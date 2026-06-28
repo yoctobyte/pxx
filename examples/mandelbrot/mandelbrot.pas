@@ -27,7 +27,7 @@ program Mandelbrot;
 
   Track B; integer-deterministic gate (checksum), visual grid for humans. }
 
-uses sysutils, baseunix;
+uses sysutils, baseunix, ansiterm;
 
 const
   W = 70;
@@ -45,13 +45,13 @@ const
 
 { ---- portable Double escape-time kernel (the reference; do not touch: the
   smoke CHECKSUM is pinned to its output) ---- }
-function EscapeCount(cre, cim: Double): Integer;
+function EscapeCountLimit(cre, cim: Double; max_it: Integer): Integer;
 var zre, zim, zr2, zi2, tmp: Double; i: Integer;
 begin
   zre := 0.0; zim := 0.0;
   zr2 := 0.0; zi2 := 0.0;
   i := 0;
-  while (i < MAXIT) and (zr2 + zi2 <= 4.0) do
+  while (i < max_it) and (zr2 + zi2 <= 4.0) do
   begin
     tmp := zr2 - zi2 + cre;
     zim := 2.0 * zre * zim + cim;
@@ -60,17 +60,22 @@ begin
     zi2 := zim * zim;
     i := i + 1;
   end;
-  EscapeCount := i;
+  EscapeCountLimit := i;
+end;
+
+function EscapeCount(cre, cim: Double): Integer;
+begin
+  EscapeCount := EscapeCountLimit(cre, cim, MAXIT);
 end;
 
 { ---- integer-only escape-time kernel: cre/cim are Q4.28 fixed-point ---- }
-function EscapeCountFixed(cre, cim: Int64): Integer;
+function EscapeCountFixedLimit(cre, cim: Int64; max_it: Integer): Integer;
 var zre, zim, zr2, zi2, tmp: Int64; i: Integer;
 begin
   zre := 0; zim := 0;
   zr2 := 0; zi2 := 0;
   i := 0;
-  while (i < MAXIT) and (zr2 + zi2 <= FOUR) do
+  while (i < max_it) and (zr2 + zi2 <= FOUR) do
   begin
     tmp := zr2 - zi2 + cre;
     zim := ((2 * zre * zim) div ONE) + cim;   { div ONE == >>FRAC, sign-correct }
@@ -79,7 +84,12 @@ begin
     zi2 := (zim * zim) div ONE;
     i := i + 1;
   end;
-  EscapeCountFixed := i;
+  EscapeCountFixedLimit := i;
+end;
+
+function EscapeCountFixed(cre, cim: Int64): Integer;
+begin
+  EscapeCountFixed := EscapeCountFixedLimit(cre, cim, MAXIT);
 end;
 
 { Double -> Q4.28; Trunc toward zero is fine for the demo window. }
@@ -90,9 +100,9 @@ end;
 
 { Deterministic integer colour palette (no math.pas): black inside the set,
   a cheap multi-frequency gradient outside. r,g,b in 0..255. }
-procedure Palette(n: Integer; var r, g, b: Integer);
+procedure PaletteLimit(n, max_it: Integer; var r, g, b: Integer);
 begin
-  if n >= MAXIT then
+  if n >= max_it then
   begin
     r := 0; g := 0; b := 0;
   end
@@ -104,6 +114,11 @@ begin
   end;
 end;
 
+procedure Palette(n: Integer; var r, g, b: Integer);
+begin
+  PaletteLimit(n, MAXIT, r, g, b);
+end;
+
 { Microsecond wall clock for the benchmark. }
 function NowUsec: Int64;
 var tv: TTimeVal;
@@ -112,6 +127,203 @@ begin
     NowUsec := tv.tv_sec * 1000000 + tv.tv_usec
   else
     NowUsec := 0;
+end;
+
+function ReadKeyAction: AnsiString;
+var c, c2, c3: Char;
+begin
+  c := AnsiReadKeyWait;
+  if c = #27 then
+  begin
+    c2 := AnsiReadKey;
+    if c2 = '[' then
+    begin
+      c3 := AnsiReadKey;
+      if c3 = 'A' then ReadKeyAction := 'up'
+      else if c3 = 'B' then ReadKeyAction := 'down'
+      else if c3 = 'C' then ReadKeyAction := 'right'
+      else if c3 = 'D' then ReadKeyAction := 'left'
+      else ReadKeyAction := 'esc';
+    end
+    else
+    begin
+      ReadKeyAction := 'esc';
+    end;
+  end
+  else
+  begin
+    ReadKeyAction := c;
+  end;
+end;
+
+procedure RenderTUIFrame(cre_min, cre_max, cim_min, cim_max: Double; max_it: Integer; use_fixed: Boolean);
+var
+  cols, rows, pw, ph, px, py, n: Integer;
+  cre, cim, dre, dim: Double;
+  r, g, b: Integer;
+  line: AnsiString;
+  lastR, lastG, lastB: Integer;
+begin
+  if not TerminalSize(cols, rows) then
+  begin
+    cols := 80;
+    rows := 24;
+  end;
+
+  ph := rows - 1;
+  pw := cols div 2;
+  if pw < 1 then pw := 1;
+  if ph < 1 then ph := 1;
+
+  dre := (cre_max - cre_min) / (pw - 1);
+  dim := (cim_max - cim_min) / (ph - 1);
+
+  AnsiWrite(AnsiMove(1, 1));
+  for py := 0 to ph - 1 do
+  begin
+    line := '';
+    lastR := -1; lastG := -1; lastB := -1;
+    cim := cim_min + py * dim;
+    for px := 0 to pw - 1 do
+    begin
+      cre := cre_min + px * dre;
+      if use_fixed then
+        n := EscapeCountFixedLimit(ToFixed(cre), ToFixed(cim), max_it)
+      else
+        n := EscapeCountLimit(cre, cim, max_it);
+
+      PaletteLimit(n, max_it, r, g, b);
+
+      if (r <> lastR) or (g <> lastG) or (b <> lastB) then
+      begin
+        line := line + AnsiBgRGB(r, g, b);
+        lastR := r; lastG := g; lastB := b;
+      end;
+      line := line + '  ';
+    end;
+    AnsiWrite(line);
+    if py < ph - 1 then
+      AnsiWrite(#13#10);
+  end;
+
+  AnsiWrite(AnsiReset);
+  AnsiWrite(AnsiMove(rows, 1));
+  line := 'Center: (' + FloatToStrF((cre_min + cre_max) * 0.5, 4) + ', ' + FloatToStrF((cim_min + cim_max) * 0.5, 4) + ') | Zoom: ' + FloatToStrF(3.5 / (cre_max - cre_min), 2) + ' | MaxIt: ' + IntToStr(max_it) + ' | Kernel: ';
+  if use_fixed then line := line + 'fixed' else line := line + 'float';
+  line := line + ' | [ARROWS]/[WASD] Pan | [+/-] Zoom | [[/]] MaxIt | [K] Kernel | [R] Reset | [Q] Quit';
+  while Length(line) < cols do
+    line := line + ' ';
+  AnsiWrite(AnsiBold + line + AnsiReset);
+end;
+
+procedure RunTUI;
+var
+  cre_min, cre_max, cim_min, cim_max: Double;
+  center_re, center_im, span_re, span_im: Double;
+  max_it: Integer;
+  use_fixed: Boolean;
+  act: AnsiString;
+  cols, rows: Integer;
+  need_redraw: Boolean;
+begin
+  AnsiWrite(AnsiAltScreen(True));
+  AnsiWrite(AnsiHideCursor);
+  AnsiSetRawMode(True);
+
+  try
+    center_re := -0.75;
+    center_im := 0.0;
+    span_re := 3.0;
+    max_it := 80;
+    use_fixed := False;
+
+    need_redraw := True;
+
+    while True do
+    begin
+      if need_redraw then
+      begin
+        if not TerminalSize(cols, rows) then
+        begin
+          cols := 80;
+          rows := 24;
+        end;
+        if cols < 2 then cols := 2;
+        if rows < 2 then rows := 2;
+        span_im := span_re * ((rows - 1) / (cols div 2));
+
+        cre_min := center_re - span_re / 2.0;
+        cre_max := center_re + span_re / 2.0;
+        cim_min := center_im - span_im / 2.0;
+        cim_max := center_im + span_im / 2.0;
+
+        RenderTUIFrame(cre_min, cre_max, cim_min, cim_max, max_it, use_fixed);
+        need_redraw := False;
+      end;
+
+      act := ReadKeyAction;
+      if (act = 'q') or (act = 'Q') or (act = 'esc') then Break
+      else if (act = 'up') or (act = 'w') or (act = 'W') then
+      begin
+        center_im := center_im - span_im * 0.1;
+        need_redraw := True;
+      end
+      else if (act = 'down') or (act = 's') or (act = 'S') then
+      begin
+        center_im := center_im + span_im * 0.1;
+        need_redraw := True;
+      end
+      else if (act = 'left') or (act = 'a') or (act = 'A') then
+      begin
+        center_re := center_re - span_re * 0.1;
+        need_redraw := True;
+      end
+      else if (act = 'right') or (act = 'd') or (act = 'D') then
+      begin
+        center_re := center_re + span_re * 0.1;
+        need_redraw := True;
+      end
+      else if (act = '+') or (act = '=') or (act = 'i') or (act = 'I') then
+      begin
+        span_re := span_re * 0.8;
+        need_redraw := True;
+      end
+      else if (act = '-') or (act = 'o') or (act = 'O') then
+      begin
+        span_re := span_re * 1.25;
+        need_redraw := True;
+      end
+      else if (act = ']') or (act = 'u') or (act = 'U') then
+      begin
+        max_it := max_it + 10;
+        if max_it > 1000 then max_it := 1000;
+        need_redraw := True;
+      end
+      else if (act = '[') or (act = 'd') or (act = 'D') then
+      begin
+        max_it := max_it - 10;
+        if max_it < 10 then max_it := 10;
+        need_redraw := True;
+      end
+      else if (act = 'k') or (act = 'K') then
+      begin
+        use_fixed := not use_fixed;
+        need_redraw := True;
+      end
+      else if (act = 'r') or (act = 'R') then
+      begin
+        center_re := -0.75;
+        center_im := 0.0;
+        span_re := 3.0;
+        max_it := 80;
+        need_redraw := True;
+      end;
+    end;
+  finally
+    AnsiSetRawMode(False);
+    AnsiWrite(AnsiShowCursor);
+    AnsiWrite(AnsiAltScreen(False));
+  end;
 end;
 
 function KName(useFixed: Boolean): AnsiString;
@@ -279,6 +491,10 @@ begin
         i := i + 2;
       end;
     end
+    else if a = '--tui' then
+    begin
+      mode := 'tui';
+    end
     else if a = '--kernel' then
     begin
       if i + 1 <= ParamCount then begin kernel := ParamStr(i + 1); i := i + 1; end;
@@ -290,5 +506,6 @@ begin
 
   if mode = 'ppm' then RunPPM(ppmPath, iw, ih, useFixed)
   else if mode = 'bench' then RunBench(iw, ih, useFixed)
+  else if mode = 'tui' then RunTUI
   else RunSmoke;
 end.

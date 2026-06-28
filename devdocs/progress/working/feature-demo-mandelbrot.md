@@ -2,8 +2,8 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** agent
 - **Opened:** 2026-06-22
 - **Relation:** Visual compute demo. Optional pressure on `lib/rtl/math.pas`;
   likely pressure on native inline assembler / hand-tuned kernels.

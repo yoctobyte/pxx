@@ -32,7 +32,7 @@ listed but are not run automatically by the batch mode.
 | `sat` | `examples/sat/satdemo.pas` | DPLL SAT solver. |
 | `mathf` | `examples/mathf/mathdemo.pas` | Floating-point math helpers. |
 | `maze` | `examples/maze/maze.pas` | Maze generation. |
-| `mandelbrot` | `examples/mandelbrot/mandelbrot.pas` | ASCII Mandelbrot output. |
+| `mandelbrot` | `examples/mandelbrot/mandelbrot.pas` | ASCII Mandelbrot output and interactive TUI explorer. |
 | `vm` | `examples/vm/vmdemo.pas` | Tiny bytecode VM. |
 
 Build one directly:
