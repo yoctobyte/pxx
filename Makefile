@@ -1169,6 +1169,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_pthread_header26)" = "pthread loaded successfully"
 	./$(COMPILER) test/test_c_gtk.pas /tmp/test_c_gtk26
 	test "$$(/tmp/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
+	./$(COMPILER) test/test_c_gtk_call.pas /tmp/test_c_gtk_call26
+	xvfb-run /tmp/test_c_gtk_call26
+	./$(COMPILER) test/test_c_gtk_types.pas /tmp/test_c_gtk_types26
+	xvfb-run /tmp/test_c_gtk_types26
+	./$(COMPILER) test/test_c_gtk_window.pas /tmp/test_c_gtk_window26
+	xvfb-run /tmp/test_c_gtk_window26
 	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26
 	test "$$(/tmp/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas /tmp/test_float26
