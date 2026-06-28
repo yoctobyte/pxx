@@ -34,7 +34,8 @@ ELF Writer (Final Executable)
 PXX is primarily an Object Pascal compiler, but it uses a modular frontend architecture. The compiler dispatches parsing based on the source file extension:
 - **Pascal (`.pas`, `.pp`)**: The main, fully-featured Object Pascal dialect.
 - **Nil Python (`.npy`)**: A statically compiled Python-like dialect with local type inference.
-- **BASIC (`.bas`)** & **C subset (`.c`)**: Experimental frontends used to test backend reuse.
+- **C (`.c`)**: An alternative frontend compiling C source directly to native executables via a libc-free runtime.
+- **BASIC (`.bas`)**: An experimental frontend used to test backend reuse.
 
 ### 2. Lexer
 The lexer converts raw source text into a flat stream of tokens. 

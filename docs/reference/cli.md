@@ -55,6 +55,9 @@ passing `--emit-obj`.
 | `--threadsafe` | Use atomic refcounts for managed strings and arrays. |
 | `--no-auto-var` | Disable auto-typed variable declarations. |
 | `--no-lazy-var` | Disable inline/lazy variable declarations. |
+| `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
+| `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
+| `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
 
 ## Search paths
 

@@ -13,13 +13,19 @@ frontends that share backend infrastructure.
 | Suffix | Frontend |
 | --- | --- |
 | `.pas`, `.pp` | Pascal |
-| `.c` | C subset |
+| `.c` | C |
 | `.bas` | BASIC, experimental |
 | `.npy` | Nil Python, experimental |
 
 The Pascal frontend is the supported user-facing path. The other frontends exist
 to test interop and backend reuse, and their accepted language subsets are still
 moving.
+
+## C Frontend
+
+PXX features a C frontend that compiles `.c` source files directly to native executables. It supports a substantial subset of C, featuring a libc-free runtime and the "magic link" model.
+
+See the dedicated [C Frontend](./c-frontend.md) page for details on compiling C, the linking model, and library configuration.
 
 ## C interop
 
