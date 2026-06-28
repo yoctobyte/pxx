@@ -92,6 +92,27 @@ When register allocation or optimization passes (like dead store elimination or 
 1.  Map `volatile` to a flag in `TVar` / `TParam`.
 2.  Ensure that AST nodes marked `volatile` lower to un-optimizable IR memory load/store operations.
 
+### Phase 3: Inline Support
+Implement the `inline` compiler directive (both for C function definitions and Pascal's upcoming `inline` support) by expanding function ASTs directly at their call sites or emitting inlineable symbols to the intermediate representation (IR).
+
+---
+
+## 4. Macro Expansion vs. Macro Generation
+
+To implement a robust C importer, we must differentiate between:
+- **Macro Expansion**: The standard preprocessor action that replaces a macro name (e.g. `NULL` -> `((void*)0)`) with its token stream. This is critical for getting types, functions, and parameters parsed cleanly.
+- **Macro Generation**: Macros that expand into new, inline C function *definitions* or code blocks (like GObject's `G_DECLARE_FINAL_TYPE` which generates type-safe casts and getters). 
+  - *FFI Strategy*: We do **not** need to compile or generate these inline functions because the dynamic library (.so) already contains the compiled implementations. Skipping macro *definitions* while keeping prototypes intact is a pragmatic interop strategy.
+
+---
+
+## 5. GNU Extensions in Other Compilers
+
+Other non-GCC compilers handle GNU extensions using three main strategies:
+1. **Clang / LLVM**: Implements native support for almost all GCC extensions and `__attribute__` decorators to achieve drop-in header compatibility.
+2. **MSVC (Microsoft Visual C++)**: Ignores or maps them via macro redirection (e.g. `#define __attribute__(x)`) or uses Microsoft-equivalent decorators (`__declspec(align(N))` or `#pragma pack`).
+3. **TCC (Tiny C Compiler)**: Parses and implements key layout attributes (like `packed` and `aligned`), but silently skips and ignores optimization/static analysis decorators (similar to Frankonpiler's current approach).
+
 ---
 
 > [!IMPORTANT]
