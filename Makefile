@@ -1169,6 +1169,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_pthread_header26)" = "pthread loaded successfully"
 	./$(COMPILER) test/test_c_crypt.pas /tmp/test_c_crypt26
 	/tmp/test_c_crypt26 | grep -q "All crypt tests passed successfully!"
+	./$(COMPILER) test/test_c_dlopen.pas /tmp/test_c_dlopen26
+	/tmp/test_c_dlopen26 | grep -q "All dynamic loading and dlsym tests passed successfully!"
 	./$(COMPILER) test/test_c_gtk.pas /tmp/test_c_gtk26
 	test "$$(/tmp/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_c_gtk_call.pas /tmp/test_c_gtk_call26
