@@ -326,7 +326,33 @@ begin
             '\': AppendChar(s, '\');
             '"': AppendChar(s, '"');
             '''': AppendChar(s, '''');
-            '0': AppendChar(s, #0);
+            '0'..'7': begin
+              { Octal escape \N / \NN / \NNN — consume leading digit here,
+                extra digits inside; outer Inc handles the last digit. }
+              n := Ord(Source[SrcPos]) - 48;
+              if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
+              begin
+                Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48);
+                if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
+                begin Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48); end;
+              end;
+              AppendChar(s, Chr(n and 255));
+            end;
+            'x': begin
+              { Hex escape \xNN... — SrcPos on 'x', consume hex digits; last
+                digit is left for outer Inc. }
+              n := 0;
+              while (SrcPos + 1 <= Length(Source)) and
+                    (Source[SrcPos+1] in ['0'..'9','a'..'f','A'..'F']) do
+              begin
+                Inc(SrcPos);
+                c := Source[SrcPos];
+                if c in ['0'..'9'] then n := n*16 + (Ord(c)-48)
+                else if c in ['a'..'f'] then n := n*16 + (Ord(c)-87)
+                else n := n*16 + (Ord(c)-55);
+              end;
+              AppendChar(s, Chr(n and 255));
+            end;
             else  AppendChar(s, Source[SrcPos]);
           end;
           Inc(SrcPos);
@@ -361,7 +387,29 @@ begin
           '\': CurTok.IVal := Ord('\');
           '''': CurTok.IVal := Ord('''');
           '"': CurTok.IVal := Ord('"');
-          '0': CurTok.IVal := 0;
+          '0'..'7': begin
+            n := Ord(Source[SrcPos]) - 48;
+            if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
+            begin
+              Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48);
+              if (SrcPos + 1 <= Length(Source)) and (Source[SrcPos+1] in ['0'..'7']) then
+              begin Inc(SrcPos); n := n * 8 + (Ord(Source[SrcPos]) - 48); end;
+            end;
+            CurTok.IVal := n and 255;
+          end;
+          'x': begin
+            n := 0;
+            while (SrcPos + 1 <= Length(Source)) and
+                  (Source[SrcPos+1] in ['0'..'9','a'..'f','A'..'F']) do
+            begin
+              Inc(SrcPos);
+              c := Source[SrcPos];
+              if c in ['0'..'9'] then n := n*16 + (Ord(c)-48)
+              else if c in ['a'..'f'] then n := n*16 + (Ord(c)-87)
+              else n := n*16 + (Ord(c)-55);
+            end;
+            CurTok.IVal := n and 255;
+          end;
           else  CurTok.IVal := Ord(Source[SrcPos]);
         end;
         Inc(SrcPos);

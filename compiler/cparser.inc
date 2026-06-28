@@ -3081,7 +3081,7 @@ end;
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
-    recId, initSymIdx, procIdx: Integer; wasArr: Boolean; initV: Int64;
+    recId, initSymIdx, procIdx, initOff: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     initStr: AnsiString;
@@ -3925,25 +3925,39 @@ begin
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
               (PendingInitCount < MAX_PENDING_INITS) then
       begin
-        { Pointer global initialised to the address of another global:
-          `T *p = &g;` — the C frontend's std-stream `FILE *stdout =
-          &__crtl_stdout` pattern. Record a PendingInit that stores @g into p at
-          main entry (Elem = -2 sentinel = address-of-sym; target sym index in
-          Val). Only when g is an already-known global and the init is exactly
-          `&g` (the token after the name ends the declarator); anything else
-          skips, as before. }
+        { Pointer global initialised to the address of another global or an
+          interior element: `T *p = &g;` or `T *p = &arr[const_expr];`.
+          Record a PendingInit that stores @g (+ optional byte offset) into p.
+          Elem = -2 sentinel; target sym index in Val; byte offset in ValAux. }
         Next;                       { consume '&' -> CurTok = target ident }
         initSymIdx := FindSym(CurTok.SVal);
-        if (initSymIdx >= 0) and (Tokens[TokPos].Kind in [tkComma, tkSemicolon]) then
+        if (initSymIdx >= 0) and
+           (Tokens[TokPos].Kind in [tkComma, tkSemicolon, tkLBrack]) then
         begin
-          PendingInitSym[PendingInitCount]  := idx;
-          PendingInitElem[PendingInitCount] := -2;     { address-of-sym sentinel }
-          PendingInitFOff[PendingInitCount] := -1;
-          PendingInitFLen[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := initSymIdx;
-          PendingInitTk[PendingInitCount]   := Ord(tyPointer);
-          Inc(PendingInitCount);
           Next;                     { consume target ident }
+          initOff := 0;
+          if CurTok.Kind = tkLBrack then
+          begin
+            Next;                   { consume '[' }
+            initOff := CEvalConstExpr;
+            if Syms[initSymIdx].ElemType <> tyUnknown then
+              initOff := initOff * TypeSize(Syms[initSymIdx].ElemType);
+            Expect(tkRBrack, ']');  { consume ']' }
+          end;
+          if CurTok.Kind in [tkComma, tkSemicolon] then
+          begin
+            PendingInitSym[PendingInitCount]  := idx;
+            PendingInitElem[PendingInitCount] := -2;     { address-of-sym sentinel }
+            PendingInitFOff[PendingInitCount] := -1;
+            PendingInitFLen[PendingInitCount] := 0;
+            PendingInitVal[PendingInitCount]  := initSymIdx;
+            PendingInitValAux[PendingInitCount] := initOff; { byte offset (0 = plain &g) }
+            PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+            Inc(PendingInitCount);
+          end
+          else
+            while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                  (CurTok.Kind <> tkEOF) do Next;
         end
         else
           while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and

@@ -14278,18 +14278,29 @@ begin
 
     if PendingInitElem[i] = -2 then
     begin
-      { Address-of-global pointer init (`T *p = &g;`, the C frontend's std-stream
-        `FILE *stdout = &__crtl_stdout` pattern). The value is the runtime address
-        of another global, not a constant — emit `p := @g` (AN_ADDR of the target
-        sym, index in PendingInitVal). Runs at main entry before any user code, so
-        the pointer is live before it is read. }
+      { Address-of-global pointer init: `T *p = &g;` or `T *p = &arr[N];`.
+        Emit `p := @g` (AN_ADDR of target sym) or `p := @g + byte_offset`
+        (ValAux carries the byte offset; 0 = plain &g). }
       valNode := AllocNode(AN_IDENT);
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := Ord(Syms[PendingInitVal[i]].TypeKind);
-      target := AllocNode(AN_ADDR);
-      ASTLeft[target] := valNode;
-      ASTTk[target] := Ord(tyPointer);
-      valNode := target;
+      innerAddr := AllocNode(AN_ADDR);
+      ASTLeft[innerAddr] := valNode;
+      ASTTk[innerAddr] := Ord(tyPointer);
+      valNode := innerAddr;
+      if PendingInitValAux[i] <> 0 then
+      begin
+        { &arr[offset]: add constant byte offset to array base pointer }
+        idxLit := AllocNode(AN_INT_LIT);
+        ASTIVal[idxLit] := PendingInitValAux[i];
+        ASTTk[idxLit] := Ord(tyInt64);
+        innerAddr := AllocNode(AN_BINOP);
+        ASTIVal[innerAddr] := Ord(tkPlus);
+        ASTLeft[innerAddr] := valNode;
+        ASTRight[innerAddr] := idxLit;
+        ASTTk[innerAddr] := Ord(tyPointer);
+        valNode := innerAddr;
+      end;
       { re-point: assignment target is the pointer sym, value is the address }
       target := identNode;
     end
