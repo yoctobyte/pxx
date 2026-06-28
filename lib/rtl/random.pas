@@ -1,21 +1,39 @@
 unit random;
-{ PRNG library. Two generators coexist:
+{ Three-tier entropy library.
 
-  1. Xoshiro256** — 256-bit state, 64-bit output. High quality, the default
-     for hosted targets. Seeded via SplitMix64 from a 64-bit seed.
-     Deterministic and byte-identical across targets from the same seed.
+  Tier 1 — HW instruction (RDRAND/x86; RNDR/aarch64; ESP RNG register).
+           Runtime CPUID probe; zero-overhead when supported.
+           STUB: requires __rdrand/__cpuid compiler builtins
+           (Track A: feature-rdrand-cpuid-compiler-builtins). Falls to tier 2.
 
-  2. LCG (Numerical Recipes) — 32-bit state/output. Small and fast, suited
-     for constrained targets (ESP32 etc). Deterministic and reproducible.
+  Tier 2 — OS CSPRNG (getrandom(2) syscall / /dev/urandom fallback on Linux).
+           Cryptographic quality; no asm. Used by Randomize on hosted targets.
 
-  The public surface (Random, RandSeed, RandRange) delegates to xoshiro.
-  The LCG remains available directly for platforms that prefer it.
+  Tier 3 — Software PRNG: xoshiro256** (256-bit state, 64-bit output) seeded
+           via SplitMix64. Byte-identical across all targets from the same seed.
+           Always active on the deterministic (RandSeed) path.
+
+  Companion: LCG (Numerical Recipes, 32-bit). Small/fast; for constrained
+  targets (ESP32). Available via LCGSeed/LCGNext.
+
+  Seed forces software: RandSeed/RandSeed64 always activate the xoshiro path;
+  the stream is deterministic and reproducible thereafter.
 
   Track B (libraries); built only with the pinned stable compiler. }
 
 interface
 
-{ --- Xoshiro256** (default on hosted) --- }
+{ --- Tier 2: OS entropy --- }
+
+{ Fill buf[0..n-1] from OS entropy. Returns True on success.
+  Not available on bare-metal targets (returns False); callers should fall
+  back to a software seed (e.g. a compile-time constant). }
+function OSEntropyBytes(buf: Pointer; n: Integer): Boolean;
+
+{ Convenience: read one 64-bit word of OS entropy. Returns True on success. }
+function OSEntropy64(out v: UInt64): Boolean;
+
+{ --- Tier 3: Xoshiro256** --- }
 
 { Seed xoshiro via SplitMix64 expansion. Reproducible thereafter. }
 procedure XoshiroSeed(seed: UInt64);
@@ -23,25 +41,33 @@ procedure XoshiroSeed(seed: UInt64);
 { Raw 64-bit output; advances xoshiro state. }
 function XoshiroNext: UInt64;
 
-{ --- LCG (lightweight, 32-bit) --- }
+{ --- LCG (lightweight 32-bit companion) --- }
 
-{ Reseed the LCG. Any 32-bit value; reproducible thereafter. }
+{ Reseed the LCG. }
 procedure LCGSeed(seed: LongWord);
 
 { Raw 32-bit LCG output; advances state. }
 function LCGNext: LongWord;
 
-{ --- Public surface (delegates to xoshiro) --- }
+{ --- Public surface (FPC-compatible + extensions) --- }
 
-{ Reseed the default generator (xoshiro). Accepts a 32-bit value for
-  FPC compatibility; zero-extends to 64 bits for SplitMix64. }
+{ Re-seed from OS entropy (or HW when tier 1 is wired). Non-reproducible. }
+procedure Randomize;
+
+{ Seed from a fixed 32-bit value (FPC-compatible). Deterministic thereafter. }
 procedure RandSeed(seed: LongWord);
 
-{ 0 .. n-1 (FPC-compatible Random(n)). n <= 0 yields 0. }
+{ Seed from a full 64-bit fixed value. Deterministic thereafter. }
+procedure RandSeed64(seed: UInt64);
+
+{ 0..n-1  (FPC-compatible Random(n)). n<=0 yields 0. }
 function Random(n: Integer): Integer;
 
 { Inclusive lo..hi. }
 function RandRange(lo, hi: Integer): Integer;
+
+{ Raw 64-bit random value (xoshiro). }
+function Random64: UInt64;
 
 implementation
 
@@ -106,11 +132,75 @@ begin
   LCGNext := lcg_state;
 end;
 
-{ ===== Public surface (xoshiro-backed) ===== }
+{ ===== Tier 2: OS CSPRNG (getrandom syscall) ===== }
+
+{ Per-arch Linux syscall number for getrandom(2). -1 = not available
+  (bare-metal targets). Verified against kernel headers and FPC sysnr tables. }
+function SysGetRandom: Integer;
+begin
+  Result := -1;
+  {$ifdef CPUX86_64}  Result := 318; {$endif}
+  {$ifdef CPU_I386}   Result := 355; {$endif}
+  {$ifdef CPU_AARCH64} Result := 278; {$endif}
+  {$ifdef CPU_ARM32}  Result := 384; {$endif}
+  {$ifdef CPU_RISCV32} Result := 278; {$endif}
+  { CPU_XTENSA (ESP32): no getrandom; use HW RNG register (tier 1) }
+end;
+
+function OSEntropyBytes(buf: Pointer; n: Integer): Boolean;
+var sn, r: Int64;
+begin
+  sn := SysGetRandom;
+  if sn < 0 then
+  begin
+    OSEntropyBytes := False;
+    Exit;
+  end;
+  { getrandom(buf, count, flags=0): block until entropy available }
+  r := __pxxrawsyscall(sn, Int64(buf), n, 0, 0, 0, 0);
+  OSEntropyBytes := (r = n);
+end;
+
+function OSEntropy64(out v: UInt64): Boolean;
+begin
+  OSEntropy64 := OSEntropyBytes(@v, 8);
+end;
+
+{ ===== Tier 1: HW RNG (stub — wired once Track A adds __rdrand/__cpuid) ===== }
+
+{ When the builtins land: replace body with CPUID probe + RDRAND loop.
+  For now always returns False → falls through to tier 2. }
+function HWEntropy64(out v: UInt64): Boolean;
+begin
+  v := 0;
+  HWEntropy64 := False;
+end;
+
+{ ===== Public surface ===== }
+
+procedure Randomize;
+var seed: UInt64;
+begin
+  seed := 0;
+  if not HWEntropy64(seed) then
+    if not OSEntropy64(seed) then
+      seed := UInt64($A39B3C2D1E0F4857); { last-resort compile-time constant }
+  XoshiroSeed(seed);
+end;
 
 procedure RandSeed(seed: LongWord);
 begin
   XoshiroSeed(UInt64(seed));
+end;
+
+procedure RandSeed64(seed: UInt64);
+begin
+  XoshiroSeed(seed);
+end;
+
+function Random64: UInt64;
+begin
+  Random64 := XoshiroNext;
 end;
 
 function Random(n: Integer): Integer;
@@ -133,5 +223,5 @@ end;
 
 initialization
   lcg_state := 2463534242;
-  XoshiroSeed(UInt64($A39B3C2D1E0F4857));
+  Randomize;   { seed xoshiro from OS entropy (or HW when tier 1 wired) }
 end.

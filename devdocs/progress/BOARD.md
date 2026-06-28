@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## unfinished (5)
+## unfinished (6)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -21,6 +21,7 @@ _none_
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
+| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 
 ## blocked (1)
 
@@ -28,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (76)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -87,7 +88,6 @@ _none_
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
@@ -555,7 +555,6 @@ _none_
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
-- [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [B] feature-release-packaging
 - [A] feature-require-forward-strict-mode

@@ -1,7 +1,7 @@
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** unfinished
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a
   syscall entropy path, procedural-type dispatch, an `initialization` section,
@@ -207,3 +207,5 @@ programs compile and run unmodified.
   now delegates to xoshiro. `RandU32` replaced by `XoshiroNext`/`LCGNext`.
   Slices 1–2 done (software core + FPC surface). Remaining: OS tier (slice 3),
   HW tiers (slices 4–6), thread safety (slice 7).
+- 2026-06-28 — **OS tier landed** (track B, slice 3 done): `getrandom(2)` syscall fallback implemented via `__pxxrawsyscall` on Linux. Verified that `Randomize` correctly varies between runs, and deterministic seeded path remains byte-identical.
+
