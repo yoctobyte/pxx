@@ -3083,7 +3083,8 @@ procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64;
-    arrLen, dimCount, nArrElems, flatInitCount, ei: Integer;
+    arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
+    initStr: AnsiString;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
 begin
   baseTk := ParseCDeclType;
@@ -3358,6 +3359,20 @@ begin
         begin
           flatInitCount := CBraceTopLevelInitCountAt(TokPos);
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
+        end
+        else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkString) and
+                (baseTk <> tyRecord) and (baseTk <> tyPointer) and
+                TypeIsOrdinal(baseTk) then
+        begin
+          idx2 := TokPos;
+          arrLen := Tokens[idx2].SLen;
+          Inc(idx2);
+          while Tokens[idx2].Kind = tkString do
+          begin
+            arrLen := arrLen + Tokens[idx2].SLen;
+            Inc(idx2);
+          end;
+          Inc(arrLen);
         end
         else arrLen := 1;
       end
@@ -3684,6 +3699,36 @@ begin
           PendingInitFLen[PendingInitCount - 1] :=
             PendingInitFLen[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
           Next;
+        end;
+      end
+      else if wasArr and (baseTk <> tyRecord) and (baseTk <> tyPointer) and
+              TypeIsOrdinal(baseTk) and (idx >= 0) and (CurTok.Kind = tkString) then
+      begin
+        initStr := '';
+        while CurTok.Kind = tkString do
+        begin
+          initStr := initStr + CurTok.SVal;
+          Next;
+        end;
+        for ei := 0 to Length(initStr) do
+        begin
+          if ei < arrLen then
+          begin
+            if ei < Length(initStr) then
+              initV := Ord(initStr[ei + 1])
+            else
+              initV := 0;
+            if PendingInitCount < MAX_PENDING_INITS then
+            begin
+              PendingInitSym[PendingInitCount]  := idx;
+              PendingInitElem[PendingInitCount] := ei;
+              PendingInitFOff[PendingInitCount] := -1;
+              PendingInitFLen[PendingInitCount] := 0;
+              PendingInitVal[PendingInitCount]  := initV;
+              PendingInitTk[PendingInitCount]   := Ord(baseTk);
+              Inc(PendingInitCount);
+            end;
+          end;
         end;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and

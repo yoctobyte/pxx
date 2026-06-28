@@ -376,6 +376,8 @@ test-core: $(COMPILER)
 	/tmp/cincdec_value_b2726; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_array_init_b28.c /tmp/cglobal_array_init_b2826
 	/tmp/cglobal_array_init_b2826; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_char_array_str_init_b128.c /tmp/cglobal_char_array_str_init_b12826
+	/tmp/cglobal_char_array_str_init_b12826; test "$$?" = "0"
 	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
 	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026
