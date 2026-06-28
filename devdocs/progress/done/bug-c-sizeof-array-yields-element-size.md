@@ -1,7 +1,7 @@
 # C: `sizeof(array)` yields element size, not total array size
 
 - **Type:** bug (C frontend → sizeof) — Track C
-- **Status:** backlog
+- **Status:** DONE (2026-06-28)
 - **Owner:** unassigned
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up
   ([[feature-c-desktop-lua-sqlite-path]]).
@@ -41,3 +41,15 @@ type-size confusion behind
 
 - 2026-06-27 - Found reducing the sqlite compile (alongside the rejected
   invalid-symbol-in-lea false alarm). Confirmed real, include-independent.
+
+## Resolution (2026-06-28, Track C+A)
+
+`ParseCSizeof` already special-cased array identifiers, but whole arrays of
+records still used `TypeSize(tyRecord)`, which is pointer-sized, rather than the
+record element's `RecSize`. This made
+`sizeof(localRecordArray)/sizeof(struct Record)` fold to zero for large records
+such as SQLite's `sqlite3_vfs`.
+
+Fixed whole-array sizing for record arrays and added
+`test/clocal_static_record_array_b115.c`, which verifies both the array count
+and the SQLite-shaped VFS registration loop.

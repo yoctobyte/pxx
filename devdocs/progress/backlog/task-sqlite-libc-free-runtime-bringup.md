@@ -48,6 +48,26 @@ through one of these unresolved (weak/absent) symbols. Add the string leaves,
 then bring up (or `#define`-out) the OS/VFS layer incrementally; an in-memory
 (`:memory:`) open needs far less than the full file VFS.
 
+## 2026-06-28 update
+
+The compiler-side blockers immediately in front of SQLite init are cleared:
+
+- block-scope `static const sqlite3_mem_methods defaultMethods = { fn, ... }`
+  now materialises function-pointer fields correctly;
+- block-scope `static sqlite3_vfs aVfs[] = { ... }` now has persistent storage,
+  inferred record-array length, and populated fields;
+- `sizeof(recordArray)/sizeof(recordArray[0])` now returns the correct count.
+
+With the current unity driver, `sqlite3_initialize()` registers the `unix` VFS,
+`sqlite3MemdbInit()` succeeds, and `sqlite3_open(":memory:")` followed by
+`sqlite3_close()` exits 0.
+
+The first SQL execution no longer crashes in the schema error path; that pointer
+truncation is fixed in [[bug-c-sqlite-sql-exec-schema-argv-pointer]]. The next
+wall is a clean `SQLITE_CORRUPT` return while preparing SQLite's built-in
+`sqlite_master` schema SQL, tracked as
+[[bug-c-sqlite-sql-exec-schema-parse-corrupt]].
+
 ## Acceptance
 
 - `lib/crtl/src/string.c` provides `memchr`/`strcspn`/`strrchr`/`strspn`.

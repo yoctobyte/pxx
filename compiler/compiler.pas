@@ -86,6 +86,7 @@ begin
   DumpCpp := False;
   NoStdInc := False;
   CUseSystemLibs := False;
+  CSystemLibCount := 0;
   CrtlSrcPulledCount := 0;
   WarnSelfResult := False;
   DumpRTTI := False;
@@ -135,6 +136,20 @@ begin
         real shared-library externs (DT_NEEDED libc/libm) instead, the way a
         normal toolchain links them. }
       CUseSystemLibs := True;
+      Inc(i);
+    end
+    else if (Length(option) > 14) and
+            (option[1] = '-') and (option[2] = '-') and
+            (option[3] = 's') and (option[4] = 'y') and
+            (option[5] = 's') and (option[6] = 't') and
+            (option[7] = 'e') and (option[8] = 'm') and
+            (option[9] = '-') and (option[10] = 'l') and
+            (option[11] = 'i') and (option[12] = 'b') and
+            (option[13] = 's') and (option[14] = '=') then
+    begin
+      { Granular opt-out: only the listed soname stems use real system shared
+        libraries; every other crtl header keeps the bundled libc-free impl. }
+      AddCSystemLibSpec(PasOptionTail(option, 15));
       Inc(i);
     end
     else if (option = '-nostdinc') or (option = '--nostdinc') then

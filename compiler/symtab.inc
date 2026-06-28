@@ -2992,6 +2992,18 @@ begin
   Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
 end;
 
+function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to ProcCount - 1 do
+    if ProcCaseSensitive[i] and (Procs[i].Name = name) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 { Does proc `idx` answer to `name`? Exact always; case-insensitively too for a
   case-insensitive Pascal proc (default), but never for an external C import
   (printf <> Printf — those relax only under {$LAZYCASING ON}, handled in
@@ -3000,7 +3012,8 @@ end;
 function ProcNameMatches(idx: Integer; const name: AnsiString): Boolean;
 begin
   Result := (Procs[idx].Name = name) or
-            ((not ProcCaseSensitive[idx]) and (not ProcExternal[idx]) and
+            ((not (CProgramMode and HasExactCaseSensitiveProc(name))) and
+             (not ProcCaseSensitive[idx]) and (not ProcExternal[idx]) and
              CaseEqual(Procs[idx].Name, name));
 end;
 

@@ -889,6 +889,8 @@ var
   CTypeFnRetPElemRec : array[0..15] of Integer;
   CTypeFnRetPRecId : array[0..15] of Integer;
   CTypeFnRetPProcSig : array[0..15] of Integer;
+  CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
+    allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
@@ -1090,9 +1092,12 @@ var
     `#include <math.h>` gets fabs/sqrt's libc-free bodies (bridged to the Pascal
     RTL) with no DT_NEEDED, instead of an unresolved libm extern. Each impl is
     pulled at most once (CrtlSrcPulled dedup, also breaks the cycle where the impl
-    re-includes its own header). `--system-libs` opts the whole program back to
-    real shared-library externs (today's libm/libc DT_NEEDED behaviour). }
+    re-includes its own header). Bare `--system-libs` opts the whole program back
+    to real shared-library externs; `--system-libs=m,pthread` does that only for
+    selected soname stems and leaves the rest on the bundled crtl path. }
   CUseSystemLibs   : Boolean;
+  CSystemLibs       : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSystemLibCount   : Integer;
   CrtlSrcPulled    : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CrtlSrcPulledCount : Integer;
 

@@ -33,7 +33,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
-| bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
+| bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -48,7 +48,6 @@ _none_
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
-| feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
@@ -101,6 +100,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
+| test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 
 ## rainy-day (19)
@@ -137,7 +137,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (337)
+## done (341)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -174,6 +174,7 @@ _none_
 | bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | A | bug | C: local static const multidimensional array initializer in sqlite | — |
+| bug-c-local-static-record-array-vfs-sqlite | A | bug | C: block-scope static record arrays in sqlite VFS init | — |
 | bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
 | bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
@@ -182,8 +183,10 @@ _none_
 | bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
 | bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
+| bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-sqlite-offsetof-style-field-address-array-bound | A | bug | C: sqlite offsetof-style field address in array bound | — |
+| bug-c-sqlite-sql-exec-schema-argv-pointer | A | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | A | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | A | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
@@ -324,6 +327,7 @@ _none_
 | feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
+| feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
@@ -492,7 +496,7 @@ _none_
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-lua-tests-regressed-segfault
-- [A] bug-c-sizeof-array-yields-element-size
+- [A] bug-c-sqlite-sql-exec-schema-parse-corrupt
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
@@ -507,7 +511,6 @@ _none_
 - [C] feature-c-header-import-complex
 - [C] feature-c-regex-library-devtest
 - [C] feature-c-source-frontend
-- [A] feature-c-system-libs-granular-opt-out
 - [A] feature-c-varargs-design
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
@@ -565,3 +568,4 @@ _none_
 - **1** — chore-inc-to-units
 - **1** — feature-esp32-idf-xtensa
 - **1** — feature-mimic-fpc
+- **1** — task-sqlite-libc-free-runtime-bringup

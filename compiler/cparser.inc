@@ -504,6 +504,16 @@ begin
       if Result < 1 then Result := 1;
     end;
   end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    begin
+      if (ASTIVal[node] >= 0) and (AliasPtrDepth[ASTIVal[node]] > 0) then
+        Result := AliasPtrDepth[ASTIVal[node]]
+      else
+        Result := 1;
+    end;
+  end
   else if ASTKind[node] = AN_BINOP then
   begin
     if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrDepth(ASTLeft[node])
@@ -536,6 +546,11 @@ begin
   end
   else if ASTKind[node] = AN_DEREF then
     Result := CNodePtrBaseTk(ASTLeft[node])
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    if (ASTIVal[node] >= 0) and (AliasPtrBaseTk[ASTIVal[node]] <> Ord(tyUnknown)) then
+      Result := AliasPtrBaseTk[ASTIVal[node]];
+  end
   else if ASTKind[node] = AN_BINOP then
   begin
     if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrBaseTk(ASTLeft[node])
@@ -701,6 +716,8 @@ begin
   else if ASTKind[node] = AN_CALL then
     { a function returning a pointer — `f()->field` must deref the result }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_PTR_CAST then
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if ASTKind[node] = AN_TERNARY then
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if ASTKind[node] = AN_ADDR then
@@ -777,6 +794,11 @@ begin
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then
       Result := ProcRetPtrElemRec[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    if ASTIVal[node] >= 0 then
+      Result := AliasElemRec[ASTIVal[node]];
   end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePtrElemRec(ASTLeft[node])   { `p++`: elem rec from the lvalue }
@@ -865,7 +887,13 @@ begin
           end
           else sz := TypeSize(Syms[si].TypeKind);
         end
-        else if Syms[si].IsArray then sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType)
+        else if Syms[si].IsArray then
+        begin
+          if Syms[si].ElemType = tyRecord then
+            sz := Syms[si].ArrLen * RecSize(Syms[si].ElemRecName)
+          else
+            sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType);
+        end
         else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
         else sz := TypeSize(Syms[si].TypeKind);
       end;
@@ -909,7 +937,8 @@ end;
 
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
-var node, operand, castElemTk, castElemRec, castDepth, argSeq, castProcSig: Integer;
+var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
+    argSeq, castProcSig: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -926,6 +955,8 @@ begin
     castDepth := CTypePtrDepth;
     castElemTk := CTypeElemTk;
     castElemRec := CTypeElemRec;
+    castBaseTk := CTypePtrBaseTk;
+    castBaseRec := CTypePtrBaseRec;
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     Expect(tkRParen, ')');
@@ -966,6 +997,9 @@ begin
     if castDepth > 0 then
     begin
       RegisterPtrAlias(0, 0, castElemTk, castElemRec, 0, 0);
+      AliasPtrDepth[AliasCount-1] := castDepth;
+      AliasPtrBaseTk[AliasCount-1] := castBaseTk;
+      AliasPtrBaseRec[AliasCount-1] := castBaseRec;
       ASTIVal[node] := AliasCount - 1;
       ASTTk[node] := Ord(tyPointer);
     end
@@ -1907,6 +1941,24 @@ begin
   Result := node;
 end;
 
+function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer;
+var savedCurProc: Integer;
+begin
+  savedCurProc := CurProc;
+  if CLocalStaticDecl then CurProc := -1;
+  Result := AllocVar(name, tk);
+  CurProc := savedCurProc;
+end;
+
+function CAllocDeclArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
+var savedCurProc: Integer;
+begin
+  savedCurProc := CurProc;
+  if CLocalStaticDecl then CurProc := -1;
+  Result := AllocArray(name, elemType, lo, hi);
+  CurProc := savedCurProc;
+end;
+
 { A local declaration line: <type> name [= init] (, name [= init])* ;
   Each name is allocated (a global slot in a top-level main where CurProc<0, a
   stack local inside a function) so subsequent statements resolve it; returns an
@@ -1923,6 +1975,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     hadStar: Boolean;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
+    recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di: Integer;
     arrElems: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -1946,7 +1999,7 @@ begin
       inline fn-ptr member branch. (Capture the name now: a cast inside the
       initializer expression re-runs ParseCDeclType and resets the global.) }
     name := CTypeFnPtrName;
-    idx := AllocVar(name, tyPointer);
+    idx := CAllocDeclVar(name, tyPointer);
     Syms[idx].PtrElemTk := tyUnknown;
     Syms[idx].PtrElemRec := REC_NONE;
     SymPtrDepth[idx] := 1;
@@ -2028,6 +2081,10 @@ begin
         garbage). Record-element arrays (each element a nested brace group) and
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
+      recArrInitCount := 0;
+      if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
+         (Tokens[TokPos].Kind = tkBegin) then
+        recArrInitCount := CBraceTopLevelInitCountAt(TokPos);
       if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (dimCount >= 2) and
          (declTk <> tyPointer) and TypeIsOrdinal(declTk) then
@@ -2083,10 +2140,13 @@ begin
       end;
       if arrLen < 1 then
       begin
-        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+        if nArrElems > 0 then arrLen := nArrElems
+        else if recArrInitCount > 0 then arrLen := recArrInitCount
+        else arrLen := 1;
       end
       else if (dimCount <= 1) and (nArrElems > arrLen) then arrLen := nArrElems;
-      idx := AllocArray(name, declTk, 0, arrLen - 1);
+      if (dimCount <= 1) and (recArrInitCount > arrLen) then arrLen := recArrInitCount;
+      idx := CAllocDeclArray(name, declTk, 0, arrLen - 1);
       if dimCount >= 2 then
       begin
         SymArrNDims[idx] := dimCount;
@@ -2116,6 +2176,73 @@ begin
         if head = -1 then head := seq else ASTRight[tail] := seq;
         tail := seq;
       end;
+      if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
+         (Tokens[TokPos].Kind = tkBegin) and (scalarRec >= REC_UCLASS_BASE) then
+      begin
+        Next; Next;   { consume the assign then the outer opening brace }
+        recBase := UClsFBase[scalarRec - REC_UCLASS_BASE];
+        ei := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkBegin then
+          begin
+            Next;   { consume element opening brace }
+            fldI := 0;
+            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+            begin
+              if (ei < arrLen) and (fldI < UClsFCount[scalarRec - REC_UCLASS_BASE]) then
+              begin
+                if CurTok.Kind = tkBegin then
+                  CSkipCInitElement
+                else
+                begin
+                  fTk := UFldTk[recBase + fldI];
+                  initExpr := ParseCExpr;
+                  if CurTok.Kind in [tkComma, tkEnd] then
+                  begin
+                    idn := AllocNode(AN_IDENT);
+                    ASTIVal[idn] := idx;
+                    ASTTk[idn] := Ord(declTk);
+                    idxLit := AllocNode(AN_INT_LIT);
+                    ASTIVal[idxLit] := ei;
+                    ASTTk[idxLit] := Ord(tyInteger);
+                    inode := AllocNode(AN_INDEX);
+                    ASTLeft[inode] := idn;
+                    ASTRight[inode] := idxLit;
+                    ASTTk[inode] := Ord(declTk);
+                    fieldNode := AllocNode(AN_FIELD);
+                    ASTLeft[fieldNode] := inode;
+                    ASTSOffset[fieldNode] := UFldNOff[recBase + fldI];
+                    ASTSLen[fieldNode] := UFldNLen[recBase + fldI];
+                    ASTTk[fieldNode] := fTk;
+                    asn := AllocNode(AN_ASSIGN);
+                    ASTLeft[asn] := fieldNode;
+                    ASTRight[asn] := initExpr;
+                    ASTTk[asn] := fTk;
+                    seq := AllocNode(AN_SEQ);
+                    ASTLeft[seq] := asn;
+                    ASTRight[seq] := -1;
+                    if head = -1 then head := seq else ASTRight[tail] := seq;
+                    tail := seq;
+                  end
+                  else
+                    CSkipCInitElement;
+                end;
+              end
+              else
+                CSkipCInitElement;
+              Inc(fldI);
+              Eat(tkComma);
+            end;
+            Eat(tkEnd);
+          end
+          else
+            CSkipCInitElement;
+          Inc(ei);
+          Eat(tkComma);
+        end;
+        Eat(tkEnd);
+      end;
       { Unconsumed initializer (record-element array, or non-brace): balanced skip. }
       if CurTok.Kind = tkAssign then
       begin
@@ -2139,7 +2266,7 @@ begin
       { A struct-by-value local needs its record id so field access resolves and
         AllocVar reserves RecSize bytes. }
       if declTk = tyRecord then LastTypeRecId := scalarRec;
-      idx := AllocVar(name, declTk);
+      idx := CAllocDeclVar(name, declTk);
       if declTk = tyPointer then
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
@@ -2155,15 +2282,71 @@ begin
         Next;
         if CurTok.Kind = tkBegin then
         begin
-          { Aggregate initializer `= { ... }` on a non-array local (e.g.
-            `static const expdesc ef = {VKINT, {0}, ...}`): not yet materialised,
-            balanced-brace skip so inner commas/braces don't end it early. }
-          arrLen := 0;   { reuse as brace depth }
-          repeat
-            if CurTok.Kind = tkBegin then Inc(arrLen)
-            else if CurTok.Kind = tkEnd then Dec(arrLen);
-            Next;
-          until (arrLen = 0) or (CurTok.Kind = tkEOF);
+          if (declTk = tyRecord) and (scalarRec >= REC_UCLASS_BASE) then
+          begin
+            { Non-array local record initializer. SQLite's
+              `static const sqlite3_mem_methods defaultMethods = { fn, ... }`
+              needs these fields materialised before the record is copied into
+              sqlite3GlobalConfig; skipping the aggregate left function-pointer
+              fields as stack garbage. Nested aggregate fields are still skipped
+              conservatively. }
+            Next;   { consume the opening brace }
+            recBase := UClsFBase[scalarRec - REC_UCLASS_BASE];
+            fldI := 0;
+            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+            begin
+              if fldI < UClsFCount[scalarRec - REC_UCLASS_BASE] then
+              begin
+                if CurTok.Kind = tkBegin then
+                  CSkipCInitElement
+                else
+                begin
+                  fTk := UFldTk[recBase + fldI];
+                  initExpr := ParseCExpr;
+                  if CurTok.Kind in [tkComma, tkEnd] then
+                  begin
+                    idn := AllocNode(AN_IDENT);
+                    ASTIVal[idn] := idx;
+                    ASTTk[idn] := Ord(declTk);
+                    fieldNode := AllocNode(AN_FIELD);
+                    ASTLeft[fieldNode] := idn;
+                    ASTSOffset[fieldNode] := UFldNOff[recBase + fldI];
+                    ASTSLen[fieldNode] := UFldNLen[recBase + fldI];
+                    ASTTk[fieldNode] := fTk;
+                    asn := AllocNode(AN_ASSIGN);
+                    ASTLeft[asn] := fieldNode;
+                    ASTRight[asn] := initExpr;
+                    ASTTk[asn] := fTk;
+                    seq := AllocNode(AN_SEQ);
+                    ASTLeft[seq] := asn;
+                    ASTRight[seq] := -1;
+                    if head = -1 then head := seq else ASTRight[tail] := seq;
+                    tail := seq;
+                  end
+                  else
+                    CSkipCInitElement;
+                end;
+              end
+              else
+                CSkipCInitElement;
+              Inc(fldI);
+              Eat(tkComma);
+            end;
+            Eat(tkEnd);
+            initExpr := -1;
+          end
+          else
+          begin
+            { Aggregate initializer `= { ... }` on unsupported local shapes
+              (e.g. nested aggregate fields): balanced-brace skip so inner
+              commas/braces don't end it early. }
+            arrLen := 0;   { reuse as brace depth }
+            repeat
+              if CurTok.Kind = tkBegin then Inc(arrLen)
+              else if CurTok.Kind = tkEnd then Dec(arrLen);
+              Next;
+            until (arrLen = 0) or (CurTok.Kind = tkEOF);
+          end;
         end
         else
           initExpr := ParseCExpr;
@@ -2491,9 +2674,25 @@ begin
     Exit;
   end;
 
+  { block-scope static declaration: parse as a normal local declaration but
+    allocate the declared storage in BSS so pointers to it survive the block.
+    This is needed for sqlite's `static sqlite3_vfs aVfs[]` registry table. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'static') then
+  begin
+    Next;
+    if IsCTypeTok then
+    begin
+      CLocalStaticDecl := True;
+      Result := ParseCLocalDeclAST;
+      CLocalStaticDecl := False;
+      Exit;
+    end;
+  end;
+
   { local variable declaration }
   if IsCTypeTok then
   begin
+    CLocalStaticDecl := False;
     Result := ParseCLocalDeclAST;
     Exit;
   end;
@@ -3669,7 +3868,7 @@ var
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
-  parenName, isVariadic, wasNewProc, fnRetIsFunc: Boolean;
+  parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch: Boolean;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -3743,6 +3942,7 @@ begin
      (name = 'atan2') or (name = 'exp') or (name = 'log') or (name = 'frexp') or
      (name = 'ldexp') or (name = 'sinh') or (name = 'cosh') or (name = 'tanh') then
     extLib := 'libm.so.6';
+  forceSystemExternal := (CurrentCLibrary <> '') or CSystemLibSelectedForSoname(extLib);
   if (not fnRetIsFunc) and parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
   if (not fnRetIsFunc) and (CurTok.Kind <> tkLParen) then
@@ -3837,7 +4037,26 @@ begin
   isFunc := True; { In C, everything is a function }
   
   { Register or locate Proc }
-  procIdx := FindProc(name);
+  procIdx := -1;
+  if forceSystemExternal then
+  begin
+    { Explicit system-library routing wins over case-insensitive Pascal fallback
+      (e.g. pxxcio pulls Pascal math.Sqrt, but `--system-libs=m` wants C sqrt
+      to remain an external libm import). Reuse an exact C declaration/definition
+      from an earlier pass if present; never bind to a differently-cased Pascal
+      routine here. }
+    for i := 0 to ProcCount - 1 do
+      if ProcCaseSensitive[i] and (Procs[i].Name = name) and
+         (Procs[i].ParamCount = nparams) then
+      begin
+        sigMatch := True;
+        for idx := 0 to nparams - 1 do
+          if Procs[i].Params[idx].TypeKind <> ptypes[idx] then sigMatch := False;
+        if sigMatch then begin procIdx := i; Break; end;
+      end;
+  end
+  else
+    procIdx := FindProc(name);
   wasNewProc := procIdx < 0;
   if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);

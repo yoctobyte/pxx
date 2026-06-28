@@ -13315,6 +13315,133 @@ begin
     dst[len1 + len2 + i] := s3[i];
 end;
 
+function CStemMatches(const a, b: AnsiString): Boolean;
+begin
+  Result := CaseEqual(a, b);
+  if (not Result) and CaseEqual(a, 'lib' + b) then Result := True;
+end;
+
+function CSystemLibStemSelected(const stem: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if CUseSystemLibs then begin Result := True; Exit; end;
+  for i := 0 to CSystemLibCount - 1 do
+    if CStemMatches(CSystemLibs[i], stem) then begin Result := True; Exit; end;
+end;
+
+procedure AddCSystemLibStem(const stem: AnsiString);
+var i: Integer;
+begin
+  if Length(stem) = 0 then Exit;
+  for i := 0 to CSystemLibCount - 1 do
+    if CaseEqual(CSystemLibs[i], stem) then Exit;
+  if CSystemLibCount >= MAX_C_INCLUDE_DIRS then Error('too many --system-libs entries');
+  CSystemLibs[CSystemLibCount] := LowerCase(stem);
+  Inc(CSystemLibCount);
+end;
+
+procedure AddCSystemLibSpec(const spec: AnsiString);
+var i: Integer; stem: AnsiString;
+begin
+  stem := '';
+  for i := 1 to Length(spec) do
+  begin
+    if spec[i] = ',' then
+    begin
+      AddCSystemLibStem(stem);
+      stem := '';
+    end
+    else if not (spec[i] in [' ', #9]) then
+      AppendChar(stem, spec[i]);
+  end;
+  AddCSystemLibStem(stem);
+end;
+
+function CHeaderStem(const name: AnsiString; var stem: AnsiString): Boolean;
+var lo: AnsiString;
+begin
+  lo := LowerCase(name);
+  Result := True;
+  stem := lo;
+  if (lo = 'ctype') or (lo = 'errno') or (lo = 'locale') or
+     (lo = 'math_ext') or (lo = 'setjmp') or (lo = 'signal') or
+     (lo = 'stdio') or (lo = 'stdlib') or (lo = 'string') or
+     (lo = 'unistd') or (lo = 'wchar') or (lo = 'wctype') or
+     (lo = 'arpa/inet') or (lo = 'netinet/in') or
+     (lo = 'sys/socket') or (lo = 'sys/types') or
+     (lo = 'sys/_types') or (lo = 'sys/cdefs') then
+    stem := 'c'
+  else if (lo = 'math') or (lo = 'm') then
+    stem := 'm'
+  else if lo = 'gtk3_c' then
+    stem := 'gtk-3'
+  else if lo = 'gtk' then
+    stem := 'gtk-x11-2.0'
+  else if (lo = 'stddef') or (lo = 'stdint') or (lo = 'stdbool') or
+          (lo = 'stdarg') or (lo = 'limits') or (lo = 'assert') then
+    stem := 'c'
+  else if Length(lo) = 0 then
+    Result := False;
+end;
+
+function CSonameForStem(const stem: AnsiString; var soname: AnsiString): Boolean;
+begin
+  Result := True;
+  if CStemMatches(stem, 'c') then soname := 'libc.so.6'
+  else if CStemMatches(stem, 'm') then soname := 'libm.so.6'
+  else if CStemMatches(stem, 'pthread') then soname := 'libpthread.so.0'
+  else if CStemMatches(stem, 'gtk-3') then soname := 'libgtk-3.so.0'
+  else if CStemMatches(stem, 'gtk-x11-2.0') then soname := 'libgtk-x11-2.0.so.0'
+  else if CStemMatches(stem, 'dl') then soname := 'libdl.so.2'
+  else if CStemMatches(stem, 'rt') then soname := 'librt.so.1'
+  else if CStemMatches(stem, 'z') then soname := 'libz.so.1'
+  else if CStemMatches(stem, 'sqlite3') then soname := 'libsqlite3.so.0'
+  else ConcatThree('lib', LowerCase(stem), '.so', soname);
+end;
+
+function CSonameForHeader(const name: AnsiString; var soname: AnsiString): Boolean;
+var stem: AnsiString;
+begin
+  Result := CHeaderStem(name, stem);
+  if Result then Result := CSonameForStem(stem, soname);
+end;
+
+function CHeaderDefaultSystem(const name: AnsiString): Boolean;
+var stem: AnsiString;
+begin
+  Result := False;
+  if not CHeaderStem(name, stem) then Exit;
+  Result := CStemMatches(stem, 'pthread') or CStemMatches(stem, 'gtk-3') or
+            CStemMatches(stem, 'gtk-x11-2.0') or CStemMatches(stem, 'dl') or
+            CStemMatches(stem, 'rt') or CStemMatches(stem, 'z') or
+            CStemMatches(stem, 'sqlite3');
+end;
+
+function CHeaderUsesSystemLib(const name: AnsiString): Boolean;
+var stem: AnsiString;
+begin
+  Result := CUseSystemLibs or CHeaderDefaultSystem(name);
+  if Result then Exit;
+  if CHeaderStem(name, stem) then
+    Result := CSystemLibStemSelected(stem);
+end;
+
+function CSystemLibSelectedForSoname(const soname: AnsiString): Boolean;
+begin
+  Result := CUseSystemLibs;
+  if Result then Exit;
+  if CaseEqual(soname, 'libc.so.6') then Result := CSystemLibStemSelected('c')
+  else if CaseEqual(soname, 'libm.so.6') then Result := CSystemLibStemSelected('m')
+  else if CaseEqual(soname, 'libpthread.so.0') then Result := CSystemLibStemSelected('pthread')
+  else if CaseEqual(soname, 'libdl.so.2') then Result := CSystemLibStemSelected('dl')
+  else if CaseEqual(soname, 'librt.so.1') then Result := CSystemLibStemSelected('rt')
+  else if CaseEqual(soname, 'libz.so.1') then Result := CSystemLibStemSelected('z')
+  else if CaseEqual(soname, 'libsqlite3.so.0') then Result := CSystemLibStemSelected('sqlite3')
+  else if CaseEqual(soname, 'libgtk-3.so.0') then Result := CSystemLibStemSelected('gtk-3')
+  else if CaseEqual(soname, 'libgtk-x11-2.0.so.0') then Result := CSystemLibStemSelected('gtk-x11-2.0');
+end;
+
 procedure EnableExceptionRuntime;
 begin
   if not ExceptionUsed then
@@ -13347,7 +13474,7 @@ var
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
-  savedSrcBase, savedUnitDir: AnsiString;
+  savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
   cdir, bdir, rtldir, lcldir: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
@@ -13387,6 +13514,7 @@ begin
 
   isCUnit := False;
   isCHeader := False;
+  savedCurrentCLibrary := CurrentCLibrary;
   CurrentCLibrary := '';
   UnitContent := '';
 
@@ -13651,7 +13779,11 @@ begin
   begin
     { sysutils/baseunix/unix with no source on the path: pass as a no-op so
       builtin-only FPC code keeps compiling (the historical behavior). }
-    if softMissOK then Exit;
+    if softMissOK then
+    begin
+      CurrentCLibrary := savedCurrentCLibrary;
+      Exit;
+    end;
     ConcatThree('uses: unit source not found: ', lo, '', emsg);
     Error(emsg);
   end;
@@ -13664,27 +13796,10 @@ begin
         Versioned sonames (not the unversioned dev symlink lib<name>.so) so
         the emitted ELF loads against the runtime libraries present on a
         stock system without -dev packages. Dynamic ld.so.cache probing is a
-        later refinement; this table covers the FFI targets in use. }
-      if (lo = 'ctype') or (lo = 'math_ext') or (lo = 'stdio') or
-         (lo = 'stdlib') or (lo = 'string') or (lo = 'unistd') then
-        CurrentCLibrary := 'libc.so.6'
-      else if (lo = 'math') or (lo = 'm') then
-        CurrentCLibrary := 'libm.so.6'
-      else if (lo = 'pthread') then
-        CurrentCLibrary := 'libpthread.so.0'
-      else if (lo = 'gtk3_c') then
-        CurrentCLibrary := 'libgtk-3.so.0'
-      else if (lo = 'gtk') then
-        CurrentCLibrary := 'libgtk-x11-2.0.so.0'
-      else if (lo = 'dl') then
-        CurrentCLibrary := 'libdl.so.2'
-      else if (lo = 'rt') then
-        CurrentCLibrary := 'librt.so.1'
-      else if (lo = 'z') then
-        CurrentCLibrary := 'libz.so.1'
-      else if (lo = 'sqlite3') then
-        CurrentCLibrary := 'libsqlite3.so.0'
-      else
+        later refinement; the registry covers the FFI targets in use and marks
+        non-emulated integrations (GTK, sqlite, zlib, pthread, dl) as external
+        by default. }
+      if not CSonameForHeader(lo, CurrentCLibrary) then
         ConcatThree('lib', lo, '.so', CurrentCLibrary);
     end;
     savedTokPos := TokPos;
@@ -13721,6 +13836,7 @@ begin
     CurTok.SVal := savedCurTokSVal;
     CurTok.IVal := savedCurTokIVal;
     CurTok.Line := savedCurTokLine;
+    CurrentCLibrary := savedCurrentCLibrary;
   end
   else
   begin
@@ -13801,6 +13917,7 @@ begin
     CurUnitDir := savedUnitDir;
     CaseSensitiveMode := savedCaseMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
+    CurrentCLibrary := savedCurrentCLibrary;
   end;
 end;
 

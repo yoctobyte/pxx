@@ -1329,6 +1329,20 @@ begin
   Result := True;
 end;
 
+{ Extract the crtl header module name (`math`, `sys/socket`, ...), without .h. }
+function CPCrtlHeaderName(const hdr: AnsiString; var name: AnsiString): Boolean;
+var idx, i, n: Integer;
+begin
+  Result := False;
+  name := '';
+  n := Length(hdr);
+  if (n < 2) or (hdr[n] <> 'h') or (hdr[n-1] <> '.') then Exit;
+  idx := CPFindSub(hdr, 'crtl/include/');
+  if idx = 0 then Exit;
+  for i := idx + 13 to n - 2 do AppendChar(name, hdr[i]);
+  Result := Length(name) > 0;
+end;
+
 { True if `path` is a crtl impl source (`.../crtl/src/<name>.c`). Such a file is
   pulled at most once per compile whether reached by the auto-pull or by an
   explicit `#include "...c"` (a unity build like lua's runner.c), so the two
@@ -1368,9 +1382,9 @@ end;
   pulled. The impl's own `#include <name.h>` re-resolves the header (guarded,
   empty) and finds the impl already pulled, so there is no recursion. }
 procedure CPAutoPullCrtlImpl(depth: Integer; const hdrPath: AnsiString);
-var src, srcDir: AnsiString;
+var src, srcDir, hdrName: AnsiString;
 begin
-  if CUseSystemLibs then Exit;
+  if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
   if CPCrtlSrcPulled(src) then Exit;
   CPrepPath := src;

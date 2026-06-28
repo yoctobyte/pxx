@@ -542,6 +542,23 @@ test-core: $(COMPILER)
 	/tmp/cpreproc_if_arith_b11026; test "$$?" = "42"
 	./$(COMPILER) test/cauto_pull_crtl_math_b111.c /tmp/cauto_pull_crtl_math_b11126
 	/tmp/cauto_pull_crtl_math_b11126; test "$$?" = "42"
+	./$(COMPILER) --system-libs=m test/csystem_libs_granular_math_b112.c /tmp/csystem_libs_granular_math_b11226
+	/tmp/csystem_libs_granular_math_b11226; test "$$?" = "39"
+	@if command -v readelf >/dev/null 2>&1; then \
+	  readelf -d /tmp/csystem_libs_granular_math_b11226 | grep -q "Shared library: \\[libm.so.6\\]"; \
+	  ! readelf -d /tmp/csystem_libs_granular_math_b11226 | grep -q "Shared library: \\[libc.so.6\\]"; \
+	fi
+	./$(COMPILER) --system-libs=c test/csystem_libs_granular_libc_b113.c /tmp/csystem_libs_granular_libc_b11326
+	@if command -v readelf >/dev/null 2>&1; then \
+	  readelf -d /tmp/csystem_libs_granular_libc_b11326 | grep -q "Shared library: \\[libc.so.6\\]"; \
+	  ! readelf -d /tmp/csystem_libs_granular_libc_b11326 | grep -q "Shared library: \\[libm.so.6\\]"; \
+	fi
+	./$(COMPILER) test/clocal_record_fnptr_init_b114.c /tmp/clocal_record_fnptr_init_b11426
+	/tmp/clocal_record_fnptr_init_b11426; test "$$?" = "42"
+	./$(COMPILER) test/clocal_static_record_array_b115.c /tmp/clocal_static_record_array_b11526
+	/tmp/clocal_static_record_array_b11526; test "$$?" = "42"
+	./$(COMPILER) test/cptr_return_text_b116.c /tmp/cptr_return_text_b11626
+	/tmp/cptr_return_text_b11626; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

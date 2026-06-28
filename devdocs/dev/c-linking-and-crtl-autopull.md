@@ -39,11 +39,22 @@ A crtl header with **no** sibling `.c` (pure declarations / macros, e.g.
 
 ## Opt-in: real system shared libraries
 
-`--system-libs` turns the auto-pull off for the whole program. Then a crtl
+Bare `--system-libs` turns the auto-pull off for the whole program. Then a crtl
 header's `extern` declarations resolve the normal way — as dynamic symbols with
-a `DT_NEEDED` (`libm.so.6` for the math names classified in
-`ParseCSubroutine`, else `libc.so.6`). Use this to link a C program against the
-host's real libraries instead of pxx's bundled runtime.
+a `DT_NEEDED` (`libm.so.6` for math, `libc.so.6` for libc-compatible headers,
+and the registry soname for known integration libraries). Use this to link a C
+program against the host's real libraries instead of pxx's bundled runtime.
+
+`--system-libs=<comma-list>` is the granular form. Each item is a soname stem
+(`m`, `c`, `pthread`, `dl`, `z`, `sqlite3`, `gtk-3`, ...). Only matching headers
+skip the bundled crtl auto-pull; everything else stays magic-linked. For example,
+`--system-libs=m` makes `<math.h>` resolve to `libm.so.6` while `<string.h>` and
+`<stdio.h>` still use PXX's libc-free implementations.
+
+Libraries PXX does not realistically emulate are modeled as system libraries by
+default. GTK/zlib/sqlite/pthread/dl-style imports therefore bind to the real
+soname registry unless a future project-owned shim explicitly changes that
+provider.
 
 Per-symbol opt-in is also possible with an explicit `external 'soname'` clause on
 a declaration (the general external-symbol path), independent of the crtl set.
@@ -66,5 +77,6 @@ in the compiler (`cpreproc.inc`, Track C).
   are removed from the binary by dead-code elimination, so a pulled-but-unused
   module costs compile time only, not binary size. (A future refinement could
   skip compiling a module whose symbols are never referenced.)
-- `--system-libs` is a whole-program switch. Mixing — most functions from crtl,
-  one from a real `.so` — is done per-symbol via an explicit `external 'soname'`.
+- Bare `--system-libs` is a whole-program switch; `--system-libs=<list>` is the
+  per-library switch. Per-symbol opt-in remains available through an explicit
+  `external 'soname'`.
