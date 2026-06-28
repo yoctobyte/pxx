@@ -12,13 +12,14 @@ _none_
 
 _none_
 
-## unfinished (4)
+## unfinished (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
+| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 
 ## blocked (1)
@@ -67,7 +68,7 @@ _none_
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
-| feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
+| feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -139,7 +140,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (345)
+## done (344)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -380,7 +381,6 @@ _none_
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
 | feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
-| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
@@ -536,7 +536,6 @@ _none_
 - [A] feature-esp32-idf-xtensa
 - [A] feature-flexcolumn-directive
 - [B] feature-gui-real-window-xvfb-smoke
-- [B] feature-ilja-tui
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
@@ -570,7 +569,7 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **4** — —
+- **6** — —
 - **2** — feature-c-source-frontend
 - **2** — feature-threadsafe-heap-contract
 - **1** — feature-esp32-idf-xtensa

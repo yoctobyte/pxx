@@ -1,10 +1,10 @@
 # Eliah M1 — form designer (box emulation)
 
 - **Type:** feature (app / demo)
-- **Status:** working
+- **Status:** unfinished (original box-emulation scope done; component-library scope added, parked — low priority)
 - **Track:** B
 - **Parent:** feature-eliah-ide
-- **Blocked-by:** feature-eliah-m0-window
+- **Blocked-by:** —
 - **Opened:** 2026-06-22
 
 ## Goal

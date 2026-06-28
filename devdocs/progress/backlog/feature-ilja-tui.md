@@ -4,7 +4,7 @@
 - **Status:** backlog
 - **Track:** B
 - **Parent:** feature-eliah-ide
-- **Blocked-by:** feature-eliah-m1-designer
+- **Blocked-by:** —
 - **Opened:** 2026-06-22
 
 ## Goal
