@@ -201,7 +201,7 @@ begin
       end;
       line := line + '  ';
     end;
-    AnsiWrite(line + AnsiReset);
+    AnsiWrite(line);
     if py < ph - 1 then
       AnsiWrite(#13#10);
   end;

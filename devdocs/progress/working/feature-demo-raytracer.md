@@ -2,8 +2,8 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** agent
 - **Opened:** 2026-06-22
 - **Relation:** Visual compute demo. May use `lib/rtl/math.pas`, but should keep
   a small no-transcendental path possible where practical.
