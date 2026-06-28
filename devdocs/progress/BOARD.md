@@ -27,11 +27,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (71)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
+| bug-c-header-case-sensitivity-lookup | A | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
@@ -497,6 +498,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
+- [A] bug-c-header-case-sensitivity-lookup
 - [A] bug-c-lua-tests-regressed-segfault
 - [A] bug-c-sqlite-sql-exec-schema-parse-corrupt
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
