@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (70)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
-| feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -136,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (342)
+## done (343)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -363,6 +362,7 @@ _none_
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
+| feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
 | feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
@@ -516,7 +516,6 @@ _none_
 - [B] feature-copy-intrinsic
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
-- [B] feature-demo-raytracer
 - [B] feature-dns-resolver-library
 - [A] feature-dynamic-compiler-tables
 - [A] feature-dynamic-include-paths-config

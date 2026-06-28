@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** working
+- **Status:** done
 - **Owner:** agent
 - **Opened:** 2026-06-22
 - **Relation:** Visual compute demo. May use `lib/rtl/math.pas`, but should keep
@@ -94,3 +94,4 @@ gaps separately if the platonic implementation needs them.
   `TRGBA` local (idiomatic). (mandelbrot deliberately kept PPM-only: it is in the
   Track A float-determinism cross gate and pulling png/image/zlib would break its
   aarch64/arm32 cross-build.)
+- 2026-06-28 — resolved, commit 71aa5923.
