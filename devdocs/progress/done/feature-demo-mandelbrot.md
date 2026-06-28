@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** working
+- **Status:** done
 - **Owner:** agent
 - **Opened:** 2026-06-22
 - **Relation:** Visual compute demo. Optional pressure on `lib/rtl/math.pas`;
@@ -104,3 +104,4 @@ portable Pascal kernel until their asm surfaces are mature enough.
   against stable (float params are the pre-existing pattern the live gate handles).
   **Still open:** interactive pan/zoom explorer, native x86-64 asm kernel, and the
   ASCII visual (the const-string-index bug).
+- 2026-06-28 — resolved, commit 590eea4f.
