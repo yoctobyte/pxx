@@ -1,0 +1,6 @@
+#ifndef MIXED_CASE_HEADER_H
+#define MIXED_CASE_HEADER_H
+
+#define MIXED_CASE_SENTINEL 77
+
+#endif

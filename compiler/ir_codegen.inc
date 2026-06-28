@@ -4411,8 +4411,8 @@ end;
 procedure IREmitMachineCode;
 var i, lblId, pos, targetOffset, f, procIdx: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..2047] of Integer;
-    LabelFixupTarget: array[0..2047] of Integer;
+    LabelFixupPos: array[0..MAX_IR-1] of Integer;
+    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
@@ -4495,6 +4495,7 @@ begin
           else
           begin
             EmitB($E9);
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -4515,6 +4516,7 @@ begin
           else
           begin
             EmitB($0F); EmitB($84);
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -4541,6 +4543,7 @@ begin
           else
           begin
             EmitB($0F); EmitB($85);
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -4561,6 +4564,7 @@ begin
           else
           begin
             EmitB($0F); EmitB($85);
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);

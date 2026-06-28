@@ -824,7 +824,7 @@ end;
   identifier operand to its symbol's size; otherwise a conservative pointer
   size (full expression-type sizing arrives with the type system). }
 function ParseCSizeof: Integer;
-var node, sz, si, depth: Integer; tk: TTypeKind;
+var node, sz, si, depth, recId, arrLen: Integer; tk, elemTk: TTypeKind; fieldName: AnsiString;
 begin
   Next; { sizeof }
   sz := TARGET_PTR_SIZE;
@@ -869,7 +869,62 @@ begin
       si := FindSym(CurTok.SVal);
       if si >= 0 then
       begin
-        if Tokens[TokPos].Kind = tkLBrack then
+        Next;
+        if CurTok.Kind = tkDot then
+        begin
+          Next;
+          if CurTok.Kind = tkIdent then
+          begin
+            fieldName := CurTok.SVal;
+            recId := REC_NONE;
+            if Syms[si].TypeKind = tyPointer then
+              recId := Syms[si].PtrElemRec
+            else if Syms[si].TypeKind = tyRecord then
+              recId := Syms[si].RecName;
+            if recId <> REC_NONE then
+            begin
+              if Tokens[TokPos].Kind = tkLBrack then
+              begin
+                if RecFieldIsArray(recId, fieldName) then
+                begin
+                  elemTk := RecFieldType(recId, fieldName);
+                  if elemTk = tyRecord then
+                    sz := RecSize(RecFieldRecId(recId, fieldName))
+                  else
+                    sz := TypeSize(elemTk);
+                end
+                else if RecFieldType(recId, fieldName) = tyPointer then
+                begin
+                  elemTk := RecFieldPtrElemTk(recId, fieldName);
+                  if elemTk = tyRecord then
+                    sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
+                  else
+                    sz := TypeSize(elemTk);
+                end
+                else if RecFieldType(recId, fieldName) = tyRecord then
+                  sz := RecSize(RecFieldRecId(recId, fieldName))
+                else
+                  sz := TypeSize(RecFieldType(recId, fieldName));
+              end
+              else if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+              begin
+                arrLen := RecFieldArrLen(recId, fieldName);
+                elemTk := RecFieldType(recId, fieldName);
+                if elemTk = tyRecord then
+                  sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
+                else
+                  sz := arrLen * TypeSize(elemTk);
+              end
+              else if RecFieldType(recId, fieldName) = tyRecord then
+                sz := RecSize(RecFieldRecId(recId, fieldName))
+              else
+                sz := TypeSize(RecFieldType(recId, fieldName));
+            end;
+          end;
+        end
+        else
+        begin
+        if CurTok.Kind = tkLBrack then
         begin
           { `sizeof(arr[i])` / `sizeof(p[i])` — the size of ONE element, not the
             whole array. Without this, the ubiquitous `ArraySize(x)` idiom
@@ -896,6 +951,7 @@ begin
         end
         else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
         else sz := TypeSize(Syms[si].TypeKind);
+        end;
       end;
     end;
     { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
@@ -4814,14 +4870,17 @@ var
     the parent's fields and break the contiguous range. }
   bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
   bfIsArr: array[0..MAX_BF-1] of Boolean;
+  bfBitWidth, bfBitShift, bfBitBytes: array[0..MAX_BF-1] of Integer;
   bfNDims: array[0..MAX_BF-1] of Integer;
   bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
-  fldNDims, dimVal, ndi: Integer;
+  fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
+  isBitField: Boolean;
 begin
   Next; { consume the opening brace }
   curOff := 0;
   maxAlign := 1;
   bfCount := 0;
+  bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
     { Nested inline aggregate member: struct or union with an inline body followed
@@ -4858,22 +4917,41 @@ begin
       if subci >= 0 then begin subRecSz := UClsSize_[subci]; subAl := UClsAlign[subci]; end
       else begin subRecSz := TARGET_PTR_SIZE; subAl := TARGET_PTR_SIZE; end;
       if subAl < 1 then subAl := 1;
+      bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
       repeat
         if CurTok.Kind <> tkIdent then Break;
         fnOff := Tokens[TokPos - 1].SOffset; fnLen := Tokens[TokPos - 1].SLen; Next;
+        isArr := False; arrLen := 1; fldNDims := 0;
         while CurTok.Kind = tkLBrack do
-        begin Next; while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next; Eat(tkRBrack); end;
+        begin
+          Next;
+          dimVal := 1;
+          if CurTok.Kind <> tkRBrack then
+            dimVal := CEvalConstExpr;
+          arrLen := arrLen * dimVal;
+          Eat(tkRBrack);
+          isArr := True;
+          if fldNDims < MAX_ARR_DIMS then
+          begin
+            bfDimSpan[bfCount * MAX_ARR_DIMS + fldNDims] := dimVal;
+            Inc(fldNDims);
+          end;
+        end;
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
         if (subci >= 0) and (bfCount < MAX_BF) then
         begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
           bfTk[bfCount] := Ord(tyRecord); bfRec[bfCount] := REC_UCLASS_BASE + subci;
           bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
-          bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfProcSig[bfCount] := -1;
+          bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
+          bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1;
+          bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           Inc(bfCount);
         end;
-        if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
-        else curOff := thisOff + subRecSz;
+        totalSz := subRecSz;
+        if isArr then totalSz := subRecSz * arrLen;
+        if isUnion then begin if totalSz > curOff then curOff := totalSz; end
+        else curOff := thisOff + totalSz;
         if subAl > maxAlign then maxAlign := subAl;
       until not Eat(tkComma);
       Eat(tkSemicolon);
@@ -4896,6 +4974,7 @@ begin
           bfTk[bfCount] := Ord(tyPointer); bfRec[bfCount] := REC_NONE;
           bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
+          bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           bfProcSig[bfCount] := fldProcSig;
           Inc(bfCount);
         end;
@@ -4946,19 +5025,15 @@ begin
         fnLen := Tokens[TokPos-1].SLen;
         Next;
 
-        { Named bit-field `T name : width` — bit-packing is not modelled; the
-          field is laid out as a full storage unit of its base type. That gives
-          offsets that differ from the C ABI but are self-consistent for
-          pxx-compiled C (which only ever accesses a bit-field by name, never by
-          reinterpreting its storage), and — crucially — it keeps the enclosing
-          struct laid out as a record instead of an opaque pointer, so sibling
-          fn-pointer members (sqlite3.xProgress, reached via the nested
-          bit-field struct `init`) stay registered and callable. Discard width.
-          A bit-field is never an array, so the bracket loop below is skipped. }
+        isBitField := False; bitWidth := 0;
+        { Named bit-field `T name : width`. Pack consecutive fields into the
+          storage unit of their declared base type and remember bit metadata for
+          masked loads/stores during IR lowering. }
         if CurTok.Kind = tkColon then
         begin
           Next;
-          CEvalConstExpr;
+          bitWidth := CEvalConstExpr;
+          isBitField := True;
         end;
 
         isArr := False; arrLen := 1; fldNDims := 0;
@@ -5011,8 +5086,38 @@ begin
         end;
         if al < 1 then al := 1;
 
-        if isUnion then thisOff := 0
-        else thisOff := AlignTo(curOff, al);
+        if isBitField then
+        begin
+          if bitWidth < 0 then bitWidth := 0;
+          if bitWidth > sz * 8 then bitWidth := sz * 8;
+          if isUnion then
+          begin
+            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > 32) then
+            begin
+              bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+            end;
+            thisOff := bitUnitOff;
+          end
+          else
+          begin
+            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > 32) then
+            begin
+              thisOff := curOff;
+              bitUnitOff := thisOff; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+            end
+            else
+              thisOff := bitUnitOff;
+          end;
+          bitBytes := (bitUnitUsed + bitWidth + 7) div 8;
+          if bitBytes < 1 then bitBytes := 1;
+          if bitBytes > 4 then bitBytes := 4;
+        end
+        else
+        begin
+          bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
+          if isUnion then thisOff := 0
+          else thisOff := AlignTo(curOff, al);
+        end;
 
         if bfCount < MAX_BF then
         begin
@@ -5021,18 +5126,46 @@ begin
           bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims;
+          if isBitField then
+          begin
+            bfBitWidth[bfCount] := bitWidth;
+            bfBitShift[bfCount] := bitUnitUsed;
+            bfBitBytes[bfCount] := bitBytes;
+          end
+          else
+          begin
+            bfBitWidth[bfCount] := 0;
+            bfBitShift[bfCount] := 0;
+            bfBitBytes[bfCount] := 0;
+          end;
           if (declStars = 0) then bfProcSig[bfCount] := fldProcSig else bfProcSig[bfCount] := -1;
           Inc(bfCount);
         end;
 
-        totalSz := sz;
-        if isArr then totalSz := sz * arrLen;
-        if isUnion then
+        if isBitField then
         begin
-          if totalSz > curOff then curOff := totalSz;
+          bitUnitUsed := bitUnitUsed + bitWidth;
+          bitBytes := (bitUnitUsed + 7) div 8;
+          if bitBytes < 1 then bitBytes := 1;
+          if bitBytes > 4 then bitBytes := 4;
+          if isUnion then
+          begin
+            if bitBytes > curOff then curOff := bitBytes;
+          end
+          else
+            curOff := bitUnitOff + bitBytes;
         end
         else
-          curOff := thisOff + totalSz;
+        begin
+          totalSz := sz;
+          if isArr then totalSz := sz * arrLen;
+          if isUnion then
+          begin
+            if totalSz > curOff then curOff := totalSz;
+          end
+          else
+            curOff := thisOff + totalSz;
+        end;
         if al > maxAlign then maxAlign := al;
 
         firstDecl := False;
@@ -5055,6 +5188,9 @@ begin
     AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
     UFldIsArray[UFldCount-1] := bfIsArr[k];
     UFldArrLen[UFldCount-1] := bfArrLen[k];
+    UFldBitWidth[UFldCount-1] := bfBitWidth[k];
+    UFldBitShift[UFldCount-1] := bfBitShift[k];
+    UFldBitBytes[UFldCount-1] := bfBitBytes[k];
     if bfProcSig[k] >= 0 then UFldProcSig[UFldCount-1] := bfProcSig[k];
     if bfNDims[k] >= 2 then
     begin

@@ -1413,6 +1413,9 @@ var
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
   UFldSetEnumId : array[0..MAX_UFIELD-1] of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
   UFldSetElemTk : array[0..MAX_UFIELD-1] of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
+  UFldBitWidth : array[0..MAX_UFIELD-1] of Integer; { C named bit-field width in bits; 0 = ordinary field }
+  UFldBitShift : array[0..MAX_UFIELD-1] of Integer; { C named bit-field least-significant bit offset within storage unit }
+  UFldBitBytes : array[0..MAX_UFIELD-1] of Integer; { C named bit-field storage bytes used for masked RMW }
   { 2-D fixed-array fields: `m: array[a..b, c..d] of T`, flattened to 1-D
     storage; r.m[i,j] / r.m[i][j] index via (i-lo1)*span2 + (j-lo2). }
   UFldArrNDims  : array[0..MAX_UFIELD-1] of Integer;

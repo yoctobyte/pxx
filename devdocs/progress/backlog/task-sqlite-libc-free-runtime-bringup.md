@@ -39,8 +39,9 @@ but its dynamic-symbol table still shows the sqlite OS-interface dependencies
   close fstat64 lstat64 stat64 fcntl64 fchmod mkdir utimes mmap64 munmap fsync
   getpid gettimeofday nanosleep sysconf localtime` — sqlite's `os_unix.c` raw
   syscall surface.
-- **threads:** `pthread_create/join`, `pthread_mutex*` — could be stubbed for a
-  single-threaded build (`SQLITE_THREADSAFE=0`) to defer.
+- **threads:** keep current bring-up on `SQLITE_THREADSAFE=0`. A later
+  multithreaded SQLite path needs the constrained syscall-only pthread subset
+  tracked in [[feature-syscall-pthread-shim]].
 - **dl:** `dlopen/dlclose/dlsym/dlerror` — `SQLITE_OMIT_LOAD_EXTENSION` defers it.
 
 The current libc-free unity driver segfaults at runtime — almost certainly a call

@@ -3,7 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
-- **Blocked-by:** feature-unified-heap-allocator
+- **Blocked-by:** feature-threadsafe-heap-contract
 - **Opened:** 2026-06-06 (user request)
 
 ## Motivation
@@ -36,9 +36,11 @@ pool, two surfaces) — design them together rather than twice.
 
 ## Why blocked
 
-Concurrent allocation needs the **thread-safe shared heap** the allocator arc
-delivers; the thread arc in `threads-todo.md` is explicitly ordered after the
-unified allocator. Parallel code doing I/O also wants
+Concurrent allocation needs a proven **thread-safe heap contract** for the active
+memory-management mode. The unified allocator has landed, and `--threadsafe`
+covers important refcount paths, but Track A still needs to audit/define the
+heap behavior for real preemptive threads; see
+`feature-threadsafe-heap-contract`. Parallel code doing I/O also wants
 `feature-threadsafe-io-serialization` (statement-atomic `write`/`writeln`) — not
 a hard blocker, but expect to need it in the same breath.
 
@@ -89,3 +91,6 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
 - 2026-06-06 — ticket opened from user request.
 - 2026-06-18 — ESP/FreeRTOS strategy + `threads ⇒ idf` + profile-default decision
   recorded (design discussion); see developer/concurrency-memory-model.md.
+- 2026-06-28 — blocker moved from the completed unified allocator to
+  `feature-threadsafe-heap-contract`: refcounting exists in threadsafe mode, but
+  heap safety needs an explicit Track A contract per memory-management mode.

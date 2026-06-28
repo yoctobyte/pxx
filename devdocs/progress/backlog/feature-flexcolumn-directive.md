@@ -3,7 +3,6 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
-- **Blocked-by:** chore-inc-to-units
 - **Opened:** 2026-06-06 (from todo.md §4)
 
 ## Motivation
@@ -12,7 +11,7 @@ The `value:w:d` formatting micro-grammar is today special-cased in
 `write`/`writeln`/`Str`. Generalize it into a declarable calling-convention
 directive so formatted routines can be ordinary library functions whose call
 args carry optional `:w:d` modifiers. Pays off when variadic `write`/`writeln`
-move to library code (see `chore-inc-to-units`).
+move to library code (see `feature-writeln-as-library`).
 
 ## Scope
 
@@ -29,3 +28,7 @@ syntax and formats correctly; existing `write`/`writeln`/`Str` unchanged.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §4.
+- 2026-06-28 — Removed `chore-inc-to-units` as a blocker after that refactor was
+  rejected. This feature remains optional and should justify itself through a
+  future library-backed formatted-output path, not through a broad compiler-file
+  split.

@@ -1,6 +1,7 @@
 # Object-reference array identity lookup fails in Eliah palette icon handler
 
 - **Type:** bug (compiler/runtime suspicion)
+- **Status:** DONE (2026-06-28)
 - **Track:** A (Pascal compiler/codegen) — found by Track B while attempting
   `feature-eliah-component-tabbar`
 - **Opened:** 2026-06-26
@@ -128,3 +129,10 @@ end.
 A minimized repro passes on x86-64 with the pinned compiler after the fix. Track
 B can then implement `feature-eliah-component-tabbar` with direct object-identity
 dispatch, no caption/string fallback and no slot-id workaround.
+
+## Log
+
+- 2026-06-28 — Re-audited on current compiler. The ticket's minimized class-field
+  dynamic-array identity shape now passes: `Sender = Btns[i]` finds the object and
+  reads the parallel `Names[i]` value. Added regression
+  `test/test_object_ref_array_identity.pas` to `make test-core`.

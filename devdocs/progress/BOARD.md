@@ -38,9 +38,7 @@ _none_
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
-| bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
-| chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
@@ -67,7 +65,7 @@ _none_
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
+| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
@@ -84,12 +82,14 @@ _none_
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
+| feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
+| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
+| feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -140,7 +140,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (343)
+## done (344)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -258,6 +258,7 @@ _none_
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
+| bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
 | bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
@@ -488,7 +489,7 @@ _none_
 | track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (4)
+## rejected (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -496,6 +497,7 @@ _none_
 | bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 
 ## Ready (no unmet blocker)
 
@@ -506,9 +508,7 @@ _none_
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
-- [A] bug-object-ref-array-identity-in-method
 - [A] bug-paramless-self-recursion-silent-result-read
-- [A] chore-inc-to-units
 - [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
@@ -535,6 +535,7 @@ _none_
 - [B] feature-embed-pascal-script
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-esp32-idf-xtensa
+- [A] feature-flexcolumn-directive
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
 - [A] feature-inline-asm-depth
@@ -550,11 +551,11 @@ _none_
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
-- [A] feature-parallel-processing
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [B] feature-release-packaging
 - [A] feature-require-forward-strict-mode
+- [B] feature-threadsafe-heap-contract
 - [A] feature-threadsafe-io-serialization
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
@@ -573,7 +574,8 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **2** — feature-c-source-frontend
-- **1** — chore-inc-to-units
+- **2** — feature-threadsafe-heap-contract
 - **1** — feature-esp32-idf-xtensa
 - **1** — feature-mimic-fpc
+- **1** — feature-threadsafe-io-serialization
 - **1** — task-sqlite-libc-free-runtime-bringup

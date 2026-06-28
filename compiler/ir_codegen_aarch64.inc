@@ -2579,8 +2579,8 @@ end;
 procedure IREmitMachineCodeAarch64;
 var i, lblId, pos, targetOffset, f, si, classIdx, procIdx: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..2047] of Integer;
-    LabelFixupTarget: array[0..2047] of Integer;
+    LabelFixupPos: array[0..MAX_IR-1] of Integer;
+    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   for i := 0 to MAX_IR - 1 do
@@ -2634,6 +2634,7 @@ begin
             EmitAsmA64(['b %', LabelPositions[lblId] - CodeLen])
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -2649,6 +2650,7 @@ begin
             EmitAsmA64(['cbz x0, %', LabelPositions[lblId] - CodeLen])
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -2691,6 +2693,7 @@ begin
             EmitI32($B5000000 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { cbnz x0, label }
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -2745,6 +2748,7 @@ begin
             EmitI32($54000001 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { b.ne label }
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);

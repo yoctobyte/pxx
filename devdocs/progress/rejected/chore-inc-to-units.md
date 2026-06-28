@@ -1,7 +1,7 @@
 # `.inc` → real `.pas` units refactor
 
 - **Type:** chore
-- **Status:** backlog
+- **Status:** rejected
 - **Owner:** —
 - **Unblocks:** feature-flexcolumn-directive
 - **Opened:** 2026-06-06 (from todo.md §6)
@@ -28,3 +28,7 @@ fixedpoint intact at each step.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §6.
+- 2026-06-28 — Rejected/wontfix. The compiler has already settled into the
+  single-translation-unit `{$include}` shape, and the main feature areas now have
+  their own focused include files. Splitting everything into units would add
+  folder/file churn without enough payoff for the current path.

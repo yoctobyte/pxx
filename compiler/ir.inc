@@ -571,6 +571,66 @@ begin
     Result := TypeSize(baseTk);
 end;
 
+function IRBitMask(width: Integer): Int64;
+var i: Integer; m: Int64;
+begin
+  m := 0;
+  for i := 0 to width - 1 do
+    m := (m shl 1) or 1;
+  Result := m;
+end;
+
+function IRBitStorageTk(bytes: Integer): TTypeKind;
+begin
+  if bytes <= 1 then Result := tyUInt8
+  else if bytes = 2 then Result := tyUInt16
+  else Result := tyUInt32;
+end;
+
+function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer;
+var recId, width, shift: Integer; fieldName: AnsiString; value, maskNode: Integer;
+begin
+  recId := ResolveNodeRec(ASTLeft[fieldNode]);
+  fieldName := GetASTIdentName(fieldNode);
+  width := RecFieldBitWidth(recId, fieldName);
+  shift := RecFieldBitShift(recId, fieldName);
+  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
+  value := IRAppend(IR_LOAD_MEM, storageAddr, -1, -1, 0, Ord(storageTk));
+  if shift > 0 then
+    value := IRAppend(IR_BINOP, value,
+                      IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
+                      Ord(tkIdent), 0, Ord(storageTk));
+  maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(storageTk));
+  Result := IRAppend(IR_BINOP, value, maskNode, Ord(tkAnd), 0, Ord(storageTk));
+end;
+
+function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer;
+var recId, width, shift, addr, oldVal, clearMask, newBits, maskedNew, maskNode: Integer;
+    fieldName: AnsiString; mask, shiftedMask: Int64;
+begin
+  recId := ResolveNodeRec(ASTLeft[fieldNode]);
+  fieldName := GetASTIdentName(fieldNode);
+  width := RecFieldBitWidth(recId, fieldName);
+  shift := RecFieldBitShift(recId, fieldName);
+  storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
+  addr := IRLowerAddress(fieldNode);
+  mask := IRBitMask(width);
+  shiftedMask := mask shl shift;
+  oldVal := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, Ord(storageTk));
+  clearMask := IRAppend(IR_BINOP, oldVal,
+                        IRAppend(IR_CONST_INT, -1, -1, -1, not shiftedMask, Ord(storageTk)),
+                        Ord(tkAnd), 0, Ord(storageTk));
+  maskedNew := IRAppend(IR_BINOP, rhsValue,
+                        IRAppend(IR_CONST_INT, -1, -1, -1, mask, Ord(storageTk)),
+                        Ord(tkAnd), 0, Ord(storageTk));
+  if shift > 0 then
+    maskedNew := IRAppend(IR_BINOP, maskedNew,
+                          IRAppend(IR_CONST_INT, -1, -1, -1, shift, Ord(tyInteger)),
+                          Ord(tkShl), 0, Ord(storageTk));
+  newBits := IRAppend(IR_BINOP, clearMask, maskedNew, Ord(tkOr), 0, Ord(storageTk));
+  Result := IRAppend(IR_STORE_MEM, addr, newBits, -1, 0, Ord(storageTk));
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     fieldName: AnsiString;
@@ -1688,6 +1748,59 @@ begin
   lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
 end;
 
+procedure IRLowerCSwitchDispatchSeq(seqNode, selTmp, selTk: Integer; var defaultLabel: Integer);
+var seq, stmt, condNode: Integer;
+begin
+  seq := seqNode;
+  while seq <> -1 do
+  begin
+    stmt := ASTLeft[seq];
+    if stmt >= 0 then
+    begin
+      if ASTKind[stmt] = AN_CASE then
+      begin
+        ASTSOffset[stmt] := IRNewLabel;
+        condNode := IRAppend(IR_BINOP,
+          IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
+          IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[stmt], selTk),
+          Ord(tkNeq), 0, Ord(tyBoolean));
+        IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[stmt], condNode, -1, 0, 0);
+      end
+      else if ASTKind[stmt] = AN_DEFAULT then
+      begin
+        ASTSOffset[stmt] := IRNewLabel;
+        defaultLabel := ASTSOffset[stmt];
+      end
+      else if ASTKind[stmt] = AN_BLOCK then
+        IRLowerCSwitchDispatchSeq(ASTLeft[stmt], selTmp, selTk, defaultLabel);
+    end;
+    seq := ASTRight[seq];
+  end;
+end;
+
+procedure IRLowerCSwitchBodySeq(seqNode: Integer);
+var seq, stmt, lowered: Integer;
+begin
+  seq := seqNode;
+  while seq <> -1 do
+  begin
+    stmt := ASTLeft[seq];
+    if stmt >= 0 then
+    begin
+      if (ASTKind[stmt] = AN_CASE) or (ASTKind[stmt] = AN_DEFAULT) then
+        IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[stmt], 0)
+      else if ASTKind[stmt] = AN_BLOCK then
+        IRLowerCSwitchBodySeq(ASTLeft[stmt])
+      else
+      begin
+        lowered := IRLowerAST(stmt);
+        IRMarkStatementNode(lowered);
+      end;
+    end;
+    seq := ASTRight[seq];
+  end;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -2159,6 +2272,11 @@ begin
         Result := left;
         IRTk[Result] := Ord(tyPointer);
       end
+      else if CProgramMode and (ASTKind[node] = AN_FIELD) and
+              (RecFieldBitWidth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) > 0) then
+        Result := IRLowerBitFieldRead(node, left,
+                                      RecFieldType(ResolveNodeRec(ASTLeft[node]),
+                                                   GetASTIdentName(node)))
       else if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
       begin
         { A frozen-string / set value IS its address (no load). Present the
@@ -2918,6 +3036,16 @@ begin
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            Syms[i].ArrLen * elemSize, Ord(tyRecord));
       end
+      else if CProgramMode and (ASTKind[ASTLeft[node]] = AN_FIELD) and
+              (RecFieldBitWidth(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                                GetASTIdentName(ASTLeft[node])) > 0) then
+      begin
+        value := IRLowerAST(ASTRight[node]);
+        lhsStoreTk := RecFieldType(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                                   GetASTIdentName(ASTLeft[node]));
+        IRLowerBitFieldStore(ASTLeft[node], value, lhsStoreTk);
+        Result := IRLowerBitFieldRead(ASTLeft[node], IRLowerAddress(ASTLeft[node]), lhsStoreTk);
+      end
       else if (ASTKind[ASTLeft[node]] <> AN_IDENT) and
               (NodeDynDepth(ASTLeft[node]) > 0) then
       begin
@@ -3340,7 +3468,7 @@ begin
           cast, so C bindings pass a Pascal string without PChar() boilerplate.
           The string data at Offset+8 is NUL-terminated by InternStr. }
         if (not isRefArg) and (cpi >= 0) and
-           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) and
+           (IntToTypeKind(IRTk[value]) = tyString) and
            (((pathIdx < Procs[cpi].ParamCount) and
              (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
             (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
@@ -3670,29 +3798,7 @@ begin
       { pass 1 — dispatch: give each case/default marker a label and, for a case,
         emit `if (sel == caseval) goto label` (via JUMP_IF_FALSE of `sel != val`). }
       swDefault := -1;
-      swSeq := ASTLeft[ASTRight[node]];
-      while swSeq <> -1 do
-      begin
-        swMarker := ASTLeft[swSeq];
-        if swMarker >= 0 then
-        begin
-          if ASTKind[swMarker] = AN_CASE then
-          begin
-            ASTSOffset[swMarker] := IRNewLabel;
-            condNode := IRAppend(IR_BINOP,
-              IRAppend(IR_LOAD_SYM, swSelTmp, -1, -1, 0, swSelTk),
-              IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[swMarker], swSelTk),
-              Ord(tkNeq), 0, Ord(tyBoolean));
-            IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[swMarker], condNode, -1, 0, 0);
-          end
-          else if ASTKind[swMarker] = AN_DEFAULT then
-          begin
-            ASTSOffset[swMarker] := IRNewLabel;
-            swDefault := ASTSOffset[swMarker];
-          end;
-        end;
-        swSeq := ASTRight[swSeq];
-      end;
+      IRLowerCSwitchDispatchSeq(ASTLeft[ASTRight[node]], swSelTmp, swSelTk, swDefault);
       if swDefault >= 0 then IRAppend(IR_JUMP, swDefault, -1, -1, 0, 0)
       else IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
       { pass 2 — bodies in source order (fallthrough). break -> end; continue is
@@ -3705,22 +3811,7 @@ begin
         IRLoopStackContinue[IRLoopStackDepth] := endLabel;
       IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
-      swSeq := ASTLeft[ASTRight[node]];
-      while swSeq <> -1 do
-      begin
-        swMarker := ASTLeft[swSeq];
-        if swMarker >= 0 then
-        begin
-          if (ASTKind[swMarker] = AN_CASE) or (ASTKind[swMarker] = AN_DEFAULT) then
-            IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[swMarker], 0)
-          else
-          begin
-            last := IRLowerAST(swMarker);
-            IRMarkStatementNode(last);
-          end;
-        end;
-        swSeq := ASTRight[swSeq];
-      end;
+      IRLowerCSwitchBodySeq(ASTLeft[ASTRight[node]]);
       Dec(IRLoopStackDepth);
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);

@@ -549,6 +549,9 @@ begin
   UFldArrLen[fi] := 1;
   UFldDynDepth[fi] := 0;
   UFldArrNDims[fi] := 0;
+  UFldBitWidth[fi] := 0;
+  UFldBitShift[fi] := 0;
+  UFldBitBytes[fi] := 0;
   UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
@@ -909,6 +912,39 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldProcSig[fi];
+  end;
+end;
+
+function RecFieldBitWidth(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldBitWidth[fi];
+  end;
+end;
+
+function RecFieldBitShift(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldBitShift[fi];
+  end;
+end;
+
+function RecFieldBitBytes(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldBitBytes[fi];
   end;
 end;
 

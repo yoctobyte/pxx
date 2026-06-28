@@ -1733,8 +1733,8 @@ end;
 procedure IREmitMachineCodeXtensa;
 var i, lblId, pos, f: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..2047] of Integer;
-    LabelFixupTarget: array[0..2047] of Integer;
+    LabelFixupPos: array[0..MAX_IR-1] of Integer;
+    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   for i := 0 to MAX_IR - 1 do
@@ -1758,6 +1758,7 @@ begin
             xtensa_j(LabelPositions[lblId] - CodeLen)
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -1777,6 +1778,7 @@ begin
             xtensa_j(LabelPositions[lblId] - CodeLen)
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);

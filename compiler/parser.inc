@@ -13468,7 +13468,7 @@ end;
 
 procedure ParseUsesUnit(const name: AnsiString);
 var
-  lo, path: AnsiString;
+  lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx: Integer;
   savedCurTokKind: TTokenKind;
   savedCurTokSVal: AnsiString;
@@ -13488,6 +13488,10 @@ begin
     lo := LowerCase(GetFileBaseName(name))
   else
     lo := LowerCase(name);
+  if isPath then
+    cName := GetFileBaseName(name)
+  else
+    cName := name;
   { sysutils/baseunix/unix: FPC RTL units that PXX programs historically `uses`
     purely to satisfy FPC source while relying on builtins. Load a real
     lib/rtl/<name> source if one exists (the canonical home for the conversion
@@ -13594,13 +13598,13 @@ begin
   end;
   if Length(UnitContent) = 0 then
   begin
-    ConcatThree(SourceFileDir, lo, '.c', path);
+    ConcatThree(SourceFileDir, cName, '.c', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then isCUnit := True;
   end;
   if Length(UnitContent) = 0 then
   begin
-    ConcatThree(SourceFileDir, lo, '.h', path);
+    ConcatThree(SourceFileDir, cName, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
@@ -13622,13 +13626,13 @@ begin
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(PasUnitDirs[i], lo, '.c', path);
+      ConcatThree(PasUnitDirs[i], cName, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(PasUnitDirs[i], lo, '.h', path);
+      ConcatThree(PasUnitDirs[i], cName, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -13664,13 +13668,13 @@ begin
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(cdir, lo, '.c', path);
+      ConcatThree(cdir, cName, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(cdir, lo, '.h', path);
+      ConcatThree(cdir, cName, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -13701,7 +13705,7 @@ begin
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(rtldir, lo, '.h', path);
+      ConcatThree(rtldir, cName, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -13722,13 +13726,13 @@ begin
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(lcldir, lo, '.c', path);
+      ConcatThree(lcldir, cName, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(lcldir, lo, '.h', path);
+      ConcatThree(lcldir, cName, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -13749,28 +13753,28 @@ begin
     if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('lib/rtl/', lo, '.h', path); LoadFile(path, UnitContent);
-      if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.h', path); LoadFile(path, UnitContent); end;
-      if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.h', path); LoadFile(path, UnitContent); end;
+      ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', cName, '.h', path); LoadFile(path, UnitContent); end;
+      if Length(UnitContent) = 0 then begin ConcatThree('compiler/', cName, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('compiler/', lo, '.c', path); LoadFile(path, UnitContent);
+      ConcatThree('compiler/', cName, '.c', path); LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
   end;
 
   if Length(UnitContent) = 0 then
   begin
-    ConcatThree('/usr/include/', lo, '.h', path);
+    ConcatThree('/usr/include/', cName, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
   if Length(UnitContent) = 0 then
   begin
-    ConcatThree('/usr/include/gtk-2.0/gtk/', lo, '.h', path);
+    ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
@@ -13799,8 +13803,8 @@ begin
         later refinement; the registry covers the FFI targets in use and marks
         non-emulated integrations (GTK, sqlite, zlib, pthread, dl) as external
         by default. }
-      if not CSonameForHeader(lo, CurrentCLibrary) then
-        ConcatThree('lib', lo, '.so', CurrentCLibrary);
+      if not CSonameForHeader(cName, CurrentCLibrary) then
+        ConcatThree('lib', LowerCase(cName), '.so', CurrentCLibrary);
     end;
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;

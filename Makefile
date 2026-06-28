@@ -278,6 +278,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_global_after_method26)" = "$$(printf '7\n121')"
 	./$(COMPILER) test/test_forin_member_access.pas /tmp/test_forin_member_access26
 	test "$$(/tmp/test_forin_member_access26)" = "$$(printf '42\n2\n42')"
+	./$(COMPILER) test/test_object_ref_array_identity.pas /tmp/test_object_ref_array_identity26
+	test "$$(/tmp/test_object_ref_array_identity26)" = "B"
 	./$(COMPILER) test/test_call_result_member.pas /tmp/test_call_result_member26
 	test "$$(/tmp/test_call_result_member26)" = "$$(printf 'rec\n7\nhello\n42\ntag:hello\nhello/tag:hello')"
 	./$(COMPILER) test/test_collections.pas /tmp/test_collections26
@@ -559,6 +561,16 @@ test-core: $(COMPILER)
 	/tmp/clocal_static_record_array_b11526; test "$$?" = "42"
 	./$(COMPILER) test/cptr_return_text_b116.c /tmp/cptr_return_text_b11626
 	/tmp/cptr_return_text_b11626; test "$$?" = "42"
+	./$(COMPILER) test/cternary_string_ptr_b118.c /tmp/cternary_string_ptr_b11826
+	/tmp/cternary_string_ptr_b11826; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_array_field_b119.c /tmp/csizeof_array_field_b11926
+	/tmp/csizeof_array_field_b11926; test "$$?" = "42"
+	./$(COMPILER) test/carray_field_decay_nested_item_b120.c /tmp/carray_field_decay_nested_item_b12026
+	/tmp/carray_field_decay_nested_item_b12026; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_ptr_field_index_b122.c /tmp/csizeof_ptr_field_index_b12226
+	/tmp/csizeof_ptr_field_index_b12226; test "$$?" = "42"
+	./$(COMPILER) test/cswitch_nested_case_block_b127.c /tmp/cswitch_nested_case_block_b12726
+	/tmp/cswitch_nested_case_block_b12726; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
@@ -1179,6 +1191,8 @@ test-core: $(COMPILER)
 	xvfb-run /tmp/test_c_gtk_types26
 	./$(COMPILER) test/test_c_gtk_window.pas /tmp/test_c_gtk_window26
 	xvfb-run /tmp/test_c_gtk_window26
+	./$(COMPILER) test/test_c_header_case_sensitive_import.pas /tmp/test_c_header_case_sensitive_import26
+	test "$$(/tmp/test_c_header_case_sensitive_import26)" = "77"
 	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26
 	test "$$(/tmp/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas /tmp/test_float26

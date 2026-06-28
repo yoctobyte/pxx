@@ -1321,8 +1321,8 @@ end;
 procedure IREmitMachineCodeRISCV32;
 var i, lblId, pos, targetOffset, f: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..2047] of Integer;
-    LabelFixupTarget: array[0..2047] of Integer;
+    LabelFixupPos: array[0..MAX_IR-1] of Integer;
+    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   for i := 0 to MAX_IR - 1 do
@@ -1346,6 +1346,7 @@ begin
             EmitAsmRv32(['jal zero, %', LabelPositions[lblId] - CodeLen])
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
@@ -1361,6 +1362,7 @@ begin
             EmitAsmRv32(['beq a0, zero, %', LabelPositions[lblId] - CodeLen])
           else
           begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
