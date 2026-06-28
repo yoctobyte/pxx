@@ -126,6 +126,13 @@ candidates — selection criteria, hard filters, and why each alternative was ke
 or rejected — lives in its own ticket: **idea-demo-app-candidates**.
 
 ## Log
+- 2026-06-28 — **slice 2 (search+eval) unblocked + verified** (Track B, v83).
+  [[bug-proc-typed-call-const-record-arg]] fixed by Track A. `go 3` from startpos
+  returns `bestmove e2e4 score 10 nodes 40793` — no longer INF. `--selftest` still
+  `ALL OK` (CHECKSUM 5554659317958071639). Engine fully functional on x86-64:
+  perft oracle + alpha-beta search + eval term table all green. **Remaining (Track A):**
+  cross-target byte-identical perft, self-host build on all 5 targets, benchmark
+  harness (nodes/sec, cycles/node).
 - 2026-06-25 — **slice 2 (search+eval) blocked by codegen bug**
   [[bug-proc-typed-call-const-record-arg]]. `go N` returns `score 30000` (=INF)
   from any position because `Evaluate` calls its terms through the proc-typed
