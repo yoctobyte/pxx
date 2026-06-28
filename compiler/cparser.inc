@@ -7,6 +7,8 @@ procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
+function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
+procedure CSkipCInitElement; forward;
 procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
 procedure ParseCStructDecl; forward;
@@ -14,7 +16,6 @@ function IsBareStructDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
-function ParseCCommaExpr: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
 { CNodeDecaysToPointer forward moved to forwards.inc (must sit above ir.inc:901,
