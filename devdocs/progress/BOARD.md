@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (73)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,8 @@ _none_
 | bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
+| bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
+| bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
@@ -506,6 +508,8 @@ _none_
 - [A] bug-c-lua-tests-regressed-segfault
 - [A] bug-c-sqlite-sql-exec-schema-parse-corrupt
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
+- [A] bug-chr-builtin-shadows-param-name
+- [A] bug-consteval-named-type-cast
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
