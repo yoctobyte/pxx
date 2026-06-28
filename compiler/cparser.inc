@@ -3510,21 +3510,55 @@ begin
                 else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkIdent) then
                 begin
                   procIdx := FindProc(CurTok.SVal);
-                  if (procIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+                  if procIdx >= 0 then
                   begin
-                    PendingInitSym[PendingInitCount]  := idx;
-                    PendingInitElem[PendingInitCount] := ei;
-                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                    PendingInitVal[PendingInitCount]  := procIdx;
-                    PendingInitValAux[PendingInitCount] := 0;
-                    PendingInitTk[PendingInitCount]   := fTk;
-                    PendingInitKind[PendingInitCount] := 2;
-                    Inc(PendingInitCount);
+                    if PendingInitCount < MAX_PENDING_INITS then
+                    begin
+                      PendingInitSym[PendingInitCount]  := idx;
+                      PendingInitElem[PendingInitCount] := ei;
+                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                      PendingInitVal[PendingInitCount]  := procIdx;
+                      PendingInitValAux[PendingInitCount] := 0;
+                      PendingInitTk[PendingInitCount]   := fTk;
+                      PendingInitKind[PendingInitCount] := 2;
+                      Inc(PendingInitCount);
+                    end;
+                    Next;
+                  end
+                  else if CurTok.SVal = 'NULL' then
+                  begin
+                    if PendingInitCount < MAX_PENDING_INITS then
+                    begin
+                      PendingInitSym[PendingInitCount]  := idx;
+                      PendingInitElem[PendingInitCount] := ei;
+                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                      PendingInitVal[PendingInitCount]  := 0;
+                      PendingInitValAux[PendingInitCount] := 0;
+                      PendingInitTk[PendingInitCount]   := fTk;
+                      PendingInitKind[PendingInitCount] := 0;
+                      Inc(PendingInitCount);
+                    end;
                     Next;
                   end
                   else
-                    CSkipCInitElement;
+                  begin
+                    initSymIdx := FindSym(CurTok.SVal);
+                    if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+                    begin
+                      PendingInitSym[PendingInitCount]  := idx;
+                      PendingInitElem[PendingInitCount] := ei;
+                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                      PendingInitVal[PendingInitCount]  := initSymIdx;
+                      PendingInitValAux[PendingInitCount] := 0;
+                      PendingInitTk[PendingInitCount]   := fTk;
+                      PendingInitKind[PendingInitCount] := 4;
+                      Inc(PendingInitCount);
+                    end;
+                    Next;
+                  end;
                 end
                 else if (fTk = Ord(tyPointer)) and CConsumeCastProcInit(procIdx) then
                 begin
@@ -3540,6 +3574,40 @@ begin
                     PendingInitKind[PendingInitCount] := 2;
                     Inc(PendingInitCount);
                   end;
+                end
+                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) then
+                begin
+                  Next; { consume '&' }
+                  initSymIdx := FindSym(CurTok.SVal);
+                  if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+                  begin
+                    PendingInitSym[PendingInitCount]  := idx;
+                    PendingInitElem[PendingInitCount] := ei;
+                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                    PendingInitVal[PendingInitCount]  := initSymIdx;
+                    PendingInitValAux[PendingInitCount] := 0;
+                    PendingInitTk[PendingInitCount]   := fTk;
+                    PendingInitKind[PendingInitCount] := 4;
+                    Inc(PendingInitCount);
+                  end;
+                  Next; { consume target ident }
+                end
+                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkInteger) then
+                begin
+                  if PendingInitCount < MAX_PENDING_INITS then
+                  begin
+                    PendingInitSym[PendingInitCount]  := idx;
+                    PendingInitElem[PendingInitCount] := ei;
+                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                    PendingInitVal[PendingInitCount]  := CurTok.IVal;
+                    PendingInitValAux[PendingInitCount] := 0;
+                    PendingInitTk[PendingInitCount]   := fTk;
+                    PendingInitKind[PendingInitCount] := 0;
+                    Inc(PendingInitCount);
+                  end;
+                  Next;
                 end
                 else if TypeIsOrdinal(IntToTypeKind(fTk)) and (CurTok.Kind <> tkBegin) then
                 begin
@@ -3589,6 +3657,128 @@ begin
             fTk := UFldTk[recBase + fldI];
             if CurTok.Kind = tkBegin then
               CSkipCInitElement
+            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
+                    (PendingInitCount < MAX_PENDING_INITS) then
+            begin
+              PendingInitSym[PendingInitCount]  := idx;
+              PendingInitElem[PendingInitCount] := -1;
+              PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+              PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+              PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
+              PendingInitValAux[PendingInitCount] := Tokens[TokPos - 1].SLen;
+              PendingInitTk[PendingInitCount]   := fTk;
+              PendingInitKind[PendingInitCount] := 1;
+              Inc(PendingInitCount);
+              Next;
+              while CurTok.Kind = tkString do
+              begin
+                PendingInitValAux[PendingInitCount - 1] :=
+                  PendingInitValAux[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
+                Next;
+              end;
+            end
+            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkIdent) then
+            begin
+              procIdx := FindProc(CurTok.SVal);
+              if procIdx >= 0 then
+              begin
+                if PendingInitCount < MAX_PENDING_INITS then
+                begin
+                  PendingInitSym[PendingInitCount]  := idx;
+                  PendingInitElem[PendingInitCount] := -1;
+                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                  PendingInitVal[PendingInitCount]  := procIdx;
+                  PendingInitValAux[PendingInitCount] := 0;
+                  PendingInitTk[PendingInitCount]   := fTk;
+                  PendingInitKind[PendingInitCount] := 2;
+                  Inc(PendingInitCount);
+                end;
+                Next;
+              end
+              else if CurTok.SVal = 'NULL' then
+              begin
+                if PendingInitCount < MAX_PENDING_INITS then
+                begin
+                  PendingInitSym[PendingInitCount]  := idx;
+                  PendingInitElem[PendingInitCount] := -1;
+                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                  PendingInitVal[PendingInitCount]  := 0;
+                  PendingInitValAux[PendingInitCount] := 0;
+                  PendingInitTk[PendingInitCount]   := fTk;
+                  PendingInitKind[PendingInitCount] := 0;
+                  Inc(PendingInitCount);
+                end;
+                Next;
+              end
+              else
+              begin
+                initSymIdx := FindSym(CurTok.SVal);
+                if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+                begin
+                  PendingInitSym[PendingInitCount]  := idx;
+                  PendingInitElem[PendingInitCount] := -1;
+                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                  PendingInitVal[PendingInitCount]  := initSymIdx;
+                  PendingInitValAux[PendingInitCount] := 0;
+                  PendingInitTk[PendingInitCount]   := fTk;
+                  PendingInitKind[PendingInitCount] := 4;
+                  Inc(PendingInitCount);
+                end;
+                Next;
+              end;
+            end
+            else if (fTk = Ord(tyPointer)) and CConsumeCastProcInit(procIdx) then
+            begin
+              if PendingInitCount < MAX_PENDING_INITS then
+              begin
+                PendingInitSym[PendingInitCount]  := idx;
+                PendingInitElem[PendingInitCount] := -1;
+                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                PendingInitVal[PendingInitCount]  := procIdx;
+                PendingInitValAux[PendingInitCount] := 0;
+                PendingInitTk[PendingInitCount]   := fTk;
+                PendingInitKind[PendingInitCount] := 2;
+                Inc(PendingInitCount);
+              end;
+            end
+            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) then
+            begin
+              Next; { consume '&' }
+              initSymIdx := FindSym(CurTok.SVal);
+              if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+              begin
+                PendingInitSym[PendingInitCount]  := idx;
+                PendingInitElem[PendingInitCount] := -1;
+                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                PendingInitVal[PendingInitCount]  := initSymIdx;
+                PendingInitValAux[PendingInitCount] := 0;
+                PendingInitTk[PendingInitCount]   := fTk;
+                PendingInitKind[PendingInitCount] := 4;
+                Inc(PendingInitCount);
+              end;
+              Next; { consume target ident }
+            end
+            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkInteger) then
+            begin
+              if PendingInitCount < MAX_PENDING_INITS then
+              begin
+                PendingInitSym[PendingInitCount]  := idx;
+                PendingInitElem[PendingInitCount] := -1;
+                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                PendingInitVal[PendingInitCount]  := CurTok.IVal;
+                PendingInitValAux[PendingInitCount] := 0;
+                PendingInitTk[PendingInitCount]   := fTk;
+                PendingInitKind[PendingInitCount] := 0;
+                Inc(PendingInitCount);
+              end;
+              Next;
+            end
             else if TypeIsOrdinal(IntToTypeKind(fTk)) then
             begin
               initV := CEvalConstExpr;

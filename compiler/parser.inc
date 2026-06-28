@@ -14325,6 +14325,16 @@ begin
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
     end
+    else if PendingInitKind[i] = 4 then
+    begin
+      valNode := AllocNode(AN_IDENT);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(Syms[PendingInitVal[i]].TypeKind);
+      innerAddr := AllocNode(AN_ADDR);
+      ASTLeft[innerAddr] := valNode;
+      ASTTk[innerAddr] := Ord(tyPointer);
+      valNode := innerAddr;
+    end
     else if PendingInitKind[i] = 3 then
     begin
       valNode := AllocNode(AN_FLOAT_LIT);
