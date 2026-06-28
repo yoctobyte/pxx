@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (72)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -101,6 +101,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
+| test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 
@@ -564,6 +565,7 @@ _none_
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [B] task-sqlite-libc-free-runtime-bringup
+- [C] test-c-crypt
 - [A] track-a-c-frontend-shared-ir-touchpoints
 
 ## Leverage (tickets each one unblocks)

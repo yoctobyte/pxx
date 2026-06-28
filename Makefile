@@ -1167,6 +1167,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_record_alignment26)" = "$$(printf '8\n4\n5\n1\n6\n2\n5\n1\n12\n2\n8\n12\n1\n8')"
 	./$(COMPILER) test/test_pthread_header.pas /tmp/test_pthread_header26
 	test "$$(/tmp/test_pthread_header26)" = "pthread loaded successfully"
+	./$(COMPILER) test/test_c_crypt.pas /tmp/test_c_crypt26
+	/tmp/test_c_crypt26 | grep -q "All crypt tests passed successfully!"
 	./$(COMPILER) test/test_c_gtk.pas /tmp/test_c_gtk26
 	test "$$(/tmp/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_c_gtk_call.pas /tmp/test_c_gtk_call26
