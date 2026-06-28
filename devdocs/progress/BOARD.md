@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (75)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -40,6 +40,7 @@ _none_
 | bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
 | bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
+| bug-mimic-fpc-version-defines-missing | A | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
@@ -511,6 +512,7 @@ _none_
 - [A] bug-chr-builtin-shadows-param-name
 - [A] bug-consteval-named-type-cast
 - [A] bug-i386-float-byval-param
+- [A] bug-mimic-fpc-version-defines-missing
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A/C] chore-repin-c-stdio-pal-bridge

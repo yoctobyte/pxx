@@ -28,3 +28,8 @@ To make header import seamless, the lookup mechanism should resolve the casing m
 
 ## Log
 - 2026-06-28 — bug ticket opened.
+- 2026-06-28 — confirmed also affects **Pascal unit lookup**, not just C headers.
+  `uses uPSUtils` fails with `unit source not found: upsutils` because the compiler
+  lowercases the name before the filesystem lookup. RemObjects Pascal Script (all `uPS*`
+  units) is blocked by this on Linux. The fix is the same: case-insensitive fallback
+  in the Pascal unit resolver path (`ParseUsesUnit`), not only in `CHeaderStem`.

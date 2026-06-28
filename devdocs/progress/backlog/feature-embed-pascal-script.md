@@ -54,6 +54,29 @@ where to find it) in the app's aboutbox / docs / README, and we keep the upstrea
 notice in any vendored source. Fair trade for a free engine; bake the credit line
 into the demo from the start, not as an afterthought.
 
+## Log
+
+### First probe 2026-06-28 (v83, --mimic-fpc)
+
+Clone at `external/pascalscript/` (remobjects/pascalscript, shallow). Core units probed
+with temporary lowercase copies (see [[bug-c-header-case-sensitivity-lookup]] — compiler
+lowercases unit name for file lookup; uPS* units have mixed-case filenames → not found
+without workaround).
+
+| unit | state |
+|------|-------|
+| `uPSUtils` | **[[bug-consteval-named-type-cast]]** — `IPointer(expr)` in const expr fails ConstEval (same bug as Synapse `TSocket(NOT(0))`) |
+| `uPSPreProcessor` | same — `IPointer` cast |
+| `uPSCompiler` | same — `IPointer` cast |
+| `uPSRuntime` | **[[bug-mimic-fpc-version-defines-missing]]** — `{$IF DEFINED(FPC) and (FPC_VERSION >= 3)}` fails; `FPC_VERSION` not defined as integer under `--mimic-fpc` |
+
+**3 Track A bugs gate the core** (1 shared with Synapse, 1 new, 1 infrastructure):
+1. [[bug-c-header-case-sensitivity-lookup]] — unit name lowercasing blocks all `uPS*` units on Linux
+2. [[bug-consteval-named-type-cast]] — `IPointer(expr)` in const, blocks uPSUtils/uPSPreProcessor/uPSCompiler
+3. [[bug-mimic-fpc-version-defines-missing]] — `FPC_VERSION` integer missing, blocks uPSRuntime
+
+When Track A fixes these, re-probe for the next wall.
+
 ## Open questions
 
 - How much of Pascal Script leans on Delphi-only RTTI vs manual registration
