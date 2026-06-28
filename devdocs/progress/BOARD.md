@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## unfinished (6)
+## unfinished (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -21,7 +21,6 @@ _none_
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
-| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 
 ## blocked (1)
 
@@ -29,14 +28,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (75)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-header-case-sensitivity-lookup | A | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
-| bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
 | bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
@@ -71,6 +69,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
+| feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
@@ -88,6 +87,7 @@ _none_
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
@@ -143,7 +143,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (344)
+## done (346)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -193,6 +193,7 @@ _none_
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-sqlite-offsetof-style-field-address-array-bound | A | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-c-sqlite-sql-exec-schema-argv-pointer | A | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
+| bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | A | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | A | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
@@ -316,6 +317,7 @@ _none_
 | bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
 | bug-writeln-real-width | A | bug | bug: `WriteLn(real:w:d)` ignores the field width | — |
 | bug-xtensa-call0-large-frame-truncates | A | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
+| bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
@@ -492,7 +494,7 @@ _none_
 | track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (5)
+## rejected (6)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -500,6 +502,7 @@ _none_
 | bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bugfix-cfront-bitfield-packing-gcc-compat | A+C | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 
 ## Ready (no unmet blocker)
@@ -507,7 +510,6 @@ _none_
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-header-case-sensitivity-lookup
 - [A] bug-c-lua-tests-regressed-segfault
-- [A] bug-c-sqlite-sql-exec-schema-parse-corrupt
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-chr-builtin-shadows-param-name
 - [A] bug-consteval-named-type-cast
@@ -523,6 +525,7 @@ _none_
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-header-import-complex
 - [C] feature-c-regex-library-devtest
+- [C] feature-c-source-frontend
 - [A] feature-c-varargs-design
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
@@ -541,7 +544,9 @@ _none_
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-esp32-idf-xtensa
 - [A] feature-flexcolumn-directive
+- [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
+- [B] feature-ilja-tui
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
@@ -555,10 +560,13 @@ _none_
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
+- [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [B] feature-release-packaging
 - [A] feature-require-forward-strict-mode
+- [B] feature-synapse-compile-check
 - [B] feature-threadsafe-heap-contract
+- [A] feature-threadsafe-io-serialization
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
 - [B] feature-tls13-from-scratch
@@ -574,7 +582,6 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **6** — —
 - **2** — feature-c-source-frontend
 - **2** — feature-threadsafe-heap-contract
 - **1** — feature-esp32-idf-xtensa

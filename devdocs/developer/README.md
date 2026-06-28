@@ -24,6 +24,12 @@ User-facing documents:
   libraries.
 - [Library Test Suite](library-testing.md) - Track B library-suite workflow,
   green vs discovery lanes, and when to file Track A/B tickets.
+- [Game Library Candidates For Compiler Testing](game-library-candidates.md) -
+  ranked Pascal and C game-engine/library candidates for discovery workloads.
+- [Pascal Torture-Corpus Candidates](pascal-torture-candidates.md) - broader
+  Object Pascal library candidates for compiler and RTL discovery.
+- [C Torture-Corpus Candidates](c-torture-candidates.md) - broader C library and
+  application candidates for C frontend, CRTL, ABI, and PAL discovery.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [Cross-codegen landmines](cross-codegen-landmines.md) - timeless gotchas for the non-x86-64 backends: the ARM32 4-byte-alignment / unguarded-x86-`EmitB` trap, the crash-diagnosis recipe (qemu `-d in_asm`, raw-binary objdump), and other cross gotchas. Append when bitten.

@@ -4,7 +4,6 @@
 - **Status:** backlog
 - **Track:** B
 - **Parent:** feature-eliah-shell
-- **Blocked-by:** —
 - **Opened:** 2026-06-23
 
 ## Goal

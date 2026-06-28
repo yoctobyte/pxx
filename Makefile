@@ -378,6 +378,10 @@ test-core: $(COMPILER)
 	/tmp/cglobal_array_init_b2826; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_char_array_str_init_b128.c /tmp/cglobal_char_array_str_init_b12826
 	/tmp/cglobal_char_array_str_init_b12826; test "$$?" = "0"
+	./$(COMPILER) test/cinline_struct_ptr_field_b129.c /tmp/cinline_struct_ptr_field_b12926
+	/tmp/cinline_struct_ptr_field_b12926; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
+	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
 	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026

@@ -1,8 +1,43 @@
-# bugfix: cfront — sqlite3 amalgamation crash (VdbeCursor field offset wrong)
+# bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field
 
 **Track:** A+C  
-**Priority:** high  
-**Depends on:** bugfix-cfront-bitfield-packing-gcc-compat.md
+**Status:** done
+**Priority:** high
+
+## Resolution
+
+Fixed 2026-06-28. The original VdbeCursor/bitfield diagnosis was stale: direct
+full-amalgamation probes now show PXX and GCC agree on `VdbeCursor` and the
+nearby VDBE layouts.
+
+The actual aggregate-query crash was in `findOrCreateAggInfoFunc`:
+
+```c
+struct AggInfo_func *pItem = pAggInfo->aFunc;
+if( pItem->pFExpr==pExpr ) ...
+```
+
+`ParseCStructInto` handled inline nested aggregate members by value, but did not
+handle declarators with stars after the closing brace:
+
+```c
+struct AggInfo_func { ... } *aFunc;
+```
+
+The parser skipped those pointer fields, so later `pAggInfo->aFunc` resolved as
+offset 0. At runtime that read the first byte fields of `AggInfo` as a pointer,
+producing a sign-extended bogus address and a segfault.
+
+Fix: the inline nested aggregate branch now parses per-declarator `*`, records
+`tyPointer` fields with the nested record as the pointee for one-star
+declarators, uses pointer size/alignment for layout, and preserves by-value
+nested aggregate behavior.
+
+Guards:
+
+- `test/cinline_struct_ptr_field_b129.c`
+- `test/csqlite_extended_test.c` now completes through aggregate query:
+  `COUNT`, `SUM`, `AVG`, and close all succeed.
 
 ## Problem
 

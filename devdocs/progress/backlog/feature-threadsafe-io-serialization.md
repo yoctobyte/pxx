@@ -3,7 +3,6 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
-- **Blocked-by:** —
 - **Opened:** 2026-06-06 (from todo.md §2d + rainy-afternoon)
 
 ## Motivation

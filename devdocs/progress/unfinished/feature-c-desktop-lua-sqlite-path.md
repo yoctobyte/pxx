@@ -5,6 +5,22 @@
   control flow, recursion, closures, generic-for, string lib, table.sort,
   metatables + operator overloading, pcall/error. Only floating-point remains
   broken.**).
+- **Session 2026-06-28 cleanup (Track A+B+C) — SQLite in-memory extended smoke
+  runs.** The stale VdbeCursor/bitfield crash diagnosis was disproved by direct
+  full-amalgamation layout probes: PXX and GCC agree on `VdbeCursor`
+  (`sizeof=120`, `uc=40`, `pKeyInfo=48`) and nearby VDBE structs. The actual
+  aggregate-query segfault was missing support for inline nested aggregate
+  pointer fields (`struct AggInfo_func { ... } *aFunc;`) in
+  `ParseCStructInto`; the parser skipped `*aFunc`, so `pAggInfo->aFunc`
+  resolved at offset 0 and loaded a bogus pointer. Fixed by parsing stars in
+  that inline-aggregate branch and recording pointer-to-nested-record metadata.
+  Guards: `test/cinline_struct_ptr_field_b129.c`; `test/csqlite_extended_test.c`
+  now completes `CREATE/INSERT/SELECT/UPDATE/DELETE/COUNT/SUM/AVG/close`.
+  Also removed a leftover `sqlite3RunParser` debug printf from the vendored
+  candidate and added `lib/crtl/src/string.c` leaf helpers
+  (`test/crtl_string_leaf_b130.c`), so the SQLite unity binary no longer imports
+  CRTL string helpers. Remaining dynamic imports are OS/VFS calls; tracked in
+  [[task-sqlite-libc-free-runtime-bringup]].
 - **Session 2026-06-27e (Track A+C) — generic-for fixed; lua essentially
   complete (minus float).** Two more fixes (self-host byte-identical, `make
   test` green):

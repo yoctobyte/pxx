@@ -1,10 +1,26 @@
 # C: sqlite SQL exec reports corrupt sqlite_master during schema parse
 
 - **Type:** bug (C frontend / sqlite bring-up) — Track C+A
-- **Status:** backlog
+- **Status:** done
 - **Owner:** unassigned
 - **Found / Opened:** 2026-06-28, after fixing
   [[bug-c-sqlite-sql-exec-schema-argv-pointer]].
+
+## Resolution
+
+Done 2026-06-28. The self-compiled SQLite unity driver now executes:
+
+```text
+open=0
+exec=0
+close=0
+```
+
+The richer `test/csqlite_extended_test.c` also completes table creation, index
+creation, inserts, selects, transaction update/delete, aggregate `COUNT/SUM/AVG`,
+and close. The last crash on the path was not schema corruption; it was the
+inline nested aggregate pointer-field bug fixed under
+`bugfix-cfront-sqlite3-crash-vdbecursor-layout.md`.
 
 ## Symptom
 

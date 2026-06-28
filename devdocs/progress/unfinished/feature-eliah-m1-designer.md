@@ -4,7 +4,6 @@
 - **Status:** unfinished (original box-emulation scope done; component-library scope added, parked — low priority)
 - **Track:** B
 - **Parent:** feature-eliah-ide
-- **Blocked-by:** —
 - **Opened:** 2026-06-22
 
 ## Goal

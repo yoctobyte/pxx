@@ -5,7 +5,6 @@
 - **Owner:** — (**Track B** — libraries/RTL; uses `$(PXX_STABLE)`, never rebuilds
   the compiler)
 - **Opened:** 2026-06-22
-- **Blocked-by:** —
 - **Note:** was blocked on `feature-mimic-fpc`; that landed 2026-06-22. Actionable.
 - **Relation:** the correctness/compat half of [[feature-networking]] (which
   names Synapse as compiler-compat target + test suite). Likely consumer of

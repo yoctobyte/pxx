@@ -4,7 +4,6 @@
 - **Status:** backlog
 - **Track:** C (C frontend)
 - **Opened:** 2026-06-17
-- **Blocked-by:** —
 - **Priority:** next major frontend after the cross-target language work lands
   (per roadmap; C frontend = the agreed next priority)
 - **Relation:** the *declaration* half of C is already mature via header import

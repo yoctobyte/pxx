@@ -32,9 +32,10 @@ A libc-free sqlite driver `#include`-ing `sqlite3.c` plus the crtl srcs compiles
 but its dynamic-symbol table still shows the sqlite OS-interface dependencies
 (`nm -D`):
 
-- **string (trivial, libc-free, add to `lib/crtl/src/string.c`):** `memchr`,
-  `strcspn`, `strrchr`, `strspn` (currently only `strlen/strcmp/strncmp/strchr/
-  memcpy/memmove/memset` exist). Leaf functions — same pattern as the rest.
+- **string:** done 2026-06-28. `lib/crtl/src/string.c` now provides the declared
+  leaf helpers SQLite was importing (`memchr`, `strcspn`, `strrchr`, `strspn`,
+  `strerror`) plus the rest of the simple declared string helpers. Guard:
+  `test/crtl_string_leaf_b130.c`.
 - **OS / VFS (the big piece, needs a PAL/syscall bridge):** `open64 read write
   close fstat64 lstat64 stat64 fcntl64 fchmod mkdir utimes mmap64 munmap fsync
   getpid gettimeofday nanosleep sysconf localtime` — sqlite's `os_unix.c` raw
@@ -44,10 +45,9 @@ but its dynamic-symbol table still shows the sqlite OS-interface dependencies
   tracked in [[feature-syscall-pthread-shim]].
 - **dl:** `dlopen/dlclose/dlsym/dlerror` — `SQLITE_OMIT_LOAD_EXTENSION` defers it.
 
-The current libc-free unity driver segfaults at runtime — almost certainly a call
-through one of these unresolved (weak/absent) symbols. Add the string leaves,
-then bring up (or `#define`-out) the OS/VFS layer incrementally; an in-memory
-(`:memory:`) open needs far less than the full file VFS.
+The current unity driver can now run a rich in-memory SQLite smoke when it is
+allowed to import libc for the OS/VFS calls. Full libc-free status still requires
+the OS/VFS bridge or a deliberately reduced in-memory VFS configuration.
 
 ## 2026-06-28 update
 
@@ -69,9 +69,22 @@ wall is a clean `SQLITE_CORRUPT` return while preparing SQLite's built-in
 `sqlite_master` schema SQL, tracked as
 [[bug-c-sqlite-sql-exec-schema-parse-corrupt]].
 
+## 2026-06-28 update 2
+
+The schema execution wall is cleared. `test/csqlite_schema_exec_probe.c` reports
+`open=0`, `exec=0`, `close=0`, and `test/csqlite_extended_test.c` runs through a
+larger in-memory workflow including aggregate queries.
+
+`nm -D /tmp/pxx_csqlite_extended` no longer lists the CRTL string helpers. The
+remaining dynamic imports are OS/VFS calls:
+
+```text
+fchmod fcntl64 fstat64 fsync getpid gettimeofday localtime lstat64 mkdir
+mmap64 munmap nanosleep open64 stat64 sysconf utimes
+```
+
 ## Acceptance
 
-- `lib/crtl/src/string.c` provides `memchr`/`strcspn`/`strrchr`/`strspn`.
-- A libc-free sqlite driver (unity-including the crtl srcs) opens and closes a
-  `:memory:` database without faulting and with no `DT_NEEDED` (or only the
-  intended ones).
+- A libc-free sqlite driver (unity-including the crtl srcs) opens, executes SQL,
+  and closes a `:memory:` database without faulting and with no `DT_NEEDED` (or
+  only the intended ones).

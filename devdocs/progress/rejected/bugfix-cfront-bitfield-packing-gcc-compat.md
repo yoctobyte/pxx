@@ -1,7 +1,28 @@
 # bugfix: C front — bitfield packing GCC-compatibility
 
 **Track:** A+C  
-**Priority:** high (blocks sqlite3 amalgamation correctness)
+**Status:** rejected / false diagnosis
+**Priority:** closed — not the current sqlite blocker
+
+## Resolution
+
+Rejected as the root cause of the sqlite aggregate crash. On 2026-06-28, the
+full SQLite `VdbeCursor` layout was tested directly against GCC:
+
+```text
+sizeof VdbeCursor=120
+seekHit=6 ub=8 seqCount=16 pAltCursor=32 uc=40 pKeyInfo=48 nField=64
+```
+
+PXX and GCC match for those offsets. The later SQLite aggregate crash was instead
+caused by missing support for inline nested aggregate pointer fields such as:
+
+```c
+struct AggInfo_func { ... } *aFunc;
+```
+
+That real bug is tracked and fixed under
+`bugfix-cfront-sqlite3-crash-vdbecursor-layout.md` despite the stale filename.
 
 ## Problem
 

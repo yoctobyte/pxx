@@ -5168,6 +5168,8 @@ begin
       if subAl < 1 then subAl := 1;
       bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
       repeat
+        declStars := 0;
+        while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
         if CurTok.Kind <> tkIdent then Break;
         fnOff := Tokens[TokPos - 1].SOffset; fnLen := Tokens[TokPos - 1].SLen; Next;
         isArr := False; arrLen := 1; fldNDims := 0;
@@ -5186,22 +5188,49 @@ begin
             Inc(fldNDims);
           end;
         end;
-        if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
+        if declStars > 0 then
+        begin
+          sz := TARGET_PTR_SIZE;
+          al := TARGET_PTR_SIZE;
+        end
+        else
+        begin
+          sz := subRecSz;
+          al := subAl;
+        end;
+        if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, al);
         if (subci >= 0) and (bfCount < MAX_BF) then
         begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
-          bfTk[bfCount] := Ord(tyRecord); bfRec[bfCount] := REC_UCLASS_BASE + subci;
-          bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          if declStars > 0 then
+          begin
+            bfTk[bfCount] := Ord(tyPointer); bfRec[bfCount] := REC_NONE;
+            if declStars = 1 then
+            begin
+              bfElemTk[bfCount] := Ord(tyRecord);
+              bfElemRec[bfCount] := REC_UCLASS_BASE + subci;
+            end
+            else
+            begin
+              bfElemTk[bfCount] := Ord(tyPointer);
+              bfElemRec[bfCount] := REC_NONE;
+            end;
+          end
+          else
+          begin
+            bfTk[bfCount] := Ord(tyRecord); bfRec[bfCount] := REC_UCLASS_BASE + subci;
+            bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          end;
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           Inc(bfCount);
         end;
-        totalSz := subRecSz;
-        if isArr then totalSz := subRecSz * arrLen;
+        totalSz := sz;
+        if isArr then totalSz := sz * arrLen;
         if isUnion then begin if totalSz > curOff then curOff := totalSz; end
         else curOff := thisOff + totalSz;
-        if subAl > maxAlign then maxAlign := subAl;
+        if al > maxAlign then maxAlign := al;
       until not Eat(tkComma);
       Eat(tkSemicolon);
     end
