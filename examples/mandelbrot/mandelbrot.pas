@@ -201,7 +201,7 @@ begin
       end;
       line := line + '  ';
     end;
-    AnsiWrite(line);
+    AnsiWrite(line + AnsiReset);
     if py < ph - 1 then
       AnsiWrite(#13#10);
   end;
@@ -211,8 +211,10 @@ begin
   line := 'Center: (' + FloatToStrF((cre_min + cre_max) * 0.5, 4) + ', ' + FloatToStrF((cim_min + cim_max) * 0.5, 4) + ') | Zoom: ' + FloatToStrF(3.5 / (cre_max - cre_min), 2) + ' | MaxIt: ' + IntToStr(max_it) + ' | Kernel: ';
   if use_fixed then line := line + 'fixed' else line := line + 'float';
   line := line + ' | [ARROWS]/[WASD] Pan | [+/-] Zoom | [[/]] MaxIt | [K] Kernel | [R] Reset | [Q] Quit';
-  while Length(line) < cols do
+  while Length(line) < cols - 1 do
     line := line + ' ';
+  if Length(line) > cols - 1 then
+    line := Copy(line, 1, cols - 1);
   AnsiWrite(AnsiBold + line + AnsiReset);
 end;
 
@@ -321,7 +323,7 @@ begin
     end;
   finally
     AnsiSetRawMode(False);
-    AnsiWrite(AnsiShowCursor);
+    AnsiWrite(AnsiShowCursor + AnsiReset);
     AnsiWrite(AnsiAltScreen(False));
   end;
 end;
