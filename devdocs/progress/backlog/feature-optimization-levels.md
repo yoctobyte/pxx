@@ -69,6 +69,8 @@ once it reliably detects ineligible bodies and degrades to a call.
    `make test` per pass.
 4. **`-O0` stays 1:1 debuggable.** Do not sneak in folds/motions at O0 that
    disturb source↔asm line mapping. Existing local const-fold is fine.
+5. **Volatile Support before Optimizing.** To prevent incorrect elision of memory accesses (especially on MMIO / hardware boundaries), `volatile` semantics MUST be fully parsed, mapped, and enforced in the AST/IR before any optimization passes (such as dead store elimination, redundant load elimination, or loop-invariant code motion) are enabled.
+
 
 ## Candidate passes (assign levels as proven)
 
