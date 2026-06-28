@@ -19,7 +19,7 @@ _none_
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
-| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
+| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 
 ## blocked (1)
 
@@ -47,7 +47,7 @@ _none_
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
@@ -87,10 +87,10 @@ _none_
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
-| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
+| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
-| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
@@ -517,7 +517,6 @@ _none_
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-header-import-complex
 - [C] feature-c-regex-library-devtest
-- [C] feature-c-source-frontend
 - [A] feature-c-varargs-design
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
@@ -556,7 +555,6 @@ _none_
 - [B] feature-release-packaging
 - [A] feature-require-forward-strict-mode
 - [B] feature-threadsafe-heap-contract
-- [A] feature-threadsafe-io-serialization
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
 - [B] feature-tls13-from-scratch
@@ -572,9 +570,9 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
+- **4** — —
 - **2** — feature-c-source-frontend
 - **2** — feature-threadsafe-heap-contract
 - **1** — feature-esp32-idf-xtensa
-- **1** — feature-mimic-fpc
 - **1** — feature-threadsafe-io-serialization
 - **1** — task-sqlite-libc-free-runtime-bringup
