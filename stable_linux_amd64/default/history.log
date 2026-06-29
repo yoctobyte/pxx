@@ -84,3 +84,4 @@
 2026-06-28T17:12:12Z  v84  12d5149f4718b5b066d786da8163361bd7c9a7e25e211d12af02c7c00ef2070d  5b581e7b460d04e23cc829b74ae404e8115b7521  fix(cfront): unblock sqlite aggregate smoke
 2026-06-29T09:05:18Z  v85  c96f00b08a5f26b6a52a48021fb2a640461c2dbdc6d7cf6dd6603bd4ac84c018  4b7175d3d18942fa2faeac92d90d689351c640ce  test(parser): cover self-result warning
 2026-06-29T16:27:21Z  v86  14167d4141e1e2aacdaec95cbc28a5e6bbd7a42031ff38ee27e51a240d377b38  3698202518430aa9c9fe2fb8f5cda487d87c6eb3  fix(c): seed va_start fp_offset for named FP params
+2026-06-29T17:36:55Z  v87  8f7af045177828f30f005c3397d397495eba719698fbfaadb2dd38cb594cbbdc  83f490aa7d003ba4beb48306d3b2f1f15e453197  docs(progress): root-cause i386 C arg-passing layer of cross-C
