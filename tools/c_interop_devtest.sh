@@ -28,7 +28,7 @@ fi
 
 say "=== C interop devtest against $PXX_STABLE ==="
 try_compile crtl_header_smoke -I"$ROOT/lib/crtl/include" "$ROOT/test/crtl_header_smoke.c"
-try_compile tiny_regex_re -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/tiny-regex-c" "$ROOT/library_candidates/tiny-regex-c/re.c"
+try_compile tiny_regex_re -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/tiny-regex-c" "$ROOT/test/crtl_tiny_regex_match.c"
 try_compile tiny_regex_header -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/tiny-regex-c" "$ROOT/test/crtl_tiny_regex_header_smoke.c"
 try_compile freebsd_regex_header -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/freebsd-regex/include" "$ROOT/test/crtl_freebsd_regex_header_smoke.c"
 try_compile freebsd_regex_regerror -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/freebsd-regex/include" -I"$ROOT/library_candidates/freebsd-regex" "$ROOT/library_candidates/freebsd-regex/regerror.c"

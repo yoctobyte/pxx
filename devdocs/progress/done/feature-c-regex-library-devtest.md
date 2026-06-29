@@ -1,7 +1,16 @@
 # C regex library dev-test import
 
 - **Type:** feature (C frontend / RTL candidate)
-- **Status:** backlog
+- **Status:** done
+- **Closed 2026-06-29:** acceptance met by the tiny-regex backend. The old
+  `re_matchp` undefined-variable compiler gap is resolved; `re.c` compiles and
+  runs. Added a real drop-in driver `test/crtl_tiny_regex_match.c` (unity-includes
+  `re.c`, asserts known POSIX cases `[0-9]+ / ^hello / \w+@\w+ / a.c`), wired into
+  `make` (expects `tiny-regex: all cases pass`) and pointed the
+  `c_interop_devtest.sh` dashboard at it (`tiny_regex_re` now `OK`). License:
+  kokke/tiny-regex-c is public domain; drop-in, no edits. The *preferred full
+  POSIX (FreeBSD/Henry-Spencer) backend* remains an optional future stretch, not
+  a blocker for this ticket's acceptance ("the selected C regex source").
 - **Track:** C (C frontend)
 - **Owner:** —
 - **Opened:** 2026-06-20

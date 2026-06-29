@@ -587,6 +587,8 @@ test-core: $(COMPILER)
 	/tmp/csizeof_ptr_field_index_b12226; test "$$?" = "42"
 	./$(COMPILER) test/cswitch_nested_case_block_b127.c /tmp/cswitch_nested_case_block_b12726
 	/tmp/cswitch_nested_case_block_b12726; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c /tmp/crtl_tiny_regex_match26
+	test "$$(/tmp/crtl_tiny_regex_match26)" = "tiny-regex: all cases pass"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
