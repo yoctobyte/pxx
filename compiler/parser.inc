@@ -166,7 +166,11 @@ begin
     else sz := LOCAL_STR_CAP + 8;
   end
   else if tk = tyRecord then sz := RecSize(Syms[idx].RecName);
-  align := TypeAlign(tk);
+  if (tk = tyRecord) and (Syms[idx].RecName >= REC_UCLASS_BASE) and
+     (UClsAlign[Syms[idx].RecName - REC_UCLASS_BASE] > TARGET_PTR_SIZE) then
+    align := UClsAlign[Syms[idx].RecName - REC_UCLASS_BASE]
+  else
+    align := TypeAlign(tk);
 
   if Syms[idx].Kind = skGlobal then
   begin
@@ -4988,7 +4992,7 @@ begin
         end;
 
         isLiftedCall := (procIdx >= 0) and (Procs[procIdx].ParamCount > nArgs) and
-                        (ProcParamPtrDepth[procIdx * 16 + nArgs] = 2);
+                        (ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + nArgs] = 2);
 
         if isLiftedCall then
         begin
@@ -5081,8 +5085,8 @@ begin
                 write-back. An array-constructor literal ([...]) is itself the
                 open-array temp. }
               if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
-                      (ProcParamIsConst[procIdx * 16 + i] or
-                       not ProcParamExplicitByRef[procIdx * 16 + i])) then
+                      (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
+                       not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
                 Error('by-reference argument must be a variable');
             end;
           end;
@@ -8437,8 +8441,8 @@ begin
                   temporary (>8-byte records are by-ref only for ABI; the callee
                   copies). Only a genuine `var`/`out` record needs a true lvalue. }
                 if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
-                        (ProcParamIsConst[procIdx * 16 + i] or
-                         not ProcParamExplicitByRef[procIdx * 16 + i])) then
+                        (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
+                         not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
                   Error('by-reference argument must be a variable');
               end;
             end;
@@ -9760,8 +9764,8 @@ var
   mPTypes: array[0..15] of TTypeKind;
   mPTypesRec: array[0..15] of Integer;
   mPArr: array[0..15] of Boolean;
-  fldNOffs: array[0..31] of Integer;   { comma-separated field-name spans }
-  fldNLens: array[0..31] of Integer;
+  fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..15] of Integer;
   nFldNames, fni: Integer;
   mPByRef: array[0..15] of Boolean;
   mPUntyped: array[0..15] of Boolean;
@@ -10200,7 +10204,7 @@ begin
               Procs[mpi].BodyAddr := -1;
               for i := 0 to mNParams-1 do
               begin
-                if (i < 16) then ProcParamUntyped[mpi * 16 + i] := mPUntyped[i];
+                if (i < MAX_PROC_PARAMS) then ProcParamUntyped[mpi * MAX_PROC_PARAMS + i] := mPUntyped[i];
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
@@ -11765,8 +11769,8 @@ var
   hasDefault : Boolean; defaultVal : Int64;
   pNDims    : array[0..15] of Integer;
   pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
-  pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
-  pDimSpan  : array[0..16*MAX_ARR_DIMS-1] of Integer;
+  pDimLo    : array[0..95] of Integer;
+  pDimSpan  : array[0..95] of Integer;
   paramNDims, paramDynDepth, paramAi, pdi: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
@@ -12301,16 +12305,16 @@ begin
             definition is deferred to top level) lowers identically to one after.
             Without ProcParamDynDepth a `var dyn-array` arg passes the handle value
             instead of &slot → SetLength corrupts memory. }
-          if i < 16 then
+          if i < MAX_PROC_PARAMS then
           begin
-            if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
-            ProcParamIsConst[procIdx * 16 + i] := pconst[i];
-            ProcParamExplicitByRef[procIdx * 16 + i] := pbyref[i];
-            ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
-            ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
-            ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];
+            if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
+            ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+            ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
+            ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
+            ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
+            ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
-              ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
+              ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
           end;
         end;
       end
@@ -12436,11 +12440,11 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
-    if (procIdx >= 0) and (i < 16) then ProcParamIsConst[procIdx * 16 + i] := pconst[i];
-    if (procIdx >= 0) and (i < 16) then ProcParamExplicitByRef[procIdx * 16 + i] := pbyref[i];
-    if (procIdx >= 0) and (i < 16) then ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
-    if (procIdx >= 0) and (i < 16) then ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
-    if (procIdx >= 0) and (i < 16) then ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array
@@ -12449,7 +12453,7 @@ begin
         call-site lowering + the IsRef read-deref). }
       Syms[idx].ArrLen := -1;
       SymDynDepth[idx] := pDynDepth[i];
-      if (procIdx >= 0) and (i < 16) then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
+      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
     end;
     if pNDims[i] >= 2 then
     begin
@@ -12473,7 +12477,7 @@ begin
       Syms[idx].RecName := ptypesRec[i];
       { Persist the param's rec id: param sym slots are reused across procs, so
         overload matching / call-arg coercion cannot read it back from the sym. }
-      if (procIdx >= 0) and (i < 16) then ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
+      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
       { Records larger than a qword are passed by reference. A CORBA interface is
         a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
         but on 32-bit targets it is only 8 bytes — force by-ref there too so the

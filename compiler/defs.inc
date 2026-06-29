@@ -9,7 +9,9 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
-  MAX_PARAM_DEPTHS = 262144;  { MAX_PROCS * 16 }
+  MAX_PROC_PARAMS = 16;
+  MAX_CALL_ARGS = 128;
+  MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
   MAX_GLOBFIX = 32768;
   MAX_EXTERNAL = 16384;
@@ -1187,6 +1189,7 @@ var
   CurWriteFd      : Integer; { fd a write/writeln syscall targets; STDOUT by default, 2 for writeln(StdErr,..) }
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;
+  CAttrAlignValue : Integer;
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
@@ -1214,6 +1217,7 @@ var
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
+  CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
   TokCount   : Integer;
   TokPos     : Integer;
   MainProgramTokCount : Integer;

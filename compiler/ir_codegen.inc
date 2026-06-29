@@ -1410,10 +1410,10 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
     intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff, vaPopN: Integer;
-    argIsSse: array[0..15] of Boolean;
-    argIsStack: array[0..15] of Boolean;
-    argRegIdx: array[0..15] of Integer;
-    argNodeArr: array[0..15] of Integer;
+    argIsSse: array[0..127] of Boolean;
+    argIsStack: array[0..127] of Boolean;
+    argRegIdx: array[0..127] of Integer;
+    argNodeArr: array[0..127] of Integer;
 begin
   if node = -1 then Exit;
   
@@ -1564,6 +1564,7 @@ begin
           argNode := IRB[node]; i := 0;
           while argNode <> -1 do
           begin
+            if i >= MAX_CALL_ARGS then Error('cdecl indirect call: too many arguments');
             argNodeArr[i] := IRA[argNode];
             { Self (i < IRC, injected for a method ptr) is a pointer -> int class. }
             if (i >= IRC[node]) and TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) then
@@ -2894,6 +2895,7 @@ begin
             argNode := IRB[node]; nArgs := 0;
             while argNode <> -1 do
             begin
+              if nArgs >= MAX_CALL_ARGS then Error('C call: too many arguments');
               argNodeArr[nArgs] := IRA[argNode]; Inc(nArgs);
               argNode := IRB[argNode];
             end;

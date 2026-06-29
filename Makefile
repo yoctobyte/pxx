@@ -388,6 +388,8 @@ test-core: $(COMPILER)
 	/tmp/c_lua_opcode_decode_b13226; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_array_elem_addr_b133.c /tmp/cglobal_array_elem_addr_b13326
 	/tmp/cglobal_array_elem_addr_b13326; test "$$?" = "42"
+	./$(COMPILER) test/cstruct_layout_stress_b134.c /tmp/cstruct_layout_stress_b13426
+	/tmp/cstruct_layout_stress_b13426; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
 	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026
@@ -518,6 +520,8 @@ test-core: $(COMPILER)
 	/tmp/ctypedef_sys_ssize_b9226; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_overflow_b93.c /tmp/cvararg_overflow_b9326
 	out="$$(/tmp/cvararg_overflow_b9326)"; status="$$?"; test "$$out" = "$$(printf '1 2 3 4 5 6\n7 8')"; test "$$status" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_many_args_b135.c /tmp/cvararg_many_args_b13526
+	out="$$(/tmp/cvararg_many_args_b13526)"; status="$$?"; test "$$out" = "$$(printf '300 78 110\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18')"; test "$$status" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26
@@ -1006,7 +1010,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_c_struct_tags.pas /tmp/c_struct_tags26
 	test "$$(/tmp/c_struct_tags26)" = "$$(printf '12\n10\n20')"
 	./$(COMPILER) test/test_c_packed_aligned.pas /tmp/test_c_packed_aligned26
-	test "$$(/tmp/test_c_packed_aligned26)" = "$$(printf 'X\n42\nPackedStruct is opaque\nAlignedStruct is opaque')"
+	test "$$(/tmp/test_c_packed_aligned26)" = "$$(printf 'X\n42\n8\n4\nP\n7\n5\n1\nA\n8\n16\n8\nT\n16\n16\n4')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
@@ -1203,6 +1207,8 @@ test-core: $(COMPILER)
 	grep -q "SizeOf: unknown type" /tmp/test_sizeof_error.log
 	./$(COMPILER) test/test_record_alignment.pas /tmp/test_record_alignment26
 	test "$$(/tmp/test_record_alignment26)" = "$$(printf '8\n4\n5\n1\n6\n2\n5\n1\n12\n2\n8\n12\n1\n8')"
+	./$(COMPILER) test/test_record_layout_stress.pas /tmp/test_record_layout_stress26
+	test "$$(/tmp/test_record_layout_stress26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35')"
 	./$(COMPILER) test/test_pthread_header.pas /tmp/test_pthread_header26
 	test "$$(/tmp/test_pthread_header26)" = "pthread loaded successfully"
 	./$(COMPILER) test/test_c_crypt.pas /tmp/test_c_crypt26

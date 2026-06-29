@@ -1674,7 +1674,11 @@ begin
     else if (tk = tyFixedString) or (tk = tyShortString) then
       sz := FrozenStrSlotSize(tk, SymStrCap[SymCount])
     else if tk = tyRecord then sz := RecSize(LastTypeRecId);
-    align := TypeAlign(tk);
+    if (tk = tyRecord) and (LastTypeRecId >= REC_UCLASS_BASE) and
+       (UClsAlign[LastTypeRecId - REC_UCLASS_BASE] > TARGET_PTR_SIZE) then
+      align := UClsAlign[LastTypeRecId - REC_UCLASS_BASE]
+    else
+      align := TypeAlign(tk);
 
     if CurProc < 0 then
     begin
@@ -1784,7 +1788,11 @@ begin
   else if elemType = tyRecord then
   begin
     elemSize := RecSize(LastTypeRecId);
-    align := TARGET_PTR_SIZE;
+    if (LastTypeRecId >= REC_UCLASS_BASE) and
+       (UClsAlign[LastTypeRecId - REC_UCLASS_BASE] > TARGET_PTR_SIZE) then
+      align := UClsAlign[LastTypeRecId - REC_UCLASS_BASE]
+    else
+      align := TARGET_PTR_SIZE;
   end
   else
   begin
@@ -3024,7 +3032,7 @@ begin
   Result := False;
   if (j < 0) or (j >= Procs[procIdx].ParamCount) then Exit;
   if Procs[procIdx].Params[j].TypeKind <> tyRecord then Exit;
-  rec := ProcParamRecId[procIdx * 16 + j];
+  rec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + j];
   Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
 end;
 
@@ -3065,7 +3073,7 @@ begin
   begin
     Result := True;
     for k := nArgs to Procs[i].ParamCount - 1 do
-      if (k >= 16) or (not ProcParamHasDefault[i * 16 + k]) then
+      if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[i * MAX_PROC_PARAMS + k]) then
       begin Result := False; Exit; end;
     Exit;
   end;
@@ -3094,7 +3102,7 @@ begin
         for j := 0 to nArgs-1 do
         begin
           if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
-             not ProcParamUntyped[i * 16 + j] then
+             not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
             match := False;
         end;
         if match then
@@ -3111,13 +3119,13 @@ begin
   begin
     if ProcNameMatches(i, name) then
     begin
-      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
           if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
-             not ProcParamUntyped[i * 16 + j] then
+             not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
             match := False;
         end;
         if match then
@@ -3143,7 +3151,7 @@ begin
       for j := 0 to nArgs-1 do
       begin
         if not ((Procs[i].Params[j].TypeKind = argTypes[j]) or
-                ProcParamUntyped[i * 16 + j] or
+                ProcParamUntyped[i * MAX_PROC_PARAMS + j] or
                 ((argTypes[j] = tyChar) and
                  ((Procs[i].Params[j].TypeKind = tyString) or
                   (Procs[i].Params[j].TypeKind = tyAnsiString)))) then
@@ -3168,7 +3176,7 @@ begin
         for j := 0 to nArgs-1 do
         begin
           if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
-                  ProcParamUntyped[i * 16 + j]) then
+                  ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
             match := False;
         end;
         if match then
@@ -3185,13 +3193,13 @@ begin
   begin
     if ProcNameMatches(i, name) then
     begin
-      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
           if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
-                  ProcParamUntyped[i * 16 + j]) then
+                  ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
             match := False;
         end;
         if match then
@@ -3215,7 +3223,7 @@ begin
       begin
         if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
                 (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
-                ProcParamUntyped[i * 16 + j]) then
+                ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
           match := False;
       end;
       if match then
@@ -3257,7 +3265,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * 16 + j] then match := False;
+        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then match := False;
       if match then
       begin
         Result := i;
@@ -3271,11 +3279,11 @@ begin
        ((Procs[i].Name = name) or
         ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
        (Procs[i].ParamCount > nArgs) and
-       (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+       (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * 16 + j] then match := False;
+        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then match := False;
       if match then
       begin
         Result := i;
@@ -3291,7 +3299,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * 16 + j]) then match := False;
+        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then match := False;
       if match then
       begin
         Result := i;
@@ -3305,11 +3313,11 @@ begin
        ((Procs[i].Name = name) or
         ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
        (Procs[i].ParamCount > nArgs) and
-       (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+       (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * 16 + j]) then match := False;
+        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then match := False;
       if match then
       begin
         Result := i;
@@ -3327,6 +3335,7 @@ function RegisterProc(const name: AnsiString; isFunc: Boolean;
 var i: Integer;
 begin
   if ProcCount >= MAX_PROCS then Error('too many procedures');
+  if nParams > MAX_PROC_PARAMS then Error('too many procedure parameters');
   Procs[ProcCount].Name       := name;
   Procs[ProcCount].IsFunc     := isFunc;
   Procs[ProcCount].RetType    := retType;
@@ -3349,11 +3358,16 @@ begin
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
-  for i := 0 to 15 do
+  for i := 0 to MAX_PROC_PARAMS - 1 do
   begin
-    ProcParamPtrDepth[ProcCount * 16 + i] := 0;
-    ProcParamIsConst[ProcCount * 16 + i] := False;
-    ProcParamExplicitByRef[ProcCount * 16 + i] := False;
+    ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamIsConst[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamExplicitByRef[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamUntyped[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamHasDefault[ProcCount * MAX_PROC_PARAMS + i] := False;
+    ProcParamDefaultVal[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
+    ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
   end;
   for i := 0 to nParams-1 do
   begin

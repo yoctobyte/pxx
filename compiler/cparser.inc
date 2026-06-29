@@ -1746,6 +1746,8 @@ begin
     Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
     Result := base
+  else if base = tyUInt8 then
+    Result := base               { _Bool is a 1-byte integer type }
   else if base = tyChar then
   begin
     if isSigned then base := tyInt8
@@ -1861,7 +1863,7 @@ begin
               begin
                 { `(void)` empty parameter list }
               end
-              else if fnRetNParams <= 15 then
+              else if fnRetNParams < MAX_PROC_PARAMS then
               begin
                 fnRetPTypes[fnRetNParams] := fpPType;
                 fnRetPDepths[fnRetNParams] := CTypePtrDepth;
@@ -1923,7 +1925,7 @@ begin
           begin
             { (void) — no parameter }
           end
-          else if fpNParams <= 15 then
+          else if fpNParams < MAX_PROC_PARAMS then
           begin
             fpPTypes[fpNParams] := fpPType;
             fpPNames[fpNParams] := 'a';
@@ -4272,7 +4274,7 @@ begin
         begin
           { `(void)` empty parameter list — no actual parameter }
         end
-        else if nparams <= 15 then
+        else if nparams < MAX_PROC_PARAMS then
         begin
           ptypes[nparams] := ptype;
           pdepths[nparams] := CTypePtrDepth;
@@ -4380,7 +4382,7 @@ begin
     ProcNamedGP[procIdx] := nparams;   { variadic C fns take only GP named params (L, fmt) }
   end;
   for i := 0 to nparams - 1 do
-    ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
+    ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
@@ -5028,10 +5030,11 @@ begin
     Dec(declStart);
   end;
 
-  { Scan from declStart to startIdx (the opening brace) for attributes }
+  { Reject only alignment attributes whose value was not parsed. Supported
+    packed/aligned(N) attributes are applied by ParseCStructInto. }
   for i := declStart to startIdx - 1 do
   begin
-    if (CAttrFlags[i] and 3) <> 0 then
+    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
     begin
       Result := False;
       Exit;
@@ -5042,8 +5045,7 @@ begin
   i := startIdx;
   while i < TokCount do
   begin
-    { Check if token inside the body has attribute }
-    if (CAttrFlags[i] and 3) <> 0 then
+    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
     begin
       Result := False;
       Exit;
@@ -5060,7 +5062,7 @@ begin
         Inc(i);
         while (i < TokCount) and (Tokens[i].Kind <> tkEOF) do
         begin
-          if (CAttrFlags[i] and 3) <> 0 then
+          if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] < 1) then
           begin
             Result := False;
             Exit;
@@ -5087,6 +5089,77 @@ begin
     end;
     Inc(i);
   end;
+end;
+
+function CAttrPackedInRange(lo, hi: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if lo < 0 then lo := 0;
+  if hi >= TokCount then hi := TokCount - 1;
+  for i := lo to hi do
+    if (CAttrFlags[i] and 1) <> 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function CAttrAlignInRange(lo, hi: Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if lo < 0 then lo := 0;
+  if hi >= TokCount then hi := TokCount - 1;
+  for i := lo to hi do
+    if ((CAttrFlags[i] and 2) <> 0) and (CAttrAlignValues[i] > Result) then
+      Result := CAttrAlignValues[i];
+end;
+
+function CStructDeclStart(startIdx: Integer): Integer;
+begin
+  Result := startIdx;
+  while Result > 0 do
+  begin
+    if Tokens[Result].Kind = tkRecord then Exit;
+    if Tokens[Result].Kind = tkIdent then
+    begin
+      if (GetTokenStrFromRaw(Tokens[Result].SOffset, Tokens[Result].SLen) = 'union') or
+         (GetTokenStrFromRaw(Tokens[Result].SOffset, Tokens[Result].SLen) = 'typedef') then
+        Exit;
+    end;
+    Dec(Result);
+  end;
+end;
+
+function CStructEndIndex(startIdx: Integer): Integer;
+var i, depth: Integer;
+begin
+  Result := startIdx;
+  depth := 0;
+  i := startIdx;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+function CStructPostAttrEnd(endIdx: Integer): Integer;
+begin
+  Result := endIdx;
+  while (Result < TokCount) and (Tokens[Result].Kind <> tkSemicolon) and
+        (Tokens[Result].Kind <> tkEOF) do
+    Inc(Result);
 end;
 
 { Record alignment of a record id (struct field by value). }
@@ -5124,8 +5197,19 @@ var
   bfNDims: array[0..MAX_BF-1] of Integer;
   bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
-  isBitField: Boolean;
+  startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
+  isBitField, structPacked, fieldPacked: Boolean;
 begin
+  startIdx := TokPos - 1;
+  endIdx := CStructEndIndex(startIdx);
+  declStartIdx := CStructDeclStart(startIdx);
+  structPacked := CAttrPackedInRange(declStartIdx, startIdx);
+  structAlign := CAttrAlignInRange(declStartIdx, startIdx);
+  attrEndIdx := CStructPostAttrEnd(endIdx);
+  if CAttrPackedInRange(endIdx + 1, attrEndIdx) then structPacked := True;
+  fieldAlign := CAttrAlignInRange(endIdx + 1, attrEndIdx);
+  if fieldAlign > structAlign then structAlign := fieldAlign;
+
   Next; { consume the opening brace }
   curOff := 0;
   maxAlign := 1;
@@ -5199,6 +5283,11 @@ begin
           sz := subRecSz;
           al := subAl;
         end;
+        attrEndIdx := TokPos - 1;
+        fieldPacked := structPacked or CAttrPackedInRange(attrEndIdx, attrEndIdx);
+        fieldAlign := CAttrAlignInRange(attrEndIdx, attrEndIdx);
+        if fieldPacked then al := 1;
+        if fieldAlign > al then al := fieldAlign;
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, al);
         if (subci >= 0) and (bfCount < MAX_BF) then
         begin
@@ -5237,6 +5326,7 @@ begin
     end
     else if IsCTypeTok then
     begin
+      fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
       if CTypeFnPtrName <> '' then
@@ -5290,6 +5380,10 @@ begin
 
       firstDecl := True;
       repeat
+        if firstDecl then
+          declStartIdx := fieldStartIdx
+        else
+          declStartIdx := TokPos - 1;
         { stars for this declarator: the first one's stars were consumed by
           ParseCDeclType (CTypePtrDepth); later ones carry their own. }
         if firstDecl then
@@ -5364,6 +5458,11 @@ begin
           al := TypeAlign(IntToTypeKind(baseScalarTk));
         end;
         if al < 1 then al := 1;
+        attrEndIdx := TokPos - 1;
+        fieldPacked := structPacked or CAttrPackedInRange(declStartIdx, attrEndIdx);
+        fieldAlign := CAttrAlignInRange(declStartIdx, attrEndIdx);
+        if fieldPacked then al := 1;
+        if fieldAlign > al then al := fieldAlign;
 
         if isBitField then
         begin
@@ -5481,6 +5580,7 @@ begin
       end;
     end;
   end;
+  if structAlign > maxAlign then maxAlign := structAlign;
   UClsSize_[ci] := AlignTo(curOff, maxAlign);
   UClsAlign[ci] := maxAlign;
 end;

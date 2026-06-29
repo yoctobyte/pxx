@@ -28,20 +28,19 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (66)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
-| feature-c-alignment-attributes | C | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
-| feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -133,7 +132,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (355)
+## done (357)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -333,9 +332,11 @@ _none_
 | feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
+| feature-c-alignment-attributes | C | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
+| feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
@@ -506,16 +507,15 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-vararg-vastart-named-fp-stack
 - [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
-- [C] feature-c-alignment-attributes
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-header-import-complex
 - [C] feature-c-regex-library-devtest
 - [C] feature-c-source-frontend
-- [A] feature-c-varargs-design
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
 - [B] feature-demo-chess

@@ -4,16 +4,33 @@ var
   n: NormalStruct;
   p: PackedStruct;
   a: AlignedStruct;
+  t: TypeAlignedStruct;
 begin
   n.a := 'X';
   n.b := 42;
   writeln(n.a);
   writeln(n.b);
+  writeln(SizeOf(NormalStruct));
+  writeln(Int64(@n.b) - Int64(@n));
 
-  { Since PackedStruct and AlignedStruct fall back to opaque pointers,
-    they are imported as pointer types. We can assign nil to them. }
-  p := nil;
-  a := nil;
-  if p = nil then writeln('PackedStruct is opaque');
-  if a = nil then writeln('AlignedStruct is opaque');
+  p.a := 'P';
+  p.b := 7;
+  writeln(p.a);
+  writeln(p.b);
+  writeln(SizeOf(PackedStruct));
+  writeln(Int64(@p.b) - Int64(@p));
+
+  a.a := 'A';
+  a.b := 8;
+  writeln(a.a);
+  writeln(a.b);
+  writeln(SizeOf(AlignedStruct));
+  writeln(Int64(@a.b) - Int64(@a));
+
+  t.a := 'T';
+  t.b := 16;
+  writeln(t.a);
+  writeln(t.b);
+  writeln(SizeOf(TypeAlignedStruct));
+  writeln(Int64(@t.b) - Int64(@t));
 end.

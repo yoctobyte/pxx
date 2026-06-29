@@ -1,7 +1,7 @@
 # Support parsing and enforcing struct alignment and packed attributes in C header import
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Track:** C (C frontend)
 - **Owner:** —
 - **Opened:** 2026-06-28
@@ -29,3 +29,8 @@ Currently, the C lexer (`compiler/clexer.inc`) extracts structural layout attrib
 
 ## Log
 - 2026-06-28 — ticket opened.
+- 2026-06-29 — implemented `aligned(N)` value capture in the C lexer and applied
+  `packed` / `aligned(N)` in C struct layout. `test/test_c_packed_aligned.pas`
+  now verifies concrete field offsets and sizes for normal, packed,
+  field-aligned, and type-aligned C structs. Self-host fixedpoint passes via
+  `make compiler/pascal26`.

@@ -2,6 +2,7 @@
 
 - **Type:** feature (the SOLE remaining lua-core parse gate) — Track C frontend +
   Track A backend codegen
+- **Status:** done
 - **Opened:** 2026-06-26
 - **Blocks:** lapi, lauxlib, ldebug, lobject (`va_arg(argp, type)` in
   luaL_error / lua_pushvfstring). With this, lua core goes 29/34 -> 33/34.
@@ -101,3 +102,12 @@ So the codegen surface collapses to a MINIMAL, well-scoped remainder:
 Net: va_arg logic = done (C helper). va_start = field stores + one address-of a
 local (frontend). Only the register-save store sequence is new backend codegen,
 and it's purely additive/gated, so the self-host gate stays byte-identical.
+
+## Completion log
+- 2026-06-29 — audited as implemented. `ProcVariadic`, `ProcNamedGP`,
+  `__builtin_va_start` / `__builtin_va_arg` / `__builtin_va_end` lowering,
+  hidden `__va_save` / `__va_overflow`, and the variadic register-save prologue
+  are present. Verified in `make test-core` via `test/cvarargs_int_b49.c`,
+  `test/cvararg_double_b83.c`, `test/cvararg_overflow_b93.c` (6+ vararg
+  overflow area, direct 7/8-int reads), and
+  `test/cva_arg_local_fnptr_typedef_b108.c`.

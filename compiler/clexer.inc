@@ -65,6 +65,38 @@ begin
   end;
 end;
 
+function CAttrAlignedValueOf(const s: AnsiString): Integer;
+var i, j, v: Integer;
+begin
+  Result := 0;
+  i := 1;
+  while i <= Length(s) - 6 do
+  begin
+    if (s[i] = 'a') and (s[i+1] = 'l') and (s[i+2] = 'i') and
+       (s[i+3] = 'g') and (s[i+4] = 'n') and (s[i+5] = 'e') and
+       (s[i+6] = 'd') then
+    begin
+      j := i + 7;
+      while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
+      if (j <= Length(s)) and (s[j] = '(') then
+      begin
+        Inc(j);
+        while (j <= Length(s)) and (s[j] in [' ', #9, #10, #13]) do Inc(j);
+        v := 0;
+        while (j <= Length(s)) and (s[j] in ['0'..'9']) do
+        begin
+          v := v * 10 + Ord(s[j]) - Ord('0');
+          Inc(j);
+        end;
+        Result := v;
+        Exit;
+      end;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure CSkipSpace;
 var done, idDone: Boolean;
     p, depth, nameLen: Integer;
@@ -121,7 +153,10 @@ begin
           if CStrContains(attrText, 'packed') then
             CAttrPacked := True;
           if CStrContains(attrText, 'aligned') then
+          begin
             CAttrAligned := True;
+            CAttrAlignValue := CAttrAlignedValueOf(attrText);
+          end;
         end;
         idDone := True;
       end
@@ -518,6 +553,7 @@ var off, len, i: Integer; k: TTokenKind;
 begin
   CAttrPacked := False;
   CAttrAligned := False;
+  CAttrAlignValue := 0;
   TokCount := 0; TokCharLen := 0;
   repeat
     CLexOne;
@@ -529,8 +565,10 @@ begin
     CAttrFlags[TokCount] := 0;
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
+    CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
+    CAttrAlignValue := 0;
     if (k = tkIdent) or (k = tkString) then
     begin
       off := TokCharLen;
@@ -561,6 +599,7 @@ var
 begin
   CAttrPacked := False;
   CAttrAligned := False;
+  CAttrAlignValue := 0;
   SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
@@ -587,8 +626,10 @@ begin
     CAttrFlags[TokCount] := 0;
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
+    CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
+    CAttrAlignValue := 0;
     sval := CurTok.SVal;
     len  := Length(sval);
     Tokens[TokCount].SOffset := TokCharLen;

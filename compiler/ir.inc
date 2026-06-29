@@ -1195,7 +1195,7 @@ begin
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) and
      (IntToTypeKind(ASTTk[argAST]) = tyClass) then
   begin
-    coerceParamSym := ProcParamRecId[cpi * 16 + pathIdx];
+    coerceParamSym := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
     if (coerceParamSym >= REC_UCLASS_BASE) and
        UClsIsInterface[coerceParamSym - REC_UCLASS_BASE] then
     begin
@@ -1420,8 +1420,8 @@ begin
   begin
     if isRefArg then
     begin
-      if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < 16) and
-         (ProcParamDynDepth[cpi * 16 + pathIdx] > 0) and
+      if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+         (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
          (ASTKind[argAST] = AN_IDENT) and
          not ((Syms[ASTIVal[argAST]].Kind = skParam) and
               Syms[ASTIVal[argAST]].IsRef) then
@@ -3512,11 +3512,11 @@ begin
         already accepted the shorter arity (ProcArityMatches). }
       cpi := ASTIVal[node];
       if cpi >= 0 then
-        while (pathIdx < Procs[cpi].ParamCount) and (pathIdx < 16) and
-              ProcParamHasDefault[cpi * 16 + pathIdx] do
+        while (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
+              ProcParamHasDefault[cpi * MAX_PROC_PARAMS + pathIdx] do
         begin
           argNode := IRAppend(IR_ARG,
-            IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * 16 + pathIdx],
+            IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
                      Ord(Procs[cpi].Params[pathIdx].TypeKind)),
             -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
           if first < 0 then first := argNode else IRB[last] := argNode;
