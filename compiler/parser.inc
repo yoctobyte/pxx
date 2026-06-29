@@ -12585,12 +12585,13 @@ begin
       { A by-ref param (var/const aggregate) is a pointer-sized handle whatever
         its declared type, and the caller pushes the argument's address; the
         4-byte copy below moves that pointer into the slot. tyVariant is passed
-        the same way (pointer to the 16-byte value). Reject only true >4-byte
-        by-value payloads (records/sets; Int64 is still low-dword only). }
+        the same way (pointer to the 16-byte value). By-value set params are
+        copied as their full 32-byte value. Reject remaining true aggregate
+        payloads such as records. }
       if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          not (TypeIsOrdinal(Syms[idx].TypeKind) or
               TypeIsFloat(Syms[idx].TypeKind) or
-              (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant])) then
+              (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
       sz := 0;
       for j := i + 1 to nparams - 1 do
@@ -12618,10 +12619,21 @@ begin
           Inc(sz, 4)
         else if (ptypes[j] = tyInt64) or (ptypes[j] = tyUInt64) then
           Inc(sz, 8)                                 { 64-bit by-value param }
+        else if ptypes[j] = tySet then
+          Inc(sz, TypeSize(tySet))                    { 32-byte by-value set }
         else
           Inc(sz, 4);
       end;
-      if Syms[idx].TypeKind = tyDouble then
+      if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+         (Syms[idx].TypeKind = tySet) then
+      begin
+        for j := 0 to (TypeSize(tySet) div 4) - 1 do
+        begin
+          EmitB($8B); EmitB($85); EmitI32(8 + sz + j * 4);      { mov eax, [ebp+disp] }
+          EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + j * 4);
+        end;
+      end
+      else if Syms[idx].TypeKind = tyDouble then
       begin
         EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);

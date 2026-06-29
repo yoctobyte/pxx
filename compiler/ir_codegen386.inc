@@ -1238,9 +1238,9 @@ begin
         end
         else if (Syms[si].Kind = skParam) and
                 (Syms[si].IsRef or Syms[si].IsArray or
-                 (Syms[si].TypeKind = tyString) or (Syms[si].TypeKind = tySet)) then
+                 (Syms[si].TypeKind = tyString)) then
         begin
-          { By-ref, open-array, fixed-string, or set param: the slot holds a
+          { By-ref, open-array, or fixed-string param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),
             so load the pointer itself, not the slot address. Mirrors x86-64. }
           EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
@@ -2345,6 +2345,23 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[nArgs].TypeKind = tySet) and
+             (not Procs[procIdx].Params[nArgs].IsRef) and
+             (not Procs[procIdx].Params[nArgs].IsArray) then
+          begin
+            { Set by-value param: eax is the 32-byte set address. Push high
+              dwords first so byte 0 is at the callee's lowest arg address. }
+            for i := 7 downto 0 do
+            begin
+              EmitB($8B); EmitB($50); EmitB(i * 4);    { mov edx, [eax+i*4] }
+              EmitB($52);                              { push edx }
+            end;
+            Inc(argBytes, TypeSize(tySet));
+            Inc(nArgs);
+            argNode := IRB[argNode];
+            Continue;
+          end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
              (Procs[procIdx].Params[nArgs].IsArray or not Procs[procIdx].Params[nArgs].IsRef) then

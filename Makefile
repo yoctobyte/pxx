@@ -1455,6 +1455,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_float_params.pas /tmp/test_i386_float_params
 	./$(COMPILER) test/test_i386_float_params.pas /tmp/test_i386_float_params_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_float_params)" = "$$(/tmp/test_i386_float_params_x64)"
+	./$(COMPILER) --target=i386 test/test_i386_byvalue_set_param.pas /tmp/test_i386_byvalue_set_param
+	./$(COMPILER) test/test_i386_byvalue_set_param.pas /tmp/test_i386_byvalue_set_param_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_byvalue_set_param)" = "$$(/tmp/test_i386_byvalue_set_param_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_float_return.pas /tmp/test_i386_fret
 	./$(COMPILER) test/test_cross_float_return.pas /tmp/test_i386_fret_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_fret)" = "$$(/tmp/test_i386_fret_x64)"

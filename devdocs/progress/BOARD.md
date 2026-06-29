@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (69)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
@@ -136,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (353)
+## done (354)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -236,6 +235,7 @@ _none_
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
+| bug-i386-float-byval-param | A | bug | i386 backend: by-value set parameter unsupported | — |
 | bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
@@ -507,7 +507,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A/C] chore-repin-c-stdio-pal-bridge
