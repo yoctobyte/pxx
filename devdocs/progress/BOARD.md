@@ -28,18 +28,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (76)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-header-case-sensitivity-lookup | A | bug | Case-sensitive C header lookup mismatch on Linux | — |
-| bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
-| bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
-| bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
-| bug-mimic-fpc-version-defines-missing | A | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
@@ -143,7 +139,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (346)
+## done (350)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -181,6 +177,7 @@ _none_
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | A | bug | C: local static const multidimensional array initializer in sqlite | — |
 | bug-c-local-static-record-array-vfs-sqlite | A | bug | C: block-scope static record arrays in sqlite VFS init | — |
+| bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
 | bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
@@ -208,6 +205,7 @@ _none_
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-char-literal-concat-in-const-expr | A | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
+| bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-hang-on-nested-if-in-begin | A | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
@@ -218,6 +216,7 @@ _none_
 | bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
+| bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
@@ -256,6 +255,7 @@ _none_
 | bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-method-miscompiled-by-context | A | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
 | bug-method-ptr-no-coerce-pointer-arg | A | bug | bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument | — |
+| bug-mimic-fpc-version-defines-missing | A | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
 | bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
@@ -509,12 +509,8 @@ _none_
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-header-case-sensitivity-lookup
-- [A] bug-c-lua-tests-regressed-segfault
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
-- [A] bug-chr-builtin-shadows-param-name
-- [A] bug-consteval-named-type-cast
 - [A] bug-i386-float-byval-param
-- [A] bug-mimic-fpc-version-defines-missing
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A/C] chore-repin-c-stdio-pal-bridge

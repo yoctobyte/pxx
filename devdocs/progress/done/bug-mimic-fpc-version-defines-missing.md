@@ -2,7 +2,8 @@
 
 - **Type:** bug
 - **Track:** A
-- **Status:** backlog
+- **Status:** done
+- **Owner:** Codex
 - **Opened:** 2026-06-28
 - **Found-by:** Pascal Script v83 compile probe (Track B)
 
@@ -51,3 +52,13 @@ Also likely blocks any real-world FPC library that version-guards code this way.
 Add `FPC_VERSION = 3`, `FPC_RELEASE = 2`, `FPC_PATCH = 2`, `FPC_FULLVERSION = 30202`
 as predefined integer constants under `--mimic-fpc` (matching the FPC 3.2.2 target
 the mimic profile was designed for).
+
+## Log
+
+- 2026-06-29 - Claimed by Codex.
+- 2026-06-29 - Fixed `--mimic-fpc` / `{$MIMIC FPC}` to install valued
+  `FPC_VERSION = 3`, `FPC_RELEASE = 2`, `FPC_PATCH = 2`, and existing
+  `FPC_FULLVERSION = 30202`. Expanded `test/test_mimic_fpc.pas` and
+  `test/test_mimic_directive.pas` to cover the Pascal Script-style
+  `defined(FPC) and (FPC_VERSION >= 3)` condition. Verification:
+  `make test-core` passed.

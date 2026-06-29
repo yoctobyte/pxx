@@ -1,8 +1,8 @@
 # C: lua runner tests regressed (segfault on most scripts)
 
 - **Type:** bug (C frontend / runtime regression) — Track C
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Codex
 - **Found / Opened:** 2026-06-28, noticed while verifying the crtl auto-pull
   change ([[c-linking-and-crtl-autopull]]).
 
@@ -37,3 +37,14 @@ test-debug-g lib-fpc-clean`), which is why the regression drifted in unnoticed.
 
 - `make test-lua` green again (all scripts match expected).
 - Root-cause commit identified; regression test added to the standard gate.
+
+## Log
+
+- 2026-06-29: Moved to working. Reproducing `make test-lua` failures and
+  reducing the crash/wrong-output cause.
+- 2026-06-29: Done. Root cause was C `#if` evaluation expanding object-like
+  macros recursively but not function-like macro calls. Lua's
+  `L_INTHASBITS(SIZE_Bx)` therefore evaluated false, `MAXARG_Bx` fell back to
+  `INT_MAX`, and Lua bytecode immediates decoded as values like `0xC0000002`.
+  Added function-like macro expansion in `#if`, restored `make test-lua`, and
+  wired reduced Lua-shaped C regressions into `test-core`.

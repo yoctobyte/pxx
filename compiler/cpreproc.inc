@@ -248,8 +248,8 @@ end;
 function CPExprOr: Int64; forward;
 
 function CPExprAtom: Int64;
-var a, b, mi, p: Integer;
-    savedText: AnsiString; savedPos, savedEnd: Integer;
+var a, b, mi, p, q, depth, argc, argBase, ai: Integer;
+    savedText, expanded: AnsiString; savedPos, savedEnd: Integer;
 begin
   CPSkipExprSpace;
   Result := 0;
@@ -269,6 +269,8 @@ begin
       Result := (Result * 10) + Ord(CPExprText[CPExprPos]) - Ord('0');
       Inc(CPExprPos);
     end;
+    while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['u','U','l','L']) do
+      Inc(CPExprPos);
     Exit;
   end;
   if CPIsIdentStart(CPExprText[CPExprPos]) then
@@ -297,6 +299,71 @@ begin
       mi := CPFindMacro(CPExprText, a, b);
       if mi < 0 then
         Result := 0
+      else if CPMFunction[mi] then
+      begin
+        q := CPExprPos;
+        CPSkipExprSpace;
+        q := CPExprPos;
+        if (q <= CPExprEnd) and (CPExprText[q] = '(') then
+        begin
+          Inc(q);
+          argc := 0;
+          depth := 0;
+          argBase := 16;
+          if (q <= CPExprEnd) and (CPExprText[q] <> ')') then
+          begin
+            CPArgStart[argBase] := q;
+            argc := 1;
+          end;
+          while (q <= CPExprEnd) and ((depth > 0) or (CPExprText[q] <> ')')) do
+          begin
+            if CPExprText[q] = '(' then Inc(depth)
+            else if CPExprText[q] = ')' then Dec(depth)
+            else if (CPExprText[q] = ',') and (depth = 0) and (argc < 16) then
+            begin
+              CPArgEnd[argBase + argc - 1] := q - 1;
+              CPArgStart[argBase + argc] := q + 1;
+              Inc(argc);
+            end;
+            Inc(q);
+          end;
+          if argc > 0 then CPArgEnd[argBase + argc - 1] := q - 1;
+          for ai := 0 to argc - 1 do
+          begin
+            while (CPArgStart[argBase + ai] <= CPArgEnd[argBase + ai]) and
+                  (CPExprText[CPArgStart[argBase + ai]] in [' ', #9]) do
+              Inc(CPArgStart[argBase + ai]);
+            while (CPArgEnd[argBase + ai] >= CPArgStart[argBase + ai]) and
+                  (CPExprText[CPArgEnd[argBase + ai]] in [' ', #9]) do
+              Dec(CPArgEnd[argBase + ai]);
+          end;
+          if (q <= CPExprEnd) and (CPExprText[q] = ')') then Inc(q);
+          CPExprPos := q;
+
+          if CPExprDepth >= 64 then
+            Result := 0
+          else
+          begin
+            SetLength(expanded, 0);
+            CPActiveMacros[CPActiveMacroCount] := mi;
+            Inc(CPActiveMacroCount);
+            CPSetTempStrLength(0, 0);
+            CPExpandFunctionForLevel(mi, CPExprText, argc, 0);
+            CPExpandRangeForLevel(0, expanded);
+            Dec(CPActiveMacroCount);
+
+            savedText := CPExprText; savedPos := CPExprPos; savedEnd := CPExprEnd;
+            CPExprText := expanded;
+            CPExprPos := 1; CPExprEnd := Length(CPExprText);
+            Inc(CPExprDepth);
+            if CPExprEnd >= 1 then Result := CPExprOr else Result := 0;
+            Dec(CPExprDepth);
+            CPExprText := savedText; CPExprPos := savedPos; CPExprEnd := savedEnd;
+          end;
+        end
+        else
+          Result := 0;
+      end
       else
       begin
         { Recursively EVALUATE the macro's body as a sub-expression, so a chained

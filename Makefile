@@ -382,6 +382,10 @@ test-core: $(COMPILER)
 	/tmp/cinline_struct_ptr_field_b12926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
+	./$(COMPILER) test/c_lua_tvalue_int_b131.c /tmp/c_lua_tvalue_int_b13126
+	/tmp/c_lua_tvalue_int_b13126; test "$$?" = "42"
+	./$(COMPILER) test/c_lua_opcode_decode_b132.c /tmp/c_lua_opcode_decode_b13226
+	/tmp/c_lua_opcode_decode_b13226; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
 	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026
@@ -768,9 +772,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_mimic_fpc.pas /tmp/test_mimic_fpc_off26
 	test "$$(/tmp/test_mimic_fpc_off26)" = "fpc=no"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc.pas /tmp/test_mimic_fpc_on26
-	test "$$(/tmp/test_mimic_fpc_on26)" = "$$(printf 'fpc=yes\nver>=20400\nunix')"
+	test "$$(/tmp/test_mimic_fpc_on26)" = "$$(printf 'fpc=yes\nver>=20400\nmajor>=3\nversion=3.2.2\nunix')"
 	./$(COMPILER) test/test_mimic_directive.pas /tmp/test_mimic_directive26
-	test "$$(/tmp/test_mimic_directive26)" = "fpc 3.x"
+	test "$$(/tmp/test_mimic_directive26)" = "$$(printf 'fpc 3.x\nversion=3.2.2')"
 	./$(COMPILER) test/test_keyword_array_case.pas /tmp/test_keyword_array_case26
 	test "$$(/tmp/test_keyword_array_case26)" = "$$(printf '36\n5')"
 	./$(COMPILER) test/test_succ_pred_odd.pas /tmp/test_succ_pred_odd26
@@ -798,6 +802,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_upcase_pos26)" = "$$(printf 'AZ5\n3\n0\n1\nHI3')"
 	./$(COMPILER) test/test_keyword_case.pas /tmp/test_keyword_case26
 	test "$$(/tmp/test_keyword_case26)" = "$$(printf '9\n22')"
+	./$(COMPILER) test/test_builtin_name_params.pas /tmp/test_builtin_name_params26
+	test "$$(/tmp/test_builtin_name_params26)" = "$$(printf '1\n41\n7\nB\n67')"
 	./$(COMPILER) test/test_var_open_array.pas /tmp/test_var_open_array26
 	test "$$(/tmp/test_var_open_array26)" = "$$(printf '6\n0 10 20 30 ')"
 	./$(COMPILER) test/test_var_open_array_field.pas /tmp/test_var_open_array_field26
@@ -822,7 +828,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_precedence.pas /tmp/test_const_precedence26
 	test "$$(/tmp/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
-	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295')"
+	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
 	./$(COMPILER) test/test_record_typecast.pas /tmp/test_record_typecast26
 	test "$$(/tmp/test_record_typecast26)" = "$$(printf '77\n88\n77\n88\n165')"
 	./$(COMPILER) test/test_funcname_field.pas /tmp/test_funcname_field26

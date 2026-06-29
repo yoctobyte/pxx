@@ -2,7 +2,8 @@
 
 - **Type:** bug
 - **Track:** A
-- **Status:** backlog
+- **Status:** done
+- **Owner:** Codex
 - **Opened:** 2026-06-28
 - **Found-by:** Synapse v83 compile probe (Track B)
 
@@ -43,3 +44,12 @@ this on every unit that uses synautil.
 Parameter name parsing should accept any identifier token, including those that
 happen to match built-in function names. Only actual reserved **keywords** (e.g.
 `begin`, `end`, `if`, `then`) should be rejected as parameter names.
+
+## Log
+
+- 2026-06-29 - Claimed by Codex.
+- 2026-06-29 - Fixed in `compiler/parser.inc`: declaration-name parsing now
+  accepts predefined/intrinsic tokens such as `Chr`, `Ord`, and `Length` in
+  parameter-name slots, and bare shadowing symbols win over intrinsic parsing in
+  expression position. Added `test/test_builtin_name_params.pas`.
+  Verification: `make test-core` passed.

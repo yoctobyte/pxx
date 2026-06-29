@@ -206,6 +206,26 @@ begin
     (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln);
 end;
 
+{ Predefined routines are not reserved words. In declaration-name position they
+  must behave like ordinary identifiers so user parameters can shadow Chr/Ord,
+  Length, Read/Write, etc. }
+function IsDeclNameTok: Boolean;
+begin
+  if IsMemberNameTok then
+  begin
+    IsDeclNameTok := True;
+    Exit;
+  end;
+  case CurTok.Kind of
+    tkHalt, tkInc, tkDec, tkLength, tkGetMem, tkFreeMem, tkOrd, tkChr, tkExit,
+    tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
+    tkArgCount, tkArgStr, tkHigh, tkLow:
+      IsDeclNameTok := True;
+  else
+    IsDeclNameTok := False;
+  end;
+end;
+
 { Resolve a (possibly dotted) unit qualifier at the front of a reference:
   `Unit.Member` or `Posix.SysSocket.Member`. Greedily matches the LONGEST dotted
   prefix that is a compiled unit and still leaves a trailing `.member`, so a
@@ -3552,6 +3572,14 @@ begin
     end;
     tkOrd, tkChr:
     begin
+      idx := FindSym(CurTok.SVal);
+      if (idx >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
+      begin
+        Next;
+        CurASTNode := ParseLValueAST(idx, TokPos - 2);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
       if CurTok.Kind = tkChr then LastExprTk := tyChar else LastExprTk := tyInteger;
       op := Ord(CurTok.Kind);
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
@@ -3652,6 +3680,14 @@ begin
     end;
     tkLength:
     begin
+      idx := FindSym(CurTok.SVal);
+      if (idx >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
+      begin
+        Next;
+        CurASTNode := ParseLValueAST(idx, TokPos - 2);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
       Next; Expect(tkLParen, '(');
       { Length of a string LITERAL folds to its char count at compile time
         (FPC: Length('hello') = 5). Covers the common literal forms without the
@@ -5417,6 +5453,21 @@ begin
   else Result := False;
 end;
 
+function ConstAliasCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
+{ True if `nm` is a user type alias whose target is ordinal and therefore usable
+  as a const typecast. }
+var aliasIdx: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  aliasIdx := FindTypeAlias(nm);
+  if aliasIdx < 0 then Exit;
+  tk := IntToTypeKind(AliasTk[aliasIdx]);
+  if not TypeIsOrdinal(tk) then Exit;
+  bytes := TypeSize(tk);
+  signed := TypeSigned(tk);
+  Result := True;
+end;
+
 function ConstApplyCast(r: Int64; bytes: Integer; signed: Boolean): Int64;
 { Reinterpret r to the cast width, matching the runtime wrap behaviour. Sign
   extension uses subtraction (Result - 2^width) rather than `not`, and decimal
@@ -5449,7 +5500,7 @@ function ConstEvalFactor: Int64;
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
-    cName: AnsiString; cQUnit: Integer;
+    cName: AnsiString; cQUnit: Integer; hasConstCast: Boolean;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -5457,8 +5508,15 @@ begin
     of recursing, both under the FPC seed and self-hosted. }
   if CurTok.Kind = tkMinus then begin Next; Result := -ConstEvalFactor(); Exit; end;
   if CurTok.Kind = tkPlus  then begin Next; Result :=  ConstEvalFactor(); Exit; end;
-  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-     ConstIntCastWidth(CurTok.SVal, castBytes, castSigned) then
+  if CurTok.Kind = tkNot   then begin Next; Result := not ConstEvalFactor(); Exit; end;
+  hasConstCast := False;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    hasConstCast := ConstIntCastWidth(CurTok.SVal, castBytes, castSigned);
+    if not hasConstCast then
+      hasConstCast := ConstAliasCastWidth(CurTok.SVal, castBytes, castSigned);
+  end;
+  if hasConstCast then
   begin
     { Integer typecast in a const expression, e.g. `Int64(1) shl 52`. Evaluate
       the inner expression then reinterpret to the cast width. FPC/Delphi fold
@@ -9831,7 +9889,7 @@ begin
               begin mIsByRef := True; Next; end
               else if CurTok.Kind = tkConst then Next;
               mStartIdx := mNParams; mDoneParam := False;
-              while (CurTok.Kind = tkIdent) and not mDoneParam do
+              while IsDeclNameTok and not mDoneParam do
               begin
                 mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
                 if not Eat(tkComma) then mDoneParam := True;
@@ -10062,7 +10120,7 @@ begin
                 begin mSawConst := True; Next; end;
                 mStartIdx := mNParams;
                 mDoneParam := False;
-                while (CurTok.Kind = tkIdent) and not mDoneParam do
+                while IsDeclNameTok and not mDoneParam do
                 begin
                   mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
                   if not Eat(tkComma) then mDoneParam := True;
@@ -10960,7 +11018,7 @@ begin
             begin mSawConst := True; Next; end;
             mStartIdx := mNParams;
             mDoneParam := False;
-            while (CurTok.Kind = tkIdent) and not mDoneParam do
+            while IsDeclNameTok and not mDoneParam do
             begin
               mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
               if not Eat(tkComma) then mDoneParam := True;
@@ -11821,7 +11879,7 @@ begin
       end;
       startIdx := nparams;
       doneParam := False;
-      while (CurTok.Kind = tkIdent) and not doneParam do
+      while IsDeclNameTok and not doneParam do
       begin
         pnames[nparams] := CurTok.SVal; Inc(nparams); Next;
         if not Eat(tkComma) then doneParam := True;

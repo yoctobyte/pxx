@@ -675,6 +675,9 @@ begin
   name := 'VER3'; PasDefine(name);
   name := 'VER3_2'; PasDefine(name);
   name := 'VER3_2_2'; PasDefine(name);
+  PasSetDefineValue('FPC_VERSION', 3);
+  PasSetDefineValue('FPC_RELEASE', 2);
+  PasSetDefineValue('FPC_PATCH', 2);
   PasSetDefineValue('FPC_FULLVERSION', 30202);
 end;
 
