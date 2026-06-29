@@ -1,8 +1,8 @@
 # Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone
 
 - **Type:** bug (compiler / intrinsic name resolution) — Track A
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Codex
 - **Found / Opened:** 2026-06-27, while adding `--dump-cpp` to `compiler.pas`.
 - **Relation:** residual gap after [[bug-builtin-write-case-sensitive]] (marked
   done) — that fix made capital write/writeln resolve in normal programs, but a
@@ -68,5 +68,13 @@ Why does it differ by context? Candidates to check:
 
 ## Log
 
+- 2026-06-29 - Fixed by making only the four I/O intrinsic keyword matches
+  (`Read`, `ReadLn`, `Write`, `WriteLn`) case-insensitive even while
+  `{$CASESENSITIVE ON}` is active. Verified the original temporary
+  `Write(Source)` self-build repro now succeeds, added a casesensitive-mode
+  Read/Write regression, and `make test-core` passes.
+- 2026-06-29 - Picked up on Track A. Reproduced the current compiler failing
+  when `compiler.pas` temporarily changes the `--dump-cpp` branch from
+  `write(Source)` to `Write(Source)`: `undefined variable (Write)`.
 - 2026-06-27 - Found adding `--dump-cpp`. Capital `Write` rejected in
   compiler.pas, accepted standalone — same binary. Mechanism unknown; filed.

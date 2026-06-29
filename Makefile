@@ -386,6 +386,8 @@ test-core: $(COMPILER)
 	/tmp/c_lua_tvalue_int_b13126; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_opcode_decode_b132.c /tmp/c_lua_opcode_decode_b13226
 	/tmp/c_lua_opcode_decode_b13226; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_array_elem_addr_b133.c /tmp/cglobal_array_elem_addr_b13326
+	/tmp/cglobal_array_elem_addr_b13326; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
 	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
 	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026
@@ -669,8 +671,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\nTRUE\nFALSE\n6')"
 	./$(COMPILER) test/test_case_io.pas /tmp/test_case_io26
 	test "$$(/tmp/test_case_io26)" = "$$(printf 'one\nab\ntwo\nthree\n42')"
+	./$(COMPILER) test/test_case_io_casesensitive_intrinsics.pas /tmp/test_case_io_casesensitive_intrinsics26
+	test "$$(printf '10 32\n' | /tmp/test_case_io_casesensitive_intrinsics26)" = "$$(printf 'AB\n42')"
 	./$(COMPILER) test/test_uses_sysutils.pas /tmp/test_uses_sysutils26
 	test "$$(/tmp/test_uses_sysutils26)" = "sysutils noop ok"
+	./$(COMPILER) -Futest/case_units test/test_case_unit_lookup.pas /tmp/test_case_unit_lookup26
+	/tmp/test_case_unit_lookup26; test "$$?" = "42"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas /tmp/test_float_result_loop26

@@ -1,9 +1,9 @@
 # Case-sensitive C header lookup mismatch on Linux
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done
 - **Track:** A (compiler frontend)
-- **Owner:** —
+- **Owner:** Codex
 - **Opened:** 2026-06-28
 
 ## Motivation
@@ -27,6 +27,15 @@ To make header import seamless, the lookup mechanism should resolve the casing m
 - Capitalized system headers (such as `uses Lerc_c_api;`, `uses FreeImage;`, and `uses GraphBLAS;`) compile and import successfully on Linux without requiring manual renaming.
 
 ## Log
+- 2026-06-29 — Added a case-insensitive load fallback for Pascal unit and C
+  header resolution.
+- 2026-06-29 — Narrowed the fallback to Pascal source/unit lookup only. C header
+  and C preprocessor includes remain exact-case by design to avoid ambiguous
+  header imports. Verified `uses uPSUtils` finds `uPSUtils.pas` through `-Fu`,
+  exact-case header import still works, and `make test-core` passes.
+- 2026-06-29 — Picked up on Track A. Reproduced the Pascal unit side with
+  `uses uPSUtils` failing to find `uPSUtils.pas` because the resolver probes
+  `upsutils.pas` on Linux.
 - 2026-06-28 — bug ticket opened.
 - 2026-06-28 — confirmed also affects **Pascal unit lookup**, not just C headers.
   `uses uPSUtils` fails with `unit source not found: upsutils` because the compiler

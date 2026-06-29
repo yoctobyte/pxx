@@ -1,5 +1,6 @@
 {$ifdef FPC}
 procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
+procedure LoadFileCI(const path: AnsiString; var dst: AnsiString); forward;
 {$endif}
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
@@ -13609,16 +13610,19 @@ begin
         isCUnit := True; isCHeader := True;
       end;
       path := basePath;
-      LoadFile(path, UnitContent);
+      if isCUnit then
+        LoadFile(path, UnitContent)
+      else
+        LoadFileCI(path, UnitContent);
     end
     else
     begin
       ConcatThree(basePath, '.pas', '', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
       if Length(UnitContent) = 0 then
       begin
         ConcatThree(basePath, '.pp', '', path);
-        LoadFile(path, UnitContent);
+        LoadFileCI(path, UnitContent);
       end;
     end;
     if Length(UnitContent) = 0 then
@@ -13637,22 +13641,22 @@ begin
   if (Length(UnitContent) = 0) and (CurUnitDir <> '') and (CurUnitDir <> SourceFileDir) then
   begin
     ConcatThree(CurUnitDir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(CurUnitDir, lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
   end;
   if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
   end;
   if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.pp', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
   end;
   if Length(UnitContent) = 0 then
   begin
@@ -13676,11 +13680,11 @@ begin
   while (Length(UnitContent) = 0) and (i < PasUnitDirCount) do
   begin
     ConcatThree(PasUnitDirs[i], lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(PasUnitDirs[i], lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
@@ -13718,11 +13722,11 @@ begin
   begin
     { If not found in base dir, try compiler's local directory or common locations }
     ConcatThree(cdir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(cdir, lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
@@ -13743,11 +13747,11 @@ begin
     { Compiler-specific runtime units (builtin: the auto-included heap allocator
       and Str/Val/variant helpers). Not user RTL, so it lives with the compiler. }
     ConcatThree(bdir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(bdir, lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
   end;
 
@@ -13755,11 +13759,11 @@ begin
   begin
     { RTL library units }
     ConcatThree(rtldir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(rtldir, lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
@@ -13776,11 +13780,11 @@ begin
       The RTL dir already tries .h; mirror it here so a PCL unit can `uses` a
       sibling .h/.c with no explicit -Fu/-I. }
     ConcatThree(lcldir, lo, '.pas', path);
-    LoadFile(path, UnitContent);
+    LoadFileCI(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(lcldir, lo, '.pp', path);
-      LoadFile(path, UnitContent);
+      LoadFileCI(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
@@ -13802,13 +13806,13 @@ begin
   if (Length(UnitContent) = 0) and (ExeDir <> '') then
   begin
     ConcatThree('compiler/', lo, '.pas', path);
-    LoadFile(path, UnitContent);
-    if Length(UnitContent) = 0 then begin ConcatThree('compiler/builtin/', lo, '.pas', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
+    LoadFileCI(path, UnitContent);
+    if Length(UnitContent) = 0 then begin ConcatThree('compiler/builtin/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then
     begin
       ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);

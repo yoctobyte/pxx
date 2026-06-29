@@ -2205,21 +2205,126 @@ begin
 {$endif}
 end;
 
+{$ifndef FPC}
+function sysgetdents64(fd: Integer; var buf; count: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(217, fd, Int64(@buf), count, 0, 0, 0));
+end;
+{$endif}
+
+function ResolveCaseInsensitivePath(const path: AnsiString; var resolved: AnsiString): Boolean;
+var dir, scanDir, want, entry, candidate: AnsiString;
+    matches, fd, n, off, reclen: Integer;
+{$ifdef FPC}
+    sr: TSearchRec;
+{$else}
+    buf: array[0..4095] of Byte;
+    b: Byte;
+{$endif}
+begin
+  Result := False;
+  resolved := path;
+  dir := GetFilePath(path);
+  want := '';
+  if Length(path) = 0 then Exit;
+  for off := Length(dir) + 1 to Length(path) do
+    AppendChar(want, path[off]);
+  if Length(want) = 0 then Exit;
+
+  scanDir := dir;
+  if Length(scanDir) = 0 then scanDir := '.';
+  matches := 0;
+
+{$ifdef FPC}
+  if FindFirst(scanDir + '/*', faAnyFile, sr) = 0 then
+  begin
+    repeat
+      if (sr.Name <> '.') and (sr.Name <> '..') and CaseEqual(sr.Name, want) then
+      begin
+        Inc(matches);
+        if Length(dir) = 0 then
+          candidate := sr.Name
+        else
+          ConcatThree(dir, sr.Name, '', candidate);
+      end;
+    until FindNext(sr) <> 0;
+    FindClose(sr);
+  end;
+{$else}
+  fd := sysopen(scanDir, 65536); { O_DIRECTORY }
+  if fd < 0 then Exit;
+  n := sysgetdents64(fd, buf, 4096);
+  while n > 0 do
+  begin
+    off := 0;
+    while off < n do
+    begin
+      reclen := Integer(buf[off + 16]) + Integer(buf[off + 17]) * 256;
+      if reclen <= 0 then
+        off := n
+      else
+      begin
+        entry := '';
+        b := buf[off + 19];
+        while b <> 0 do
+        begin
+          AppendChar(entry, Chr(b));
+          off := off + 1;
+          b := buf[off + 19];
+        end;
+        off := off - Length(entry);
+        if (entry <> '.') and (entry <> '..') and CaseEqual(entry, want) then
+        begin
+          Inc(matches);
+          if Length(dir) = 0 then
+            candidate := entry
+          else
+            ConcatThree(dir, entry, '', candidate);
+        end;
+        off := off + reclen;
+      end;
+    end;
+    if matches > 1 then Break;
+    n := sysgetdents64(fd, buf, 4096);
+  end;
+  sysclose(fd);
+{$endif}
+
+  if matches = 1 then
+  begin
+    resolved := candidate;
+    Result := True;
+  end;
+end;
+
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
-var f, n: Integer;
+var f, n, i: Integer; buf: array[0..STRING_CAP-1] of Byte;
 begin
   LoadPath := path;
-  SetLength(dst, STRING_CAP);
+  SetLength(dst, 0);
   f := sysopen(LoadPath, 0);
   if f >= 0 then
   begin
-    n := sysread(f, dst[1], STRING_CAP);
+    n := sysread(f, buf, STRING_CAP);
     if n < 0 then n := 0;
     sysclose(f);
     SetLength(dst, n);
+    for i := 0 to n - 1 do
+      dst[i + 1] := Chr(buf[i]);
   end
   else
     SetLength(dst, 0);
+end;
+
+procedure LoadFileCI(const path: AnsiString; var dst: AnsiString);
+var realPath: AnsiString;
+begin
+  LoadFile(path, dst);
+  if Length(dst) = 0 then
+  begin
+    if ResolveCaseInsensitivePath(path, realPath) then
+      LoadFile(realPath, dst);
+  end;
 end;
 
 function GetFilePath(const path: AnsiString): AnsiString;
@@ -2470,7 +2575,7 @@ begin
             for k := 1 to Length(fname) do AppendChar(fullPath, fname[k]);
           end;
           NormalizePath(fullPath);
-          LoadFile(fullPath, IncIncluded);
+          LoadFileCI(fullPath, IncIncluded);
           AppendString(IncExpanded, IncIncluded);
           i := j + 1;
         end

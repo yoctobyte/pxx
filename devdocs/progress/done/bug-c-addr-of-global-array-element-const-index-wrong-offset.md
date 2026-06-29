@@ -2,8 +2,8 @@
 
 - **Type:** bug (C frontend → global-init lowering) — Track C (+ A if shared
   address-of / reloc path)
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Codex
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up (side find while chasing
   [[bug-c-invalid-symbol-in-lea-sqlite]]).
 
@@ -47,5 +47,10 @@ This is the sqlite `sqlite3aLTb = &sqlite3UpperToLower[256-OP_Ne]` shape
 
 ## Log
 
+- 2026-06-29 - Closed as fixed by current constant-expression/preprocessor work:
+  the standalone repro passes for both `u8` and `u16` element strides. Added
+  `test/cglobal_array_elem_addr_b133.c` and wired it into `test-core`.
+- 2026-06-29 - Picked up on Track A; reproducing with a standalone `u8`/`u16`
+  global pointer initializer regression.
 - 2026-06-27 - Found while reducing the sqlite invalid-symbol-in-lea crash; this
   is the non-crashing sibling on the same `&global_array[const]` construct.
