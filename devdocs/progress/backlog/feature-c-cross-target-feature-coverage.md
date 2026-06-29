@@ -52,8 +52,21 @@ x86-64 bytes that crash.
    to `feature-cdecl-indirect-cross-targets` (cdecl honored only on x86-64).
 3. **C varargs call cross** — printf-style `f(fmt, ...)` fails to compile on
    i386/arm32/aarch64 with `call argument count mismatch (defaults not supported
-   yet)`; riscv32 wants the `__pxx_dcmp` softfloat helper. The variadic *call*
-   path is x86-64-only.
+   yet)` (`ir_codegen386.inc:2446` — the call site rejects nArgs != ParamCount).
+   The variadic *call* path is x86-64-only. **i386 design note (2026-06-29):**
+   two coupled problems make this non-trivial. (a) The `va_list` model in
+   `lib/crtl/include/stdarg.h` keys on a 176-byte SysV register-save area
+   (gp/fp_offset) — i386 has no arg registers, all args are on the stack, so the
+   model differs. (b) PXX's i386 calling convention pushes args **left-to-right
+   (leftmost deepest)**, the *opposite* of standard i386 cdecl (right-to-left,
+   arg0 lowest), so variadic args land at *decreasing* addresses while `va_arg`
+   walks *up* — a simple stack-walk won't line up. Fixing i386 varargs likely
+   needs either a right-to-left push for variadic C funcs (+ an i386 `va_start`
+   that points at the first variadic stack slot and walks up, gp/fp_offset forced
+   to the overflow path so `__pxx_va_arg_*` reuse the existing stack branch), or a
+   dedicated i386 va model. The x86-64 variadic register-save prologue
+   (`cparser.inc`) is also x86-64-only and needs an i386 no-op. Deferred — a
+   dedicated piece.
 
 Each is a separate Track-A backend gap; fix + guard incrementally per target.
 
