@@ -25,11 +25,12 @@ _none_
 
 _none_
 
-## backlog (60)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
@@ -508,6 +509,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-vararg-vastart-named-fp-stack
+- [A] bug-fpc-seeded-binary-runtime-segfault
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
