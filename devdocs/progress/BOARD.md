@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (67)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
@@ -507,7 +506,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-paramless-self-recursion-silent-result-read
 - [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps

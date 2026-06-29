@@ -1,8 +1,8 @@
 # Paramless self-recursion reads own Result silently — no diagnostic
 
 - **Type:** bug / dev-footgun (compiler language semantics)
+- **Status:** done
 - **Track:** A (compiler core / parser-semantics) — raised by Track C (C frontend).
-- **Status:** DONE (2026-06-26, commit on master)
 - **Opened:** 2026-06-25
 
 ## Symptom
@@ -56,11 +56,23 @@ depends on it). Just surface the ambiguity.
 Always call paramless routines (incl. self-recursion) as `Name()`. Documented in
 the Track C resume notes / landmines.
 
-## Resolution (2026-06-26, Track A)
-Added opt-in `--warn-self-result`: warns at the bare own-name value-read site when
-the enclosing function is parameterless (the ambiguous case; with-params bare name
-is unambiguously Result). Default OFF so the compiler's own bare-name=Result idiom
-keeps self-host byte-identical and -Werror builds clean. The assignment-target
-form and `Name()` calls are unaffected. Did NOT change the default
-bare-name=Result semantics (self-host depends on it), per the ticket's non-goal —
-just surfaced the ambiguity. C-frontend authors: build with --warn-self-result.
+## Resolution
+
+The compiler already had the intended opt-in diagnostic behind
+`--warn-self-result`; this ticket was stale. Added regression coverage:
+
+- normal compile preserves existing FPC-compatible bare-name-as-Result behavior;
+- `--warn-self-result` emits the ambiguity warning;
+- `--warn-self-result -Werror` promotes the warning to an error.
+
+Verified:
+
+```
+./compiler/pascal26 test/test_warn_self_result.pas /tmp/test_warn_self_result26
+./compiler/pascal26 --warn-self-result test/test_warn_self_result.pas /tmp/test_warn_self_result_warn26
+./compiler/pascal26 --warn-self-result -Werror test/test_warn_self_result.pas /tmp/test_warn_self_result_werror26
+```
+
+## Log
+
+- 2026-06-29 — resolved; commit in this changeset.

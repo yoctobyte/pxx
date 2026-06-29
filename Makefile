@@ -1175,6 +1175,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_pascal_directive_messages.pas /tmp/test_pascal_directive_messages26 > /tmp/test_pascal_directive_messages.log
 	grep -q "warning: warning text" /tmp/test_pascal_directive_messages.log
 	grep -q "message: message text" /tmp/test_pascal_directive_messages.log
+	./$(COMPILER) test/test_warn_self_result.pas /tmp/test_warn_self_result26
+	test "$$(/tmp/test_warn_self_result26)" = "2"
+	./$(COMPILER) --warn-self-result test/test_warn_self_result.pas /tmp/test_warn_self_result_warn26 > /tmp/test_warn_self_result.log
+	grep -q "warning: bare own name 'Count' reads the result of parameterless function Count" /tmp/test_warn_self_result.log
+	! ./$(COMPILER) --warn-self-result -Werror test/test_warn_self_result.pas /tmp/test_warn_self_result_werror26 > /tmp/test_warn_self_result_werror.log 2>&1
+	grep -q "warning promoted by -Werror" /tmp/test_warn_self_result_werror.log
 	! ./$(COMPILER) test/test_pascal_directive_error.pas /tmp/test_pascal_directive_error26 > /tmp/test_pascal_directive_error.log 2>&1
 	grep -q "requested failure" /tmp/test_pascal_directive_error.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas /tmp/test_pascal_conditional_include26
