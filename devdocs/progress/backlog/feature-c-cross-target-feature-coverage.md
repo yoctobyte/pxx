@@ -27,7 +27,15 @@ x86-64 bytes that crash.
    argc/argv-in-regs (r0/r1, x0/x1, a0/a1) + `call main` (BL / bl) + exit
    syscall. (riscv32 also emits a near-empty binary — its C lowering produces
    almost nothing; deeper.)
-2. **C function call arg-passing on i386 — ROOT-CAUSED.** `cnoprintf.c` returns
+2. **C function call arg-passing on i386 — FIXED 2026-06-29.** The C param-spill
+   in `ParseCSubroutine` was hardcoded x86-64 (spill rdi/rsi/xmm…); it now has an
+   i386 branch that copies the cdecl **stack** args (`[ebp+8+sz]`, leftmost
+   deepest) into the param slots, mirroring the Pascal i386 spill. `id(42)`,
+   `add`, 5-arg calls, recursion (`fib`), structs + loops (`cnoprintf` → 62) all
+   run on i386 now. Guard `test/ccross_args.c` in `make test-i386`. x86-64
+   unaffected; self-host byte-identical. Original diagnosis below for reference:
+
+   `cnoprintf.c` returned
    7 (= only `p.x+p.y`, struct fields ok; `sum_to(10)` returns 0). Minimal repro
    `int id(int a){return a;} int main(){return id(42);}` → 0 on i386 (42 on
    x86-64); no-arg call + local arith are fine, so it is purely **argument

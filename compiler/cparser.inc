@@ -4576,6 +4576,50 @@ begin
     EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
   end;
 
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386: C cdecl args are pushed on the stack (NOT in registers as on x86-64).
+      The i386 call site pushes them left-to-right (leftmost ends up deepest), so
+      param i of n sits at [ebp + 8 + sz] where sz = the total stack width of the
+      params to its right. Copy each into its frame slot; the caller cleans the
+      arg area. Mirrors the Pascal i386 param spill (parser.inc). int/ptr =
+      4-byte slots, double/Int64 = 8-byte. }
+    for i := 0 to nparams - 1 do
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      sz := 0;
+      for j := i + 1 to nparams - 1 do
+      begin
+        if Syms[Procs[procIdx].Params[j].SymIdx].IsRef then Inc(sz, 4)
+        else if (ptypes[j] = tyDouble) or (ptypes[j] = tyInt64) or (ptypes[j] = tyUInt64) then Inc(sz, 8)
+        else Inc(sz, 4);
+      end;
+      if (not Syms[idx].IsRef) and
+         ((ptypes[i] = tyDouble) or (ptypes[i] = tyInt64) or (ptypes[i] = tyUInt64)) then
+      begin
+        EmitB($8B); EmitB($85); EmitI32(8 + sz);                  { mov eax, [ebp+disp] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);        { mov [ebp+off], eax }
+        EmitB($8B); EmitB($85); EmitI32(12 + sz);                 { mov eax, [ebp+disp+4] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + 4);    { mov [ebp+off+4], eax }
+      end
+      else
+      begin
+        EmitB($8B); EmitB($85); EmitI32(8 + sz);                  { mov eax, [ebp+disp] }
+        if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+           not (Syms[idx].TypeKind in [tyPointer, tyString, tyAnsiString, tyClass]) and
+           (TypeSize(Syms[idx].TypeKind) = 1) then
+          begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end          { mov [ebp+off], al }
+        else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+           not (Syms[idx].TypeKind in [tyPointer, tyString, tyAnsiString, tyClass]) and
+           (TypeSize(Syms[idx].TypeKind) = 2) then
+          begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ax }
+        else
+          begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;          { mov [ebp+off], eax }
+      end;
+    end;
+  end
+  else
+  begin
   { Copy SysV argument locations to local parameter slots. Integer and SSE
     classes have independent register counts; overflow args are 8-byte stack
     slots starting at [rbp+16]. }
@@ -4713,7 +4757,8 @@ begin
     end;
     Inc(intIdx);
   end;
-  
+  end;  { end of x86-64 param-spill else-branch }
+
   { Constant global initializers (struct/union brace inits recorded as PendingInit
     during pass 1) run once at the start of `main`, before user code — the C
     analogue of the Pascal program's pre-body CompilePendingGlobalInits. }
