@@ -4087,18 +4087,49 @@ var firstIdx, callPatch, mainIdx: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
-  { mov [BSS_INITIAL_RSP], rsp }
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  { seed C main(argc, argv) from the Linux initial stack: [argc][argv0]... }
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [BSS_INITIAL_RSP] }
-  EmitB($8B); EmitB($38);                                                       { mov edi, [rax] }
-  EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] }
-  { call main (rel32, patched once main's body address is known) }
+  { Program entry stub (the ELF entry at code offset 0): save the initial stack
+    pointer, hand C `main(argc, argv)` the Linux initial stack ([argc][argv0]...),
+    call main, then exit_group(main's return). Target-specific: x86-64 passes
+    argc/argv in edi/rsi and syscalls via `syscall`; i386 passes them on the
+    cdecl stack and syscalls via `int 0x80`. Other targets use a different call
+    encoding for `call main`; they raise a clear error until their stub lands,
+    rather than emitting x86-64 bytes that crash at runtime. }
+  case TargetArch of
+    TARGET_X86_64:
+    begin
+      EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov [initial_rsp], rsp }
+      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [initial_rsp] }
+      EmitB($8B); EmitB($38);                                                       { mov edi, [rax]  (argc) }
+      EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] (argv) }
+    end;
+    TARGET_I386:
+    begin
+      EmitB($89); EmitB($E0);                                  { mov eax, esp }
+      EmitB($A3); EmitGlobRef(BSS_INITIAL_RSP);                { mov [initial_sp], eax }
+      EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
+      EmitB($51);                                              { push ecx        (arg2 = argv) }
+      EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
+    end;
+  else
+    Error('C program entry stub not implemented for this target yet');
+  end;
+  { call main (rel32, patched once main's body address is known — same E8
+    encoding on x86-64 and i386). }
   EmitB($E8); callPatch := CodeLen; EmitI32(0);
-  { mov edi, eax ; mov eax, 231 (exit_group) ; syscall }
-  EmitB($89); EmitB($C7);
-  EmitB($B8); EmitI32(231);
-  EmitB($0F); EmitB($05);
+  case TargetArch of
+    TARGET_X86_64:
+    begin
+      EmitB($89); EmitB($C7);            { mov edi, eax }
+      EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
+      EmitB($0F); EmitB($05);            { syscall }
+    end;
+    TARGET_I386:
+    begin
+      EmitB($89); EmitB($C3);            { mov ebx, eax }
+      EmitB($B8); EmitI32(252);          { mov eax, 252 (exit_group) }
+      EmitB($CD); EmitB($80);            { int 0x80 }
+    end;
+  end;
 
   { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
     `extern __pxx_write`/`__pxx_read` resolve to bodied Pascal procs over the

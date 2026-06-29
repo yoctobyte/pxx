@@ -1,9 +1,42 @@
 # C frontend + lua — cross-target / ESP feature coverage
 
 - **Type:** feature (test coverage) — Track C (+ A for any backend gap found)
-- **Status:** backlog
+- **Status:** backlog (in progress — entry layer fixed 2026-06-29)
 - **Owner:** unassigned
 - **Opened:** 2026-06-27
+
+## 2026-06-29 — empirical cross-C test + first layer fixed
+
+Confirmed C was x86-64-only: every C program (even `int main(void){return 42;}`)
+crashed on i386/arm32/aarch64/riscv32, while the equivalent Pascal ran. Traced
+to **layer 1 — the program entry stub**: `ParseCProgram` hand-emitted raw
+**x86-64** bytes (REX.W `mov [m],rsp`, `syscall`, exit_group 231) for the ELF
+entry regardless of target, so on i386 the `0x48` REX prefixes decoded as garbage
+→ SIGILL/SIGSEGV before `main` even ran.
+
+**Fixed for i386** (commit pending): the entry stub now dispatches on
+`TargetArch` — x86-64 keeps edi/rsi + `syscall`; i386 uses the cdecl stack
+([argc][argv] pushed) + `int 0x80` exit_group(252). `int main(void){return 42}`
+now exits 42 on i386 (guard `test/ccross_entry.c` in `make test-i386`). The other
+backends (arm32/aarch64/riscv32) now raise a **clear compile error** ("C program
+entry stub not implemented for this target yet") instead of silently emitting
+x86-64 bytes that crash.
+
+**Remaining layers (still open), discovered by the same test:**
+1. **arm32 / aarch64 / riscv32 entry stubs** — need the per-target save-sp +
+   argc/argv-in-regs (r0/r1, x0/x1, a0/a1) + `call main` (BL / bl) + exit
+   syscall. (riscv32 also emits a near-empty binary — its C lowering produces
+   almost nothing; deeper.)
+2. **C function call / arithmetic on i386** — `cnoprintf.c` (struct + loop +
+   call, returns 62 on x86-64) returns **7** on i386: the C call/arith lowering
+   is wrong cross. Needs isolation (likely cdecl arg passing or 32-bit result
+   handling).
+3. **C varargs call cross** — printf-style `f(fmt, ...)` fails to compile on
+   i386/arm32/aarch64 with `call argument count mismatch (defaults not supported
+   yet)`; riscv32 wants the `__pxx_dcmp` softfloat helper. The variadic *call*
+   path is x86-64-only.
+
+Each is a separate Track-A backend gap; fix + guard incrementally per target.
 
 ## Problem
 
