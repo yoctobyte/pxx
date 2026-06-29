@@ -38,7 +38,7 @@ _none_
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
-| feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
@@ -132,7 +132,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (357)
+## done (358)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -335,6 +335,7 @@ _none_
 | feature-c-alignment-attributes | C | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
+| feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
@@ -513,7 +514,7 @@ _none_
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
 - [A] feature-c-cross-target-feature-coverage
-- [C] feature-c-header-import-complex
+- [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-regex-library-devtest
 - [C] feature-c-source-frontend
 - [A] feature-cdecl-indirect-cross-targets
