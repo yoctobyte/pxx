@@ -3633,7 +3633,26 @@ begin
       begin
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argIsManagedTemp :=
+          (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
+          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+          (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+          (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+        if argIsManagedTemp then
+        begin
+          hiddenArgSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_DEFAULT_MEM,
+            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+          value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+        end
+        else
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         IRB[last] := argNode; last := argNode;
         item := ASTRight[item];
         Inc(pathIdx);

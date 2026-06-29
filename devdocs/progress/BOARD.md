@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (68)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -135,7 +134,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (354)
+## done (355)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -258,6 +257,7 @@ _none_
 | bug-mimic-fpc-version-defines-missing | A | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
 | bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
+| bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
@@ -507,7 +507,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size

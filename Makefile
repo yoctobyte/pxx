@@ -663,6 +663,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interfaces_param26)" = "$$(printf 'viaparam=7\nresult=7\nfg same\nfh diff\nfh ne\nf set\nnow nil')"
 	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_interfaces_inherit26
 	test "$$(/tmp/test_interfaces_inherit26)" = "$$(printf 'bar.B=9\nbar.F=7\nfoo.F=7\nwiden=7\nwf=7\na is IFoo\na is IBar\nsup IFoo')"
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas /tmp/test_interfaces_multi_secondary26
+	test "$$(/tmp/test_interfaces_multi_secondary26)" = "$$(printf 'direct\nTitle\nSome content\nSome content\nTitle\nSome content')"
 	./$(COMPILER) test/test_interface_arc.pas /tmp/test_interface_arc26
 	test "$$(/tmp/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
 	./$(COMPILER) test/test_interface_arc_exc.pas /tmp/test_interface_arc_exc26
@@ -1621,6 +1623,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_interfaces_inherit.pas /tmp/test_i386_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_i386_iface_inh_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_inh)" = "$$(/tmp/test_i386_iface_inh_x64)"
+	./$(COMPILER) --target=i386 test/test_interfaces_multi_secondary.pas /tmp/test_i386_iface_multi
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas /tmp/test_i386_iface_multi_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_multi)" = "$$(/tmp/test_i386_iface_multi_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_aggregate_return.pas /tmp/test_i386_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_i386_aggret_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_aggret)" = "$$(/tmp/test_i386_aggret_x64)"
@@ -1879,6 +1884,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_interfaces_inherit.pas /tmp/test_aarch64_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_aarch64_iface_inh_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_inh)" = "$$(/tmp/test_aarch64_iface_inh_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interfaces_multi_secondary.pas /tmp/test_aarch64_iface_multi
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas /tmp/test_aarch64_iface_multi_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_multi)" = "$$(/tmp/test_aarch64_iface_multi_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_aggret)" = "$$(/tmp/test_aarch64_aggret_x64)"
@@ -2158,6 +2166,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_interfaces_inherit.pas /tmp/test_arm32_iface_inh
 	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_arm32_iface_inh_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_inh)" = "$$(/tmp/test_arm32_iface_inh_x64)"
+	./$(COMPILER) --target=arm32 test/test_interfaces_multi_secondary.pas /tmp/test_arm32_iface_multi
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas /tmp/test_arm32_iface_multi_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_multi)" = "$$(/tmp/test_arm32_iface_multi_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggret)" = "$$(/tmp/test_arm32_aggret_x64)"
