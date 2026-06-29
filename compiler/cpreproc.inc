@@ -247,6 +247,17 @@ end;
 
 function CPExprOr: Int64; forward;
 
+{ Forward decls for the recursive macro expander, hoisted above CPExprAtom
+  which calls them at #if-eval time. pascal26 sees these via whole-section
+  forward-visibility regardless of position; FPC needs them before first use. }
+procedure CPSetTempStrLength(level: Integer; len: Integer); forward;
+procedure CPExpandObjectForLevel(mi, level: Integer); forward;
+procedure CPExpandRangeForLevel(level: Integer; var dst: AnsiString); forward;
+procedure CPExpandFunctionForLevel(mi: Integer; const src: AnsiString; argCount, level: Integer); forward;
+procedure CPSetExpandedArgLength(level, len: Integer); forward;
+procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer); forward;
+procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward;
+
 function CPExprAtom: Int64;
 var a, b, mi, p, q, depth, argc, argBase, ai: Integer;
     savedText, expanded: AnsiString; savedPos, savedEnd: Integer;
@@ -602,14 +613,6 @@ end;
 
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString); forward;
-
-procedure CPSetTempStrLength(level: Integer; len: Integer); forward;
-procedure CPExpandObjectForLevel(mi, level: Integer); forward;
-procedure CPExpandRangeForLevel(level: Integer; var dst: AnsiString); forward;
-procedure CPExpandFunctionForLevel(mi: Integer; const src: AnsiString; argCount, level: Integer); forward;
-procedure CPSetExpandedArgLength(level, len: Integer); forward;
-procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer); forward;
-procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward;
 
 function CPMacroIsActive(mi: Integer): Boolean;
 var i: Integer;
