@@ -25,10 +25,11 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-unsigned-int-32bit-arithmetic-semantics | A | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -508,6 +509,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-unsigned-int-32bit-arithmetic-semantics
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-fpc-seeded-binary-runtime-segfault
 - [A] chore-runtime-emission-size
