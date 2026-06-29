@@ -1,7 +1,10 @@
 # feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout)
 
 - **Type:** feature (epic / Track B)
-- **Status:** backlog
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** epic M1–M5 complete — layout-tree,
+  perspectives, component-palette, selection-link all in `done/`. Only cosmetic
+  strip polish deferred (not blocking). Shell scope delivered.
 - **Track:** B
 - **Parent:** feature-eliah-ide
 - **Opened:** 2026-06-23

@@ -12,35 +12,31 @@ _none_
 
 _none_
 
-## unfinished (5)
+## unfinished (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
-| feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 
-## blocked (1)
+## blocked (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+_none_
 
-## backlog (65)
+## backlog (60)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
-| chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
+| feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -52,7 +48,6 @@ _none_
 | feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
-| feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -69,7 +64,6 @@ _none_
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-networking | B | feature | Networking runtime | — |
-| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
@@ -94,9 +88,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
-| test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
-| track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 
 ## rainy-day (19)
 
@@ -132,7 +124,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (358)
+## done (365)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -319,6 +311,7 @@ _none_
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
+| chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | docs-user-documentation-site-structure | D | docs | User documentation site structure and first content pass | — |
@@ -336,6 +329,7 @@ _none_
 | feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
@@ -387,10 +381,12 @@ _none_
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
 | feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
+| feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
+| feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
@@ -436,6 +432,7 @@ _none_
 | feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
+| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
@@ -489,7 +486,9 @@ _none_
 | lib-intToStr-missing | B | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+| test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
+| track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 | track-a-c-stdio-needs-pascal-import-and-data-relocs | A | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
 | track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
 | track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
@@ -509,14 +508,13 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-vararg-vastart-named-fp-stack
-- [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-regex-library-devtest
-- [C] feature-c-source-frontend
+- [C] feature-c-runtime-library
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
 - [B] feature-demo-chess
@@ -528,7 +526,6 @@ _none_
 - [A] feature-dynarray-torture-test
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
-- [B] feature-eliah-shell
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
 - [B] feature-esp-peripheral-callback-api
@@ -545,7 +542,6 @@ _none_
 - [B] feature-move-fillchar-intrinsics
 - [A] feature-net-lib-cross-target
 - [B] feature-networking
-- [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-lwip-sockaddr-readback
@@ -567,12 +563,9 @@ _none_
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [B] task-sqlite-libc-free-runtime-bringup
-- [C] test-c-crypt
-- [A] track-a-c-frontend-shared-ir-touchpoints
 
 ## Leverage (tickets each one unblocks)
 
-- **2** — feature-c-source-frontend
 - **2** — feature-threadsafe-heap-contract
 - **1** — feature-esp32-idf-xtensa
 - **1** — feature-threadsafe-io-serialization

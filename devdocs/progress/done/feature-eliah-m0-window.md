@@ -1,7 +1,10 @@
 # Eliah M0 — single tiled GTK3 window
 
 - **Type:** feature (app / demo)
-- **Status:** unfinished (parked — no active agent; GTK/Xvfb work, resume when picked up)
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** `apps/ide/eliah` builds+runs in
+  `gui_suite` (`eliah_smoke`); M0 window milestone delivered and the splitter gap
+  was superseded by `done/feature-eliah-layout-tree`.
 - **Track:** B (built with `$(PXX_STABLE)`)
 - **Owner:** Track B agent
 - **Parent:** feature-eliah-ide

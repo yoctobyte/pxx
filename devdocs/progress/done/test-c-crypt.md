@@ -1,7 +1,10 @@
 # Implement a C interop regression test for passphrase hashing (`crypt.h`)
 
 - **Type:** test
-- **Status:** in-progress
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** `test/test_c_crypt.pas` wired in
+  `Makefile:1214` with pass-assertion (commit `0d695bfc`). Left stuck at
+  in-progress.
 - **Track:** C (C frontend interop testing)
 - **Owner:** Antigravity
 - **Opened:** 2026-06-28

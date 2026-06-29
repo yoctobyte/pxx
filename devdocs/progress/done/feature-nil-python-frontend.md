@@ -1,7 +1,10 @@
 # Nil Python frontend (`.npy`)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** frontend shipped — `pylexer.inc`/`pyparser.inc`
+  wired in `compiler.pas`, 23 `.npy` tests, `make test-nilpy` target. Resolved
+  incrementally over the Nil-Python arc; ticket was never moved out of backlog.
 - **Owner:** —
 - **Opened:** 2026-06-13 (tracking the long-standing plan as a board ticket)
 

@@ -2,7 +2,11 @@
 
 - **Type:** feature (C frontend / RTL — legitimately Track B library work
   originally; reassigned to C now that C owns `lib/crtl` and the C runtime)
-- **Status:** blocked
+- **Status:** backlog (unblocked 2026-06-29)
+- **Unblocked 2026-06-29 (board cleanup):** the blocker
+  `feature-c-source-frontend` is now done. `lib/crtl/{include,src}` substrate
+  exists (math/stdio/string/stdlib/socket/ctype/locale) and the autopull link
+  model is live. Remaining work is open-ended runtime build-out, not blocked.
 - **Track:** C (C frontend)
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-20

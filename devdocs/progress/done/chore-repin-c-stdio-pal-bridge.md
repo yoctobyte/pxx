@@ -1,7 +1,9 @@
 # Re-pin stable for C stdio/socket PAL bridge
 
 - **Type:** chore
-- **Status:** backlog
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** C stdio PAL bridge landed (`4c81feae`)
+  and was blessed before pin v82; tree now at v85. Re-pin no longer pending.
 - **Track:** A/C handoff, affects Track B `lib/crtl` gates
 - **Opened:** 2026-06-27
 - **Found-by:** Track B `crtl` work, after implementing `bug-c-crtl-fopen-missing`

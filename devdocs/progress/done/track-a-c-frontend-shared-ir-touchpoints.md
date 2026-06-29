@@ -4,6 +4,11 @@
 - **Track:** A (compiler core / shared IR) — raised by Track D (C frontend,
   worktree `feat/cfront`).
 - **Opened:** 2026-06-25
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** all flagged shared-IR nodes landed
+  (`AN_TERNARY`/`AN_COMMA`/`AN_INCDEC`/`AN_COMPOUND_ASSIGN`/`AN_SWITCH` in
+  `defs.inc`+`ir.inc`); ticket already carried a RESOLVED section but stayed in
+  backlog.
 - **Why:** the C body frontend lowers to the SAME shared AST/IR as the Pascal
   frontend. Where building it required touching shared lowering (not just
   `clexer/cparser`), Track A should own/review the semantics so a future Pascal

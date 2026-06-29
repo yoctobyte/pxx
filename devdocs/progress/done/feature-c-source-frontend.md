@@ -1,7 +1,13 @@
 # C source frontend — compile C function bodies (statements + expressions)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
+- **Closed 2026-06-29 (board cleanup):** C body frontend delivered — full
+  statement/expression compilation (`ParseCIf`/`While`/`For`/`DoWhile`/`Switch`,
+  `AN_GOTO`, multi-function bodies, bitfields). Proof: real lua and sqlite C
+  sources compile and run. Float value-model (a separate concern) was fixed
+  2026-06-27 (b81–b85). Remaining C work (cross-target coverage, gcc-oracle
+  fixtures, sqlite libc-free VFS) lives in its own tickets.
 - **Track:** C (C frontend)
 - **Opened:** 2026-06-17
 - **Priority:** next major frontend after the cross-target language work lands
