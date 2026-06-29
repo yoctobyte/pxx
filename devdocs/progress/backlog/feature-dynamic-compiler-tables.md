@@ -69,6 +69,40 @@ surface as a self-host or cross divergence. Free, brutal, deterministic coverage
 - **Frozen vs managed self-build** — the compiler self-builds frozen; make sure
   the dynarray path is exercised in that mode too, not only managed user progs.
 
+## Performance angle (2026-06-29)
+
+Raised after the `make benchmark` run (commit `9eecff79` era):
+
+- self-host pascal26 compiles `compiler.pas` **2.96× slower than FPC** (6.47s vs
+  ~2.19s) — gap *widened* from ~2.1× as the compiler grew.
+- managed-string hello is **23× slower** than frozen and yields a **110× bigger
+  exe** (31.6 KB vs 287 B) — runtime memory/heap init dominates tiny programs.
+
+User hypothesis: **the speed cost is largely memory management** — we reach for
+fixed `array[0..MAX_*]` static storage where a grow-on-demand dynarray belongs,
+and pay for it in a ~165 MB BSS that is touched/cache-thrashed and reserved
+worst-case on every compile.
+
+**Honest scoping (don't oversell):** the dominant self-compile lever is still
+**register allocation** (no regalloc → ~2× baseline, per
+[[project_make_test_timing_analysis]]) — converting tables to dynarrays will
+*not* close the 2.96× gap on its own. Its perf wins are real but secondary:
+smaller resident set / better cache locality / faster process startup (less BSS
+to map+zero), plus killing the manual `MAX_*` bump+reseed treadmill. Treat perf
+as a *bonus* on top of the capacity+RAM+dogfood case above, and **measure**
+(wall-time self-compile + RSS + hello startup before/after) rather than assume.
+
+## Execution constraint — do this on a dev branch, NOT master
+
+This is a **big destabilizing overhaul** that touches the compiler's hottest
+data structures. It breaks self-host byte-identical until it converges and needs
+a multi-gen reseed + re-pin. Unlike the usual Track-A "work on master" rule, the
+user has explicitly scoped this one to a **separate git dev tree / branch**:
+land it incrementally there, get `make test` + self-host fixedpoint + full cross
++ ESP all green on the branch, *then* merge to master as one converged step.
+Never carry a half-converted tables refactor on master (it would trip the
+stable-binary / self-host gate for every other Track-A change).
+
 ## Acceptance
 
 - Target tables are dynamic; compiler compiles sqlite (and lua) without manual
@@ -90,3 +124,10 @@ surface as a self-host or cross divergence. Free, brutal, deterministic coverage
   cost); dynarray conversion is explicitly **later**. Interim static bumps
   tracked in [[chore-sqlite-static-capacity-bumps]]. This ticket stays backlog as
   the eventual proper fix + dynarray dogfood.
+- 2026-06-29 - Reframed with a **performance** motivation off the `make
+  benchmark` numbers (pxx 2.96× slower self-compile; managed hello 23× slower /
+  110× bigger). User hypothesis: speed cost is mostly memory management
+  (static-over-dynarray). Added honest scoping (regalloc is the bigger lever;
+  this is a secondary cache/startup/RAM win + dogfood) and an **execution
+  constraint: do the overhaul on a dedicated git dev branch, not master**, then
+  merge once converged. Still backlog, still not blocking anything.
