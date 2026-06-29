@@ -27,10 +27,21 @@ x86-64 bytes that crash.
    argc/argv-in-regs (r0/r1, x0/x1, a0/a1) + `call main` (BL / bl) + exit
    syscall. (riscv32 also emits a near-empty binary — its C lowering produces
    almost nothing; deeper.)
-2. **C function call / arithmetic on i386** — `cnoprintf.c` (struct + loop +
-   call, returns 62 on x86-64) returns **7** on i386: the C call/arith lowering
-   is wrong cross. Needs isolation (likely cdecl arg passing or 32-bit result
-   handling).
+2. **C function call arg-passing on i386 — ROOT-CAUSED.** `cnoprintf.c` returns
+   7 (= only `p.x+p.y`, struct fields ok; `sum_to(10)` returns 0). Minimal repro
+   `int id(int a){return a;} int main(){return id(42);}` → 0 on i386 (42 on
+   x86-64); no-arg call + local arith are fine, so it is purely **argument
+   passing to C functions**. Disassembly: the call site correctly does cdecl
+   (`mov eax,42; push eax; call id`), but `id`'s **prologue spills `edi`**
+   (`mov [ebp-4], edi`) — i.e. it reads the first param from the x86-64 first-arg
+   register, and the param was given a *negative* (local-style) frame offset
+   instead of `[ebp+8]`. So the i386 callee prologue uses the register-arg
+   convention (correct for Pascal i386, which passes args in regs and spills
+   them) while the cdecl call site passed on the stack → mismatch, param reads
+   garbage/0. Fix must make C (cdecl) functions on i386 bind params from the
+   stack (`[ebp+8]`, `[ebp+12]`, …) — touches the shared param-offset assignment
+   + the i386 prologue, with self-host risk (Pascal i386 must stay green). Ties
+   to `feature-cdecl-indirect-cross-targets` (cdecl honored only on x86-64).
 3. **C varargs call cross** — printf-style `f(fmt, ...)` fails to compile on
    i386/arm32/aarch64 with `call argument count mismatch (defaults not supported
    yet)`; riscv32 wants the `__pxx_dcmp` softfloat helper. The variadic *call*
