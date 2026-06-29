@@ -1,9 +1,29 @@
 # C: `va_start` ignores named FP and stack-spilled parameters
 
 - **Type:** bug (Track A / C frontend + x86-64 SysV variadic ABI)
-- **Status:** backlog
+- **Status:** backlog (partially fixed 2026-06-29 — register-class case closed)
 - **Owner:** unassigned
 - **Found / Opened:** 2026-06-29, while lifting the C vararg argument-count cap.
+
+## Progress — 2026-06-29 (register-class case fixed)
+
+The **named-FP-in-register** case is fixed. `ParseCSubroutine` now classifies
+named params by SysV class (`ProcNamedGP` = int/ptr count, new `ProcNamedFP` =
+float count), and `__pxx_va_start_impl` takes `nfp` and seeds
+`fp_offset = 48 + nfp*16` (was hardcoded 48). So `double f(double scale, int n,
+...)` now reads its variadic doubles correctly (`sumv(2.0,3,1,2,3)` → 12.0, was
+10.0; gcc-matched). Guard: `test/cvararg_named_fp.c` (in `make`). Self-host
+fixedpoint byte-identical; lua green.
+
+**Still open — stack-spilled named params** (the harder half). When a variadic
+function has more than 6 named GP or 8 named FP params, the surplus named params
+spill to the caller stack, and:
+  - reading those *named* params is itself wrong (e.g. 10 named doubles: the 9th/
+    10th read as 0 — a prologue issue, not just va), and
+  - `overflow_arg_area` must start past the stack-spilled named params, else the
+    variadic tail is misaligned (7 named ints + variadic: tail summed 20 vs 60).
+Repros: scratchpad `v2_many_double.c`, `v3_many_gp.c`. These need the prologue /
+overflow-area accounting, separate from the register-class fix above.
 
 ## Symptom
 

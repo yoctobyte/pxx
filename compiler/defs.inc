@@ -842,6 +842,7 @@ var
   ProcCdecl    : array[0..MAX_PROCS-1] of Boolean; { signature uses the C (System V AMD64) convention. Set for a `... cdecl` PROC TYPE so an INDIRECT call through it marshals SysV (int->rdi.., float->xmm0..) instead of PXX's internal all-integer convention — needed for dlsym'd C functions with float args. }
   ProcVariadic : array[0..MAX_PROCS-1] of Boolean; { C function with a trailing `...` — needs the System V register-save prologue so va_arg can read the variadic args. }
   ProcNamedGP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
+  ProcNamedFP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }

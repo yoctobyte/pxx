@@ -243,7 +243,7 @@ end;
   call with an AN_ARG chain). }
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
-    apNode, addrNode, callNode, helper, a2, a3, a4: Integer;
+    apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
     vt: TTypeKind;
     name: AnsiString;
 begin
@@ -338,7 +338,7 @@ begin
       end
       else if (name = '__builtin_va_start') and (CurTok.Kind = tkLParen) then
       begin
-        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP, __va_overflow) }
+        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP, __va_overflow, NFP) }
         Next;
         apNode := ParseCExpr; Eat(tkComma);
         valNode := ParseCExpr;   { `last` named param — discarded }
@@ -352,11 +352,15 @@ begin
         ASTTk[a3] := Ord(tyInteger);
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
+        a5 := AllocNode(AN_INT_LIT);
+        if CurProc >= 0 then ASTIVal[a5] := ProcNamedFP[CurProc] else ASTIVal[a5] := 0;
+        ASTTk[a5] := Ord(tyInteger);
         helper := FindProc('__pxx_va_start_impl');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
         calleeNode := AllocNode(AN_ARG); ASTLeft[calleeNode] := node; ASTRight[argNode] := calleeNode;
         valNode := AllocNode(AN_ARG); ASTLeft[valNode] := a3; ASTRight[calleeNode] := valNode;
-        apNode := AllocNode(AN_ARG); ASTLeft[apNode] := a4; ASTRight[valNode] := apNode; ASTRight[apNode] := -1;
+        apNode := AllocNode(AN_ARG); ASTLeft[apNode] := a4; ASTRight[valNode] := apNode;
+        a5arg := AllocNode(AN_ARG); ASTLeft[a5arg] := a5; ASTRight[apNode] := a5arg; ASTRight[a5arg] := -1;
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
         Result := callNode; Exit;
@@ -4163,7 +4167,7 @@ var
   name, extLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
-  intIdx, sseIdx, stackOff: Integer;
+  intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   retPtrElemTk, retPtrElemRec, retRecId: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
@@ -4379,7 +4383,17 @@ begin
   begin
     ProcVariadic[procIdx] := isVariadic;
     ProcCdecl[procIdx] := True;
-    ProcNamedGP[procIdx] := nparams;   { variadic C fns take only GP named params (L, fmt) }
+    { Classify named params by SysV class so va_start seeds gp_offset/fp_offset
+      correctly: GP (int/ptr) named params consume GP save slots, FP (float/
+      double) named params consume XMM save slots. Counting all named params as
+      GP (the old behaviour) skewed both offsets whenever a variadic function had
+      a named float param (e.g. `sumv(double scale, int n, ...)` reread `scale`
+      in the first va_arg(double)). }
+    ngpNamed := 0; nfpNamed := 0;
+    for i := 0 to nparams - 1 do
+      if TypeIsFloat(ptypes[i]) then Inc(nfpNamed) else Inc(ngpNamed);
+    ProcNamedGP[procIdx] := ngpNamed;
+    ProcNamedFP[procIdx] := nfpNamed;
   end;
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];

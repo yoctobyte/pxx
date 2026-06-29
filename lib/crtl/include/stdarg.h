@@ -19,13 +19,17 @@ typedef struct __pxx_va_elem va_list;
    declared as a hidden local in every variadic function. */
 typedef struct __pxx_va_save { char bytes[176]; } __pxx_va_save;
 
-/* va_start, in plain C: seed the control block. ngp = number of named GP params
-   already consumed (so the first variadic GP arg is read next). overflow points
-   at the first caller stack slot past the six GP registers. */
+/* va_start, in plain C: seed the control block. ngp/nfp = number of named GP /
+   FP(XMM) params already consumed (so the first variadic arg of each class is
+   read next). The GP save region starts at offset 0, the XMM region at 48, so
+   gp_offset skips ngp 8-byte slots and fp_offset skips nfp 16-byte XMM slots
+   past the region base. overflow points at the first caller stack slot past the
+   six GP registers. */
 static void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save,
-                                unsigned int ngp, void *overflow) {
+                                unsigned int ngp, void *overflow,
+                                unsigned int nfp) {
   ap->gp_offset = ngp * 8;
-  ap->fp_offset = 48;
+  ap->fp_offset = 48 + nfp * 16;
   ap->reg_save_area = save;
   ap->overflow_arg_area = overflow;
 }
