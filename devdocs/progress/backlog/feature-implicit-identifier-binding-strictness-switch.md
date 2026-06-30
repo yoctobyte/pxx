@@ -158,6 +158,12 @@ lua green. Guard `test/test_decl_order_global_error.pas`.
   self-host byte-identical; `make test` green (`test/test_decl_order_lax.pas` +
   a `--lax-decl-order` compile of the strict error case). NB: no `--mimic-fpc`
   change needed — strict IS the FPC behavior and is already the default.
-- **`--auto-locals` (the originally-imagined feature).** Undeclared `for x := ...`
-  counter → implicit routine-local `Integer`. Default OFF (typos must still error).
-  Independent of the gating above.
+- **`--auto-locals` / inline-var — CARVED OUT (2026-06-30) into two proper
+  language-syntax tickets** after a design pass (the originating bug is fixed; this
+  is pure ergonomics, and pxx already has the `tyAuto` inference + a working inline
+  `var x := expr` statement). Forward-compatible, reuses existing machinery:
+  - [[feature-inline-loop-var-rio]] — `for var i := 0 to N` / `for var x in coll`
+    (Delphi 10.3 Rio inline loop vars; typed-by-inference; standard).
+  - [[feature-implicit-locals-sloppy-switch]] — undeclared `i := 0` →
+    inferred local, behind `{$IMPLICITVARS}` / `--auto-locals` (opt-in, warns,
+    strict-errors; the Python/BASIC ergonomics, off by default).

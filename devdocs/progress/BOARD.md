@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -60,8 +60,10 @@ _none_
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
+| feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
+| feature-inline-loop-var-rio | A | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -552,8 +554,10 @@ _none_
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
 - [A] feature-implicit-identifier-binding-strictness-switch
+- [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
+- [A] feature-inline-loop-var-rio
 - [A] feature-inline-routines
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
