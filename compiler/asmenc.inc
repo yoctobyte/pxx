@@ -37,6 +37,21 @@ begin
   AsmB(Integer((v shr 24) and $FF));
 end;
 
+{ Record a global-var operand's fixup (the real EmitGlobRef can't run here —
+  AsmBytesCount isn't the operand's final code position, only the IR_ASM
+  codegen-replay loop in ir_codegen.inc knows that). Writes the same 4-byte
+  zero placeholder EmitGlobRef itself would. Real body for the `forward`
+  declaration in x64enc.inc — called from EncModRMAbs when EncToAsmBuffer
+  is set. }
+procedure AsmRecordGlobalFixup(bssOff: Integer);
+begin
+  if AsmGlobFixCount >= MAX_ASM_GLOBFIX then Error('asm: too many global-var operand references');
+  AsmGlobFix[AsmGlobFixCount].AsmOff := AsmBytesCount;
+  AsmGlobFix[AsmGlobFixCount].BSSoff := bssOff;
+  Inc(AsmGlobFixCount);
+  AsmI32(0);
+end;
+
 procedure AsmI64(v: Int64);
 begin
   AsmI32(v);
@@ -161,6 +176,10 @@ begin
   begin
     EncModRMMem(regField, rRBP, AsmOpVal[rmSlot], True);
   end
+  else if AsmOpKind[rmSlot] = AOP_GLOBAL then
+  begin
+    EncModRMAbs(regField, Integer(AsmOpVal[rmSlot]));
+  end
   else
     Error('asm: bad r/m operand');
   EncToAsmBuffer := False;
@@ -201,13 +220,20 @@ begin
       Next;
       Exit;
     end;
-    { Named variable -> memory operand [rbp+off] }
+    { Named variable -> memory operand [rbp+off], or an absolute [disp32]
+      for a global (Offset is BSS-relative for skGlobal symbols). }
     idx := FindSym(CurTok.SVal);
     if idx < 0 then Error('asm: unknown symbol: ' + CurTok.SVal);
     if Syms[idx].Kind = skGlobal then
-      Error('asm: global var operands not yet supported: ' + CurTok.SVal);
+    begin
+      AsmOpKind[slot] := AOP_GLOBAL;
+      AsmOpVal[slot] := Syms[idx].Offset;
+      AsmOpSize[slot] := TypeSize(Syms[idx].TypeKind);
+      Next;
+      Exit;
+    end;
     if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
-      Error('asm: operand must be a local, param, or register: ' + CurTok.SVal);
+      Error('asm: operand must be a local, param, global, or register: ' + CurTok.SVal);
     AsmOpKind[slot] := AOP_MEM;
     AsmOpVal[slot] := Syms[idx].Offset;
     AsmOpSize[slot] := TypeSize(Syms[idx].TypeKind);
@@ -225,8 +251,8 @@ function AsmOpSizeOf(nops: Integer): Integer;
 begin
   if (nops >= 1) and (AsmOpKind[0] = AOP_REG) then begin Result := AsmOpSize[0]; Exit; end;
   if (nops >= 2) and (AsmOpKind[1] = AOP_REG) then begin Result := AsmOpSize[1]; Exit; end;
-  if (nops >= 1) and (AsmOpKind[0] = AOP_MEM) then begin Result := AsmOpSize[0]; Exit; end;
-  if (nops >= 2) and (AsmOpKind[1] = AOP_MEM) then begin Result := AsmOpSize[1]; Exit; end;
+  if (nops >= 1) and ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) then begin Result := AsmOpSize[0]; Exit; end;
+  if (nops >= 2) and ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_GLOBAL)) then begin Result := AsmOpSize[1]; Exit; end;
   Result := 4;
 end;
 
@@ -289,8 +315,8 @@ begin
     AsmB($C0 or ((rf and 7) * 8) or (AsmOpReg[0] and 7));
     Exit;
   end;
-  { dest=reg, src=mem : reg,r/m form (reg field = dest reg, rm = mem) }
-  if (AsmOpKind[0] = AOP_REG) and (AsmOpKind[1] = AOP_MEM) then
+  { dest=reg, src=mem/global : reg,r/m form (reg field = dest reg, rm = mem) }
+  if (AsmOpKind[0] = AOP_REG) and ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_GLOBAL)) then
   begin
     opSize := AsmOpSize[0];
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
@@ -299,8 +325,8 @@ begin
     AsmModRM(rf, 1);
     Exit;
   end;
-  { dest=mem, src=reg : rm,reg form }
-  if (AsmOpKind[0] = AOP_MEM) and (AsmOpKind[1] = AOP_REG) then
+  { dest=mem/global, src=reg : rm,reg form }
+  if ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) and (AsmOpKind[1] = AOP_REG) then
   begin
     opSize := AsmOpSize[1];
     rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
@@ -309,8 +335,8 @@ begin
     AsmModRM(rf, 0);
     Exit;
   end;
-  { dest=reg/mem, src=imm : 81 /ext id (or C7 /0 handled by caller for mov) }
-  if ((AsmOpKind[0] = AOP_REG) or (AsmOpKind[0] = AOP_MEM)) and (AsmOpKind[1] = AOP_IMM) then
+  { dest=reg/mem/global, src=imm : 81 /ext id (or C7 /0 handled by caller for mov) }
+  if ((AsmOpKind[0] = AOP_REG) or (AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) and (AsmOpKind[1] = AOP_IMM) then
   begin
     if immExt < 0 then Error('asm: immediate form not supported for this mnemonic');
     opSize := AsmOpSizeOf(1);
@@ -343,6 +369,8 @@ begin
     EncToAsmBuffer := False;
     Exit;
   end;
+  if (AsmOpKind[0] = AOP_GLOBAL) and (AsmOpKind[1] = AOP_IMM) then
+    Error('asm: mov global,imm not yet supported (x64_mov_mem_imm assumes an [rbp+disp] base) -- load the value into a register first');
   AsmEncodeALU($89, $8B, -1);
 end;
 
@@ -417,10 +445,10 @@ begin
     Error('asm: xchg needs a register operand');
   end;
 
-  { lea reg, mem }
+  { lea reg, mem/global }
   if CaseEqual(mn,'lea') then
   begin
-    if (AsmOpKind[0] <> AOP_REG) or (AsmOpKind[1] <> AOP_MEM) then
+    if (AsmOpKind[0] <> AOP_REG) or ((AsmOpKind[1] <> AOP_MEM) and (AsmOpKind[1] <> AOP_GLOBAL)) then
       Error('asm: lea needs reg, mem');
     opSize := AsmOpSize[0];
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
@@ -503,6 +531,8 @@ begin
       x64_push_reg(AsmOpReg[0])
     else if AsmOpKind[0] = AOP_IMM then
       x64_push_imm(AsmOpVal[0])
+    else if AsmOpKind[0] = AOP_GLOBAL then
+      Error('asm: push global not yet supported (x64_push_mem assumes an [rbp+disp] base)')
     else
       x64_push_mem(rRBP, AsmOpVal[0], True);
     EncToAsmBuffer := False;
@@ -513,6 +543,8 @@ begin
     EncToAsmBuffer := True;
     if AsmOpKind[0] = AOP_REG then
       x64_pop_reg(AsmOpReg[0])
+    else if AsmOpKind[0] = AOP_GLOBAL then
+      Error('asm: pop global not yet supported (x64_pop_mem assumes an [rbp+disp] base)')
     else
       x64_pop_mem(rRBP, AsmOpVal[0], True);
     EncToAsmBuffer := False;

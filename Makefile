@@ -688,6 +688,8 @@ test-core: $(COMPILER)
 	/tmp/test_asm_branch26; test "$$?" = "45"
 	./$(COMPILER) test/test_asm_keywords.pas /tmp/test_asm_keywords26
 	test "$$(/tmp/test_asm_keywords26)" = "4"
+	./$(COMPILER) test/test_asm_global.pas /tmp/test_asm_global26
+	test "$$(/tmp/test_asm_global26)" = "$$(printf '11 12 23\nTRUE')"
 	./$(COMPILER) test/test_coswitch.pas /tmp/test_coswitch26
 	test "$$(/tmp/test_coswitch26)" = "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
 	./$(COMPILER) test/test_not.pas /tmp/test_not26

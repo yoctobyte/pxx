@@ -87,15 +87,24 @@ so the asm body's `rax` survives as the return value.
   fixup table, `target - (patch_offset + 4)` once every label in the block is
   known. See [[feature-asm-structured-ir-library]] TODO #1.
 - `{$asmMode intel}` accepted (ignored — Intel is the only mode).
+- **Global variables** as operands — `mov reg,global` / `mov global,reg` /
+  ALU `global,reg`/`reg,global` / `cmp` / `lea reg,global`, resolved via a
+  deferred `EmitGlobRef` fixup (`AsmGlobFix[]`, `defs.inc`): the encoder
+  can't call `EmitGlobRef` at parse time (`AsmBytes` offsets aren't final
+  code positions), so it records `(AsmBytes-offset, BSS-offset)` and writes
+  a 4-byte zero placeholder; the `IR_ASM` codegen-replay loop in
+  `ir_codegen.inc` calls the real `EmitGlobRef` once `CodeLen` is correct,
+  in place of literally copying those 4 placeholder bytes. Absolute
+  `[disp32]` addressing (`EncModRMAbs`, shared with regular codegen — the
+  compiler builds non-PIE), not RIP-relative. **Not yet covered**: `mov
+  global,imm` (the fast-path `x64_mov_mem_imm`/`x64_push_mem`/
+  `x64_pop_mem` helpers hardcode an `[rbp+disp]` base) — load into a
+  register first. Two memory/global operands in one instruction (`add
+  globalA, globalB` or `add localA, localB`) was never possible — ModRM
+  only has one r/m slot, pre-existing x86 limitation, not new.
 
 ## Limitations / not yet implemented
 
-- **Global variables** as operands: error (`global var operands not yet
-  supported`). They need a relocation entry, but the encoder writes into a
-  flat byte buffer at parse time with no access to the codegen-time
-  `EmitGlobRef` fixup machinery. Needs a structured (instruction-list) asm
-  representation encoded at codegen time, or a parallel reloc list keyed by
-  buffer offset.
 - **Explicit memory operands** `[reg]`, `[reg+disp]`, `[reg+reg*scale]`: not
   parsed. Only bare-name memory (always `[rbp+disp32]`) is supported. No SIB.
 - **AT&T syntax** (`{$asmMode att}`) and `direct`: not implemented (directive
@@ -116,8 +125,9 @@ so the asm body's `rax` survives as the return value.
 1. ~~**Labels + branches** inside an asm block (local label table + fixups).~~
    **Done 2026-06-30** — see Supported, above, and
    [[feature-asm-structured-ir-library]].
-2. **Global-var operands** via a codegen-time encode path (or buffer-offset
-   reloc list) so `EmitGlobRef` can patch absolute addresses.
+2. ~~**Global-var operands** via a codegen-time encode path (or buffer-offset
+   reloc list) so `EmitGlobRef` can patch absolute addresses.~~ **Done
+   2026-07-01** — see Supported, above.
 3. **Explicit `[reg+disp]` memory** + SIB, for pointer-style access.
 4. **Operand-size keywords** (`byte/word/dword/qword ptr`).
 5. Broaden register coverage edge cases (ah/ch/dh/bh high-byte regs are

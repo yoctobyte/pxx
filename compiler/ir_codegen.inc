@@ -1398,6 +1398,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx: Integer;
+    asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -1477,10 +1478,25 @@ begin
       end;
       
     IR_ASM:
+      { Blit the buffered bytes 1:1, except at a recorded global-var operand
+        fixup: AsmParseOperand/EncModRMAbs couldn't call EmitGlobRef at parse
+        time (AsmBytes offsets aren't final code positions), so they left a
+        4-byte zero placeholder and a (AsmOff, BSSoff) entry in AsmGlobFix.
+        Here CodeLen is finally correct, so call the real EmitGlobRef instead
+        of copying those 4 placeholder bytes literally. }
       begin
-        for i := 0 to IRB[node] - 1 do
+        i := 0;
+        while i < IRB[node] do
         begin
-          EmitB(AsmBytes[IRA[node] + i]);
+          asmGfFound := False;
+          for asmGfK := 0 to AsmGlobFixCount - 1 do
+            if AsmGlobFix[asmGfK].AsmOff = IRA[node] + i then
+            begin
+              EmitGlobRef(AsmGlobFix[asmGfK].BSSoff);
+              asmGfFound := True;
+            end;
+          if asmGfFound then Inc(i, 4)
+          else begin EmitB(AsmBytes[IRA[node] + i]); Inc(i); end;
         end;
       end;
 

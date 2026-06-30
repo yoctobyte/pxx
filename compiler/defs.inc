@@ -14,6 +14,7 @@ const
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
   MAX_GLOBFIX = 32768;
+  MAX_ASM_GLOBFIX = 4096;
   MAX_EXTERNAL = 16384;
   MAX_CPREP_MACROS = 32768;
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
@@ -242,10 +243,11 @@ const
                            SYS_exit). The one machine-code piece of libc-free threading. }
 
   { Inline-asm operand kinds }
-  AOP_NONE = 0;
-  AOP_REG  = 1;
-  AOP_MEM  = 2;   { [rbp+disp32] — a named local/param }
-  AOP_IMM  = 3;
+  AOP_NONE   = 0;
+  AOP_REG    = 1;
+  AOP_MEM    = 2;   { [rbp+disp32] — a named local/param }
+  AOP_IMM    = 3;
+  AOP_GLOBAL = 4;   { absolute [disp32] — a named global var, BSS-relative }
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -520,6 +522,19 @@ type
   TGlobFix = record
     CodePos : Integer;
     BSSoff  : Integer;
+  end;
+
+  { A global-var operand referenced from inline asm: the encoder writes the
+    ModRM/SIB bytes immediately (parse time, into AsmBytes) but can't call
+    EmitGlobRef yet — AsmBytes offsets aren't the final code position, only
+    the IR_ASM codegen-replay loop knows that (see ir_codegen.inc). AsmOff
+    is the AsmBytes-relative offset of the 4-byte placeholder; the replay
+    loop matches it against the block it's currently emitting and calls the
+    real EmitGlobRef(BSSoff) at that point instead of copying the literal
+    placeholder bytes. }
+  TAsmGlobFix = record
+    AsmOff : Integer;
+    BSSoff : Integer;
   end;
 
   TCallFix = record
@@ -1115,6 +1130,8 @@ var
   WithStackDepth: Integer;
   AsmBytes: array[0..65535] of Byte;
   AsmBytesCount: Integer;
+  AsmGlobFix: array[0..MAX_ASM_GLOBFIX-1] of TAsmGlobFix;
+  AsmGlobFixCount: Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
   AsmOpReg  : array[0..1] of Integer;   { register number 0..15 }

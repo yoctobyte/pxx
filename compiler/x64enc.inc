@@ -9,6 +9,11 @@ const
 var
   EncToAsmBuffer: Boolean = False;
 
+{ Defined in asmenc.inc (included later); forward-declared here so
+  EncModRMAbs can defer a global-var operand fixup to IR_ASM codegen-replay
+  time instead of erroring. }
+procedure AsmRecordGlobalFixup(bssOff: Integer); forward;
+
 procedure EncB(b: Byte);
 begin
   if EncToAsmBuffer then AsmB(b) else EmitB(b);
@@ -133,7 +138,7 @@ begin
   EncB(((regField and 7) shl 3) or 4); { mod=00, rm=4 }
   EncB($25); { SIB: scale=0, index=4 (none), base=5 }
   if EncToAsmBuffer then
-    Error('asm: absolute BSS reference not supported in inline assembly')
+    AsmRecordGlobalFixup(bssOff)
   else
     EmitGlobRef(bssOff);
 end;
