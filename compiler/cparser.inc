@@ -4137,6 +4137,21 @@ begin
       EmitI32($E3A070F8);                 { mov r7, #248 (exit_group) }
       EmitI32($EF000000);                 { svc #0 (r0 = exit code) }
     end;
+    TARGET_AARCH64:
+    begin
+      { AAPCS64: main(argc, argv) -> x0=argc, x1=argv. argc at [sp], argv = sp+8.
+        Save sp to BSS_INITIAL_RSP via an inline 32-bit literal (low-4GB image). }
+      EmitI32($18000041);                 { ldr w1, [pc+8] -> w1 = &initial_sp }
+      EmitI32($14000002);                 { b [pc+8] (skip literal) }
+      EmitGlobRef(BSS_INITIAL_RSP);       { literal: absolute BSS address }
+      EmitI32($910003E2);                 { mov x2, sp }
+      EmitI32($F9000022);                 { str x2, [x1] }
+      EmitI32($F94003E0);                 { ldr x0, [sp]  (argc) }
+      EmitI32($910023E1);                 { add x1, sp, #8 (argv) }
+      callPatch := CodeLen; EmitI32($94000000);   { bl main (offset patched) }
+      EmitI32($D2800BC8);                 { mov x8, #94 (exit_group) }
+      EmitI32($D4000001);                 { svc #0 (x0 = exit code) }
+    end;
   else
     Error('C program entry stub not implemented for this target yet');
   end;
@@ -4205,6 +4220,9 @@ begin
   if TargetArch = TARGET_ARM32 then
     Patch32(callPatch, Integer($EB000000) or
       (((Procs[mainIdx].BodyAddr - (callPatch + 8)) div 4) and $00FFFFFF))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(callPatch, Integer($94000000) or
+      (((Procs[mainIdx].BodyAddr - callPatch) div 4) and $03FFFFFF))
   else
     Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
@@ -4683,6 +4701,45 @@ begin
           else EmitI32($E5890000);
         end;
         Inc(pwA, 1);
+      end;
+    end;
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    { aarch64 (AAPCS64), mirrors the Pascal aarch64 spill: params 0..7 arrive in
+      x0..x7, the rest on the stack at [x29 + 16 + (i-8)*8]. Copy each into its
+      frame slot. Single by-value arrives as double bits (value model). }
+    for i := 0 to nparams - 1 do
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if i < 8 then
+      begin
+        EmitLoadImmA64(9, Syms[idx].Offset);
+        EmitI32($8B0903A8);              { add x8, x29, x9 (slot addr) }
+        if (Syms[idx].TypeKind = tySingle) and
+           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+        begin
+          EmitI32($9E670000 + (i shl 5));  { fmov d0, x[i] }
+          EmitI32($1E624000);              { fcvt s0, d0 }
+          EmitI32($BD000100);              { str s0, [x8] }
+        end
+        else if sz = 1 then EmitI32($39000100 + i)   { strb w[i], [x8] }
+        else if sz = 2 then EmitI32($79000100 + i)   { strh w[i], [x8] }
+        else if sz = 4 then EmitI32($B9000100 + i)   { str w[i], [x8] }
+        else EmitI32($F9000100 + i);                 { str x[i], [x8] }
+      end
+      else
+      begin
+        EmitLoadImmA64(9, 16 + (i - 8) * 8);
+        EmitI32($8B0903A8);              { add x8, x29, x9 -> &incoming arg }
+        EmitI32($F9400109);              { ldr x9, [x8] }
+        EmitLoadImmA64(10, Syms[idx].Offset);
+        EmitI32($8B0A03A8);              { add x8, x29, x10 -> &local slot }
+        if sz = 1 then EmitI32($39000109)
+        else if sz = 2 then EmitI32($79000109)
+        else if sz = 4 then EmitI32($B9000109)
+        else EmitI32($F9000109);
       end;
     end;
   end

@@ -29,9 +29,14 @@ x86-64 bytes that crash.
    path: word k in r[k] for k<4 else `[fp+8+(pnWords-1-k)*4]`, Int64/Double =
    2 words). `return 42`, 5-arg calls, recursion, struct+loop (cnoprintf→62) all
    run on arm32; guards `ccross_entry.c` + `ccross_args.c` in `make test-arm32`.
-   **aarch64 / riscv32 still need stubs** — same shape (x0/x1, a0/a1; `bl`; their
-   param spills). riscv32 also emits a near-empty C binary (its C lowering
-   produces almost nothing; deeper).
+   **aarch64 also FIXED 2026-06-29** — entry stub (save sp via inline literal,
+   x0=argc/x1=argv, `bl main` imm26 fixup, `svc` exit_group 94) + aarch64 param
+   spill (x0..x7 then `[x29+16+(i-8)*8]`, mirrors the Pascal aarch64 path).
+   `return 42`, args, recursion, cnoprintf→62 run on aarch64; guards in
+   `make test-aarch64`. **riscv32 still needs a stub** — same shape (a0/a1; its
+   param spill), and it also emits a near-empty C binary (its C lowering produces
+   almost nothing; deeper). So non-varargs C now runs on x86-64 + i386 + arm32 +
+   aarch64.
 2. **C function call arg-passing on i386 — FIXED 2026-06-29.** The C param-spill
    in `ParseCSubroutine` was hardcoded x86-64 (spill rdi/rsi/xmm…); it now has an
    i386 branch that copies the cdecl **stack** args (`[ebp+8+sz]`, leftmost
