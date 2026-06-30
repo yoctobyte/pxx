@@ -19,7 +19,8 @@ IMT thunks for interfaces.
 
 ## Scope (priority order, see `../../developer/inline-asm.md` TODO)
 
-- Labels and branches (highest value).
+- ~~Labels and branches (highest value).~~ **Done 2026-06-30** — see
+  [[feature-asm-structured-ir-library]] log.
 - Global-var operands.
 - Explicit `[reg]` memory operands and SIB addressing.
 - Operand-size keywords.
@@ -31,3 +32,7 @@ Each capability covered by an asm regression test; self-host fixedpoint holds.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §5.
+- 2026-06-30 — Labels + branches landed (Track A); see
+  [[feature-asm-structured-ir-library]] for the implementation log and the
+  keyword-mnemonic bug (`and`/`or`/`div`/`dec`/...) found and fixed alongside
+  it. Next up on this ticket: global-var operands.

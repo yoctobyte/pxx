@@ -128,3 +128,26 @@ observes this discipline — match it.)
   aware engine already exists per target. Rewrote scope to "wire inline-asm
   onto it" instead of "build it." (Track B, filing Track A-scope ticket per
   convention.)
+- 2026-06-30 — **TODO #1 (labels + branches) landed** (Track A), closing the
+  "highest value" item — but via a narrower path than this ticket's full
+  scope: `compiler/asmenc.inc` did **not** migrate onto `asmtext.inc`'s
+  `array of const`-based engine (that's a poor fit for text parsed at compile
+  time from a user's `.pas` source, vs. literal arrays a codegen author
+  writes). Instead, only the new branch-target operand (jmp/call/jcc) routes
+  through `lib/asmcore`'s `AsmEncodeX64` (`PatchOp(4)`), with a local label
+  table + fixup list living in `AsmParseBody` itself (same pattern as
+  [[feature-asm-source-frontend]]'s `compiler/asmfront.inc`). Everything else
+  in `asmenc.inc` (mov/ALU/shifts/unary/stack/setcc/cmovcc) is untouched,
+  still the original `x64enc.inc`-based encoder. So this ticket's bigger
+  goal — retiring the legacy emitters by migrating `ir_codegen*.inc` and the
+  *rest* of `asmenc.inc` onto a shared engine — remains open and is, per
+  user sequencing call, explicitly **deprioritized ("latest")** relative to
+  the inline-asm (head 1) and `.asm`-frontend (head 3) user-facing work.
+  Also surfaced and fixed in the same pass: `and`/`or`/`xor`/`not`/`div`/
+  `mod`/`shl`/`inc`/`dec` lex as Pascal keyword tokens, not `tkIdent`, so
+  `AsmParseBody`'s "skip stray punctuation" gate silently swallowed them —
+  most of the documented "supported" ALU/shift table was actually broken for
+  these mnemonics; fixed by widening the gate (`AsmTokIsWordLike`) rather
+  than touching the lexer. `test/test_asm_branch.pas` (label + `jg` loop),
+  `test/test_asm_keywords.pas` (and/or/xor/not/dec/div regression), both in
+  `make test`. Self-host + threadsafe-self-host byte-identical.
