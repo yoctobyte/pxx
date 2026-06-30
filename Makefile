@@ -277,6 +277,10 @@ test-asm: $(COMPILER)
 	/tmp/test_asmcore_i386_26 | tail -1 | grep -q "all asmcore_i386 checks passed"
 	./$(COMPILER) test/test_asmcore_arm32.pas /tmp/test_asmcore_arm32_26
 	/tmp/test_asmcore_arm32_26 | tail -1 | grep -q "all asmcore_arm32 checks passed"
+	./$(COMPILER) test/test_asmcore_riscv32.pas /tmp/test_asmcore_riscv32_26
+	/tmp/test_asmcore_riscv32_26 | tail -1 | grep -q "all asmcore_riscv32 checks passed"
+	./$(COMPILER) test/test_asmcore_xtensa.pas /tmp/test_asmcore_xtensa_26
+	/tmp/test_asmcore_xtensa_26 | tail -1 | grep -q "all asmcore_xtensa checks passed"
 	./$(COMPILER) test/test_asm_loop.asm /tmp/test_asm_loop26
 	/tmp/test_asm_loop26; test "$$?" = "45"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26

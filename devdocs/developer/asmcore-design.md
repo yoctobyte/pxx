@@ -257,9 +257,64 @@ code anyway.
    subtracts 1 internally, so the *frontend-facing* contract stays uniform
    even though A32 hardware doesn't behave uniformly — verified against
    `arm-linux-gnueabi-as`/objdump (4 branch directions/conditions, all
-   byte-exact). Remaining: riscv32 (no cross-toolchain installed in this
-   environment — needs `apt install` or a different oracle strategy),
-   xtensa (likely the same gap, ESP-specific toolchain).
+   byte-exact). **riscv32 done 2026-06-30** (toolchain installed by user
+   request: `binutils-riscv64-linux-gnu`, which assembles RV32I cleanly via
+   `-march=rv32i -mabi=ilp32` — no separate riscv32-only package needed).
+   Two more findings: (1) RV32I's `jal` (UJ-type) and branch (SB-type)
+   immediates are **bit-scrambled** — non-contiguous, non-monotonic field
+   placement (`imm[20|10:1|11|19:12]` for jal), a genuine hardware-wiring
+   optimization in the ISA spec, not just a packed-and-shifted field like
+   aarch64's. `AsmPatchBranchRiscv32` scatters the bits per-field rather
+   than a single shift+OR. (2) RV32I branch/jal immediates are relative to
+   the instruction's **own** address (no pipeline/next-instruction
+   adjustment at all — the simplest PC-relative convention met so far);
+   kept the uniform `relWords` *input* contract by having the resolver do
+   `byteOffset = relWords*4 + 4` internally. (3) RISC-V branches compare two
+   registers *in the branch instruction itself* (no separate flags-setting
+   `cmp`), so a riscv32 branch's `TAsmInstr` is 3 operands (rs1, rs2, the
+   patch site) where every other target here uses 1 (`<patch>` alone) —
+   `TAsmOperand`/`TAsmInstr` needed no changes to express this either.
+   **xtensa done 2026-06-30** (toolchain: `binutils-xtensa-lx106`) — the
+   biggest structural departure yet and the last of the six targets:
+   - The base (non-"narrow"/code-density) ISA is **24-bit (3 bytes), not
+     32-bit**. This slice covers only the 3-byte forms (forced via
+     `xtensa-lx106-elf-as --no-transform`, since the default behavior
+     silently substitutes the 2-byte density forms where available —
+     real xtensa assembly distinguishes `add` from `add.n` by mnemonic,
+     an assembler doesn't choose between them on your behalf by spec, GNU
+     as just defaults to relaxing). `TAsmByteBuf`/`TAsmPatchSite` needed
+     no changes to support a 3-byte instruction width — `Width` was
+     always caller bookkeeping, not enforced by `asmcore_base`.
+   - **A genuine trap, not a finding about the ISA**: `objdump`'s
+     disassembly text shows each instruction as a conventional hex number
+     (most-significant-byte-leftmost in the printed string) — this is
+     **not** the literal little-endian memory byte order. Hand-deriving
+     bit layouts from `objdump -d` output alone (the method that worked
+     fine for x64/aarch64/arm32/riscv32, all of which display the *raw*
+     bytes left-to-right) silently produces a backwards encoder for
+     xtensa. Caught it by cross-checking against `objcopy -O binary` +
+     `xxd` (the actual memory bytes) — once seen, abandoned the from-
+     scratch derivation and used this compiler's own existing,
+     ESP-hardware-validated `compiler/xtensaenc.inc` as the formula
+     source instead (still byte-verified against the corrected raw-byte
+     oracle, not blindly trusted).
+   - **`AsmPatchBranchXtensa` breaks the `relWords`-divided-by-4 pattern
+     on purpose**: xtensa instructions are 3 bytes, so "words of 4" isn't
+     a meaningful unit here — a sequence of 3-byte instructions lands on
+     multiples of 3, not 4, and forcing the convention would silently go
+     fractional. Takes a raw **byte** delta instead
+     (`relBytes = target-(patch_offset+4)`), which happens to be *exactly*
+     what the `.asm` frontend's existing generic `Patch32` already computes
+     for x64 — the most natural-fitting resolver contract of the six, not
+     a special case. (aarch64/arm32/riscv32's word-based resolvers are
+     still correct for *those* targets, not changed — their instructions
+     really are uniformly 4-byte and every valid branch target really
+     does land on a multiple of 4, so no bug, just a convention that
+     doesn't generalize to every target and shouldn't have been assumed
+     to.)
+   - Field formulas verified byte-exact (15 checks, encode + patch) against
+     raw bytes from `xtensa-lx106-elf-as --no-transform` + `objcopy`.
+   **All six `lib/asmcore` targets done.**
 6. Textual printer per target, in step with each target's encoder (not
    bolted on at the end). **Done for x64 and aarch64** (`AsmPrintX64`/
    `AsmPrintAArch64`).
