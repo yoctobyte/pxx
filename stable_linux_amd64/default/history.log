@@ -87,3 +87,4 @@
 2026-06-29T17:36:55Z  v87  8f7af045177828f30f005c3397d397495eba719698fbfaadb2dd38cb594cbbdc  83f490aa7d003ba4beb48306d3b2f1f15e453197  docs(progress): root-cause i386 C arg-passing layer of cross-C
 2026-06-29T18:33:05Z  v88  aee4765ebdfcdb7988078cb936a8afe0ac886cab511cb283f933321a5bf745a9  cb1b2d9eb2b92b88a104130348086372e24c2b98  docs(progress): note i386 varargs design (left-to-right push / va model)
 2026-06-30T04:35:12Z  v89  46f26bf87b70901ca1066317f6accfdb1ad90a8b7c271df2b512dc7531283cf2  f3ee0af1aad35433c881b0e3658f00ddcd1c9b8e  fix(c): aarch64 C program entry + cdecl param binding
+2026-06-30T04:57:09Z  v90  c0a74eeb1120cc7ac0e198d1d8486fc722c1d7878ba121732a58d07c39397411  c626797d2803c623ce42d2a0071543ae940ac28d  fix(c): riscv32 C program entry + cdecl param binding (all cross targets)
