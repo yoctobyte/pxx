@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -91,6 +91,7 @@ _none_
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
@@ -582,6 +583,7 @@ _none_
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
+- [A] meta-dialect-extensions-and-fpc-strict
 - [B] meta-track-b-compiler-wishlist
 - [B] task-sqlite-libc-free-runtime-bringup
 
