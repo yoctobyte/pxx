@@ -101,6 +101,47 @@ Self-host is byte-identical-sensitive (the compiler returns frozen strings
 pervasively) → expect to reseed and run the full cross matrix. Sizeable, careful
 multi-target change — not a quick edit.
 
+## CORRECTION (2026-06-30, after user review) — capacity was a strawman; real blocker = virtual/indirect calls
+
+Attempt 1 below blamed a "capacity 8MB→256" regression and a frozen self-build
+crash. **Both were wrong / confounded** (user caught this):
+- The self-host compiler builds **managed** (AnsiString), so it uses **zero**
+  frozen-string returns — it does NOT "rely on >256-char frozen results". The
+  8 MB was just the global slot size, an anomaly. A default frozen `string` is
+  ShortString-class (255); capping a `string` *result* at LOCAL_STR_CAP (256) is
+  **correct**, not a regression. Longer ⇒ sized `string[N]` or AnsiString.
+- The frz1 segfault attributed to Attempt 1 is the **pre-existing**
+  frozen-self-build crash ([[bug-frozen-self-build-unreliable]]), not the change.
+
+**Attempt 2 (re-applied the same direct-call fix, validated properly):**
+- Reentrancy fixed (`Build(5)=5`); managed self-host **byte-identical**;
+  **`make test` (managed) PASSES**; `test_virtual_managed_arg` correct in managed.
+- **Real regression found:** frozen-mode **virtual** and **indirect** string
+  returns. `b.GetA(i): string` (virtual) returned the global Result address
+  before; now its epilogue expects a hidden dest, but `AN_VIRTUAL_CALL`/
+  `IR_VIRTUAL_CALL` (ir.inc:4276 / ir_codegen*.inc) and `IR_CALL_IND` **push args
+  and dispatch without ever passing a dest** — and the IR node has no free operand
+  (IRA=args, IRB=last, IRC=procIdx, IRIVal=slot) to thread one. So `test_virtual_
+  managed_arg` in frozen mode went `2\ncherry\napple`(ish) → `2`.
+- A callee's return convention must be uniform across all its call sites, so you
+  can't "hidden-dest for direct, global for virtual" per-function (a method is
+  both). The complete fix **requires** routing the hidden dest through the
+  virtual + indirect call lowering and their per-backend codegen (mirroring
+  records — which themselves don't support virtual/indirect aggregate returns
+  today: a virtual record-returning method already segfaults on pristine). That is
+  a real multi-backend lift with IR-encoding work, **not** the "mechanical swap"
+  Attempt 1 claimed.
+
+**Recommendation:** frozen mode is currently broadly broken anyway
+([[bug-frozen-self-build-unreliable]] — startup SIGSEGV, can't even self-build),
+so the reentrancy fix sits on a broken foundation. Fix the frozen-self-build
+crash FIRST (makes frozen usable + testable via a working `bootstrap-frozen`),
+THEN land the reentrancy fix *with* virtual/indirect dest support and validate
+under `test-frozen`. Direct-call-only reverted to avoid shipping the virtual/
+indirect regression. The `RetViaHiddenDest`/`AggRetCopySize` wiring + the exact
+edit sites are recorded below and re-confirmed correct — re-applying them is
+step 1 of the eventual fix; steps 2-3 are virtual + indirect dest passing.
+
 ## Attempt 1 (2026-06-30, Track A) — copy-out model PROVEN INSUFFICIENT, reverted
 
 Implemented the refined proposal exactly (copy-out-to-fixed-local), full multi-target.
