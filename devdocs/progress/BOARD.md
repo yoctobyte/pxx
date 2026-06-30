@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -87,6 +87,7 @@ _none_
 | feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-uses-alias-as | ACA | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
+| feature-warn-oversized-stack-frame | A | feature | Warn on oversized stack locals / stack frames | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -570,6 +571,7 @@ _none_
 - [B] feature-tls13-from-scratch
 - [A] feature-toolchain-cli-ux
 - [ACA] feature-uses-alias-as
+- [A] feature-warn-oversized-stack-frame
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
