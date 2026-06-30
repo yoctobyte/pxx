@@ -53,6 +53,41 @@ during unit/global initialisation.
   byte-identical signal** when changing frozen-string codegen — a real gap for
   bug-frozen-string-result-global (which only frozen mode exercises in-compiler).
 
+## ROOT CAUSE LOCATED (2026-06-30, gdb + disasm)
+
+The fault is in **global zero-initialisation emitting garbage absolute addresses**.
+
+`gdb` (ASLR off via `setarch -R`) stops with `SIGSEGV` at the entry-region init
+code, `rbp = 0`, stack barely descended. The faulting instruction:
+
+```
+=> 0x646a95:  mov %al, 0xffffffffe9a777ff      ; 88 04 25 ff 77 a7 e9, with al = 0
+```
+
+i.e. `mov byte [0xe9a777ff], 0` — a zero-init byte store to **absolute address
+0xe9a777ff (~3.9 GB)**, which is unmapped (the whole image is vaddr
+0x400000 .. ~0x1da8b000, ~494 MB). Disassembling the surrounding init run shows a
+sequence of `movabs $0,%rax ; mov [abs],%al` byte-zeroing stores whose target
+addresses are **mostly garbage / out of range** (0xe9a777ff, 0x51c46743 = 1.37 GB,
+0x2cbb4bdb = 750 MB, 0x2e3f54xx = 778 MB), interleaved with some in-range ones
+(0x17fa7e0x ≈ 402 MB). So the global zero-init address computation is wrong in
+**frozen mode** — the `mov [disp32], al` absolute encoding (`88 04 25 disp32`,
+sign-extended 32-bit) is being handed bogus displacements. The crash is gated by
+whether ASLR happens to map the first bad address (→ the observed intermittency).
+
+This is a real frozen-mode **codegen** bug in the pinned compiler, not OOM and not
+a stack-frame size issue. Next step is the global zero-init emit path:
+
+- Find where global (BSS) zero-init emits `mov [abs], al` (the per-byte / length-
+  word clear for frozen-string and other globals) — likely an `EmitGlobRef` /
+  `EmitGlobalZeroInit` site. In frozen mode globals are 8 MB `STRING_CAP` slots, so
+  cumulative BSS is ~490 MB; check for a 32-bit truncation/overflow or a
+  signed/zero-extension bug in the offset→absolute-address computation, or a
+  garbage offset for a specific global kind. The `88 04 25 disp32` form can only
+  reach the low 2 GB as a sign-extended disp32 — but even the in-range targets are
+  < 494 MB, so the bogus ones are a *miscomputation*, not just an encoding-range
+  limit.
+
 ## To investigate
 
 1. It crashes at **startup** (2.4 MB RSS), so run `frz1` under `gdb` on *any*
