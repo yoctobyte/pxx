@@ -2298,19 +2298,22 @@ begin
 end;
 
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
-var f, n, i: Integer; buf: array[0..STRING_CAP-1] of Byte;
+var f, n, i: Integer;
 begin
+  { Staging buffer is the global LoadFileBuf (8 MB) — an 8 MB stack local here
+    overflows a default 8 MB stack (FPC cold-bootstrap segfaulted in this
+    prologue). Single-use, never re-entered, so a shared global is safe. }
   LoadPath := path;
   SetLength(dst, 0);
   f := sysopen(LoadPath, 0);
   if f >= 0 then
   begin
-    n := sysread(f, buf, STRING_CAP);
+    n := sysread(f, LoadFileBuf, STRING_CAP);
     if n < 0 then n := 0;
     sysclose(f);
     SetLength(dst, n);
     for i := 0 to n - 1 do
-      dst[i + 1] := Chr(buf[i]);
+      dst[i + 1] := Chr(LoadFileBuf[i]);
   end
   else
     SetLength(dst, 0);

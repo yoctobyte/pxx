@@ -1229,6 +1229,11 @@ var
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;
+  { File-read staging buffer for LoadFile. Global (BSS) rather than an 8 MB stack
+    local: an 8 MB frame overflows a default 8 MB process stack (the FPC-seeded
+    cold-bootstrap binary segfaulted in LoadFile's prologue). Single-use and never
+    re-entered (include loads are sequential), so a shared global is safe here. }
+  LoadFileBuf : array[0..STRING_CAP-1] of Byte;
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
