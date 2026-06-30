@@ -13857,7 +13857,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
-  cdir, bdir, rtldir, lcldir: AnsiString;
+  cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
@@ -14031,7 +14031,7 @@ begin
   if ExeDir = '' then
   begin
     cdir := 'compiler/'; bdir := 'compiler/builtin/';
-    rtldir := 'lib/rtl/'; lcldir := 'lib/pcl/';
+    rtldir := 'lib/rtl/'; lcldir := 'lib/pcl/'; asmdir := 'lib/asmcore/';
   end
   else
   begin
@@ -14039,6 +14039,7 @@ begin
     ConcatThree(ExeDir, 'builtin/', '', bdir);   { ExeDir is <root>/compiler/ }
     ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
     ConcatThree(ExeDir, '../lib/pcl/', '', lcldir);
+    ConcatThree(ExeDir, '../lib/asmcore/', '', asmdir);
   end;
 
   if Length(UnitContent) = 0 then
@@ -14123,6 +14124,21 @@ begin
     end;
   end;
 
+  if Length(UnitContent) = 0 then
+  begin
+    { lib/asmcore — the standalone multi-target instruction-encoder library
+      (feature-asmcore-encoder-library). A built-in peer of RTL/PCL: any
+      program can `uses asmcore_base, asmcore_x64` with no -Fu, same as the
+      compiler's own .asm frontend / inline-asm branch encoding do. }
+    ConcatThree(asmdir, lo, '.pas', path);
+    LoadFileCI(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(asmdir, lo, '.pp', path);
+      LoadFileCI(path, UnitContent);
+    end;
+  end;
+
   { CWD-relative fallback (only meaningful when ExeDir is set and differs from
     the repo root, e.g. the self-host tests run a /tmp copy of the compiler with
     CWD at the repo root where compiler/ + lib/ live). }
@@ -14133,9 +14149,11 @@ begin
     if Length(UnitContent) = 0 then begin ConcatThree('compiler/builtin/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/asmcore/', lo, '.pas', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/asmcore/', lo, '.pp', path); LoadFileCI(path, UnitContent); end;
     if Length(UnitContent) = 0 then
     begin
       ConcatThree('lib/rtl/', cName, '.h', path); LoadFile(path, UnitContent);

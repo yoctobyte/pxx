@@ -267,8 +267,8 @@ begin
 end;
 
 const
-  ASM_MAX_LABELS = 4096;
-  ASM_MAX_FIXUPS = 8192;
+  ASM_FRONT_MAX_LABELS = 4096;
+  ASM_FRONT_MAX_FIXUPS = 8192;
   SEC_TEXT = 0;
   SEC_DATA = 1;
 
@@ -287,13 +287,13 @@ var
   curSection, dataBase: Integer;
   dataBuf: TAsmByteBuf;
   { label table + branch fixups (layer-2 symbolic resolution) }
-  lblName: array[0..ASM_MAX_LABELS-1] of AnsiString;
-  lblOff:  array[0..ASM_MAX_LABELS-1] of Integer;
-  lblIsData: array[0..ASM_MAX_LABELS-1] of Boolean;
+  lblName: array[0..ASM_FRONT_MAX_LABELS-1] of AnsiString;
+  lblOff:  array[0..ASM_FRONT_MAX_LABELS-1] of Integer;
+  lblIsData: array[0..ASM_FRONT_MAX_LABELS-1] of Boolean;
   lblCount: Integer;
-  fixPos:  array[0..ASM_MAX_FIXUPS-1] of Integer;
-  fixName: array[0..ASM_MAX_FIXUPS-1] of AnsiString;
-  fixLine: array[0..ASM_MAX_FIXUPS-1] of Integer;
+  fixPos:  array[0..ASM_FRONT_MAX_FIXUPS-1] of Integer;
+  fixName: array[0..ASM_FRONT_MAX_FIXUPS-1] of AnsiString;
+  fixLine: array[0..ASM_FRONT_MAX_FIXUPS-1] of Integer;
   fixCount: Integer;
   found: Boolean; rel: Int64; tgt: Integer;
   labelPart: AnsiString;
@@ -334,7 +334,7 @@ begin
       labelPart := AsmTrim(Copy(line, 1, ci - 1));
       if labelPart = '' then
         Error('asm:' + AsmIntToStr(lineNo) + ': empty label');
-      if lblCount >= ASM_MAX_LABELS then
+      if lblCount >= ASM_FRONT_MAX_LABELS then
         Error('asm:' + AsmIntToStr(lineNo) + ': too many labels');
       lblName[lblCount] := AsmLower(labelPart);
       lblIsData[lblCount] := (curSection = SEC_DATA);
@@ -426,7 +426,7 @@ begin
     begin
       if branchLabel = '' then
         Error('asm:' + AsmIntToStr(lineNo) + ': unresolved operand patch with no label');
-      if fixCount >= ASM_MAX_FIXUPS then
+      if fixCount >= ASM_FRONT_MAX_FIXUPS then
         Error('asm:' + AsmIntToStr(lineNo) + ': too many branch fixups');
       fixPos[fixCount] := baseOff + patches.Items[k].Offset;
       fixName[fixCount] := branchLabel;

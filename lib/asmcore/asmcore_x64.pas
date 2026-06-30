@@ -1,4 +1,5 @@
 unit asmcore_x64;
+{$mode objfpc}{$H+}
 { x86-64 instruction encoder + textual printer.
   Coverage (Intel syntax, dst-first):
     mov   reg,imm | reg,reg | reg,[base+disp] | [base+disp],reg

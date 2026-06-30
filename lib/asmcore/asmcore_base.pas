@@ -1,7 +1,13 @@
 unit asmcore_base;
+{$mode objfpc}{$H+}
 { Shared types for lib/asmcore: operands, instructions, patch sites, a
   growable byte buffer. Mechanical only — no labels, no symbol table, no
-  dependency on compiler/**. See devdocs/developer/asmcore-design.md. }
+  dependency on compiler/**. See devdocs/developer/asmcore-design.md.
+  {$mode objfpc}{$H+} is inert for PXX self-host (which already allows
+  Result + ansistrings unconditionally) and is needed only so the FPC cold
+  bootstrap (make bootstrap / make test-fpc) can compile this unit — FPC
+  defaults to {$mode fpc}, where the Result pseudo-variable is off
+  (bug-asmcore-fpc-bootstrap). }
 
 interface
 

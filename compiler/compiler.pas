@@ -448,12 +448,10 @@ begin
       AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
     AddPasUnitDir('lib/rtl/platform/posix/');
   end;
-  { lib/asmcore holds the asmcore_base/asmcore_x64 units the compiler `uses` for the
-    .asm frontend — anchor it for the self-build (ExeDir-relative installed layout +
-    CWD-relative for the /tmp self-host tests), same shape as the PAL dir above. }
-  if ExeDir <> '' then
-    AddPasUnitDir(ExeDir + '../lib/asmcore/');
-  AddPasUnitDir('lib/asmcore/');
+  { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
+    own .asm frontend / inline-asm branches and for any user program) is now a
+    first-class peer of RTL/PCL in ParseUsesUnit's own search chain — no
+    AddPasUnitDir needed here, see compiler/parser.inc (asmdir). }
   CompiledUnitCount := 0;
   UnitAliasCount := 0;
   InitProcCount := 0;
