@@ -249,6 +249,8 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_atomic_counter26)" = "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
 	./$(COMPILER) test/test_mutex.pas /tmp/test_mutex26
 	test "$$(/tmp/test_mutex26)" = "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
+	./$(COMPILER) test/test_tthread.pas /tmp/test_tthread26
+	test "$$(/tmp/test_tthread26)" = "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
