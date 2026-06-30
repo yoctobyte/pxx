@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,7 @@ _none_
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
+| bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
@@ -547,6 +548,7 @@ _none_
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
 - [A] bug-open-array-ctor-statement-call
+- [A] bug-typed-const-array-of-string-broken
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
