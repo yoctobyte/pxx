@@ -1828,7 +1828,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
-    i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize, savedProc: Integer;
+    i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
     helperPi, wrapperArg, wrapperCall: Integer;
@@ -2691,10 +2691,10 @@ begin
           left := IRLowerAddress(ASTLeft[node])
         else
         begin
-          savedProc := CurProc;
-          CurProc := -1;
+          { box temp is a routine local (per-call/thread slot), not a shared
+            global — consumed within this comparison, never outlives the frame
+            (bug-variant-boxing-temp-global-shared). }
           value := AllocVar('', tyVariant);
-          CurProc := savedProc;
           left := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
                            IRLowerAST(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
         end;
@@ -2702,10 +2702,9 @@ begin
           right := IRLowerAddress(ASTRight[node])
         else
         begin
-          savedProc := CurProc;
-          CurProc := -1;
+          { box temp is a routine local (per-call/thread slot), not a shared
+            global (bug-variant-boxing-temp-global-shared). }
           value := AllocVar('', tyVariant);
-          CurProc := savedProc;
           right := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
                             IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
