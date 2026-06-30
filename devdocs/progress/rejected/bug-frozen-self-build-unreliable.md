@@ -1,7 +1,18 @@
+## REJECTED (2026-06-30, user decision)
+
+WON'T FIX. The compiler self-builds **managed (AnsiString)** by design — that is
+the supported, stable path. A frozen-string compiler self-build
+(`bootstrap-frozen` / `stabilize-frozen`) is **not a goal**, and we will not
+retrofit the compiler with static-sized strings to make it work. The startup
+crash characterised below is therefore moot. `make test` is managed-only and
+unaffected. Closing.
+
+---
+
 # Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable
 
 - **Type:** bug (build/infra) — Track A
-- **Status:** backlog
+- **Status:** REJECTED (2026-06-30) — frozen self-build is a non-goal (managed is the path)
 - **Opened:** 2026-06-30
 - **Found by:** incidental, while working bug-frozen-string-result-global (the
   frozen self-build is the only thing that exercises frozen-string returns in the

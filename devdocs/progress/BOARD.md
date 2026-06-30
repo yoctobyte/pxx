@@ -25,13 +25,12 @@ _none_
 
 _none_
 
-## backlog (66)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
-| bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -511,11 +510,12 @@ _none_
 | track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (6)
+## rejected (7)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-invalid-symbol-in-lea-sqlite | A | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
+| bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
@@ -526,7 +526,6 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
-- [A] bug-frozen-self-build-unreliable
 - [A] bug-frozen-string-result-global-not-reentrant
 - [A] bug-nested-dynarray-cross-segfault
 - [A] chore-runtime-emission-size
