@@ -94,3 +94,8 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
 - 2026-06-28 — blocker moved from the completed unified allocator to
   `feature-threadsafe-heap-contract`: refcounting exists in threadsafe mode, but
   heap safety needs an explicit Track A contract per memory-management mode.
+
+## Part of the multithreading epic (2026-06-30)
+
+Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
+single-threaded self-build stays byte-identical; no libc (Linux syscalls only).

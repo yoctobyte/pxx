@@ -67,3 +67,8 @@ semantics out of the first slice.
 - 2026-06-28 — opened from Track B sqlite discussion. Decision: possible as a
   constrained syscall-only pthread subset, but keep immediate SQLite work on
   `SQLITE_THREADSAFE=0` and do not attempt a full glibc pthread clone.
+
+## Part of the multithreading epic (2026-06-30)
+
+Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
+single-threaded self-build stays byte-identical; no libc (Linux syscalls only).

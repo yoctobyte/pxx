@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -71,13 +71,17 @@ _none_
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
+| feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-pascal-tthread | A | feature | Native Pascal TThread class (M3) | — |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
+| feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
+| feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -87,6 +91,7 @@ _none_
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
+| meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 
@@ -572,11 +577,15 @@ _none_
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
+- [A] feature-pal-thread-primitives
+- [A] feature-pascal-tthread
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
 - [B] feature-synapse-compile-check
+- [A] feature-sync-primitives-futex
 - [B] feature-threadsafe-heap-contract
+- [A] feature-threadsafe-heap-optimize
 - [A] feature-threadsafe-io-serialization
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
@@ -586,6 +595,7 @@ _none_
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
+- [A] meta-multithreading
 - [B] task-sqlite-libc-free-runtime-bringup
 
 ## Leverage (tickets each one unblocks)

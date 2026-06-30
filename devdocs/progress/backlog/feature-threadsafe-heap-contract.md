@@ -48,3 +48,8 @@ safety, and that contract may differ by memory-management mode.
 - 2026-06-28 — opened from Track B pthread discussion. User clarified that
   refcounting is partly threadsafe already, but heap safety is less certain and
   may depend on the memory-management mode; that belongs in Track A.
+
+## Part of the multithreading epic (2026-06-30)
+
+Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
+single-threaded self-build stays byte-identical; no libc (Linux syscalls only).

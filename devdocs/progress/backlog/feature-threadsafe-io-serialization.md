@@ -28,3 +28,8 @@ single-thread output and size are unchanged without it.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §2d.
+
+## Part of the multithreading epic (2026-06-30)
+
+Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
+single-threaded self-build stays byte-identical; no libc (Linux syscalls only).

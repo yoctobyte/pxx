@@ -78,3 +78,8 @@ AllocDynArray (genuine globals, not overrides), and scope resets at routine end
 -local (v97, done). So the **reentrancy** class is closed: nothing new bites
 single-threaded in managed mode. Remaining items (I/O scratch, heap) are
 thread-safety-only and need the thread runtime anyway.
+
+## Part of the multithreading epic (2026-06-30)
+
+Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
+single-threaded self-build stays byte-identical; no libc (Linux syscalls only).
