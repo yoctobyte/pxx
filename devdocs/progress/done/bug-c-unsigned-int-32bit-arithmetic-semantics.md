@@ -1,7 +1,7 @@
 # C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares
 
 - **Type:** bug (correctness) — Track A (shared codegen) + C frontend
-- **Status:** backlog
+- **Status:** DONE (2026-06-30, pin v91, commit 84a3fbf0)
 - **Opened:** 2026-06-29
 - **Found by:** empirical C-ticket re-test sweep (2026-06-29). Supersedes the
   "unsigned literal suffix `5u` tagged signed" minor note in
@@ -71,3 +71,40 @@ Two compounding gaps:
 Why it has not bitten lua/sqlite hard: most hot unsigned uses funnel through an
 `unsigned`-typed variable (the store truncates), masking the inline gap. It is a
 latent correctness bug for any inline 32-bit unsigned expression.
+
+## Resolution (2026-06-30, pin v91, commit 84a3fbf0)
+
+All three gaps fixed; verified vs gcc on x86-64/i386/arm32/aarch64/riscv32. Full
+gate + four cross suites + lua green; self-host byte-identical (frontend changes
+plus 32-bit-only backend changes — x86-64 codegen unchanged, so no reseed).
+
+1. **Truncation (frontend, C-only).** `CMakeBinop` now wraps a tyUInt32 arithmetic
+   result in `(e & $FFFFFFFF)` (`CTrunc32`, mask tagged tyInt64 so the AND runs in
+   64 bits and zero-extends). Unsigned-32-domain comparisons (`CCmpUnsigned32`:
+   both operands <=32-bit ordinal, at least one tyUInt32) truncate *both* operands
+   so the compare runs on two non-negative values — matching C's convert-to-
+   unsigned rule (`-1 < 1u` -> 0) without touching the shared `TypeCompareUnsigned`
+   (Pascal stays signed-wins-at-equal-width).
+2. **Suffix (lexer+parser).** `u`/`U` sets a new `CLexUnsignedSuffix` flag ->
+   `CAttrFlags` bit 4 in both tokenizer storage paths (CLexAll only stored SVal for
+   ident/string, so SVal-marking was dropped — that was the first attempt's miss).
+   Parser tags the literal tyUInt32 (or tyUInt64 above 2^32-1).
+3. **32-bit backend compares.** i386 (`EmitSetcc(op, not TypeCompareUnsigned…)`),
+   arm32 (`EmitSetccArm32` gained a `signed` param: lo/ls/hi/hs for unsigned),
+   riscv32 (`slt`->`sltu` when unsigned) — were hardcoded signed for scalar ordinal
+   ordering compares. This was also a latent **Pascal** Cardinal/LongWord bug on
+   those targets, now fixed too. aarch64/x86-64 were already correct (64-bit reg +
+   the new truncation makes both operands non-negative).
+
+Guard: `test/cunsigned_int_arith_b121.c` (six inline-unsigned checks -> exit 42),
+wired into `make test` + `make test-{i386,arm32,aarch64,riscv32}`.
+
+### Residual (separate, filed-as-note) — unsigned DIVISION/MOD on 32-bit
+Out of scope here (this ticket was arithmetic-wrap + compares). The 32-bit
+backends still hardcode **signed** divide/mod for scalar ordinals: i386 `idiv`
+(ir_codegen386.inc ~1743), arm32 `sdiv` (ir_codegen_arm32.inc ~1323), riscv32
+`div`/`rem` (ir_codegen_riscv32.inc ~955). So C `unsigned int` (and Pascal
+Cardinal/LongWord) `/` and `%` on i386/arm32/riscv32 give signed results for
+operands with bit 31 set. x86-64 already keys division on `TypeDivideUnsigned`.
+Fix = mirror that (div->divu/udiv/`divu`+`remu`) per backend. Low-frequency
+(unsigned div by a >2^31 value is rare), filed for a follow-up.
