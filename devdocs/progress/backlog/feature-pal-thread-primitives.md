@@ -82,3 +82,29 @@ wakes on exit). First slice: x86-64 only; cross trampolines under M5.
 trampoline glue; (4) a libc-free test: N threads incrementing a shared counter
 under a futex mutex, join, assert no lost updates, `ldd`/`readelf -d` shows no
 libc/libpthread. Opt-in target; single-thread self-build byte-identical.
+
+## Status — M1 first slice LANDED (2026-06-30, commit a49d5251)
+
+DONE (x86-64):
+- `__pxxclone(flags, childStack, entry, arg, ctidptr)` intrinsic — AN_CLONE(72) ->
+  IR_CLONE(62) -> bare clone(2)+trampoline stub (compiler/thread_emit.inc), emitted
+  lazily with a jmp-over so it works from main program OR a uses'd unit.
+- `lib/rtl/palthread.pas`: PalThreadCreate / PalThreadJoin / PalFutexWait /
+  PalFutexWake / PalThreadSelf. mmap'd stacks, race-free futex join via
+  CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, munmap on join.
+- Tests: test_thread_clone (raw) + test_palthread (PAL), `make test-threads` gate.
+  Single-thread self-host byte-identical; full `make test` green; libc-free
+  (readelf -d shows no libpthread).
+
+REMAINING in M1:
+- i386 trampoline (SYS_clone=120, int 0x80, args on stack) — currently a clean
+  compile-error. The goal is "main platforms (PC/server/intel/AMD)"; x86-64 covers
+  the 64-bit case, i386 is the 32-bit follow-up.
+- TLS: child shares the parent fs base (no CLONE_SETTLS yet). Fine for the
+  global-state RTL; per-thread TLS is needed before thread-local vars / a
+  per-thread exception chain (ties into [[audit-shared-global-reentrancy-thread-safety]]).
+- Stack guard page (mprotect PROT_NONE at the low end) — overflow currently just
+  faults into adjacent mmap. Cheap to add.
+
+NEXT MILESTONE: M2 futex sync primitives ([[feature-sync-primitives-futex]]) now
+has its foundation (PalFutexWait/Wake live).
