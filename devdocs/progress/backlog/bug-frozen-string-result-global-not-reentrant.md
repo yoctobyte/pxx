@@ -100,3 +100,62 @@ riscv32, xtensa). Each needs the dest-pointer return instead of the global addre
 Self-host is byte-identical-sensitive (the compiler returns frozen strings
 pervasively) → expect to reseed and run the full cross matrix. Sizeable, careful
 multi-target change — not a quick edit.
+
+## Attempt 1 (2026-06-30, Track A) — copy-out model PROVEN INSUFFICIENT, reverted
+
+Implemented the refined proposal exactly (copy-out-to-fixed-local), full multi-target.
+Reverted clean; tree green. Findings (these de-risk the next attempt):
+
+**The wiring is almost entirely mechanical and the machinery already exists:**
+- Added `RetViaHiddenDest(tk) = TypeIsAggregate(tk) or TypeIsFrozenString(tk)` and
+  `AggRetCopySize(retSymIdx)` in symtab.inc, then swapped `TypeIsAggregate(...)` →
+  `RetViaHiddenDest(...)` at exactly the *return-ABI* sites (NOT the arg site
+  `ir.inc:3787`, NOT the C frontend `cparser.inc` — Track C, C has no frozen
+  returns): parser.inc 12539/12555, ir.inc 191/947, all 6 epilogue gates in
+  symtab.inc, and the call-site dest loads in every `ir_codegen*.inc`
+  (`TypeIsAggregate(Procs[procIdx].RetType)` is *always* the return convention in
+  the codegen files — a blanket per-file token swap is correct there).
+- `EmitAggregateDestStash` (prologue) is already fully generic — gated only on
+  `ProcAggregateDestSym>=0`, so it auto-handles frozen returns once the parser
+  allocates the dest sym. No per-backend prologue edit needed.
+- Result: small recursive frozen-string test fixed (`Build(5)=5`, was `0`),
+  managed-mode self-host **byte-identical** (the default `make` build is MANAGED —
+  `PXXFLAGS` empty keeps `PXX_MANAGED_STRING` defined — so the change is *dormant*
+  there and proves nothing about frozen mode).
+
+**Why it fails (the real blocker — a capacity-semantics problem, not a wiring bug):**
+- The frozen self-build (`-uPXX_MANAGED_STRING`) reaches a compiler that
+  **segfaults compiling anything**. Root cause: the copy-out model makes `Result`
+  a routine **local**, which is capped at `LOCAL_STR_CAP+8 = 264` bytes. The old
+  shared global was `STRING_CAP+8 = 8 MB`. Confirmed directly: a frozen function
+  building a 1000-char result now returns **len=256** (truncated), and the compiler
+  builds frozen-string *results* well over 256 chars (mangled names, generated
+  lines, error text) → writing them into the 264-byte Result local overflows the
+  frame → segfault.
+- So copy-out-to-fixed-local silently **shrinks frozen-string-result capacity 8 MB
+  → 256 chars**. That is both a crash (compiler) and a semantic regression (user
+  programs). Sizing the local bigger trades the crash for stack-overflow risk under
+  recursion (capacity × depth on the frame).
+
+**What the next attempt must do instead — true NRVO (Result *aliases* the caller dest):**
+- Don't give the callee a separate fixed-size Result local. Make `Result` an
+  **indirect** slot: its frame slot holds the caller's dest pointer (already stashed
+  by `EmitAggregateDestStash`), and every frozen `Result` load/store/address in the
+  body redirects through that pointer (Result behaves like a `var`-param). Capacity
+  then equals the *caller's* storage, so 8 MB is preserved.
+- The caller must supply a dest of adequate capacity. For a real target
+  (`g := F()`) pass the target's address. For an **expression temp**
+  (`writeln(F())`, `F()+x`) the caller still needs a big buffer — i.e. the temp
+  `IRAppendCall` allocates must be `STRING_CAP`-capable, but **per-call-site**
+  (distinct global per site) so recursion/expression nesting can't clobber it (the
+  reentrancy fix). A per-site 8 MB BSS temp is the same memory shape as today's
+  global Result, just no longer shared across active calls.
+- This is the "high-risk, many-sites" redirect the proposal warned against, but
+  scoped to *Result accesses only*. It is the part that needs a deliberate design +
+  the user's sign-off on capacity (keep 8 MB? or formally cap frozen results at
+  shortstring-like 255 and update docs — arguably more FPC-like, but a behavior
+  change). **Parked for that decision** rather than guessed at unattended.
+
+**Status:** stays in backlog. Wiring approach is validated and mechanical; the open
+question is the Result *home* (NRVO redirect + per-site big temp vs. an agreed
+capacity cap). Pick that first, then the rest is the mechanical swap above.
