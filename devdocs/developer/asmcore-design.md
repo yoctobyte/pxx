@@ -159,33 +159,86 @@ AsmEncodeX64(instr, buf, patches);
 { -> B8 05 00 00 00 appended to buf; patches unchanged (value fully known) }
 ```
 
-**aarch64** — `mov w0, #5` (structurally different: fixed 32-bit width, no
-ModRM/SIB, no variable instruction length):
+**aarch64** — `movz x0, #100` (structurally different: fixed 32-bit width, no
+ModRM/SIB, no variable instruction length; built 2026-06-30, see
+`asmcore_aarch64.pas`):
 ```pascal
-instr.Mnemonic := 'mov';
-instr.Operands[0] := RegOp(reg_w0, 4);
-instr.Operands[1] := ImmOp(5);
+instr.Mnemonic := 'movz';
+instr.Operands[0] := RegOp(reg_x0, 8);
+instr.Operands[1] := ImmOp(100);
 instr.OperandCount := 2;
 AsmEncodeAArch64(instr, buf, patches);
 { -> single 4-byte word appended; same TAsmInstr/TAsmOperand shape, no x64-
-  specific field was needed to express this. }
+  specific field was needed to express this. Note `movz`, not a `mov reg,imm`
+  alias — real aarch64 has no single "load any 64-bit immediate" opcode (that
+  needs up to 4 movz/movk instructions); asmcore picked the literal
+  instruction set over inventing a multi-instruction pseudo-op, same
+  philosophy as x64's documented divergences (movabs vs the c7 shortcut). }
 ```
+
+Register naming also mirrors x64's choice: no separate `reg_w0` constants —
+`RegOp(reg_x0, 4)` is the 32-bit (`w0`) view of the same register number,
+exactly like `RegOp(reg_rax, 4)` is `eax` on x64. One register-number space
+per target, width carried on the operand, not duplicated into the constant
+table.
 
 If aarch64 (or riscv32) needs *no* changes to `TAsmOperand`/`TAsmInstr` to
 express its instructions cleanly, the abstraction is proven — that's the
 explicit goal of doing one structurally-different target second, before the
-remaining four.
+remaining four. **Result: proven, with one real exception** — see "Branch
+patch resolution is target-specific" below.
+
+## Branch patch resolution is target-specific (the actual pressure-test finding)
+
+`TAsmPatchSite`'s `(Offset, Width, OperandIndex)` contract needed *zero*
+changes for aarch64 — the encode side is exactly as generic as hoped. But
+*resolving* a patch is not: x86's rel32 is a separate, byte-aligned trailing
+field, so a generic "overwrite these N raw bytes" (`Patch32`, what the `.asm`
+frontend and inline-asm both already use for x64) is correct and sufficient.
+aarch64 branch immediates are bit-packed *inside* the same 32-bit opcode
+word — `imm26` at bits[25:0] for `b`/`bl`, `imm19` at bits[23:5] for
+`b.cond` — so a raw overwrite would clobber the opcode. The encode side
+writes the **base opcode word** (with the immediate field zeroed) as the
+"patch site" placeholder, not a zeroed field; resolution is a
+read-modify-write (`word | (relValue & mask) << shift`) that has to know
+which mnemonic it's resolving. That knowledge can't live in `asmcore_base`
+(it's exactly the kind of target-specific bit-layout knowledge the base unit
+is designed to stay ignorant of) — so each target that needs it exports its
+own resolver: `AsmPatchBranchAArch64(var buf, offset, mnemonic, relWords):
+Boolean` in `asmcore_aarch64.pas`. `relWords` is pre-divided by 4 (aarch64
+instructions are always 4-byte aligned) the same way the `.asm` frontend
+already computes `target - (patch+4)` for x64 — only the OR-into-existing-
+word step differs. **Implication for Track A's layer 2**: when a frontend
+eventually targets aarch64, it must call the target's `AsmPatchBranchAArch64`
+(or whatever the riscv32/arm32/xtensa equivalents end up being) instead of a
+generic byte-overwrite — the patch-resolution step is per-target, even
+though the patch-*recording* step (`PatchAdd`) is fully generic. Worth a
+`AsmPatchBranchAArch64`-shaped contract per target as that work lands, not a
+single generalized resolver — the bit layouts genuinely differ enough
+(imm26 vs imm19 vs riscv32's split/scrambled B-type and J-type immediates)
+that a shared resolver would just be a dispatch table back to per-target
+code anyway.
 
 ## Sequencing
 
 1. `asmcore_base.pas` — types above, fully working (buffer growth, operand
-   constructors).
+   constructors). **Done.**
 2. `asmcore_x64.pas` first slice: `mov reg,imm`, `add reg,reg`, `ret` — small
    enough to prove the whole pipeline (types → encode → test) end to end.
+   **Done**, since widened well past the first slice (see ticket log).
 3. One structurally different target (aarch64 or riscv32) at the same slice
    size, to pressure-test the operand model per the worked example above.
+   **Done 2026-06-30 — aarch64** chosen over riscv32 for tooling reasons:
+   `aarch64-linux-gnu-as`/`objdump` were available as a byte-exact host
+   oracle (matching how x64 was validated); no riscv32 cross-toolchain was
+   installed in this environment. mov/add/sub/and/orr/eor/cmp/ldr/str/movz/
+   movk/movn/b/bl/b.cond/ret/nop, 26/26 checks byte-exact, both under PXX
+   self-host and FPC (`test/test_asmcore_aarch64.pas`, in `make test`).
 4. Widen x64 to match `x64enc.inc`/`asmtext.inc`'s existing coverage.
-5. Remaining targets (i386, the other of aarch64/riscv32, arm32, xtensa) —
-   same shape, new mnemonic tables, no new abstraction work expected.
+5. Remaining targets (i386, riscv32, arm32, xtensa) — same shape, new
+   mnemonic tables; riscv32/arm32/xtensa will each need their own
+   `AsmPatchBranch<Target>` per the finding above (i386 can likely reuse
+   x64's `Patch32` raw-overwrite, being x86-family).
 6. Textual printer per target, in step with each target's encoder (not
-   bolted on at the end).
+   bolted on at the end). **Done for x64 and aarch64** (`AsmPrintX64`/
+   `AsmPrintAArch64`).
