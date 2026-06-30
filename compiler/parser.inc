@@ -1294,7 +1294,10 @@ begin
         else
         begin
           ErrorIdent := fieldName;
-          Error('undefined variable');
+          if HiddenByDeclOrder(fieldName) then
+            Error('undefined variable — it is a global declared later, declare it before use')
+          else
+            Error('undefined variable');
         end;
       end;
     end;
@@ -2468,7 +2471,10 @@ begin
   if idx < 0 then
   begin
     ErrorIdent := name;
-    Error('undefined variable');
+    if HiddenByDeclOrder(name) then
+      Error('undefined variable — it is a global declared later, declare it before use')
+    else
+      Error('undefined variable');
   end;
   CompileLValueAddressInternal(idx, tk, recName);
 end;
@@ -2486,7 +2492,10 @@ begin
   if idx < 0 then
   begin
     ErrorIdent := name;
-    Error('undefined variable');
+    if HiddenByDeclOrder(name) then
+      Error('undefined variable — it is a global declared later, declare it before use')
+    else
+      Error('undefined variable');
   end;
 
   Next; { consume identifier }
@@ -6810,7 +6819,14 @@ var
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
   varIdx := FindSym(CurTok.SVal);
-  if varIdx < 0 then Error('for: undefined');
+  if varIdx < 0 then
+  begin
+    ErrorIdent := CurTok.SVal;
+    if HiddenByDeclOrder(CurTok.SVal) then
+      Error('for counter is a global declared later — declare it before use, or add a local')
+    else
+      Error('for: undefined');
+  end;
   Next;
   if CurTok.Kind = tkIn then
   begin

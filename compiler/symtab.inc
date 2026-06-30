@@ -1535,6 +1535,26 @@ begin
   Result := False;
 end;
 
+{ True if `nm` would resolve to a program/unit GLOBAL that FindSym is currently
+  hiding ONLY because of decl-order gating (declared textually later than the
+  routine being compiled). Lets undefined-name error sites give a clearer hint.
+  Cost is irrelevant — only called on an error path that aborts the compile. }
+function HiddenByDeclOrder(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if not DeclOrderStrict then Exit;
+  for i := SymCount-1 downto 0 do
+    if (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok) and
+       IsBlockVisible(SymBlockId[i], CurBlockId) and
+       (StrEqual(Syms[i].Name, nm) or
+        ((not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, nm))) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin

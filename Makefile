@@ -1129,7 +1129,8 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_case_sensitive_error.pas /tmp/test_case_sensitive_error26 > /tmp/test_case_sensitive_error.log 2>&1
 	grep -q "undefined variable (VALUE)" /tmp/test_case_sensitive_error.log
 	! ./$(COMPILER) test/test_decl_order_global_error.pas /tmp/test_decl_order_global_error26 > /tmp/test_decl_order_global_error.log 2>&1
-	grep -q "undefined variable (gLate)" /tmp/test_decl_order_global_error.log
+	grep -q "declared later" /tmp/test_decl_order_global_error.log
+	grep -q "(gLate)" /tmp/test_decl_order_global_error.log
 	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
 	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_qualified_units.pas /tmp/test_qualified_units26
