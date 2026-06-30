@@ -87,7 +87,9 @@ procedure rv32_jalr(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $67
 procedure rv32_mul(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 0, rd, $33); end;
 procedure rv32_mulhu(rd, rs1, rs2: Integer);begin EmitRType(1, rs2, rs1, 3, rd, $33); end;
 procedure rv32_div(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 4, rd, $33); end;
+procedure rv32_divu(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 5, rd, $33); end;
 procedure rv32_rem(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 6, rd, $33); end;
+procedure rv32_remu(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 7, rd, $33); end;
 procedure rv32_and(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 7, rd, $33); end;
 procedure rv32_or(rd, rs1, rs2: Integer);   begin EmitRType(0, rs2, rs1, 6, rd, $33); end;
 procedure rv32_xor(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 4, rd, $33); end;

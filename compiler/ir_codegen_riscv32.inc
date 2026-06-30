@@ -952,8 +952,17 @@ begin
         if op = Ord(tkPlus) then rv32_add(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkMinus) then rv32_sub(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkStar) then rv32_mul(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkDiv) then rv32_div(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkMod) then rv32_rem(reg_a0, reg_a0, reg_a1)
+        else if op = Ord(tkDiv) then
+        begin
+          { unsigned dividend (Cardinal/LongWord, C unsigned int) -> divu }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then rv32_divu(reg_a0, reg_a0, reg_a1)
+          else rv32_div(reg_a0, reg_a0, reg_a1);
+        end
+        else if op = Ord(tkMod) then
+        begin
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then rv32_remu(reg_a0, reg_a0, reg_a1)
+          else rv32_rem(reg_a0, reg_a0, reg_a1);
+        end
         else if op = Ord(tkAnd) then rv32_and(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkOr) then rv32_or(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkXor) then rv32_xor(reg_a0, reg_a0, reg_a1)

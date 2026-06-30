@@ -1332,10 +1332,16 @@ begin
         if op = Ord(tkPlus) then EmitI32($E0800001)        { add r0, r0, r1 }
         else if op = Ord(tkMinus) then EmitI32($E0400001)  { sub r0, r0, r1 }
         else if op = Ord(tkStar) then EmitI32($E0000091)   { mul r0, r1, r0 }
-        else if op = Ord(tkDiv) then EmitI32($E710F110)    { sdiv r0, r0, r1 }
+        else if op = Ord(tkDiv) then
+        begin
+          { unsigned dividend (Cardinal/LongWord, C unsigned int) -> udiv (bit21) }
+          if TypeDivideUnsigned(lhsTk) then EmitI32($E730F110)   { udiv r0, r0, r1 }
+          else EmitI32($E710F110);                               { sdiv r0, r0, r1 }
+        end
         else if op = Ord(tkMod) then
         begin
-          EmitI32($E712F110);  { sdiv r2, r0, r1 }
+          if TypeDivideUnsigned(lhsTk) then EmitI32($E732F110)   { udiv r2, r0, r1 }
+          else EmitI32($E712F110);                               { sdiv r2, r0, r1 }
           EmitI32($E0020192);  { mul r2, r2, r1 }
           EmitI32($E0400002);  { sub r0, r0, r2 }
         end

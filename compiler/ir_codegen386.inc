@@ -1740,10 +1740,20 @@ begin
         if op = Ord(tkPlus) then begin EmitB($01); EmitB($C8); end       { add eax, ecx }
         else if op = Ord(tkMinus) then begin EmitB($29); EmitB($C8); end { sub eax, ecx }
         else if op = Ord(tkStar) then begin EmitB($0F); EmitB($AF); EmitB($C1); end { imul eax, ecx }
-        else if op = Ord(tkDiv) then begin EmitB($99); EmitB($F7); EmitB($F9); end { cdq; idiv ecx }
+        else if op = Ord(tkDiv) then
+        begin
+          { unsigned dividend (Cardinal/LongWord, C unsigned int): zero edx + div }
+          if TypeDivideUnsigned(lhsTk) then
+            begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
+          else
+            begin EmitB($99); EmitB($F7); EmitB($F9); end;            { cdq; idiv ecx }
+        end
         else if op = Ord(tkMod) then
         begin
-          EmitB($99); EmitB($F7); EmitB($F9);        { cdq; idiv ecx }
+          if TypeDivideUnsigned(lhsTk) then
+            begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
+          else
+            begin EmitB($99); EmitB($F7); EmitB($F9); end;            { cdq; idiv ecx }
           EmitB($89); EmitB($D0);                    { mov eax, edx }
         end
         else if op = Ord(tkAnd) then begin EmitB($21); EmitB($C8); end   { and eax, ecx }
