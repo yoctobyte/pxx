@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -57,6 +57,7 @@ _none_
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
+| feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -539,6 +540,7 @@ _none_
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
+- [A] feature-implicit-identifier-binding-strictness-switch
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
