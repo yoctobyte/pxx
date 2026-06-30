@@ -2233,6 +2233,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggret)" = "$$(/tmp/test_arm32_aggret_x64)"
+	./$(COMPILER) --target=arm32 test/test_cross_aggregate_stackargs.pas /tmp/test_arm32_aggstk
+	./$(COMPILER) test/test_cross_aggregate_stackargs.pas /tmp/test_arm32_aggstk_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggstk)" = "$$(/tmp/test_arm32_aggstk_x64)"
 	./$(COMPILER) --target=arm32 test/test_inheritance_dispatch.pas /tmp/test_arm32_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_arm32_cls_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cls)" = "$$(/tmp/test_arm32_cls_x64)"
@@ -2292,7 +2295,7 @@ test-arm32: $(COMPILER)
 	tools/run_target.sh arm32 /tmp/test_arm32_cuarith; test "$$?" = "42"
 	./$(COMPILER) --target=arm32 test/cunsigned_div_mod_b123.c /tmp/test_arm32_cudiv
 	tools/run_target.sh arm32 /tmp/test_arm32_cudiv; test "$$?" = "42"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args ok (output identical to x86-64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

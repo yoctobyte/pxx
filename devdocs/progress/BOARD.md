@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,6 @@ _none_
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
-| feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
@@ -128,7 +127,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (371)
+## done (372)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -327,6 +326,7 @@ _none_
 | feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
 | feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
+| feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-text-emitter | A | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
@@ -523,7 +523,6 @@ _none_
 - [A] bug-frozen-string-result-global-not-reentrant
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
-- [A] feature-arm32-large-aggregate-result
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library

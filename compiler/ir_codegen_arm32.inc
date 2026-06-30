@@ -2005,14 +2005,31 @@ begin
 
         if TypeIsAggregate(Procs[procIdx].RetType) then
         begin
-          { Hidden dest is the deepest word, at [sp + j*4]; load it into r12,
-            drop args + dest, call. Callee returns the dest pointer in r0. }
-          if j > 4 then
-            Error('target arm32: aggregate result with more than 4 param words not supported');
+          { Hidden dest is the deepest word, at [sp + j*4]; load it into r12.
+            The callee prologue stashes r12 (EmitAggregateDestStash) and returns
+            the dest pointer in r0. The ldr immediate offset is 12-bit. }
+          if j * 4 >= 4096 then
+            Error('target arm32: too many aggregate-call argument words');
           EmitI32($E59DC000 or (j * 4));  { ldr r12, [sp, #j*4] (hidden dest) }
-          EmitLoadImmArm32(9, (j + 1) * 4);
-          EmitI32($E08DD009);             { add sp, sp, r9 (drop args + dest) }
-          EmitCallProc(procIdx);
+          if j <= 4 then
+          begin
+            { All args fit in r0-r3: drop the arg words + dest before the call. }
+            EmitLoadImmArm32(9, (j + 1) * 4);
+            EmitI32($E08DD009);           { add sp, sp, r9 (drop args + dest) }
+            EmitCallProc(procIdx);
+          end
+          else
+          begin
+            { j>4: words 0-3 are in r0-r3, words 4..j-1 are stack arguments the
+              callee reads at [fp + 8 + (pnWords-1-k)*4]. Keep them on the stack
+              across the call (sp still points at word j-1), then drop args+dest.
+              The hidden dest sits at [sp + j*4], above word 0, so the callee's
+              stack-param reads never touch it. Mirrors the non-aggregate j>4
+              path below. }
+            EmitCallProc(procIdx);
+            EmitLoadImmArm32(9, (j + 1) * 4);
+            EmitI32($E08DD009);           { add sp, sp, r9 (drop args + dest) }
+          end;
         end
         else
         begin
