@@ -1430,6 +1430,29 @@ begin
     Result := cap + 8;
 end;
 
+function RetViaHiddenDest(tk: TTypeKind): Boolean;
+{ Return types whose ABI is a caller-owned hidden destination pointer (NRVO):
+  records/sets AND the inline frozen string kinds. The callee copies its Result
+  local into [dest] and returns the dest pointer; the caller allocates the
+  destination. Frozen strings previously returned a shared BSS-global Result
+  address (not reentrant, bug-frozen-string-result-global). A default frozen
+  `string` result is capped at LOCAL_STR_CAP (256, the ShortString norm). }
+begin
+  Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk);
+end;
+
+function AggRetCopySize(retSymIdx: Integer): Integer;
+{ Byte count copied from the Result local into the caller's hidden destination. }
+var tk: TTypeKind;
+begin
+  tk := Syms[retSymIdx].TypeKind;
+  if tk = tyRecord then Result := RecSize(Syms[retSymIdx].RecName)
+  else if tk = tyString then Result := LOCAL_STR_CAP + 8
+  else if (tk = tyFixedString) or (tk = tyShortString) then
+    Result := FrozenStrSlotSize(tk, SymStrCap[retSymIdx])
+  else Result := TypeSize(tk);
+end;
+
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 { The wider operand determines the comparison domain; at equal width a signed
   operand wins. Values are still evaluated in 64-bit registers. }
@@ -4247,7 +4270,7 @@ begin
       Legacy fixed string returns the address of its inline buffer. }
     if retSymIdx >= 0 then
     begin
-      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -4256,10 +4279,7 @@ begin
         EmitB($8B); EmitB($BD); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov edi, [ebp+destOff] }
         EmitB($89); EmitB($F8);                                  { mov eax, edi (return value) }
         EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea esi, [ebp+resultOff] }
-        if Syms[retSymIdx].TypeKind = tyRecord then
-          sz := RecSize(Syms[retSymIdx].RecName)
-        else
-          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := AggRetCopySize(retSymIdx);
         EmitB($B9); EmitI32(sz);                                 { mov ecx, sz }
         EmitB($F3); EmitB($A4);                                  { rep movsb }
       end
@@ -4370,7 +4390,7 @@ begin
 
     if retSymIdx >= 0 then
     begin
-      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -4380,10 +4400,7 @@ begin
         EmitI32($E1A06000);                               { mov r6, r0 (dst) }
         EmitLoadVarAddrArm32(retSymIdx);                  { r0 = &Result }
         EmitI32($E1A05000);                               { mov r5, r0 (src) }
-        if Syms[retSymIdx].TypeKind = tyRecord then
-          sz := RecSize(Syms[retSymIdx].RecName)
-        else
-          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := AggRetCopySize(retSymIdx);
         EmitLoadImmArm32(4, sz);                          { r4 = byte count }
         EmitArm32CopyBytes(4, 5, 6);
         EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest (return value) }
@@ -4430,7 +4447,7 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate result: copy the Result local into the caller's hidden
@@ -4440,10 +4457,7 @@ begin
         EmitI32($AA0003E6);                              { mov x6, x0 (dst) }
         EmitLoadImmA64(9, Syms[retSymIdx].Offset);
         EmitI32($8B0903A5);                              { add x5, x29, x9 (src = &Result) }
-        if Syms[retSymIdx].TypeKind = tyRecord then
-          sz := RecSize(Syms[retSymIdx].RecName)
-        else
-          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := AggRetCopySize(retSymIdx);
         EmitLoadImmA64(4, sz);                           { x4 = byte count }
         EmitA64CopyBytes(4, 5, 6);
       end
@@ -4499,7 +4513,7 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate (record) result, Call0 only: copy the Result local into the
@@ -4510,10 +4524,7 @@ begin
           Error('target xtensa: record function results require Call0 (windowed not yet supported)');
         EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
         EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
-        if Syms[retSymIdx].TypeKind = tyRecord then
-          sz := RecSize(Syms[retSymIdx].RecName)
-        else
-          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := AggRetCopySize(retSymIdx);
         EmitLoadConstXtensa(reg_xtensa_a4, sz);                       { a4 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
@@ -4584,7 +4595,7 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+      if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
          (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
       begin
         { Aggregate (record) result: copy the Result local into the caller's
@@ -4592,10 +4603,7 @@ begin
           that pointer in a0. PXXMemMove(dest, &Result, size). }
         EmitSlotAddrRISCV32(reg_a1, retSymIdx);              { a1 = &Result (src) }
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest ptr }
-        if Syms[retSymIdx].TypeKind = tyRecord then
-          sz := RecSize(Syms[retSymIdx].RecName)
-        else
-          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := AggRetCopySize(retSymIdx);
         EmitLoadImmRISCV32(reg_a2, sz);                       { a2 = byte count }
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
@@ -4646,7 +4654,7 @@ begin
 
   if retSymIdx >= 0 then
   begin
-    if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+    if RetViaHiddenDest(Syms[retSymIdx].TypeKind) and
        (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
     begin
       { Aggregate results use a hidden caller-owned destination pointer in r10.
@@ -4655,10 +4663,7 @@ begin
       EmitB($50);                                  { push original destination }
       EmitB($48); EmitB($89); EmitB($C7);          { mov rdi, rax }
       EmitB($48); EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea rsi, [rbp+off] }
-      if Syms[retSymIdx].TypeKind = tyRecord then
-        sz := RecSize(Syms[retSymIdx].RecName)
-      else
-        sz := TypeSize(Syms[retSymIdx].TypeKind);
+      sz := AggRetCopySize(retSymIdx);
       EmitB($48); EmitB($B9); EmitI64(sz);          { movabs rcx, byte count }
       EmitB($F3); EmitB($A4);                       { rep movsb }
       EmitB($58);                                   { pop rax = result address }

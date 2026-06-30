@@ -12658,12 +12658,11 @@ begin
     end
     else if retType = tyString then
     begin
-      savedCurProc := CurProc;
-      CurProc := -1;
+      { Frozen-string Result is a routine LOCAL (was a shared BSS global — not
+        reentrant, bug-frozen-string-result-global). Returns via the hidden
+        caller-destination ABI like records. Capacity LOCAL_STR_CAP (ShortString). }
       AllocVar('Result', retType);
-      CurProc := savedCurProc;
       Procs[procIdx].RetSymIdx := SymCount - 1;
-      Syms[SymCount-1].Kind := skGlobal;
     end
     else
     begin
@@ -12672,7 +12671,7 @@ begin
       Syms[SymCount-1].Kind := skLocal;
     end;
     LastTypeRecId := savedLastTypeRecId;
-    if not retIsDynArr and TypeIsAggregate(retType) then
+    if not retIsDynArr and RetViaHiddenDest(retType) then
     begin
       idx := AllocVar('', tyPointer);
       ProcAggregateDestSym[procIdx] := idx;

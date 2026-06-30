@@ -1154,7 +1154,7 @@ begin
           call. riscv has no dedicated indirect-result register, so t1 (a
           caller-saved temp) carries it; the callee prologue reads t1 first. }
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           TypeIsAggregate(Procs[procIdx].RetType) then
+           RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           IREmitNodeRISCV32(IRC[node]);                  { a0 = hidden dest addr }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
@@ -1220,7 +1220,7 @@ begin
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
 
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           TypeIsAggregate(Procs[procIdx].RetType) then
+           RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           rv32_lw(reg_t1, reg_sp, nArgs * 4);          { hidden dest (pushed deepest) }
           rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);  { free args + hidden dest }

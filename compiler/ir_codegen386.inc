@@ -2457,7 +2457,7 @@ begin
         end;
         if nArgs <> Procs[procIdx].ParamCount then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
-        if TypeIsAggregate(Procs[procIdx].RetType) then
+        if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           { Aggregate result: pass the caller's hidden destination buffer in ecx
             (args already pushed; computing the address only touches eax). The
@@ -2488,6 +2488,8 @@ begin
 
     IR_CALL_IND:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target i386: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Same caller-cleanup cdecl
           push convention as IR_CALL; the callee address is evaluated last (args
           already on the stack, so a simple proc-var load can't disturb them)
@@ -2511,6 +2513,8 @@ begin
 
     IR_VIRTUAL_CALL:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target i386: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           cdecl: push args leftmost-deepest (Self is param 0, deepest), load the
           VMT pointer from [Self], call through [VMT + slot*8] (the data blob

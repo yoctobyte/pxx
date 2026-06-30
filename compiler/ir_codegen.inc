@@ -1645,6 +1645,12 @@ begin
               4: begin EmitB($41); EmitB($58); end;   { pop r8 }
               5: begin EmitB($41); EmitB($59); end;   { pop r9 }
             end;
+          if IRCallDest[node] >= 0 then
+          begin
+            { aggregate / frozen-string result via the hidden dest in r10 }
+            IREmitNode(IRCallDest[node]);
+            EmitB($49); EmitB($89); EmitB($C2);       { mov r10, rax }
+          end;
           EmitB($41); EmitB($5B);                     { pop r11 = callee }
           EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
         end;
@@ -3011,7 +3017,7 @@ begin
               and epilogue fills. External libc aggregate returns (true SysV sret)
               are not modelled here. Evaluate the dest into r10 before AL is set
               and the call is made; arg registers are already loaded above. }
-            if (not ProcExternal[procIdx]) and TypeIsAggregate(Procs[procIdx].RetType) then
+            if (not ProcExternal[procIdx]) and RetViaHiddenDest(Procs[procIdx].RetType) then
             begin
               IREmitNode(IRC[node]);                  { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
@@ -3102,7 +3108,7 @@ begin
                   4: begin EmitB($41); EmitB($58); end; { pop r8 }
                   5: begin EmitB($41); EmitB($59); end; { pop r9 }
                 end;
-            if TypeIsAggregate(Procs[procIdx].RetType) then
+            if RetViaHiddenDest(Procs[procIdx].RetType) then
             begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
@@ -4390,6 +4396,14 @@ begin
             fetch it for the VMT load, args stay on the stack for the callee. }
           EmitB($48); EmitB($8B); EmitB($BC); EmitB($24); { mov rdi, [rsp+disp] }
           EmitI32((Procs[procIdx].ParamCount - 1) * 8);
+        end;
+        { Aggregate / frozen-string result: load the hidden caller-destination into
+          r10 (the pxx indirect-result reg) before dispatch. The dest IR_LEA only
+          uses rax, so the arg registers stay intact. }
+        if IRCallDest[node] >= 0 then
+        begin
+          IREmitNode(IRCallDest[node]);
+          EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
         end;
         { Virtual Method Table dispatch }
         EmitB($48); EmitB($8B); EmitB($07); { mov rax, [rdi]   -- load VMT pointer }

@@ -30,6 +30,7 @@ begin
   IRTk[IRCount] := tk;
   IRStmtRoot[IRCount] := False;
   IRLine[IRCount] := CurLowerLine;
+  IRCallDest[IRCount] := -1;
   Result := IRCount;
   Inc(IRCount);
 end;
@@ -188,7 +189,7 @@ begin
         if (IRA[i] >= ProcCount) then
           Error('invalid IR proc reference in call');
         IRRequireOptionalNode(IRB[i], 'call first arg');
-        if (IRA[i] >= 0) and TypeIsAggregate(Procs[IRA[i]].RetType) then
+        if (IRA[i] >= 0) and RetViaHiddenDest(Procs[IRA[i]].RetType) then
           IRRequireNode(IRC[i], 'call aggregate destination');
         { Otherwise IRC = classIdx (record id for constructor/method dispatch),
           NOT a node. Args chain via IRB[argNode]. }
@@ -941,12 +942,28 @@ begin
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
 
+function IRBuildHiddenDest(procIdx: Integer): Integer;
+{ Allocate the caller-owned scratch destination for a call that returns an
+  aggregate / frozen string by hidden pointer, and return its IR_LEA address node.
+  The direct-call path inlines this in IRAppendCall (IRC = the dest); virtual /
+  indirect calls store the returned node in IRCallDest[callNode]. }
+var scratchSym, savedRecId: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  if Procs[procIdx].RetType = tyRecord then LastTypeRecId := ProcRetRecId[procIdx];
+  scratchSym := AllocVar('', Procs[procIdx].RetType);
+  LastTypeRecId := savedRecId;
+  if (Procs[procIdx].RetType = tyRecord) and RecordHasManagedFields(ProcRetRecId[procIdx]) then
+    SymIsHiddenArgTemp[scratchSym] := True;
+  Result := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
+end;
+
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
 var scratchSym, scratchAddr, savedRecId: Integer;
 begin
-  if (procIdx >= 0) and TypeIsAggregate(Procs[procIdx].RetType) then
+  if (procIdx >= 0) and RetViaHiddenDest(Procs[procIdx].RetType) then
   begin
-    { Aggregate calls return into caller-owned storage. IRC carries an IR_LEA
+    { Aggregate (and frozen-string) calls return into caller-owned storage. IRC carries an IR_LEA
       node for that hidden destination; ordinary calls keep the class index. }
     savedRecId := LastTypeRecId;
     if Procs[procIdx].RetType = tyRecord then
@@ -3619,6 +3636,8 @@ begin
       else
         callVal := IRLowerAST(ASTRight[node]);   { plain: load the code-address value }
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
+      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+        IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
     AN_INTF_CALL:
@@ -3673,6 +3692,8 @@ begin
       { IRC=0: the interface signature's ParamCount already counts Self (param 0),
         and Self is the first node in the arg chain, so no extra injected-Self. }
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
+      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+        IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
     AN_IF:
@@ -4318,6 +4339,11 @@ begin
       end;
       { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
       Result := IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, ASTTk[node]);
+      { Aggregate / frozen-string result: the IR node has no free operand for the
+        hidden caller-destination, so stash its IR_LEA in IRCallDest (codegen loads
+        it into the per-target dest register before the dispatch). }
+      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+        IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
     AN_METACLASS_NEW:

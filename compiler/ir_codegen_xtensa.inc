@@ -1488,7 +1488,7 @@ begin
           caller->callee hidden-dest register) and are rejected at the callee
           epilogue, so no windowed call reaches here with an aggregate result. }
         if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-           TypeIsAggregate(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_CALL0) then
+           RetViaHiddenDest(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_CALL0) then
         begin
           IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
           XtensaPushA2;
@@ -1563,7 +1563,7 @@ begin
           for i := 0 to nArgs - 1 do
             xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-             TypeIsAggregate(Procs[procIdx].RetType) then
+             RetViaHiddenDest(Procs[procIdx].RetType) then
           begin
             xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);   { hidden dest (deepest) }
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);

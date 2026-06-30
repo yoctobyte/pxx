@@ -1,7 +1,7 @@
 # Frozen-string function Result is a shared global → not reentrant / thread-unsafe
 
 - **Type:** bug (latent, correctness) — Track A (parser / codegen)
-- **Status:** backlog
+- **Status:** DONE (2026-06-30) — reentrant on all call paths (x86-64); cross virtual/indirect ticketed
 - **Opened:** 2026-06-30
 - **Found by:** review while adding decl-order gating (user spotted it).
 
@@ -218,3 +218,34 @@ Reverted clean; tree green. Findings (these de-risk the next attempt):
 **Status:** stays in backlog. Wiring approach is validated and mechanical; the open
 question is the Result *home* (NRVO redirect + per-site big temp vs. an agreed
 capacity cap). Pick that first, then the rest is the mechanical swap above.
+
+## RESOLVED (2026-06-30, Track A) — Attempt 3, complete
+
+Frozen-string `Result` is now a routine **local** returned via the hidden
+caller-destination ABI (per-call, reentrant), instead of a shared BSS global.
+The capacity question is settled: a default frozen `string` result is
+LOCAL_STR_CAP (256, the ShortString norm) — correct, not a regression (user).
+
+**Wired on every call path** (the gap Attempt 2 hit):
+- `RetViaHiddenDest(tk) = TypeIsAggregate or TypeIsFrozenString` + `AggRetCopySize`
+  (symtab.inc); parser allocates Result local + `ProcAggregateDestSym`; all 6
+  epilogues + the direct `IR_CALL` dest load widened to it (the proven record path).
+- **Direct** calls: x86-64 + all 5 cross backends (reuses record machinery).
+- **Virtual** (`IR_VIRTUAL_CALL`) + **indirect** (`IR_CALL_IND`): the IR node has no
+  free operand, so the hidden-dest IR_LEA is stashed in a new parallel array
+  `IRCallDest[]` (defs.inc, defaulted in `IRAppend`), set by the lowering
+  (`IRBuildHiddenDest`), and loaded into the dest register by the codegen.
+  **x86-64: fully implemented + tested.** i386 / arm32 / aarch64: clean compile
+  error (not silent breakage) → [[feature-cross-virtual-indirect-hidden-dest]].
+  riscv32 / xtensa: no virtual/indirect calls (bare-metal), moot.
+
+**Verified:** `test/test_frozen_string_reentrant.pas` (4/4) — direct recursion
+(`Build(5)='5'`, was clobbered to `'0'`), virtual (two independent calls),
+indirect (proc-pointer). Managed self-host **byte-identical**; `make test` +
+cross (i386/aarch64/arm32/riscv32) green. The vma/`ve` frozen array-of-string
+quirks seen while testing are a **separate pre-existing** frozen bug (identical on
+pinned), not this fix.
+
+**Note:** `--threadsafe` was not separately re-tested; the single-threaded
+reentrancy (the reported hazard) is fixed. Thread-safety of the per-call dest is
+inherent (each call has its own destination).

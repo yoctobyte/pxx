@@ -1738,7 +1738,7 @@ begin
         { Aggregate result: push the caller's hidden destination first (deepest
           temp) so arg evaluation can't disturb it; it is popped into x8 (the
           AAPCS indirect-result register) just before the call. }
-        if TypeIsAggregate(Procs[procIdx].RetType) then
+        if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           IREmitNodeAarch64(IRC[node]);   { x0 = hidden destination }
           EmitI32($F81F0FE0);             { str x0, [sp, #-16]! }
@@ -1761,13 +1761,13 @@ begin
           { All args fit in x0..x7: pop each temp into its register (unchanged). }
           for i := nArgs - 1 downto 0 do
             EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
-          if TypeIsAggregate(Procs[procIdx].RetType) then
+          if RetViaHiddenDest(Procs[procIdx].RetType) then
             EmitI32($F84107E8);   { ldr x8, [sp], #16 (hidden destination) }
           EmitCallProc(procIdx);
         end
         else
         begin
-          if TypeIsAggregate(Procs[procIdx].RetType) then
+          if RetViaHiddenDest(Procs[procIdx].RetType) then
             Error('target aarch64: aggregate result with more than 8 params not supported');
           { AAPCS: args 0..7 in x0..x7, args 8.. in an outgoing stack block at sp.
             Build the block from the temp slots without consuming them, load the
@@ -1797,6 +1797,8 @@ begin
 
     IR_CALL_IND:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target aarch64: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Push the callee address first
           (deepest temp slot) so arg evaluation can't disturb it, push args, pop
           args into x0..x7, pop the callee into x16, and `blr x16`. }
@@ -1822,6 +1824,8 @@ begin
 
     IR_VIRTUAL_CALL:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target aarch64: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Push args to 16-byte temps (Self = param 0, deepest), pop into x0..x7,
           load the VMT pointer from [Self], call through [VMT + slot*8]. The data

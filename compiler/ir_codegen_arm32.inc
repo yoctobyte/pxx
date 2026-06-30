@@ -1924,7 +1924,7 @@ begin
         { Aggregate result: push the caller's hidden destination first (deepest
           word) so arg evaluation can't disturb it; it is loaded into r12 (ip,
           a scratch reg) just before the call. }
-        if TypeIsAggregate(Procs[procIdx].RetType) then
+        if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           IREmitNodeArm32(IRC[node]);   { r0 = hidden destination }
           EmitI32($E92D0001);           { push {r0} }
@@ -2003,7 +2003,7 @@ begin
           if i < 4 then
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
 
-        if TypeIsAggregate(Procs[procIdx].RetType) then
+        if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
           { Hidden dest is the deepest word, at [sp + j*4]; load it into r12.
             The callee prologue stashes r12 (EmitAggregateDestStash) and returns
@@ -2059,6 +2059,8 @@ begin
 
     IR_CALL_IND:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target arm32: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Word-based args (<=4 words,
           one per scalar/pointer arg). Push the callee first (deepest), push args,
           load r0..r3 from the arg slots, load the callee into r9, drop the whole
@@ -2089,6 +2091,8 @@ begin
 
     IR_VIRTUAL_CALL:
       begin
+        if IRCallDest[node] >= 0 then
+          Error('target arm32: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Word-push args (Self = param 0, deepest), load r0..r3, drop the block,
           load the VMT pointer from [Self], call through [VMT + slot*8]. The data

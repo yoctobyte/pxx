@@ -1338,6 +1338,11 @@ var
   IRC     : array[0..MAX_IR-1] of Integer;
   IRIVal  : array[0..MAX_IR-1] of Int64;
   IRTk    : array[0..MAX_IR-1] of Integer;
+  { Hidden caller-destination for a call that returns an aggregate / frozen string
+    by a caller-owned buffer. For IR_CALL the dest IR_LEA is in IRC; IR_VIRTUAL_CALL
+    and IR_CALL_IND have no free operand, so their dest node lives here (-1 = none).
+    bug-frozen-string-result-global-not-reentrant. }
+  IRCallDest : array[0..MAX_IR-1] of Integer;
   IRSetLenBaseRec : array[0..MAX_IR-1] of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
   { Pending open-array copy-out (writeback) for a static array passed to a
     `var`/`out` open-array parameter. The call site copies the static array into
