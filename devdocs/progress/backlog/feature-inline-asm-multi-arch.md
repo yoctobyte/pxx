@@ -1,33 +1,71 @@
 # Inline assembly support for other architectures (i386, aarch64, arm32)
 
-- **Type:** feature
+- **Type:** feature — Track A
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-21
-- **Relation:** Extends inline assembly parser and instruction encoder in `compiler/asmenc.inc` to support i386, aarch64, and arm32 targets.
+- **Relation:** Extends inline assembly to i386, aarch64, and arm32 targets — and, per the 2026-06-30 correction below, riscv32 and xtensa too, for full coverage under the umbrella [[feature-assembler-first-class-citizen]].
 
-## Background
+## Correction (2026-06-30 — read before starting)
 
-The compiler currently restricts inline assembly (`asm` blocks and `assembler` routines) to `x86-64` only, raising an error for all other architectures. This is because `compiler/asmenc.inc` parses x86-64 Intel-syntax and directly encodes it to x86-64 binary bytes.
+The "Implementation Steps" below originally assumed ARM/i386 instruction
+encoders need to be **written from scratch**. They don't — audited the same
+day while filing [[feature-asm-structured-ir-library]]: `compiler/
+asmtext_386.inc`, `asmtext_a64.inc`, `asmtext_arm32.inc`, `asmtext_rv32.inc`,
+and `asmtext_xtensa.inc` **already exist**, each a working label-aware,
+relocation-aware (`@glob`/`@data`) text-to-binary instruction assembler for
+its target, already used internally by `ir_codegen386.inc` /
+`ir_codegen_aarch64.inc` / `ir_codegen_arm32.inc` /
+`ir_codegen_riscv32.inc` / `ir_codegen_xtensa.inc`. Do **not** write a new
+ARM/i386 syntax parser+encoder per Steps 1-2 below — that work is done.
+
+The real remaining work for this ticket is the same shape as x86-64's (see
+[[feature-asm-structured-ir-library]]): make `compiler/asmenc.inc`'s
+*parser* (the thing that reads a Pascal `asm...end` block and resolves
+identifiers) target-dispatch to the already-existing `EmitAsm386`/
+`EmitAsmA64`/`EmitAsmArm32`/`EmitAsmRv32`/`EmitAsmXtensa` engine instead of
+raising the current "x86-64 only" error. Land x86-64's wiring first
+([[feature-asm-structured-ir-library]]) and copy the pattern per target —
+the local/global identifier-resolution glue is target-agnostic; only the
+register-name table and a handful of target-specific operand quirks differ.
+
+Riscv32 and xtensa are added to this ticket's scope (not split out) since the
+underlying work — wire the parser to an existing engine — is identical in
+shape; no reason to track them separately from i386/aarch64/arm32.
 
 ## Goal
 
-Extend the inline assembler to support:
-1. **i386 (Intel 32-bit)**:
-   - Reuse the Intel syntax parser.
-   - Disable REX prefix emission.
-   - Map registers to 32-bit equivalents (`eax`..`edi`, `esp`, `ebp`).
-   - Support `int 0x80` for 32-bit Linux system calls.
-2. **AArch64 & ARM32 (ARM 64-bit and 32-bit)**:
-   - Implement an ARM assembly syntax parser and instruction encoder.
-   - Support register names (`x0`..`x30`, `w0`..`w30`, `sp`, `lr`, `pc` for aarch64; `r0`..`r15` for arm32).
-   - Support common instructions (`add`, `sub`, `mov`, `ldr`, `str`, `b`, `bl`, `svc` system calls).
+Wire inline `asm`/`assembler` blocks to the existing per-target text-
+assembler engines for: **i386, aarch64, arm32, riscv32, xtensa** (x86-64
+already works via [[feature-asm-structured-ir-library]]'s baseline). Register
+name tables per target:
+- i386: `eax`..`edi`, `esp`, `ebp` (32-bit subset of the x86-64 set).
+- aarch64: `x0`..`x30`, `w0`..`w30`, `sp`, `lr`, `pc`.
+- arm32: `r0`..`r15`.
+- riscv32: `a0`..`a7`, `t0`..`t6`, `s0`..`s11`, `ra`, `sp`, `gp`, `tp`
+  (see `reg_*` constants already defined in `compiler/rv32enc.inc`).
+- xtensa: `a0`..`a15`, `sp` = `a1` (per `asmtext_xtensa.inc`'s documented
+  operand model — Call0 ABI).
 
-## Implementation Steps
+## Implementation Steps (revised)
 
-1. Update the architecture filter check in `AsmParseBody` in `compiler/asmenc.inc` to accept `TARGET_I386`, `TARGET_AARCH64`, and `TARGET_ARM32`.
-2. Refactor parsing and encoding logic into target-specific sections or delegate to target encoders.
-3. Write target-specific test cases under `test/` to verify correct instruction translation and local variable frame reference resolution.
+1. Replace the architecture filter check in `AsmParseBody`
+   (`compiler/asmenc.inc`) — instead of erroring on non-x86-64 targets,
+   dispatch to the target's existing `EmitAsmXxx` engine via the runtime
+   instruction-line builder from [[feature-asm-structured-ir-library]].
+2. Add each target's register-name table to the identifier-resolution layer
+   (above); reuse the existing local-frame-slot and global-symbol resolution
+   logic, which is target-agnostic.
+3. Target-specific syscall convention for inline asm (e.g. i386 `int 0x80`,
+   riscv32 `ecall` with `a7`=syscall number, aarch64/arm32 `svc`) — confirm
+   each against what `ir_codegen_<target>.inc` already does for normal
+   syscalls, don't invent a new convention.
+4. Write target-specific test cases under `test/` verifying instruction
+   translation and local/global variable frame-reference resolution, per
+   target.
 
 ## Log
 - 2026-06-21 — Opened.
+- 2026-06-30 — Corrected: the assumed-missing ARM/i386 encoders already
+  exist (`asmtext_*.inc` family); rescoped from "build encoders" to "wire
+  parser to existing engines," and broadened to include riscv32 + xtensa.

@@ -1,0 +1,84 @@
+# `.asm` as a first-class source frontend (assemble + link to object/exe/.so)
+
+- **Type:** feature (frontend / linker) — Track A
+- **Status:** backlog
+- **Opened:** 2026-06-30
+- **Relation:** part of [[feature-assembler-first-class-citizen]];
+  consumes [[feature-asm-structured-ir-library]]; pairs with
+  [[feature-asm-textual-emit-mode]] for round-trip validation.
+
+## Owner split (2026-06-30)
+
+This frontend's eventual backend is the layer-1/layer-2 split: parse `.asm`
+text into operands, encode the mechanical part via
+[[feature-asmcore-encoder-library]] (Track B, `lib/asmcore/`), resolve
+labels/externs/relocations via [[feature-asm-structured-ir-library]] (Track
+A). The frontend parser itself (this ticket) and the `ET_DYN` writer gap are
+Track A — new compiler entry point + linker work, not library legwork.
+
+## Correction (2026-06-30, same day as filing)
+
+The per-target encode-with-labels-and-relocations engines this frontend would
+need as a backend **already exist and don't need to be built**: `compiler/
+asmtext.inc` + `asmtext_386.inc`/`asmtext_a64.inc`/`asmtext_arm32.inc`/
+`asmtext_rv32.inc`/`asmtext_xtensa.inc` already handle label resolution,
+forward/backward jumps, and `@glob`/`@data` relocations for all six targets
+(x64, i386, aarch64, arm32, riscv32, xtensa) — see
+[[feature-asm-structured-ir-library]] for the full audit. What's genuinely
+novel here is the **frontend**: a free-form parser for external `.asm` files
+(comments, `section`/`global`/`extern`/`align` directives, multi-line syntax)
+feeding into those existing engines — and the `ET_DYN` linker gap below,
+which is real and unaddressed by anything found so far.
+
+## Goal
+
+`pxx foo.asm` parses hand-written assembly source the same way `.c` is
+already a first-class frontend alongside `.pas` (`compiler/clexer.inc` /
+`cparser.inc`), and drives `elfwriter.inc` to produce, depending on flags:
+
+- an object file (`-c` → `ET_REL`),
+- a linked executable (`ET_EXEC`),
+- a shared library (`ET_DYN`).
+
+## Current state of the linker backend (audited 2026-06-30)
+
+`elfwriter.inc` already has a relocatable `ET_REL` object writer ("Relocatable
+ELF32 object writer (feature-elf-rel-writer)") and an `ET_EXEC` writer,
+reachable today via the existing `EmitObjMode` compiler flag
+(`compiler/compiler.pas`). **`ET_DYN` (`.so` output) does not exist anywhere
+in `elfwriter.inc`** — confirmed by grep, zero hits. That's the one genuinely
+net-new linker capability this ticket needs; the object/exe paths are mostly
+wiring, not new machinery.
+
+## Scope
+
+- New lexer/parser pair for assembly syntax (own directives: `section`,
+  `global`, `extern`, `align`, `db/dw/dd/dq`, labels) parsing into the same
+  structured instruction-list IR [[feature-asm-structured-ir-library]]
+  introduces — reuse, don't reinvent, the mnemonic table.
+- Wire `.asm` into the existing source-dispatch path alongside `.pas`/`.c`
+  (`compiler/parser.inc` extension-dispatch, same place `.c` was added).
+- Object-file output: extend the existing `ET_REL` writer path if needed for
+  asm-originated symbols (external refs via `extern`, exported via `global`).
+- Executable output: reuse `ET_EXEC` writer as-is.
+- **New:** `ET_DYN` shared-library writer — dynamic symbol table, `.dynsym`/
+  `.dynstr`, `PT_DYNAMIC` segment, position-independent considerations. Cross-
+  link with [[feature-real-dynlib-loader]] / [[feature-dynamic-soname-discovery]]
+  if either already assumes or wants `.so` *production* (today they're
+  consume-only: `DT_NEEDED` against system libs).
+
+## Acceptance
+
+- A hand-written `.asm` "hello world" / syscall-exit program assembles to a
+  runnable `ET_EXEC`.
+- `-c foo.asm` produces a valid `ET_REL` object, linkable by an external
+  linker (and/or our own multi-object link path if one exists by then).
+- `--shared foo.asm` produces a loadable `ET_DYN` `.so` (`dlopen` round-trip
+  or equivalent smoke test).
+- Round-trip with [[feature-asm-textual-emit-mode]]: reassembling a `.s` file
+  the compiler emitted for a Pascal program reproduces byte-identical output
+  to direct codegen, for at least one nontrivial test program.
+- Self-host byte-identical; `make test` + cross green.
+
+## Log
+- 2026-06-30 — Opened (Track B, filing Track A-scope ticket per convention).

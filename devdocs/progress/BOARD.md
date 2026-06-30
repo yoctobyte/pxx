@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-asmcore-encoder-library | B | feature | `lib/asmcore` — clean standalone multi-target instruction encoder library | — |
 
 ## unfinished (3)
 
@@ -24,12 +26,13 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (80)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
+| bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
@@ -43,6 +46,10 @@ _none_
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
+| feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
+| feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
+| feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
+| feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
@@ -545,6 +552,7 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-array-const-too-many-elements-synapse
+- [A] bug-array-ctor-statement-arg-after-dynarray-record-param
 - [A] bug-byvalue-record-managed-field-aliases-caller
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
@@ -558,6 +566,10 @@ _none_
 - [A] bug-typed-const-array-of-string-broken
 - [A] bug-unqualified-property-in-method
 - [A] chore-sqlite-static-capacity-bumps
+- [A] feature-asm-source-frontend
+- [A] feature-asm-structured-ir-library
+- [A] feature-asm-textual-emit-mode
+- [A] feature-assembler-first-class-citizen
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library

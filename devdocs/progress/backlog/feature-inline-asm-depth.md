@@ -1,9 +1,15 @@
 # Inline assembler depth
 
-- **Type:** feature
+- **Type:** feature — Track A
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §5)
+- **Relation:** this ticket's scope (labels/branches, global-var operands,
+  explicit memory operands) is the acceptance criteria of
+  [[feature-asm-structured-ir-library]], filed 2026-06-30 as the underlying
+  architecture fix (flat-byte-at-parse-time → structured IR resolved at
+  codegen/link time) needed to unblock all of these. See umbrella
+  [[feature-assembler-first-class-citizen]].
 
 ## Motivation
 

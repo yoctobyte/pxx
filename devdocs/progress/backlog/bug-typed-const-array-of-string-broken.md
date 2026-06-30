@@ -56,6 +56,31 @@ the element-count check. Look at where typed-const array initializers are
 lowered (consteval / static data emission) and add a managed-string element case
 mirroring how a single `const s: string = '...'` is emitted.
 
+## Additional isolation (2026-06-30, found independently while building lib/asmcore)
+
+Hit the same `too many array constant elements ()` message via a different
+trigger axis: **element string length**, not just element count. Minimal
+repro, a single-element array:
+
+```pascal
+const a: array[0..0] of AnsiString = ('r0');   { error: too many array constant elements () }
+const a: array[0..0] of AnsiString = ('ab');   { same error }
+const a: array[0..0] of AnsiString = ('0');    { compiles (didn't verify runtime correctness) }
+const a: array[0..0] of AnsiString = ('r');    { compiles (didn't verify runtime correctness) }
+```
+
+So with a **1-element** array (which this ticket's table shows segfaults
+rather than erroring, for 1-char elements `'a'`), a **2+ character** string
+literal flips it straight to the "too many" error instead of compiling-then-
+segfaulting. Consistent with this ticket's existing hypothesis ("the element
+counter appears to overcount string entries") — looks like whatever counts
+elements is counting something proportional to *string content* (characters,
+bytes, or similar) rather than array elements, so both element count *and*
+per-element string length shift when the bogus ceiling trips. Real-world
+trigger: `array[0..15] of AnsiString` register-name tables (`'rax'`, `'r10'`,
+etc., 2-3 chars each) — exactly the multi-char-string-array idiom this
+ticket already flags as "very common."
+
 ## Acceptance
 
 - `const A: array[0..2] of string = ('a','b','c'); writeln(A[0],A[1],A[2])`
