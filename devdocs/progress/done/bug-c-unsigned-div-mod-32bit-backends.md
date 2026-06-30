@@ -1,7 +1,7 @@
 # C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends
 
 - **Type:** bug (correctness) — Track A (shared codegen)
-- **Status:** backlog
+- **Status:** DONE (2026-06-30, pin v92)
 - **Opened:** 2026-06-30
 - **Found by:** split off from [[bug-c-unsigned-int-32bit-arithmetic-semantics]]
   (resolved 2026-06-30); that ticket fixed unsigned arithmetic wrap + compares,

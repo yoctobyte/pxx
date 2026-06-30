@@ -25,11 +25,10 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (60)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-c-unsigned-div-mod-32bit-backends | A | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -125,7 +124,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (367)
+## done (368)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -186,6 +185,7 @@ _none_
 | bug-c-ternary-middle-comma | A | bug | C: ternary middle arm rejects comma expression | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
+| bug-c-unsigned-div-mod-32bit-backends | A | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
 | bug-c-va-arg-local-fnptr-typedef-sqlite | A | bug | C: va_arg with local function-pointer typedef in sqlite | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
@@ -510,7 +510,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-c-unsigned-div-mod-32bit-backends
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-fpc-seeded-binary-runtime-segfault
 - [A] chore-runtime-emission-size
