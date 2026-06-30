@@ -53,3 +53,23 @@ test (bare read, bare write, method-backed read, field-backed read).
 Quality-of-life / FPC compatibility for all classes, not threading-specific.
 Workaround (`Self.`) is available everywhere, so not urgent — but it is a real
 papercut for ported FPC code.
+
+## RESOLVED 2026-06-30 (parser.inc ParseLValueAST)
+
+Added a `FindUProp` fallback beside the bare-`FindUField` path in ParseLValueAST
+(used for both read and assignment-LHS contexts). Behaviour now:
+- bare property READ (field-backed) -> implicit Self + AN_FIELD on the backing
+  read field (source span = the backing field, so codegen loads the right
+  width — an early cut pointed the span at the property name and produced
+  wrong-width Boolean loads: `not Done` came out TRUE);
+- bare property READ (method-backed) -> implicit-Self getter call (virtual-aware);
+- bare property WRITE (field-backed) -> AN_FIELD on the backing WRITE field
+  (uses the write accessor, not the read one);
+- bare property WRITE (method-backed setter) -> CLEAN compile-error pointing to
+  `Self.<prop> := ...` (building the setter call from the lvalue path is too
+  entangled — left as the one residual case);
+- indexed/default properties unchanged (still need Self.<prop>).
+
+Self-host byte-identical. Test: test/test_bare_property.pas (in make test-core) +
+test/test_tthread_terminate.pas now uses the bare FPC idiom `while not Terminated`
++ `ReturnValue := 42`. Moving to done/ (residual = method-backed bare write, by design).

@@ -21,11 +21,9 @@ var
 begin
   ignore := __pxxatomic_xchg(@running, 1);     { tell main we are running }
   spin := 0;
-  { Self-qualified: unqualified property access inside a method is a known pxx gap
-    (bug-unqualified-property-in-method) — Self.Terminated resolves fine. }
-  while not Self.Terminated do                    { cooperative cancellation }
+  while not Terminated do                          { bare property read (FPC idiom) }
     spin := spin + 1;
-  Self.ReturnValue := 42;
+  ReturnValue := 42;                               { bare field-backed property write }
 end;
 
 var

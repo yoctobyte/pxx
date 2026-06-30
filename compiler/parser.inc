@@ -1195,6 +1195,95 @@ begin
 
       node := fieldNode;
     end
+    else if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0)
+            and (Procs[CurProc].ParamCount > 0)
+            and (FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName) >= 0)
+            and (not UPropIsIndexed[FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName)]) then
+    begin
+      { Bare (unqualified) property access inside a method -> implicit Self.<prop>.
+        Field-backed read/write rewrites to the backing field (like the bare-field
+        path above) using the correct accessor for the context. Method-backed READ
+        builds the getter call; method-backed WRITE (a setter call needing the RHS)
+        is not built here — that path stays Self.<prop> := .... Indexed/default
+        properties also keep needing Self.<prop>. See bug-unqualified-property-in-method. }
+      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+      pri := FindUProp(selfClassCi, fieldName);
+      isAssign := (CurTok.Kind = tkAssign);
+      selfIdx := Procs[CurProc].Params[0].SymIdx;
+      selfNode := AllocNode(AN_IDENT);
+      ASTIVal[selfNode] := selfIdx;
+      ASTTk[selfNode] := Ord(tyClass);
+      if isAssign then
+      begin
+        { assignment target: use the WRITE accessor }
+        if UPropWriteFLen[pri] > 0 then
+        begin
+          fieldName := '';
+          for i := 0 to UPropWriteFLen[pri] - 1 do
+            AppendChar(fieldName, TokChars[UPropWriteFOff[pri] + i]);
+          fldIdx := FindUField(selfClassCi, fieldName);
+          if fldIdx < 0 then Error('property backing field not found: ' + fieldName);
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := selfNode;
+          ASTSOffset[fieldNode] := UPropWriteFOff[pri];
+          ASTSLen[fieldNode] := UPropWriteFLen[pri];
+          tk := IntToTypeKind(UFldTk[fldIdx]);
+          recName := UFldRec_[fldIdx];
+          ASTTk[fieldNode] := Ord(tk);
+          node := fieldNode;
+        end
+        else if UPropWriteMLen[pri] > 0 then
+          Error('unqualified write of a setter-method property is not supported inside a method; use Self.' + fieldName + ' := ... (bug-unqualified-property-in-method)')
+        else
+          Error('property is read-only: ' + fieldName);
+      end
+      else if UPropReadFLen[pri] > 0 then
+      begin
+        { backing read field -> resolve + build Self.field }
+        fieldName := '';
+        for i := 0 to UPropReadFLen[pri] - 1 do
+          AppendChar(fieldName, TokChars[UPropReadFOff[pri] + i]);
+        fldIdx := FindUField(selfClassCi, fieldName);
+        if fldIdx < 0 then Error('property backing field not found: ' + fieldName);
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := selfNode;
+        { source location of the BACKING field name (not the property name) — codegen
+          re-resolves the field by this span, like the qualified Self.<prop> path. }
+        ASTSOffset[fieldNode] := UPropReadFOff[pri];
+        ASTSLen[fieldNode] := UPropReadFLen[pri];
+        tk := IntToTypeKind(UFldTk[fldIdx]);
+        recName := UFldRec_[fldIdx];
+        ASTTk[fieldNode] := Ord(tk);
+        node := fieldNode;
+      end
+      else if UPropReadMLen[pri] > 0 then
+      begin
+        { backing getter method -> build a (virtual) call with Self as arg }
+        methName := '';
+        for i := 0 to UPropReadMLen[pri] - 1 do
+          AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+        mmi := FindUMeth(selfClassCi, methName);
+        if mmi < 0 then Error('property getter method not found: ' + methName);
+        mpi := UMthProc_[mmi];
+        if UMthVirSlot[mmi] >= 0 then
+        begin
+          mcallNode := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[mcallNode] := UMthVirSlot[mmi];
+        end
+        else
+          mcallNode := AllocNode(AN_CALL);
+        ASTIVal[mcallNode] := mpi;
+        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+        mselfArg := AllocNode(AN_ARG);
+        ASTLeft[mselfArg] := selfNode;
+        ASTLeft[mcallNode] := mselfArg;
+        tk := Procs[mpi].RetType;
+        recName := REC_NONE;
+        node := mcallNode;
+      end
+      else
+        Error('property is write-only: ' + fieldName);
+    end
     else
     begin
       aliasIdx := FindTypeAlias(fieldName);
