@@ -98,3 +98,4 @@
 2026-06-30T18:44:50Z  v98  10eecc6ce80b0045818fe99096a840d7e8aacb7251e4c79b064386bf63813d4b  dd0c69778503ce1f10ad61c1e2ce4f8df6fc7085  feat(thread): FPC TRTLCriticalSection API + RunOnce (M2)
 2026-06-30T19:31:28Z  v99  4dbbb32a1bf3944aab3a27f7780197def92d66e76cce6db778c1e0f0e9f985cb  f36d93dc5205fefd46753efc62932d9fd5b1c0a8  fix(parser): unqualified property access inside a method (bug-unqualified-property-in-method)
 2026-06-30T19:59:50Z  v100  e6124bc209dd650a71ce94b0021a8f76cf0504b476b102441173b3fa05ab5edd  3c76a1d67894f246fb67a2b41e93d178efe8b0d9  feat(asm): MVP .asm -> exe frontend via lib/asmcore (feature-asm-mvp-frontend)
+2026-06-30T20:42:02Z  v101  dfa4b899dbe02b9611f4a87d6ce6c1f5e97bd4bbe360a7f4c756851dc7bea324  ef315c85736e6ef52397c993df75501fc61d3e3b  feat(asm): .asm frontend grows section .data + rip-relative lea
