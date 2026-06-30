@@ -1141,6 +1141,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_decl_order_lax26)" = "42"
 	# --lax-decl-order flag: the strict error case compiles cleanly under the opt-out
 	./$(COMPILER) --lax-decl-order test/test_decl_order_global_error.pas /tmp/test_decl_order_global_lax26
+	# Rio inline loop var: for var i := a to b
+	./$(COMPILER) test/test_for_var_inline.pas /tmp/test_for_var_inline26
+	test "$$(/tmp/test_for_var_inline26)" = "$$(printf '10\n6')"
 	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
 	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_qualified_units.pas /tmp/test_qualified_units26

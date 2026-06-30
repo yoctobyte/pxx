@@ -6815,17 +6815,37 @@ var
   gpi, fsym: Integer;
   selfClassCi, fldIdx, fldTokIdx, selfSym: Integer;
   srcIdx, srcTokIdx: Integer;
-  down: Boolean;
+  down, inlineVar: Boolean;
 begin
+  { Delphi 10.3 Rio inline loop variable: `for var i := 0 to N` / `for var x in c`
+    declares a fresh routine-local counter instead of binding an existing one.
+    Forward-compatible — classic `for i := ...` (i pre-declared) is unchanged.
+    Counted form -> Integer; for-in form -> tyAuto (element type inferred by the
+    for-in path). Gated on EnableAutoVar (the inline-`var` inference switch).
+    See feature-inline-loop-var-rio. }
+  inlineVar := False;
+  if EnableAutoVar and (CurTok.Kind = tkVar) then begin Next; inlineVar := True; end;
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
-  varIdx := FindSym(CurTok.SVal);
-  if varIdx < 0 then
+  if inlineVar then
   begin
-    ErrorIdent := CurTok.SVal;
-    if HiddenByDeclOrder(CurTok.SVal) then
-      Error('for counter is a global declared later — declare it before use, or add a local')
-    else
-      Error('for: undefined');
+    { v1: counted `for var i := a to b` only — declare a fresh Integer counter.
+      The for-in form `for var x in c` (element-type inference into the loop var)
+      is filed separately: feature-inline-loop-var-rio. }
+    if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIn) then
+      Error('for var .. in: inline loop variable in a for-in is not yet supported — declare the variable (feature-inline-loop-var-rio)');
+    varIdx := AllocVar(CurTok.SVal, tyInteger);
+  end
+  else
+  begin
+    varIdx := FindSym(CurTok.SVal);
+    if varIdx < 0 then
+    begin
+      ErrorIdent := CurTok.SVal;
+      if HiddenByDeclOrder(CurTok.SVal) then
+        Error('for counter is a global declared later — declare it before use, or add a local')
+      else
+        Error('for: undefined');
+    end;
   end;
   Next;
   if CurTok.Kind = tkIn then

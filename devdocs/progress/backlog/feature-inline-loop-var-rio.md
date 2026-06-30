@@ -1,7 +1,7 @@
 # Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio)
 
 - **Type:** feature (language / parser) — Track A
-- **Status:** backlog
+- **Status:** backlog — counted form `for var i := a to b` DONE (2026-06-30); for-in inline remains
 - **Opened:** 2026-06-30
 - **Origin:** carved out of the `--auto-locals` idea (feature-implicit-identifier-
   binding-strictness-switch) after a design pass. This is the **typed, standard,
@@ -66,3 +66,26 @@ leans Delphi-compatible elsewhere).
   correctly typed; existing pre-declared `for` unchanged; `--no-auto-var` still
   compiles pre-declared loops (only the inline form is gated). Self-host
   byte-identical. Tests for counted + for-in inline forms.
+
+## v1 done (2026-06-30, Track A) — counted form
+
+`for var i := a to b` / `downto` now declares a fresh Integer routine-local
+counter (gated on `EnableAutoVar`; classic pre-declared `for` unchanged).
+`ParseForStatementAST` (parser.inc): on `var` after `for`, `AllocVar(name,
+tyInteger)` instead of `FindSym`. Nested `for var` works. Self-host byte-identical;
+`make test` green (`test/test_for_var_inline.pas`, oracle `10 / 6`).
+
+## Remaining — for-in inline `for var x in coll`
+
+Filed-but-not-done; cleanly rejected for now with a pointer to this ticket.
+**Root cause located:** the for-in body is parsed (`ParseStatementAST`) *before*
+the loop variable's type is set, so a `tyAuto` inline var read in the body hits
+`use of auto variable before type is inferred` (parser.inc ~4223). The element
+type IS computed in `ParseForInVarAST` (parser.inc ~6176: `elemTk` = `tyChar` for a
+string, `Syms[contSym].ElemType` for an array) but only *after* the body and never
+written back to the loop var. Fix: in `ParseForInVarAST` (and the sibling
+`ParseForInFieldAST` / `ParseForInNodeAST` / enum / set / generator paths reachable
+by an inline var), compute the element type **before** parsing the body and, when
+`Syms[varIdx].TypeKind = tyAuto`, set it (`TypeKind := ElemType`; copy `ElemRecName`
+for record elements). Then `for var x in a` types `x` = element type. v1 was kept
+counted-only to keep the for-in change testable on its own.
