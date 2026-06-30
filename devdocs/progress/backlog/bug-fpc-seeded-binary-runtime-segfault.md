@@ -47,3 +47,20 @@ urgent** — it does not block `make test`, `stabilize`, `pin`, or `make
 benchmark`. It does block release-compliance (`make test-fpc`) and any genuine
 cold-start bootstrap from FPC. Note `2a473bda fix(bootstrap): restore FPC seed
 build` recently touched this path.
+
+## 2026-06-30 — compile blocker cleared; runtime segfault confirmed still open
+
+The FPC **compile** failure (7 errors, all from `ParseCSubroutine`'s undeclared
+`for j` counter) is fixed: `j` is now a real local, and the new decl-order gating
+([[feature-implicit-identifier-binding-strictness-switch]], pin v93) would flag any
+recurrence. `fpc -O2 -Tlinux -Px86_64 compiler/compiler.pas` now builds clean.
+
+The **runtime segfault is still here** — the FPC-built binary segfaults on
+`test/hello.pas` (SIGSEGV, exit 139), exactly as this ticket describes. So the two
+were independent: a compile-time strictness gap on top of a separate FPC-codegen /
+runtime divergence. This ticket now tracks only the runtime segfault. Next:
+debugger backtrace on `compiler/pascal26-fpc test/hello.pas` (cheap repro), and
+check the managed-string / early-heap-init suspects already listed below. A
+candidate worth checking given today's review: the frozen-string `Result` shared
+global ([[bug-frozen-string-result-global-not-reentrant]]) — FPC's heap/BSS layout
+or init order could expose a latent slot issue differently than pxx codegen does.

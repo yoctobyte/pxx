@@ -1,14 +1,18 @@
 # Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch
 
 - **Type:** feature (language / parser) — Track A
-- **Status:** backlog (design)
+- **Status:** backlog — **core gating DONE (pin v93)**; only the smaller
+  follow-ups below remain (clearer diagnostic, opt-out switch, `--auto-locals`).
+  See "Resolution" at the bottom.
 - **Owner:** unassigned
 - **Opened:** 2026-06-30
 - **Found by:** the FPC-seed bootstrap break
   ([[bug-fpc-seeded-binary-runtime-segfault]]). `ParseCSubroutine`'s inner loop
   `for j := i+1 to nparams-1` has **no local `j`**; pascal26 compiled it fine for
   weeks, FPC rejected it ("Identifier not found j / Illegal counter variable").
-  Loved the bug — turning it into a deliberate, switchable feature.
+  NOTE: the "double-edged feature" framing below was the initial read; after
+  investigation the forward-visible-global-**variable** case was confirmed a
+  **bug** and fixed by default — see Resolution.
 
 ## What actually happens (mechanism, verified 2026-06-30)
 
@@ -109,3 +113,36 @@ wait on it.
   resolution paths in the parser.
 - User explicitly likes the lenient behaviour — the goal is to *keep* it as the
   default and make strictness opt-in, not to remove it.
+
+## Resolution (2026-06-30, pin v93, commit 97805ea9) — core gating shipped as DEFAULT
+
+Reframed after investigation: the forward-visible-**global-variable** case is a
+**bug**, not a feature (user confirmed). It is non-reentrant and FPC-incompatible.
+The fix shipped on by default; types/consts/procedures keep forward visibility.
+
+**Mechanism (token-position gating).** Each program/unit global var records the
+token index where it was declared (`SymDeclTok`, stamped only in the pre-scan, only
+for `skGlobal`). While compiling a routine body, `FindSym` hides any global whose
+declaration token is past the body's header token (`CurBodyHdrTok`). Token indices
+are absolute into the single expanded `Tokens[]` stream, so methods, forward decls
+and unit/builtin routines are handled by real source position — no
+registration-order snapshots (an earlier per-proc-sequence design wrongly used a
+method's class-declaration position instead of its implementation position and
+hid legitimately-visible globals; the token approach has no such edge case).
+
+Verified: rejects the stray-bind (`for j` → distant global), keeps the legitimate
+"global before the impl" pattern (`test_dynarray_global_after_method` green),
+still errors on truly-undeclared names. Self-host byte-identical; gate + 4 cross +
+lua green. Guard `test/test_decl_order_global_error.pas`.
+
+### Still open (smaller follow-ups, kept in backlog)
+- **Clearer diagnostic.** A hidden-by-decl-order reference currently reports the
+  generic `undefined variable (X)` / `for: undefined`. Distinguish it ("X is a
+  global declared later — declare it before use") by noting in FindSym when a
+  candidate was suppressed *only* by the decl-order gate.
+- **The switch.** Gating is hard-wired `DeclOrderStrict := True`. Expose it as
+  `{$DECLORDER OFF}` / `--lax-decl-order` for anyone who wants the old lenient
+  behavior, and surface the strict default in `--mimic-fpc`.
+- **`--auto-locals` (the originally-imagined feature).** Undeclared `for x := ...`
+  counter → implicit routine-local `Integer`. Default OFF (typos must still error).
+  Independent of the gating above.
