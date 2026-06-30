@@ -66,3 +66,37 @@ self-host byte-identical and the `--threadsafe` self-build green.
 - The decl-order gating explicitly does NOT gate this synthetic global (it is
   allocated with PreScanPass=False, so `StampDeclSeq` skips it) — otherwise the
   function body could not see its own Result.
+
+## Fix proposal — refined (2026-06-30)
+
+Route frozen-string returns through the **existing hidden-destination aggregate
+return path** (the one records/sets already use), instead of the shared global.
+
+Concretely:
+1. Allocate `Result` for a `tyString`/`tyFixedString`/`tyShortString` function as a
+   routine **local** (the normal `CurProc >= 0` AllocVar), not `CurProc := -1` +
+   `Kind := skGlobal` (parser.inc ParseSubroutine, the `else if retType = tyString`
+   block ~12523).
+2. Give the function a hidden destination param like aggregate returns
+   (`ProcAggregateDestSym`): the caller allocates the return buffer and passes its
+   address (r10 on x86-64 / the per-target dest register already used for records).
+3. The epilogue copies the local `Result` into the caller's dest and returns that
+   pointer — the existing `TypeIsAggregate(...) and ProcAggregateDestSym >= 0`
+   branch in `EmitProcEpilog` (symtab.inc) already does exactly this with rep movsb;
+   the `tyString` branch right below it (which returns the global address) is what
+   gets removed.
+4. Call sites: allocate the hidden dest temp and pass it, as record-by-value calls
+   already do.
+
+**Do NOT widen `TypeIsAggregate` to include tyString globally** — tyString is
+special-cased in many codegen paths (load/store width, concat, length); flipping it
+to "aggregate" everywhere is high-risk. Instead gate the *return* path on
+`TypeIsFrozenString(retType)` so only the return ABI changes, reusing the aggregate
+copy/dest machinery.
+
+**Per-backend:** the frozen-string return branch exists in every backend's epilogue
++ call lowering (x86-64 ir_codegen.inc, i386 ir_codegen386.inc, arm32, aarch64,
+riscv32, xtensa). Each needs the dest-pointer return instead of the global address.
+Self-host is byte-identical-sensitive (the compiler returns frozen strings
+pervasively) → expect to reseed and run the full cross matrix. Sizeable, careful
+multi-target change — not a quick edit.

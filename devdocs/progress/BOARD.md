@@ -25,13 +25,14 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
+| bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
@@ -516,6 +517,7 @@ _none_
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-fpc-seeded-binary-runtime-segfault
 - [A] bug-frozen-string-result-global-not-reentrant
+- [A] bug-variant-boxing-temp-global-shared
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
