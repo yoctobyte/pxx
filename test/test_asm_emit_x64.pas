@@ -132,6 +132,11 @@ end;
 {$include ../compiler/x64enc.inc}
 {$include ../compiler/asmtext.inc}
 
+{ Resolves x64enc.inc's `AsmRecordGlobalFixup` forward decl (the real body
+  lives in compiler/asmenc.inc, not included here) — never reached since
+  EncToAsmBuffer stays False in this harness. }
+procedure AsmRecordGlobalFixup(bssOff: Integer); begin EmitGlobRef(bssOff); end;
+
 procedure ResetCode;
 begin
   CodeLen := 0; FixCount := 0; GlobFixCount := 0;

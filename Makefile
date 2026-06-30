@@ -1,8 +1,10 @@
 FPC     ?= fpc
-# -Fulib/asmcore: the compiler `uses asmcore_base/asmcore_x64` for the .asm frontend,
-# so the FPC bootstrap needs them on its unit path (PXX self-host finds them via a
-# built-in search dir; see compiler.pas AddPasUnitDir).
-FPCFLAGS = -O2 -Tlinux -Px86_64 -Fulib/asmcore
+# No -Fu needed for lib/asmcore: compiler.pas carries its own
+# {$UNITPATH ../lib/asmcore} (FPC-only directive, source-relative, silently
+# ignored by PXX self-host -- which finds lib/asmcore via its own
+# ParseUsesUnit search chain instead, see compiler/parser.inc). Parameter-
+# less compile from sources alone, no out-of-band flags to keep in sync.
+FPCFLAGS = -O2 -Tlinux -Px86_64
 HYPERFINE ?= hyperfine
 BENCH_RUNS ?= 3
 BENCH_HELLO_RUNS ?= 3

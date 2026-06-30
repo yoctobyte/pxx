@@ -23,9 +23,17 @@ program Pascal26;
   lib/rtl/sysutils.pas — the compiler must not drag a user RTL unit into its own
   build. {$ifdef FPC} is true only under real FPC (never under PXX). }
 { asmcore (lib/asmcore) is compiled INTO the compiler so the .asm frontend can
-  encode through the real library (feature-asm-mvp-frontend). Both real FPC (the
-  bootstrap, which also needs -Fulib/asmcore) and PXX self-host process this uses;
-  only the SysUtils/BaseUnix host shims are FPC-only. }
+  encode through the real library (feature-asm-mvp-frontend). Both real FPC
+  (the bootstrap) and PXX self-host process this uses; only the SysUtils/
+  BaseUnix host shims are FPC-only. {$UNITPATH} makes the FPC side find
+  lib/asmcore with no -Fu flag needed -- "self-host when pointed to the
+  right source, dependencies implicit" (PXX never needed the flag: its own
+  ParseUsesUnit already resolves lib/asmcore via the same exe-anchored
+  search chain as lib/rtl/lib/pcl, see compiler/parser.inc; {$UNITPATH} is
+  an FPC-only directive, silently ignored by PXX like any other directive
+  it doesn't recognize). Path is relative to this source file's own
+  directory (compiler/), not CWD -- portable to any checkout location. }
+{$UNITPATH ../lib/asmcore}
 {$ifdef FPC}
 uses SysUtils, BaseUnix, asmcore_base, asmcore_x64;
 {$else}
