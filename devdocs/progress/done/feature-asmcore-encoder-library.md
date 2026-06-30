@@ -1,7 +1,7 @@
 # `lib/asmcore` — clean standalone multi-target instruction encoder library
 
 - **Type:** feature (library) — Track B
-- **Status:** working
+- **Status:** done
 - **Owner:** Track B (franktrackD)
 - **Opened:** 2026-06-30
 - **Relation:** layer 1 of [[feature-assembler-first-class-citizen]]'s
@@ -263,3 +263,4 @@ before fanning out wide, not about limiting ambition:
   not the full ISA; growing per-target coverage and decode/disassemble
   (the stretch goal) are natural follow-on work, not blockers to closing
   this ticket's initial buildout. Closing as resolved.
+- 2026-07-01 — resolved, commit 07d6a427.

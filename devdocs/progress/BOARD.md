@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-asmcore-encoder-library | B | feature | `lib/asmcore` — clean standalone multi-target instruction encoder library | — |
+_none_
 
 ## unfinished (3)
 
@@ -147,7 +145,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (387)
+## done (388)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -355,6 +353,7 @@ _none_
 | feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-mvp-frontend | A | feature | MVP `.asm` -> executable path (head #3, fast-tracked ahead of #1/#2) | — |
 | feature-asm-text-emitter | A | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
+| feature-asmcore-encoder-library | B | feature | `lib/asmcore` — clean standalone multi-target instruction encoder library | — |
 | feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
