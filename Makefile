@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -1966,6 +1966,13 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/ccross_args.c /tmp/test_aarch64_cargs
 	tools/run_target.sh aarch64 /tmp/test_aarch64_cargs; test "$$?" = "42"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args ok (output identical to x86-64)"
+
+test-riscv32: $(COMPILER)
+	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_riscv32_centry
+	tools/run_target.sh riscv32 /tmp/test_riscv32_centry; test "$$?" = "42"
+	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_riscv32_cargs
+	tools/run_target.sh riscv32 /tmp/test_riscv32_cargs; test "$$?" = "42"
+	@echo "riscv32 c-entry + c-args ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

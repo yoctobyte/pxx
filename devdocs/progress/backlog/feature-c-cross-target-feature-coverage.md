@@ -33,10 +33,14 @@ x86-64 bytes that crash.
    x0=argc/x1=argv, `bl main` imm26 fixup, `svc` exit_group 94) + aarch64 param
    spill (x0..x7 then `[x29+16+(i-8)*8]`, mirrors the Pascal aarch64 path).
    `return 42`, args, recursion, cnoprintf→62 run on aarch64; guards in
-   `make test-aarch64`. **riscv32 still needs a stub** — same shape (a0/a1; its
-   param spill), and it also emits a near-empty C binary (its C lowering produces
-   almost nothing; deeper). So non-varargs C now runs on x86-64 + i386 + arm32 +
-   aarch64.
+   `make test-aarch64`. **riscv32 also FIXED 2026-06-30** — entry stub (save sp via
+   `EmitLoadGlobAddrRISCV32`, a0=argc/a1=argv, `jal ra` patched via
+   `EncodeRISCVJAL`, `ecall` exit_group 94) + riscv32 word-based param spill
+   (a0..a7, mirrors the Pascal riscv32 path). `return 42`, args, recursion,
+   cnoprintf→62 run on riscv32; guards in `make test-riscv32`. The earlier
+   "near-empty binary (procs=3)" was a **misdiagnosis** — riscv32 C lowering is
+   fine; the small binary is just libc-free/minimal C. **Non-varargs C now runs
+   on ALL desktop/cross targets: x86-64 + i386 + arm32 + aarch64 + riscv32.**
 2. **C function call arg-passing on i386 — FIXED 2026-06-29.** The C param-spill
    in `ParseCSubroutine` was hardcoded x86-64 (spill rdi/rsi/xmm…); it now has an
    i386 branch that copies the cdecl **stack** args (`[ebp+8+sz]`, leftmost

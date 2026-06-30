@@ -4152,6 +4152,18 @@ begin
       EmitI32($D2800BC8);                 { mov x8, #94 (exit_group) }
       EmitI32($D4000001);                 { svc #0 (x0 = exit code) }
     end;
+    TARGET_RISCV32:
+    begin
+      { RV32 ilp32: main(argc, argv) -> a0=argc, a1=argv. argc at [sp], argv=sp+4.
+        Save sp to BSS_INITIAL_RSP (absolute address via the inline-literal load). }
+      EmitLoadGlobAddrRISCV32(reg_t0, BSS_INITIAL_RSP);  { t0 = &initial_sp }
+      rv32_sw(reg_sp, reg_t0, 0);         { sw sp, 0(t0) }
+      rv32_lw(reg_a0, reg_sp, 0);         { a0 = argc = [sp] }
+      rv32_addi(reg_a1, reg_sp, 4);       { a1 = argv = sp+4 }
+      callPatch := CodeLen; rv32_jal(reg_ra, 0);   { jal ra, main (patched) }
+      rv32_addi(reg_a7, reg_zero, 94);    { a7 = 94 (exit_group) }
+      EmitI32($00000073);                 { ecall (a0 = exit code) }
+    end;
   else
     Error('C program entry stub not implemented for this target yet');
   end;
@@ -4223,6 +4235,8 @@ begin
   else if TargetArch = TARGET_AARCH64 then
     Patch32(callPatch, Integer($94000000) or
       (((Procs[mainIdx].BodyAddr - callPatch) div 4) and $03FFFFFF))
+  else if TargetArch = TARGET_RISCV32 then
+    Patch32(callPatch, EncodeRISCVJAL(reg_ra, Procs[mainIdx].BodyAddr - callPatch))
   else
     Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
@@ -4740,6 +4754,39 @@ begin
         else if sz = 2 then EmitI32($79000109)
         else if sz = 4 then EmitI32($B9000109)
         else EmitI32($F9000109);
+      end;
+    end;
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { RV32 word-based (mirrors the Pascal riscv32 spill): args arrive in a0..a7
+      (word k in a[k]); scalar = 1 word, by-value Int64/UInt64/Double = 2 (lo
+      then hi). Up to 8 words (no stack args yet). }
+    pwA := 0;
+    for i := 0 to nparams - 1 do
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if pwA >= 8 then
+        Error('target riscv32: C function with more than 8 parameter words not yet supported');
+      EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
+      rv32_add(reg_t0, reg_s0, reg_t0);   { t0 = &slot }
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+          (Syms[idx].TypeKind = tyDouble)) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        rv32_sw(reg_a0 + pwA, reg_t0, 0);          { lo (word pw) }
+        if pwA + 1 >= 8 then
+          Error('target riscv32: C function with more than 8 parameter words not yet supported');
+        rv32_sw(reg_a0 + pwA + 1, reg_t0, 4);      { hi (word pw+1) }
+        Inc(pwA, 2);
+      end
+      else
+      begin
+        if sz = 1 then rv32_sb(reg_a0 + pwA, reg_t0, 0)
+        else if sz = 2 then rv32_sh(reg_a0 + pwA, reg_t0, 0)
+        else rv32_sw(reg_a0 + pwA, reg_t0, 0);
+        Inc(pwA, 1);
       end;
     end;
   end
