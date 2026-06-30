@@ -204,3 +204,31 @@ before fanning out wide, not about limiting ambition:
   off) or riscv32/arm32/xtensa (each needs its own `AsmPatchBranch<Target>`
   per the finding above) — riscv32's toolchain isn't installed here, may
   need `apt install` or a different oracle strategy when picked up.
+- 2026-06-30 — **i386 lands — third target** (Track B): confirmed
+  mechanical as the ticket predicted — byte-identical opcodes to x64 minus
+  REX, rel32 branches resolve via the existing generic `Patch32` (no new
+  resolver needed, i386 being x86-family). One real divergence: `inc`/`dec
+  r32` use the 1-byte short form (`40+r`/`48+r`), valid only in 32-bit mode
+  (those bytes are REX prefixes in long mode) — matched `as --32`'s default
+  choice. `test/test_asmcore_i386.pas` in `make test`, byte-exact both PXX
+  self-host and FPC.
+- 2026-06-30 — **arm32 (A32) lands — fourth target** (Track B): a second
+  patch-resolution wrinkle, distinct from aarch64's — every A32 instruction
+  is conditionally predicated (4-bit cond field, this slice only emits
+  AL/always for non-branches), and branch PC-relative arithmetic is off by
+  **one whole word** from x64/aarch64/i386's shared `instr_addr+4`
+  convention: A32's classic pipeline artifact reads PC as `instr_addr+8`
+  during execution. `AsmPatchBranchArm32` takes `relWords` in the same
+  uniform `(target-(patch+4))/4` convention every resolver uses and
+  subtracts 1 internally, keeping the frontend-facing contract uniform
+  despite the hardware not being. `test/test_asmcore_arm32.pas` in `make
+  test`, byte-exact vs `arm-linux-gnueabi-as`/objdump, both PXX self-host
+  and FPC. **4 of 6 targets done (x64, aarch64, i386, arm32).** Remaining:
+  riscv32, xtensa — neither has a cross-toolchain installed in this
+  environment (`binutils-riscv64-linux-gnu`/`binutils-xtensa-lx106` are
+  available via `apt` but installing wasn't authorized this session); the
+  alternative is deriving against the compiler's own existing
+  `compiler/rv32enc.inc`/`xtensaenc.inc` typed encoders as the "known-good
+  reference" instead of a live host oracle (the ticket's acceptance
+  criteria explicitly allow either). User call needed on which path before
+  continuing.
