@@ -1,5 +1,8 @@
 FPC     ?= fpc
-FPCFLAGS = -O2 -Tlinux -Px86_64
+# -Fulib/asmcore: the compiler `uses asmcore_base/asmcore_x64` for the .asm frontend,
+# so the FPC bootstrap needs them on its unit path (PXX self-host finds them via a
+# built-in search dir; see compiler.pas AddPasUnitDir).
+FPCFLAGS = -O2 -Tlinux -Px86_64 -Fulib/asmcore
 HYPERFINE ?= hyperfine
 BENCH_RUNS ?= 3
 BENCH_HELLO_RUNS ?= 3
@@ -9,7 +12,7 @@ BENCH_RUNTIME_RUNS ?= 3
 COMPILER     := compiler/pascal26
 COMPILER_MANAGED := compiler/pascal26-managed
 COMPILER_SRC := compiler/compiler.pas
-COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas)
+COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) $(wildcard lib/asmcore/*.pas)
 FPC_COMPILER := /tmp/pascal26-fpc
 BUILD_COMPILER := /tmp/pascal26-build
 VERIFY_COMPILER := /tmp/pascal26-verify
@@ -29,7 +32,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -187,7 +190,7 @@ test-nilpy-frozen: test-nilpy
 # `make test-fpc` (release/CI postcheck), and a cold checkout seeds the binary
 # with `make seed-from-stable` (also no FPC). Only a pure-source distro build
 # with no committed binary needs `make bootstrap`.
-test: test-core test-threads test-debug-g lib-fpc-clean
+test: test-core test-threads test-asm test-debug-g lib-fpc-clean
 
 # FPC-dependent postcheck, NOT part of the daily gate. Two checks that shell out
 # to FPC: (1) fpc-check -- FPC can still compile us and yields the same
@@ -259,6 +262,13 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	./$(COMPILER) test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
 	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
+
+# MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
+# encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
+# Gives Track B a run-it-and-check path for lib/asmcore. x86-64.
+test-asm: $(COMPILER)
+	./$(COMPILER) test/test_asm_mvp.asm /tmp/test_asm_mvp26
+	/tmp/test_asm_mvp26; test "$$?" = "42"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26

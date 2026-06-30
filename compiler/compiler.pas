@@ -22,8 +22,14 @@ program Pascal26;
   must stay unloaded now that `uses sysutils` can resolve a real
   lib/rtl/sysutils.pas — the compiler must not drag a user RTL unit into its own
   build. {$ifdef FPC} is true only under real FPC (never under PXX). }
+{ asmcore (lib/asmcore) is compiled INTO the compiler so the .asm frontend can
+  encode through the real library (feature-asm-mvp-frontend). Both real FPC (the
+  bootstrap, which also needs -Fulib/asmcore) and PXX self-host process this uses;
+  only the SysUtils/BaseUnix host shims are FPC-only. }
 {$ifdef FPC}
-uses SysUtils, BaseUnix;
+uses SysUtils, BaseUnix, asmcore_base, asmcore_x64;
+{$else}
+uses asmcore_base, asmcore_x64;
 {$endif}
 
 {$include defs.inc}
@@ -75,6 +81,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
 {$include cpreproc.inc}
+{$include asmfront.inc}
 
 { ===== Main ===== }
 
@@ -415,6 +422,7 @@ begin
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
   isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');
   isNilPy := (n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.');
+  isAsm := (n >= 4) and (inFile[n] = 'm') and (inFile[n-1] = 's') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
@@ -440,13 +448,19 @@ begin
       AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
     AddPasUnitDir('lib/rtl/platform/posix/');
   end;
+  { lib/asmcore holds the asmcore_base/asmcore_x64 units the compiler `uses` for the
+    .asm frontend — anchor it for the self-build (ExeDir-relative installed layout +
+    CWD-relative for the /tmp self-host tests), same shape as the PAL dir above. }
+  if ExeDir <> '' then
+    AddPasUnitDir(ExeDir + '../lib/asmcore/');
+  AddPasUnitDir('lib/asmcore/');
   CompiledUnitCount := 0;
   UnitAliasCount := 0;
   InitProcCount := 0;
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;
-  if (not isC) and (not isBasic) and (not isNilPy) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -513,6 +527,8 @@ begin
     Next;
     ParseCProgram;
   end
+  else if isAsm then
+    ParseAsmProgram
   else
   begin
     LexAll;
@@ -521,7 +537,7 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) and (not isNilPy) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;

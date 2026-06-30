@@ -72,3 +72,24 @@ correct to scope.
   fast-track: build the minimal #3 first so Track B's own testing has a
   trivial path, ahead of the full 3-head sequencing in
   [[feature-assembler-first-class-citizen]].
+
+## DONE 2026-06-30 (self-host; FPC bootstrap deferred)
+
+`pxx foo.asm -> ET_EXEC` shipped. compiler/asmfront.inc parses a flat
+mov/add/ret sequence (comments, blank lines; rejects labels/jumps/extern/global/
+sections/syscall with a clear error), encodes each line through lib/asmcore's
+AsmEncodeX64 (asmcore compiled INTO the compiler via `uses asmcore_base,
+asmcore_x64`), blits the bytes into Code[] (entry = first instruction), and
+appends a fixed exit epilogue (`mov eax,60; syscall`) so the program exits with
+whatever it left in rdi.
+
+- Fixture test/test_asm_mvp.asm (`mov rdi,21; add rdi,rdi` -> exit 42), gated by
+  `make test-asm` (in `make test`). Track B can now drop a `.asm` and run it.
+- PXX self-host byte-identical; full `make test` green; libc-free output.
+- lib/asmcore reached via a built-in unit-search dir (compiler.pas AddPasUnitDir)
+  for self-host + `-Fulib/asmcore` in FPCFLAGS.
+
+Deferred (filed): FPC bootstrap can't compile asmcore (no `{$mode objfpc}`) —
+[[bug-asmcore-fpc-bootstrap]]; two name-resolution rough edges worked around —
+[[bug-compiler-uses-unit-interactions]]. Full directive set / labels / objects /
+.so stay in [[feature-asm-source-frontend]].

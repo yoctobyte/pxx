@@ -1670,4 +1670,4 @@ begin
 end;
 
 var
-  isC, isBasic, isNilPy: Boolean;
+  isC, isBasic, isNilPy, isAsm: Boolean;
