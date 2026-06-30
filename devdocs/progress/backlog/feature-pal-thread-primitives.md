@@ -39,3 +39,46 @@ The green-field foundation everything else sits on. Raw syscalls, no libc:
 - A libc-free test spawns N threads that each do local work + futex-synchronise,
   joins them, correct result, **zero `DT_NEEDED`** (no libc/libpthread).
 - Single-threaded self-build byte-identical (opt-in; default path untouched).
+
+## Technical scope — de-risked (2026-06-30)
+
+Survey result: the RTL already has `__pxxrawsyscall(num, a1..a6)` (compiler-
+intercepted, used by ansiterm/baseunix). So most of M1 is **pure Pascal, no
+compiler change**:
+- **futex** = `__pxxrawsyscall(SYS_futex=202, uaddr, op, val, ts, uaddr2, val3)`.
+- **mmap** thread stack + `mprotect` guard page = `__pxxrawsyscall`.
+- **thread exit** = `__pxxrawsyscall(SYS_exit=60, 0,...)`.
+
+**The one real compiler change = a `__pxxclone` builtin.** `clone(2)` can't go
+through `__pxxrawsyscall`: after the syscall the **child** resumes *inside*
+`__pxxrawsyscall` on the fresh stack and would `ret` through a torn frame. The
+child must instead branch on `rax==0`, set up args from the new stack, `call` the
+Pascal entry, then `SYS_exit` — never returning to Pascal. pxx inline-asm has no
+branches/labels yet ([[feature-inline-asm-depth]]), so emit the trampoline as a
+compiler builtin (intercept like `__pxxrawsyscall`, ~35 bytes x86-64):
+
+```
+; __pxxclone(flags, childStackTop, ptid, ctid, tls, entry, arg) -> tid
+; pre-push [entry][arg] at childStackTop; rdi=flags rsi=stack rdx=ptid r10=ctid r8=tls
+mov eax, 56            ; SYS_clone
+syscall
+test rax, rax
+jnz  .parent          ; parent: rax = child tid -> return
+pop  rax              ; child: entry (was pushed)
+pop  rdi              ; arg
+call rax              ; run Pascal entry(arg) on the new stack
+xor  edi, edi
+mov  eax, 60          ; SYS_exit
+syscall
+.parent:
+; rax already = tid
+```
+
+`PalThreadJoin` = futex-wait on the CLONE_CHILD_CLEARTID word (kernel writes 0 +
+wakes on exit). First slice: x86-64 only; cross trampolines under M5.
+
+**Implementation order (each testable):** (1) futex + mmap-stack PAL (pure Pascal);
+(2) the `__pxxclone` builtin (compiler, x86-64); (3) `PalThreadCreate/Join` +
+trampoline glue; (4) a libc-free test: N threads incrementing a shared counter
+under a futex mutex, join, assert no lost updates, `ldd`/`readelf -d` shows no
+libc/libpthread. Opt-in target; single-thread self-build byte-identical.
