@@ -91,3 +91,4 @@
 2026-06-30T05:43:15Z  v91  0c1586c930b8e307cf0b1a075af1c161e2a834cfc2b1256de4240627bf594421  84a3fbf03a3d9014ed656a65266b8b413e072ab6  fix(c): unsigned int 32-bit arithmetic wraps mod 2^32 + unsigned compares
 2026-06-30T06:02:07Z  v92  dd75001dd9e98ebe4bb2662e16c69f6f005ab842046ec02ec1cf9c28afed2521  5df228f9a6d210c49861ffcc2d980f5227d2e8e2  fix(c): unsigned int division/mod use unsigned div on 32-bit backends
 2026-06-30T06:52:25Z  v93  59326e4fd6b47e6190e54868aca1e848560482b2370edba7192a07303f183174  97805ea9378aa8e8234afa0c38e1c366da308d70  feat(parser): enforce declare-before-use for program/unit global variables
+2026-06-30T07:18:36Z  v94  40b35a28599bd267b9ed2e6466272222b223b2179a0a2f20926f2d7da7eb8252  b0aaa1157529816d097d83a11b4a5439309129c6  fix(bootstrap): move LoadFile's 8 MB staging buffer off the stack
