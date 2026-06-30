@@ -269,6 +269,8 @@ test-threads: $(COMPILER)
 test-asm: $(COMPILER)
 	./$(COMPILER) test/test_asm_mvp.asm /tmp/test_asm_mvp26
 	/tmp/test_asm_mvp26; test "$$?" = "42"
+	./$(COMPILER) test/test_asmcore_x64.pas /tmp/test_asmcore_x64_26
+	/tmp/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26

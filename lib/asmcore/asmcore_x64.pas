@@ -1,6 +1,19 @@
 unit asmcore_x64;
-{ x86-64 instruction encoder + textual printer — first slice.
-  Covers: mov reg,imm | add reg,reg | ret. Grows per need.
+{ x86-64 instruction encoder + textual printer.
+  Coverage (Intel syntax, dst-first):
+    mov   reg,imm | reg,reg | reg,[base+disp] | [base+disp],reg
+    lea   reg,[base+disp]
+    add/sub/and/or/xor/cmp  reg,reg | reg,imm
+    test  reg,reg
+    imul  reg,reg
+    inc/dec/neg/not  reg
+    push/pop  reg
+    ret | syscall | nop | leave | cqo | cdq
+    jmp/call  <patch>      (rel32 patch site)
+    je/jne/jz/jnz/jl/jge/jle/jg/jb/jae/jbe/ja/js/jns  <patch>  (rel32 patch site)
+  Branch targets are PatchOp(4): asmcore emits opcode + 4 zero bytes and records
+  a patch site at the rel32 offset; layer 2 (the .asm frontend / structured-ir
+  library) resolves the label to (target - instr_end) and fills it.
   See devdocs/developer/asmcore-design.md. }
 
 interface
@@ -42,8 +55,7 @@ end;
 
 { Plain if-chain, not a typed const array of AnsiString — that construct is
   broken in the pinned stable compiler for multi-char string elements (see
-  devdocs/progress/backlog/bug-typed-const-array-of-string-broken.md, which
-  this finding was folded into). }
+  devdocs/progress/backlog/bug-typed-const-array-of-string-broken.md). }
 function RegName(reg, size: Integer): AnsiString;
 begin
   if (reg < 0) or (reg > 15) then begin Result := '?'; Exit; end;
@@ -84,88 +96,329 @@ begin
   Result := s;
 end;
 
-{ REX prefix: 0100WRXB. needB extends the rm/opcode-reg field, needR the
-  reg field. Emits nothing if none of W/R/B/X are needed. }
-procedure EmitRex(var buf: TAsmByteBuf; w: Boolean; regHi, rmHi: Boolean);
+{ REX prefix: 0100WRXB. Emits nothing if none of W/R/X/B are needed. }
+procedure EmitRex(var buf: TAsmByteBuf; w, r, x, b: Boolean);
 var rex: Integer;
 begin
-  if not (w or regHi or rmHi) then Exit;
+  if not (w or r or x or b) then Exit;
   rex := $40;
   if w then rex := rex or $08;
-  if regHi then rex := rex or $04;
-  if rmHi then rex := rex or $01;
+  if r then rex := rex or $04;
+  if x then rex := rex or $02;
+  if b then rex := rex or $01;
   BufAppend(buf, Byte(rex));
 end;
+
+function FitsI8(v: Int64): Boolean;
+begin
+  Result := (v >= -128) and (v <= 127);
+end;
+
+{ ModRM + (SIB) + disp for a memory operand [base+disp] (no index in this
+  slice). regField is the /r register or /digit opcode extension already
+  masked to 0..7. Caller has already emitted any REX. }
+procedure EmitModRMMem(var buf: TAsmByteBuf; regField: Integer; const m: TAsmOperand);
+var base, rm, modBits: Integer; needSib, forceDisp8: Boolean;
+begin
+  base := m.MemBase;
+  rm := base and 7;
+  needSib := (rm = 4);                 { rsp / r12 -> SIB with no-index }
+  forceDisp8 := (rm = 5) and (m.MemDisp = 0); { rbp / r13 has no disp-less form }
+
+  if (m.MemDisp = 0) and (not forceDisp8) then modBits := 0
+  else if FitsI8(m.MemDisp) then modBits := 1
+  else modBits := 2;
+
+  BufAppend(buf, Byte((modBits shl 6) or (regField shl 3) or rm));
+  if needSib then BufAppend(buf, $24);  { scale=00, index=100(none), base=rm }
+
+  if modBits = 1 then BufAppend(buf, Byte(m.MemDisp and $FF))
+  else if modBits = 2 then BufAppendI32(buf, m.MemDisp);
+end;
+
+{ ALU "op r/m, r" primary opcode (32/64-bit form, dst=r/m src=reg). }
+function AluOpcodeRR(const mnem: AnsiString; var op: Integer): Boolean;
+begin
+  Result := True;
+  if MnemIs(mnem, 'add') then op := $01
+  else if MnemIs(mnem, 'or')  then op := $09
+  else if MnemIs(mnem, 'and') then op := $21
+  else if MnemIs(mnem, 'sub') then op := $29
+  else if MnemIs(mnem, 'xor') then op := $31
+  else if MnemIs(mnem, 'cmp') then op := $39
+  else Result := False;
+end;
+
+{ ALU "op r/m, imm32" /digit extension for the 81 /digit form. }
+function AluDigit(const mnem: AnsiString; var dig: Integer): Boolean;
+begin
+  Result := True;
+  if MnemIs(mnem, 'add') then dig := 0
+  else if MnemIs(mnem, 'or')  then dig := 1
+  else if MnemIs(mnem, 'and') then dig := 4
+  else if MnemIs(mnem, 'sub') then dig := 5
+  else if MnemIs(mnem, 'xor') then dig := 6
+  else if MnemIs(mnem, 'cmp') then dig := 7
+  else Result := False;
+end;
+
+{ jcc tttn condition nibble for the 0F 8x rel32 form (returns -1 if not a jcc). }
+function JccCond(const mnem: AnsiString): Integer;
+begin
+  if MnemIs(mnem, 'jo')  then JccCond := $0
+  else if MnemIs(mnem, 'jno') then JccCond := $1
+  else if MnemIs(mnem, 'jb')  or MnemIs(mnem, 'jc')  or MnemIs(mnem, 'jnae') then JccCond := $2
+  else if MnemIs(mnem, 'jae') or MnemIs(mnem, 'jnb') or MnemIs(mnem, 'jnc')  then JccCond := $3
+  else if MnemIs(mnem, 'je')  or MnemIs(mnem, 'jz')  then JccCond := $4
+  else if MnemIs(mnem, 'jne') or MnemIs(mnem, 'jnz') then JccCond := $5
+  else if MnemIs(mnem, 'jbe') or MnemIs(mnem, 'jna') then JccCond := $6
+  else if MnemIs(mnem, 'ja')  or MnemIs(mnem, 'jnbe') then JccCond := $7
+  else if MnemIs(mnem, 'js')  then JccCond := $8
+  else if MnemIs(mnem, 'jns') then JccCond := $9
+  else if MnemIs(mnem, 'jp')  or MnemIs(mnem, 'jpe') then JccCond := $A
+  else if MnemIs(mnem, 'jnp') or MnemIs(mnem, 'jpo') then JccCond := $B
+  else if MnemIs(mnem, 'jl')  or MnemIs(mnem, 'jnge') then JccCond := $C
+  else if MnemIs(mnem, 'jge') or MnemIs(mnem, 'jnl')  then JccCond := $D
+  else if MnemIs(mnem, 'jle') or MnemIs(mnem, 'jng')  then JccCond := $E
+  else if MnemIs(mnem, 'jg')  or MnemIs(mnem, 'jnle') then JccCond := $F
+  else JccCond := -1;
+end;
+
+{ ---- per-family encoders ---- }
 
 function EncodeMovRegImm(const dst, src: TAsmOperand; var buf: TAsmByteBuf): Boolean;
 begin
   Result := False;
-  if dst.Kind <> opReg then begin LastError := 'mov: expected register destination'; Exit; end;
-  if src.Kind <> opImm then begin LastError := 'mov: expected immediate source (this slice)'; Exit; end;
-  EmitRex(buf, dst.RegSize = 8, False, dst.Reg >= 8);
+  EmitRex(buf, dst.RegSize = 8, False, False, dst.Reg >= 8);
   BufAppend(buf, Byte($B8 + (dst.Reg and 7)));
   if dst.RegSize = 8 then BufAppendI64(buf, src.Imm) else BufAppendI32(buf, src.Imm);
   Result := True;
 end;
 
-function EncodeAddRegReg(const dst, src: TAsmOperand; var buf: TAsmByteBuf): Boolean;
-var modrm: Integer;
+{ op r/m, r  (dst=r/m, src=reg). Used by ALU reg,reg, mov reg,reg, test. }
+function EncodeRMReg(opcode: Integer; w: Boolean;
+                     const dst, src: TAsmOperand; var buf: TAsmByteBuf): Boolean;
 begin
-  Result := False;
-  if (dst.Kind <> opReg) or (src.Kind <> opReg) then
-  begin LastError := 'add: expected register, register (this slice)'; Exit; end;
-  EmitRex(buf, dst.RegSize = 8, src.Reg >= 8, dst.Reg >= 8);
-  BufAppend(buf, $01);   { ADD r/m, r }
-  modrm := ($03 shl 6) or ((src.Reg and 7) shl 3) or (dst.Reg and 7);
-  BufAppend(buf, Byte(modrm));
+  EmitRex(buf, w, src.Reg >= 8, False, dst.Reg >= 8);
+  BufAppend(buf, Byte(opcode));
+  BufAppend(buf, Byte(($03 shl 6) or ((src.Reg and 7) shl 3) or (dst.Reg and 7)));
   Result := True;
+end;
+
+{ ALU reg,imm: prefer the compact 83 /digit imm8 form when the immediate fits a
+  signed byte (what `as` picks too); else 81 /digit imm32. The AL/AX/EAX/RAX
+  short special-case opcodes (05/2D/25/...) are deliberately not used — the
+  general /digit form is equally valid and keeps the encoder uniform. }
+function EncodeAluRegImm(dig: Integer; const dst, src: TAsmOperand; var buf: TAsmByteBuf): Boolean;
+begin
+  EmitRex(buf, dst.RegSize = 8, False, False, dst.Reg >= 8);
+  if FitsI8(src.Imm) then
+  begin
+    BufAppend(buf, $83);
+    BufAppend(buf, Byte(($03 shl 6) or (dig shl 3) or (dst.Reg and 7)));
+    BufAppend(buf, Byte(src.Imm and $FF));
+  end
+  else
+  begin
+    BufAppend(buf, $81);
+    BufAppend(buf, Byte(($03 shl 6) or (dig shl 3) or (dst.Reg and 7)));
+    BufAppendI32(buf, src.Imm);
+  end;
+  Result := True;
+end;
+
+{ mov/lea between a register and [base+disp]. memIsDst selects direction for
+  mov; lea is always reg<-mem. opcode is the base (89 mov r/m,r ; 8B mov r,r/m ;
+  8D lea r,m). The reg operand supplies REX.W/R; the mem base supplies REX.B. }
+function EncodeRegMem(opcode: Integer; const regOp, memOp: TAsmOperand;
+                      var buf: TAsmByteBuf): Boolean;
+begin
+  EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, False, memOp.MemBase >= 8);
+  BufAppend(buf, Byte(opcode));
+  EmitModRMMem(buf, regOp.Reg and 7, memOp);
+  Result := True;
+end;
+
+function EncodeUnary(digit: Integer; opByte: Integer; const dst: TAsmOperand; var buf: TAsmByteBuf): Boolean;
+begin
+  EmitRex(buf, dst.RegSize = 8, False, False, dst.Reg >= 8);
+  BufAppend(buf, Byte(opByte));
+  BufAppend(buf, Byte(($03 shl 6) or (digit shl 3) or (dst.Reg and 7)));
+  Result := True;
+end;
+
+function EncodePushPop(base: Integer; const r: TAsmOperand; var buf: TAsmByteBuf): Boolean;
+begin
+  EmitRex(buf, False, False, False, r.Reg >= 8);   { 64-bit default; only REX.B }
+  BufAppend(buf, Byte(base + (r.Reg and 7)));
+  Result := True;
+end;
+
+{ Branch with a rel32 patch site. Emits prefix opcode bytes, then 4 zero bytes,
+  recording the patch at the rel32 byte offset (layer 2 fills target-instr_end). }
+procedure EncodeRel32(var buf: TAsmByteBuf; var patches: TAsmPatchList; opIndex: Integer);
+begin
+  PatchAdd(patches, buf.Len, 4, opIndex);
+  BufAppendI32(buf, 0);
 end;
 
 function AsmEncodeX64(const instr: TAsmInstr;
                        var buf: TAsmByteBuf;
                        var patches: TAsmPatchList): Boolean;
+var
+  d0, d1: TAsmOperand;
+  aluOp, dig, cond: Integer;
+  w: Boolean;
 begin
   LastError := '';
-  if MnemIs(instr.Mnemonic, 'mov') and (instr.OperandCount = 2) then
+  Result := False;
+
+  { ---- zero-operand ---- }
+  if instr.OperandCount = 0 then
   begin
-    Result := EncodeMovRegImm(instr.Operands[0], instr.Operands[1], buf);
+    if MnemIs(instr.Mnemonic, 'ret') then begin BufAppend(buf, $C3); Result := True; Exit; end;
+    if MnemIs(instr.Mnemonic, 'syscall') then begin BufAppend(buf, $0F); BufAppend(buf, $05); Result := True; Exit; end;
+    if MnemIs(instr.Mnemonic, 'nop') then begin BufAppend(buf, $90); Result := True; Exit; end;
+    if MnemIs(instr.Mnemonic, 'leave') then begin BufAppend(buf, $C9); Result := True; Exit; end;
+    if MnemIs(instr.Mnemonic, 'cqo') then begin BufAppend(buf, $48); BufAppend(buf, $99); Result := True; Exit; end;
+    if MnemIs(instr.Mnemonic, 'cdq') then begin BufAppend(buf, $99); Result := True; Exit; end;
+    LastError := 'asmcore_x64: unknown zero-operand mnemonic: ' + instr.Mnemonic;
     Exit;
   end;
-  if MnemIs(instr.Mnemonic, 'add') and (instr.OperandCount = 2) then
+
+  { ---- one-operand ---- }
+  if instr.OperandCount = 1 then
   begin
-    Result := EncodeAddRegReg(instr.Operands[0], instr.Operands[1], buf);
+    d0 := instr.Operands[0];
+    { branches: jmp/call/jcc with a patch operand (rel32) }
+    if d0.Kind = opPatch then
+    begin
+      if MnemIs(instr.Mnemonic, 'jmp') then
+      begin BufAppend(buf, $E9); EncodeRel32(buf, patches, 0); Result := True; Exit; end;
+      if MnemIs(instr.Mnemonic, 'call') then
+      begin BufAppend(buf, $E8); EncodeRel32(buf, patches, 0); Result := True; Exit; end;
+      cond := JccCond(instr.Mnemonic);
+      if cond >= 0 then
+      begin
+        BufAppend(buf, $0F); BufAppend(buf, Byte($80 + cond));
+        EncodeRel32(buf, patches, 0); Result := True; Exit;
+      end;
+      LastError := 'asmcore_x64: mnemonic does not take a branch target: ' + instr.Mnemonic;
+      Exit;
+    end;
+    if d0.Kind = opReg then
+    begin
+      if MnemIs(instr.Mnemonic, 'push') then begin Result := EncodePushPop($50, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'pop')  then begin Result := EncodePushPop($58, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'inc') then begin Result := EncodeUnary(0, $FF, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'dec') then begin Result := EncodeUnary(1, $FF, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'not') then begin Result := EncodeUnary(2, $F7, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'neg') then begin Result := EncodeUnary(3, $F7, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'mul') then begin Result := EncodeUnary(4, $F7, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'imul') then begin Result := EncodeUnary(5, $F7, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'div') then begin Result := EncodeUnary(6, $F7, d0, buf); Exit; end;
+      if MnemIs(instr.Mnemonic, 'idiv') then begin Result := EncodeUnary(7, $F7, d0, buf); Exit; end;
+    end;
+    LastError := 'asmcore_x64: unsupported one-operand form: ' + instr.Mnemonic;
     Exit;
   end;
-  if MnemIs(instr.Mnemonic, 'ret') and (instr.OperandCount = 0) then
+
+  { ---- two-operand ---- }
+  if instr.OperandCount = 2 then
   begin
-    BufAppend(buf, $C3);
-    Result := True;
-    Exit;
+    d0 := instr.Operands[0];
+    d1 := instr.Operands[1];
+    w := (d0.RegSize = 8) or (d1.RegSize = 8);
+
+    if MnemIs(instr.Mnemonic, 'mov') then
+    begin
+      if (d0.Kind = opReg) and (d1.Kind = opImm) then begin Result := EncodeMovRegImm(d0, d1, buf); Exit; end;
+      if (d0.Kind = opReg) and (d1.Kind = opReg) then begin Result := EncodeRMReg($89, w, d0, d1, buf); Exit; end;
+      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMem($8B, d0, d1, buf); Exit; end;
+      if (d0.Kind = opMem) and (d1.Kind = opReg) then begin Result := EncodeRegMem($89, d1, d0, buf); Exit; end;
+      LastError := 'asmcore_x64: unsupported mov operand combination';
+      Exit;
+    end;
+
+    if MnemIs(instr.Mnemonic, 'lea') then
+    begin
+      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMem($8D, d0, d1, buf); Exit; end;
+      LastError := 'asmcore_x64: lea expects reg, [mem]';
+      Exit;
+    end;
+
+    if MnemIs(instr.Mnemonic, 'test') then
+    begin
+      if (d0.Kind = opReg) and (d1.Kind = opReg) then begin Result := EncodeRMReg($85, w, d0, d1, buf); Exit; end;
+      LastError := 'asmcore_x64: test expects reg, reg (this slice)';
+      Exit;
+    end;
+
+    if MnemIs(instr.Mnemonic, 'imul') then
+    begin
+      if (d0.Kind = opReg) and (d1.Kind = opReg) then
+      begin
+        EmitRex(buf, w, d0.Reg >= 8, False, d1.Reg >= 8);
+        BufAppend(buf, $0F); BufAppend(buf, $AF);
+        BufAppend(buf, Byte(($03 shl 6) or ((d0.Reg and 7) shl 3) or (d1.Reg and 7)));
+        Result := True; Exit;
+      end;
+      LastError := 'asmcore_x64: imul reg,reg only (this slice)';
+      Exit;
+    end;
+
+    if AluOpcodeRR(instr.Mnemonic, aluOp) then
+    begin
+      if (d0.Kind = opReg) and (d1.Kind = opReg) then begin Result := EncodeRMReg(aluOp, w, d0, d1, buf); Exit; end;
+      if (d0.Kind = opReg) and (d1.Kind = opImm) then
+      begin
+        AluDigit(instr.Mnemonic, dig);
+        Result := EncodeAluRegImm(dig, d0, d1, buf);
+        Exit;
+      end;
+      LastError := 'asmcore_x64: unsupported ALU operand combination for ' + instr.Mnemonic;
+      Exit;
+    end;
   end;
+
   LastError := 'asmcore_x64: unrecognized mnemonic/operand combination: ' + instr.Mnemonic;
   Result := False;
 end;
 
-function AsmPrintX64(const instr: TAsmInstr): AnsiString;
-var op0, op1: TAsmOperand;
+{ ---- textual printer ---- }
+
+function MemText(const m: TAsmOperand): AnsiString;
+var s: AnsiString;
 begin
-  if MnemIs(instr.Mnemonic, 'ret') and (instr.OperandCount = 0) then
-  begin
-    Result := 'ret';
-    Exit;
+  s := '[' + RegName(m.MemBase, 8);
+  if m.MemDisp > 0 then s := s + '+' + IntToStrAsm(m.MemDisp)
+  else if m.MemDisp < 0 then s := s + IntToStrAsm(m.MemDisp);
+  Result := s + ']';
+end;
+
+function OperandText(const op: TAsmOperand): AnsiString;
+begin
+  case op.Kind of
+    opReg: Result := RegName(op.Reg, op.RegSize);
+    opImm: Result := IntToStrAsm(op.Imm);
+    opMem: Result := MemText(op);
+    opPatch: Result := '<patch>';
+  else
+    Result := '?';
   end;
-  if instr.OperandCount = 2 then
+end;
+
+function AsmPrintX64(const instr: TAsmInstr): AnsiString;
+var i: Integer; s: AnsiString;
+begin
+  s := instr.Mnemonic;
+  if instr.OperandCount > 0 then s := s + ' ';
+  for i := 0 to instr.OperandCount - 1 do
   begin
-    op0 := instr.Operands[0];
-    op1 := instr.Operands[1];
-    Result := instr.Mnemonic + ' ' + RegName(op0.Reg, op0.RegSize) + ', ';
-    if op1.Kind = opImm then
-      Result := Result + IntToStrAsm(op1.Imm)
-    else
-      Result := Result + RegName(op1.Reg, op1.RegSize);
-    Exit;
+    if i > 0 then s := s + ', ';
+    s := s + OperandText(instr.Operands[i]);
   end;
-  Result := instr.Mnemonic + ' ; <unprintable in this slice>';
+  Result := s;
 end;
 
 function AsmCoreLastError: AnsiString;
