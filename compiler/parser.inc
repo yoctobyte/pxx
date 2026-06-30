@@ -13357,6 +13357,12 @@ begin
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);
 
+  { Oversized stack-frame diagnostic: this routine's locals total FrameSize bytes,
+    all on the small fixed process stack. Warn (once, at the body end) when that
+    exceeds the threshold — a fat frame risks a runtime stack overflow. }
+  if (MaxStackFrameSize > 0) and (FrameSize > MaxStackFrameSize) then
+    WarnStackFrame(CurTok.Line, Procs[procIdx].Name, FrameSize, MaxStackFrameSize);
+
   { Restore scope }
   SymCount  := savedSC;
   FrameSize := savedFS;

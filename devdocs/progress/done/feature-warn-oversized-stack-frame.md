@@ -1,7 +1,7 @@
 # Warn on oversized stack locals / stack frames
 
 - **Type:** feature (diagnostic / safety) — Track A
-- **Status:** backlog
+- **Status:** DONE (2026-06-30) — per-frame check landed; per-*var* precision deferred
 - **Opened:** 2026-06-30
 - **Found by:** the FPC cold-bootstrap segfault
   ([[project_fpc_seed_segfault_done]] / done ticket): `LoadFile` had an 8 MB
@@ -62,3 +62,52 @@ Add a tunable threshold and a warning:
   general "big buffers don't belong on the stack" rule.
 - Doubles as a portability guard for ESP/bare-metal targets, where stacks are tiny
   (KBs) — an oversized frame there is fatal, and the same check warns early.
+
+## Landed (2026-06-30, Track A)
+
+Two commits:
+1. **Prep — `refactor(codegen): move label-fixup scratch arrays off the stack to
+   globals`.** Every backend's `IREmitMachineCode*` declared
+   `LabelPositions/LabelFixupPos/LabelFixupTarget` as `array[0..MAX_IR-1]` stack
+   locals (512 KB each, ~1.5 MB/frame) — the biggest offenders the warning would
+   flag. Only the active target's emit runs per compile, non-reentrant, so they
+   are now a single shared global set (`defs.inc`). This is what lets the default
+   threshold default ON without flagging the compiler's own frames.
+2. **Feature — the warning itself.**
+   - `MAX_STACK_FRAME_SIZE = 1048576` (1 MB) const + `MaxStackFrameSize` global
+     (0 = off), reset in `PasReset`.
+   - Per-frame check at `ParseSubroutine` right after `PatchProcPrologue`
+     (`parser.inc`): `if (MaxStackFrameSize>0) and (FrameSize>MaxStackFrameSize)`
+     → `WarnStackFrame(line, Procs[procIdx].Name, FrameSize, limit)`.
+   - `WarnStackFrame` (`lexer.inc`) prints via `writeln` (byte counts format with
+     no int->string helper, like `Error`); `-Werror` promotes to fatal.
+   - Tunable: CLI `--max-stack-frame=N` (`=0` disables) and `{$MAXSTACKFRAME n}`
+     directive (`name='off'` disables). New helpers `PasOptHasPrefix` /
+     `PasOptionInt` in `lexer.inc`.
+   - Test `test/test_warn_stack_frame.pas` + Makefile: a 2 MB local warns, a 256 B
+     local stays silent, the program still runs (`1\n42`), `--max-stack-frame=0`
+     silences, `-Werror` makes it fatal.
+
+**Why 1 MB default (not the ticket's 256 KB):** after moving the label arrays,
+the compiler's remaining big frames are the `MAX_EXTERNAL`-sized ELF arrays
+(~192 KB) and `MAX_IR` Boolean scratch (~128 KB) — all under 1 MB, so the
+compiler self-builds clean at 1 MB. 256 KB would have required moving those too;
+1 MB still catches the motivating FPC-class bug (an 8 MB single local → 8 MB
+frame) with zero false positives on our own source. Lower it per-project via the
+flag/directive when targeting tiny (ESP/bare-metal) stacks.
+
+**Gate:** managed self-host byte-identical; `make test` (incl. the new test) +
+cross (i386/aarch64/arm32/riscv32) green; xtensa codegen untouched by the feature
+(verified green in the prep commit's bare-metal qemu run).
+
+## Deferred follow-up — per-LOCAL size warning (`MAX_STACK_VAR_SIZE`)
+
+The "Idea" section also proposed a per-single-local knob (default 64 KB) that
+names the specific offending local. Only the per-FRAME check landed (it satisfies
+acceptance — "a warning fires for a local/frame over the threshold" — and catches
+the FPC bug, since one 8 MB local makes an 8 MB frame). The per-var check is a
+tighter, complementary diagnostic (flags a fat single local even when the whole
+frame is under the frame limit) and needs the size check threaded through the
+~5 local-alloc sites (`AllocVar`, the array/dynarray/string alloc paths in
+`symtab.inc` + `parser.inc`) with the var's name/line. Small, self-contained,
+low-risk — left as a follow-up to keep this landing focused. Not blocking.

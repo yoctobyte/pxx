@@ -28,6 +28,23 @@ begin
   WarnAt(CurTok.Line, msg);
 end;
 
+{ Oversized stack-frame warning. Built with writeln (not Warn) so the byte
+  counts format without an int->string helper, matching Error's inline style.
+  -Werror promotes it. See feature-warn-oversized-stack-frame. }
+procedure WarnStackFrame(line: Integer; const routine: AnsiString; frameBytes, limit: Integer);
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26:', line, ': error: routine ''', routine, ''' uses ', frameBytes,
+            ' bytes of stack frame (> ', limit, ') (warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26:', line, ': warning: routine ''', routine, ''' uses ', frameBytes,
+          ' bytes of stack frame (> ', limit, '); large frames risk stack overflow',
+          ' — move big buffers to the heap (GetMem) or a global');
+end;
+
 { ===== Lexer ===== }
 
 function Keyword(const s0: AnsiString): TTokenKind;
@@ -533,6 +550,35 @@ begin
   end;
 end;
 
+function PasOptHasPrefix(const value, prefix: AnsiString): Boolean;
+{ True if `value` starts with `prefix` (for `--flag=value` CLI options). }
+var i: Integer;
+begin
+  Result := False;
+  if Length(value) < Length(prefix) then Exit;
+  for i := 1 to Length(prefix) do
+    if value[i] <> prefix[i] then Exit;
+  Result := True;
+end;
+
+function PasOptionInt(const value: AnsiString; first: Integer): Integer;
+{ Parse the decimal integer tail of an option (the 262144 in
+  --max-stack-frame=262144). Fatal on empty / non-digit input. }
+var i, v: Integer; c: Char;
+begin
+  if first > Length(value) then
+    begin writeln(StdErr, 'option needs an integer value: ', value); Halt(1); end;
+  v := 0;
+  for i := first to Length(value) do
+  begin
+    c := value[i];
+    if (c < '0') or (c > '9') then
+      begin writeln(StdErr, 'option value is not a non-negative integer: ', value); Halt(1); end;
+    v := v * 10 + (Ord(c) - Ord('0'));
+  end;
+  Result := v;
+end;
+
 procedure PasInitDefines;
 var name: AnsiString;
 begin
@@ -550,6 +596,7 @@ begin
   NestedComments := False;  { FPC default: brace and paren-star comments do NOT nest; an inner open-brace is plain text. NESTEDCOMMENTS ON opts in. }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
+  MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   name := 'PXX';
   PasDefine(name);
   name := 'PXX_MANAGED_STRING';
@@ -1314,6 +1361,13 @@ begin
       if CaseEqual(name, 'on') then CaseSensitiveMode := True
       else if CaseEqual(name, 'off') then CaseSensitiveMode := False
       else Error('casesensitive requires on or off');
+    end
+    else if CaseEqual(command, 'maxstackframe') then
+    begin
+      { {$MAXSTACKFRAME n} — oversized-frame warn threshold in bytes (0 = off).
+        See feature-warn-oversized-stack-frame. }
+      if CaseEqual(name, 'off') then MaxStackFrameSize := 0
+      else MaxStackFrameSize := PasOptionInt(name, 1);
     end
     else if CaseEqual(command, 'lazycasing') then
     begin

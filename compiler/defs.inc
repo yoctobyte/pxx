@@ -31,6 +31,12 @@ const
   MAX_TOKENS  = 2097152;
   MAX_AST     = 524288;
   MAX_IR      = 131072;
+  MAX_STACK_FRAME_SIZE = 1048576; { default --max-stack-frame threshold: warn when a
+                                    routine's stack frame exceeds 1 MB. Locals live on
+                                    the stack (~8 MB total, shared by the whole call
+                                    chain); a single fat frame risks overflow as a
+                                    runtime SIGSEGV (e.g. the FPC-seed 8 MB-local bug,
+                                    project_fpc_seed_segfault_done). 0 disables. }
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
   MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
@@ -964,6 +970,9 @@ var
   LabelPositions : array[0..MAX_IR-1] of Integer;
   LabelFixupPos : array[0..MAX_IR-1] of Integer;
   LabelFixupTarget : array[0..MAX_IR-1] of Integer;
+  MaxStackFrameSize : Integer; { effective oversized-stack-frame warn threshold in
+                                 bytes (0 = disabled). Init to MAX_STACK_FRAME_SIZE;
+                                 overridable via --max-stack-frame=N / {$MAXSTACKFRAME n}. }
   WarnSelfResult : Boolean; { --warn-self-result: warn when a paramless function's
                              bare own name is read as a value (FPC = its Result,
                              but often a mistaken `Name()` self-recursion). Off by

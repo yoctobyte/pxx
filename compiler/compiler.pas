@@ -265,6 +265,13 @@ begin
       WarnAsError := True;
       Inc(i);
     end
+    else if PasOptHasPrefix(option, '--max-stack-frame=') then
+    begin
+      { Tune (or disable with =0) the oversized-stack-frame warning threshold in
+        bytes. Default MAX_STACK_FRAME_SIZE. See feature-warn-oversized-stack-frame. }
+      MaxStackFrameSize := PasOptionInt(option, 19);
+      Inc(i);
+    end
     else if option = '--warn-self-result' then
     begin
       { Warn when a parameterless function's bare own name is read as a value

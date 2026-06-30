@@ -1196,6 +1196,17 @@ test-core: $(COMPILER)
 	grep -q "warning: bare own name 'Count' reads the result of parameterless function Count" /tmp/test_warn_self_result.log
 	! ./$(COMPILER) --warn-self-result -Werror test/test_warn_self_result.pas /tmp/test_warn_self_result_werror26 > /tmp/test_warn_self_result_werror.log 2>&1
 	grep -q "warning promoted by -Werror" /tmp/test_warn_self_result_werror.log
+	# Oversized-stack-frame warning: 2MB local warns (default 1MB threshold), runs fine
+	./$(COMPILER) test/test_warn_stack_frame.pas /tmp/test_warn_stack_frame26 > /tmp/test_warn_stack_frame.log
+	grep -q "routine 'BigLocal' uses 2097152 bytes of stack frame" /tmp/test_warn_stack_frame.log
+	! grep -q "routine 'SmallLocal'" /tmp/test_warn_stack_frame.log
+	test "$$(/tmp/test_warn_stack_frame26)" = "$$(printf '1\n42')"
+	# --max-stack-frame=0 disables the warning entirely
+	./$(COMPILER) --max-stack-frame=0 test/test_warn_stack_frame.pas /tmp/test_warn_stack_frame_off26 > /tmp/test_warn_stack_frame_off.log
+	! grep -q "stack frame" /tmp/test_warn_stack_frame_off.log
+	# -Werror promotes the oversized-frame warning to a fatal error
+	! ./$(COMPILER) -Werror test/test_warn_stack_frame.pas /tmp/test_warn_stack_frame_werr26 > /tmp/test_warn_stack_frame_werr.log 2>&1
+	grep -q "uses 2097152 bytes of stack frame .* (warning promoted by -Werror)" /tmp/test_warn_stack_frame_werr.log
 	! ./$(COMPILER) test/test_pascal_directive_error.pas /tmp/test_pascal_directive_error26 > /tmp/test_pascal_directive_error.log 2>&1
 	grep -q "requested failure" /tmp/test_pascal_directive_error.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas /tmp/test_pascal_conditional_include26
