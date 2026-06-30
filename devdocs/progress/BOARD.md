@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (68)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ _none_
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
@@ -540,6 +541,7 @@ _none_
 - [A] bug-array-const-too-many-elements-synapse
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
+- [A] bug-except-base-handler-misses-derived
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
 - [A] bug-open-array-ctor-statement-call
