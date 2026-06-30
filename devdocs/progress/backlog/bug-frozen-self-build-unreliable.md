@@ -22,15 +22,26 @@ with no file, occasionally exit 0. Reproduced on **pristine master** (pinned
 compiler, unmodified source), so it is **pre-existing and independent of any
 in-flight frozen-string-return work**.
 
-## Likely cause (unconfirmed)
+## Cause — narrowed (2026-06-30, measured)
 
-Resource / OOM, not necessarily a codegen bug. A frozen-mode compiler has a
-**~490 MB BSS** (frozen strings use 8 MB `STRING_CAP` globals/temps pervasively);
-`frz1` compiling the compiler holds its own ~490 MB resident *and* emits another
-~490 MB image. Under concurrent load (the repo runs several agents at once) that
-is a plausible OOM-kill — which presents exactly as "silent no-output" or an
-inconsistent segfault. The intermittency (sometimes exit 0) fits OOM better than a
-deterministic miscompile.
+**Not OOM, and not an oversized stack frame.** Measured under `/usr/bin/time -v`
+with 8.8 GB free:
+
+- Pinned compiler building frozen `frz1`: exit 0, **Max RSS 237 MB**.
+- `frz1` building `frz2`: **SIGSEGV (139), Max RSS 2432 KB** — i.e. it dies in
+  **early startup**, before allocating its working set (the ~490 MB BSS is
+  reserved, not the issue; it never gets far enough to use it).
+- Intermittent across runs (sometimes exit 0) → **ASLR-dependent**: a wild /
+  uninitialised pointer or a prologue touching an unmapped page, not a
+  deterministic miscompile.
+
+Ruled out **oversized stack frame** (the FPC-seed class) directly: building the
+compiler in frozen mode through the new `--max-stack-frame` warning shows the
+largest frozen-mode frames are only ~196 KB (`PrepareDynamicData`/`32`) and
+~131 KB (`IRVerify`, `IRDump`) — nothing close to the 8 MB stack. So `frz1`'s
+crash is a genuine **frozen-mode startup bug** (a `frz1` produced by the *pinned*
+compiler), most likely a frozen-string global/temp init or a wild pointer hit
+during unit/global initialisation.
 
 ## Why it matters / why it's low-priority right now
 
@@ -44,14 +55,17 @@ deterministic miscompile.
 
 ## To investigate
 
-1. Run the failing step alone (no other agents) under `/usr/bin/time -v` and watch
-   max RSS; check `dmesg` for an OOM-killer line. If OOM: either reduce frozen BSS
-   (the 8 MB `STRING_CAP` temps — many could be `LOCAL_STR_CAP`, cf.
-   bug-ansistring-concat-arg-static-bloat) or document a memory floor for frozen
-   self-build.
-2. If it segfaults deterministically under ample memory: it is a real frozen-mode
-   miscompile — bisect which compiler routine, likely a frozen-string return or a
-   frozen global temp.
+1. It crashes at **startup** (2.4 MB RSS), so run `frz1` under `gdb` on *any*
+   trivial input (`frz1 -uPXX_MANAGED_STRING test/hello.pas /tmp/x`) and get the
+   backtrace of the SIGSEGV — it faults before parsing, so the crash site is in
+   runtime init / global-init / unit init, not the compile logic.
+2. Suspect frozen-string **global initialisation**: frozen mode turns every
+   compiler `string` global/temp into an 8 MB inline `STRING_CAP` buffer; a
+   zero-init or length-word setup over that BSS, or a wild pointer in the init
+   order, is a candidate. Cross-check against the frozen-string-return work
+   (bug-frozen-string-result-global) — same value model, may share a root.
+3. Because it is ASLR-dependent, run a few times / under `setarch -R` (disable
+   ASLR) to make it deterministic for bisection.
 
 ## Acceptance
 
