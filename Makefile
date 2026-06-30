@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -2415,6 +2415,40 @@ test-lua: $(COMPILER)
 	done; \
 	test "$$fail" = "0" || { echo "test-lua: FAILURES"; exit 1; }; \
 	echo "test-lua: all lua programs match expected"
+
+# cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make
+# test`: the base gate carries no 3rd-party dependency. Amalgamates lib/crtl + the
+# cJSON 1.7.18 core (from library_candidates/cjson/src — gitignored scratch, fetch
+# it there) into a round-trip runner: parse each test/cjson/*.json and re-serialize
+# with cJSON_PrintUnformatted, checking stdout against the committed *.expected
+# (generated independently with stock json tooling). Skips gracefully when the
+# cJSON tree is absent. Rung-1 C-frontend probe: heap (malloc/realloc/free),
+# object/array structs, pointers, recursive parser, string handling — coverage the
+# test/c*_b*.c micro-tests cannot reach. The float-output path additionally needs
+# crtl sscanf; the committed fixtures stay integer/string/bool/null to keep that
+# gap out of this rung.
+CJSON_SRC := library_candidates/cjson/src
+test-cjson: $(COMPILER)
+	@if [ ! -f "$(CJSON_SRC)/cJSON.h" ]; then \
+	  echo "test-cjson: SKIP — no cJSON tree at $(CJSON_SRC) (fetch cJSON 1.7.18 there to run)"; \
+	  exit 0; \
+	fi; \
+	echo "compiling cJSON runner ..."; \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(CJSON_SRC) test/cjson/runner.c /tmp/pxx_cjson_runner || exit 1; \
+	fail=0; for p in test/cjson/*.json; do \
+	  exp="$${p%.json}.expected"; \
+	  cp "$$p" /tmp/pxx_cjson_input.json; \
+	  /tmp/pxx_cjson_runner 2>/dev/null > /tmp/pxx_cjson_got.txt; \
+	  if diff -u "$$exp" /tmp/pxx_cjson_got.txt > /tmp/pxx_cjson_diff.txt; then \
+	    echo "test-cjson: PASS $$(basename $$p)"; \
+	  else \
+	    echo "test-cjson: FAIL $$(basename $$p)"; \
+	    head -12 /tmp/pxx_cjson_diff.txt; \
+	    fail=1; \
+	  fi; \
+	done; \
+	test "$$fail" = "0" || { echo "test-cjson: FAILURES"; exit 1; }; \
+	echo "test-cjson: all cJSON documents round-trip to expected"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

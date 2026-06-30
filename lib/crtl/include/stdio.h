@@ -35,6 +35,8 @@ int vprintf(const char *fmt, va_list ap);
 int vfprintf(FILE *stream, const char *fmt, va_list ap);
 int vsprintf(char *s, const char *fmt, va_list ap);
 int vsnprintf(char *s, size_t n, const char *fmt, va_list ap);
+int sscanf(const char *s, const char *fmt, ...);
+int vsscanf(const char *s, const char *fmt, va_list ap);
 int puts(const char *s);
 int fputs(const char *s, FILE *stream);
 int putchar(int c);

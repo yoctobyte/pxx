@@ -36,6 +36,7 @@ _none_
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
+| bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
@@ -46,7 +47,6 @@ _none_
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
-| bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
@@ -147,7 +147,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (384)
+## done (385)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -324,6 +324,7 @@ _none_
 | bug-textfile-primitives-not-ambient-in-units | A | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-unit-qualified-constant-not-resolved | A | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
+| bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
 | bug-untyped-float-const | A | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
 | bug-untyped-params-in-methods | A | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
@@ -556,6 +557,7 @@ _none_
 - [A] bug-array-const-too-many-elements-synapse
 - [A] bug-array-ctor-statement-arg-after-dynarray-record-param
 - [A] bug-byvalue-record-managed-field-aliases-caller
+- [A] bug-c-arrow-on-array-store-of-call-result-clobbered
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-except-base-handler-misses-derived
@@ -566,7 +568,6 @@ _none_
 - [A] bug-open-array-ctor-statement-call
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
-- [A] bug-unqualified-property-in-method
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-asm-source-frontend
 - [A] feature-asm-structured-ir-library

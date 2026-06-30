@@ -607,3 +607,90 @@ int ferror(FILE *stream) { return stream->err; }
 void clearerr(FILE *stream) { stream->err = 0; stream->eof = 0; }
 int setvbuf(FILE *stream, char *buf, int mode, size_t size) { (void)stream; (void)buf; (void)mode; (void)size; return 0; }
 void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
+
+/* ---- minimal sscanf ------------------------------------------------------- */
+/* Enough for cJSON's number-roundtrip check (`sscanf(buf, "%lg", &d)`) plus the
+   common integer/string conversions, so a real C library that scans strings can
+   build and run libc-free. Supported: leading-whitespace skipping, literal
+   character match, and the conversions %d/%i/%u/%x/%o (with l/ll length →
+   long/long long), %f/%e/%g (with l/L length → double, else float), %s
+   (whitespace-delimited, NUL-terminated), %c (single char), and %%. Field width
+   and the '*' assignment-suppression flag are NOT supported (cJSON uses neither).
+   Numeric conversions delegate to strtol/strtod for correctness. Returns the
+   number of input items successfully assigned (C sscanf semantics). */
+extern long strtol(const char *s, char **end, int base);
+extern double strtod(const char *s, char **end);
+extern int isspace(int c);
+
+int vsscanf(const char *s, const char *fmt, va_list ap) {
+  int count = 0;
+  const char *p = fmt;
+  while (*p) {
+    if (isspace((unsigned char)*p)) {
+      while (isspace((unsigned char)*s)) s++;
+      p++;
+      continue;
+    }
+    if (*p != '%') {
+      if (*s != *p) break;
+      s++; p++;
+      continue;
+    }
+    p++; /* past '%' */
+    {
+      int lng = 0;
+      char conv;
+      while (*p == 'l' || *p == 'L' || *p == 'h') {
+        if (*p == 'l' || *p == 'L') lng++;
+        p++;
+      }
+      conv = *p;
+      if (conv == '\0') break;
+      p++;
+      if (conv != 'c' && conv != '%')
+        while (isspace((unsigned char)*s)) s++;
+      if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x' || conv == 'o') {
+        char *end;
+        int base = (conv == 'x') ? 16 : (conv == 'o') ? 8 : 10;
+        long v = strtol(s, &end, base);
+        if (end == s) break;
+        if (lng >= 2) *va_arg(ap, long long *) = (long long)v;
+        else if (lng == 1) *va_arg(ap, long *) = v;
+        else *va_arg(ap, int *) = (int)v;
+        s = end; count++;
+      } else if (conv == 'f' || conv == 'e' || conv == 'g' ||
+                 conv == 'F' || conv == 'E' || conv == 'G') {
+        char *end;
+        double v = strtod(s, &end);
+        if (end == s) break;
+        if (lng >= 1) *va_arg(ap, double *) = v;
+        else *va_arg(ap, float *) = (float)v;
+        s = end; count++;
+      } else if (conv == 's') {
+        char *dst = va_arg(ap, char *);
+        if (*s == '\0') break;
+        while (*s && !isspace((unsigned char)*s)) *dst++ = *s++;
+        *dst = '\0'; count++;
+      } else if (conv == 'c') {
+        char *dst = va_arg(ap, char *);
+        if (*s == '\0') break;
+        *dst = *s++; count++;
+      } else if (conv == '%') {
+        if (*s != '%') break;
+        s++;
+      } else {
+        break; /* unsupported conversion: stop, matching glibc's early return */
+      }
+    }
+  }
+  return count;
+}
+
+int sscanf(const char *s, const char *fmt, ...) {
+  va_list ap;
+  int r;
+  va_start(ap, fmt);
+  r = vsscanf(s, fmt, ap);
+  va_end(ap);
+  return r;
+}
