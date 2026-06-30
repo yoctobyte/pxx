@@ -21,7 +21,8 @@ blocks a normal build.
 - `runner.c` — committed. Amalgamates `lib/crtl` + `cJSON.c` and round-trips the
   document at `/tmp/pxx_cjson_input.json` (the Makefile copies each case there;
   C argv is not wired yet).
-- `*.json` — committed fixtures (integer/string/bool/null/nested).
+- `*.json` — committed fixtures (integer/string/bool/null/nested, plus
+  `floats.json`/`floatarr.json` exercising the number print path).
 - `*.expected` — committed canonical output, generated **independently** with
   stock `python3 -c "json.dumps(..., separators=(',',':'))"`, not by the runner
   itself (so the oracle is independent of the code under test).
@@ -50,8 +51,14 @@ is dead. Filed as
 The harness goes green once that lands.
 
 The float-number print path additionally needs crtl `sscanf` (cJSON re-parses its
-own `%g` output to check round-trip precision); that was added to `lib/crtl`, so
-float fixtures can be added once the print path is unblocked.
+own `%g` output to check round-trip precision); that was added to `lib/crtl`.
+`floats.json`/`floatarr.json` are already committed and exercise it. They use
+**only exact binary fractions** (0.5, 0.125, 19.5, …) where cJSON's `%1.15g`
+serialization is unambiguous — verified to match both the `python3` compact
+oracle and crtl's own `%1.15g` engine, and to round-trip at 15 sig digits (so
+cJSON never bumps to the `%1.17g` fallback). Avoid non-exact decimals (0.1, 3.14)
+and exponent-notation magnitudes until the print path is unblocked and the crtl
+`%g` engine can be diffed against the oracle for those shapes.
 
 ## Adding a fixture
 
