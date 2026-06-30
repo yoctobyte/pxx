@@ -167,14 +167,30 @@ begin
   op := MemOp(reg, disp);
 end;
 
-{ Build one TAsmOperand from a textual operand (register / [mem] / immediate).
-  out-param avoids an asmcore-typed function result, which the compiler's
-  two-pass prescan does not resolve here. }
-procedure AsmParseOperand(const tok: AnsiString; lineNo: Integer; var op: TAsmOperand);
-var reg, size: Integer; iv: Int64; ok: Boolean;
+{ Build one TAsmOperand from a textual operand (register / [mem] / [rel label]
+  / immediate). out-param avoids an asmcore-typed function result, which the
+  compiler's two-pass prescan does not resolve here. ripLabel is set (lower-
+  cased) iff the operand was a `[rel name]` rip-relative form — the caller
+  threads that into the same label-fixup table branches already use, since
+  the relocation arithmetic (target - (patch_offset+4)) is identical. }
+procedure AsmParseOperand(const tok: AnsiString; lineNo: Integer; var op: TAsmOperand; var ripLabel: AnsiString);
+var reg, size: Integer; iv: Int64; ok: Boolean; inner, innerLower, nm: AnsiString;
 begin
+  ripLabel := '';
   if (Length(tok) > 0) and (tok[1] = '[') then
-    AsmParseMem(tok, lineNo, op)
+  begin
+    inner := AsmTrim(Copy(tok, 2, Length(tok) - 2));
+    innerLower := AsmLower(inner);
+    if (Length(innerLower) > 4) and (Copy(innerLower, 1, 4) = 'rel ') then
+    begin
+      nm := AsmLower(AsmTrim(Copy(inner, 5, Length(inner) - 4)));
+      if nm = '' then Error('asm:' + AsmIntToStr(lineNo) + ': empty rip-relative label');
+      op := MemOp(REG_RIP, 0);
+      ripLabel := nm;
+      Exit;
+    end;
+    AsmParseMem(tok, lineNo, op);
+  end
   else if AsmRegLookup(AsmLower(tok), reg, size) then
     op := RegOp(reg, size)
   else
@@ -185,21 +201,76 @@ begin
   end;
 end;
 
-{ Reject a directive that still needs the deferred (data/section/symbol)
-  machinery, with a clear pointer at the next increment. }
+{ Parse a `db`/`dw`/`dd`/`dq` data line's operand list into dataBuf, quote-
+  aware (string literals only valid with `db`, expand one byte per char). }
+procedure AsmParseDataLine(const mnem: AnsiString; const restp: AnsiString; lineNo: Integer; var dataBuf: TAsmByteBuf);
+var width, i, n: Integer; tok: AnsiString; ok: Boolean; v: Int64;
+begin
+  if mnem = 'db' then width := 1
+  else if mnem = 'dw' then width := 2
+  else if mnem = 'dd' then width := 4
+  else if mnem = 'dq' then width := 8
+  else begin Error('asm:' + AsmIntToStr(lineNo) + ': unknown data directive "' + mnem + '" (.data section allows db/dw/dd/dq only)'); width := 0; end;
+
+  if restp = '' then Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs operands');
+
+  n := Length(restp);
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and AsmIsSpace(restp[i]) do Inc(i);
+    if i > n then Break;
+    if restp[i] = '"' then
+    begin
+      if width <> 1 then Error('asm:' + AsmIntToStr(lineNo) + ': string literal only valid with db');
+      Inc(i);
+      while (i <= n) and (restp[i] <> '"') do
+      begin
+        BufAppend(dataBuf, Byte(Ord(restp[i])));
+        Inc(i);
+      end;
+      if i > n then Error('asm:' + AsmIntToStr(lineNo) + ': unterminated string literal');
+      Inc(i);   { closing quote }
+    end
+    else
+    begin
+      tok := '';
+      while (i <= n) and (restp[i] <> ',') do begin tok := tok + restp[i]; Inc(i); end;
+      tok := AsmTrim(tok);
+      if tok = '' then Error('asm:' + AsmIntToStr(lineNo) + ': empty data value');
+      v := AsmParseInt(tok, ok);
+      if not ok then Error('asm:' + AsmIntToStr(lineNo) + ': bad data value "' + tok + '"');
+      case width of
+        1: BufAppend(dataBuf, Byte(v and $FF));
+        2: begin BufAppend(dataBuf, Byte(v and $FF)); BufAppend(dataBuf, Byte((v shr 8) and $FF)); end;
+        4: BufAppendI32(dataBuf, v);
+        8: BufAppendI64(dataBuf, v);
+      end;
+    end;
+    while (i <= n) and AsmIsSpace(restp[i]) do Inc(i);
+    if (i <= n) and (restp[i] = ',') then Inc(i)
+    else if i <= n then Error('asm:' + AsmIntToStr(lineNo) + ': expected "," in data list "' + restp + '"');
+  end;
+end;
+
+{ Reject a directive that still needs the deferred (symbol-table / object-
+  output) machinery, with a clear pointer at the next increment. `section`
+  and `db`/`dw`/`dd`/`dq` are handled by the caller now (data section). }
 procedure AsmRejectIfUnsupported(const mnem: AnsiString; lineNo: Integer);
 begin
-  if (mnem = 'extern') or (mnem = 'global') or (mnem = 'section')
-     or (mnem = 'db') or (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') then
+  if (mnem = 'extern') or (mnem = 'global') then
     Error('asm:' + AsmIntToStr(lineNo) +
-      ': "' + mnem + '" needs a data section / symbol table — not in this ' +
+      ': "' + mnem + '" needs a symbol table / object output — not in this ' +
       'frontend increment yet (see feature-asm-source-frontend). Supported: ' +
-      'labels, jmp/call/jcc, syscall, and asmcore''s register/imm/[mem] forms.');
+      'labels, jmp/call/jcc, syscall, asmcore''s register/imm/[mem]/[rel] ' +
+      'forms, and a "section .text"/"section .data" + db/dw/dd/dq data area.');
 end;
 
 const
   ASM_MAX_LABELS = 4096;
   ASM_MAX_FIXUPS = 8192;
+  SEC_TEXT = 0;
+  SEC_DATA = 1;
 
 procedure ParseAsmProgram;
 var
@@ -212,10 +283,13 @@ var
   buf: TAsmByteBuf;
   patches: TAsmPatchList;
   baseOff: Integer;
-  branchLabel: AnsiString;
+  branchLabel, opRipLabel: AnsiString;
+  curSection, dataBase: Integer;
+  dataBuf: TAsmByteBuf;
   { label table + branch fixups (layer-2 symbolic resolution) }
   lblName: array[0..ASM_MAX_LABELS-1] of AnsiString;
   lblOff:  array[0..ASM_MAX_LABELS-1] of Integer;
+  lblIsData: array[0..ASM_MAX_LABELS-1] of Boolean;
   lblCount: Integer;
   fixPos:  array[0..ASM_MAX_FIXUPS-1] of Integer;
   fixName: array[0..ASM_MAX_FIXUPS-1] of AnsiString;
@@ -232,6 +306,8 @@ begin
   emittedAny := False;
   lblCount := 0;
   fixCount := 0;
+  curSection := SEC_TEXT;
+  BufInit(dataBuf);
 
   while i <= n do
   begin
@@ -261,7 +337,9 @@ begin
       if lblCount >= ASM_MAX_LABELS then
         Error('asm:' + AsmIntToStr(lineNo) + ': too many labels');
       lblName[lblCount] := AsmLower(labelPart);
-      lblOff[lblCount] := CodeLen;
+      lblIsData[lblCount] := (curSection = SEC_DATA);
+      if curSection = SEC_DATA then lblOff[lblCount] := dataBuf.Len
+      else lblOff[lblCount] := CodeLen;
       Inc(lblCount);
       line := AsmTrim(Copy(line, ci + 1, Length(line) - ci));
       if line = '' then Continue;   { label-only line }
@@ -275,6 +353,23 @@ begin
     while (ci <= Length(line)) and (not AsmIsSpace(line[ci])) do Inc(ci);
     mnem := AsmLower(Copy(line, 1, ci - 1));
     restp := AsmTrim(Copy(line, ci, Length(line) - ci + 1));
+
+    if mnem = 'section' then
+    begin
+      if AsmLower(restp) = '.text' then curSection := SEC_TEXT
+      else if AsmLower(restp) = '.data' then curSection := SEC_DATA
+      else Error('asm:' + AsmIntToStr(lineNo) + ': unsupported section "' + restp + '" (only .text/.data)');
+      Continue;
+    end;
+
+    if curSection = SEC_DATA then
+    begin
+      AsmParseDataLine(mnem, restp, lineNo, dataBuf);
+      Continue;
+    end;
+
+    if (mnem = 'db') or (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') then
+      Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs "section .data"');
 
     AsmRejectIfUnsupported(mnem, lineNo);
 
@@ -313,7 +408,10 @@ begin
       end;
       instr.OperandCount := opCount;
       for k := 0 to opCount - 1 do
-        AsmParseOperand(ops[k], lineNo, instr.Operands[k]);
+      begin
+        AsmParseOperand(ops[k], lineNo, instr.Operands[k], opRipLabel);
+        if opRipLabel <> '' then branchLabel := opRipLabel;
+      end;
     end;
 
     { encode via lib/asmcore -> Code[] ; remember branch fixups }
@@ -341,7 +439,24 @@ begin
   if not emittedAny then
     Error('asm: no instructions in source');
 
-  { resolve branch fixups: rel32 = target - (patchPos + 4) }
+  { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. A program that runs off
+    the end exits with whatever it left in rdi (programs may also exit via an
+    explicit `syscall`). }
+  EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
+  EmitB($0F); EmitB($05);                                       { syscall }
+
+  { append the data section after code+epilogue (one contiguous loaded image,
+    so rip-relative disp arithmetic below is valid) and turn each data
+    label's dataBuf-local offset into its final absolute one. }
+  dataBase := CodeLen;
+  for i := 0 to lblCount - 1 do
+    if lblIsData[i] then lblOff[i] := dataBase + lblOff[i];
+  for k := 0 to dataBuf.Len - 1 do
+    EmitB(dataBuf.Bytes[k]);
+
+  { resolve fixups (branch rel32 + rip-relative disp32): same formula,
+    target - (patchPos + 4), since both measure from the end of the patched
+    field to the resolved address. }
   for k := 0 to fixCount - 1 do
   begin
     found := False; tgt := 0;
@@ -352,10 +467,4 @@ begin
     rel := tgt - (fixPos[k] + 4);
     Patch32(fixPos[k], rel);
   end;
-
-  { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. A program that runs off
-    the end exits with whatever it left in rdi (programs may also exit via an
-    explicit `syscall`). }
-  EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
-  EmitB($0F); EmitB($05);                                       { syscall }
 end;

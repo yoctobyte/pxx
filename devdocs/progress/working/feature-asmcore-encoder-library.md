@@ -157,3 +157,15 @@ before fanning out wide, not about limiting ambition:
   patch sites against its own label table with `Patch32` — proving the
   layer-1/layer-2 split. See [[feature-asm-source-frontend]] (data section /
   db/global/extern/.so still deferred there).
+- 2026-06-30 — **`REG_RIP` sentinel + `EncodeRegMemPatch`** (Track B+A):
+  `asmcore_x64` grew rip-relative addressing for `mov reg,[mem]`/`lea reg,[mem]`
+  — `MemOp(REG_RIP, 0)` (`REG_RIP = -2`) signals "no base register, ModRM
+  mod=00/rm=101 means rip-relative", and the encoder records a disp32 patch
+  site exactly like a branch's rel32 (same opaque-marker contract, layer 2
+  resolves both with the same formula). Consumed end-to-end by the `.asm`
+  frontend's new `section .data`/`db` support — see
+  [[feature-asm-source-frontend]]'s 2026-06-30 log for the `test_asm_hello.asm`
+  proof (real `write(2)` syscall I/O, not just arithmetic). Textual printer
+  (`MemText`) updated for the sentinel too. Still open for full x64
+  acceptance: SIB index/scale, 8/16-bit operand sizes, rip-relative *store*
+  (`mov [rel x], reg`); other five targets not started.

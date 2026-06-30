@@ -25,6 +25,11 @@ const
   reg_rsp = 4; reg_rbp = 5; reg_rsi = 6; reg_rdi = 7;
   reg_r8  = 8; reg_r9  = 9; reg_r10 = 10; reg_r11 = 11;
   reg_r12 = 12; reg_r13 = 13; reg_r14 = 14; reg_r15 = 15;
+  { MemOp(REG_RIP, 0) means "rip-relative, disp32 is a patch site" — the
+    layer-1 opaque-patch-marker the design doc calls for, not a label name;
+    layer 2 (the .asm frontend) resolves the disp the same way it resolves
+    branch targets: target - (patch_offset + 4). }
+  REG_RIP = -2;
 
 function AsmEncodeX64(const instr: TAsmInstr;
                        var buf: TAsmByteBuf;
@@ -239,6 +244,26 @@ begin
   Result := True;
 end;
 
+{ mov/lea reg, [rip+disp32] — a rip-relative patch site (REG_RIP sentinel).
+  No base register is encoded (ModRM rm=101 with mod=00 means RIP-relative,
+  not "no base"); REX.B is never set for this form. }
+function EncodeRegMemPatch(opcode: Integer; const regOp, memOp: TAsmOperand;
+                            var buf: TAsmByteBuf; var patches: TAsmPatchList;
+                            opIndex: Integer): Boolean;
+begin
+  if memOp.MemBase = REG_RIP then
+  begin
+    EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, False, False);
+    BufAppend(buf, Byte(opcode));
+    BufAppend(buf, Byte((0 shl 6) or ((regOp.Reg and 7) shl 3) or 5));
+    PatchAdd(patches, buf.Len, 4, opIndex);
+    BufAppendI32(buf, 0);
+    Result := True;
+    Exit;
+  end;
+  Result := EncodeRegMem(opcode, regOp, memOp, buf);
+end;
+
 function EncodeUnary(digit: Integer; opByte: Integer; const dst: TAsmOperand; var buf: TAsmByteBuf): Boolean;
 begin
   EmitRex(buf, dst.RegSize = 8, False, False, dst.Reg >= 8);
@@ -334,7 +359,7 @@ begin
     begin
       if (d0.Kind = opReg) and (d1.Kind = opImm) then begin Result := EncodeMovRegImm(d0, d1, buf); Exit; end;
       if (d0.Kind = opReg) and (d1.Kind = opReg) then begin Result := EncodeRMReg($89, w, d0, d1, buf); Exit; end;
-      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMem($8B, d0, d1, buf); Exit; end;
+      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMemPatch($8B, d0, d1, buf, patches, 1); Exit; end;
       if (d0.Kind = opMem) and (d1.Kind = opReg) then begin Result := EncodeRegMem($89, d1, d0, buf); Exit; end;
       LastError := 'asmcore_x64: unsupported mov operand combination';
       Exit;
@@ -342,7 +367,7 @@ begin
 
     if MnemIs(instr.Mnemonic, 'lea') then
     begin
-      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMem($8D, d0, d1, buf); Exit; end;
+      if (d0.Kind = opReg) and (d1.Kind = opMem) then begin Result := EncodeRegMemPatch($8D, d0, d1, buf, patches, 1); Exit; end;
       LastError := 'asmcore_x64: lea expects reg, [mem]';
       Exit;
     end;
@@ -390,6 +415,7 @@ end;
 function MemText(const m: TAsmOperand): AnsiString;
 var s: AnsiString;
 begin
+  if m.MemBase = REG_RIP then begin Result := '[rip+<patch>]'; Exit; end;
   s := '[' + RegName(m.MemBase, 8);
   if m.MemDisp > 0 then s := s + '+' + IntToStrAsm(m.MemDisp)
   else if m.MemDisp < 0 then s := s + IntToStrAsm(m.MemDisp);

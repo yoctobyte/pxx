@@ -97,3 +97,33 @@ wiring, not new machinery.
   with rip-relative relocation, `section`/`global`/`extern` directives, `-c`
   `ET_REL` object output, `--shared` `ET_DYN` `.so` writer. Those give clear
   "not in this increment" errors today.
+- 2026-06-30 — **data section + rip-relative `lea` landed** (Track B+A): `section
+  .text`/`section .data` directives + `db/dw/dd/dq` (quote-aware, string
+  literals only valid with `db`) feed a second byte buffer appended after
+  code+epilogue (one contiguous `ET_EXEC` image); data-label offsets fold into
+  the *same* label table code labels use, before fixup resolution runs.
+  `lea reg, [rel label]` is the new operand form — `lib/asmcore/asmcore_x64.pas`
+  grew a `REG_RIP = -2` sentinel (`MemOp(REG_RIP, 0)`) + `EncodeRegMemPatch`
+  (ModRM mod=00/rm=101 + disp32 patch site, same opaque-patch-marker contract
+  as branches), wired into the `mov reg,[mem]` and `lea reg,[mem]` two-operand
+  arms. The frontend reuses the branch-fixup table verbatim for this — rip disp32
+  and branch rel32 share the same `target - (patch_offset+4)` formula, so
+  `[rel label]` just sets the same `branchLabel` var a `jmp <label>` would.
+  `test/test_asm_hello.asm`: a real `write(1,msg,18); exit(0)` syscall program —
+  first asm program that does I/O, not just arithmetic — in `make test`
+  (`test-asm`, stdout-checked). LANDMINE: a local var named `low` collided with
+  the compiler's reserved `Low` builtin token (case-insensitive) and broke
+  self-host parsing with a baffling "expected (, but got" — renamed to
+  `innerLower`. Self-host + threadsafe-self-host byte-identical, full `make
+  test` green. **Still deferred:** `section`/`global`/`extern` symbol export,
+  `-c` `ET_REL` object output, `--shared` `ET_DYN` `.so` writer, `mov
+  [rel label], reg` (rip-relative store — only load/lea landed).
+- 2026-06-30 — **User sequencing call:** heads 1 (inline `asm...end`) and 3
+  (this `.asm` frontend) are primary now; head/layer-2 (migrating the
+  compiler's *own* self-hosted codegen backends onto `lib/asmcore`, retiring
+  the legacy emitters — see [[feature-asm-structured-ir-library]]) is
+  deprioritized to "latest." Next legwork on this side: head 1, wiring
+  `compiler/asmenc.inc`'s inline-asm parser to the existing structured engine
+  per [[feature-asm-structured-ir-library]]'s corrected understanding (the
+  per-target `EmitAsmXxx` engines already do labels/branches/relocations —
+  this is parser-identifier-resolution wiring, not new encoder work).

@@ -273,6 +273,8 @@ test-asm: $(COMPILER)
 	/tmp/test_asmcore_x64_26 | tail -1 | grep -q "all asmcore_x64 checks passed"
 	./$(COMPILER) test/test_asm_loop.asm /tmp/test_asm_loop26
 	/tmp/test_asm_loop26; test "$$?" = "45"
+	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
+	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
