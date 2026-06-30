@@ -95,3 +95,4 @@
 2026-06-30T07:43:06Z  v95  ad0686ca24311246c8448af207494c0ba5f662a854d95bb4c183b404e4065e67  1134858cf2d211d097d7f17a61dd42b02fe58a59  docs(progress): file oversized-stack-frame warning feature ticket
 2026-06-30T08:00:48Z  v96  7bbcebc187e555ccdc8bdfee4cf42e773751c9f2ec9cf4a8abc512eb01ca608c  1134858cf2d211d097d7f17a61dd42b02fe58a59  docs(progress): file oversized-stack-frame warning feature ticket
 2026-06-30T08:15:23Z  v97  77b68b4ca2b5d02d18d4a503dc1a479bae12e54ec64802c47582372da111dc46  1134858cf2d211d097d7f17a61dd42b02fe58a59  docs(progress): file oversized-stack-frame warning feature ticket
+2026-06-30T18:44:50Z  v98  10eecc6ce80b0045818fe99096a840d7e8aacb7251e4c79b064386bf63813d4b  dd0c69778503ce1f10ad61c1e2ce4f8df6fc7085  feat(thread): FPC TRTLCriticalSection API + RunOnce (M2)
