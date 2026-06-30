@@ -238,7 +238,15 @@ code anyway.
 5. Remaining targets (i386, riscv32, arm32, xtensa) — same shape, new
    mnemonic tables; riscv32/arm32/xtensa will each need their own
    `AsmPatchBranch<Target>` per the finding above (i386 can likely reuse
-   x64's `Patch32` raw-overwrite, being x86-family).
+   x64's `Patch32` raw-overwrite, being x86-family). **i386 done 2026-06-30**
+   — confirmed mechanical as predicted: byte-identical opcodes to x64 minus
+   REX, rel32 branches resolve via the same generic `Patch32` (no
+   `AsmPatchBranchI386` needed). One real divergence: `inc`/`dec r32` use
+   the 1-byte short form (`40+r`/`48+r`), only valid in 32-bit mode (those
+   bytes are REX prefixes in long mode, so x64 has to use the longer
+   `FF /digit` form) — matched `as`'s default choice. Remaining: riscv32
+   (no cross-toolchain installed in this environment — needs `apt install`
+   or a different oracle strategy), arm32, xtensa.
 6. Textual printer per target, in step with each target's encoder (not
    bolted on at the end). **Done for x64 and aarch64** (`AsmPrintX64`/
    `AsmPrintAArch64`).
