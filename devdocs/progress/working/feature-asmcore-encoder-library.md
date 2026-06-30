@@ -232,3 +232,34 @@ before fanning out wide, not about limiting ambition:
   reference" instead of a live host oracle (the ticket's acceptance
   criteria explicitly allow either). User call needed on which path before
   continuing.
+- 2026-06-30 — **riscv32 + xtensa land — all 6 targets done** (Track B).
+  User authorized `apt install binutils-riscv64-linux-gnu
+  binutils-xtensa-lx106`, giving a real host oracle for both. riscv32
+  (RV32I): 24/24 byte-exact, two findings beyond aarch64/arm32's — `jal`/
+  branch immediates are bit-*scrambled* (UJ/SB-type, non-contiguous field
+  placement, not just packed-and-shifted) and relative to the instruction's
+  own address (simplest convention yet, no pipeline adjustment); RISC-V
+  branches also compare two registers in the branch instruction itself, so
+  its `TAsmInstr` is 3 operands where every other target uses 1 — no base
+  changes needed regardless. xtensa (LX6/LX7): the biggest structural
+  departure of the six — the base ISA is 24-bit/3-byte, not 32-bit (this
+  slice covers only the 3-byte forms, forced via `as --no-transform`);
+  `AsmPatchBranchXtensa` takes a raw byte delta instead of the
+  word-divided-by-4 convention the 4-byte-fixed targets share (3-byte
+  instructions don't have a meaningful "word of 4" unit — forcing it would
+  go fractional). Real trap caught and documented: `objdump`'s disassembly
+  text is MSB-first-as-a-number, not the literal little-endian memory byte
+  order — verified the true bytes via `objcopy -O binary`+`xxd`, then used
+  this compiler's own existing, ESP-hardware-validated
+  `compiler/xtensaenc.inc` as the formula source (independently
+  byte-verified, not blindly trusted). 15/15 checks. Both standalone, both
+  `test/test_asmcore_{riscv32,xtensa}.pas` in `make test`, byte-exact under
+  PXX self-host and FPC. Full writeup in `devdocs/developer/
+  asmcore-design.md`. **Acceptance met**: all 6 targets (x64, aarch64,
+  i386, arm32, riscv32, xtensa) encode byte-identical vs. a host oracle,
+  standalone test suite, readable per-instruction-family code. Each
+  target's coverage is a representative MVP slice (mirrors x64's own
+  scope, which also still has open items — SIB, 8/16-bit operand sizes),
+  not the full ISA; growing per-target coverage and decode/disassemble
+  (the stretch goal) are natural follow-on work, not blockers to closing
+  this ticket's initial buildout. Closing as resolved.
