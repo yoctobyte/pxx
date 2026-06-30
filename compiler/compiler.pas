@@ -48,6 +48,7 @@ procedure AsmI64(v: Int64); forward;
 {$include symtab.inc}
 {$include exception_emit.inc}
 {$include coroutine_emit.inc}
+{$include thread_emit.inc}
 {$include asmenc.inc}
 {$include asmtext.inc}
 {$include asmtext_386.inc}

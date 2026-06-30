@@ -4181,6 +4181,38 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxclone') then
+      begin
+        { Libc-free thread spawn: __pxxclone(flags, childStack, entry, arg, ctidptr).
+          Lowers to a call to the bare clone+trampoline stub. Returns the child tid
+          (Int64) in the parent; never returns in the child. }
+        Next; { consume '__pxxclone' }
+        { The clone+trampoline stub is emitted lazily (jmp-over) at the first IR_CLONE
+          codegen — see EnsureCloneStub — so nothing to arrange here. }
+        Expect(tkLParen, '(');
+        node := AllocNode(AN_CLONE);
+        ASTTk[node] := Ord(tyInt64);
+        lastArg := -1;
+        nArgs := 0;
+        repeat
+          ParseExpr;
+          exprNode := CurASTNode;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := exprNode;
+          if lastArg = -1 then
+            ASTLeft[node] := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        if nArgs <> 5 then Error('__pxxclone: expects exactly 5 arguments (flags, childStack, entry, arg, ctidptr)');
+        LastExprTk := tyInt64;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__resources') then
       begin
         Next; { consume '__resources' }
@@ -14666,6 +14698,7 @@ begin
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   ExceptionUsed := False;
   CoroutineUsed := False;
+  CloneStubAddr := 0;        { 0 = clone+trampoline stub not yet emitted (lazy) }
   hasExceptions := False;
   hasCoroutine := False;
   needsBuiltin := False;

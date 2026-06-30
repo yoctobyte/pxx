@@ -94,6 +94,7 @@ begin
     IR_VAR_BOX: Result := 'var_box';
     IR_SYSCALL: Result := 'syscall';
     IR_COSWITCH: Result := 'coswitch';
+    IR_CLONE: Result := 'clone';
     IR_YIELD: Result := 'yield';
     IR_CALL_IND: Result := 'call_ind';
   else
@@ -332,6 +333,9 @@ begin
 
       IR_COSWITCH:
         IRRequireNode(IRA[i], 'coswitch first arg');
+
+      IR_CLONE:
+        IRRequireNode(IRA[i], 'clone first arg');
 
       IR_YIELD:
         IRRequireNode(IRA[i], 'yield value');
@@ -2470,6 +2474,26 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_COSWITCH, first, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_CLONE:
+    begin
+      { Five args (flags, childStack, entry, arg, ctidptr) as an IR_ARG chain;
+        backend moves them into the SysV arg regs and calls the bare clone+
+        trampoline stub. Result (child tid) in the accumulator. }
+      first := -1;
+      last := -1;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        value := IRLowerAST(ASTLeft[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+      end;
+      Result := IRAppend(IR_CLONE, first, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_YIELD:

@@ -2568,6 +2568,9 @@ begin
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
       end;
 
+    IR_CLONE:
+      Error('target i386: __pxxclone not yet supported (threading is x86-64 first)');
+
     IR_FIELD:
       begin
         IREmitNode386(IRA[node]);                    { base address -> eax }

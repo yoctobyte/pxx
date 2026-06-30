@@ -1534,6 +1534,33 @@ begin
         IREmitCodeCall(CoSwitchAddr);
       end;
 
+    IR_CLONE:
+      begin
+        { __pxxclone(flags, childStack, entry, arg, ctidptr): evaluate the five
+          args left-to-right onto the stack, pop into the SysV arg regs
+          rdi/rsi/rdx/rcx/r8 (the stub's input contract), then call the bare
+          clone+trampoline stub. Result (child tid) stays in rax. The stub is
+          emitted lazily (jmp-over) the first time we get here. }
+        EnsureCloneStub;
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode(IRA[argNode]);
+          EmitB($50); { push rax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          case i of
+            0: EmitB($5F);                        { pop rdi  (flags) }
+            1: EmitB($5E);                        { pop rsi  (childStack) }
+            2: EmitB($5A);                        { pop rdx  (entry) }
+            3: EmitB($59);                        { pop rcx  (arg) }
+            4: begin EmitB($41); EmitB($58); end; { pop r8   (ctidptr) }
+          end;
+        IREmitCodeCall(CloneStubAddr);
+      end;
+
     IR_YIELD:
       begin
         { Evaluate the yielded value into rax, store it into the instance's

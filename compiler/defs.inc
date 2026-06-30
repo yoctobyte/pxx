@@ -225,6 +225,12 @@ const
                            case/default node kinds. Lowered to a dispatch (compare
                            selector vs each case, jump to its label) + the body in
                            order (fallthrough), with a break-only scope. }
+  AN_CLONE         = 72; { __pxxclone(flags, childStack, entry, arg, ctidptr): Int64.
+                           Left = AN_ARG chain (exactly 5). Lowers to IR_CLONE: moves
+                           the args into the SysV arg regs and calls the bare clone+
+                           trampoline stub (thread_emit.inc). Returns the child tid in
+                           the parent; never returns in the child (runs entry(arg) then
+                           SYS_exit). The one machine-code piece of libc-free threading. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -295,6 +301,7 @@ const
   IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. Captured as the fat pointer's first word. }
   IR_STORE_DYN    = 60;  { ARC-correct whole dyn-array store into a slot ADDRESS (record/class field or nested sub-array). IRA = slot-address node; IRB = new handle value node; IRC = dyn depth; IRIVal = -1 (non-symbol → node-derived descriptor); IRTk = base TTypeKind; IRSetLenBaseRec = base record id. Retains the new handle, publishes it, element-aware releases the old. x86-64 only; other targets keep the IR_STORE_MEM share path. }
   IR_SETLEN_STR   = 61;  { SetLength on a managed AnsiString reached through ANY lvalue (symbol, record/class field, var-param field, index, deref). IRA = target slot-ADDRESS node (IRLowerAddress of the lvalue → &handle slot); IRB = new length count node. Calls PXXStrSetLen(addr, n). Address-based so a field/var-param target needs no symbol reconstruction — the managed-string analogue of IR_SETLEN_DYN. Frozen inline strings (tyString, the self-host model) keep the -101 store-length path; only tyAnsiString reaches here. }
+  IR_CLONE        = 62;  { IRA = first IR_ARG (flags, childStack, entry, arg, ctidptr — exactly 5); moves them into the SysV arg regs and calls the bare clone+trampoline stub (CloneStubAddr). Result (child tid) in the accumulator. Libc-free thread creation; x86-64 first, i386 next. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
@@ -1238,6 +1245,7 @@ var
   ExcRaiseAddr    : Integer;
   CoroutineUsed   : Boolean;
   CoSwitchAddr    : Integer;  { code address of the bare CoSwitch context-switch stub }
+  CloneStubAddr   : Integer;  { code address of the bare clone+trampoline thread-spawn stub; 0 = not yet emitted (lazy) }
   CurProcIsAsync  : Boolean;  { parsing the body of an `; async;` routine (legalises `await`) }
   CurProcIsGenerator : Boolean; { parsing the body of a `; generator;` routine }
   CurGenSelfSym   : Integer;  { sym idx of the generator body's hidden self-pointer local }

@@ -1,0 +1,71 @@
+{ ===== Thread runtime emission ===== }
+
+{ The only machine-code part of libc-free threading: a bare clone+trampoline stub.
+  Everything else (futex wait/wake, mmap'd stacks, join, the PAL/TThread layers) is
+  Pascal in the PXX-only RTL, built on __pxxrawsyscall.
+
+  clone(2) cannot go through __pxxrawsyscall: after the syscall the CHILD resumes
+  inside the syscall wrapper on a brand-new stack and would `ret` through a torn
+  frame. The child must instead branch on its zero return, fetch the entry pointer +
+  argument that the parent staged on the new stack, `call` the Pascal entry, then
+  SYS_exit — never returning to Pascal code. That branch is why this is a hand-emitted
+  stub rather than inline asm (pxx inline-asm has no branches yet).
+
+  __pxxclone(flags, childStack, entry, arg, ctidptr): Int64
+    flags     (arg1) -> clone flags. Callers pass PXX_CLONE_THREAD which includes
+                        CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID so the kernel writes
+                        the child tid into *ctidptr at clone time and clears it +
+                        futex-wakes on exit (the join handshake).
+    childStack(arg2) -> highest address of the child's stack (grows down); must be
+                        16-byte aligned. The stub stages [entry][arg] just below it.
+    entry     (arg3) -> ^procedure(arg: Pointer); cdecl-free, called with arg in rdi.
+    arg       (arg4) -> opaque pointer handed to entry.
+    ctidptr   (arg5) -> &tidword, the CLONE_*_*TID futex word used by join.
+  Returns the child tid in the parent; the child path never returns.
+
+  The IR_CLONE lowering moves the five args into the SysV arg regs (rdi,rsi,rdx,rcx,r8)
+  and `call`s this stub, so the stub's input contract is exactly that register set.
+
+  Emitted lazily and exactly once, the first time IR_CLONE is codegen'd, fronted by a
+  `jmp` over itself so it is reached only by `call` (never fallen through). Lazy +
+  self-contained means it works no matter where __pxxclone is used — main program or
+  a `uses`d unit pulled in after the up-front runtime-stub region. CloneStubAddr = 0
+  marks "not yet emitted". }
+
+procedure EnsureCloneStub;
+var
+  jmpOver: Integer;
+begin
+  if CloneStubAddr <> 0 then Exit;
+  if TargetArch = TARGET_X86_64 then
+  begin
+    { jump over the stub body — execution must reach it only via `call`. }
+    EmitB($E9); jmpOver := CodeLen; EmitI32(0);
+    CloneStubAddr := CodeLen;
+    { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
+    EmitB($48); EmitB($83); EmitB($EE); EmitB($10);   { sub rsi, 16   (stage area) }
+    EmitB($48); EmitB($89); EmitB($16);               { mov [rsi], rdx     (entry) }
+    EmitB($48); EmitB($89); EmitB($4E); EmitB($08);   { mov [rsi+8], rcx   (arg) }
+    EmitB($4C); EmitB($89); EmitB($C2);               { mov rdx, r8    (parent_tid = ctidptr) }
+    EmitB($4D); EmitB($89); EmitB($C2);               { mov r10, r8    (child_tid  = ctidptr) }
+    EmitB($45); EmitB($31); EmitB($C0);               { xor r8d, r8d   (tls = NULL) }
+    EmitB($B8); EmitB($38); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 56  (SYS_clone) }
+    EmitB($0F); EmitB($05);                           { syscall }
+    EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
+    EmitB($75); EmitB($0D);                           { jnz .parent  (skip 13 child bytes) }
+    { ---- child: rsp = childStack-16, [rsp]=entry [rsp+8]=arg ---- }
+    EmitB($58);                                       { pop rax  (entry) }
+    EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
+    EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }
+    EmitB($31); EmitB($FF);                           { xor edi, edi  (exit code 0) }
+    EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60  (SYS_exit) }
+    EmitB($0F); EmitB($05);                           { syscall  (thread exits here) }
+    { ---- .parent: rax already = child tid ---- }
+    EmitB($C3);                                       { ret }
+    { patch the jump-over to land here, past the stub. }
+    Patch32(jmpOver, CodeLen - (jmpOver + 4));
+  end;
+  { i386 lands next; other targets (esp) are out of scope for threading. The IR_CLONE
+    codegen guards those with a clean compile-error, so EnsureCloneStub is never
+    reached on them. }
+end;

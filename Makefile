@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -187,7 +187,7 @@ test-nilpy-frozen: test-nilpy
 # `make test-fpc` (release/CI postcheck), and a cold checkout seeds the binary
 # with `make seed-from-stable` (also no FPC). Only a pure-source distro build
 # with no committed binary needs `make bootstrap`.
-test: test-core test-debug-g lib-fpc-clean
+test: test-core test-threads test-debug-g lib-fpc-clean
 
 # FPC-dependent postcheck, NOT part of the daily gate. Two checks that shell out
 # to FPC: (1) fpc-check -- FPC can still compile us and yields the same
@@ -234,6 +234,16 @@ test-asm-emit:
 	    { echo "asm-emit $$t: FAIL"; /tmp/test_asm_emit_$$t; exit 1; }; \
 	  echo "asm-emit $$t: OK"; \
 	done
+
+# Libc-free threading (meta-multithreading M1). x86-64 only: spawns real OS threads
+# via the __pxxclone trampoline (clone(2)) and joins them with futex, through both
+# the raw intrinsic and the palthread PAL. Verifies every child ran in the shared
+# address space; tids are kept out of stdout so the output is deterministic.
+test-threads: $(COMPILER)
+	./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone26
+	test "$$(/tmp/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
+	./$(COMPILER) test/test_palthread.pas /tmp/test_palthread26
+	test "$$(/tmp/test_palthread26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
