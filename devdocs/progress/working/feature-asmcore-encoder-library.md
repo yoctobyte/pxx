@@ -186,3 +186,21 @@ before fanning out wide, not about limiting ambition:
   pinned-binary-outside-repo-root caveat) RTL/PCL already have.
   `test/test_asmcore_x64.pas` already exercises this unflagged in `make
   test`, now re-verified after the refactor. Full `make test` green.
+- 2026-06-30 — **aarch64 lands — second target, sequencing step 3 done**
+  (Track B): chose aarch64 over riscv32 (the ticket's own "e.g." suggestion)
+  for tooling — `aarch64-linux-gnu-as`/`objdump` were installed as a host
+  byte-exact oracle, no riscv32 cross-toolchain was. Coverage: mov(=orr
+  alias)/add/sub/and/orr/eor/cmp(=subs alias)/ldr/str/movz/movk/movn/b/bl/
+  b.cond/ret/nop — 26/26 byte-exact, both PXX self-host and FPC.
+  `TAsmOperand`/`TAsmInstr` needed **zero** changes — encode-side abstraction
+  holds. Real finding: branch-patch *resolution* is target-specific (x64's
+  generic `Patch32` raw-overwrite doesn't work — aarch64 packs imm26/imm19
+  inside the same 32-bit opcode word, not a separate trailing field), so
+  added `AsmPatchBranchAArch64` as the per-target resolver this needs. Full
+  writeup in `devdocs/developer/asmcore-design.md` ("Branch patch resolution
+  is target-specific"). `test/test_asmcore_aarch64.pas` in `make test`.
+  Standalone — `compiler.pas` doesn't `uses` this target, self-host
+  unaffected by construction. **Next**: i386 (mechanical, x64-with-the-lid-
+  off) or riscv32/arm32/xtensa (each needs its own `AsmPatchBranch<Target>`
+  per the finding above) — riscv32's toolchain isn't installed here, may
+  need `apt install` or a different oracle strategy when picked up.
