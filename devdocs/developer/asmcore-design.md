@@ -244,9 +244,22 @@ code anyway.
    `AsmPatchBranchI386` needed). One real divergence: `inc`/`dec r32` use
    the 1-byte short form (`40+r`/`48+r`), only valid in 32-bit mode (those
    bytes are REX prefixes in long mode, so x64 has to use the longer
-   `FF /digit` form) — matched `as`'s default choice. Remaining: riscv32
-   (no cross-toolchain installed in this environment — needs `apt install`
-   or a different oracle strategy), arm32, xtensa.
+   `FF /digit` form) — matched `as`'s default choice. **arm32 (A32) done
+   2026-06-30** — another real finding, distinct from aarch64's: every
+   instruction is conditionally predicated (a 4-bit cond field in
+   bits[31:28], this slice only emits `AL`/always for non-branches), and
+   branch PC-relative arithmetic is off by **one whole word** from every
+   other target here — A32's classic 3-stage-pipeline artifact where PC
+   reads as `instr_addr+8` while an instruction executes, not the
+   `instr_addr+4` ("next instruction") convention x64/aarch64/i386 all
+   share. `AsmPatchBranchArm32` takes `relWords` in the same
+   `(target-(patch+4))/4` convention every other resolver uses and
+   subtracts 1 internally, so the *frontend-facing* contract stays uniform
+   even though A32 hardware doesn't behave uniformly — verified against
+   `arm-linux-gnueabi-as`/objdump (4 branch directions/conditions, all
+   byte-exact). Remaining: riscv32 (no cross-toolchain installed in this
+   environment — needs `apt install` or a different oracle strategy),
+   xtensa (likely the same gap, ESP-specific toolchain).
 6. Textual printer per target, in step with each target's encoder (not
    bolted on at the end). **Done for x64 and aarch64** (`AsmPrintX64`/
    `AsmPrintAArch64`).
