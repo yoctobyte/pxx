@@ -65,3 +65,16 @@ occur between the write and the read of the slot.
   variant-box temp (cheap) → I/O serialization (needs the thread runtime anyway).
 - Not blocking the FPC cold-bootstrap work, which is a separate codegen-divergence
   bug ([[bug-fpc-seeded-binary-runtime-segfault]]).
+
+## Sweep done (2026-06-30)
+
+Ran the choke-point grep (`CurProc := -1`, `Kind := skGlobal`). Result: the ONLY
+mid-routine *forced*-global (a `CurProc:=-1` override while inside a routine) is
+the frozen-string Result (parser.inc 12542/12546) — DEFERRED as low-priority
+(niche frozen mode, [[bug-frozen-string-result-global-not-reentrant]]). Every other
+hit is benign: the `if CurProc<0 then Kind:=skGlobal` in AllocVar/AllocArray/
+AllocDynArray (genuine globals, not overrides), and scope resets at routine end
+(parser.inc 13371/14104, pyparser 876/1055). Variant-box temp = already a routine
+-local (v97, done). So the **reentrancy** class is closed: nothing new bites
+single-threaded in managed mode. Remaining items (I/O scratch, heap) are
+thread-safety-only and need the thread runtime anyway.
