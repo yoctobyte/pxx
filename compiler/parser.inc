@@ -249,7 +249,7 @@ begin
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }
-  u := FindCompiledUnit(cand);
+  u := FindUnitOrAlias(cand);
   if u >= 0 then begin bestUnit := u; bestExtra := 0; end;
 
   { Extend with `.ident` groups; each is a unit-qualifier candidate only while a
@@ -264,7 +264,7 @@ begin
     if (ti + 3 < TokCount) and (Tokens[ti + 2].Kind = tkDot) and
        (Tokens[ti + 3].Kind = tkIdent) then
     begin
-      u := FindCompiledUnit(cand);
+      u := FindUnitOrAlias(cand);
       if u >= 0 then begin bestUnit := u; bestExtra := extra; end;
     end;
     Inc(extra);
@@ -14030,6 +14030,42 @@ begin
   end;
 end;
 
+procedure ParseUsesEntry;
+{ One `uses` entry: a (possibly dotted/quoted) unit name with an optional
+  `as <alias>` suffix. The alias gives a valid-identifier handle for a quoted
+  unit whose real name is not a Pascal identifier (`uses 'wayland-client' as
+  wayland;`) or that clashes with a keyword (`uses 'string' as cstrings;`), so
+  `wayland.Sym` / `cstrings.strlen` qualifiers parse. Symbol lookup is flat, so
+  the alias only needs to be a findable compiled-unit name (FindCompiledUnit) —
+  registering it there is enough for ConsumeUnitQualifier to accept the prefix.
+  See feature-uses-alias-as. }
+var uname, alias, realLo: AnsiString; aStrIdx, realStrIdx, i: Integer; isPath: Boolean;
+begin
+  uname := ReadDottedUsesName;
+  ParseUsesUnit(uname);
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'as') then
+  begin
+    Next;                          { consume `as` }
+    if CurTok.Kind <> tkIdent then
+      Error('expected an identifier after `as` in a uses clause');
+    alias := CurTok.SVal;
+    Next;                          { consume the alias identifier }
+    { Map the alias to the REAL unit's Strs[] index — the same normalisation
+      ParseUsesUnit used to tag the unit's symbols (basename for a path). }
+    isPath := False;
+    for i := 1 to Length(uname) do if uname[i] = '/' then isPath := True;
+    if isPath then realLo := LowerCase(GetFileBaseName(uname)) else realLo := LowerCase(uname);
+    realStrIdx := InternStr(realLo);
+    aStrIdx := InternStr(LowerCase(alias));
+    if (UnitAliasCount < 64) and (aStrIdx <> realStrIdx) then
+    begin
+      UnitAliasName[UnitAliasCount] := aStrIdx;
+      UnitAliasReal[UnitAliasCount] := realStrIdx;
+      Inc(UnitAliasCount);
+    end;
+  end;
+end;
+
 { Compile a unit's `initialization` section into a synthesized parameterless
   proc and register it in InitProcs[]. The dialect has no real init execution,
   so ParseUnit used to drop these tokens; this emits a normal proc body that the
@@ -14143,7 +14179,7 @@ begin
         doneUses := False;
         while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
-          ParseUsesUnit(ReadDottedUsesName);
+          ParseUsesEntry;
           if not Eat(tkComma) then doneUses := True;
         end;
         Eat(tkSemicolon);
@@ -14196,7 +14232,7 @@ begin
           doneUses := False;
           while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
           begin
-            ParseUsesUnit(ReadDottedUsesName);
+            ParseUsesEntry;
             if not Eat(tkComma) then doneUses := True;
           end;
           Eat(tkSemicolon);
@@ -14871,7 +14907,7 @@ begin
         doneUses := False;
         while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
-          ParseUsesUnit(ReadDottedUsesName);
+          ParseUsesEntry;
           if not Eat(tkComma) then doneUses := True;
         end;
         Eat(tkSemicolon);

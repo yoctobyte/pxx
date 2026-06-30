@@ -1005,6 +1005,12 @@ var
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
+  { `uses 'name' as alias` table: a qualifier `alias.Sym` resolves to the real
+    unit's symbols. UnitAliasName[k] = Strs[] idx of the (lowercased) alias,
+    UnitAliasReal[k] = Strs[] idx of the real unit (= its SymUnitIdx tag). }
+  UnitAliasName : array[0..63] of Integer;
+  UnitAliasReal : array[0..63] of Integer;
+  UnitAliasCount : Integer;
   { Synthesized unit initialization procs, in dependency (post-uses) order.
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;

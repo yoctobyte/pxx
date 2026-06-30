@@ -432,6 +432,7 @@ begin
     AddPasUnitDir('lib/rtl/platform/posix/');
   end;
   CompiledUnitCount := 0;
+  UnitAliasCount := 0;
   InitProcCount := 0;
   InInterface := False;
   PreScanPass := False;

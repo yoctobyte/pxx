@@ -1611,6 +1611,26 @@ begin
   Result := -1;
 end;
 
+function FindUnitOrAlias(const name: AnsiString): Integer;
+{ Like FindCompiledUnit, but also resolves a `uses .. as alias` name to the REAL
+  unit's Strs[] index (symbols are tagged with that index, so the qualifier must
+  match it — feature-uses-alias-as). }
+var i, j: Integer; lo: AnsiString;
+begin
+  Result := FindCompiledUnit(name);
+  if Result >= 0 then Exit;
+  lo := name;
+  for j := 1 to Length(lo) do
+    if lo[j] in ['A'..'Z'] then lo[j] := Chr(Ord(lo[j]) + 32);
+  for i := 0 to UnitAliasCount - 1 do
+    if Strs[UnitAliasName[i]].Text = lo then
+    begin
+      Result := UnitAliasReal[i];
+      Exit;
+    end;
+  Result := -1;
+end;
+
 function FindSymInUnit(const name: AnsiString; unitIdx: Integer): Integer;
 var i: Integer;
 begin

@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -85,7 +85,6 @@ _none_
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
-| feature-uses-alias-as | ACA | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -127,7 +126,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (372)
+## done (373)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -487,6 +486,7 @@ _none_
 | feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | feature | Untyped `var` / `const` / `out` parameters | — |
+| feature-uses-alias-as | ACA | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
 | feature-value-bearing-expressions-for-c | A | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-warn-oversized-stack-frame | A | feature | Warn on oversized stack locals / stack frames | — |
 | feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
@@ -570,7 +570,6 @@ _none_
 - [B] feature-tls-system-trust-store
 - [B] feature-tls13-from-scratch
 - [A] feature-toolchain-cli-ux
-- [ACA] feature-uses-alias-as
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
