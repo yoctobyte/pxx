@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,7 @@ _none_
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
+| bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
@@ -548,6 +549,7 @@ _none_
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
 - [A] bug-open-array-ctor-statement-call
+- [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
