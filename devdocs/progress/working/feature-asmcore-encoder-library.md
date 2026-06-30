@@ -134,3 +134,26 @@ before fanning out wide, not about limiting ambition:
 ## Log
 - 2026-06-30 — Opened (Track B). This is the actual legwork ticket for this
   session — pull into `working/` when starting implementation.
+- 2026-06-30 — **x64 encoder widened well past the first slice** (Track B+A).
+  `asmcore_x64` now covers: mov (reg,imm | reg,reg | reg↔[base+disp]), lea,
+  full ALU reg,reg + reg,imm (83 imm8 / 81 imm32), test, imul, inc/dec/neg/not,
+  push/pop, ret/syscall/nop/leave/cqo/cdq, and jmp/call/jcc as rel32 **patch
+  sites** (the layer-1 contract — PatchOp → patch list, no label knowledge).
+  Byte-exact vs host `as`+`objdump` oracle; deliberate divergences (imm64 mov,
+  /digit ALU, no AL/AX-special) documented in `test_asmcore_x64`. Test rewritten
+  to hex-string compare (sidesteps the array-ctor bug) and folded into
+  `make test` via `test-asm`. Self-host byte-identical (asmcore is in the
+  compiler closure since the MVP frontend `uses` it). Textual printer
+  (`AsmPrintX64`) extended to all operand kinds incl `[mem]`/`<patch>`.
+  **Still open for full acceptance:** memory index/scale (SIB with index),
+  the 8/16-bit operand sizes, and the other five targets
+  (i386/aarch64/arm32/riscv32/xtensa) — none started; abstraction held for x64
+  with no `TAsmOperand` changes needed.
+- 2026-06-30 — Consumed by the **`.asm` frontend** (layer 2, Track A): labels +
+  forward/backward jmp/jcc/call resolution + `[base+disp]` operands now work
+  end-to-end (`test/test_asm_loop.asm`, sum 1..9 = 45 via a cmp/jg loop,
+  exit-code-checked in `make test`). The frontend (`compiler/asmfront.inc`)
+  builds `TAsmInstr`, encodes via `AsmEncodeX64`, and resolves the returned
+  patch sites against its own label table with `Patch32` — proving the
+  layer-1/layer-2 split. See [[feature-asm-source-frontend]] (data section /
+  db/global/extern/.so still deferred there).

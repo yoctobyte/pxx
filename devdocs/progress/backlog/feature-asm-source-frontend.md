@@ -87,3 +87,13 @@ wiring, not new machinery.
 
 ## Log
 - 2026-06-30 — Opened (Track B, filing Track A-scope ticket per convention).
+- 2026-06-30 — **labels + branches increment landed** (Track B+A) on top of the
+  MVP: `compiler/asmfront.inc` now parses `name:` labels (alone or prefixing an
+  instruction), `jmp`/`call`/`jcc <label>` rel32 branches (forward + backward,
+  resolved post-parse via `Patch32`), `[base+disp]` memory operands, and real
+  `syscall` — driven by the widened `lib/asmcore` x64 encoder + its patch-site
+  contract. `test/test_asm_loop.asm` (cmp/jg loop) in `make test`. **Still
+  deferred (the remaining scope of this ticket):** a data section + `db/dw/dd/dq`
+  with rip-relative relocation, `section`/`global`/`extern` directives, `-c`
+  `ET_REL` object output, `--shared` `ET_DYN` `.so` writer. Those give clear
+  "not in this increment" errors today.
