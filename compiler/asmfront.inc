@@ -1,16 +1,23 @@
-{ ===== MVP .asm -> executable frontend (feature-asm-mvp-frontend) =====
+{ ===== .asm -> executable frontend (feature-asm-source-frontend) =====
 
-  The minimal slice: a flat sequence of straight-line instructions (mov/add/ret,
-  matching lib/asmcore's current coverage) -> machine code via asmcore's
-  AsmEncodeX64 -> the existing ET_EXEC writer. NO labels, jumps, extern/global,
-  or sections (those land with the full feature-asm-source-frontend once asmcore
-  grows branches). Each instruction is encoded by lib/asmcore so a `.asm` fixture
-  is a real end-to-end test of that library.
+  Parses a hand-written x86-64 assembly file (Intel syntax, dst-first) and
+  drives lib/asmcore's AsmEncodeX64 + the existing ET_EXEC writer. This grew
+  out of the straight-line MVP (feature-asm-mvp-frontend); it now adds the
+  layer-2 symbolic resolution the MVP deferred:
 
-  Termination: asmcore has no syscall mnemonic yet, so a flat program cannot exit
-  on its own. The frontend appends a fixed exit epilogue (`mov eax,60; syscall`)
-  that exits with the value left in rdi — so a `.asm` computes its result into rdi
-  and the process exit code reflects it. x86-64 only. }
+    - labels (`name:`, alone or prefixing an instruction)
+    - branches: jmp / call / jcc <label>  (rel32, forward + backward resolved)
+    - syscall and the rest of asmcore's grown instruction set
+    - `[base+disp]` memory operands
+
+  Still deferred to later increments (clear errors point at them):
+    - section/global/extern directives, db/dw/dd/dq data + a data section
+      (needs rip-relative relocation), .so/object output.
+
+  Termination: as in the MVP, a fixed exit epilogue (`mov eax,60; syscall`) is
+  appended after the program, so a program that falls through exits with the
+  value left in rdi. A program may also exit itself with an explicit `syscall`.
+  x86-64 only. }
 
 { ---- tiny line helpers (self-contained; the compiler proper has its own) ---- }
 
@@ -111,12 +118,64 @@ begin
   Result := v;
 end;
 
-{ Build one TAsmOperand from a textual operand (out-param avoids an asmcore-typed
-  function result, which the compiler's two-pass prescan does not resolve here). }
+{ True if mnem is a control-transfer that takes a single label target. }
+function AsmIsBranch(const mnem: AnsiString): Boolean;
+begin
+  Result := (mnem = 'jmp') or (mnem = 'call')
+    or (mnem = 'je') or (mnem = 'jz') or (mnem = 'jne') or (mnem = 'jnz')
+    or (mnem = 'jl') or (mnem = 'jnge') or (mnem = 'jge') or (mnem = 'jnl')
+    or (mnem = 'jle') or (mnem = 'jng') or (mnem = 'jg') or (mnem = 'jnle')
+    or (mnem = 'jb') or (mnem = 'jc') or (mnem = 'jnae')
+    or (mnem = 'jae') or (mnem = 'jnb') or (mnem = 'jnc')
+    or (mnem = 'jbe') or (mnem = 'jna') or (mnem = 'ja') or (mnem = 'jnbe')
+    or (mnem = 'js') or (mnem = 'jns') or (mnem = 'jp') or (mnem = 'jpe')
+    or (mnem = 'jnp') or (mnem = 'jpo') or (mnem = 'jo') or (mnem = 'jno');
+end;
+
+{ Parse a memory operand `[base+disp]` / `[base-disp]` / `[base]`. The token
+  still has its surrounding brackets. Errors on a malformed form. }
+procedure AsmParseMem(const tok: AnsiString; lineNo: Integer; var op: TAsmOperand);
+var inner, basetok, disptok: AnsiString; sgn, i, n: Integer; reg, size: Integer;
+    disp: Int64; ok: Boolean;
+begin
+  n := Length(tok);
+  if (n < 3) or (tok[1] <> '[') or (tok[n] <> ']') then
+    Error('asm:' + AsmIntToStr(lineNo) + ': malformed memory operand "' + tok + '"');
+  inner := AsmTrim(Copy(tok, 2, n - 2));
+  { find a +/- separating base from displacement (not at position 1) }
+  sgn := 0; i := 2;
+  while i <= Length(inner) do
+  begin
+    if (inner[i] = '+') or (inner[i] = '-') then begin sgn := i; i := Length(inner) + 1; end
+    else Inc(i);
+  end;
+  if sgn = 0 then
+  begin
+    basetok := AsmTrim(inner);
+    disp := 0;
+  end
+  else
+  begin
+    basetok := AsmTrim(Copy(inner, 1, sgn - 1));
+    disptok := AsmTrim(Copy(inner, sgn + 1, Length(inner) - sgn));
+    disp := AsmParseInt(disptok, ok);
+    if not ok then Error('asm:' + AsmIntToStr(lineNo) + ': bad memory displacement "' + disptok + '"');
+    if inner[sgn] = '-' then disp := -disp;
+  end;
+  if not AsmRegLookup(AsmLower(basetok), reg, size) then
+    Error('asm:' + AsmIntToStr(lineNo) + ': bad base register in "' + tok + '"');
+  op := MemOp(reg, disp);
+end;
+
+{ Build one TAsmOperand from a textual operand (register / [mem] / immediate).
+  out-param avoids an asmcore-typed function result, which the compiler's
+  two-pass prescan does not resolve here. }
 procedure AsmParseOperand(const tok: AnsiString; lineNo: Integer; var op: TAsmOperand);
 var reg, size: Integer; iv: Int64; ok: Boolean;
 begin
-  if AsmRegLookup(AsmLower(tok), reg, size) then
+  if (Length(tok) > 0) and (tok[1] = '[') then
+    AsmParseMem(tok, lineNo, op)
+  else if AsmRegLookup(AsmLower(tok), reg, size) then
     op := RegOp(reg, size)
   else
   begin
@@ -126,17 +185,21 @@ begin
   end;
 end;
 
-{ Reject a mnemonic that needs the deferred (label/branch/symbol) machinery, with
-  a clear pointer at the full feature. }
+{ Reject a directive that still needs the deferred (data/section/symbol)
+  machinery, with a clear pointer at the next increment. }
 procedure AsmRejectIfUnsupported(const mnem: AnsiString; lineNo: Integer);
 begin
-  if (mnem = 'jmp') or (mnem = 'je') or (mnem = 'jne') or (mnem = 'jz') or (mnem = 'jnz')
-     or (mnem = 'jg') or (mnem = 'jl') or (mnem = 'jge') or (mnem = 'jle') or (mnem = 'call')
-     or (mnem = 'extern') or (mnem = 'global') or (mnem = 'section') or (mnem = 'syscall') then
+  if (mnem = 'extern') or (mnem = 'global') or (mnem = 'section')
+     or (mnem = 'db') or (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') then
     Error('asm:' + AsmIntToStr(lineNo) +
-      ': "' + mnem + '" needs labels/branches/symbols — not in the MVP frontend ' +
-      '(see feature-asm-source-frontend). MVP accepts only straight-line mov/add/ret.');
+      ': "' + mnem + '" needs a data section / symbol table — not in this ' +
+      'frontend increment yet (see feature-asm-source-frontend). Supported: ' +
+      'labels, jmp/call/jcc, syscall, and asmcore''s register/imm/[mem] forms.');
 end;
+
+const
+  ASM_MAX_LABELS = 4096;
+  ASM_MAX_FIXUPS = 8192;
 
 procedure ParseAsmProgram;
 var
@@ -148,13 +211,28 @@ var
   instr: TAsmInstr;
   buf: TAsmByteBuf;
   patches: TAsmPatchList;
+  baseOff: Integer;
+  branchLabel: AnsiString;
+  { label table + branch fixups (layer-2 symbolic resolution) }
+  lblName: array[0..ASM_MAX_LABELS-1] of AnsiString;
+  lblOff:  array[0..ASM_MAX_LABELS-1] of Integer;
+  lblCount: Integer;
+  fixPos:  array[0..ASM_MAX_FIXUPS-1] of Integer;
+  fixName: array[0..ASM_MAX_FIXUPS-1] of AnsiString;
+  fixLine: array[0..ASM_MAX_FIXUPS-1] of Integer;
+  fixCount: Integer;
+  found: Boolean; rel: Int64; tgt: Integer;
+  labelPart: AnsiString;
 begin
   if TargetArch <> TARGET_X86_64 then
-    Error('asm frontend: x86-64 only in the MVP (matches lib/asmcore coverage)');
+    Error('asm frontend: x86-64 only (matches lib/asmcore coverage)');
   n := Length(Source);
   i := 1;
   lineNo := 0;
   emittedAny := False;
+  lblCount := 0;
+  fixCount := 0;
+
   while i <= n do
   begin
     { slice one physical line }
@@ -173,10 +251,24 @@ begin
     line := AsmTrim(raw);
     if line = '' then Continue;
 
-    if Pos(':', line) > 0 then
-      Error('asm:' + AsmIntToStr(lineNo) + ': labels are not supported in the MVP frontend');
+    { a leading `name:` is a label definition (alone, or prefixing an instr) }
+    ci := Pos(':', line);
+    if ci > 0 then
+    begin
+      labelPart := AsmTrim(Copy(line, 1, ci - 1));
+      if labelPart = '' then
+        Error('asm:' + AsmIntToStr(lineNo) + ': empty label');
+      if lblCount >= ASM_MAX_LABELS then
+        Error('asm:' + AsmIntToStr(lineNo) + ': too many labels');
+      lblName[lblCount] := AsmLower(labelPart);
+      lblOff[lblCount] := CodeLen;
+      Inc(lblCount);
+      line := AsmTrim(Copy(line, ci + 1, Length(line) - ci));
+      if line = '' then Continue;   { label-only line }
+    end;
+
     if line[1] = '.' then
-      Error('asm:' + AsmIntToStr(lineNo) + ': directives/sections are not supported in the MVP frontend');
+      Error('asm:' + AsmIntToStr(lineNo) + ': directives (.section etc) not supported yet');
 
     { split mnemonic vs operand list }
     ci := 1;
@@ -186,47 +278,84 @@ begin
 
     AsmRejectIfUnsupported(mnem, lineNo);
 
-    { comma-split operands }
-    opCount := 0;
-    while restp <> '' do
+    branchLabel := '';
+    instr.Mnemonic := mnem;
+
+    if AsmIsBranch(mnem) then
     begin
-      ci := Pos(',', restp);
-      if ci > 0 then
+      { the single operand is a label target -> rel32 patch site }
+      if restp = '' then
+        Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs a label target');
+      branchLabel := AsmLower(AsmTrim(restp));
+      instr.OperandCount := 1;
+      instr.Operands[0] := PatchOp(4);
+    end
+    else
+    begin
+      { comma-split operands }
+      opCount := 0;
+      while restp <> '' do
       begin
-        tok := AsmTrim(Copy(restp, 1, ci - 1));
-        restp := AsmTrim(Copy(restp, ci + 1, Length(restp) - ci));
-      end
-      else
-      begin
-        tok := AsmTrim(restp);
-        restp := '';
+        ci := Pos(',', restp);
+        if ci > 0 then
+        begin
+          tok := AsmTrim(Copy(restp, 1, ci - 1));
+          restp := AsmTrim(Copy(restp, ci + 1, Length(restp) - ci));
+        end
+        else
+        begin
+          tok := AsmTrim(restp);
+          restp := '';
+        end;
+        if opCount > 3 then Error('asm:' + AsmIntToStr(lineNo) + ': too many operands');
+        ops[opCount] := tok;
+        Inc(opCount);
       end;
-      if opCount > 3 then Error('asm:' + AsmIntToStr(lineNo) + ': too many operands');
-      ops[opCount] := tok;
-      Inc(opCount);
+      instr.OperandCount := opCount;
+      for k := 0 to opCount - 1 do
+        AsmParseOperand(ops[k], lineNo, instr.Operands[k]);
     end;
 
-    { encode this instruction via lib/asmcore -> Code[] }
-    instr.Mnemonic := mnem;
-    instr.OperandCount := opCount;
-    for k := 0 to opCount - 1 do
-      AsmParseOperand(ops[k], lineNo, instr.Operands[k]);
+    { encode via lib/asmcore -> Code[] ; remember branch fixups }
+    baseOff := CodeLen;
     BufInit(buf);
     PatchListInit(patches);
     if not AsmEncodeX64(instr, buf, patches) then
       Error('asm:' + AsmIntToStr(lineNo) + ': ' + AsmCoreLastError);
-    if patches.Count > 0 then
-      Error('asm:' + AsmIntToStr(lineNo) + ': operand needs relocation — not supported in the MVP frontend');
     for k := 0 to buf.Len - 1 do
       EmitB(buf.Bytes[k]);
+    for k := 0 to patches.Count - 1 do
+    begin
+      if branchLabel = '' then
+        Error('asm:' + AsmIntToStr(lineNo) + ': unresolved operand patch with no label');
+      if fixCount >= ASM_MAX_FIXUPS then
+        Error('asm:' + AsmIntToStr(lineNo) + ': too many branch fixups');
+      fixPos[fixCount] := baseOff + patches.Items[k].Offset;
+      fixName[fixCount] := branchLabel;
+      fixLine[fixCount] := lineNo;
+      Inc(fixCount);
+    end;
     emittedAny := True;
   end;
 
   if not emittedAny then
     Error('asm: no instructions in source');
 
-  { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. The program's result is
-    whatever it left in rdi. }
+  { resolve branch fixups: rel32 = target - (patchPos + 4) }
+  for k := 0 to fixCount - 1 do
+  begin
+    found := False; tgt := 0;
+    for i := 0 to lblCount - 1 do
+      if lblName[i] = fixName[k] then begin tgt := lblOff[i]; found := True; end;
+    if not found then
+      Error('asm:' + AsmIntToStr(fixLine[k]) + ': undefined label "' + fixName[k] + '"');
+    rel := tgt - (fixPos[k] + 4);
+    Patch32(fixPos[k], rel);
+  end;
+
+  { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. A program that runs off
+    the end exits with whatever it left in rdi (programs may also exit via an
+    explicit `syscall`). }
   EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
   EmitB($0F); EmitB($05);                                       { syscall }
 end;
