@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (67)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -34,6 +34,7 @@ _none_
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
+| bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
@@ -541,6 +542,7 @@ _none_
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
+- [A] bug-open-array-ctor-statement-call
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
