@@ -51,6 +51,7 @@ type
 function RegOp(reg, size: Integer): TAsmOperand;
 function ImmOp(v: Int64): TAsmOperand;
 function MemOp(base: Integer; disp: Int64): TAsmOperand;
+function MemOpIndexed(base, index, scale: Integer; disp: Int64): TAsmOperand;
 function PatchOp(width: Integer): TAsmOperand;
 
 procedure BufInit(var buf: TAsmByteBuf);
@@ -88,6 +89,18 @@ begin
   Result.Reg := -1; Result.RegSize := 0;
   Result.Imm := 0;
   Result.MemBase := base; Result.MemIndex := -1; Result.MemScale := 1; Result.MemDisp := disp;
+  Result.PatchWidth := 0;
+end;
+
+{ [base + index*scale + disp] — SIB addressing. base = -1 means "no base
+  register" (index*scale+disp only); index = -1 degrades to plain MemOp.
+  scale must be 1/2/4/8 (target encoders reject anything else). }
+function MemOpIndexed(base, index, scale: Integer; disp: Int64): TAsmOperand;
+begin
+  Result.Kind := opMem;
+  Result.Reg := -1; Result.RegSize := 0;
+  Result.Imm := 0;
+  Result.MemBase := base; Result.MemIndex := index; Result.MemScale := scale; Result.MemDisp := disp;
   Result.PatchWidth := 0;
 end;
 

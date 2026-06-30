@@ -137,6 +137,24 @@ begin
   Check('mov [rdi-4],ecx',   EncHex(I2('mov', MemOp(reg_rdi, -4), RegOp(reg_rcx, 4)), p), '89 4f fc');
   Check('mov ecx,[rdi+12]',  EncHex(I2('mov', RegOp(reg_rcx, 4), MemOp(reg_rdi, 12)), p), '8b 4f 0c');
 
+  { ---- SIB: [base+index*scale+disp] ----
+    Byte-exact vs host `as`+objdump (.intel_syntax noprefix), 2026-07-01. }
+  Check('mov eax,[rbx+rcx*4+8]',   EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rcx, 4, 8)), p), '8b 44 8b 08');
+  Check('mov eax,[rbx+rcx*4]',     EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rcx, 4, 0)), p), '8b 04 8b');
+  Check('mov eax,[rbx+rcx*8+1000]',EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rcx, 8, 1000)), p), '8b 84 cb e8 03 00 00');
+  Check('mov eax,[r12+r13*2+8]',   EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_r12, reg_r13, 2, 8)), p), '43 8b 44 6c 08');
+  Check('mov eax,[rbp+rcx*4+8]',   EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbp, reg_rcx, 4, 8)), p), '8b 44 8d 08');
+  Check('mov eax,[rcx*4+1000]',    EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(-1, reg_rcx, 4, 1000)), p), '8b 04 8d e8 03 00 00');
+  Check('lea rax,[rbx+rcx*4+8]',   EncHex(I2('lea', RegOp(reg_rax, 8), MemOpIndexed(reg_rbx, reg_rcx, 4, 8)), p), '48 8d 44 8b 08');
+  Check('mov [rbx+rcx*4+8],eax',   EncHex(I2('mov', MemOpIndexed(reg_rbx, reg_rcx, 4, 8), RegOp(reg_rax, 4)), p), '89 44 8b 08');
+  if EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rsp, 4, 8)), p) = 'ENC-ERR:asmcore_x64: rsp cannot be a SIB index register' then
+    writeln('OK: rsp-as-index rejected')
+  else
+  begin
+    writeln('FAIL: rsp-as-index should be rejected, got [', EncHex(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rsp, 4, 8)), p), ']');
+    failed := True;
+  end;
+
   { ---- branches (rel32 patch sites): opcode + 4 zero bytes ---- }
   Check('jmp <patch>',  EncHex(I1('jmp',  PatchOp(4)), p), 'e9 00 00 00 00');
   Check('call <patch>', EncHex(I1('call', PatchOp(4)), p), 'e8 00 00 00 00');
@@ -169,6 +187,7 @@ begin
   { ---- textual printer round-trip sanity ---- }
   writeln('print mov: ', AsmPrintX64(I2('mov', RegOp(reg_rax, 4), ImmOp(5))));
   writeln('print mem: ', AsmPrintX64(I2('mov', RegOp(reg_rax, 8), MemOp(reg_rbp, -8))));
+  writeln('print sib: ', AsmPrintX64(I2('mov', RegOp(reg_rax, 4), MemOpIndexed(reg_rbx, reg_rcx, 4, 8))));
   writeln('print jmp: ', AsmPrintX64(I1('jmp', PatchOp(4))));
 
   if failed then Halt(1);

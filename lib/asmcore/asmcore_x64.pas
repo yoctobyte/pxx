@@ -2,8 +2,8 @@ unit asmcore_x64;
 {$mode objfpc}{$H+}
 { x86-64 instruction encoder + textual printer.
   Coverage (Intel syntax, dst-first):
-    mov   reg,imm | reg,reg | reg,[base+disp] | [base+disp],reg
-    lea   reg,[base+disp]
+    mov   reg,imm | reg,reg | reg,[mem] | [mem],reg
+    lea   reg,[mem]
     add/sub/and/or/xor/cmp  reg,reg | reg,imm
     test  reg,reg
     imul  reg,reg
@@ -12,6 +12,12 @@ unit asmcore_x64;
     ret | syscall | nop | leave | cqo | cdq
     jmp/call  <patch>      (rel32 patch site)
     je/jne/jz/jnz/jl/jge/jle/jg/jb/jae/jbe/ja/js/jns  <patch>  (rel32 patch site)
+  [mem] = MemOp(base,disp) `[base+disp]` or MemOpIndexed(base,index,scale,disp)
+  full SIB `[base+index*scale+disp]` (scale 1/2/4/8; base=-1 for the
+  base-less `[index*scale+disp]` form; rsp can't be an index — that bit
+  pattern means "no index", so it's rejected rather than silently dropped).
+  REG_RIP (asmcore's rip-relative sentinel, base=-2) cannot carry an index.
+  Byte-exact vs host `as`+objdump, 2026-07-01.
   Branch targets are PatchOp(4): asmcore emits opcode + 4 zero bytes and records
   a patch site at the rel32 offset; layer 2 (the .asm frontend / structured-ir
   library) resolves the label to (target - instr_end) and fills it.
@@ -120,26 +126,50 @@ begin
   Result := (v >= -128) and (v <= 127);
 end;
 
-{ ModRM + (SIB) + disp for a memory operand [base+disp] (no index in this
-  slice). regField is the /r register or /digit opcode extension already
-  masked to 0..7. Caller has already emitted any REX. }
+{ ModRM + (SIB) + disp for a memory operand: plain [base+disp], SIB
+  [base+index*scale+disp] when MemIndex<>-1, or the base-less SIB form
+  [index*scale+disp] when MemBase=-1 (base field forced to 101, mod=00,
+  disp32 mandatory — the dedicated "no base register" encoding, distinct
+  from rbp/r13's "no disp-less form" special case below). regField is the
+  /r register or /digit opcode extension already masked to 0..7. Caller has
+  already emitted any REX (incl. REX.X for the index register, where
+  applicable — see EncodeRegMem). }
 procedure EmitModRMMem(var buf: TAsmByteBuf; regField: Integer; const m: TAsmOperand);
-var base, rm, modBits: Integer; needSib, forceDisp8: Boolean;
+var rmField, modBits, scaleBits, sibIndex, sibBase: Integer; needSib, noBase, forceDisp8: Boolean;
 begin
-  base := m.MemBase;
-  rm := base and 7;
-  needSib := (rm = 4);                 { rsp / r12 -> SIB with no-index }
-  forceDisp8 := (rm = 5) and (m.MemDisp = 0); { rbp / r13 has no disp-less form }
+  noBase := (m.MemBase = -1) and (m.MemIndex <> -1);
+  needSib := noBase or (m.MemIndex <> -1) or ((m.MemBase and 7) = 4);  { index present, or rsp/r12 base }
 
-  if (m.MemDisp = 0) and (not forceDisp8) then modBits := 0
-  else if FitsI8(m.MemDisp) then modBits := 1
-  else modBits := 2;
+  if needSib then rmField := 4 else rmField := m.MemBase and 7;
 
-  BufAppend(buf, Byte((modBits shl 6) or (regField shl 3) or rm));
-  if needSib then BufAppend(buf, $24);  { scale=00, index=100(none), base=rm }
+  if noBase then
+    modBits := 0   { base=101 + mod=00 is the dedicated no-base SIB form; disp32 is mandatory }
+  else
+  begin
+    forceDisp8 := ((m.MemBase and 7) = 5) and (m.MemDisp = 0);  { rbp/r13 (SIB or not) has no disp-less form }
+    if (m.MemDisp = 0) and (not forceDisp8) then modBits := 0
+    else if FitsI8(m.MemDisp) then modBits := 1
+    else modBits := 2;
+  end;
+
+  BufAppend(buf, Byte((modBits shl 6) or (regField shl 3) or rmField));
+
+  if needSib then
+  begin
+    case m.MemScale of
+      2: scaleBits := 1;
+      4: scaleBits := 2;
+      8: scaleBits := 3;
+    else
+      scaleBits := 0;
+    end;
+    if m.MemIndex = -1 then sibIndex := 4 else sibIndex := m.MemIndex and 7;  { 100 = no index }
+    if noBase then sibBase := 5 else sibBase := m.MemBase and 7;
+    BufAppend(buf, Byte((scaleBits shl 6) or (sibIndex shl 3) or sibBase));
+  end;
 
   if modBits = 1 then BufAppend(buf, Byte(m.MemDisp and $FF))
-  else if modBits = 2 then BufAppendI32(buf, m.MemDisp);
+  else if (modBits = 2) or noBase then BufAppendI32(buf, m.MemDisp);
 end;
 
 { ALU "op r/m, r" primary opcode (32/64-bit form, dst=r/m src=reg). }
@@ -233,13 +263,20 @@ begin
   Result := True;
 end;
 
-{ mov/lea between a register and [base+disp]. memIsDst selects direction for
-  mov; lea is always reg<-mem. opcode is the base (89 mov r/m,r ; 8B mov r,r/m ;
-  8D lea r,m). The reg operand supplies REX.W/R; the mem base supplies REX.B. }
+{ mov/lea between a register and [base+disp] or [base+index*scale+disp].
+  memIsDst selects direction for mov; lea is always reg<-mem. opcode is the
+  base (89 mov r/m,r ; 8B mov r,r/m ; 8D lea r,m). The reg operand supplies
+  REX.W/R; the mem base supplies REX.B; the mem index (when present)
+  supplies REX.X. rsp (4) can't be a SIB index — that bit pattern is the
+  dedicated "no index" encoding, so passing it would silently produce a
+  plain [base+disp] instead of erroring on the caller's actual mistake. }
 function EncodeRegMem(opcode: Integer; const regOp, memOp: TAsmOperand;
                       var buf: TAsmByteBuf): Boolean;
 begin
-  EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, False, memOp.MemBase >= 8);
+  Result := False;
+  if (memOp.Kind = opMem) and (memOp.MemIndex = 4) then
+  begin LastError := 'asmcore_x64: rsp cannot be a SIB index register'; Exit; end;
+  EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, memOp.MemIndex >= 8, memOp.MemBase >= 8);
   BufAppend(buf, Byte(opcode));
   EmitModRMMem(buf, regOp.Reg and 7, memOp);
   Result := True;
@@ -252,6 +289,9 @@ function EncodeRegMemPatch(opcode: Integer; const regOp, memOp: TAsmOperand;
                             var buf: TAsmByteBuf; var patches: TAsmPatchList;
                             opIndex: Integer): Boolean;
 begin
+  Result := False;
+  if (memOp.MemBase = REG_RIP) and (memOp.MemIndex <> -1) then
+  begin LastError := 'asmcore_x64: rip-relative addressing cannot carry a SIB index'; Exit; end;
   if memOp.MemBase = REG_RIP then
   begin
     EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, False, False);
@@ -414,10 +454,17 @@ end;
 { ---- textual printer ---- }
 
 function MemText(const m: TAsmOperand): AnsiString;
-var s: AnsiString;
+var s: AnsiString; wroteBase: Boolean;
 begin
   if m.MemBase = REG_RIP then begin Result := '[rip+<patch>]'; Exit; end;
-  s := '[' + RegName(m.MemBase, 8);
+  s := '[';
+  wroteBase := False;
+  if m.MemBase >= 0 then begin s := s + RegName(m.MemBase, 8); wroteBase := True; end;
+  if m.MemIndex >= 0 then
+  begin
+    if wroteBase then s := s + '+';
+    s := s + RegName(m.MemIndex, 8) + '*' + IntToStrAsm(m.MemScale);
+  end;
   if m.MemDisp > 0 then s := s + '+' + IntToStrAsm(m.MemDisp)
   else if m.MemDisp < 0 then s := s + IntToStrAsm(m.MemDisp);
   Result := s + ']';
