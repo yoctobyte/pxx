@@ -221,6 +221,22 @@ begin
   Chk(24, a[1] = 105);
 end;
 
+{ ---- one-call multidim SetLength(a, d1, d2[, d3]) ---- }
+procedure MultiDim;
+var a: array of array of Integer; b: array of array of array of Integer;
+    i, j, k, tot: Integer;
+begin
+  SetLength(a, 2, 3);                    { rectangular 2x3 }
+  Chk(25, (Length(a) = 2) and (Length(a[0]) = 3) and (Length(a[1]) = 3));
+  for i := 0 to 1 do for j := 0 to 2 do a[i][j] := i * 10 + j;
+  Chk(26, (a[1][2] = 12) and (a[0][0] = 0));
+  SetLength(b, 2, 3, 4);                 { 3-D }
+  tot := 0;
+  for i := 0 to High(b) do for j := 0 to High(b[i]) do for k := 0 to High(b[i][j]) do
+    tot := tot + 1;
+  Chk(27, (Length(b) = 2) and (Length(b[0]) = 3) and (Length(b[0][0]) = 4) and (tot = 24));
+end;
+
 begin
   okCount := 0;
   GrowShrink;
@@ -236,5 +252,6 @@ begin
   CopySub;
   RecCopy;
   ElemVar;
-  writeln('total ok ', okCount, ' / 24');
+  MultiDim;
+  writeln('total ok ', okCount, ' / 27');
 end.

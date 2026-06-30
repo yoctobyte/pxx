@@ -269,7 +269,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
-	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 24 / 24"
+	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
 	# dynarray a+b is rejected at compile time (not a silent segfault)
 	! ./$(COMPILER) test/test_dynarray_concat_rejected.pas /tmp/test_dynarray_concat_rejected26 > /tmp/test_dynarray_concat_rejected.log 2>&1
 	grep -q "not supported for dynamic arrays" /tmp/test_dynarray_concat_rejected.log

@@ -1011,6 +1011,10 @@ var
   UnitAliasName : array[0..63] of Integer;
   UnitAliasReal : array[0..63] of Integer;
   UnitAliasCount : Integer;
+  { Multidim `SetLength(a, d1, d2, ...)` scratch: the parsed size-expr AST nodes
+    for one SetLength call (not nested, so a single shared buffer is safe). }
+  SetLenDimNode : array[0..31] of Integer;
+  SetLenDimN : Integer;
   { Synthesized unit initialization procs, in dependency (post-uses) order.
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;

@@ -7605,12 +7605,85 @@ begin
   end;
 end;
 
+function MkForAsc(varIdx, initN, limitN, bodyN: Integer): Integer;
+{ Synthesise `for <varIdx> := <initN> to <limitN> do <bodyN>` (ascending),
+  matching ParseForStatementAST's AN_FOR layout. }
+var node, p1, p2, p3, dn: Integer;
+begin
+  node := AllocNode(AN_FOR);
+  ASTLeft[node] := AllocNode(AN_IDENT);
+  ASTIVal[ASTLeft[node]] := varIdx;
+  p1 := AllocNode(AN_PAIR); ASTLeft[p1] := initN; ASTRight[p1] := limitN;
+  dn := AllocNode(AN_INT_LIT); ASTIVal[dn] := 0;       { 0 = ascending (to) }
+  p2 := AllocNode(AN_PAIR); ASTLeft[p2] := dn; ASTRight[p2] := bodyN;
+  p3 := AllocNode(AN_PAIR); ASTLeft[p3] := p1; ASTRight[p3] := p2;
+  ASTRight[node] := p3;
+  Result := node;
+end;
+
+function BuildSetLenNest(target, k: Integer): Integer; forward;
+
+function BuildSetLenNest(target, k: Integer): Integer;
+{ Inner levels of a multidim SetLength (k >= 1, so `target` is always a sub-array
+  index node -> dynamic-array SetLength, -102). Returns
+  `SetLength(target, dim[k])` for the last dim, else that plus
+  `for i := 0 to dim[k]-1 do BuildSetLenNest(target[i], k+1)`. Dim exprs are
+  re-cloned per use, so they must be side-effect-free (the FPC norm). }
+var argSeq, call, loopVar, idxN, inner, limitN, lo, one, forN, seqN: Integer;
+begin
+  argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := target;
+  ASTRight[argSeq] := AllocNode(AN_ARG);
+  ASTLeft[ASTRight[argSeq]] := CloneAST(SetLenDimNode[k]);
+  call := AllocNode(AN_CALL); ASTIVal[call] := -102; ASTLeft[call] := argSeq;
+  if k = SetLenDimN - 1 then begin Result := call; Exit; end;
+  loopVar := AllocVar('', tyInteger);
+  idxN := AllocNode(AN_INDEX);
+  ASTLeft[idxN] := CloneAST(target);
+  ASTRight[idxN] := AllocNode(AN_IDENT); ASTIVal[ASTRight[idxN]] := loopVar;
+  inner := BuildSetLenNest(idxN, k + 1);
+  limitN := AllocNode(AN_BINOP); ASTIVal[limitN] := Ord(tkMinus);
+  ASTLeft[limitN] := CloneAST(SetLenDimNode[k]);
+  one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+  ASTRight[limitN] := one;
+  lo := AllocNode(AN_INT_LIT); ASTTk[lo] := Ord(tyInteger);
+  forN := MkForAsc(loopVar, lo, limitN, inner);
+  seqN := AllocNode(AN_SEQ); ASTLeft[seqN] := call; ASTRight[seqN] := forN;
+  Result := seqN;
+end;
+
+function BuildMultiSetLen(target: Integer; outerIsArr: Boolean): Integer;
+{ Build the whole `SetLength(target, d0 [, d1, ...])` from the dim nodes in
+  SetLenDimNode[0..SetLenDimN-1]. Single-dim returns just the call (same as the
+  classic path); multidim adds nested loops sizing the sub-arrays. }
+var argSeq, outerCall, loopVar, idxN, inner, limitN, lo, one, forN: Integer;
+begin
+  argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := target;
+  ASTRight[argSeq] := AllocNode(AN_ARG);
+  ASTLeft[ASTRight[argSeq]] := CloneAST(SetLenDimNode[0]);
+  outerCall := AllocNode(AN_CALL);
+  if outerIsArr then ASTIVal[outerCall] := -102 else ASTIVal[outerCall] := -101;
+  ASTLeft[outerCall] := argSeq;
+  if SetLenDimN = 1 then begin Result := outerCall; Exit; end;
+  loopVar := AllocVar('', tyInteger);
+  idxN := AllocNode(AN_INDEX);
+  ASTLeft[idxN] := CloneAST(target);
+  ASTRight[idxN] := AllocNode(AN_IDENT); ASTIVal[ASTRight[idxN]] := loopVar;
+  inner := BuildSetLenNest(idxN, 1);
+  limitN := AllocNode(AN_BINOP); ASTIVal[limitN] := Ord(tkMinus);
+  ASTLeft[limitN] := CloneAST(SetLenDimNode[0]);
+  one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+  ASTRight[limitN] := one;
+  lo := AllocNode(AN_INT_LIT); ASTTk[lo] := Ord(tyInteger);
+  forN := MkForAsc(loopVar, lo, limitN, inner);
+  Result := AllocNode(AN_SEQ); ASTLeft[Result] := outerCall; ASTRight[Result] := forN;
+end;
+
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
-  isLn, slIsArrTarget: Boolean;
+  isLn, slIsArrTarget, slIsDynArr: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
@@ -8139,18 +8212,22 @@ begin
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
 
-        ParseExpr; Expect(tkRParen, ')');
+        { Collect the size dimension(s): `SetLength(a, d0)` or the multidim sugar
+          `SetLength(a, d0, d1, ...)` (FPC: allocate a rectangular jagged array,
+          each extra size dimensioning the sub-arrays). }
+        ParseExpr;
+        SetLenDimNode[0] := CurASTNode; SetLenDimN := 1;
+        while CurTok.Kind = tkComma do
+        begin
+          Next; ParseExpr;
+          if SetLenDimN >= 32 then Error('SetLength: too many dimensions');
+          SetLenDimNode[SetLenDimN] := CurASTNode; Inc(SetLenDimN);
+        end;
+        Expect(tkRParen, ')');
 
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        ASTRight[argSeq] := AllocNode(AN_ARG);
-        ASTLeft[ASTRight[argSeq]] := CurASTNode;
-
-        node := AllocNode(AN_CALL);
-        { -101 = string SetLength; -102 = dynamic-array (and managed AnsiString)
-          SetLength (heap alloc). Classify from the resolved lvalue, not the
-          base symbol: `SetLength(obj.field, n)` resolves `idx` to the object,
-          so a dynamic-array field would otherwise be misrouted to the string
-          path. }
+        { Classify the target: -101 = string SetLength; -102 = dynamic-array (and
+          managed AnsiString). From the resolved lvalue, not the base symbol
+          (`SetLength(obj.field, n)` resolves `idx` to the object). }
         slIsArrTarget := False;
         if ASTKind[valNode] = AN_FIELD then
           slIsArrTarget := (RecFieldDynDepth(ResolveNodeRec(ASTLeft[valNode]),
@@ -8169,11 +8246,22 @@ begin
           slIsArrTarget := (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or
                            (Syms[idx].TypeKind = tyAnsiString);
         end;
-        if slIsArrTarget then
-          ASTIVal[node] := -102
-        else
-          ASTIVal[node] := -101;
-        ASTLeft[node] := argSeq;
+        { Multidim sugar requires a genuine dynamic array (not a managed string,
+          which slIsArrTarget also covers): each extra dim sizes the sub-arrays. }
+        if SetLenDimN > 1 then
+        begin
+          slIsDynArr := False;
+          if ASTKind[valNode] = AN_FIELD then
+            slIsDynArr := RecFieldDynDepth(ResolveNodeRec(ASTLeft[valNode]),
+                            GetASTIdentName(valNode)) > 0
+          else if ASTKind[valNode] = AN_INDEX then
+            slIsDynArr := True
+          else if idx >= 0 then
+            slIsDynArr := Syms[idx].IsArray and (Syms[idx].ArrLen = -1);
+          if not slIsDynArr then
+            Error('SetLength: multiple dimensions require a dynamic array');
+        end;
+        node := BuildMultiSetLen(valNode, slIsArrTarget);
       end
       else if CaseEqual(name, 'New') then
       begin
