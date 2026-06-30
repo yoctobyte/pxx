@@ -347,7 +347,7 @@ begin
 end;
 
 { Forward decls for the per-instruction dispatcher. }
-function AsmEncodeOne: Boolean; forward;
+function AsmEncodeOneNamed(const mn: AnsiString; mnLine: Integer): Boolean; forward;
 
 { Encode a single instruction whose mnemonic is in mn and whose operands have
   already been parsed into AsmOp[0..nops-1]. Returns False if mnemonic unknown. }
@@ -552,15 +552,34 @@ begin
   Result := False;
 end;
 
-{ Parse + encode one instruction starting at CurTok (a mnemonic ident).
-  Operand list ends at the next source line or at 'end'. Returns False if the
-  mnemonic is unknown (caller reports it). }
-function AsmEncodeOne: Boolean;
-var mn: AnsiString; mnLine, nops: Integer;
+{ True for a token that can lead an asm statement (mnemonic or label name).
+  Mostly tkIdent, but `and`/`or`/`xor`/`not`/`div`/`mod`/`shl`/`inc`/`dec` are
+  valid x86 mnemonics that collide with Pascal keywords and lex to their own
+  token kinds (bug-asm-keyword-mnemonic-collision) — CurTok.SVal still holds
+  their text, so the fix is just widening this gate, not touching SVal. }
+function AsmTokIsWordLike(k: TTokenKind): Boolean;
 begin
-  mn := CurTok.SVal;
-  mnLine := CurTok.Line;
-  Next;
+  Result := (k = tkIdent) or (k = tkAnd) or (k = tkOr) or (k = tkXor)
+    or (k = tkNot) or (k = tkDiv) or (k = tkMod) or (k = tkShl)
+    or (k = tkInc) or (k = tkDec);
+end;
+
+{ True if mn is a control-transfer mnemonic taking a single label target
+  (jmp/call/jcc) — built on the existing AsmCC condition-code table, so the
+  jcc set never needs to be enumerated twice. }
+function AsmIsBranchMnem(const mn: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mn, 'jmp') or CaseEqual(mn, 'call')
+    or (AsmStartsWith(mn, 'j') and (AsmCC(AsmTail(mn, 1)) >= 0));
+end;
+
+{ Parse + encode one instruction's operands. mn/mnLine are the already-
+  consumed mnemonic (CurTok is sitting on the first operand, or past the
+  instruction if it had none). Operand list ends at the next source line or
+  at 'end'. Returns False if the mnemonic is unknown (caller reports it). }
+function AsmEncodeOneNamed(const mn: AnsiString; mnLine: Integer): Boolean;
+var nops: Integer;
+begin
   nops := 0;
   { Operands continue while still on the mnemonic's source line. }
   while (CurTok.Kind <> tkEnd) and (CurTok.Line = mnLine) and (CurTok.Kind <> tkEOF) do
@@ -574,32 +593,69 @@ begin
   Result := AsmDispatch(mn, nops);
 end;
 
+const
+  ASM_MAX_LOCAL_LABELS = 256;
+  ASM_MAX_LOCAL_FIXUPS = 512;
+
 { Parse a full asm block body (after the 'asm' keyword) up to 'end', encoding
-  into AsmBytes. Handles raw data directives db/dw/dd/dq too. startOff is set
-  to the buffer offset where this block's bytes begin; len is the byte count.
-  Also consumes the optional clobber list:  end ['eax', ...] ;  (parsed,
-  ignored — this codegen keeps nothing live in registers across statements). }
+  into AsmBytes. Handles raw data directives db/dw/dd/dq, `name:` labels, and
+  jmp/call/jcc <label> branches (rel32, forward + backward — see
+  devdocs/developer/inline-asm.md TODO #1). Branches are encoded via
+  lib/asmcore's AsmEncodeX64 (PatchOp(4)) the same way the standalone `.asm`
+  frontend (compiler/asmfront.inc) resolves its own labels: record a fixup at
+  the patch site, resolve target-(patch+4) once every label is known.
+  startOff is set to the buffer offset where this block's bytes begin; len is
+  the byte count. Also consumes the optional clobber list:
+  end ['eax', ...] ;  (parsed, ignored — this codegen keeps nothing live in
+  registers across statements). }
 procedure AsmParseBody(var startOff, len: Integer);
-var dir: AnsiString; v: Int64;
+var
+  dir, branchTarget: AnsiString;
+  v, rel: Int64;
+  dirLine, dummyNum, dummySize, baseOff, k, tgt, li: Integer;
+  found: Boolean;
+  instr: TAsmInstr;
+  buf: TAsmByteBuf;
+  patches: TAsmPatchList;
+  lblName: array[0..ASM_MAX_LOCAL_LABELS-1] of AnsiString;
+  lblOff:  array[0..ASM_MAX_LOCAL_LABELS-1] of Integer;
+  lblCount: Integer;
+  fixPos:  array[0..ASM_MAX_LOCAL_FIXUPS-1] of Integer;
+  fixName: array[0..ASM_MAX_LOCAL_FIXUPS-1] of AnsiString;
+  fixCount: Integer;
 begin
   { The encoder below emits x86-64 bytes only; encoding them into a
     cross-target ELF would be silently wrong. }
   if TargetArch <> TARGET_X86_64 then
     Error('inline asm is x86-64 only; not supported for this target');
   startOff := AsmBytesCount;
+  lblCount := 0;
+  fixCount := 0;
 
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
-    if CurTok.Kind <> tkIdent then
+    if not AsmTokIsWordLike(CurTok.Kind) then
     begin
       Next;  { skip stray punctuation defensively }
       Continue;
     end;
 
     dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;   { tentatively consume the identifier to check for a trailing ':' }
+
+    if CurTok.Kind = tkColon then
+    begin
+      if lblCount >= ASM_MAX_LOCAL_LABELS then Error('asm: too many labels');
+      lblName[lblCount] := dir;
+      lblOff[lblCount] := AsmBytesCount;
+      Inc(lblCount);
+      Next;   { consume ':' — a label may stand alone or prefix an instruction }
+      Continue;
+    end;
+
     if CaseEqual(dir,'db') or CaseEqual(dir,'dw') or CaseEqual(dir,'dd') or CaseEqual(dir,'dq') then
     begin
-      Next;
       repeat
         if CurTok.Kind <> tkInteger then Error('asm: expected integer constant');
         v := CurTok.IVal;
@@ -610,10 +666,47 @@ begin
         else AsmI64(v);
       until not Eat(tkComma);
     end
+    else if AsmIsBranchMnem(dir) then
+    begin
+      if CurTok.Kind <> tkIdent then Error('asm: "' + dir + '" needs a label target');
+      if AsmRegNum(CurTok.SVal, dummyNum, dummySize) then
+        Error('asm: "' + dir + '" target must be a label, not a register');
+      branchTarget := CurTok.SVal;
+      Next;
+      instr.Mnemonic := dir;
+      instr.OperandCount := 1;
+      instr.Operands[0] := PatchOp(4);
+      baseOff := AsmBytesCount;
+      BufInit(buf);
+      PatchListInit(patches);
+      if not AsmEncodeX64(instr, buf, patches) then
+        Error('asm: ' + AsmCoreLastError);
+      for k := 0 to buf.Len - 1 do AsmB(buf.Bytes[k]);
+      if patches.Count <> 1 then
+        Error('asm: internal: branch "' + dir + '" produced an unexpected number of patch sites');
+      if fixCount >= ASM_MAX_LOCAL_FIXUPS then Error('asm: too many branch fixups');
+      fixPos[fixCount] := baseOff + patches.Items[0].Offset;
+      fixName[fixCount] := branchTarget;
+      Inc(fixCount);
+    end
     else
     begin
-      if not AsmEncodeOne then Error('asm: unknown instruction: ' + dir);
+      if not AsmEncodeOneNamed(dir, dirLine) then Error('asm: unknown instruction: ' + dir);
     end;
+  end;
+
+  { resolve branch fixups: rel32 = target - (patchPos + 4) }
+  for k := 0 to fixCount - 1 do
+  begin
+    found := False; tgt := 0;
+    for li := 0 to lblCount - 1 do
+      if CaseEqual(lblName[li], fixName[k]) then begin tgt := lblOff[li]; found := True; end;
+    if not found then Error('asm: undefined label "' + fixName[k] + '"');
+    rel := tgt - (fixPos[k] + 4);
+    AsmBytes[fixPos[k]]   := Byte(rel and $FF);
+    AsmBytes[fixPos[k]+1] := Byte((rel shr 8) and $FF);
+    AsmBytes[fixPos[k]+2] := Byte((rel shr 16) and $FF);
+    AsmBytes[fixPos[k]+3] := Byte((rel shr 24) and $FF);
   end;
 
   Expect(tkEnd, 'end');

@@ -35,7 +35,23 @@ end;
 
 Tests: `test/test_asm.pas` (raw bytes / `exit` syscall),
 `test/test_asm_func.pas` (assembler function), `test/test_asm_swap.pas`
-(statement-level local swap). All wired into `make test`.
+(statement-level local swap), `test/test_asm_branch.pas` (labels + `jcc`
+loop), `test/test_asm_keywords.pas` (keyword-colliding mnemonics regression).
+All wired into `make test`.
+
+Labels:
+
+```pascal
+asm
+  mov rdi, 0
+  mov rcx, 9
+sumloop:
+  add rdi, rcx
+  dec rcx
+  cmp rcx, 0
+  jg sumloop          { forward and backward both resolve }
+end;
+```
 
 ## How variable passing works
 
@@ -65,6 +81,11 @@ so the asm body's `rax` survives as the return value.
 - `setcc` and `cmovcc` families (full condition-code set).
 - Zero-operand: `nop ret leave syscall cdq cqo cdqe cwde`; `int imm8`.
 - Raw data: `db dw dd dq` (comma lists).
+- **Labels + `jmp`/`call`/`jcc <label>`** (rel32, forward + backward) —
+  encoded via `lib/asmcore`'s `AsmEncodeX64` (`PatchOp(4)`), resolved the
+  same way the standalone `.asm` frontend resolves its own labels: a local
+  fixup table, `target - (patch_offset + 4)` once every label in the block is
+  known. See [[feature-asm-structured-ir-library]] TODO #1.
 - `{$asmMode intel}` accepted (ignored — Intel is the only mode).
 
 ## Limitations / not yet implemented
@@ -77,9 +98,6 @@ so the asm body's `rax` survives as the return value.
   buffer offset.
 - **Explicit memory operands** `[reg]`, `[reg+disp]`, `[reg+reg*scale]`: not
   parsed. Only bare-name memory (always `[rbp+disp32]`) is supported. No SIB.
-- **Labels / branches inside asm** (`jmp`, `jcc`, `call`, `loop`): not
-  supported. No intra-block label table, no fixups. This is the main thing
-  blocking real algorithms.
 - **AT&T syntax** (`{$asmMode att}`) and `direct`: not implemented (directive
   is silently accepted but ignored, so att source would mis-encode).
 - **Operand-size disambiguation** (`byte ptr` / `word ptr` / `dword ptr`):
@@ -95,8 +113,9 @@ so the asm body's `rax` survives as the return value.
 
 ## TODO (rough priority)
 
-1. **Labels + branches** inside an asm block (local label table + fixups).
-   Highest value — unlocks loops and conditionals in asm.
+1. ~~**Labels + branches** inside an asm block (local label table + fixups).~~
+   **Done 2026-06-30** — see Supported, above, and
+   [[feature-asm-structured-ir-library]].
 2. **Global-var operands** via a codegen-time encode path (or buffer-offset
    reloc list) so `EmitGlobRef` can patch absolute addresses.
 3. **Explicit `[reg+disp]` memory** + SIB, for pointer-style access.
