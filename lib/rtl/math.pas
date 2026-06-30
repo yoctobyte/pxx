@@ -2,6 +2,8 @@ unit math;
 interface
 uses math_ext;
 
+function Abs(x: Integer): Integer;
+function Abs(x: Int64): Int64;
 function Min(a, b: Integer): Integer;
 function Max(a, b: Integer): Integer;
 function Power(base, exponent: Integer): Integer;
@@ -524,6 +526,16 @@ begin
 end;
 
 { ================= Integer helpers ================= }
+
+function Abs(x: Integer): Integer;
+begin
+  if x < 0 then Result := -x else Result := x;
+end;
+
+function Abs(x: Int64): Int64;
+begin
+  if x < 0 then Result := -x else Result := x;
+end;
 
 function Min(a, b: Integer): Integer;
 begin

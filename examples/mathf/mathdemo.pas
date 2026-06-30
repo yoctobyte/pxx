@@ -111,6 +111,10 @@ begin
   Chk('radtodeg(pi)', RadToDeg(Pi),     180.0);
   Chk('min(3,5)',     Min(3.0, 5.0),    3.0);
   Chk('max(3,5)',     Max(3.0, 5.0),    5.0);
+  { Abs must stay integer-valued even with the math unit in scope (the float
+    Abs overloads here must not shadow the integer/int64 intrinsic). }
+  ChkStr('abs(-7):int',     IntToStr(Abs(-7)),                  '7');
+  ChkStr('abs(int64):i64',  IntToStr(Abs(Int64(-5000000000))),  '5000000000');
 
   writeln('-- identities --');
   Chk('sin^2+cos^2',  Sin(0.7) * Sin(0.7) + Cos(0.7) * Cos(0.7), 1.0);
