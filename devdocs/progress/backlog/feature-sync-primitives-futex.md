@@ -55,3 +55,15 @@ Set/Reset/Wait. Manual = level-triggered "go gun" (wakes all, lost-wakeup-safe
 either order); auto = one-waiter hand-off (CAS-consumes the signal). test_event
 (manual start gun, 4 waiters) in make test-threads. Still remaining: condition
 variable, Once. TCriticalSection alias still pending (with M3).
+
+## Update — TRTLCriticalSection (FPC API) + RunOnce landed (2026-06-30)
+- TRTLCriticalSection = TMutex under the FPC System names: InitCriticalSection /
+  EnterCriticalSection / LeaveCriticalSection / TryEnterCriticalSection /
+  DoneCriticalSection — so existing threaded Pascal compiles unchanged.
+- RunOnce(var ctl: TOnceControl; proc): pthread_once-style; the initialiser runs
+  exactly once across all racers (CAS 0->1 winner runs it, publishes 2 + futex-wakes;
+  losers block until 2).
+- test_critsec_once: 8 threads x 50k EnterCriticalSection increments = 400000 AND
+  the once-initialiser ran exactly 1 time. In make test-threads.
+Sync surface now: TMutex, TEvent, TRTLCriticalSection, RunOnce. Still open:
+condition variable (TConditionVariable), 64-bit atomics if needed.

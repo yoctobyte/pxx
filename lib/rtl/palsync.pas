@@ -54,6 +54,27 @@ procedure EventReset(var e: TEvent);
 { Block until signalled; auto-reset consumes the signal. }
 procedure EventWait(var e: TEvent);
 
+type
+  { FPC-compatible critical-section API — a TMutex under familiar names so existing
+    threaded Pascal (InitCriticalSection/EnterCriticalSection/...) compiles as-is. }
+  TRTLCriticalSection = TMutex;
+  PRTLCriticalSection = ^TRTLCriticalSection;
+
+procedure InitCriticalSection(var cs: TRTLCriticalSection);
+procedure DoneCriticalSection(var cs: TRTLCriticalSection);      { futex needs no teardown }
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+function  TryEnterCriticalSection(var cs: TRTLCriticalSection): Boolean;
+
+type
+  { One-time initialiser guard. Zero-initialise (0) before first use. RunOnce calls
+    proc exactly once across all racing threads; later/lost racers block until the
+    winner finishes. }
+  TOnceControl = Integer;   { 0 = pending | 1 = running | 2 = done }
+  TOnceProc = procedure;
+
+procedure RunOnce(var ctl: TOnceControl; proc: TOnceProc);
+
 implementation
 
 procedure MutexInit(var m: TMutex);
@@ -130,6 +151,48 @@ begin
     while Integer(__pxxatomic_cas(@e.State, 1, 0)) <> 1 do
       PalFutexWait(@e.State, 0);
   end;
+end;
+
+procedure InitCriticalSection(var cs: TRTLCriticalSection);
+begin
+  MutexInit(cs);
+end;
+
+procedure DoneCriticalSection(var cs: TRTLCriticalSection);
+begin
+  { nothing to release — a futex word owns no kernel resource }
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  MutexLock(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  MutexUnlock(cs);
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): Boolean;
+begin
+  Result := MutexTryLock(cs);
+end;
+
+procedure RunOnce(var ctl: TOnceControl; proc: TOnceProc);
+var ignore: Int64;
+begin
+  if ctl = 2 then Exit;                              { fast path: already done }
+  if Integer(__pxxatomic_cas(@ctl, 0, 1)) = 0 then
+  begin
+    { we won the race — run the initialiser exactly once, then publish + wake }
+    proc();
+    ignore := __pxxatomic_xchg(@ctl, 2);
+    PalFutexWake(@ctl, WAKE_ALL);
+  end
+  else
+    { someone else is running it — wait until they publish done (2) }
+    while ctl <> 2 do
+      PalFutexWait(@ctl, 1);
 end;
 
 end.
