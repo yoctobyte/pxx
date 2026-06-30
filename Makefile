@@ -268,6 +268,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_single_in_aggregate26)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
+	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 24 / 24"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26
 	test "$$(/tmp/test_method_implicit_field26)" = "$$(printf '3\n2\n42\n0\n-1')"
 	./$(COMPILER) test/test_method_read_write_unqualified.pas /tmp/test_method_rw_unqual26

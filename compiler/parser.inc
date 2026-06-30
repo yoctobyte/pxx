@@ -8123,7 +8123,19 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
-        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        { Bare function name as the SetLength target = the result var (FPC: `F`
+          synonym for `Result`), so `SetLength(F, n)` works like `SetLength(Result,
+          n)` for a string/dynarray-returning F. FindSym does not know the own name
+          (it is not a plain symbol) — map it to RetSymIdx, mirroring the bare-own-
+          name read in ParseFactor. Excluded in {$mode delphi} (Result-only there).
+          Was bug-bare-name-setlength-dynarray-result. }
+        if (CurProc >= 0) and Procs[CurProc].IsFunc and not DelphiMode and
+           ((CurTok.SVal = Procs[CurProc].Name) or
+            CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name))) then
+          idx := Procs[CurProc].RetSymIdx
+        else
+          idx := FindSym(CurTok.SVal);
+        identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
 

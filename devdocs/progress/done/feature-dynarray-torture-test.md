@@ -1,7 +1,7 @@
 # Dynamic-array torture test — make dynarray trustable
 
 - **Type:** feature (test / compiler-correctness) — Track A
-- **Status:** backlog
+- **Status:** DONE (2026-06-30, Track A)
 - **Owner:** unassigned
 - **Opened:** 2026-06-27
 - **Relation:** the standalone confidence-builder for
@@ -66,3 +66,38 @@ bug/feature ticket. Run it against `$(PXX_STABLE)` and across targets.
 
 - 2026-06-27 - Filed (user). Build a dynarray torture app; goal = trust, not a
   green run; expected to spawn new tickets.
+
+## Done (2026-06-30, Track A)
+
+`test/test_dynarray_torture.pas` — 24 self-checking cases (each prints `ok n` /
+`FAIL n`, oracle = `total ok 24 / 24`), in `make test`. Covers grow/shrink (zero-
+fill on grow, truncate on shrink), High/Low/empty/nil, **deep-copy on assignment**
+(PXX deep-copies — pinned: `b:=a; b[0]:=99` leaves `a[0]` unchanged; same for a
+record's dynarray field on by-value copy), dynarray-of-string, jagged
+dynarray-of-dynarray, dynarray-of-record-with-managed-fields, passing
+(value/var/const/returned, incl. **bare function-name result**), class-field
+dynarray, 50-cycle grow/shrink stress, for-in, `Copy(arr,i,n)` sub-array,
+element-as-`var`-actual.
+
+### Found + fixed
+- **Bare function-name as a dynarray/string SetLength target** (`SetLength(F, n)`
+  where F is the function) → `undefined variable (F)`. `SetLength(Result, n)`
+  worked but the FPC `F`=`Result` synonym did not, because the `SetLength` parser
+  resolves its target via `FindSym` (which doesn't know the own name). **Fixed**
+  (parser.inc ~8126): map the bare own name to `RetSymIdx`, mirroring the
+  bare-own-name read in `ParseFactor`. Guarded by the torture test. Self-host
+  byte-identical.
+
+### Found + filed (still open)
+- `SetLength(a, x, y)` one-call multidim → `unexpected token`. Per-row SetLength
+  works (the test uses it). → [[bug-setlength-multidim-one-call]]
+- Dynamic-array `a + b` concat **silently miscompiles** (compiles, binary produces
+  no output). → [[bug-dynarray-concat-silent-miscompile]]
+- Dynamic-array `Insert`/`Delete` rejected ("not yet supported"). →
+  [[feature-dynarray-insert-delete]]
+
+### Confirmed working (no action)
+`Copy(arr,i,n)`; record-by-value copy deep-copies its dynarray field; const/var
+open-array params; returned dynarray; element as `var` actual; nil/empty for-in +
+`Length(nil)=0`; out-param resize requires a **named** dynarray type (anonymous
+`out array of T` is a fixed view by design — clear error, not a bug).

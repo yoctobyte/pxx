@@ -25,14 +25,16 @@ _none_
 
 _none_
 
-## backlog (62)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-dynarray-concat-silent-miscompile | A | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
 | bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
+| bug-setlength-multidim-one-call | A | bug | `SetLength(a, x, y)` one-call multidim allocation not parsed | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
@@ -47,7 +49,7 @@ _none_
 | feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
-| feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
+| feature-dynarray-insert-delete | A | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
@@ -126,7 +128,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (373)
+## done (374)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -385,6 +387,7 @@ _none_
 | feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
+| feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
@@ -519,8 +522,10 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
+- [A] bug-dynarray-concat-silent-miscompile
 - [A] bug-frozen-self-build-unreliable
 - [A] bug-frozen-string-result-global-not-reentrant
+- [A] bug-setlength-multidim-one-call
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
@@ -535,7 +540,7 @@ _none_
 - [A] feature-dynamic-compiler-tables
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
-- [A] feature-dynarray-torture-test
+- [A] feature-dynarray-insert-delete
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
 - [B] feature-embed-dwscript-rtti
