@@ -86,3 +86,4 @@
 2026-06-29T16:27:21Z  v86  14167d4141e1e2aacdaec95cbc28a5e6bbd7a42031ff38ee27e51a240d377b38  3698202518430aa9c9fe2fb8f5cda487d87c6eb3  fix(c): seed va_start fp_offset for named FP params
 2026-06-29T17:36:55Z  v87  8f7af045177828f30f005c3397d397495eba719698fbfaadb2dd38cb594cbbdc  83f490aa7d003ba4beb48306d3b2f1f15e453197  docs(progress): root-cause i386 C arg-passing layer of cross-C
 2026-06-29T18:33:05Z  v88  aee4765ebdfcdb7988078cb936a8afe0ac886cab511cb283f933321a5bf745a9  cb1b2d9eb2b92b88a104130348086372e24c2b98  docs(progress): note i386 varargs design (left-to-right push / va model)
+2026-06-30T04:35:12Z  v89  46f26bf87b70901ca1066317f6accfdb1ad90a8b7c271df2b512dc7531283cf2  f3ee0af1aad35433c881b0e3658f00ddcd1c9b8e  fix(c): aarch64 C program entry + cdecl param binding
