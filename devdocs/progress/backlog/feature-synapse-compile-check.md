@@ -297,3 +297,7 @@ Fresh probe at v83 with `--mimic-fpc`:
 | `synsock`/`blcksock`/`httpsend` | **[[bug-consteval-named-type-cast]]** (Track A, new) — `ssfpc.inc`: `INVALID_SOCKET = TSocket(NOT(0))` fails ConstEval |
 
 Both bugs filed 2026-06-28. When Track A fixes them, re-probe to find the next wall.
+
+## TRIAGE (2026-06-30, multi-agent verify)
+
+UPDATE (verify): both listed Track A blockers (bug-chr-builtin-shadows-param-name, bug-consteval-named-type-cast) are now in done/. Re-probe 'uses synautil --mimic-fpc' advances past them to a NEW wall: 'too many array constant elements' (candidate focused Track A ticket / capacity bump). Track B compile target still open.

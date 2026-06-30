@@ -127,3 +127,7 @@ dynarray Copy), and string-family overloads for ShortString/UnicodeString.
   FPC-matched. **REMAINING:** string `Copy` family overloads (ShortString/Unicode
   if/when added); dynamic-array `Delete`/`Insert`. The common string-mutator set
   (Copy 2-arg, dynarray Copy, Delete, Insert, Concat) is now complete.
+
+## TRIAGE (2026-06-30, multi-agent verify)
+
+SOLVED. Probed: Copy(dynarr,1,2)->len2 [10,20]; Copy(s,1,5)->'hello'; 2-arg Copy(s,7)->'world' all work. Remaining scope is covered elsewhere: dynarray Delete/Insert = [[feature-dynarray-insert-delete]]; ShortString/UnicodeString overloads need types that do not exist yet. The Copy intrinsic itself is complete -> done.

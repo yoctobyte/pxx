@@ -167,3 +167,7 @@ lua green. Guard `test/test_decl_order_global_error.pas`.
   - [[feature-implicit-locals-sloppy-switch]] — undeclared `i := 0` →
     inferred local, behind `{$IMPLICITVARS}` / `--auto-locals` (opt-in, warns,
     strict-errors; the Python/BASIC ergonomics, off by default).
+
+## TRIAGE (2026-06-30, multi-agent verify)
+
+SOLVED/closed. Core decl-order gating (v93), clearer diagnostic (v97), and the opt-out switch (--lax-decl-order / {$DECLORDER ON|OFF}, 2026-06-30) all DONE. The remaining --auto-locals idea was carved into [[feature-inline-loop-var-rio]] (counted form done) + [[feature-implicit-locals-sloppy-switch]]. Nothing actionable left here -> done.

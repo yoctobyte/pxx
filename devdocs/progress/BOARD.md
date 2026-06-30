@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-c-unsigned-semantics-suite-resweep | A | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
@@ -58,7 +57,6 @@ _none_
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
-| feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
@@ -91,7 +89,6 @@ _none_
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
-| meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 
@@ -129,7 +126,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (377)
+## done (380)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -354,6 +351,7 @@ _none_
 | feature-conditional-declared-directive | A | feature | `{$IF DECLARED(...)}` conditional directive support | — |
 | feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
+| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-bootstrap | A | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-codegen-gaps | A | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
@@ -427,6 +425,7 @@ _none_
 | feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
+| feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 | feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
@@ -503,6 +502,7 @@ _none_
 | lib-intToStr-missing | B | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+| meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
@@ -535,7 +535,6 @@ _none_
 - [C] feature-c-runtime-library
 - [A] feature-c-unsigned-semantics-suite-resweep
 - [A] feature-cdecl-indirect-cross-targets
-- [B] feature-copy-intrinsic
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
@@ -554,7 +553,6 @@ _none_
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
-- [A] feature-implicit-identifier-binding-strictness-switch
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
@@ -584,7 +582,6 @@ _none_
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
-- [B] meta-track-b-compiler-wishlist
 - [B] task-sqlite-libc-free-runtime-bringup
 
 ## Leverage (tickets each one unblocks)

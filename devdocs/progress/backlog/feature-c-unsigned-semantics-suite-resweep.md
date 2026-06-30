@@ -81,3 +81,9 @@ Each is a hypothesis to confirm/refute with a minimal repro, NOT a known bug yet
   [[project_c_unsigned_int_32bit_done]].
 - Related: the C cross-coverage umbrella
   [[feature-c-cross-target-feature-coverage]].
+
+## TRIAGE note (2026-06-30) — confirmed concrete gap
+
+Probe found a real residual: C signed arithmetic right shift is wrong on x86-64 —
+`int s = -2; (s >> 1)` returns a value != -1 (should be -1, arithmetic shift). So
+this sweep is justified, not speculative; start here.

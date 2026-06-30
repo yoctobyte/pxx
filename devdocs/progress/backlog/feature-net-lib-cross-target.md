@@ -52,3 +52,7 @@ side. Pinning the exact call needs an arm32-side bisect (Track A).
 `httpdemo` (and `make lib-test`'s `net-demo`) cross-compiles on i386 and arm32 in
 addition to amd64 + aarch64. Track A owns the backend changes; Track B will add a
 cross smoke once the backends accept it.
+
+## TRIAGE (2026-06-30, multi-agent verify)
+
+UPDATE (verify): i386 sub-claim is OUTDATED — i386 now BUILDS httpdemo cleanly (procs=432), the old 'only ordinal/pointer params' failure is gone. **arm32 still fails**: 'target arm32: virtual call with more than 4 parameter words not supported'. Acceptance needs all targets, so still open — scope narrowed to the arm32 virtual-call >4-param-word gap.

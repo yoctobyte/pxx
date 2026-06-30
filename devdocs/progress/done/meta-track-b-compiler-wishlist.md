@@ -167,3 +167,7 @@ B's pinned binary (binary+builtin coherent; v9->v10).
 - 2026-06-21 — Synapse/POSIX smoke exposed two new compiler asks: dotted unit
   names and `{$IF DECLARED(...)}`. Filed detail tickets and linked them here so
   Track A can pick them up without Track B inventing Synapse-specific shims.
+
+## TRIAGE (2026-06-30, multi-agent verify)
+
+CLOSED — purpose spent. All ranked COMPILER items verified done (64-bit xor/shift/hex; case-insensitive write; sets-from-runtime-values + Include/Exclude; const-record-temp-arg; record-fn-codegen-crash; Copy intrinsic). Residual pointers (Synapse/POSIX RTL, dynarray Delete/Insert, generator edge variants) each live in their own open tickets. Index no longer needed -> done.
