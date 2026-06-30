@@ -318,3 +318,53 @@ code anyway.
 6. Textual printer per target, in step with each target's encoder (not
    bolted on at the end). **Done for x64 and aarch64** (`AsmPrintX64`/
    `AsmPrintAArch64`).
+
+## Growing coverage per target (post-sequencing)
+
+With all six targets at an MVP slice, the next phase is widening each
+target's addressing-mode and immediate/constant coverage — explicitly
+*library* work, ahead of any further compiler integration (per user
+direction 2026-07-01: grow `lib/asmcore` first, "dial it into the compiler"
+later — same rationale as the original layered sequencing, see
+[[feedback_asm_heads_priority]]).
+
+- **x64 SIB `[base+index*scale+disp]` — done 2026-07-01.** `TAsmOperand`'s
+  `MemIndex`/`MemScale` fields existed since the original design (this
+  doc's "Core types" section above) but were unused until now — confirms
+  the type was already scoped correctly, only the x64 encode function
+  needed filling in. New `MemOpIndexed(base, index, scale, disp)`
+  constructor in `asmcore_base`. `EmitModRMMem` grew the SIB byte, the
+  base-less `[index*scale+disp]` form (`base=-1`, SIB base field forced to
+  101), and generalized the existing rbp/r13-forces-disp8 rule to the SIB
+  case. `rsp` can't be a SIB index (that bit pattern is the dedicated
+  "no index" encoding) — rejected with a clear error rather than silently
+  degrading to plain `[base+disp]`, which would mask a real caller
+  mistake; same guard for `REG_RIP`+index (meaningless — rip-relative has
+  no SIB form at all). 8 new byte-exact checks vs host `as`+objdump.
+- **arm32 full rotated-immediate encoding — done 2026-07-01.** Previously
+  only `rotate=0` (raw 0-255) was supported; `EncodeArmImm12` now searches
+  all 16 even rotations for one that reproduces an arbitrary 32-bit value
+  via `ROR(imm8, rotate*2)` — the real ARM encoding, not an approximation.
+  Most "round-looking" constants (`0x10000`, `0xFF000000`, ...) have a
+  valid rotation; values needing more than 8 significant bits spread
+  non-rotation-adjacently (e.g. `258` = `0x102`) genuinely don't — errors
+  clearly rather than silently truncating (real `as` falls back to the
+  separate MOVW/MOVT pair there, ARMv6T2+, not modeled this slice — a
+  clean "library work, not yet" boundary, same style as every other
+  documented scope cut in this library). 6 new byte-exact checks (5
+  encodings + the 258-must-be-rejected case) vs host `as`+objdump.
+- **Build-system note, same session**: while verifying these, found and
+  fixed a real "explicit dependency" gap unrelated to addressing modes —
+  the FPC bootstrap silently relied on `-Fulib/asmcore` (a genuinely
+  required flag; an earlier "it works without -Fu" read this session was
+  a stale-cache false positive, see commit `8f983fd0`). Fixed via
+  `compiler.pas`'s own `{$UNITPATH ../lib/asmcore}` (FPC-only directive,
+  source-relative, silently ignored by PXX self-host) — both
+  `fpc compiler/compiler.pas` and `./compiler/pascal26 compiler/compiler.pas`
+  now build with zero flags, sources only.
+- **Next candidates**: aarch64 register-offset/scaled addressing for
+  ldr/str (`[x1,x2]` / `[x1,x2,lsl#3]`) and logical-immediate ALU
+  (AND/ORR/EOR with an immediate — the bitmask-immediate encoding, its own
+  can of worms); riscv32/xtensa immediate range refinements; i386 likely
+  wants the same SIB treatment x64 just got (same ModRM/SIB shape, no
+  REX); 8/16-bit operand sizes and rip-relative store for x64.

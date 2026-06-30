@@ -25,20 +25,25 @@ unit asmcore_arm32;
      targets even though the hardware doesn't.
 
   Coverage (mirrors the aarch64/x64 tier):
-    mov   reg,reg | reg,#imm0-255 (rotate=0 only, see note below)
-    add/sub/and/orr/eor  reg,reg,reg | reg,reg,#imm0-255
-    cmp   reg,reg | reg,#imm0-255
+    mov   reg,reg | reg,#imm (rotated-imm8, see EncodeArmImm12)
+    add/sub/and/orr/eor  reg,reg,reg | reg,reg,#imm (rotated-imm8)
+    cmp   reg,reg | reg,#imm (rotated-imm8)
     ldr/str reg,[reg,#imm0-4095]   (P=1,U=1,W=0 — pre-indexed, positive,
                                      no writeback; the common "[base,#imm]")
     bx reg                          (the real A32 "return" idiom: bx lr)
     b/bl/b<cc> <patch>               (imm24, PC-relative /4, see note above)
     nop                              (the classic pre-ARMv6T2 `mov r0,r0`)
-  Byte-exact vs `arm-linux-gnueabi-as`+objdump oracle, 2026-06-30.
-  Deliberately NOT modeled this slice: the 8-bit-value+4-bit-rotate general
-  immediate encoding (only rotate=0, i.e. raw 0-255, is supported — matching
-  every other target's "start simple" immediate-range choice), Thumb/
-  Thumb2, conditional data-processing, shifted-register operands, LDM/STM,
-  SIMD/VFP.
+  Byte-exact vs `arm-linux-gnueabi-as`+objdump oracle, 2026-06-30 and
+  2026-07-01 (rotated-immediate search, EncodeArmImm12). The immediate
+  field is the real ARM 8-bit-value-rotated-right-by-an-even-amount
+  encoding (not just raw 0-255) — most "round-looking" 32-bit constants
+  (0x10000, 0xFF000000, ...) have a valid rotation; constants that need
+  more than 8 significant bits spread non-rotation-adjacently (e.g. 258 =
+  0x102) don't, and error clearly rather than silently truncating — real
+  `as` falls back to the separate MOVW/MOVT pair there (ARMv6T2+), not
+  modeled this slice.
+  Deliberately NOT modeled: MOVW/MOVT, Thumb/Thumb2, conditional data-
+  processing, shifted-register operands, LDM/STM, SIMD/VFP.
   See devdocs/developer/asmcore-design.md. }
 
 interface
@@ -120,6 +125,42 @@ end;
 const
   COND_AL = $E0000000;
 
+function RotateLeft32(v: Int64; n: Integer): Int64;
+begin
+  v := v and $FFFFFFFF;
+  n := n and 31;
+  if n = 0 then begin Result := v; Exit; end;
+  Result := ((v shl n) or (v shr (32 - n))) and $FFFFFFFF;
+end;
+
+{ ARM data-processing immediates encode as ROR(imm8, rotate*2) -- an 8-bit
+  value rotated right by an even amount, not a plain 0..255 range. Search
+  all 16 even rotations for one that reproduces v exactly (v is treated as
+  a 32-bit bit pattern; a negative Int64 is masked to its 32-bit pattern
+  first, e.g. -1 -> 0xFFFFFFFF, which DOES have a valid rotated-imm8 form).
+  Checking rotField=0 first means a plain 0..255 value always gets the
+  canonical rotate=0 encoding, matching what `as` picks. Returns the packed
+  12-bit imm12 field (rotate<<8 | imm8) on success. Not every 32-bit value
+  has a rotated-imm8 encoding at all (e.g. 258/0x102 doesn't -- real `as`
+  falls back to the separate MOVW/MOVT instructions there, ARMv6T2+); this
+  slice doesn't model that fallback, see unit header note. }
+function EncodeArmImm12(v: Int64; var imm12: Integer): Boolean;
+var rotField: Integer; uval, candidate: Int64;
+begin
+  Result := False;
+  uval := v and $FFFFFFFF;
+  for rotField := 0 to 15 do
+  begin
+    candidate := RotateLeft32(uval, rotField * 2);
+    if (candidate and (not Int64($FF))) = 0 then
+    begin
+      imm12 := (rotField shl 8) or Integer(candidate and $FF);
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
 { Data-processing, register shifter_operand form (no shift):
   cond 00 0 opcode S Rn Rd 00000000 Rm. dpOpcode already includes the I=0
   bit position (bits[24:21]). }
@@ -131,13 +172,15 @@ begin
   Result := True;
 end;
 
-{ Data-processing, immediate (rotate=0) form: cond 00 1 opcode S Rn Rd 0000 imm8. }
-function EncodeDpImm(dpOpcodeImm: Int64; imm8: Int64; const rd, rn: TAsmOperand; var buf: TAsmByteBuf): Boolean;
-var w: Int64;
+{ Data-processing, immediate form: cond 00 1 opcode S Rn Rd imm12, where
+  imm12 packs a rotate field and an 8-bit value (ROR(imm8,rotate*2) == v) --
+  see EncodeArmImm12. }
+function EncodeDpImm(dpOpcodeImm: Int64; v: Int64; const rd, rn: TAsmOperand; var buf: TAsmByteBuf): Boolean;
+var w: Int64; imm12: Integer;
 begin
-  if (imm8 < 0) or (imm8 > 255) then
-  begin LastError := 'asmcore_arm32: immediate must be 0..255 (rotate=0 only, this slice)'; Result := False; Exit; end;
-  w := COND_AL or dpOpcodeImm or (Int64(rn.Reg) shl 16) or (Int64(rd.Reg) shl 12) or imm8;
+  if not EncodeArmImm12(v, imm12) then
+  begin LastError := 'asmcore_arm32: ' + IntToStrAsm(v) + ' has no rotated-imm8 encoding (not every 32-bit value does; MOVW/MOVT not modeled this slice)'; Result := False; Exit; end;
+  w := COND_AL or dpOpcodeImm or (Int64(rn.Reg) shl 16) or (Int64(rd.Reg) shl 12) or Int64(imm12);
   BufAppendU32(buf, w);
   Result := True;
 end;

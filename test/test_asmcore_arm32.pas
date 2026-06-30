@@ -73,7 +73,7 @@ begin
   Result.Mnemonic := mn; Result.OperandCount := 0;
 end;
 
-var r0, r1, r2, lr: TAsmOperand;
+var r0, r1, r2, lr: TAsmOperand; buf: TAsmByteBuf; patches: TAsmPatchList;
 begin
   checks := 0; fails := 0;
   r0 := RegOp(reg_r0, 4); r1 := RegOp(reg_r1, 4); r2 := RegOp(reg_r2, 4); lr := RegOp(reg_lr, 4);
@@ -99,6 +99,19 @@ begin
   CheckPatch('bl forward 2',  'bl',  2, $eb000001);
   CheckPatch('beq forward 1', 'beq', 1, $0a000000);
   CheckPatch('blt forward 0', 'blt', 0, $baffffff);
+
+  { ---- rotated-immediate (ROR(imm8,rotate*2)), not just plain 0..255 ----
+    Byte-exact vs `arm-linux-gnueabi-as`+objdump, 2026-07-01. }
+  Check('mov r0,#0x10000',    I2('mov', r0, ImmOp($10000)), $e3a00801);
+  Check('mov r0,#0xFF000000', I2('mov', r0, ImmOp($FF000000)), $e3a004ff);
+  Check('mov r0,#0x3FC',      I2('mov', r0, ImmOp($3FC)), $e3a00fff);
+  Check('add r0,r1,#0x10000', I3('add', r0, r1, ImmOp($10000)), $e2810801);
+  Check('mov r0,#256',        I2('mov', r0, ImmOp(256)), $e3a00c01);
+  { 258 has no rotated-imm8 encoding at all -- must error, not miscompile }
+  Inc(checks);
+  BufInit(buf); PatchListInit(patches);
+  if AsmEncodeArm32(I2('mov', r0, ImmOp(258)), buf, patches) then
+  begin writeln('FAIL: mov r0,#258 should have been rejected'); Inc(fails); end;
 
   writeln(checks - fails, ' / ', checks, ' arm32 checks passed');
   if fails = 0 then writeln('all asmcore_arm32 checks passed');
