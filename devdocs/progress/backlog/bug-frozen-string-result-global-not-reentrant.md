@@ -101,6 +101,24 @@ Self-host is byte-identical-sensitive (the compiler returns frozen strings
 pervasively) → expect to reseed and run the full cross matrix. Sizeable, careful
 multi-target change — not a quick edit.
 
+## PRIORITY: LOW — deferred (2026-06-30, user decision)
+
+User clarified the frozen-string model + priority:
+- Frozen `string` (no size) = **255 / ShortString** by design. A bigger frozen
+  buffer must be an explicit `string[N]` (tyFixedString, capacity N). So capping a
+  bare-`string` *result* at LOCAL_STR_CAP (256) is **correct**; the current
+  8 MB-global-for-bare-`string` Result is the *accidental* part, not a feature.
+- **AnsiString (managed) is the stable, primary path** and the default build.
+  frozen→AnsiString conversion is trivial; mixed mode (libs vs app) is the likely
+  real-world shape. Frozen only matters at the edges: **ESP32 / 8-bit / minimal
+  code (small hello-world, no heap/ARC overhead)**.
+- Net: **not worth** the full NRVO + virtual/indirect dest multi-backend lift for
+  a niche mode while managed is stable. Deferred. The latent reentrancy bug
+  remains documented; revisit only if a frozen-target (ESP/minimal) actually hits
+  it. If/when picked up: the direct-call wiring below is correct (step 1); the
+  blocker is virtual/indirect dest passing (step 2-3), AND a separate `string[N]`
+  sized-result capacity story if big frozen buffers are returned by value.
+
 ## CORRECTION (2026-06-30, after user review) — capacity was a strawman; real blocker = virtual/indirect calls
 
 Attempt 1 below blamed a "capacity 8MB→256" regression and a frozen self-build
