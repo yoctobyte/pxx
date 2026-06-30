@@ -1732,9 +1732,6 @@ end;
 
 procedure IREmitMachineCodeXtensa;
 var i, lblId, pos, f: Integer;
-    LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..MAX_IR-1] of Integer;
-    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   for i := 0 to MAX_IR - 1 do

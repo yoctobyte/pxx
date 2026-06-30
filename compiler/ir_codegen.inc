@@ -4412,9 +4412,6 @@ end;
 
 procedure IREmitMachineCode;
 var i, lblId, pos, targetOffset, f, procIdx: Integer;
-    LabelPositions: array[0..MAX_IR-1] of Integer;
-    LabelFixupPos: array[0..MAX_IR-1] of Integer;
-    LabelFixupTarget: array[0..MAX_IR-1] of Integer;
     LabelFixupCount: Integer;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }

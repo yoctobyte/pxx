@@ -956,6 +956,14 @@ var
   ErrorIdent : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
+  { Label fixup scratch for the machine-code emit pass. One shared set: only the
+    active target's IREmitMachineCode* runs per compile, and it runs once (not
+    reentrant), so a single global set is safe. Moved off the stack — as locals
+    these were array[0..MAX_IR-1] (512 KB each, ~1.5 MB/frame) in EVERY backend,
+    bloating the compiler's own frames (feature-warn-oversized-stack-frame). }
+  LabelPositions : array[0..MAX_IR-1] of Integer;
+  LabelFixupPos : array[0..MAX_IR-1] of Integer;
+  LabelFixupTarget : array[0..MAX_IR-1] of Integer;
   WarnSelfResult : Boolean; { --warn-self-result: warn when a paramless function's
                              bare own name is read as a value (FPC = its Result,
                              but often a mistaken `Name()` self-recursion). Off by
