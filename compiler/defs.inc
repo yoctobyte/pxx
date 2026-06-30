@@ -825,6 +825,7 @@ var
   SymRTTIOff  : array[0..MAX_SYMS-1] of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array[0..MAX_SYMS-1] of Integer;
+  SymDeclTok : array[0..MAX_SYMS-1] of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }
   SymCount  : Integer;
   FrameSize : Integer;
 
@@ -1192,6 +1193,18 @@ var
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
+  { Declaration-order gating for program/unit GLOBAL VARIABLES (declare-before-use,
+    FPC-parity). The whole-program pre-scan registers every global before any body
+    compiles, which otherwise lets a routine bind a global declared textually below
+    it (a stray-name / reentrancy hazard, e.g. a shared loop counter). Each global
+    var records the token index where it was declared; while compiling a routine
+    body, FindSym hides a global whose declaration token is past the body's header
+    token (i.e. declared after the routine). Token positions are absolute into the
+    single expanded Tokens[] stream, so methods, forward decls and unit/builtin
+    routines are all handled by real source position — no registration-order
+    bookkeeping. Types/consts/procs stay forward-visible (legit mutual recursion). }
+  CurBodyHdrTok    : Integer;    { token index of the routine body being compiled; high = see all (outside a body) }
+  DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;

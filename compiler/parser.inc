@@ -11780,7 +11780,7 @@ var
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
-  savedGLC, savedGFC, j: Integer;
+  savedGLC, savedGFC, j, savedVisVarSeq: Integer;
   cleanupJnePatch, cleanupJmpPatch: Integer;
   patchPos : Integer;
   depth    : Integer;
@@ -12395,6 +12395,10 @@ begin
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
   CurProc := procIdx;
+  { Decl-order gating: this body may only see globals declared before its header
+    token (TokPos is now in this routine's header). FindSym hides later globals. }
+  savedVisVarSeq := CurBodyHdrTok;
+  CurBodyHdrTok := TokPos;
   Procs[procIdx].ScopeBase := SymCount;
 
   { Set method context before allocating params }
@@ -13343,6 +13347,7 @@ begin
   GotoLabelCount := savedGLC;
   GotoFixupCount := savedGFC;
   CurProc   := -1;
+  CurBodyHdrTok := savedVisVarSeq;   { restore decl-order horizon (see all outside a body) }
   CurSelfClass := REC_NONE;
   CurProcIsAsync := savedProcIsAsync;
   CurProcIsGenerator := savedGenIsGen;
@@ -14458,6 +14463,10 @@ begin
   ArrTypeCount := 0;
   StrConstCount := 0;
   SetConstCount := 0;
+  { Decl-order gating defaults: no body active (a high sentinel means "see all"
+    outside a routine body — main body + pre-scan), strict by default. }
+  CurBodyHdrTok    := $7FFFFFFF;
+  DeclOrderStrict  := True;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }

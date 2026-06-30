@@ -1539,9 +1539,12 @@ function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
-  { Exact-case match first, innermost scope out (preserves shadowing). }
+  { Exact-case match first, innermost scope out (preserves shadowing). A global
+    variable declared textually after the current routine is hidden (decl-order
+    gating, DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity. }
   for i := SymCount-1 downto 0 do
-    if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId) then
+    if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
+       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
       Result := i;
@@ -1550,7 +1553,8 @@ begin
   { Case-insensitive fallback for case-insensitive symbols only. }
   for i := SymCount-1 downto 0 do
     if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
-       IsBlockVisible(SymBlockId[i], CurBlockId) then
+       IsBlockVisible(SymBlockId[i], CurBlockId)
+       and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
       Result := i;
@@ -1604,6 +1608,18 @@ begin
       Exit;
     end;
   Result := -1;
+end;
+
+procedure StampDeclSeq(symIdx: Integer);
+{ Record a program/unit global var's declaration token so FindSym can hide it from
+  routines whose body is positioned before it (declare-before-use for globals,
+  FPC-parity). Locals/params/consts/types are not skGlobal, so they are never
+  stamped and stay visible as before. Only source-order globals registered during
+  the declaration pre-scan are gated; synthetic globals allocated while compiling a
+  body (e.g. the string-Result slot) run with PreScanPass=False and stay visible. }
+begin
+  if PreScanPass and (Syms[symIdx].Kind = skGlobal) then
+    SymDeclTok[symIdx] := TokPos;
 end;
 
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
@@ -1694,7 +1710,7 @@ begin
       Syms[SymCount].Offset := -FrameSize;
     end;
   end;
-  Result := SymCount; Inc(SymCount);
+  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function ParamSize(idx: Integer): Integer;
@@ -1759,7 +1775,7 @@ begin
     align := TypeAlign(tk);
   FrameSize := AlignTo(FrameSize + sz, align);
   Syms[SymCount].Offset := -FrameSize;
-  Result := SymCount; Inc(SymCount);
+  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
@@ -1854,7 +1870,7 @@ begin
     Syms[SymCount].Offset := -FrameSize;
   end;
   LastTypeElemDynDepth := 0;   { consumed }
-  Result := SymCount; Inc(SymCount);
+  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integer): Integer;
@@ -1917,7 +1933,7 @@ begin
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
-  Result := SymCount; Inc(SymCount);
+  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocTemp: Integer;
@@ -1934,7 +1950,7 @@ begin
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
-  Result := SymCount; Inc(SymCount);
+  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
 end;
 
 { ===== Variable load/store ===== }

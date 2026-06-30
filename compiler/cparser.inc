@@ -4307,7 +4307,7 @@ var
   retType, ptype: TTypeKind;
   name, extLib: AnsiString;
   isFunc: Boolean;
-  nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
+  nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId: Integer;
