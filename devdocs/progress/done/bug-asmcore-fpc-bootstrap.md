@@ -1,7 +1,7 @@
 # FPC bootstrap can't compile the asmcore units the compiler now `uses`
 
 - **Type:** bug (bootstrap / FPC only — NOT the daily self-host gate)
-- **Status:** backlog
+- **Status:** done
 - **Track:** A (compiler bootstrap) + B (owns lib/asmcore)
 - **Opened:** 2026-06-30, building the .asm MVP frontend (feature-asm-mvp-frontend)
 
@@ -41,3 +41,6 @@ User decision 2026-06-30: ship the .asm frontend on the **self-host** path now
 (green), ignore FPC bootstrapping for the moment, file this. The daily gate does
 not need FPC (FPC-optional workflow), so this does not block normal work — only a
 cold FPC-seeded checkout or the release `test-fpc` compliance step.
+
+## Log
+- 2026-06-30 — resolved, commit 5a0dfe54.

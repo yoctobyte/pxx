@@ -169,3 +169,20 @@ before fanning out wide, not about limiting ambition:
   (`MemText`) updated for the sentinel too. Still open for full x64
   acceptance: SIB index/scale, 8/16-bit operand sizes, rip-relative *store*
   (`mov [rel x], reg`); other five targets not started.
+- 2026-06-30 — **FPC bootstrap fixed + promoted to built-in** (Track B+A,
+  closes [[bug-asmcore-fpc-bootstrap]]): `{$mode objfpc}{$H+}` added to both
+  units (Result was off under FPC's default `{$mode fpc}`); a separate latent
+  bug surfaced once that cleared — `asmfront.inc`'s top-level `const
+  ASM_MAX_LABELS`/`ASM_MAX_FIXUPS` collided with the same names already at
+  top level in `asmtext.inc` (PXX tolerates redeclaration, FPC errors
+  "Duplicate identifier"); renamed to `ASM_FRONT_MAX_LABELS`/
+  `ASM_FRONT_MAX_FIXUPS`. `make bootstrap`/`bootstrap-managed`/`test-fpc` all
+  green; FPC-built compiler reaches the same self-host fixedpoint as the
+  PXX-built one (byte-identical). Also promoted `lib/asmcore` to a first-
+  class peer of `lib/rtl`/`lib/pcl` in `ParseUsesUnit`'s own exe-anchored
+  search chain (`compiler/parser.inc`, new `asmdir`) instead of the ad hoc
+  `AddPasUnitDir` calls in `compiler.pas` — any program can `uses
+  asmcore_base, asmcore_x64` with no `-Fu`, same guarantees (and the same
+  pinned-binary-outside-repo-root caveat) RTL/PCL already have.
+  `test/test_asmcore_x64.pas` already exercises this unflagged in `make
+  test`, now re-verified after the refactor. Full `make test` green.
