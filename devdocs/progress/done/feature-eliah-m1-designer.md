@@ -67,3 +67,7 @@ compiler gaps → Track A ticket, no workaround.
   routines, import-corruption) are all fixed + pinned now; eliah wiring is
   idiomatic. Acceptance met. Remaining IDE work tracked separately:
   feature-eliah-pane-reflow, feature-eliah-m2-builder, and file SAVE (.lfm write).
+
+## CLOSED via triage (2026-06-30)
+
+Acceptance MET (M1 designer COMPLETE 2026-06-23: editable inspector, click-to-place palette, .lfm load, 31/31 gate). The only remaining item is an added 'component-library' stretch scope (low priority) — split out if pursued. Closing the ticket on its own acceptance.

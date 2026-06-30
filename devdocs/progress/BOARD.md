@@ -12,27 +12,27 @@ _none_
 
 _none_
 
-## unfinished (4)
+## unfinished (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
-| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 
 ## blocked (0)
 
 _none_
 
-## backlog (62)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
+| bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
+| bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
-| chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
@@ -51,8 +51,9 @@ _none_
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
+| feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
+| feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
@@ -62,7 +63,6 @@ _none_
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-loop-var-rio | A | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
-| feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
@@ -70,12 +70,10 @@ _none_
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
-| feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
-| feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
@@ -126,7 +124,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (380)
+## done (384)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -395,6 +393,7 @@ _none_
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
 | feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
+| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
@@ -408,6 +407,7 @@ _none_
 | feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
 | feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
@@ -449,6 +449,7 @@ _none_
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+| feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
@@ -462,6 +463,7 @@ _none_
 | feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
+| feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
 | feature-riscv32-var-param-forwarding | A | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
@@ -511,7 +513,7 @@ _none_
 | track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (7)
+## rejected (9)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -522,13 +524,16 @@ _none_
 | bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
 | bugfix-cfront-bitfield-packing-gcc-compat | A+C | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
+| chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
+- [A] bug-array-const-too-many-elements-synapse
+- [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-nested-dynarray-cross-segfault
-- [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
@@ -547,8 +552,9 @@ _none_
 - [B] feature-eliah-component-tabbar
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
+- [A] feature-emission-size-dce
+- [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
-- [A] feature-esp32-idf-xtensa
 - [A] feature-flexcolumn-directive
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
@@ -558,18 +564,16 @@ _none_
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-loop-var-rio
 - [A] feature-inline-routines
-- [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics
 - [A] feature-net-lib-cross-target
 - [B] feature-networking
+- [A] feature-nilpy-idf-import
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
-- [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
-- [B] feature-release-packaging
 - [A] feature-require-forward-strict-mode
 - [B] feature-synapse-compile-check
 - [B] feature-threadsafe-heap-contract
@@ -587,6 +591,5 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **2** — feature-threadsafe-heap-contract
-- **1** — feature-esp32-idf-xtensa
 - **1** — feature-threadsafe-io-serialization
 - **1** — task-sqlite-libc-free-runtime-bringup

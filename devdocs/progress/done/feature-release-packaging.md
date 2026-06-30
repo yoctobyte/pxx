@@ -256,3 +256,7 @@ the corrected chess xfail reason.
 4. **Codename ledger** (`CODENAMES`) is created only at publish; `suggest_codename`
    counts its lines. The hand-set codename in the release-notes file must match what
    publish will append — consistent for beta.1 (Babbage = pool index 0). No change.
+
+## CLOSED via triage (2026-06-30)
+
+Validated end-to-end (tools/release.sh dry-run + --publish; dist/ holds reproducible pxx-v0.1.0[-beta.1] bundles + manifests; Makefile selfcheck; bit-for-bit reproducibility green 2026-06-21). Remaining items are non-blocking maintainer decisions. Closing.

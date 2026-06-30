@@ -87,3 +87,7 @@ idf.py -p /dev/ttyUSB0 flash monitor          # adjust port (ttyUSB*/ttyACM*)
 Expect: IDF boot banner, `PXX hello from Pascal S3: i=1..5`, `PXX S3 sum 1..5 = 15`,
 then GPIO2 LED toggling on a ~500 ms cadence. Ctrl-] exits the monitor. (Wire an
 LED+resistor to GPIO2/GND if the board has no on-board LED there.)
+
+## CLOSED via triage (2026-06-30)
+
+Harness-achievable scope COMPLETE: ESP-IDF Xtensa QEMU path + GDB windowed-frame backtrace done & re-verified. The sole remaining acceptance item — flashing a physical ESP32-S2/S3 board over USB — is un-automatable in this harness. Closing the QEMU/integration scope; physical-board validation split to [[feature-esp-hardware-flash-validation]].

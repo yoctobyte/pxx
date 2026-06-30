@@ -92,3 +92,7 @@ All qemu-reproducible (no hardware) via the net-c3 smoke.
 - 2026-06-22 — Found wiring the ESP32-C3 lwIP loopback smoke. Send-side sockaddr
   layout fixed (BSD `sin_len`) — datagram delivery now works on real lwIP under
   qemu; read-back side still returns zeros. Filed for root-cause.
+
+## CLOSED via triage (2026-06-30)
+
+Root cause was NOT a PAL bug but the riscv32 var-param-forwarding compiler bug, now FIXED (commit f67fad2, in done/; esp32c3+s3 oracle-diff green). The PAL sockaddr read-back code is correct. Only remnant: re-enable the net-c3 smoke's ungated address-readback 'diagnostic' (main.pas ~18-19) under qemu — a trivial test re-enable, not a compiler gap. Resolved; closing.

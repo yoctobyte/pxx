@@ -25,3 +25,8 @@ suite green; self-host fixedpoint holds.
 
 ## Log
 - 2026-06-06 — ticket opened from rainy-afternoon.md.
+
+## MERGED (2026-06-30 triage)
+
+Redundant with the sibling emission-size ticket — both are reachability-gated DCE.
+Merged into [[feature-emission-size-dce]]. Rejected here to avoid duplication.

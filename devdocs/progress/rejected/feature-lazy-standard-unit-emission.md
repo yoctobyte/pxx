@@ -51,3 +51,8 @@ and scales badly as the default standard surface grows (`System`, more RTL).
 - 2026-06-21 - Opened from `feature-default-standard-units`: default-loading
   textfile grew hello.pas 29,086 → ~42,661 bytes with no DCE. File this before
   broadening the default standard surface further.
+
+## MERGED (2026-06-30 triage)
+
+Redundant with the sibling emission-size ticket — both are reachability-gated DCE.
+Merged into [[feature-emission-size-dce]]. Rejected here to avoid duplication.
