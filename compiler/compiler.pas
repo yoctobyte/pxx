@@ -272,6 +272,14 @@ begin
       MaxStackFrameSize := PasOptionInt(option, 19);
       Inc(i);
     end
+    else if option = '--lax-decl-order' then
+    begin
+      { Opt out of declare-before-use gating for forward-visible global vars
+        (strict/FPC-parity is the default). Restores the old lenient behavior.
+        Equivalent to {$DECLORDER OFF}. }
+      LaxDeclOrder := True;
+      Inc(i);
+    end
     else if option = '--warn-self-result' then
     begin
       { Warn when a parameterless function's bare own name is read as a value

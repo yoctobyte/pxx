@@ -1,9 +1,9 @@
 # Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch
 
 - **Type:** feature (language / parser) — Track A
-- **Status:** backlog — **core gating DONE (pin v93)**; only the smaller
-  follow-ups below remain (clearer diagnostic, opt-out switch, `--auto-locals`).
-  See "Resolution" at the bottom.
+- **Status:** backlog — core gating DONE (pin v93), clearer diagnostic DONE (v97),
+  **opt-out switch DONE (2026-06-30)**; only `--auto-locals` remains. See
+  "Resolution" at the bottom.
 - **Owner:** unassigned
 - **Opened:** 2026-06-30
 - **Found by:** the FPC-seed bootstrap break
@@ -146,9 +146,18 @@ lua green. Guard `test/test_decl_order_global_error.pas`.
   at each site (error path only) rather than via a fragile global flag.
   `test_decl_order_global_error` asserts the clearer text. Self-host
   byte-identical. The two below remain.
-- **The switch.** Gating is hard-wired `DeclOrderStrict := True`. Expose it as
-  `{$DECLORDER OFF}` / `--lax-decl-order` for anyone who wants the old lenient
-  behavior, and surface the strict default in `--mimic-fpc`.
+- **The switch — DONE (2026-06-30, Track A).** `--lax-decl-order` CLI flag and
+  `{$DECLORDER ON|OFF}` directive expose the gating (strict/FPC-parity stays the
+  default). New `LaxDeclOrder` global (defs.inc; reset in `PasInitDefines`), set by
+  the flag (compiler.pas) and the directive (lexer.inc); `ParseProgram` computes
+  `DeclOrderStrict := not LaxDeclOrder` after `LexAll`, so a top-of-file directive
+  (lex-time) and the CLI flag both take effect, and a `{$DECLORDER ON}` in-file
+  overrides a `--lax-decl-order` (last-wins, directive over flag). Verified: strict
+  default still errors; flag + directive compile the lenient case (prints 42);
+  `{$DECLORDER ON}` overrides the flag; a truly-undefined name still errors;
+  self-host byte-identical; `make test` green (`test/test_decl_order_lax.pas` +
+  a `--lax-decl-order` compile of the strict error case). NB: no `--mimic-fpc`
+  change needed — strict IS the FPC behavior and is already the default.
 - **`--auto-locals` (the originally-imagined feature).** Undeclared `for x := ...`
   counter → implicit routine-local `Integer`. Default OFF (typos must still error).
   Independent of the gating above.

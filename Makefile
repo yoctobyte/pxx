@@ -1131,6 +1131,11 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) test/test_decl_order_global_error.pas /tmp/test_decl_order_global_error26 > /tmp/test_decl_order_global_error.log 2>&1
 	grep -q "declared later" /tmp/test_decl_order_global_error.log
 	grep -q "(gLate)" /tmp/test_decl_order_global_error.log
+	# {$DECLORDER OFF} opt-out: the lenient program compiles + runs
+	./$(COMPILER) test/test_decl_order_lax.pas /tmp/test_decl_order_lax26
+	test "$$(/tmp/test_decl_order_lax26)" = "42"
+	# --lax-decl-order flag: the strict error case compiles cleanly under the opt-out
+	./$(COMPILER) --lax-decl-order test/test_decl_order_global_error.pas /tmp/test_decl_order_global_lax26
 	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
 	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_qualified_units.pas /tmp/test_qualified_units26

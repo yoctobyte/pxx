@@ -597,6 +597,7 @@ begin
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
+  LaxDeclOrder := False;
   name := 'PXX';
   PasDefine(name);
   name := 'PXX_MANAGED_STRING';
@@ -1368,6 +1369,16 @@ begin
         See feature-warn-oversized-stack-frame. }
       if CaseEqual(name, 'off') then MaxStackFrameSize := 0
       else MaxStackFrameSize := PasOptionInt(name, 1);
+    end
+    else if CaseEqual(command, 'declorder') then
+    begin
+      { {$DECLORDER ON|OFF} — declare-before-use gating for forward-visible global
+        vars (FPC-parity, strict by default). OFF restores the old lenient
+        behavior. ParseProgram reads LaxDeclOrder after LexAll. See
+        feature-implicit-identifier-binding-strictness-switch. }
+      if CaseEqual(name, 'on') then LaxDeclOrder := False
+      else if CaseEqual(name, 'off') then LaxDeclOrder := True
+      else Error('declorder requires on or off');
     end
     else if CaseEqual(command, 'lazycasing') then
     begin

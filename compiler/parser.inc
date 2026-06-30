@@ -14524,7 +14524,7 @@ begin
   { Decl-order gating defaults: no body active (a high sentinel means "see all"
     outside a routine body — main body + pre-scan), strict by default. }
   CurBodyHdrTok    := $7FFFFFFF;
-  DeclOrderStrict  := True;
+  DeclOrderStrict  := not LaxDeclOrder;   { strict by default; --lax-decl-order / {$DECLORDER OFF} opts out }
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }

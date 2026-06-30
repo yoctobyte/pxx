@@ -1228,6 +1228,7 @@ var
     bookkeeping. Types/consts/procs stay forward-visible (legit mutual recursion). }
   CurBodyHdrTok    : Integer;    { token index of the routine body being compiled; high = see all (outside a body) }
   DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
+  LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
