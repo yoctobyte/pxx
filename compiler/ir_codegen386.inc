@@ -2571,6 +2571,9 @@ begin
     IR_CLONE:
       Error('target i386: __pxxclone not yet supported (threading is x86-64 first)');
 
+    IR_ATOMIC:
+      Error('target i386: __pxxatomic_* not yet supported (threading is x86-64 first)');
+
     IR_FIELD:
       begin
         IREmitNode386(IRA[node]);                    { base address -> eax }

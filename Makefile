@@ -235,15 +235,20 @@ test-asm-emit:
 	  echo "asm-emit $$t: OK"; \
 	done
 
-# Libc-free threading (meta-multithreading M1). x86-64 only: spawns real OS threads
-# via the __pxxclone trampoline (clone(2)) and joins them with futex, through both
-# the raw intrinsic and the palthread PAL. Verifies every child ran in the shared
-# address space; tids are kept out of stdout so the output is deterministic.
+# Libc-free threading (meta-multithreading M1/M2). x86-64 only: spawns real OS
+# threads via the __pxxclone trampoline (clone(2)) and joins them with futex
+# (raw + the palthread PAL); M2 adds the atomic intrinsics (lost-update test) and
+# the futex mutex (mutual-exclusion test). tids stay out of stdout so output is
+# deterministic.
 test-threads: $(COMPILER)
 	./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone26
 	test "$$(/tmp/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
 	./$(COMPILER) test/test_palthread.pas /tmp/test_palthread26
 	test "$$(/tmp/test_palthread26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
+	./$(COMPILER) test/test_atomic_counter.pas /tmp/test_atomic_counter26
+	test "$$(/tmp/test_atomic_counter26)" = "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
+	./$(COMPILER) test/test_mutex.pas /tmp/test_mutex26
+	test "$$(/tmp/test_mutex26)" = "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

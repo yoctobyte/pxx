@@ -4213,6 +4213,46 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxatomic_xchg') or CaseEqual(name, '__pxxatomic_cas')
+         or CaseEqual(name, '__pxxatomic_add') then
+      begin
+        { 32-bit atomic read-modify-write on addr^, returning the OLD value:
+            __pxxatomic_xchg(addr, val)            *addr := val
+            __pxxatomic_cas (addr, expected, newv)  if *addr=expected then *addr:=newv
+            __pxxatomic_add (addr, delta)           *addr := *addr + delta
+          The op is baked at parse time; lowers to IR_ATOMIC. }
+        node := AllocNode(AN_ATOMIC);
+        ASTTk[node] := Ord(tyInt64);
+        if CaseEqual(name, '__pxxatomic_xchg') then ASTIVal[node] := ATOMIC_XCHG
+        else if CaseEqual(name, '__pxxatomic_cas') then ASTIVal[node] := ATOMIC_CAS
+        else ASTIVal[node] := ATOMIC_ADD;
+        Next; { consume the intrinsic name }
+        Expect(tkLParen, '(');
+        lastArg := -1;
+        nArgs := 0;
+        repeat
+          ParseExpr;
+          exprNode := CurASTNode;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := exprNode;
+          if lastArg = -1 then
+            ASTLeft[node] := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        if ASTIVal[node] = ATOMIC_CAS then
+        begin
+          if nArgs <> 3 then Error('__pxxatomic_cas: expects 3 arguments (addr, expected, newval)');
+        end
+        else if nArgs <> 2 then Error('__pxxatomic_xchg/add: expects 2 arguments (addr, val)');
+        LastExprTk := tyInt64;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__resources') then
       begin
         Next; { consume '__resources' }

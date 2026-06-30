@@ -225,6 +225,15 @@ const
                            case/default node kinds. Lowered to a dispatch (compare
                            selector vs each case, jump to its label) + the body in
                            order (fallthrough), with a break-only scope. }
+  AN_ATOMIC        = 73; { __pxxatomic_xchg/cas/add(addr, ...): Int64. 32-bit atomic
+                           read-modify-write on addr^. ASTIVal = op (ATOMIC_XCHG/CAS/ADD);
+                           Left = AN_ARG chain (addr, then 1 or 2 operands). Lowers to
+                           IR_ATOMIC; x86-64 emits a lock-prefixed rmw and returns the
+                           OLD value. The atomic substrate for futex sync primitives. }
+  ATOMIC_XCHG = 0;  { xchg [addr], val          -> old (xchg to mem is implicitly locked) }
+  ATOMIC_CAS  = 1;  { lock cmpxchg [addr]; args (addr, expected, newval) -> old }
+  ATOMIC_ADD  = 2;  { lock xadd [addr], delta   -> old }
+
   AN_CLONE         = 72; { __pxxclone(flags, childStack, entry, arg, ctidptr): Int64.
                            Left = AN_ARG chain (exactly 5). Lowers to IR_CLONE: moves
                            the args into the SysV arg regs and calls the bare clone+
@@ -302,6 +311,7 @@ const
   IR_STORE_DYN    = 60;  { ARC-correct whole dyn-array store into a slot ADDRESS (record/class field or nested sub-array). IRA = slot-address node; IRB = new handle value node; IRC = dyn depth; IRIVal = -1 (non-symbol → node-derived descriptor); IRTk = base TTypeKind; IRSetLenBaseRec = base record id. Retains the new handle, publishes it, element-aware releases the old. x86-64 only; other targets keep the IR_STORE_MEM share path. }
   IR_SETLEN_STR   = 61;  { SetLength on a managed AnsiString reached through ANY lvalue (symbol, record/class field, var-param field, index, deref). IRA = target slot-ADDRESS node (IRLowerAddress of the lvalue → &handle slot); IRB = new length count node. Calls PXXStrSetLen(addr, n). Address-based so a field/var-param target needs no symbol reconstruction — the managed-string analogue of IR_SETLEN_DYN. Frozen inline strings (tyString, the self-host model) keep the -101 store-length path; only tyAnsiString reaches here. }
   IR_CLONE        = 62;  { IRA = first IR_ARG (flags, childStack, entry, arg, ctidptr — exactly 5); moves them into the SysV arg regs and calls the bare clone+trampoline stub (CloneStubAddr). Result (child tid) in the accumulator. Libc-free thread creation; x86-64 first, i386 next. }
+  IR_ATOMIC       = 63;  { IRIVal = op (ATOMIC_XCHG/CAS/ADD); IRA = IR_ARG chain (addr, then operands). x86-64 emits a 32-bit lock-prefixed read-modify-write on addr^ and returns the OLD value in the accumulator. Substrate for futex mutexes/atomic counters. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

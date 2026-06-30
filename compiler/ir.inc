@@ -95,6 +95,7 @@ begin
     IR_SYSCALL: Result := 'syscall';
     IR_COSWITCH: Result := 'coswitch';
     IR_CLONE: Result := 'clone';
+    IR_ATOMIC: Result := 'atomic';
     IR_YIELD: Result := 'yield';
     IR_CALL_IND: Result := 'call_ind';
   else
@@ -336,6 +337,9 @@ begin
 
       IR_CLONE:
         IRRequireNode(IRA[i], 'clone first arg');
+
+      IR_ATOMIC:
+        IRRequireNode(IRA[i], 'atomic addr arg');
 
       IR_YIELD:
         IRRequireNode(IRA[i], 'yield value');
@@ -2494,6 +2498,25 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_CLONE, first, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_ATOMIC:
+    begin
+      { addr + operands as an IR_ARG chain; op carried in IRIVal. Backend emits a
+        lock-prefixed 32-bit rmw and returns the old value. }
+      first := -1;
+      last := -1;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        value := IRLowerAST(ASTLeft[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+      end;
+      Result := IRAppend(IR_ATOMIC, first, -1, -1, ASTIVal[node], ASTTk[node]);
     end;
 
     AN_YIELD:

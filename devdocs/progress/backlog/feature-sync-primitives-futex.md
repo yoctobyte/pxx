@@ -27,3 +27,24 @@ stubs in `lib/rtl/syncobjs.pas` (TCriticalSection methods are currently no-ops):
   contention), event signal/wait, and once-runs-once; libc-free. Self-build
   byte-identical. The stub TCriticalSection becomes real without breaking the
   Synapse/single-thread parse-compat users.
+
+## Status — M2 first slice LANDED (2026-06-30)
+
+DONE (x86-64):
+- Atomic intrinsics: `__pxxatomic_xchg(addr, val)`, `__pxxatomic_cas(addr, expected,
+  newval)`, `__pxxatomic_add(addr, delta)` — AN_ATOMIC(73) -> IR_ATOMIC(63), x86-64
+  lock-prefixed 32-bit rmw (xchg / lock cmpxchg / lock xadd), returns the OLD value.
+  i386 + cross = clean compile-error (x86-64 first). test_atomic_counter: 4 threads ×
+  200k atomic-adds = 800000 with zero lost updates.
+- `lib/rtl/palsync.pas`: TMutex = Drepper 3-state futex mutex (MutexInit / MutexLock /
+  MutexUnlock / MutexTryLock). Uncontended path is pure userspace (cas, no syscall);
+  blocks via PalFutexWait only under real contention. test_mutex: 4 threads × 100k
+  NON-atomic increments under the lock = 400000 exactly (proves mutual exclusion).
+- Wired into `make test-threads`. Single-thread self-host byte-identical; libc-free.
+
+REMAINING in M2:
+- TEvent (auto/manual reset) + TConditionVariable on futex.
+- Once / lazy-init guard (atomic CAS on a done-flag, futex for the racing waiters).
+- 64-bit atomics + atomic load/store fences if a use needs them (current ops are 32-bit).
+- TCriticalSection alias (FPC EnterCriticalSection/LeaveCriticalSection names) —
+  trivial wrapper, lands with M3 TThread/FPC-compat surface ([[feature-pascal-tthread]]).

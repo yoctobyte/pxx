@@ -1561,6 +1561,45 @@ begin
         IREmitCodeCall(CloneStubAddr);
       end;
 
+    IR_ATOMIC:
+      begin
+        { 32-bit atomic read-modify-write on addr^. Args evaluated left-to-right
+          onto the stack; addr -> rcx, operands -> eax (+ edx for CAS). Old value
+          returned in eax (auto zero-extends to rax). }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode(IRA[argNode]);
+          EmitB($50); { push rax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        case IRIVal[node] of
+          ATOMIC_CAS:
+            begin
+              { stack (top..bottom): newval, expected, addr }
+              EmitB($5A);                 { pop rdx  (newval) }
+              EmitB($58);                 { pop rax  (expected) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($F0); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [rcx], edx }
+            end;                          { eax = old *addr }
+          ATOMIC_ADD:
+            begin
+              { stack: delta, addr }
+              EmitB($58);                 { pop rax  (delta) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($F0); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [rcx], eax }
+            end;                          { eax = old *addr }
+          else { ATOMIC_XCHG }
+            begin
+              { stack: val, addr }
+              EmitB($58);                 { pop rax  (val) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($87); EmitB($01);     { xchg [rcx], eax  (implicitly locked) }
+            end;                          { eax = old *addr }
+        end;
+      end;
+
     IR_YIELD:
       begin
         { Evaluate the yielded value into rax, store it into the instance's
