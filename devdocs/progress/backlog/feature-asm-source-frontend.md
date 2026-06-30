@@ -6,6 +6,11 @@
 - **Relation:** part of [[feature-assembler-first-class-citizen]];
   consumes [[feature-asm-structured-ir-library]]; pairs with
   [[feature-asm-textual-emit-mode]] for round-trip validation.
+- **Fast-tracked subset is urgent:** [[feature-asm-mvp-frontend]] cuts a
+  minimal straight-line-only (no labels/externs/sections) version of this
+  out and asks Track A to land it first — read that one before this if
+  you're picking up asm-frontend work now; this ticket is still where the
+  full scope (labels, `-c`, `.so`, multi-target) lands afterward.
 
 ## Owner split (2026-06-30)
 

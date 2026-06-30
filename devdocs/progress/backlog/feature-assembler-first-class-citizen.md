@@ -9,6 +9,18 @@
   the goals of [[feature-inline-asm-depth]] and [[feature-inline-asm-multi-arch]]
   (both stay open as detailed scope/acceptance refs, not duplicated here).
 
+## Sequencing update (2026-06-30): head #3 fast-tracked, urgent
+
+User call: don't land heads in 1→2→3 order. Fast-track a **minimal** head #3
+first — see urgent ticket [[feature-asm-mvp-frontend]] — so Track B has a
+trivial `.asm`-file-in, run-it-and-check-behavior test path for
+`lib/asmcore` as it grows, instead of only hand-derived byte-comparison
+Pascal tests. That MVP deliberately needs none of layer 2's label/relocation
+work (today's `lib/asmcore` coverage is straight-line `mov`/`add`/`ret`, no
+branches yet) — it's a real shortcut, not a reordering for its own sake. The
+full [[feature-asm-source-frontend]] (labels, `-c`, `.so`, multi-target)
+still follows the layered plan below once layer 2 exists.
+
 ## Two-layer architecture (2026-06-30 — owner split)
 
 The user drew an explicit line: the actual instruction-encoding tables are
