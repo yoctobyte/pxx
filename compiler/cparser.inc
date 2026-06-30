@@ -4094,6 +4094,10 @@ begin
     cdecl stack and syscalls via `int 0x80`. Other targets use a different call
     encoding for `call main`; they raise a clear error until their stub lands,
     rather than emitting x86-64 bytes that crash at runtime. }
+  { Each branch emits: setup (save sp, hand main argc/argv), the call to main
+    (recording callPatch at the call instruction for later body-address fixup),
+    then exit_group(main's return). The call encoding differs per target (E8
+    rel32 on x86 family, BL on arm32), so it lives inside each branch. }
   case TargetArch of
     TARGET_X86_64:
     begin
@@ -4101,6 +4105,10 @@ begin
       EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [initial_rsp] }
       EmitB($8B); EmitB($38);                                                       { mov edi, [rax]  (argc) }
       EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] (argv) }
+      EmitB($E8); callPatch := CodeLen; EmitI32(0);                                 { call main }
+      EmitB($89); EmitB($C7);            { mov edi, eax }
+      EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
+      EmitB($0F); EmitB($05);            { syscall }
     end;
     TARGET_I386:
     begin
@@ -4109,26 +4117,28 @@ begin
       EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
       EmitB($51);                                              { push ecx        (arg2 = argv) }
       EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
-    end;
-  else
-    Error('C program entry stub not implemented for this target yet');
-  end;
-  { call main (rel32, patched once main's body address is known — same E8
-    encoding on x86-64 and i386). }
-  EmitB($E8); callPatch := CodeLen; EmitI32(0);
-  case TargetArch of
-    TARGET_X86_64:
-    begin
-      EmitB($89); EmitB($C7);            { mov edi, eax }
-      EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
-      EmitB($0F); EmitB($05);            { syscall }
-    end;
-    TARGET_I386:
-    begin
+      EmitB($E8); callPatch := CodeLen; EmitI32(0);            { call main }
       EmitB($89); EmitB($C3);            { mov ebx, eax }
       EmitB($B8); EmitI32(252);          { mov eax, 252 (exit_group) }
       EmitB($CD); EmitB($80);            { int 0x80 }
     end;
+    TARGET_ARM32:
+    begin
+      { AAPCS: main(argc, argv) -> r0=argc, r1=argv. argc at [sp], argv = sp+4.
+        Save the initial sp to BSS_INITIAL_RSP (loaded via an inline literal, the
+        only way to reach an absolute address on arm32). }
+      EmitI32($E59F1000);                 { ldr r1, [pc]  -> r1 = &initial_sp }
+      EmitI32($EA000000);                 { b .+8 (skip the literal) }
+      EmitGlobRef(BSS_INITIAL_RSP);       { literal: absolute BSS address }
+      EmitI32($E581D000);                 { str sp, [r1] }
+      EmitI32($E59D0000);                 { ldr r0, [sp]  (argc) }
+      EmitI32($E28D1004);                 { add r1, sp, #4 (argv) }
+      callPatch := CodeLen; EmitI32($EB000000);   { bl main (offset patched) }
+      EmitI32($E3A070F8);                 { mov r7, #248 (exit_group) }
+      EmitI32($EF000000);                 { svc #0 (r0 = exit code) }
+    end;
+  else
+    Error('C program entry stub not implemented for this target yet');
   end;
 
   { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
@@ -4189,7 +4199,14 @@ begin
 
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('main function not found');
-  Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
+  { Patch the entry stub's call-to-main with main's body address. x86 family: E8
+    rel32 = target - (callPatch+4). arm32: BL imm24 = (target - (callPatch+8))/4
+    in the low 24 bits of 0xEB000000 (pc is 8 ahead of the BL on arm). }
+  if TargetArch = TARGET_ARM32 then
+    Patch32(callPatch, Integer($EB000000) or
+      (((Procs[mainIdx].BodyAddr - (callPatch + 8)) div 4) and $00FFFFFF))
+  else
+    Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
 
 procedure ParseCSubroutine;
@@ -4199,6 +4216,7 @@ var
   isFunc: Boolean;
   nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
+  pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
@@ -4615,6 +4633,56 @@ begin
           begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ax }
         else
           begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;          { mov [ebp+off], eax }
+      end;
+    end;
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    { arm32 word-based spill (mirrors the Pascal arm32 path in parser.inc): each
+      scalar param is one machine word, a by-value Int64/UInt64/Double is two
+      (lo then hi). Word k arrives in r[k] when k<4, else on the stack at
+      [fp + 8 + (pnWords-1-k)*4] (the caller pushed words in index order). }
+    pnWordsA := 0;
+    for i := 0 to nparams - 1 do
+      if ((ptypes[i] = tyInt64) or (ptypes[i] = tyUInt64) or (ptypes[i] = tyDouble)) and
+         (not Syms[Procs[procIdx].Params[i].SymIdx].IsRef) and
+         (not Syms[Procs[procIdx].Params[i].SymIdx].IsArray) then
+        Inc(pnWordsA, 2)
+      else Inc(pnWordsA, 1);
+    pwA := 0;
+    for i := 0 to nparams - 1 do
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      EmitLoadImmArm32(9, Syms[idx].Offset);
+      EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+          (Syms[idx].TypeKind = tyDouble)) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        if pwA < 4 then EmitI32($E5890000 or (pwA shl 12))
+        else begin EmitI32($E59B0000 or (8 + (pnWordsA-1-pwA)*4)); EmitI32($E5890000); end;
+        whiA := pwA + 1;
+        if whiA < 4 then EmitI32($E5890004 or (whiA shl 12))
+        else begin EmitI32($E59B0000 or (8 + (pnWordsA-1-whiA)*4)); EmitI32($E5890004); end;
+        Inc(pwA, 2);
+      end
+      else
+      begin
+        if pwA < 4 then
+        begin
+          if sz = 1 then EmitI32($E5C90000 or (pwA shl 12))        { strb r[pw], [r9] }
+          else if sz = 2 then EmitI32($E1C900B0 or (pwA shl 12))   { strh r[pw], [r9] }
+          else EmitI32($E5890000 or (pwA shl 12));                 { str r[pw], [r9] }
+        end
+        else
+        begin
+          EmitI32($E59B0000 or (8 + (pnWordsA - 1 - pwA) * 4));    { ldr r0, [fp, #off] }
+          if sz = 1 then EmitI32($E5C90000)
+          else if sz = 2 then EmitI32($E1C900B0)
+          else EmitI32($E5890000);
+        end;
+        Inc(pwA, 1);
       end;
     end;
   end

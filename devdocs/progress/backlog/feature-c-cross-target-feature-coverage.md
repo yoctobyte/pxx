@@ -23,10 +23,15 @@ entry stub not implemented for this target yet") instead of silently emitting
 x86-64 bytes that crash.
 
 **Remaining layers (still open), discovered by the same test:**
-1. **arm32 / aarch64 / riscv32 entry stubs** — need the per-target save-sp +
-   argc/argv-in-regs (r0/r1, x0/x1, a0/a1) + `call main` (BL / bl) + exit
-   syscall. (riscv32 also emits a near-empty binary — its C lowering produces
-   almost nothing; deeper.)
+1. **arm32 entry + args — FIXED 2026-06-29.** arm32 C entry stub (save sp via
+   inline literal, r0=argc/r1=argv, `bl main` with a 24-bit offset fixup, `svc`
+   exit_group 248) + arm32 word-based C param spill (mirrors the Pascal arm32
+   path: word k in r[k] for k<4 else `[fp+8+(pnWords-1-k)*4]`, Int64/Double =
+   2 words). `return 42`, 5-arg calls, recursion, struct+loop (cnoprintf→62) all
+   run on arm32; guards `ccross_entry.c` + `ccross_args.c` in `make test-arm32`.
+   **aarch64 / riscv32 still need stubs** — same shape (x0/x1, a0/a1; `bl`; their
+   param spills). riscv32 also emits a near-empty C binary (its C lowering
+   produces almost nothing; deeper).
 2. **C function call arg-passing on i386 — FIXED 2026-06-29.** The C param-spill
    in `ParseCSubroutine` was hardcoded x86-64 (spill rdi/rsi/xmm…); it now has an
    i386 branch that copies the cdecl **stack** args (`[ebp+8+sz]`, leftmost
