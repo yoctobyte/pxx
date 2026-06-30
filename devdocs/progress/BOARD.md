@@ -24,12 +24,13 @@ _none_
 
 _none_
 
-## backlog (73)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
+| bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
@@ -543,6 +544,7 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-array-const-too-many-elements-synapse
+- [A] bug-byvalue-record-managed-field-aliases-caller
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-except-base-handler-misses-derived
