@@ -107,6 +107,45 @@ begin
     Result := ASTTk[thenE];
 end;
 
+{ Wrap a node in `(e & $FFFFFFFF)` to truncate it to 32 bits, zero-extended into
+  the 64-bit register. pxx evaluates integer arithmetic in 64-bit registers, so
+  an inline C `unsigned int` expression (`a - 10`, `0u - 1`) keeps the full 64-bit
+  value instead of wrapping modulo 2^32; the mask restores C semantics. The mask
+  literal is tagged tyInt64 so it is not itself re-truncated; the result is
+  tyUInt32 so downstream arithmetic/comparisons stay in the unsigned domain. Built
+  directly (not via CMakeBinop) to avoid re-wrapping the AND. }
+function CTrunc32(e: Integer): Integer;
+var node, mask: Integer;
+begin
+  mask := AllocNode(AN_INT_LIT);
+  ASTIVal[mask] := $FFFFFFFF;
+  ASTTk[mask] := Ord(tyInt64);
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := Ord(tkAnd);   { bitwise AND on integer operands }
+  ASTLeft[node] := e;
+  ASTRight[node] := mask;
+  ASTTk[node] := Ord(tyUInt32);
+  Result := node;
+end;
+
+{ True when a comparison of these two operand nodes resolves to the C unsigned
+  32-bit domain: both operands are <= 32-bit ordinals and at least one is
+  unsigned int (tyUInt32). C usual-arithmetic-conversions then convert the signed
+  operand to unsigned, so the compare is unsigned. We model that by truncating
+  both operands to 32 bits (CTrunc32), leaving two non-negative values whose
+  signed and unsigned 64-bit comparison agree — without touching the shared
+  TypeCompareUnsigned (which keeps Pascal's signed-wins-at-equal-width rule). A
+  64-bit operand drops to the existing wider-operand path. }
+function CCmpUnsigned32(l, r: Integer): Boolean;
+var lt, rt: TTypeKind;
+begin
+  Result := False;
+  lt := IntToTypeKind(ASTTk[l]); rt := IntToTypeKind(ASTTk[r]);
+  if not (TypeIsOrdinal(lt) and TypeIsOrdinal(rt)) then Exit;
+  if (TypeSize(lt) > 4) or (TypeSize(rt) > 4) then Exit;
+  Result := (lt = tyUInt32) or (rt = tyUInt32);
+end;
+
 { Build an AN_BINOP from a C operator token and two operand nodes. cTok is the
   raw C lexer token kind (CurTok.Kind ordinal). }
 { Wrap an expression in `(e != 0)` so a logical operand becomes a true 0/1
@@ -152,6 +191,16 @@ begin
     l := CMakeTruthy(l);
     r := CMakeTruthy(r);
   end;
+  { C unsigned 32-bit comparison: truncate both operands so the compare runs on
+    two non-negative values (signed == unsigned 64-bit result), matching C's
+    convert-to-unsigned rule for `int < unsigned int` (e.g. `-1 < 1u` -> 0). }
+  if ((cTok = Ord(tkEq)) or (cTok = Ord(tkNeq)) or (cTok = Ord(tkLt)) or
+      (cTok = Ord(tkLe)) or (cTok = Ord(tkGt)) or (cTok = Ord(tkGe))) and
+     CCmpUnsigned32(l, r) then
+  begin
+    l := CTrunc32(l);
+    r := CTrunc32(r);
+  end;
   node := AllocNode(AN_BINOP);
   ASTIVal[node] := ivalOp;
   ASTLeft[node] := l;
@@ -167,6 +216,11 @@ begin
     else if (cTok = Ord(tkPlus)) and CNodeDecaysToPointer(r) then
     begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(r); end;
   end;
+  { C unsigned int (32-bit) arithmetic wraps modulo 2^32. The result is only
+    tyUInt32 for the integer unsigned-32 arithmetic path (comparisons -> Boolean,
+    pointer arith -> tyPointer above), so mask it back to 32 bits. }
+  if IntToTypeKind(ASTTk[node]) = tyUInt32 then
+    node := CTrunc32(node);
   Result := node;
 end;
 
@@ -253,7 +307,14 @@ begin
     begin
       node := AllocNode(AN_INT_LIT);
       ASTIVal[node] := CurTok.IVal;
-      if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
+      if (CAttrFlags[TokPos - 1] and 4) <> 0 then
+        { `u`/`U`-suffixed literal: unsigned. <=2^32-1 is unsigned int (tyUInt32),
+          else unsigned long (tyUInt64). }
+        if (CurTok.IVal >= 0) and (CurTok.IVal <= $FFFFFFFF) then
+          ASTTk[node] := Ord(tyUInt32)
+        else
+          ASTTk[node] := Ord(tyUInt64)
+      else if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
         ASTTk[node] := Ord(tyInt64)
       else
         ASTTk[node] := Ord(tyInteger);

@@ -144,16 +144,28 @@ begin
   end;
 end;
 
-procedure EmitSetccArm32(opTk: Integer);
+procedure EmitSetccArm32(opTk: Integer; signed: Boolean);
 begin
   EmitAsmArm32('mov r0, #0');
   if opTk = Ord(tkEq) then EmitAsmArm32('moveq r0, #1')
   else if opTk = Ord(tkNeq) then EmitAsmArm32('movne r0, #1')
-  else if opTk = Ord(tkLt) then EmitAsmArm32('movlt r0, #1')
-  else if opTk = Ord(tkLe) then EmitAsmArm32('movle r0, #1')
-  else if opTk = Ord(tkGt) then EmitAsmArm32('movgt r0, #1')
-  else if opTk = Ord(tkGe) then EmitAsmArm32('movge r0, #1')
-  else Error('target arm32: unsupported compare operator');
+  else if signed then
+  begin
+    if opTk = Ord(tkLt) then EmitAsmArm32('movlt r0, #1')
+    else if opTk = Ord(tkLe) then EmitAsmArm32('movle r0, #1')
+    else if opTk = Ord(tkGt) then EmitAsmArm32('movgt r0, #1')
+    else if opTk = Ord(tkGe) then EmitAsmArm32('movge r0, #1')
+    else Error('target arm32: unsupported compare operator');
+  end
+  else
+  begin
+    { unsigned ordered compares: lo/ls/hi/hs (Cardinal/LongWord, C unsigned int) }
+    if opTk = Ord(tkLt) then EmitAsmArm32('movlo r0, #1')
+    else if opTk = Ord(tkLe) then EmitAsmArm32('movls r0, #1')
+    else if opTk = Ord(tkGt) then EmitAsmArm32('movhi r0, #1')
+    else if opTk = Ord(tkGe) then EmitAsmArm32('movhs r0, #1')
+    else Error('target arm32: unsupported compare operator');
+  end;
 end;
 
 procedure EmitHeapAllocLockedArm32;
@@ -1293,7 +1305,7 @@ begin
           begin
             EmitI32($EEB40B41);                  { vcmp.f64 d0, d1 }
             EmitI32($EEF1FA10);                  { vmrs APSR_nzcv, fpscr }
-            EmitSetccArm32(op);
+            EmitSetccArm32(op, True);            { VFP flags use signed cond codes }
           end
           else
             Error('target arm32: unsupported float binop');
@@ -1336,7 +1348,7 @@ begin
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
           EmitI32($E1500001); { cmp r0, r1 }
-          EmitSetccArm32(op);
+          EmitSetccArm32(op, not TypeCompareUnsigned(lhsTk, rhsTk));
         end
         else if op = Ord(tkIn) then
         begin

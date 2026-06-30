@@ -265,6 +265,7 @@ var
 begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
+  CLexUnsignedSuffix := False;
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
 
@@ -298,8 +299,14 @@ begin
       Exit;
     end;
     { consume an integer suffix (u/U/l/L, e.g. UL/LL/ULL) — else it dangles as a
-      separate identifier token and breaks const expressions like `MAX/sizeof(t)` }
-    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
+      separate identifier token and breaks const expressions like `MAX/sizeof(t)`.
+      A u/U suffix marks the literal unsigned (SVal='u'); the parser tags it
+      tyUInt32 so `5u - 10` wraps modulo 2^32 like C. }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do
+    begin
+      if Source[SrcPos] in ['u','U'] then CLexUnsignedSuffix := True;
+      Inc(SrcPos);
+    end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
@@ -334,8 +341,13 @@ begin
       while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
         begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end;
-    { consume an integer suffix (u/U/l/L) on hex/octal/decimal-zero literals }
-    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
+    { consume an integer suffix (u/U/l/L) on hex/octal/decimal-zero literals;
+      u/U marks unsigned (SVal='u') -> parser tags tyUInt32 }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do
+    begin
+      if Source[SrcPos] in ['u','U'] then CLexUnsignedSuffix := True;
+      Inc(SrcPos);
+    end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
@@ -565,6 +577,7 @@ begin
     CAttrFlags[TokCount] := 0;
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
+    if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
@@ -626,6 +639,7 @@ begin
     CAttrFlags[TokCount] := 0;
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
+    if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;

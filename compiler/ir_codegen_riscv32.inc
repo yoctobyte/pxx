@@ -970,19 +970,35 @@ begin
           rv32_sub(reg_a0, reg_a0, reg_a1);
           rv32_sltu(reg_a0, reg_zero, reg_a0);
         end
-        else if op = Ord(tkLt) then
-          rv32_slt(reg_a0, reg_a0, reg_a1)
-        else if op = Ord(tkGt) then
-          rv32_slt(reg_a0, reg_a1, reg_a0)
-        else if op = Ord(tkLe) then
+        else if (op = Ord(tkLt)) or (op = Ord(tkGt)) or
+                (op = Ord(tkLe)) or (op = Ord(tkGe)) then
         begin
-          rv32_slt(reg_a0, reg_a1, reg_a0);
-          rv32_xori(reg_a0, reg_a0, 1);
-        end
-        else if op = Ord(tkGe) then
-        begin
-          rv32_slt(reg_a0, reg_a0, reg_a1);
-          rv32_xori(reg_a0, reg_a0, 1);
+          { Unsigned operands (Cardinal/LongWord, C unsigned int) use sltu, not
+            slt — was hardcoded signed, so an inline `LongWord > 0` / C
+            `(a-10u) > 0` compared signed. }
+          sgn := not TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+          if op = Ord(tkLt) then
+          begin
+            if sgn then rv32_slt(reg_a0, reg_a0, reg_a1)
+            else rv32_sltu(reg_a0, reg_a0, reg_a1);
+          end
+          else if op = Ord(tkGt) then
+          begin
+            if sgn then rv32_slt(reg_a0, reg_a1, reg_a0)
+            else rv32_sltu(reg_a0, reg_a1, reg_a0);
+          end
+          else if op = Ord(tkLe) then
+          begin
+            if sgn then rv32_slt(reg_a0, reg_a1, reg_a0)
+            else rv32_sltu(reg_a0, reg_a1, reg_a0);
+            rv32_xori(reg_a0, reg_a0, 1);
+          end
+          else { tkGe }
+          begin
+            if sgn then rv32_slt(reg_a0, reg_a0, reg_a1)
+            else rv32_sltu(reg_a0, reg_a0, reg_a1);
+            rv32_xori(reg_a0, reg_a0, 1);
+          end;
         end
         else
           Error('target riscv32: unsupported binary operator');

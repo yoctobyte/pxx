@@ -1191,6 +1191,7 @@ var
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
+  CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;

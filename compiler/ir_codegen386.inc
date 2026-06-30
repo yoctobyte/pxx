@@ -1755,7 +1755,10 @@ begin
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
           EmitB($39); EmitB($C8);                    { cmp eax, ecx }
-          EmitSetcc(op, True);                       { REX-free; shared with x86-64 }
+          { Unsigned operands (Cardinal/LongWord, C unsigned int) need unsigned
+            setcc — mirrors the x86-64 cmpUnsigned path. Was hardcoded signed, so
+            an inline `LongWord > 0` / C `(a-10u) > 0` compared signed. }
+          EmitSetcc(op, not TypeCompareUnsigned(lhsTk, rhsTk));
         end
         else if op = Ord(tkIn) then
         begin
