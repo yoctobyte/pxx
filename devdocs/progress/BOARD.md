@@ -25,13 +25,12 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
-| bug-dynarray-concat-silent-miscompile | A | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
 | bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
 | bug-setlength-multidim-one-call | A | bug | `SetLength(a, x, y)` one-call multidim allocation not parsed | — |
@@ -128,7 +127,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (374)
+## done (375)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -213,6 +212,7 @@ _none_
 | bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-dynarray-concat-silent-miscompile | A | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
@@ -522,7 +522,6 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
-- [A] bug-dynarray-concat-silent-miscompile
 - [A] bug-frozen-self-build-unreliable
 - [A] bug-frozen-string-result-global-not-reentrant
 - [A] bug-setlength-multidim-one-call

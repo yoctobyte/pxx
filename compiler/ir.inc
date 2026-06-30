@@ -2652,6 +2652,15 @@ begin
         IRB[first] := last;
         Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
       end
+      else if ((NodeDynDepth(ASTLeft[node]) > 0) or (NodeDynDepth(ASTRight[node]) > 0)) and
+              ((Integer(ASTIVal[node]) = Ord(tkPlus)) or (Integer(ASTIVal[node]) = Ord(tkMinus)) or
+               (Integer(ASTIVal[node]) = Ord(tkStar)) or (Integer(ASTIVal[node]) = Ord(tkDiv))) then
+        { An arithmetic operator with a dynamic-array operand otherwise fell through
+          to the integer/pointer IR_BINOP, which added the two array handles and
+          produced a wild pointer -> runtime SIGSEGV (bug-dynarray-concat-silent-
+          miscompile). Reject it honestly. `a + b` array concat is a future feature
+          (feature-dynarray-insert-delete / feature-copy-intrinsic). }
+        Error('arithmetic operator not supported for dynamic arrays (`a + b` array concatenation is not implemented)')
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
               (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
       begin

@@ -1,7 +1,7 @@
 # Dynamic-array `a + b` concat silently miscompiles (compiles, no output)
 
 - **Type:** bug (parser/codegen — silent miscompile) — Track A
-- **Status:** backlog
+- **Status:** DONE (2026-06-30, Track A) — silent miscompile fixed (now a clean error); concat-as-feature deferred
 - **Opened:** 2026-06-30
 - **Found by:** feature-dynarray-torture-test.
 
@@ -38,3 +38,20 @@ aware — same generic-over-T problem as [[feature-copy-intrinsic]]).
 
 `c := a + b` either concatenates correctly (oracle: `4 / 1 / 4`) or errors at
 compile time; never a silent no-output binary. Regression test.
+
+## Fixed (2026-06-30, Track A)
+
+`a + b` (and `-`/`*`/`/`) with a dynamic-array operand fell through the AN_BINOP
+lowering to the integer/pointer `IR_BINOP`, which added the two array *handles* →
+wild pointer → runtime SIGSEGV. Now rejected at IR lowering with
+`arithmetic operator not supported for dynamic arrays (...)` (ir.inc AN_BINOP,
+gated on `NodeDynDepth(operand) > 0` + an arithmetic op), so it is a clean
+compile-time error instead of a silent crashing binary. Integer `+` and string
+concat unchanged; self-host byte-identical; `make test` green
+(`test/test_dynarray_concat_rejected.pas`, a negative test).
+
+**Remaining (feature, not this bug):** actually *implementing* `a + b` array
+concat (allocate `Length(a)+Length(b)`, copy both, element-type-aware) — the same
+generic-over-element-type shape as [[feature-copy-intrinsic]] /
+[[feature-dynarray-insert-delete]]. Tracked there; this ticket only owned the
+silent-miscompile, which is resolved.
