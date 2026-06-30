@@ -136,10 +136,16 @@ still errors on truly-undeclared names. Self-host byte-identical; gate + 4 cross
 lua green. Guard `test/test_decl_order_global_error.pas`.
 
 ### Still open (smaller follow-ups, kept in backlog)
-- **Clearer diagnostic.** A hidden-by-decl-order reference currently reports the
-  generic `undefined variable (X)` / `for: undefined`. Distinguish it ("X is a
-  global declared later — declare it before use") by noting in FindSym when a
-  candidate was suppressed *only* by the decl-order gate.
+- **Clearer diagnostic — DONE (2026-06-30, commit 2526bd0a, pin v97).** Added
+  `HiddenByDeclOrder(name)` (symtab.inc): True when FindSym is hiding a same-name,
+  block-visible global *only* because of decl-order gating. Wired into the four
+  undefined-name error sites (two ParseFactor lvalue paths, the statement lvalue
+  path at parser.inc ParseLValueAST, and the for-counter) → emits "undefined
+  variable — it is a global declared later, declare it before use" / "for counter
+  is a global declared later — declare it before use, or add a local". Recomputed
+  at each site (error path only) rather than via a fragile global flag.
+  `test_decl_order_global_error` asserts the clearer text. Self-host
+  byte-identical. The two below remain.
 - **The switch.** Gating is hard-wired `DeclOrderStrict := True`. Expose it as
   `{$DECLORDER OFF}` / `--lax-decl-order` for anyone who wants the old lenient
   behavior, and surface the strict default in `--mimic-fpc`.

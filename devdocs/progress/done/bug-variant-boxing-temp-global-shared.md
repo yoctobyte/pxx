@@ -46,3 +46,17 @@ own source) + cross green.
 
 - Part of the thread-safety cluster: [[feature-threadsafe-io-serialization]],
   [[feature-threadsafe-heap-contract]], [[bug-frozen-string-result-global-not-reentrant]].
+
+## Resolution (2026-06-30, commit a7d5d413, pin v97)
+
+Fixed. Dropped the `savedProc := CurProc; CurProc := -1; ... := savedProc`
+forcing at both variant-operand-boxing sites in `ir.inc`; the box temp is now a
+plain `AllocVar('', tyVariant)` routine-local (per-call/thread slot). It is
+consumed within the one comparison and never outlives the frame, so a local is
+correct. `savedProc` removed (now unused). Single-threaded behaviour unchanged.
+
+Verified: self-host byte-identical; `make test` + all four cross suites
+(i386/arm32/aarch64/riscv32) green — `variant` + `variant-single` output
+identical to x86-64. The arithmetic-result variant temp (separate BSS slot at the
+non-comparison branch) is a different allocation and out of scope here; it is a
+transient result, not an operand box.

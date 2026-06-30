@@ -25,14 +25,13 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
-| bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
@@ -129,7 +128,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (369)
+## done (370)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -307,6 +306,7 @@ _none_
 | bug-untyped-params-in-methods | A | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
 | bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
+| bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | bug-whole-record-copy-main-body-noop | A | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
@@ -519,7 +519,6 @@ _none_
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-frozen-string-result-global-not-reentrant
-- [A] bug-variant-boxing-temp-global-shared
 - [A] chore-runtime-emission-size
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
