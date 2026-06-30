@@ -112,7 +112,7 @@ _none_
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
-| wish-compile-gnu-pascal | B+C | wish | Wish: compile the GNU Pascal project (GPC) under pxx — two angles | — |
+| wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
 
 ## rainy-day (19)
 
