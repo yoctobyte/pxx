@@ -251,6 +251,10 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_mutex26)" = "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
 	./$(COMPILER) test/test_tthread.pas /tmp/test_tthread26
 	test "$$(/tmp/test_tthread26)" = "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
+	./$(COMPILER) test/test_event.pas /tmp/test_event26
+	test "$$(/tmp/test_event26)" = "$$(printf 'passed=4 expected=4\nEVENT OK')"
+	./$(COMPILER) --threadsafe test/test_thread_heap.pas /tmp/test_thread_heap26
+	test "$$(/tmp/test_thread_heap26)" = "$$(printf 'errors=0\nHEAP OK')"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

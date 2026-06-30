@@ -48,3 +48,10 @@ REMAINING in M2:
 - 64-bit atomics + atomic load/store fences if a use needs them (current ops are 32-bit).
 - TCriticalSection alias (FPC EnterCriticalSection/LeaveCriticalSection names) —
   trivial wrapper, lands with M3 TThread/FPC-compat surface ([[feature-pascal-tthread]]).
+
+## Update — TEvent landed (2026-06-30)
+TEvent (manual/auto-reset) added to lib/rtl/palsync.pas on the futex: EventInit/
+Set/Reset/Wait. Manual = level-triggered "go gun" (wakes all, lost-wakeup-safe
+either order); auto = one-waiter hand-off (CAS-consumes the signal). test_event
+(manual start gun, 4 waiters) in make test-threads. Still remaining: condition
+variable, Once. TCriticalSection alias still pending (with M3).

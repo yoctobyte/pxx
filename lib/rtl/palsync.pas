@@ -35,6 +35,25 @@ procedure MutexUnlock(var m: TMutex);
 { Non-blocking acquire; True if it took the lock. }
 function MutexTryLock(var m: TMutex): Boolean;
 
+type
+  PEvent = ^TEvent;
+  { Futex-backed event. Manual-reset stays signalled until EventReset and releases
+    every waiter (a one-shot "go" gun); auto-reset releases exactly one waiter per
+    EventSet and clears itself (hand-off). Keep alive + address-stable like TMutex. }
+  TEvent = record
+    State:  Integer;   { 0 = unsignalled | 1 = signalled }
+    Manual: Boolean;
+  end;
+
+{ Initialise unsignalled. }
+procedure EventInit(var e: TEvent; manualReset: Boolean);
+{ Signal: wake all waiters (manual) or one (auto). }
+procedure EventSet(var e: TEvent);
+{ Clear the signalled state (mainly meaningful for manual-reset). }
+procedure EventReset(var e: TEvent);
+{ Block until signalled; auto-reset consumes the signal. }
+procedure EventWait(var e: TEvent);
+
 implementation
 
 procedure MutexInit(var m: TMutex);
@@ -72,6 +91,45 @@ begin
   { if there were waiters (state was 2), drop to free and wake exactly one }
   if Integer(__pxxatomic_xchg(@m.State, 0)) = 2 then
     PalFutexWake(@m.State, 1);
+end;
+
+const
+  WAKE_ALL = $7FFFFFFF;
+
+procedure EventInit(var e: TEvent; manualReset: Boolean);
+begin
+  e.State := 0;
+  e.Manual := manualReset;
+end;
+
+procedure EventSet(var e: TEvent);
+var ignore: Integer;
+begin
+  ignore := Integer(__pxxatomic_xchg(@e.State, 1));
+  if e.Manual then PalFutexWake(@e.State, WAKE_ALL)
+  else PalFutexWake(@e.State, 1);
+end;
+
+procedure EventReset(var e: TEvent);
+var ignore: Integer;
+begin
+  ignore := Integer(__pxxatomic_xchg(@e.State, 0));
+end;
+
+procedure EventWait(var e: TEvent);
+begin
+  if e.Manual then
+  begin
+    { stays signalled — just wait for State to become non-zero }
+    while e.State = 0 do
+      PalFutexWait(@e.State, 0);
+  end
+  else
+  begin
+    { auto-reset — atomically consume the signal (1 -> 0); sleep until available }
+    while Integer(__pxxatomic_cas(@e.State, 1, 0)) <> 1 do
+      PalFutexWait(@e.State, 0);
+  end;
 end;
 
 end.

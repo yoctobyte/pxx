@@ -28,3 +28,12 @@ refcount, **x86-64 only**. Make it fast + portable:
 - Multi-thread alloc benchmark scales (no single-lock cliff); `--threadsafe`
   accepted + correct on the cross targets; single-thread alloc unchanged; self-host
   byte-identical.
+
+## Update — thread-safe heap VALIDATED under contention (2026-06-30)
+test_thread_heap (lib/rtl + TThread): 4 threads x 12000 GetMem/FreeMem of 128B,
+each fills its block with a thread-unique tag and reads it back. WITH --threadsafe:
+0 errors across runs (the existing x86-64 lock-prefixed spinlock around PXXAlloc/
+PXXFree holds). WITHOUT --threadsafe: SIGSEGV every run — proving threaded
+allocation genuinely requires the flag (the M5 contract). In make test-threads
+(compiled --threadsafe). The *optimisation* part of M5 (per-thread arenas /
+lock-free fast path) is still open; correctness is now demonstrated + gated.
