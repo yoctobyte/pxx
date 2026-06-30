@@ -25,13 +25,12 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
-| bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
 | bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -129,7 +128,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (368)
+## done (369)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -226,6 +225,7 @@ _none_
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
+| bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
@@ -517,7 +517,6 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
-- [A] bug-fpc-seeded-binary-runtime-segfault
 - [A] bug-frozen-string-result-global-not-reentrant
 - [A] bug-variant-boxing-temp-global-shared
 - [A] chore-runtime-emission-size
