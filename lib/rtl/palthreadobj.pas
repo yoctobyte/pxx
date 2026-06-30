@@ -21,9 +21,11 @@ uses palthread;
 type
   TThread = class
   private
-    FHandle:   TThreadHandle;
-    FStarted:  Boolean;
-    FFinished: Boolean;
+    FHandle:      TThreadHandle;
+    FStarted:     Boolean;
+    FFinished:    Boolean;
+    FTerminated:  Boolean;
+    FReturnValue: Integer;
   protected
     { Override with the thread body. Runs on the spawned OS thread. }
     procedure Execute; virtual; abstract;
@@ -42,7 +44,15 @@ type
     { Kernel thread id (0 until started). }
     function ThreadID: Int64;
 
+    { Cooperative cancellation (FPC pattern): Terminate sets the Terminated flag;
+      a well-behaved Execute polls `Terminated` and returns early. It does NOT
+      forcibly kill the thread. }
+    procedure Terminate;
+
+    property Terminated: Boolean read FTerminated;
     property Finished: Boolean read FFinished;
+    { Thread result — Execute assigns it, the joiner reads it after WaitFor. }
+    property ReturnValue: Integer read FReturnValue write FReturnValue;
   end;
 
 implementation
@@ -59,6 +69,8 @@ end;
 
 constructor TThread.Create(CreateSuspended: Boolean);
 begin
+  FTerminated := False;
+  FReturnValue := 0;
   FStarted := False;
   FFinished := False;
   if not CreateSuspended then Start;
@@ -79,6 +91,13 @@ end;
 function TThread.ThreadID: Int64;
 begin
   Result := FHandle.Tid;
+end;
+
+procedure TThread.Terminate;
+begin
+  { one-way flag, observed by Execute via the Terminated property; plain store is
+    fine for cooperative cancellation (eventual cross-core visibility). }
+  FTerminated := True;
 end;
 
 end.

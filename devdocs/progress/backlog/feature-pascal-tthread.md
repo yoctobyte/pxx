@@ -48,3 +48,13 @@ REMAINING in M3 (FPC-compat surface):
 - ReturnValue / OnTerminate / Suspend-Resume / priority; TThread.CurrentThread.
 - Re-export TThread from `classes` for drop-in FPC `uses classes` compatibility
   (kept isolated in palthreadobj for now to not destabilise the shared unit).
+
+## Update — Terminate/Terminated + ReturnValue (2026-06-30)
+TThread now has FPC cooperative cancellation: Terminate sets a Terminated flag the
+Execute body polls (`while not Self.Terminated do ...`); plus ReturnValue (Integer,
+Execute sets, joiner reads after WaitFor). test_tthread_terminate in make
+test-threads. NOTE: unqualified property access in a method is a pxx gap
+([[bug-unqualified-property-in-method]]) so Execute must write `Self.Terminated` /
+`Self.ReturnValue` for now — filed Track A. Still remaining: Synchronize/Queue,
+virtual destructor/auto-join (needs virtual TObject.Destroy), OnTerminate,
+CurrentThread, classes re-export.

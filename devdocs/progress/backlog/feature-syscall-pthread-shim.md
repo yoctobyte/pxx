@@ -72,3 +72,30 @@ semantics out of the first slice.
 
 Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
 single-threaded self-build stays byte-identical; no libc (Linux syscalls only).
+
+## READY TO PICK — the libc-free PAL now exists (2026-06-30, Track A landed M1/M2)
+
+The hard parts this ticket described as future work are **already built and tested**
+on x86-64 — the C pthread shim should *reuse* them, not reinvent. See
+`devdocs/dev/threading.md`. Concrete mapping:
+
+| pthread surface            | reuse from the PXX PAL                                   |
+|----------------------------|----------------------------------------------------------|
+| `pthread_mutex_lock/unlock`| `lib/rtl/palsync.pas` TMutex — Drepper 3-state futex; port the *same* algorithm to `lib/crtl/src/pthread.c` (CAS fast path + `SYS_futex`). |
+| `pthread_once`             | palsync `RunOnce` — CAS(0->1) winner + futex-wait losers. |
+| `pthread_cond_*`           | futex sequence counter (palsync has no cond var yet — this shim and the Pascal side can share the design; file it once). |
+| `pthread_self`/`equal`     | `gettid` (palthread `PalThreadSelf`).                     |
+| `pthread_create`/`join`    | the `__pxxclone` trampoline already does clone(2)+stack+CHILD_CLEARTID join. From C, either expose a tiny intrinsic-backed helper or reimplement the same clone+trampoline in `pthread.c`. palthread `PalThreadCreate/Join` is the reference. |
+
+Atomics: the compiler now has `__pxxatomic_xchg/cas/add` intrinsics — usable from
+C lowering if the shim wants them instead of inline asm.
+
+Heap-safety dependency is **de-risked**: the heap is validated thread-safe under
+`--threadsafe` (test_thread_heap: 0 errors with the flag, SIGSEGV without). So a
+threadsafe-SQLite path compiles `--threadsafe` and the contract holds on x86-64.
+[[feature-threadsafe-heap-contract]] is still the formal contract doc, but the
+runtime guarantee exists.
+
+Still Track B (owns `lib/crtl/**`). First slice unchanged: mutex + once +
+self/equal, libc-free, no `DT_NEEDED` on libpthread. cond var + create/join follow.
+x86-64 first (the atomics/clone intrinsics are x86-64 today).

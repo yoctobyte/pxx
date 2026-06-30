@@ -257,6 +257,8 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_thread_heap26)" = "$$(printf 'errors=0\nHEAP OK')"
 	./$(COMPILER) test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
+	./$(COMPILER) test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
+	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

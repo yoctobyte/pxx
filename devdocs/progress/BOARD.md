@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (74)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
+| bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
@@ -555,6 +556,7 @@ _none_
 - [A] bug-open-array-ctor-statement-call
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
+- [A] bug-unqualified-property-in-method
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
