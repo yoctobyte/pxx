@@ -17,7 +17,7 @@ DOCS = Path(__file__).resolve().parent.parent / "docs"
 OUT = Path(__file__).resolve().parent.parent / "_site"
 
 FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
-MD_LINK_RE = re.compile(r'href="([^"]+?)\.md(#[^"]*)?"')
+MD_LINK_RE = re.compile(r'href="((?!\w+://)[^"]+?)\.md(#[^"]*)?"')
 
 TEMPLATE = """<!doctype html>
 <html lang="en">
@@ -147,7 +147,7 @@ def main():
     for page in pages:
         depth = len(page["rel"].parts) - 1
         prefix = "../" * depth
-        body_html = markdown.markdown(page["body"], extensions=["fenced_code", "tables", "toc"])
+        body_html = markdown.markdown(page["body"], extensions=["fenced_code", "tables", "toc", "md_in_html"])
         body_html = rewrite_links(body_html)
         nav_html = render_nav(nav, page["rel"], prefix)
         html_out = TEMPLATE.format(

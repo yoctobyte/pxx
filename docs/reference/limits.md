@@ -34,7 +34,8 @@ before treating a successful compile as a production-ready result.
   test coverage.
 - `riscv32` and `xtensa` are embedded/ESP32-oriented targets. Treat them as
   active bring-up surfaces rather than stable general-purpose release targets.
-- `--emit-obj` is intended for ESP-style object flows.
+- `--shared` (`.so` output) is x86-64 only, introduced for and validated with
+  the `.asm` assembly-source frontend.
 
 ## Libraries
 

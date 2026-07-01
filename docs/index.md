@@ -14,31 +14,9 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
 > security-sensitive, safety-sensitive, financial, legal, medical, or public
 > network-facing work.
 
-## What makes PXX different
-
-Most "small" compilers still lean on an external toolchain somewhere — GNU `as`,
-a system linker, libc. PXX doesn't. The lexer, parser, IR, every backend, the ELF
-writer, the runtime library, and the GTK-based component library are all its own
-code, hand-written for this project. FPC-compatible in dialect and naming, but
-nothing is copied or ported from FPC, Borland, or anyone else.
-
-It also proves itself on every change: the compiler is written in its own
-dialect, and the development gate requires it to compile itself to a
-byte-identical fixed point — build 2 must equal build 3, exactly, on every
-supported target. A binary you build from this source is meant to be verified
-against that source, not just trusted.
-
-The minimalism shows up in the output too. The default build uses managed,
-reference-counted strings, which pulls in enough runtime that a `hello world`
-executable is a little over 31 KB. Opt into the older frozen-string ABI
-(`-uPXX_MANAGED_STRING`, see [Types](./language/types.md#strings)) and the
-same program links down to a 287-byte static ELF — no libc, no dynamic
-section, just the syscalls it needs.
-
-FPC compatibility is a means, not the goal — being able to lean on FPC's docs
-and an existing Pascal ecosystem while building something independent. The
-project exists mostly for the joy and the learning: for the maker who wants to
-*understand* their tools, not just rent them.
+**New here? → [Dive](./dive/)** — one page, five minutes, everything that
+makes PXX worth a second look, with a working example and no need to browse
+the rest of this documentation first.
 
 ## Highlights
 
@@ -61,6 +39,7 @@ project exists mostly for the joy and the learning: for the maker who wants to
 
 ## Where to go next
 
+- [Dive](./dive/) — the fast, five-minute version of this whole project.
 - [Install](./install/) — set up the pinned compiler and `pxx` wrapper.
 - [Getting started](./getting-started/) — compile and run your first program.
 - [Features](./features/) — what PXX can do today.
