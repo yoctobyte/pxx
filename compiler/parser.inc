@@ -4216,7 +4216,19 @@ begin
               sci := FindSym(name);
               if sci >= 0 then
               begin
-                if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
+                if Syms[sci].IsArray then
+                begin
+                  { Array symbols store the ELEMENT type in TypeKind/ElemType
+                    (a recurring landmine throughout this codebase), so the
+                    aggregate size is elementSize * ArrLen (ArrLen already
+                    holds the flattened element count for N-D arrays too --
+                    see bug-sizeof-array-and-typename-wrong). }
+                  if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                    prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
+                  else
+                    prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                end
+                else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
                   prevTok := RecSize(Syms[sci].RecName)
                 else
                   prevTok := TypeSize(Syms[sci].TypeKind);
