@@ -234,6 +234,18 @@ begin
   AssertBytes('mov edx,@glob', [$BA,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 200) then Error('glob reloc failed');
 
+  { --- [@glob]/[@data] dereference-load (mem->reg, bracketed -- distinct from
+    the bracket-less address-load forms above) and lea absolute-address (new
+    form added for the ir_codegen.inc EmitAsmX64 migration) --- }
+  ResetCode; EmitAsmX64(['mov rdi, [@glob]', 300]);
+  AssertBytes('mov rdi,[@glob]', [$48,$8B,$3C,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov rax, [@glob]', 300]);
+  AssertBytes('mov rax,[@glob]', [$48,$8B,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['lea rsi, [@glob]', 400]);
+  AssertBytes('lea rsi,[@glob]', [$48,$8D,$34,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['lea rax, [@data]', 500]);
+  AssertBytes('lea rax,[@data]', [$48,$8D,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
+
   { --- SSE scalar double --- }
   ResetCode; EmitAsmX64('movsd xmm0, xmm1'); AssertBytes('movsd xmm0,xmm1', [$F2,$0F,$10,$C1]);
   ResetCode; EmitAsmX64('movsd xmm0, [rbp - 8]'); AssertBytes('movsd xmm0,[rbp-8]', [$F2,$0F,$10,$45,$F8]);

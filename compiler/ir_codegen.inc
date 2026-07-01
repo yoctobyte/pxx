@@ -310,8 +310,7 @@ begin
   procIdx := FindProc('PXXDynArrayRelease');
   if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
 
-  EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
-  EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocSymRTTI(symIdx)); { mov rsi, desc }
+  EmitAsmX64(['mov rdi, rax', 'mov rsi, @data', GetOrAllocSymRTTI(symIdx)]);
   EmitCallProc(procIdx);
 end;
 
@@ -331,8 +330,7 @@ var procIdx: Integer;
 begin
   procIdx := FindProc('PXXDynArrayRelease');
   if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
-  EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
-  EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocNodeDynDesc(node)); { mov rsi, desc }
+  EmitAsmX64(['mov rdi, rax', 'mov rsi, @data', GetOrAllocNodeDynDesc(node)]);
   EmitCallProc(procIdx);
 end;
 
@@ -350,8 +348,7 @@ begin
   if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
 
   EmitAcquireHeapLock;
-  EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax  (arrSlot) }
-  EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocSymRTTI(symIdx)); { mov rsi, desc }
+  EmitAsmX64(['mov rdi, rax', 'mov rsi, @data', GetOrAllocSymRTTI(symIdx)]);
   EmitCallProc(procIdx);
   EmitReleaseHeapLock;
 end;
@@ -366,15 +363,10 @@ begin
     argument registers, so no marshalling is needed. The callee may clobber
     any caller-visible scratch register, hence the full save set (mirrors
     EmitHeapAllocLocked). The lock wraps the whole call in threadsafe mode. }
-  EmitB($53);             { push rbx }
-  EmitB($51);             { push rcx }
-  EmitB($52);             { push rdx }
-  EmitB($56);             { push rsi }
-  EmitB($57);             { push rdi }
-  EmitB($41); EmitB($50); { push r8 }
-  EmitB($41); EmitB($51); { push r9 }
-  EmitB($41); EmitB($52); { push r10 }
-  EmitB($41); EmitB($53); { push r11 }
+  EmitAsmX64([
+    'push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi',
+    'push r8', 'push r9', 'push r10', 'push r11'
+  ]);
 
   EmitAcquireHeapLock;
   procIdx := FindProc('PXXStrFromLit');
@@ -382,16 +374,11 @@ begin
   EmitCallProc(procIdx);       { rax = managed string pointer (or nil) }
   EmitReleaseHeapLock;
 
-  EmitB($41); EmitB($5B); { pop r11 }
-  EmitB($41); EmitB($5A); { pop r10 }
-  EmitB($41); EmitB($59); { pop r9 }
-  EmitB($41); EmitB($58); { pop r8 }
-  EmitB($5F);             { pop rdi }
-  EmitB($5E);             { pop rsi }
-  EmitB($5A);             { pop rdx }
-  EmitB($59);             { pop rcx }
-  EmitB($5B);             { pop rbx }
-  EmitB($C3);             { ret }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
+    'ret'
+  ]);
 end;
 
 procedure EmitAnsiStringRuntime;
@@ -407,86 +394,68 @@ begin
   EmitB($C3);                                     { ret }
 
   AnsiStrReleaseAddr := CodeLen;
-  EmitB($50); { push rax }
-  EmitB($51); { push rcx }
-  EmitB($52); { push rdx }
-  EmitB($56); { push rsi }
-  EmitB($57); { push rdi }
+  EmitAsmX64(['push rax', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
   EmitAcquireHeapLock;
   EmitAnsiStrReleaseLocked;
   EmitReleaseHeapLock;
-  EmitB($5F); { pop rdi }
-  EmitB($5E); { pop rsi }
-  EmitB($5A); { pop rdx }
-  EmitB($59); { pop rcx }
-  EmitB($58); { pop rax }
-  EmitB($C3); { ret }
+  EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
 
   AnsiStrUniqueAddr := CodeLen;
-  EmitB($53); { push rbx }
-  EmitB($51); { push rcx }
-  EmitB($52); { push rdx }
-  EmitB($56); { push rsi }
-  EmitB($57); { push rdi }
+  EmitAsmX64(['push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
 
-  EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax (rbx = variable address) }
-  EmitB($48); EmitB($8B); EmitB($3B);             { mov rdi, [rbx] (rdi = string pointer) }
-  EmitB($48); EmitB($85); EmitB($FF);             { test rdi, rdi }
+  EmitAsmX64([
+    'mov rbx, rax',   { rbx = variable address }
+    'mov rdi, [rbx]', { rdi = string pointer }
+    'test rdi, rdi'
+  ]);
   EmitB($74); pNilUnique := CodeLen; EmitB(0);     { jz done_nil }
 
-  EmitB($48); EmitB($8B); EmitB($4F); EmitB($F0); { mov rcx, [rdi-16] (rcx = refcount) }
-  EmitB($48); EmitB($83); EmitB($F9); EmitB($01); { cmp rcx, 1 }
+  EmitAsmX64([
+    'mov rcx, [rdi-16]', { rcx = refcount }
+    'cmp rcx, %', 1
+  ]);
   EmitB($76); pNilUnique2 := CodeLen; EmitB(0);    { jbe done_keep }
 
   { Clone path }
-  EmitB($48); EmitB($8B); EmitB($77); EmitB($F8); { mov rsi, [rdi-8] (rsi = length) }
-  EmitB($48); EmitB($89); EmitB($F2);             { mov rdx, rsi }
-  EmitB($48); EmitB($89); EmitB($FE);             { mov rsi, rdi }
-  EmitB($48); EmitB($89); EmitB($D7);             { mov rdi, rdx }
+  EmitAsmX64([
+    'mov rsi, [rdi-8]', { rsi = length }
+    'mov rdx, rsi',
+    'mov rsi, rdi',
+    'mov rdi, rdx'
+  ]);
   IREmitCodeCall(AnsiStrFromLiteralAddr);          { rax = new string pointer }
 
-  EmitB($50);                                     { push rax (new string) }
-  EmitB($48); EmitB($89); EmitB($F0);             { mov rax, rsi (old string) }
+  EmitAsmX64(['push rax', 'mov rax, rsi']);        { push new string; rax = old string }
   IREmitCodeCall(AnsiStrReleaseAddr);
-  EmitB($58);                                     { pop rax (new string) }
+  EmitAsmX64(['pop rax']);                         { pop rax (new string) }
 
-  EmitB($48); EmitB($89); EmitB($03);             { mov [rbx], rax }
+  EmitAsmX64(['mov [rbx], rax']);
   { Now rax contains the new string pointer }
   EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp done }
 
   { done_nil path }
   Patch8(pNilUnique, CodeLen - (pNilUnique + 1));
-  EmitB($31); EmitB($C0);                         { xor eax, eax }
+  EmitAsmX64(['xor eax, eax']);
   EmitB($EB); pDone2 := CodeLen; EmitB(0);         { jmp done }
 
   { done_keep path }
   Patch8(pNilUnique2, CodeLen - (pNilUnique2 + 1));
-  EmitB($48); EmitB($89); EmitB($F8);             { mov rax, rdi }
+  EmitAsmX64(['mov rax, rdi']);
 
   { done }
   Patch8(pDone, CodeLen - (pDone + 1));
   Patch8(pDone2, CodeLen - (pDone2 + 1));
-  EmitB($5F); { pop rdi }
-  EmitB($5E); { pop rsi }
-  EmitB($5A); { pop rdx }
-  EmitB($59); { pop rcx }
-  EmitB($5B); { pop rbx }
-  EmitB($C3); { ret }
+  EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx', 'ret']);
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }
   { Shim → PXXStrConcat(lenA, srcA, srcB, lenB). Caller already placed the
     args in rdi/rsi/rdx/rcx (the internal call convention's first four), so
     the body just saves scratch, takes the heap lock, and delegates. }
   AnsiStrConcatAddr := CodeLen;
-  EmitB($53);             { push rbx }
-  EmitB($51);             { push rcx }
-  EmitB($52);             { push rdx }
-  EmitB($56);             { push rsi }
-  EmitB($57);             { push rdi }
-  EmitB($41); EmitB($50); { push r8 }
-  EmitB($41); EmitB($51); { push r9 }
-  EmitB($41); EmitB($52); { push r10 }
-  EmitB($41); EmitB($53); { push r11 }
+  EmitAsmX64([
+    'push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi',
+    'push r8', 'push r9', 'push r10', 'push r11'
+  ]);
 
   EmitAcquireHeapLock;
   pConcatNil := FindProc('PXXStrConcat');
@@ -494,29 +463,19 @@ begin
   EmitCallProc(pConcatNil);  { rax = result data pointer (or nil) }
   EmitReleaseHeapLock;
 
-  EmitB($41); EmitB($5B); { pop r11 }
-  EmitB($41); EmitB($5A); { pop r10 }
-  EmitB($41); EmitB($59); { pop r9 }
-  EmitB($41); EmitB($58); { pop r8 }
-  EmitB($5F);             { pop rdi }
-  EmitB($5E);             { pop rsi }
-  EmitB($5A);             { pop rdx }
-  EmitB($59);             { pop rcx }
-  EmitB($5B);             { pop rbx }
-  EmitB($C3);             { ret }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
+    'ret'
+  ]);
 
   { Shim → PXXStrLoadFile(path). Caller passes the path data pointer in rdi
     (param 0). Save scratch, take the heap lock for the inner PXXAlloc, call. }
   AnsiStrLoadFileAddr := CodeLen;
-  EmitB($53);             { push rbx }
-  EmitB($51);             { push rcx }
-  EmitB($52);             { push rdx }
-  EmitB($56);             { push rsi }
-  EmitB($57);             { push rdi }
-  EmitB($41); EmitB($50); { push r8 }
-  EmitB($41); EmitB($51); { push r9 }
-  EmitB($41); EmitB($52); { push r10 }
-  EmitB($41); EmitB($53); { push r11 }
+  EmitAsmX64([
+    'push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi',
+    'push r8', 'push r9', 'push r10', 'push r11'
+  ]);
 
   EmitAcquireHeapLock;
   pFail := FindProc('PXXStrLoadFile');
@@ -524,28 +483,23 @@ begin
   EmitCallProc(pFail);    { rax = managed string pointer (or nil) }
   EmitReleaseHeapLock;
 
-  EmitB($41); EmitB($5B); { pop r11 }
-  EmitB($41); EmitB($5A); { pop r10 }
-  EmitB($41); EmitB($59); { pop r9 }
-  EmitB($41); EmitB($58); { pop r8 }
-  EmitB($5F);             { pop rdi }
-  EmitB($5E);             { pop rsi }
-  EmitB($5A);             { pop rdx }
-  EmitB($59);             { pop rcx }
-  EmitB($5B);             { pop rbx }
-  EmitB($C3);             { ret }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
+    'ret'
+  ]);
 end;
 
 procedure EmitLoadManagedHandleRdi(symIdx: Integer);
 { Load a managed-string variable's handle (data pointer) into rdi. }
 begin
   if Syms[symIdx].Kind = skGlobal then
-    begin EmitB($48); EmitB($8B); EmitB($3C); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+    EmitAsmX64(['mov rdi, [@glob]', Syms[symIdx].Offset])
   else
   begin
-    EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[symIdx].Offset); { mov rdi, [rbp+off] }
+    EmitAsmX64(['mov rdi, [rbp+%]', Syms[symIdx].Offset]);
     if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
-      begin EmitB($48); EmitB($8B); EmitB($3F); end                   { mov rdi, [rdi] }
+      EmitAsmX64(['mov rdi, [rdi]']);
   end;
 end;
 
@@ -554,33 +508,34 @@ procedure EmitPublishManagedString(dstIdx: Integer);
   variable, releasing dst's old handle. Handles global, local, and IsRef-param
   destinations (the IsRef case derefs the slot to reach the caller's handle). }
 begin
-  EmitB($50);                                      { push rax (new) }
+  EmitAsmX64(['push rax']);                         { push rax (new) }
   if (Syms[dstIdx].Kind = skParam) and Syms[dstIdx].IsRef then
   begin
-    EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[dstIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
-    EmitB($48); EmitB($8B); EmitB($01);            { mov rax, [rcx] = old }
-    EmitB($50);                                    { push old }
-    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = new }
-    EmitB($48); EmitB($89); EmitB($01);            { mov [rcx], rax }
-    EmitB($58);                                    { pop rax = old }
+    EmitAsmX64([
+      'mov rcx, [rbp+%]', Syms[dstIdx].Offset,       { rcx = caller slot addr }
+      'mov rax, [rcx]',                              { old }
+      'push rax',
+      'mov rax, [rsp+8]',                             { new }
+      'mov [rcx], rax',
+      'pop rax'                                       { old }
+    ]);
     IREmitCodeCall(AnsiStrReleaseAddr);
-    EmitB($58);                                    { pop rax = new (discard) }
+    EmitAsmX64(['pop rax']);                          { new (discard) }
   end
   else
   begin
     if Syms[dstIdx].Kind = skGlobal then
-      begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset); end
+      EmitAsmX64(['mov rax, [@glob]', Syms[dstIdx].Offset])   { old }
     else
-      begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[dstIdx].Offset); end; { mov rax, [rbp+off] = old }
-    EmitB($50);                                    { push old }
-    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = new }
+      EmitAsmX64(['mov rax, [rbp+%]', Syms[dstIdx].Offset]); { old }
+    EmitAsmX64(['push rax', 'mov rax, [rsp+8]']);      { push old; rax = new }
     if Syms[dstIdx].Kind = skGlobal then
-      begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset); end
+      EmitAsmX64(['mov [@glob], rax', Syms[dstIdx].Offset])
     else
-      begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[dstIdx].Offset); end; { mov [rbp+off], rax = new }
-    EmitB($58);                                    { pop rax = old }
+      EmitAsmX64(['mov [rbp+%], rax', Syms[dstIdx].Offset]); { new }
+    EmitAsmX64(['pop rax']);                           { old }
     IREmitCodeCall(AnsiStrReleaseAddr);
-    EmitB($58);                                    { pop rax = new (discard) }
+    EmitAsmX64(['pop rax']);                           { new (discard) }
   end;
 end;
 
@@ -601,27 +556,35 @@ var inRangePatch, doneOutPatch: Integer;
 begin
   { Bounds check: out-of-range index (>= argc, or negative) publishes nil (empty
     string) instead of dereferencing a bad argv slot. argc is at [initial_rsp]. }
-  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);  { mov rcx, [initial_rsp] }
-  EmitB($48); EmitB($8B); EmitB($09);               { mov rcx, [rcx] = argc }
-  EmitB($48); EmitB($39); EmitB($C8);               { cmp rax, rcx }
+  EmitAsmX64([
+    'mov rcx, [@glob]', BSS_INITIAL_RSP,   { mov rcx, [initial_rsp] }
+    'mov rcx, [rcx]',                    { rcx = argc }
+    'cmp rax, rcx'
+  ]);
   EmitB($72); inRangePatch := CodeLen; EmitB(0);    { jb in_range }
-  EmitB($48); EmitB($31); EmitB($C0);               { xor rax, rax (nil handle) }
+  EmitAsmX64(['xor rax, rax']);                     { nil handle }
   EmitPublishManagedString(dstIdx);                  { dst := '' }
   EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
   Code[inRangePatch] := Byte(CodeLen - (inRangePatch + 1));
-  EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
-  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
-  EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
-  EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] = argv[index] }
-  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax (src) }
-  { strlen(rsi) -> rcx }
-  EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
+  EmitAsmX64([
+    'shl rax, %', 3,
+    'mov rcx, [@glob]', BSS_INITIAL_RSP,
+    'add rcx, %', 8,
+    'add rax, rcx',
+    'mov rax, [rax]',   { argv[index] }
+    'mov rsi, rax'       { src }
+  ]);
+  { strlen(rsi) -> rcx. NOT mechanically portable: the inline loop below uses
+    [rsi+rcx] (SIB base+index register addressing, a form EmitAsmX64's memory
+    operand grammar doesn't support -- [base+disp]/[base+%] only) and hardcoded
+    (non-Patch-tracked) short jump deltas whose values depend on the loop
+    body's exact byte length, so it must stay raw EmitB unchanged. }
+  EmitAsmX64(['xor rcx, rcx']);
   EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0 }
   EmitB($74); EmitB($05);                           { je +5 }
   EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
   EmitB($EB); EmitB($F5);                           { jmp -11 }
-  EmitB($48); EmitB($89); EmitB($CF);               { mov rdi, rcx (length) }
+  EmitAsmX64(['mov rdi, rcx']);                     { length }
   IREmitCodeCall(AnsiStrFromLiteralAddr);           { rax = new managed string }
   EmitPublishManagedString(dstIdx);
   Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
@@ -670,11 +633,11 @@ procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
   for i := 1 to count do
-  begin
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-    EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE);
-  end;
+    EmitAsmX64([
+      'mov rax, [rsp]',
+      'mov [@glob], rax', BSS_EXC_TOP,
+      'add rsp, %', EXC_FRAME_SIZE
+    ]);
 end;
 
 procedure IREmitStoreCharAsString;
@@ -682,8 +645,10 @@ procedure IREmitStoreCharAsString;
   ([len:8=1][char]) directly into the destination, so a tyChar value can be
   assigned to a tyString slot. No allocation — the target buffer already exists.}
 begin
-  EmitB($48); EmitB($C7); EmitB($07); EmitI32(1); { mov qword [rdi], 1 }
-  EmitB($40); EmitB($88); EmitB($77); EmitB($08); { mov byte [rdi+8], sil }
+  EmitAsmX64([
+    'mov qword [rdi], %', 1,
+    'mov byte [rdi+8], sil'
+  ]);
 end;
 
 procedure EmitReadLine;

@@ -683,6 +683,12 @@ begin
   if CaseEqual(mnem, 'lea') then
   begin
     if (k0 = 0) and (k1 = 2) then x64_lea_reg_mem(s0, r0, mb1, md1, False)
+    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    begin
+      EncPrefixAndREX(s0, r0, 0, False);
+      EncB($8D);
+      AsmEncAbsRM(r0, k1, md1);
+    end
     else Error('EmitAsmX64: unsupported lea form');
     Exit;
   end;
