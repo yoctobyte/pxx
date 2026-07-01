@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (84)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ _none_
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
+| bug-emitasmx64-no-sib-index-silent-misparse | A | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -568,6 +569,7 @@ _none_
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
+- [A] bug-emitasmx64-no-sib-index-silent-misparse
 - [A] bug-except-base-handler-misses-derived
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] bug-narrowing-typecast-rvalue-no-truncate
