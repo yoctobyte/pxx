@@ -390,6 +390,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_collections26)" = "$$(printf '100\n0\n81\n9801\n7\n328276\n0\n3\nalpha\ngamma\nBETA')"
 	./$(COMPILER) test/test_generic_class_in_program.pas /tmp/test_generic_class_in_program26
 	test "$$(/tmp/test_generic_class_in_program26)" = "$$(printf '7\nhi')"
+	./$(COMPILER) test/test_nested_proc_sibling_call.pas /tmp/test_nested_proc_sibling_call26
+	test "$$(/tmp/test_nested_proc_sibling_call26)" = "$$(printf 'a\nb-before\na7\nb-after\na7\na42')"
 	./$(COMPILER) test/test_managed_var_param.pas /tmp/test_managed_var_param26
 	test "$$(/tmp/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas /tmp/test_managed_setlength_var26

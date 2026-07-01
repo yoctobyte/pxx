@@ -11960,7 +11960,14 @@ begin
       Inc(i);
     end;
     parentEnd := i;
-    for i := parentEnd - 1 downto parentBegin do
+    { Lower bound is finalCur (not parentBegin): also rewrite call sites inside
+      not-yet-lifted SIBLING nested routines declared between this routine and
+      the enclosing 'begin' (skipped above only to locate parentBegin, not to
+      exempt them) -- otherwise a sibling calling this routine (e.g. `b` calling
+      `a`, both nested in the same `outer`) keeps the unmangled name and fails
+      to resolve once this routine's own declaration is rewritten to `forward`
+      (bug-nested-proc-sibling-call-unresolved). }
+    for i := parentEnd - 1 downto finalCur do
       if (Tokens[i].Kind = tkIdent) and
          CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
          ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
