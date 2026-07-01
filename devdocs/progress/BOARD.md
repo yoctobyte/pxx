@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (72)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -33,6 +33,7 @@ _none_
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
+| bug-hard-keyword-intrinsics-block-identifier-use | A | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
@@ -569,6 +570,7 @@ _none_
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
+- [A] bug-hard-keyword-intrinsics-block-identifier-use
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-anonymous-record-type
