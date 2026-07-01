@@ -283,3 +283,97 @@ mechanism (or find a different one) that explains why compile-time-invoked
 `EmitAsmX64` calls leak/corrupt after a threshold. Not blocking — raw `EmitB`
 is back in place for all 3 genuinely-broken procedures and `make test` is
 green.
+
+## Appendix: exact NEW (EmitAsmX64) source for the 4 reverted procedures
+
+This text never got committed anywhere (the risky diff was reverted before
+ever being committed) and only exists in the investigating session's
+conversation — reconstructing it here so a future session can re-apply any of
+these for testing without archaeology. Drop-in replacements for the current
+(reverted, raw-`EmitB`) bodies in `compiler/ir_codegen.inc`.
+
+`EmitHeapAllocLocked` (currently ~line 31; genuinely broken — 17-site repro):
+```pascal
+procedure EmitHeapAllocLocked;
+var procIdx: Integer;
+begin
+  EmitAsmX64([
+    'push rsi', 'push rdi', 'push rcx', 'push rdx',
+    'push r8', 'push r9', 'push r10', 'push r11',
+    'mov rdi, rax',      { size }
+    'mov rsi, %', 8       { alignment }
+  ]);
+  procIdx := FindProc('PXXAlloc');
+  if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(procIdx);                               { rax = returned pointer }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdx', 'pop rcx', 'pop rdi', 'pop rsi'
+  ]);
+end;
+```
+
+`EmitHeapFreeLocked` (currently ~line 51; genuinely broken):
+```pascal
+procedure EmitHeapFreeLocked;
+var procIdx: Integer;
+begin
+  EmitAsmX64([
+    'push rsi', 'push rdi', 'push rcx', 'push rdx',
+    'push r8', 'push r9', 'push r10', 'push r11',
+    'mov rdi, rax'   { pointer }
+  ]);
+  procIdx := FindProc('PXXFree');
+  if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(procIdx);
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdx', 'pop rcx', 'pop rdi', 'pop rsi'
+  ]);
+end;
+```
+
+`EmitAnsiStrRetainLocked` (currently ~line 110; **NOT actually broken** — see
+"Correction 1" above, safe to re-apply on its own, only reverted for
+consistency):
+```pascal
+procedure EmitAnsiStrRetainLocked;
+{ rax = managed-string data pointer. Preserve rax. Caller holds the heap lock
+  when threading is enabled. }
+begin
+  EmitAsmX64([
+    'test rax, rax',
+    'jz .done',
+    'inc qword [rax-16]',
+  '.done:'
+  ]);
+end;
+```
+
+`EmitAnsiStrReleaseLocked` (currently ~line 146; genuinely broken, no small
+repro found yet):
+```pascal
+procedure EmitAnsiStrReleaseLocked;
+{ rax = managed-string data pointer. Caller holds the heap lock when threading
+  is enabled. See EmitDynArrayReleaseLocked for why the jumps are manually
+  patched rather than via EmitAsmX64 labels. }
+var pNil, pNonZero: Integer;
+begin
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+  else EmitAsmX64(['dec qword [rax-16]']);
+  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
+  EmitAsmX64(['sub rax, %', 16]);
+  EmitHeapFreeLocked;
+  Code[pNil] := Byte(CodeLen - (pNil + 1));
+  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
+end;
+```
+
+For reference, the always-safe already-committed form (`EmitDynArrayReleaseLocked`,
+same shape as `EmitAnsiStrReleaseLocked` above but for dynamic arrays instead
+of strings, at ~line 121) is already in the tree as-is — diff the two if you
+need to see there's no meaningful difference beyond which helper
+(`EmitDynArrayReleaseLockedForSym`-adjacent vs `EmitAnsiStr*`) it's paired
+with.
