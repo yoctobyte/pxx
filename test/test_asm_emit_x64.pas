@@ -279,5 +279,52 @@ begin
   AssertBytes('mov dword [@glob],0', [$C7,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('mov-abs glob reloc failed');
 
+  { --- push/pop, all registers (regression for bug-emitasmx64-heap-helpers-
+    oom-selfhost: the REX.B-forcing path for r8-r15 was never covered here) ---
+    Expected bytes cross-checked against llvm-mc-18 -triple=x86_64 -x86-asm-
+    syntax=intel -show-encoding. }
+  ResetCode; EmitAsmX64('push rax'); AssertBytes('push rax', [$50]);
+  ResetCode; EmitAsmX64('push rsi'); AssertBytes('push rsi', [$56]);
+  ResetCode; EmitAsmX64('push rdi'); AssertBytes('push rdi', [$57]);
+  ResetCode; EmitAsmX64('push r8');  AssertBytes('push r8', [$41,$50]);
+  ResetCode; EmitAsmX64('push r11'); AssertBytes('push r11', [$41,$53]);
+  ResetCode; EmitAsmX64('push r15'); AssertBytes('push r15', [$41,$57]);
+  ResetCode; EmitAsmX64('pop rax');  AssertBytes('pop rax', [$58]);
+  ResetCode; EmitAsmX64('pop rsi');  AssertBytes('pop rsi', [$5E]);
+  ResetCode; EmitAsmX64('pop r8');   AssertBytes('pop r8', [$41,$58]);
+  ResetCode; EmitAsmX64('pop r11');  AssertBytes('pop r11', [$41,$5B]);
+  ResetCode; EmitAsmX64('pop r15');  AssertBytes('pop r15', [$41,$5F]);
+
+  { --- inc/dec [mem] (new form added for the ir_codegen.inc EmitAsmX64
+    migration) --- }
+  ResetCode; EmitAsmX64('inc qword [rax-16]');
+  AssertBytes('inc qword[rax-16]', [$48,$FF,$40,$F0]);
+  ResetCode; EmitAsmX64('dec qword [rax-16]');
+  AssertBytes('dec qword[rax-16]', [$48,$FF,$48,$F0]);
+  ResetCode; EmitAsmX64('lock dec qword [rax-16]');
+  AssertBytes('lock dec qword[rax-16]', [$F0,$48,$FF,$48,$F0]);
+  ResetCode; EmitAsmX64('inc byte [rax-16]');
+  AssertBytes('inc byte[rax-16]', [$FE,$40,$F0]);
+  ResetCode; EmitAsmX64('dec dword [rax-16]');
+  AssertBytes('dec dword[rax-16]', [$FF,$48,$F0]);
+  ResetCode; EmitAsmX64('inc qword [rax+16]');
+  AssertBytes('inc qword[rax+16]', [$48,$FF,$40,$10]);
+  ResetCode; EmitAsmX64('inc qword [r8-16]');
+  AssertBytes('inc qword[r8-16]', [$49,$FF,$40,$F0]);
+  ResetCode; EmitAsmX64('inc qword [r12-16]');
+  AssertBytes('inc qword[r12-16]', [$49,$FF,$44,$24,$F0]);
+  ResetCode; EmitAsmX64('inc qword [rbp-16]');
+  AssertBytes('inc qword[rbp-16]', [$48,$FF,$45,$F0]);
+
+  { --- forward-label jump (the `.done` idiom used by EmitDynArrayRetainLocked
+    etc): EmitAsmX64 always emits the near/rel32 form for a same-call forward
+    reference, unlike an optimizing assembler (llvm-mc picks the short rel8
+    form here since it resolves sizes in a later pass) -- both are correct,
+    just different sizes; pin the near form explicitly so a future change
+    doesn't silently flip it. }
+  ResetCode; EmitAsmX64(['test rax, rax', 'jz .done', 'inc qword [rax-16]', '.done:']);
+  AssertBytes('test/jz .done/inc/.done:',
+    [$48,$85,$C0, $0F,$84,$04,$00,$00,$00, $48,$FF,$40,$F0]);
+
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.
