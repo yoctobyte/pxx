@@ -1,7 +1,7 @@
 # Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse
 
 - **Type:** bug — Track A (compiler internals, parser)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-01
 - **Found by:** building the `-S` x86-64 disassembler (feature-asm-textual-emit-mode
   task #7) — `compiler/asmdisasm_x64.inc` self-compiled cleanly under FPC but
@@ -97,3 +97,30 @@ overwhelmingly common case) is unaffected.
   end/another case label" to gauge exposure elsewhere in the existing
   codebase (none found in a quick manual pass during this session, but a
   scripted sweep would be more thorough).
+
+## Fixed (2026-07-01, Track A)
+
+`ParseCaseStatementAST` (`compiler/parser.inc`)'s `tkElse` branch called
+`ParseStatementAST` exactly ONCE then expected `end` — capturing only the
+first bare statement after `else` and leaving any following statements
+un-consumed, which the outer branch-parsing loop then choked on (reported far
+from the real cause, against the `end` token or whatever identifier followed).
+Fixed by replacing the single `ParseStatementAST` call with a loop that
+consumes statements until `end`/EOF, chaining them into an `AN_SEQ` list —
+the exact same node-chaining pattern `ParseBlockAST` already uses for a
+`begin...end` body (including its progress watchdog against a
+statement that consumes zero tokens hanging the loop). Confirmed this
+`AN_SEQ`-as-branch-body shape was already valid and already exercised: a
+case-LABEL arm wrapped in `begin...end` already produces exactly this same
+shape via `ParseStatementAST`'s own `tkBegin` handling — so no IR/codegen
+changes were needed, only the parser's `else`-clause statement count.
+
+**Verified**: the ticket's own repro (label 0 single-stmt, label 1
+begin/end multi-stmt, else multi-stmt-no-wrap) all three paths now correct
+and matches FPC's output exactly. New `test/test_case_else_multistmt.pas` in
+`make test-core`. Full `make test` green, self-host bootstrap byte-identical
+(pinned v115, same stabilize pass as the sibling
+bug-const-array-of-ansistring-literal-too-many-elements fix).
+
+## Log
+- 2026-07-01 — resolved, commit HEAD.

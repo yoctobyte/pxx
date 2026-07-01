@@ -7134,6 +7134,7 @@ var
   stmtNode, node, si, hiNode: Integer;
   hasElse: Boolean;
   cv, cvHi: Int64;
+  elseLast, elseStmt, wdPos: Integer;
 begin
   ParseExpr; condNode := CurASTNode;
   Expect(tkOf, 'of');
@@ -7148,8 +7149,31 @@ begin
     begin
       hasElse := True;
       Next;
-      stmtNode := ParseStatementAST;
-      Eat(tkSemicolon);
+      { `case...else` takes an implicit statement LIST up to `end` (like
+        try/except's exception-handler list, or a bare begin...end block) --
+        not a single statement. A single ParseStatementAST call left any
+        statement after the first one unconsumed, desyncing the parser and
+        producing a confusing error far from the real cause (bug-case-else-
+        multi-statement-parse-error). Mirrors ParseBlockAST's AN_SEQ chain +
+        progress watchdog. }
+      stmtNode := AllocNode(AN_SEQ);
+      elseLast := stmtNode;
+      while not (CurTok.Kind in [tkEnd, tkEOF]) do
+      begin
+        wdPos := TokPos;
+        elseStmt := ParseStatementAST;
+        Eat(tkSemicolon);
+        if TokPos <= wdPos then
+          Error('internal parser bug: statement made no progress in case-else (would hang)');
+        if ASTLeft[elseLast] = -1 then
+          ASTLeft[elseLast] := elseStmt
+        else
+        begin
+          ASTRight[elseLast] := AllocNode(AN_SEQ);
+          elseLast := ASTRight[elseLast];
+          ASTLeft[elseLast] := elseStmt;
+        end;
+      end;
 
       branchPair := AllocNode(AN_PAIR);
       ASTLeft[branchPair] := -1;
@@ -9787,7 +9811,49 @@ begin
           else
           begin
             if cElem >= cFlatLen then Error('too many array constant elements');
-            if isLocalConst then
+            if cElemTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
+            begin
+              { String/AnsiString array-const elements can't go through
+                ParseInitVal/ConstEval (ConstEvalFactor only special-cases
+                single-char literals as an ordinal; a multi-char literal falls
+                through without consuming the token, desyncing cElem from the
+                real token stream -- bug-const-array-of-ansistring-literal-too-
+                many-elements). Capture the literal's span directly, exactly
+                like the scalar typed-string-const path above, and record it as
+                a Kind=1 (string literal) init so the emitter builds an
+                AN_STR_LIT assignment -- same managed-string coercion any
+                ordinary `s := 'literal'` already gets. }
+              if CurTok.Kind <> tkString then
+                Error('array constant: expected a string or char literal');
+              scOff := Tokens[TokPos-1].SOffset;
+              scLen := Tokens[TokPos-1].SLen;
+              Next;
+              if isLocalConst then
+              begin
+                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+                LocalInitSym[LocalInitCount]  := cIdx;
+                LocalInitElem[LocalInitCount] := cLo + cElem;
+                LocalInitFOff[LocalInitCount] := -1;
+                LocalInitKind[LocalInitCount] := 1;
+                LocalInitVal[LocalInitCount]  := scOff;
+                LocalInitFLen[LocalInitCount] := scLen;
+                LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+                Inc(LocalInitCount);
+              end
+              else
+              begin
+                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                PendingInitSym[PendingInitCount]    := cIdx;
+                PendingInitElem[PendingInitCount]   := cLo + cElem;
+                PendingInitFOff[PendingInitCount]   := -1;
+                PendingInitKind[PendingInitCount]   := 1;
+                PendingInitVal[PendingInitCount]    := scOff;
+                PendingInitValAux[PendingInitCount] := scLen;
+                PendingInitTk[PendingInitCount]     := Ord(cElemTk);
+                Inc(PendingInitCount);
+              end;
+            end
+            else if isLocalConst then
             begin
               if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
               LocalInitSym[LocalInitCount]  := cIdx;
@@ -11959,9 +12025,19 @@ begin
     else
       target := identNode;
 
-    valNode := AllocNode(AN_INT_LIT);
-    ASTIVal[valNode] := LocalInitVal[i];
-    ASTTk[valNode] := LocalInitTk[i];
+    if LocalInitKind[i] = 1 then
+    begin
+      valNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[valNode] := LocalInitVal[i];
+      ASTSLen[valNode] := LocalInitFLen[i];
+      ASTTk[valNode] := Ord(tyString);
+    end
+    else
+    begin
+      valNode := AllocNode(AN_INT_LIT);
+      ASTIVal[valNode] := LocalInitVal[i];
+      ASTTk[valNode] := LocalInitTk[i];
+    end;
 
     assignNode := AllocNode(AN_ASSIGN);
     ASTLeft[assignNode] := target;

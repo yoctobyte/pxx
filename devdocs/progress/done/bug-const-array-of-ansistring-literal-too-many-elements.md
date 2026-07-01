@@ -1,7 +1,7 @@
 # Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count
 
 - **Type:** bug — Track A (compiler internals, parser / const folding)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-01
 - **Found by:** building the `-S` x86-64 disassembler (feature-asm-textual-emit-mode
   task #7) — several lookup tables (`array[0..15] of AnsiString` register
@@ -77,3 +77,58 @@ codebase).
   tried during this session and both failed identically, ruling out scope as
   the variable — worth noting in whatever eventually fixes this, so a future
   reader doesn't re-waste time on that hypothesis.
+
+## Fixed (2026-07-01, Track A)
+
+Root cause (found via a dispatched research agent, verified by direct code
+reading): `compiler/parser.inc`'s array-const element loop (~9781-9812)
+consumed each element via `ParseInitVal` -> `ConstEval` -> `ConstEvalFactor`.
+`ConstEvalFactor` has exactly ONE branch that matches a `tkString` token — a
+*single-character* literal, treated as an ordinal (`Ord(CurTok.SVal[1])`,
+for `Char`-constant contexts) — and calls `Next` to consume it. A
+multi-character string literal matches NO branch in `ConstEvalFactor`;
+execution falls through to `Result := 0` WITHOUT calling `Next`, leaving the
+token stream un-advanced. The outer loop's `Inc(cElem)` runs unconditionally
+regardless of whether a token was actually consumed, so it re-examines the
+same un-consumed string token on the next iteration, incrementing `cElem`
+again with zero real progress — `cElem` reaches `cFlatLen` (the correct
+element count) long before the real token stream reaches the closing `)`,
+firing the misleading "too many array constant elements" error on a
+perfectly correctly-counted initializer. The *single*-char case (e.g.
+`array[0..15] of AnsiString = ('a','b',...)`) doesn't hit the parse error at
+all — `ConstEvalFactor` matches it, `cElem`/token-stream stay in lockstep —
+but silently stores `Ord(char)` as a plain `AN_INT_LIT` where a managed-
+string handle is expected, segfaulting at runtime instead. Confirmed: this
+is a genuine unimplemented-feature gap, not a miscount — a doc comment right
+above the array-const path already said so ("string/float/record
+initializers remain a follow-up"), and `PendingInitKind`/`LocalInit*` had no
+string-literal wiring for array elements (a separate `Kind=1` string-literal
+mechanism already existed and is used by the C frontend for globals, just
+never wired up from the Pascal array-const parser).
+
+**Fix**: when the array's element type is a string kind
+(`tyString`/`tyAnsiString`/`tyFixedString`/`tyShortString`), the element loop
+now bypasses `ParseInitVal`/`ConstEval` entirely and captures the literal's
+span directly (`Tokens[TokPos-1].SOffset`/`SLen`, the same pattern the
+existing scalar typed-string-const path already uses), recording it as a
+`Kind=1` (string literal) init instead of a plain int. For GLOBAL consts this
+reuses the pre-existing `PendingInitKind=1` mechanism (already consumed
+correctly by `CompilePendingGlobalInits`, building an `AN_STR_LIT` node —
+zero changes needed there). For LOCAL (routine-scoped) typed consts, added a
+matching `LocalInitKind` array (`compiler/defs.inc`, mirroring
+`PendingInitKind`) plus a new `AN_STR_LIT` branch in
+`CompilePendingLocalInits`, since that path had no string-literal support at
+all before this fix. Both emit a normal `arr[elem] := AN_STR_LIT` assignment
+— the exact same managed-string coercion/allocation any ordinary `s :=
+'literal'` already gets, so no new ARC logic was needed.
+
+**Verified**: multi-char and single-char elements, global AND local typed
+array consts, plus a reassignment-after-init check (`Multi[1] := 'zzz'`
+after reading the original value into a separate var) proving the element is
+a real independently-refcounted managed string, not an aliased literal.
+Matches FPC output exactly (`fpc` build of the same source). New
+`test/test_const_array_of_string.pas` in `make test-core`. Full `make test`
+green, self-host bootstrap byte-identical (pinned v115).
+
+## Log
+- 2026-07-01 — resolved, commit HEAD.

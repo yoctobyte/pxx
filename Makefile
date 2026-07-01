@@ -971,6 +971,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_precedence26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
 	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295\n-1\n1\n65535')"
+	./$(COMPILER) test/test_const_array_of_string.pas /tmp/test_const_array_of_string26
+	test "$$(/tmp/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
+	./$(COMPILER) test/test_case_else_multistmt.pas /tmp/test_case_else_multistmt26
+	test "$$(/tmp/test_case_else_multistmt26)" = "$$(printf '5 a\n1 b\n4 c')"
 	./$(COMPILER) test/test_record_typecast.pas /tmp/test_record_typecast26
 	test "$$(/tmp/test_record_typecast26)" = "$$(printf '77\n88\n77\n88\n165')"
 	./$(COMPILER) test/test_funcname_field.pas /tmp/test_funcname_field26

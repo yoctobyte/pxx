@@ -1411,9 +1411,10 @@ var
   LocalInitSym  : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitElem : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitVal  : array[0..MAX_LOCAL_INITS-1] of Int64;
+  LocalInitKind : array[0..MAX_LOCAL_INITS-1] of Integer;  { 0=int, 1=string literal; mirrors PendingInitKind }
   LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitFOff : array[0..MAX_LOCAL_INITS-1] of Integer;  { record-field span (SOff=-1 if not a field) }
-  LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;  { field-name length, or (Kind=1) string literal length }
   LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;
