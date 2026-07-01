@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -44,7 +44,6 @@ _none_
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
-| bug-var-array-of-ansistring-param-loses-writes | A | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
@@ -146,7 +145,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (391)
+## done (392)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -331,6 +330,7 @@ _none_
 | bug-untyped-float-const | A | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
 | bug-untyped-params-in-methods | A | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
+| bug-var-array-of-ansistring-param-loses-writes | A | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
 | bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
 | bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
@@ -574,7 +574,6 @@ _none_
 - [A] bug-open-array-ctor-statement-call
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
-- [A] bug-var-array-of-ansistring-param-loses-writes
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-asm-source-frontend
 - [A] feature-asm-structured-ir-library
