@@ -16,6 +16,8 @@ const
   MAX_GLOBFIX = 32768;
   MAX_ASM_GLOBFIX = 4096;
   MAX_EXTERNAL = 16384;
+  MAX_ASM_OBJ_CALLFIX = 4096;   { .asm frontend -c: extern calls needing an R_X86_64_PLT32 relocation }
+  MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
   MAX_CPREP_MACROS = 32768;
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
@@ -1137,6 +1139,26 @@ var
     (feature-asm-source-frontend); 0 = default (start of Code[], unchanged
     for every non-.asm compile). }
   AsmEntryOff: Integer;
+  { .asm frontend -c (EmitObjMode): `call <extern>` emits a plain `call
+    rel32` placeholder instead of the GOT-indirect ET_EXEC form, and records
+    (code position of the rel32 field, ExternalProc[]/RegisterExternal index)
+    here so writeELFRelX64 can turn it into an R_X86_64_PLT32 relocation for
+    a real external linker to resolve. }
+  AsmObjCallPos: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
+  AsmObjCallExtIdx: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
+  AsmObjCallCount: Integer;
+  { .asm frontend: resolved `global <label>` symbols (name + offset into the
+    single combined Code[] blob + whether the label was in `section .data`),
+    for writeELFRelX64 to export as GLOBAL ELF symbols. Populated at the end
+    of ParseAsmProgram; unused outside EmitObjMode. }
+  AsmGlobalSymName: array[0..MAX_ASM_GLOBALS-1] of AnsiString;
+  AsmGlobalSymOff: array[0..MAX_ASM_GLOBALS-1] of Integer;
+  AsmGlobalSymIsData: array[0..MAX_ASM_GLOBALS-1] of Boolean;
+  AsmGlobalSymCount: Integer;
+  { writeELFRelX64 scratch: .strtab offset of each AsmGlobalSymName[i]/each
+    extern's Procs[].Name (mirrors ObjProcStrOff/ObjExtStrOff's role in the
+    xtensa/riscv32 ET_REL writer). }
+  AsmGlobalSymStrOff: array[0..MAX_ASM_GLOBALS-1] of Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
   AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }

@@ -291,6 +291,22 @@ test-asm: $(COMPILER)
 	/tmp/test_asm_entry_global26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_extern.asm /tmp/test_asm_extern26
 	test "$$(/tmp/test_asm_extern26)" = "Hello from extern printf!"
+	./$(COMPILER) test/test_asm_obj.asm /tmp/test_asm_obj26.o
+	readelf -h /tmp/test_asm_obj26.o | grep -q 'REL (Relocatable file)'
+	readelf -h /tmp/test_asm_obj26.o | grep -q 'X86-64'
+	readelf -s /tmp/test_asm_obj26.o | grep -q 'GLOBAL DEFAULT    1 asm_obj_add'
+	readelf -s /tmp/test_asm_obj26.o | grep -q 'GLOBAL DEFAULT    1 asm_obj_start'
+	readelf -s /tmp/test_asm_obj26.o | grep -q 'UND puts'
+	readelf -r /tmp/test_asm_obj26.o | grep -q 'R_X86_64_PLT32'
+	readelf -r /tmp/test_asm_obj26.o | grep -q 'puts - 4'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -nostartfiles -e asm_obj_start /tmp/test_asm_obj26.o -o /tmp/test_asm_obj26_exe 2>/dev/null && \
+	  test "$$(/tmp/test_asm_obj26_exe)" = "asm object file test" && echo "test-asm: .o links+runs via ld/gcc ok" || { echo "test-asm: .o link/run FAILED"; exit 1; }; \
+	  printf 'extern int asm_obj_add(int,int);\nint main(){ return asm_obj_add(19,23) == 42 ? 0 : 1; }\n' > /tmp/test_asm_obj26_caller.c; \
+	  gcc -c /tmp/test_asm_obj26_caller.c -o /tmp/test_asm_obj26_caller.o && \
+	  gcc /tmp/test_asm_obj26_caller.o /tmp/test_asm_obj26.o -o /tmp/test_asm_obj26_caller_exe 2>/dev/null && \
+	  /tmp/test_asm_obj26_caller_exe && echo "test-asm: .o exported symbol callable from C ok"; \
+	else echo "test-asm: gcc not installed; .o link check skipped"; fi
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26

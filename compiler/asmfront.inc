@@ -368,7 +368,9 @@ var
   externCount, externResolvedIdx, extIdx, j2: Integer;
   externParsedName: AnsiString;
   externParsedProcIdx: Integer;
-  globalEntryName: AnsiString;
+  globalNames: array[0..MAX_ASM_GLOBALS-1] of AnsiString;
+  globalCount: Integer;
+  isDataLbl, entrySet: Boolean;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('asm frontend: x86-64 only (matches lib/asmcore coverage)');
@@ -380,7 +382,7 @@ begin
   fixCount := 0;
   curSection := SEC_TEXT;
   externCount := 0;
-  globalEntryName := '';
+  globalCount := 0;
   BufInit(dataBuf);
 
   while i <= n do
@@ -450,7 +452,10 @@ begin
     if mnem = 'global' then
     begin
       if restp = '' then Error('asm:' + AsmIntToStr(lineNo) + ': "global" needs a label name');
-      if globalEntryName = '' then globalEntryName := AsmLower(AsmTrim(restp));
+      if globalCount >= MAX_ASM_GLOBALS then
+        Error('asm:' + AsmIntToStr(lineNo) + ': too many "global" declarations');
+      globalNames[globalCount] := AsmLower(AsmTrim(restp));
+      Inc(globalCount);
       Continue;
     end;
 
@@ -470,15 +475,30 @@ begin
     begin
       { the single operand is a label target -> rel32 patch site, unless
         `call` names a declared `extern` symbol: that routes through the
-        existing GOT-indirect dynamic-call machinery instead (no rel32 patch
-        site at all, so it's handled and Continue'd before reaching the
-        shared encode block below). }
+        dynamic-call machinery instead (no rel32 patch site at all, so it's
+        handled and Continue'd before reaching the shared encode block
+        below). Two different forms depending on output mode: a linked
+        ET_EXEC resolves the call itself (GOT-indirect, existing dynamic-
+        link machinery); a `-c` object leaves it for a real external linker
+        (plain `call rel32` placeholder + an R_X86_64_PLT32 relocation,
+        written out by writeELFRelX64). }
       if restp = '' then
         Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs a label target');
       if (mnem = 'call') and AsmExternLookup(AsmTrim(restp), externName, externProcIdx, externCount, externResolvedIdx) then
       begin
         extIdx := RegisterExternal(externResolvedIdx);
-        EmitExternalIndirectCall(extIdx);
+        if EmitObjMode then
+        begin
+          if AsmObjCallCount >= MAX_ASM_OBJ_CALLFIX then
+            Error('asm:' + AsmIntToStr(lineNo) + ': too many extern calls (object mode)');
+          EmitB($E8);
+          AsmObjCallPos[AsmObjCallCount] := CodeLen;
+          AsmObjCallExtIdx[AsmObjCallCount] := extIdx;
+          Inc(AsmObjCallCount);
+          EmitI32(0);
+        end
+        else
+          EmitExternalIndirectCall(extIdx);
         emittedAny := True;
         Continue;
       end;
@@ -542,9 +562,16 @@ begin
 
   { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. A program that runs off
     the end exits with whatever it left in rdi (programs may also exit via an
-    explicit `syscall`). }
-  EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
-  EmitB($0F); EmitB($05);                                       { syscall }
+    explicit `syscall`). Object mode (-c) has no notion of "the program falls
+    off the end" -- a .asm compiled to an object is a reusable compilation
+    unit (functions/data for a real linker to combine), not a standalone
+    process; forcing an exit syscall onto it would be dead code at best and
+    actively wrong if the object gets linked as a library. }
+  if not EmitObjMode then
+  begin
+    EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
+    EmitB($0F); EmitB($05);                                       { syscall }
+  end;
 
   { append the data section after code+epilogue (one contiguous loaded image,
     so rip-relative disp arithmetic below is valid) and turn each data
@@ -575,16 +602,36 @@ begin
     Patch32(fixPos[k], rel);
   end;
 
-  { `global <label>`: override the ELF entry point (default = start of
-    Code[]) with a chosen code label's offset. First `global` naming an
-    actual code label wins; a program with none keeps the old default. }
-  if globalEntryName <> '' then
+  { `global <label>`: resolve every declared name to its offset in the single
+    combined Code[] blob (labels only -- no separate .data section exists at
+    the compiler-internal level, `section .data` content lives in the same
+    buffer, see the epilogue comment above). Two consumers:
+    - ET_EXEC: the *first* global naming an actual **code** label overrides
+      the ELF entry point (default = start of Code[]) via AsmEntryOff -- a
+      data label can't sensibly be an entry point, so it's skipped for this
+      purpose (still exported as a symbol, just not tried as `entry`).
+    - `-c` object mode: every global becomes an exported GLOBAL ELF symbol
+      (AsmGlobalSym*, consumed by writeELFRelX64) -- unused, harmless, for a
+      linked ET_EXEC. }
+  entrySet := False;
+  for k := 0 to globalCount - 1 do
   begin
-    found := False; tgt := 0;
+    found := False; tgt := 0; isDataLbl := False;
     for i := 0 to lblCount - 1 do
-      if (not lblIsData[i]) and (lblName[i] = globalEntryName) then begin tgt := lblOff[i]; found := True; end;
+      if lblName[i] = globalNames[k] then
+      begin tgt := lblOff[i]; isDataLbl := lblIsData[i]; found := True; end;
     if not found then
-      Error('asm: "global ' + globalEntryName + '" -- no code label with that name');
-    AsmEntryOff := tgt;
+      Error('asm: "global ' + globalNames[k] + '" -- no label with that name');
+    if AsmGlobalSymCount >= MAX_ASM_GLOBALS then
+      Error('asm: too many "global" declarations');
+    AsmGlobalSymName[AsmGlobalSymCount] := globalNames[k];
+    AsmGlobalSymOff[AsmGlobalSymCount] := tgt;
+    AsmGlobalSymIsData[AsmGlobalSymCount] := isDataLbl;
+    Inc(AsmGlobalSymCount);
+    if (not entrySet) and (not isDataLbl) then
+    begin
+      AsmEntryOff := tgt;
+      entrySet := True;
+    end;
   end;
 end;

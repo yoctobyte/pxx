@@ -498,6 +498,8 @@ begin
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0; WithStackDepth := 0; AsmBytesCount := 0;
   AsmGlobFixCount := 0;
   AsmEntryOff := 0;
+  AsmObjCallCount := 0;
+  AsmGlobalSymCount := 0;
   InLValueWrite := False;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0; IMTCount := 0;
@@ -604,7 +606,12 @@ begin
     for i := 0 to ProcCount - 1 do
       writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
   if EmitObjMode then
-    writeELF32Rel(outFile)
+  begin
+    if TargetArch = TARGET_X86_64 then
+      writeELFRelX64(outFile)
+    else
+      writeELF32Rel(outFile);
+  end
   else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)

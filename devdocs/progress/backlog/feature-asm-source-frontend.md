@@ -166,3 +166,51 @@ wiring, not new machinery.
   - **Still deferred:** `-c` `ET_REL` object output, `--shared` `ET_DYN` `.so`
     writer (the one genuinely net-new linker capability per the audit above —
     `ET_DYN` doesn't exist anywhere in `elfwriter.inc` yet).
+- 2026-07-01 — **`-c`/`--emit-obj` `ET_REL` object output landed** (Track A),
+  new `writeELFRelX64` in `elfwriter.inc` — the x86-64 relocatable-object gap
+  the earlier audit flagged (`writeELF32Rel` was xtensa/riscv32-only).
+  - Design: everything the `.asm` frontend assembles — code, `section .data`
+    bytes, even a data label's own bytes — lives in ONE combined `Code[]`
+    blob (`asmfront.inc`'s existing "one contiguous loaded image" choice for
+    `ET_EXEC`); the object writer keeps that and emits a single `.text`
+    section covering the whole blob, so `global` symbols (code or
+    `section .data` alike) all point into it — no separate `.data`/`.bss`
+    section needed since there's no separate content. Internal `jmp`/`jcc`/
+    `[rel]` references are already fully resolved by `ParseAsmProgram`
+    (`Patch32`) before the writer runs, unchanged from `ET_EXEC` — the only
+    thing that needs a *real* relocation is `call <extern>`.
+  - `call <extern>` now branches on `EmitObjMode`: `-c` emits a plain `call
+    rel32` placeholder (`E8` + 4-byte zero) instead of the GOT-indirect
+    `ET_EXEC` form, recording `(code position, RegisterExternal index)` in
+    new `AsmObjCallPos`/`AsmObjCallExtIdx` globals; `writeELFRelX64` turns
+    each into an `R_X86_64_PLT32` relocation (addend `-4`, the same
+    convention `gas`/`nasm` use for a `call` to an undefined symbol) against
+    an `UND GLOBAL` symbol built from the *existing* `ExternalCount`/
+    `ExternalProc[]` (`RegisterExternal` still dedups exactly like the
+    `ET_EXEC` path). The auto-`SYS_exit` epilogue is skipped entirely in
+    object mode — a `.asm` file compiled to an object is a reusable
+    compilation unit for a real linker to combine, not a standalone process;
+    forcing an exit syscall onto it would be dead code at best, actively
+    wrong if it gets linked as a library.
+  - `global <label>` widened from "remember one name" (the `ET_EXEC`-only
+    entry-point override from the earlier increment) to a real list
+    (`MAX_ASM_GLOBALS = 64`, `AsmGlobalSymName`/`Off`/`IsData` globals) — the
+    *first* one naming a non-data label still overrides the `ET_EXEC` entry
+    point (unchanged, existing tests still pass), and *every* one becomes an
+    exported `GLOBAL` ELF symbol in object mode.
+  - **Verified for real, not just structurally**: the resulting `.o` was
+    linked with the *system* `ld`/`gcc` (not a hand-rolled linker) against
+    real `libc.so.6` — `gcc -nostartfiles -e asm_obj_start file.o -o exe`
+    runs and prints through a genuine `extern puts`/`fflush` `R_X86_64_PLT32`
+    call; a separate C file (`extern int asm_obj_add(int,int);`) links
+    against the same `.o` and calls the exported function correctly. Both
+    checks now in `make test` (`test-asm`, gcc-guarded like the existing
+    ESP `test-emit-obj` link checks) via `test/test_asm_obj.asm`. Self-hosted
+    `compiler/pascal26`'s object output confirmed **byte-identical** to the
+    FPC-built compiler's.
+  - Structural checks (`readelf -h/-s/-r`) also in `make test`, same file.
+  - Full `make test` green (backend/ELF-writer touch); self-host byte-
+    identical bootstrap.
+  - **Still deferred:** `--shared` `ET_DYN` `.so` writer (task #6 of the
+    `full asm support for all 3 heads` umbrella) — the one remaining
+    genuinely net-new linker capability.

@@ -472,6 +472,30 @@ begin
   writeU32(f, link); writeU32(f, info);
   writeU32(f, alignv); writeU32(f, entsize);
 end;
+{ Elf64_Sym (24 bytes) / Elf64_Rela (24 bytes) / Elf64_Shdr (64 bytes, split
+  A/B for the same >6-param reason as writeShdrA/B) for writeELFRelX64. }
+procedure writeSym64(var f: File; name: Integer; info, shndx: Integer; value, size: Int64);
+begin
+  writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
+  writeU64(f, value); writeU64(f, size);
+end;
+procedure writeRela64(var f: File; offset: Int64; symIdx, rtype: Integer; addend: Int64);
+begin
+  writeU64(f, offset);
+  writeU64(f, (Int64(symIdx) shl 32) or Int64(rtype));
+  writeU64(f, addend);
+end;
+procedure writeShdrA64(var f: File; name, typ: Integer; flags, off, size: Int64);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU64(f, flags); writeU64(f, 0);   { sh_addr = 0 in ET_REL }
+  writeU64(f, off); writeU64(f, size);
+end;
+procedure writeShdrB64(var f: File; link, info: Integer; alignv, entsize: Int64);
+begin
+  writeU32(f, link); writeU32(f, info);
+  writeU64(f, alignv); writeU64(f, entsize);
+end;
 { One Elf64_Shdr (64 bytes) for the -g debug sections. All share flags/addr/link/
   info/entsize = 0 and addralign = 1, so only name/type/offset/size vary. }
 procedure writeShdr64(var f: File; name, typ: Integer; off, size: Int64);
@@ -609,6 +633,30 @@ procedure writeShdrB(f: Integer; link, info, alignv, entsize: Integer);
 begin
   writeU32(f, link); writeU32(f, info);
   writeU32(f, alignv); writeU32(f, entsize);
+end;
+{ Elf64_Sym (24 bytes) / Elf64_Rela (24 bytes) / Elf64_Shdr (64 bytes, split
+  A/B for the same >6-param reason as writeShdrA/B) for writeELFRelX64. }
+procedure writeSym64(f: Integer; name: Integer; info, shndx: Integer; value, size: Int64);
+begin
+  writeU32(f, name); writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
+  writeU64(f, value); writeU64(f, size);
+end;
+procedure writeRela64(f: Integer; offset: Int64; symIdx, rtype: Integer; addend: Int64);
+begin
+  writeU64(f, offset);
+  writeU64(f, (Int64(symIdx) shl 32) or Int64(rtype));
+  writeU64(f, addend);
+end;
+procedure writeShdrA64(f: Integer; name, typ: Integer; flags, off, size: Int64);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU64(f, flags); writeU64(f, 0);   { sh_addr = 0 in ET_REL }
+  writeU64(f, off); writeU64(f, size);
+end;
+procedure writeShdrB64(f: Integer; link, info: Integer; alignv, entsize: Int64);
+begin
+  writeU32(f, link); writeU32(f, info);
+  writeU64(f, alignv); writeU64(f, entsize);
 end;
 { One Elf64_Shdr (64 bytes) for the -g debug sections. All share flags/addr/link/
   info/entsize = 0 and addralign = 1, so only name/type/offset/size vary. }
@@ -2196,6 +2244,138 @@ begin
   writeShdrB(f, 0, 0, 1, 0);
   writeShdrA(f, 56, 3, 0, shstrOff, 66);
   writeShdrB(f, 0, 0, 1, 0);
+
+{$ifdef FPC}
+  Close(f);
+{$else}
+  sysfchmod(f, 420); { chmod 644 — a .o is not executable }
+  sysclose(f);
+{$endif}
+end;
+
+{ Relocatable ELF64 object writer for the .asm frontend's `-c`/--emit-obj
+  mode (feature-asm-source-frontend task #5), x86-64 only. Everything the
+  .asm frontend assembles -- code, the inline `section .data` bytes, even a
+  data label's own bytes -- lives in ONE combined Code[]/CodeLen blob (see
+  the comments in asmfront.inc's ParseAsmProgram): there is no separate data
+  segment to emit, so this writer has just one content section, `.text`,
+  covering the whole blob. `global <label>` symbols and `extern` UND symbols
+  both index into that single section. Internal jmp/jcc/[rel] references are
+  already fully resolved by ParseAsmProgram (Patch32) before this runs --
+  the only relocations this object needs are `call <extern>` sites
+  (AsmObjCallPos/AsmObjCallExtIdx), each an R_X86_64_PLT32 against the
+  extern's UND symbol, exactly what `nasm -f elf64` + `extern foo` + `call
+  foo` produces.
+  File layout (written sequentially; the self-hosted writer cannot seek):
+  ehdr, .text, .symtab, .strtab, .rela.text, .shstrtab, section headers. }
+procedure writeELFRelX64(const outPath: AnsiString);
+var
+  i, machine: Integer;
+  numSyms, firstGlobal, relaTextCount: Integer;
+  textOff, symOff, strOff, relaTextOff, shstrOff, shOff, strSize: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('--emit-obj: .asm frontend object output is x86-64 only');
+  machine := 62;   { EM_X86_64 }
+
+  { .strtab layout: 0 = empty, then global-label names, then extern names }
+  strSize := 1;
+  for i := 0 to AsmGlobalSymCount - 1 do
+  begin
+    AsmGlobalSymStrOff[i] := strSize;
+    strSize := strSize + Length(AsmGlobalSymName[i]) + 1;
+  end;
+  for i := 0 to ExternalCount - 1 do
+  begin
+    ObjExtStrOff[i] := strSize;
+    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+  end;
+
+  firstGlobal := 2;   { null sym + .text section sym }
+  numSyms := firstGlobal + AsmGlobalSymCount + ExternalCount;
+  relaTextCount := AsmObjCallCount;
+
+  textOff := ELF_HEADER_SIZE;                       { 64, already 8-aligned }
+  symOff  := AlignTo(textOff + CodeLen, 8);
+  strOff  := symOff + numSyms * 24;
+  relaTextOff := AlignTo(strOff + strSize, 8);
+  shstrOff := relaTextOff + relaTextCount * 24;
+  shOff := AlignTo(shstrOff + 44, 8);               { 44 = .shstrtab blob size }
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF64 ehdr (64 bytes), ET_REL }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 64, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,1);writeU16(f,machine);writeU32(f,1);      { ET_REL }
+  writeU64(f,0);writeU64(f,0);writeU64(f,shOff);        { entry, phoff, shoff }
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
+  writeU16(f,64);writeU16(f,6);writeU16(f,5);   { shentsize, shnum=6, shstrndx=5 }
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+{$endif}
+  writePad(f, symOff - (textOff + CodeLen));
+
+  { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
+  writeSym64(f, 0, 0, 0, 0, 0);
+  writeSym64(f, 0, 3, 1, 0, 0);   { STT_SECTION .text }
+  for i := 0 to AsmGlobalSymCount - 1 do
+    writeSym64(f, AsmGlobalSymStrOff[i], $10, 1, AsmGlobalSymOff[i], 0); { GLOBAL NOTYPE, in .text }
+  for i := 0 to ExternalCount - 1 do
+    writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);   { GLOBAL NOTYPE UNDEF }
+
+  { .strtab }
+  writeU8(f, 0);
+  for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  writePad(f, relaTextOff - (strOff + strSize));
+
+  { .rela.text: one R_X86_64_PLT32 per `call <extern>` site. addend -4:
+    the call encodes rel32 relative to the END of the 4-byte field (the
+    next instruction), so S + A - P with A=-4 lands exactly there -- the
+    same convention gas/nasm use for `call` to an undefined symbol. }
+  for i := 0 to AsmObjCallCount - 1 do
+    writeRela64(f, AsmObjCallPos[i], firstGlobal + AsmGlobalSymCount + AsmObjCallExtIdx[i], 4, -4);
+
+  { .shstrtab: fixed 44-byte blob; name offsets hardcoded in the shdrs below }
+  writeU8(f, 0);
+  writeStrZ(f, '.text');        { 1 }
+  writeStrZ(f, '.rela.text');   { 7 }
+  writeStrZ(f, '.symtab');      { 18 }
+  writeStrZ(f, '.strtab');      { 26 }
+  writeStrZ(f, '.shstrtab');    { 34 }
+  writePad(f, shOff - (shstrOff + 44));
+
+  { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .symtab, 4 .strtab, 5 .shstrtab.
+    $40 = SHF_INFO_LINK on the rela section. }
+  writeShdrA64(f, 0, 0, 0, 0, 0);
+  writeShdrB64(f, 0, 0, 0, 0);
+  writeShdrA64(f, 1, 1, 6, textOff, CodeLen);
+  writeShdrB64(f, 0, 0, 16, 0);
+  writeShdrA64(f, 7, 4, $40, relaTextOff, relaTextCount * 24);
+  writeShdrB64(f, 3, 1, 8, 24);
+  writeShdrA64(f, 18, 2, 0, symOff, numSyms * 24);
+  writeShdrB64(f, 4, firstGlobal, 8, 24);
+  writeShdrA64(f, 26, 3, 0, strOff, strSize);
+  writeShdrB64(f, 0, 0, 1, 0);
+  writeShdrA64(f, 34, 3, 0, shstrOff, 44);
+  writeShdrB64(f, 0, 0, 1, 0);
 
 {$ifdef FPC}
   Close(f);
