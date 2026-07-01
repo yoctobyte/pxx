@@ -1043,22 +1043,42 @@ begin
         si := IRA[node];
         if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
         begin
-          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW). }
+          { Dynamic array: slot holds the heap data pointer. Read position loads
+            it (Length/indexing want the data ptr); WRITE position wants the
+            SLOT's own address instead, so a SetLength target (or the outer
+            level of a nested SetLength(a[i], n), which addresses the root
+            symbol's own slot via a plain IR_LEA) can publish a new handle into
+            it -- mirrors the x86-64 IR_LEA read/write gate immediately below
+            for scalar AnsiString. Previously this always loaded the handle
+            regardless of InLValueWrite, so SetLength on the array itself wrote
+            through the CURRENT (often nil) handle value instead of the slot,
+            silently no-opping (or, one level down inside a nested array,
+            computing a bogus small-integer "address" from a nil base plus an
+            index stride and segfaulting on any index > 0) --
+            bug-nested-dynarray-cross-segfault. v1: no COW either way. }
           if Syms[si].Kind = skGlobal then
           begin
             EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset); { r0 = slot addr }
-            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+            if not InLValueWrite then
+              EmitI32($E5900000);  { ldr r0, [r0] = handle }
           end
           else
           begin
             EmitLoadImmArm32(0, Syms[si].Offset);
-            EmitI32($E08B0000);  { add r0, fp, r0 = slot addr }
-            EmitI32($E5900000);  { ldr r0, [r0] = handle (or &caller_slot if by-ref) }
+            EmitI32($E08B0000);  { add r0, fp, r0 = local slot addr }
             if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-              { by-ref (var/out) named-dynarray param: the slot holds &caller_slot;
-                deref once more to reach the data pointer (no COW, so Length/indexing
-                want the data ptr in both modes; SetLength reads the slot itself). }
-              EmitI32($E5900000);  { ldr r0, [r0] = data ptr }
+            begin
+              { by-ref (var/out) named-dynarray param: the local slot holds
+                &caller_slot; load it (needed either way -- SetLength wants to
+                publish through it, Length/indexing want to deref it once
+                more). }
+              EmitI32($E5900000);  { ldr r0, [r0] = &caller_slot }
+              if not InLValueWrite then
+                EmitI32($E5900000);  { ldr r0, [r0] = data ptr }
+            end
+            else if not InLValueWrite then
+              EmitI32($E5900000);  { ldr r0, [r0] = handle }
+            { else: r0 already holds &local_slot -- exactly what a write wants. }
           end;
         end
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
@@ -2164,7 +2184,24 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
         IREmitNodeArm32(left);      { base address -> r0 }
-        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+        if (InLValueWrite and (IRKind[left] = IR_LEA) and
+            Syms[IRA[left]].IsArray and (Syms[IRA[left]].ArrLen = -1)) then
+        begin
+          { Indexing INTO a dynamic-array symbol during a write (`g[i] := x`,
+            or the base level of a nested SetLength(a[i], n)): the write-mode
+            IR_LEA branch above (added for a SetLength target that IS the
+            array symbol itself) leaves r0 one deref short of the data
+            pointer -- correct for THAT caller, but indexing always needs to
+            read the array's own handle to use as a base; the real write
+            happens at the computed element address further down, not to the
+            array's handle slot. Deref once more to reach it (v1: no COW here
+            either, matching the rest of this backend -- x86-64 reaches the
+            same data pointer via a full COW-aware PXXDynArrayUnique call
+            instead of a bare deref, but nothing on this backend tracks array
+            aliasing to make that distinction matter yet). }
+          EmitI32($E5900000);  { ldr r0, [r0] = data ptr }
+        end
+        else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
             (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then

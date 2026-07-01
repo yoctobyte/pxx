@@ -899,12 +899,26 @@ begin
         si := IRA[node];
         if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
         begin
-          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW).
-            For a by-ref (var/out) named-dynarray param EmitLoadVarAddrA64 already
-            yields &caller_slot (it bakes in the by-ref deref), so the single ldr
-            below reaches the data pointer in both cases. }
+          { Dynamic array: slot holds the heap data pointer. Read position loads
+            it (Length/indexing want the data ptr); WRITE position wants the
+            SLOT's own address instead, so a SetLength target (or the outer
+            level of a nested SetLength(a[i], n), which addresses the root
+            symbol's own slot via a plain IR_LEA) can publish a new handle into
+            it -- mirrors the x86-64/arm32 IR_LEA read/write gate. Previously
+            this always loaded the handle regardless of InLValueWrite, so
+            SetLength on the array itself wrote through the CURRENT (often nil)
+            handle value instead of the slot, silently no-opping (or, one level
+            down inside a nested array, computing a bogus small-integer
+            "address" from a nil base plus an index stride and segfaulting on
+            any index > 0) -- bug-nested-dynarray-cross-segfault. For a by-ref
+            (var/out) named-dynarray param, EmitLoadVarAddrA64 already yields
+            &caller_slot (it bakes in the by-ref deref), so the conditional ldr
+            below reaches the data pointer on a read in both cases, and on a
+            write leaves &caller_slot itself -- exactly what SetLength wants to
+            publish through. v1: no COW either way. }
           EmitLoadVarAddrA64(si);               { x0 = slot address (&caller_slot if by-ref) }
-          EmitI32($F9400000);                   { ldr x0, [x0] = data ptr }
+          if not InLValueWrite then
+            EmitI32($F9400000);                 { ldr x0, [x0] = data ptr }
         end
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite then
@@ -1902,7 +1916,20 @@ begin
           address. Dynamic arrays use the handle loaded by IR_LEA. }
         left := IRA[node];
         IREmitNodeAarch64(left);                 { base -> x0 }
-        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+        if (InLValueWrite and (IRKind[left] = IR_LEA) and
+            Syms[IRA[left]].IsArray and (Syms[IRA[left]].ArrLen = -1)) then
+        begin
+          { Indexing INTO a dynamic-array symbol during a write (`g[i] := x`,
+            or the base level of a nested SetLength(a[i], n)): the write-mode
+            IR_LEA branch (added for a SetLength target that IS the array
+            symbol itself) leaves x0 one deref short of the data pointer --
+            correct for THAT caller, but indexing always needs to read the
+            array's own handle to use as a base; the real write happens at the
+            computed element address further down. Deref once more (v1: no
+            COW here either, matching the rest of this backend). }
+          EmitI32($F9400000);                     { ldr x0, [x0] = data ptr }
+        end
+        else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
             (IRTk[left] = Ord(tyAnsiString)) and (Integer(IRIVal[node]) = 1)) then

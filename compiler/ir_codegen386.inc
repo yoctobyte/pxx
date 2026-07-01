@@ -1196,19 +1196,38 @@ begin
         si := IRA[node];
         if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
         begin
-          { Dynamic array: the slot holds the heap data pointer; load it. v1:
-            no copy-on-write in write mode (single-owner arrays only). }
+          { Dynamic array: slot holds the heap data pointer. Read position loads
+            it (Length/indexing want the data ptr); WRITE position wants the
+            SLOT's own address instead, so a SetLength target (or the outer
+            level of a nested SetLength(a[i], n), which addresses the root
+            symbol's own slot via a plain IR_LEA -- it does NOT bypass IR_LEA,
+            despite what this comment used to claim) can publish a new handle
+            into it. Previously this always loaded the handle regardless of
+            InLValueWrite, so SetLength on the array itself wrote through the
+            CURRENT (often nil) handle value instead of the slot, silently
+            no-opping (or, one level down inside a nested array, computing a
+            bogus small-integer "address" from a nil base plus an index stride
+            and crashing on any index > 0) -- bug-nested-dynarray-cross-segfault.
+            v1: no copy-on-write in write mode either way (single-owner arrays
+            only). }
           if Syms[si].Kind = skGlobal then
-            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
+          begin
+            if InLValueWrite then
+              begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end        { mov eax, slot addr }
+            else
+              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;       { mov eax, [slot] }
+          end
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             { by-ref (var/out) named-dynarray param: the slot holds &caller_slot;
-              load it, then deref once more to reach the data pointer (no COW on
-              i386, so Length/indexing want the data ptr in both modes; SetLength
-              reads the slot itself, bypassing IR_LEA). }
+              load it (needed either way -- SetLength wants to publish through
+              it, Length/indexing want to deref it once more). }
             EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); { mov eax, [ebp+off] = &caller_slot }
-            EmitB($8B); EmitB($00);                           { mov eax, [eax] = data ptr }
+            if not InLValueWrite then
+              begin EmitB($8B); EmitB($00); end;              { mov eax, [eax] = data ptr }
           end
+          else if InLValueWrite then
+            begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end  { lea eax, [ebp+off] }
           else
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
         end
@@ -2591,7 +2610,20 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
         IREmitNode386(left);                          { base address -> eax }
-        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+        if (InLValueWrite and (IRKind[left] = IR_LEA) and
+            Syms[IRA[left]].IsArray and (Syms[IRA[left]].ArrLen = -1)) then
+        begin
+          { Indexing INTO a dynamic-array symbol during a write (`g[i] := x`,
+            or the base level of a nested SetLength(a[i], n)): the write-mode
+            IR_LEA branch (added for a SetLength target that IS the array
+            symbol itself) leaves eax one deref short of the data pointer --
+            correct for THAT caller, but indexing always needs to read the
+            array's own handle to use as a base; the real write happens at the
+            computed element address further down. Deref once more (v1: no
+            COW here either, matching the rest of this backend). }
+          EmitB($8B); EmitB($00);                     { mov eax, [eax] = data ptr }
+        end
+        else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
             not Syms[IRA[left]].IsArray) or
            (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
             (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
