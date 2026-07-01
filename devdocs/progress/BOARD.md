@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (76)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -88,7 +88,6 @@ _none_
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
-| feature-sysutils-decodedate-missing | A | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
@@ -139,7 +138,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (404)
+## done (405)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -517,6 +516,7 @@ _none_
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
+| feature-sysutils-decodedate-missing | A | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |
@@ -622,7 +622,6 @@ _none_
 - [A] feature-require-forward-strict-mode
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
-- [A] feature-sysutils-decodedate-missing
 - [B] feature-threadsafe-heap-contract
 - [A] feature-threadsafe-heap-optimize
 - [A] feature-threadsafe-io-serialization
