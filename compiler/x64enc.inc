@@ -179,9 +179,22 @@ procedure x64_mov_reg_imm(size, destReg: Integer; immVal: Int64);
 begin
   if size = 8 then
   begin
-    EncPrefixAndREX(8, 0, destReg, False);
-    EncB($B8 + (destReg and 7));
-    EncI64(immVal);
+    { mov r/m64, imm32 (0xC7, sign-extended) when the value round-trips through
+      a 32-bit sign extension -- same resulting register value, 3 bytes
+      shorter than the movabs (0xB8+r, full imm64) form below. }
+    if Int64(Integer(immVal)) = immVal then
+    begin
+      EncPrefixAndREX(8, 0, destReg, False);
+      EncB($C7);
+      EncModRMReg(0, destReg);
+      EncI32(immVal);
+    end
+    else
+    begin
+      EncPrefixAndREX(8, 0, destReg, False);
+      EncB($B8 + (destReg and 7));
+      EncI64(immVal);
+    end;
   end
   else
   begin

@@ -327,6 +327,10 @@ begin
   AssertBytes('inc qword[r12-16]', [$49,$FF,$44,$24,$F0]);
   ResetCode; EmitAsmX64('inc qword [rbp-16]');
   AssertBytes('inc qword[rbp-16]', [$48,$FF,$45,$F0]);
+  ResetCode; EmitAsmX64(['inc qword [@glob]', 4096]);
+  AssertBytes('inc qword[@glob]', [$48,$FF,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['dec dword [@glob]', 8192]);
+  AssertBytes('dec dword[@glob]', [$FF,$0C,$25,$00,$00,$00,$00]);
 
   { --- mov [mem], imm (new form added for the EmitVariantClear/Retain
     migration; verified against llvm-mc) --- }
@@ -344,6 +348,26 @@ begin
   AssertBytes('mov qword[r12],0', [$49,$C7,$04,$24,$00,$00,$00,$00]);
   ResetCode; EmitAsmX64(['mov qword [r13], %', 0]);
   AssertBytes('mov qword[r13],0', [$49,$C7,$45,$00,$00,$00,$00,$00]);
+
+  { --- mov reg64, imm: compact 0xC7 (sign-extended imm32) when the value
+    round-trips, movabs (0xB8+r, full imm64) only when it doesn't -- verified
+    against llvm-mc. New selection logic added for the ir_codegen.inc
+    EmitAsmX64 migration (avoids a silent size regression vs. the original
+    hand-picked-compact-form raw EmitB sequences it replaces). }
+  ResetCode; EmitAsmX64(['mov rax, %', 1]);
+  AssertBytes('mov rax,1', [$48,$C7,$C0,$01,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov rsi, %', 8]);
+  AssertBytes('mov rsi,8', [$48,$C7,$C6,$08,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov rcx, %', -1]);
+  AssertBytes('mov rcx,-1', [$48,$C7,$C1,$FF,$FF,$FF,$FF]);
+  ResetCode; EmitAsmX64(['mov rdx, %', 2147483647]);
+  AssertBytes('mov rdx,2147483647', [$48,$C7,$C2,$FF,$FF,$FF,$7F]);
+  ResetCode; EmitAsmX64(['mov r8, %', -2147483648]);
+  AssertBytes('mov r8,-2147483648', [$49,$C7,$C0,$00,$00,$00,$80]);
+  ResetCode; EmitAsmX64(['mov r9, %', Int64(2147483648)]);
+  AssertBytes('mov r9,2147483648 (movabs)', [$49,$B9,$00,$00,$00,$80,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov r10, %', Int64(4294967296)]);
+  AssertBytes('mov r10,4294967296 (movabs)', [$49,$BA,$00,$00,$00,$00,$01,$00,$00,$00]);
 
   { --- forward-label jump (the `.done` idiom used by EmitDynArrayRetainLocked
     etc): EmitAsmX64 always emits the near/rel32 form for a same-call forward

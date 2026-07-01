@@ -393,6 +393,13 @@ begin
       if s0 = 1 then EncB($FE) else EncB($FF);
       EncModRMMem(i, mb0, md0, False);
     end
+    else if (k0 = 3) or (k0 = 4) then
+    begin
+      if s0 = 0 then Error('EmitAsmX64: inc/dec [@glob]/[@data] needs an explicit size (byte/dword/qword)');
+      EncPrefixAndREX(s0, i, 0, False);
+      if s0 = 1 then EncB($FE) else EncB($FF);
+      AsmEncAbsRM(i, k0, md0);
+    end
     else Error('EmitAsmX64: unsupported inc/dec form');
     Exit;
   end;
