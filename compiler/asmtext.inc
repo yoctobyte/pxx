@@ -650,6 +650,11 @@ begin
     else if (k0 = 0) and (k1 = 1) then x64_mov_reg_imm(s0, r0, imm1)
     else if (k0 = 0) and (k1 = 2) then x64_mov_reg_mem(s0, r0, mb1, md1, False)
     else if (k0 = 2) and (k1 = 0) then x64_mov_mem_reg(s1, mb0, md0, r1, False)
+    else if (k0 = 2) and (k1 = 1) then
+    begin
+      if s0 = 0 then Error('EmitAsmX64: mov [mem],imm needs an explicit size (byte/word/dword/qword)');
+      x64_mov_mem_imm(s0, mb0, md0, imm1, False);
+    end
     { absolute [@glob]/[@data] r/m forms }
     else if ((k0 = 3) or (k0 = 4)) and (k1 = 1) then
     begin

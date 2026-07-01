@@ -222,7 +222,7 @@ end;
 
 procedure x64_mov_mem_imm(size, baseReg, disp: Integer; immVal: Int64; force32: Boolean);
 begin
-  EncPrefixAndREX(size, 0, baseReg, False);
+  EncPrefixAndREXMem(size, 0, baseReg, False);
   if size = 1 then EncB($C6) else EncB($C7);
   EncModRMMem(0, baseReg, disp, force32);
   if size = 1 then EncB(immVal and $FF)

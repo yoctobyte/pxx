@@ -316,6 +316,23 @@ begin
   ResetCode; EmitAsmX64('inc qword [rbp-16]');
   AssertBytes('inc qword[rbp-16]', [$48,$FF,$45,$F0]);
 
+  { --- mov [mem], imm (new form added for the EmitVariantClear/Retain
+    migration; verified against llvm-mc) --- }
+  ResetCode; EmitAsmX64(['mov qword [rax], %', 0]);
+  AssertBytes('mov qword[rax],0', [$48,$C7,$00,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov qword [rax+8], %', 0]);
+  AssertBytes('mov qword[rax+8],0', [$48,$C7,$40,$08,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov qword [rax-16], %', 5]);
+  AssertBytes('mov qword[rax-16],5', [$48,$C7,$40,$F0,$05,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov dword [rbx], %', 5]);
+  AssertBytes('mov dword[rbx],5', [$C7,$03,$05,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov byte [rdi], %', 1]);
+  AssertBytes('mov byte[rdi],1', [$C6,$07,$01]);
+  ResetCode; EmitAsmX64(['mov qword [r12], %', 0]);
+  AssertBytes('mov qword[r12],0', [$49,$C7,$04,$24,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov qword [r13], %', 0]);
+  AssertBytes('mov qword[r13],0', [$49,$C7,$45,$00,$00,$00,$00,$00]);
+
   { --- forward-label jump (the `.done` idiom used by EmitDynArrayRetainLocked
     etc): EmitAsmX64 always emits the near/rel32 form for a same-call forward
     reference, unlike an optimizing assembler (llvm-mc picks the short rel8

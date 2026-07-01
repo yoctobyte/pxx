@@ -119,3 +119,4 @@
 2026-07-01T16:37:32Z  v119  1698d2788b79c8976b45ad4a3ed94df7fd311f8268541182f0b03791d777b401  66de7d1e309ad39419391d7f7696e71d701a77a2  chore(stable): pin v118 (AnsiString SetLength capacity-doubling OOM fix)
 2026-07-01T16:47:19Z  v120  09558a4347c387fbaf768b7ad141648fe862761d5d092254ff1ce71e16367a2e  d0aab40d13f1454f2b282a9e9803e33f77b2f770  fix(x64): re-apply EmitAnsiStrRetainLocked EmitAsmX64 conversion (v119)
 2026-07-01T16:55:12Z  v121  b8c7a90bc1454f45116675c0a7d20a45c3edbd4f12d3659c4f52df5087ff6b58  94cd5f47fc1b930486a468f721c81be03ed582fb  fix(x64): re-apply EmitHeapAllocLocked/EmitHeapFreeLocked EmitAsmX64 conversion (v120)
+2026-07-01T17:08:36Z  v122  100827b8af8cb35426cc516b0e6466515b5b2ce93880d08e1f8e517feb19478b  1a764edbecf9143b7c9f0e0024a9dd3ed5ddcf47  fix(x64): re-apply EmitAnsiStrReleaseLocked EmitAsmX64 conversion (v121)

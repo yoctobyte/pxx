@@ -45,6 +45,28 @@ the fix (17- and 60-site repros), so it is now **unblocked** for
 feature-asm-structured-ir-library whenever that work resumes — but was left
 reverted here to keep this fix's scope to the one real bug.
 
+**Update (2026-07-01, later same day) — all 4 re-applied, closed for good.**
+Work resumed same day: re-applied all 4 procedures from the "Appendix" source
+below, one at a time, each verified with a capped-memory (`ulimit -v 3000000`)
+self-host + `make test` + `make stabilize` (4-iteration fixedpoint) before
+landing.
+- `EmitAnsiStrRetainLocked` (v119) — as predicted, gen1 != gen2 by the known
+  byte-97 short/long-`je` artifact; gen2 == gen3 confirmed convergence.
+  `compiler/pascal26` reseeded from the converged (gen2) binary, not the
+  transient gen1, before running the full gate.
+- `EmitHeapAllocLocked` + `EmitHeapFreeLocked` (v120) — the two confirmed
+  genuinely-broken procedures. Re-verified clean: 60-site micro-repro *and*
+  full self-host both pass under the 3GB cap; same one-generation lag as
+  chunk 1 (gen1 != gen2, gen2 == gen3) since these are inlined at every
+  `GetMem`/`SetLength`/`New` site, not a cached subroutine.
+- `EmitAnsiStrReleaseLocked` (v121) — the one with no small repro found.
+  Also clean under the memory cap; this time gen1 == gen2 immediately, no
+  lag at all (consistent with `EmitHeapFreeLocked`, which it calls, already
+  being on the new path as of v120).
+
+No further OOM, no unexplained non-determinism beyond the already-understood
+one-generation lag. Ticket fully closed; nothing left to re-apply.
+
 ---
 
 ### Original interim resolution (superseded)

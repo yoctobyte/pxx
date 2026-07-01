@@ -629,38 +629,40 @@ end;
 
 procedure EmitVariantClear;
 { rax = address of a 16-byte variant slot. Release a managed payload, then
-  reset the slot to VT_EMPTY. Preserves the slot address in rax. }
+  reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
+  target is patched manually (not via EmitAsmX64's `.label` form) because it
+  jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
 var pDone: Integer;
 begin
-  EmitB($50);                                        { push rax }
-  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING); { cmp qword [rax], VT_STRING }
+  EmitAsmX64(['push rax', 'cmp qword [rax], %', VT_STRING]);
   EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
-  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrReleaseAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
-  EmitB($58);                                        { pop rax }
-  EmitB($48); EmitB($C7); EmitB($00); EmitI32(VT_EMPTY); { mov qword [rax], VT_EMPTY }
-  EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(0); { mov qword [rax+8], 0 }
+  EmitAsmX64([
+    'pop rax',
+    'mov qword [rax], %', VT_EMPTY,
+    'mov qword [rax+8], %', 0
+  ]);
 end;
 
 procedure EmitVariantRetain;
-{ rax = address of a variant slot. Retain a managed payload. Preserves rax. }
+{ rax = address of a variant slot. Retain a managed payload. Preserves rax.
+  See EmitVariantClear for why the jne target is patched manually. }
 var pDone: Integer;
 begin
-  EmitB($50);                                        { push rax }
-  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING); { cmp qword [rax], VT_STRING }
+  EmitAsmX64(['push rax', 'cmp qword [rax], %', VT_STRING]);
   EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
-  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(AnsiStrRetainAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
-  EmitB($58);                                        { pop rax }
+  EmitAsmX64(['pop rax']);
 end;
 
 procedure EmitAnsiStrFromInlineString;
 { rax = inline string address ([len:8][chars]). Returns a managed string ptr. }
 begin
-  EmitB($48); EmitB($8B); EmitB($38);               { mov rdi, [rax] }
-  EmitB($48); EmitB($8D); EmitB($70); EmitB($08);   { lea rsi, [rax+8] }
+  EmitAsmX64(['mov rdi, [rax]', 'lea rsi, [rax+8]']);
   IREmitCodeCall(AnsiStrFromLiteralAddr);
 end;
 
