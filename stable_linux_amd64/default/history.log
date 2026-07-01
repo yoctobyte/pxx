@@ -107,3 +107,4 @@
 2026-07-01T00:16:05Z  v107  24ca3c26f91debf0db0a3742226af1f8bd62468b7bfbb27761f8e1e3b78c2c12  a948fb8bc6a5616d111b04fc6e5977d109fc69dc  feat(asm): inline asm gains operand-size keywords (byte/word/dword/qword)
 2026-07-01T00:25:07Z  v108  aa5778f2b166e3aeed2605f6046af0448c747798e91d892bf1bff7859f3bd01d  9f3f6e748bda52e5862978a18074709a2dabe537  feat(asm): inline asm commits to Intel-only, rejects {\$asmMode att}
 2026-07-01T00:50:24Z  v109  7f472030b85e6a2f86acdec72b6dc7937a4a70ce3f98f697cb42d346671a6ea3  2f1804fbf1fab7804e50f0192e90c22240bc0a56  feat(asm): .asm frontend gains extern + global directives
+2026-07-01T01:08:43Z  v110  f4df76bcc68c26fd81868c404676cede2bd610c086bf73960607b4ed84204786  456f0eda2eaefa76b7a2b4563230093e90eb151e  feat(asm): .asm frontend gains -c/--emit-obj ET_REL object output
