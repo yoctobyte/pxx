@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (74)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -34,7 +34,6 @@ _none_
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
-| bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -137,7 +136,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (406)
+## done (407)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -318,6 +317,7 @@ _none_
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
+| bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-sizeof-variable-unsupported | A | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-stderr-not-fd2 | A | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
@@ -570,7 +570,6 @@ _none_
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-integer-div-zero-sigfpe-uncatchable
-- [A] bug-sizeof-array-and-typename-wrong
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-anonymous-record-type
 - [A] feature-asm-source-frontend

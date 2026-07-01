@@ -1,12 +1,10 @@
 # `SizeOf` wrong for static arrays, and rejects most named types
 
 - **Type:** bug (SizeOf / consteval — correctness) — Track A
-- **Status:** done for 1-D arrays — Symptom 1 fixed (pin v131), Symptom 2
-  type-name resolution fixed (pin v134), `SizeOf(arr[i])` fixed for 1-D
-  arrays (pin v139), all 2026-07-01/02. Indexing an N-D array with fewer
-  indices than dimensions (`m[0]` for a 2-D array, which yields a row/
-  sub-array, not a scalar) is still open — see below — but no longer
-  silently wrong: it now raises a clear error instead.
+- **Status:** done — Symptom 1 fixed (pin v131), Symptom 2 type-name
+  resolution fixed (pin v134), `SizeOf(arr[i])` fixed for 1-D arrays
+  (pin v139), N-D array row/scalar indexed `SizeOf` fixed (pin v141), all
+  2026-07-01/02. All acceptance criteria met.
 - **Severity:** high — `SizeOf(arr)` silently returns the wrong number (no error),
   breaking the ubiquitous `SizeOf(buf)` (I/O length) and
   `SizeOf(arr) div SizeOf(arr[0])` (element count) idioms.
@@ -157,10 +155,21 @@ sized (to confirm it's truly unevaluated). Cross-verified identical on
 arm32/aarch64/i386. `test/test_sizeof_array_typename.pas` extended, full
 `make test` green.
 
-**Still open:** `SizeOf(m[0])` for a genuinely multi-dimensional array with
-fewer indices than dimensions (should yield the row/sub-array size) — now
-a clean, honest error rather than the earlier "arbitrary expression"
-framing or a silent wrong answer.
+**Fixed (2026-07-02, pin v141):** `SizeOf(m[0])` / `SizeOf(m[i,j,..])` on a
+genuinely N-D array (`SymArrNDims >= 2`). Mirrors the two subscript forms
+real N-D indexing already supports (`BuildPartialNDRowIndex` /
+`BuildFlatNDIndex`): a single leading subscript names a whole row/sub-array,
+one subscript per dimension names the scalar element. Since `SizeOf` never
+evaluates the index expression's value (same rationale as the 1-D case),
+no parsing-as-expression was needed — just count top-level commas while
+skipping the balanced brackets, then multiply the element size by the
+product of the trailing (unindexed) dimension spans for the row case, or
+use the bare element size for the full-index case. A subscript count that's
+neither 1 nor `NDims` errors with the same "wrong number of array
+subscripts" message real indexing gives for the same shape, rather than
+guessing. Verified against FPC for 2-D and 3-D int arrays and a 2-D
+array-of-record (both row and scalar forms). `test/test_sizeof_array_typename.pas`
+extended, full `make test` green (590 `ok:`), self-host byte-identical.
 
 ## Likely cause
 
@@ -178,8 +187,8 @@ same underlying "byte size of this type" helper that record types already use.
       set, string, record) — Symptom 2 type-name resolution. **Done, pin v134.**
 - [x] `SizeOf(arr) div SizeOf(arr[0])` gives the element count, for a 1-D
       array. **Done, pin v139.**
-- [ ] `SizeOf(m[0])` for a multi-dimensional array with fewer indices than
-      dimensions (row/sub-array size) — still open, now a clean error
-      instead of a silent wrong answer.
+- [x] `SizeOf(m[0])` for a multi-dimensional array with fewer indices than
+      dimensions (row/sub-array size). **Done, pin v141.**
 - [x] Regression test (`test/test_sizeof_array_typename.pas`) wired into
-      `make test`; self-host stays byte-identical. **Done, covers Symptoms 1 and 2.**
+      `make test`; self-host stays byte-identical. **Done, covers Symptoms 1, 2,
+      and the N-D indexed case.**
