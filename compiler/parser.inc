@@ -8780,12 +8780,20 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if CaseEqual(name, 'Str') then
+      else if CaseEqual(name, 'Str') and (FindProc('Str') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Str(x[:w[:d]], s): format integer x into string s, right-justified to
           width w. Parsed like write's value:w:d (literal width/decimals;
           decimals ignored for integer Str). Rewritten to s := StrInt(x, w),
-          which lives in the auto-included builtin unit. }
+          which lives in the auto-included builtin unit.
+          Guarded like Insert/Delete above: a user proc named `Str` shadows
+          this, and a plain statement head not immediately followed by `(`
+          (assignment `str := ...`, a proc-var call `str.field`, etc.) is not
+          the intrinsic -- a variable named `str`/`Str` (a very natural name
+          for a string) otherwise broke even on plain assignment, since this
+          branch previously always committed to the Str(..) parse shape
+          unconditionally. }
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;        { value }
         castPrevTok := 0;                          { width default }
