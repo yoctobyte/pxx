@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,6 @@ _none_
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
-| bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
@@ -138,7 +137,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (405)
+## done (406)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -255,6 +254,7 @@ _none_
 | bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value set parameter unsupported | — |
+| bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
@@ -569,7 +569,6 @@ _none_
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
-- [A] bug-i386-try-except-segfault
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] chore-sqlite-static-capacity-bumps

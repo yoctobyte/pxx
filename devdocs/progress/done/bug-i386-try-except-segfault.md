@@ -1,7 +1,7 @@
 # i386 target: `try...except` segfaults (layout-sensitive, not universal)
 
 - **Type:** bug (i386 backend / exception machinery — correctness) — Track A
-- **Status:** backlog
+- **Status:** done (v140)
 - **Severity:** high — a basic, single `try...except on E: Exception do` block
   can crash the i386 target outright (SIGSEGV), though it doesn't happen for
   every program shape (see below).
@@ -100,6 +100,80 @@ cause (field layout vs. String/AnsiString ABI differences across targets).
   session, though no crash was observed on those two targets).
 - Wired into the relevant cross-target `make test` targets.
 
+## Fixed (v140)
+
+Root cause: a **shared, target-independent** IR-lowering gap, not a
+per-backend codegen bug — which is why it hit i386/arm32/aarch64 alike but
+not x86-64 (whose call-arg path happens to tolerate the bad value; the
+"layout-sensitive" framing was a red herring caused by chasing per-backend
+codegen when the real bug was upstream in `ir.inc`).
+
+`ir.inc`'s `AN_CALL` lowering materializes a non-lvalue managed-string
+argument (a literal, concat, or coercion) into a hidden owning local before
+passing it by value — this is what gives a `const s: string` parameter a
+real managed AnsiString heap handle instead of a raw frozen-string
+representation. That materialization was gated on `cpi >= 0`. Class
+instantiation (`TFoo.Create(...)`) lowers through a distinct **negative**
+`cpi` sentinel (`-Ord(tkGetMem)`), so **every constructor call was silently
+excluded** from this path. A string-literal argument to any constructor's
+`const s: string` parameter therefore reached codegen still tagged as a raw
+frozen string; the by-value call-arg push in each backend then pushed that
+raw value as if it already were a real heap pointer.
+
+This explains **both** observations filed in this ticket as one root cause:
+
+1. **`E.Message` empty** — `Exception.Create('literal')` stored the bogus
+   non-managed "handle" into the `Message` field. Reading it back doesn't
+   crash, it just isn't a valid AnsiString, so printing it gives nothing.
+2. **The SIGSEGV** — the same bogus handle blows up only when something
+   later in the unwind/ARC-release path actually dereferences or frees it
+   (e.g. AnsiString release on scope exit). Whether that dereference is
+   reached depends on subtle codegen differences between handler bodies —
+   exactly the "layout-sensitive" behavior originally observed (the
+   `E.Message` handler body happened to avoid the release path that the
+   `writeln('c1')`-only handler body hit).
+
+**Fix** (`compiler/ir.inc`, `argIsManagedTemp` in the `AN_CALL` lowering
+loop): added a second disjunct covering the constructor case, reusing
+`slot` (the constructor's already-resolved proc index, computed earlier in
+the same loop iteration by the existing `isRefArg` block) to look up the
+target parameter's `TypeKind`, mirroring the existing `cpi >= 0` case:
+
+```pascal
+argIsManagedTemp :=
+  (not isRefArg) and
+  (((cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+    (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString)) or
+   ((cpi < 0) and (-cpi = Ord(tkGetMem)) and (pathIdx > 0) and
+    (slot >= 0) and (pathIdx < Procs[slot].ParamCount) and
+    (Procs[slot].Params[pathIdx].TypeKind = tyAnsiString))) and
+  (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+  (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+  (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+  (ASTKind[ASTLeft[item]] <> AN_DEREF);
+```
+
+One shared fix resolved all four targets (x86-64 unaffected/no regression;
+i386/arm32/aarch64 all fixed) with a single change, no per-backend patch
+needed.
+
+**Verification:**
+- FPC oracle + x86-64 oracle across every repro shape in this ticket
+  (single block, two subclass variants, sequential blocks, `E.Message`
+  read-back).
+- `git stash`/`git stash pop` A/B test on i386: pre-fix binary reproduces
+  exit 139 (SIGSEGV) exactly as filed; post-fix binary gives clean output
+  on the identical repro.
+- New regression test `test/test_ctor_string_literal_arg.pas` combines all
+  repro shapes from this ticket into one program; verified byte-identical
+  output across x86-64/arm32/aarch64/i386:
+  `field:hello / c1 / after1 / c2 / after2 / c3 / c4 / after3 / msg:hello / after4`.
+  Wired into `Makefile` for host + i386 + arm32 + aarch64.
+- Full `make test` + all four cross suites (i386/arm32/aarch64/riscv32)
+  green: 559 `ok:` lines, no errors.
+
+Committed as `dcc98ca1` (pin v140).
+
 ## Log
 - 2026-07-01 — Opened while cross-verifying an unrelated except-handler fix.
   Confirmed pre-existing on v127 (pre-fix) baseline via direct testing:
@@ -107,3 +181,7 @@ cause (field layout vs. String/AnsiString ABI differences across targets).
   code shape, runs clean in another; `E.Message` empty on i386/arm32/aarch64
   even where no crash occurs. Not investigated further — out of scope for
   the session that found it.
+- 2026-07-02 — Root-caused and fixed: shared `ir.inc` managed-string-argument
+  materialization excluded constructor calls (`cpi < 0` sentinel). One fix,
+  all four targets. See "Fixed (v140)" above. Both filed symptoms (SIGSEGV
+  and empty `E.Message`) confirmed to share this one root cause.
