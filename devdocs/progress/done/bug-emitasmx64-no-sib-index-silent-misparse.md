@@ -1,7 +1,8 @@
 # `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error
 
 - **Type:** bug (asmtext.inc — diagnostics/coverage gap, low severity) — Track A
-- **Status:** backlog
+- **Status:** done — part 1 (clearer error) landed 2026-07-01, pin v132. Part 2
+  (real SIB encoding) left undone, not needed by any current call site.
 - **Opened:** 2026-07-01 (found during the ongoing `ir_codegen.inc` →
   `EmitAsmX64` migration, [[feature-asm-structured-ir-library]]; corrected
   same day — see Log)
@@ -74,3 +75,11 @@ exact byte length.
   register-name displacement with a fatal error. Rescoped from a safety bug
   to a minor diagnostics/coverage gap. Not blocking anything currently — the
   one site that hit it stays raw `EmitB` either way.
+- 2026-07-01 — Part 1 landed: `AsmTextOperand` (`compiler/asmtext.inc`) now
+  checks `AsmRegNum` on the displacement token before calling
+  `AsmTextParseInt`, and raises `EmitAsmX64: [base+index-register] (SIB)
+  addressing not supported — write it as raw EmitB` instead of the generic
+  "bad integer literal". Verified via the `test_asm_emit_x64.pas` FPC oracle
+  harness (all existing cases still pass; `[rsi+rcx]` now gives the new
+  message). Self-host byte-identical, `make test-asm` green. Part 2 (real
+  SIB encoding) left open — no current call site needs it.

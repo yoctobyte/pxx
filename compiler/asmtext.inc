@@ -244,6 +244,8 @@ begin
     begin
       memDisp := Integer(holes[holeCur]) * sign; Inc(holeCur);
     end
+    else if AsmRegNum(dispStr, dummySize, dummySize) then
+      Error('EmitAsmX64: [base+index-register] (SIB) addressing not supported — write it as raw EmitB')
     else
       memDisp := Integer(AsmTextParseInt(dispStr)) * sign;
     regSize := memSize;   { explicit operand size, 0 if unspecified }

@@ -1,7 +1,11 @@
 # Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3)
 
 - **Type:** bug (consteval / data emission — correctness) — Track A
-- **Status:** backlog
+- **Status:** done — duplicate of [[bug-const-array-of-ansistring-literal-too-many-elements]],
+  which fixed this exact symptom at v115 (2026-07-01). Re-verified 2026-07-01:
+  all three repros in this ticket (1/2/3-element `array of string`) now
+  compile and run correctly (`test/test_const_array_of_string.pas`, already
+  wired into `make test`). Closing without further changes.
 - **Severity:** medium-high — `const Names: array[..] of string = (...)` is a
   very common idiom (month/day names, enum labels, error tables); it is
   completely unusable today.
