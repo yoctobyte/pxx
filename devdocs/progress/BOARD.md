@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,6 @@ _none_
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
-| bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
@@ -140,7 +139,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (403)
+## done (404)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -285,6 +284,7 @@ _none_
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
+| bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
@@ -571,7 +571,6 @@ _none_
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-i386-try-except-segfault
 - [A] bug-integer-div-zero-sigfpe-uncatchable
-- [A] bug-nested-proc-sibling-call-unresolved
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-anonymous-record-type

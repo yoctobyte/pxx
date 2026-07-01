@@ -1,8 +1,8 @@
 # Nested procedure can't call its sibling (and capturing self-recursion breaks)
 
 - **Type:** bug (parser / symtab / static-link — correctness) — Track A
-- **Status:** backlog — **symptom 1 fixed** (pin v133, 2026-07-01); symptom 2
-  (capturing self-recursion arity) still open, see Log
+- **Status:** done — symptom 1 fixed pin v133, symptom 2 fixed pin v138
+  (both 2026-07-01/02)
 - **Opened:** 2026-06-30 (found in Track B latent-bug sweep, against stable v97)
 
 ## Symptom
@@ -151,3 +151,37 @@ correctness here — any mistake in the position-adjustment arithmetic would
 only be caught by hand-written test cases, not by the usual gates. Parking
 so this can get a clear head and thorough FPC-oracle-diffed testing rather
 than being rushed at the tail end of an overnight session.
+
+## Symptom 2 fixed (2026-07-02, pin v138)
+
+Came back to this the same overnight session after the user's feedback
+pushed back on pausing — implemented exactly the plan above: `core[]`
+(the captured-actuals list) moved earlier so it's ready before the needSelf
+block, `namePos[]` positions corrected for the field-prefix shift using the
+`2 * count(fieldPos[j] < namePos[k])` formula, spliced in descending
+corrected-position order.
+
+**The plan's one gap, caught by testing, not by re-reading the plan**: a
+Self-capturing method whose nested routine ALSO self-recurses broke with
+`undefined variable (Self)` — splicing had reused the literal `Self` token
+(built for EXTERNAL call sites, where `Self` is the enclosing method's real
+parameter) for the self-recursive splice too, but `Self` isn't a valid
+identifier inside the now-lifted, top-level routine body — only its OWN
+hidden parameter `__nestself` is. Fixed by building a second `coreSelf` list
+identical to `core` except substituting `__nestself` for `Self`, used only
+for the self-splice path. A captured variable doesn't need this distinction
+(the lifted routine's by-ref param already shares its original name in both
+contexts), so `coreSelf` differs from `core` only in that one slot.
+
+Verified against real FPC output for: plain self-recursion (must-not-
+regress control), capture + self-recursion (the ticket's `m1` repro,
+prints 15), capture + self-recursion + Self-capture together (the case
+that broke on the first attempt), multiple captured vars with multiple
+self-call sites, and a sibling calling a capturing self-recursive routine
+(both symptoms at once — also confirms the two fixes compose correctly).
+Also cross-verified on arm32/aarch64/i386 — this is a front-end-only
+(token-rewriting) fix with no codegen change, so all three match the
+x86-64/FPC output exactly, confirming genuine target-independence.
+`test/test_nested_proc_sibling_call.pas` extended with all of the above.
+Self-host byte-identical (still not exercised by the compiler's own
+source), full `make test` green.
