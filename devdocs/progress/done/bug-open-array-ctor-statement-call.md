@@ -1,9 +1,21 @@
 # Array constructor `[...]` as open-array arg fails at a statement-level call
 
 - **Type:** bug (parser / call lowering — correctness) — Track A
-- **Status:** backlog
+- **Status:** done — fixed 2026-07-01, pin v127
 - **Opened:** 2026-06-30 (Track B latent-bug sweep, against stable v97)
 - **Relates:** regresses part of [[feature-open-array-constructor-arg]] (done 2026-06-23)
+
+## Resolution
+
+Confirmed exactly the predicted cause: `compiler/parser.inc`'s statement-level
+call-arg by-ref check (~line 8755) excluded `AN_VARREC_ARRAY` from the
+"must be a variable" gate but never added `AN_ARRAY_CTOR` alongside it, unlike
+the expression-level check (~line 5248) which already allowed both. One-line
+fix: `and (ASTKind[exprNode] <> AN_ARRAY_CTOR)` added to the same gate.
+Regression test `test/test_open_array_ctor_stmt.pas` (procedure + function
+statement-call with a `[...]` literal, plus an empty-`[]` statement call),
+wired into `make test`. Front-end only — self-host byte-identical (gen1==gen2,
+no lag), full `make test` green, `make stabilize` green.
 
 ## Symptom
 

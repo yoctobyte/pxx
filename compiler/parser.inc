@@ -8753,7 +8753,7 @@ begin
           begin
             exprNode := ASTLeft[currArg];
             if (Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray) and
-               (ASTKind[exprNode] <> AN_VARREC_ARRAY) then
+               (ASTKind[exprNode] <> AN_VARREC_ARRAY) and (ASTKind[exprNode] <> AN_ARRAY_CTOR) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
                       (ASTKind[exprNode] = AN_DEREF)) then

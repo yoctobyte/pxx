@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
-| bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
@@ -147,7 +146,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (393)
+## done (394)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -287,6 +286,7 @@ _none_
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
+| bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
@@ -575,7 +575,6 @@ _none_
 - [A] bug-narrowing-typecast-rvalue-no-truncate
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
-- [A] bug-open-array-ctor-statement-call
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
 - [A] chore-sqlite-static-capacity-bumps

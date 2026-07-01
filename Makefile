@@ -925,6 +925,8 @@ test-core: $(COMPILER)
 	@if grep -qE 'bss=[0-9]{7,}B' /tmp/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log))"; fi
 	./$(COMPILER) test/test_const_open_array_managed.pas /tmp/test_const_open_array_managed26
 	test "$$(/tmp/test_const_open_array_managed26)" = "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
+	./$(COMPILER) test/test_open_array_ctor_stmt.pas /tmp/test_open_array_ctor_stmt26
+	test "$$(/tmp/test_open_array_ctor_stmt26)" = "$$(printf '3\n1 2 3 ')"
 	./$(COMPILER) test/test_open_array_no_leak.pas /tmp/test_open_array_no_leak26
 	test "$$(/tmp/test_open_array_no_leak26)" = "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \
