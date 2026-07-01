@@ -44,6 +44,26 @@ The .asm frontend shipped with the workarounds and is green on self-host. These
 fixes touch core name resolution + the decl-order feature; worth doing properly
 under their own gate rather than inline. Both reproduce trivially (see asmfront.inc).
 
+## Investigation (2026-07-02, item 1 — could not reproduce standalone either)
+
+Tried a standalone repro matching item 1's shape exactly: a `-Fu`-loaded unit
+exporting a record type, and a main-program top-level `function F(v: Integer):
+TOperand;` (the unit's record type as the function's RESULT) called from
+another top-level function before its own definition (exercising the
+two-pass prescan the same way `asmfront.inc` originally did). Compiled and
+ran correctly on the current binary — no `undefined variable (F)` error.
+
+Same outcome as item 2 below: neither of this ticket's two items reproduces
+via a standalone `-Fu` unit. Both were originally found specifically while
+embedding `asmcore` INTO the compiler's own source (multiple `{$i}`
+includes feeding into `compiler.pas`, then self-compiling) — a materially
+different scenario from a normal external unit, and one that's slow and
+somewhat risky to iterate on (requires temporarily modifying `compiler.pas`
+itself and rebuilding, with the self-host gate as a tripwire for mistakes).
+Not attempting that setup this session; leaving both items exactly as
+scoped for whoever next has a block of time to reproduce against the real
+self-hosting scenario rather than a standalone stand-in.
+
 ## Investigation (2026-07-01, item 2 attempted, reverted — could not reproduce)
 
 Tried item 2's suggested fix exactly as described: added
