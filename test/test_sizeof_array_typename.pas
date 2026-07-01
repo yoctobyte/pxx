@@ -34,4 +34,14 @@ begin
   writeln(SizeOf(TEnum));   { 4 }
   writeln(SizeOf(TProc));   { 8, not the shadowed builtin TProc record }
   writeln(SizeOf(TRec));    { 12, named record type (not just a record var) }
+
+  { SizeOf(arr[i]): the index expression is never evaluated (just its
+    balanced brackets skipped), result is the element size -- lets the
+    common SizeOf(arr) div SizeOf(arr[0]) element-count idiom work. }
+  writeln(SizeOf(arr10[0]));                    { 4 }
+  writeln(SizeOf(arr10) div SizeOf(arr10[0]));  { 10 }
+  writeln(SizeOf(bytes[0]));                    { 1 }
+  writeln(SizeOf(recs[0]));                     { 12, record element }
+  writeln(SizeOf(recs) div SizeOf(recs[0]));    { 5 }
+  writeln(SizeOf(arr10[arr10[0] + 1]));         { 4, index expression itself untouched/unevaluated }
 end.

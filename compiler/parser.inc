@@ -3264,7 +3264,7 @@ var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, va
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
-    szAi, szFlatLen, szDi: Integer; szElemTk: TTypeKind;
+    szAi, szFlatLen, szDi, szBrDepth: Integer; szElemTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -4271,7 +4271,46 @@ begin
                   sci := FindSym(name);
                   if sci >= 0 then
                   begin
-                    if Syms[sci].IsArray then
+                    if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
+                       (SymArrNDims[sci] <= 1) then
+                    begin
+                      { SizeOf(arr[i]): the index expression's VALUE is never
+                        evaluated by SizeOf (exactly like a type name's own
+                        contents) -- skip the balanced brackets and report
+                        the array's ELEMENT size, so the common idiom
+                        `SizeOf(arr) div SizeOf(arr[0])` (element count)
+                        works (bug-sizeof-array-and-typename-wrong, the
+                        remaining symptom-2 gap). Only one level of
+                        indexing on a genuinely 1-D array; a chained
+                        `arr[i].field` is out of scope, and an N-D array
+                        (SymArrNDims >= 2) needs its own row/sub-array
+                        accounting depending on how many indices are given
+                        (`m[0]` is a row, `m[0,1]` is a scalar) -- rather
+                        than silently reporting the wrong (scalar) size,
+                        that case falls through to the "unknown" error
+                        below by NOT matching this guard. }
+                      Next;                { consume the identifier; CurTok = '[' }
+                      Next;                { consume '['; CurTok = start of index expr }
+                      szBrDepth := 1;
+                      while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
+                      begin
+                        if CurTok.Kind = tkLBrack then Inc(szBrDepth)
+                        else if CurTok.Kind = tkRBrack then Dec(szBrDepth);
+                        if szBrDepth > 0 then Next;
+                      end;
+                      { CurTok = ']'; the shared trailing Next below moves past
+                        it to the enclosing SizeOf(...)'s ')'. }
+                      if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                        prevTok := RecSize(Syms[sci].ElemRecName)
+                      else
+                        prevTok := TypeSize(Syms[sci].ElemType);
+                    end
+                    else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
+                    begin
+                      Error('SizeOf: indexed access on a multi-dimensional array is not yet supported');
+                      prevTok := 0;
+                    end
+                    else if Syms[sci].IsArray then
                     begin
                       { Array symbols store the ELEMENT type in TypeKind/ElemType
                         (a recurring landmine throughout this codebase), so the
