@@ -1,8 +1,9 @@
 # `SizeOf` wrong for static arrays, and rejects most named types
 
 - **Type:** bug (SizeOf / consteval — correctness) — Track A
-- **Status:** backlog — **Symptom 1 fixed** (pin v131, 2026-07-01); Symptom 2
-  (type-name resolution) still open, see below
+- **Status:** backlog — **Symptom 1 fixed** (pin v131, 2026-07-01); **Symptom 2
+  type-name resolution fixed** (pin v134, 2026-07-01); the `SizeOf(arr[0])`
+  arbitrary-expression-argument part of Symptom 2 is still open, see below
 - **Severity:** high — `SizeOf(arr)` silently returns the wrong number (no error),
   breaking the ubiquitous `SizeOf(buf)` (I/O length) and
   `SizeOf(arr) div SizeOf(arr[0])` (element count) idioms.
@@ -89,6 +90,55 @@ subject to symptom 1 for arrays). So the type-name resolution path only
 recognises `record` types and builtin type names; it should accept any named
 type.
 
+## Progress: Symptom 2 type-name resolution fixed (pin v134)
+
+`SizeOf`'s type-name branch (`compiler/parser.inc`, the `sizeof` intrinsic
+handler) only ever matched `record`/`class` types and hardcoded builtin
+names; anything else (integer alias, named array type, pointer alias, enum,
+set alias, string alias) fell through to the variable-lookup fallback and
+errored. Fixed by mirroring the SAME resolution chain `ParseTypeKind`
+already uses for a `var x: T` declaration:
+
+1. `FindArrayType(name)` first (named array types are resolved outside
+   `ParseTypeKind` in `ParseVarSection`, so they need the same early check
+   here) — aggregate size via `elemSize * Π extents` (or `RecSize` for
+   array-of-record), same formula as Symptom 1. A *dynamic* named array
+   type resolves to `TARGET_PTR_SIZE` (it's a reference/handle, matching
+   FPC: `SizeOf` of a dynamic-array type is the pointer width).
+2. Record/class match — but ONLY if `FindTypeAlias(name) < 0`. This guard
+   is load-bearing: the compiler pre-registers internal RTTI descriptor
+   records under common names (`TProc`, `TParam`, ...), and `ParseTypeKind`
+   already has this exact "user alias shadows builtin record" rule for
+   `var` declarations. Missed this on the first pass — a hand-written test
+   using `TProc = procedure(x: Integer);` (a name that collides with the
+   compiler's own builtin) silently resolved to the WRONG record and
+   printed `704` instead of `8`; caught by diffing against real FPC output
+   before landing, not by self-host (this collision isn't exercised by the
+   compiler's own source).
+3. `FindTypeAlias(name)` — set/pointer/general-scalar/proc-type alias,
+   `TypeSize(AliasTk)`; a `tyRecord`-shaped alias (method-pointer-of-object)
+   uses `RecSize(AliasElemRec)` instead, since `TypeSize(tyRecord)` is a
+   placeholder pointer-width slot, not the real size.
+4. `FindEnumType(name)` — ordinal/integer-sized, matching `ParseTypeKind`'s
+   own comment ("enums are ordinal/integer-sized at codegen").
+5. Existing variable-operand fallback, unchanged.
+
+Verified every case from this ticket's Symptom 2 table plus a named
+array-of-record, a named dynamic-array type, a record-of-record alias, and
+the `TProc`-collision case, all diffed byte-for-byte against real FPC output
+(`fpc -Mobjfpc` with `{$H+}`) — including the one pre-existing, deliberate
+divergence: this compiler represents EVERY set as a fixed 32-byte bitset
+regardless of element-range (`TypeSize(tySet) = 32` everywhere, already true
+for `SizeOf(setVariable)` before this fix too), where FPC packs small sets
+tighter; not a regression, just this dialect's existing set-size model.
+`test/test_sizeof_array_typename.pas` extended with 8 new cases (including
+the `TProc` shadow case) instead of a new file. Self-host byte-identical,
+full `make test` green.
+
+**Still open:** `SizeOf(arr) div SizeOf(arr[0])` (an arbitrary INDEXED
+EXPRESSION as the argument, not just a bare identifier/type name) — not
+attempted this pass, see Acceptance below.
+
 ## Likely cause
 
 Two adjacent gaps in the `SizeOf` argument handler: (a) for an array operand it
@@ -101,11 +151,11 @@ same underlying "byte size of this type" helper that record types already use.
 
 - [x] `SizeOf(arrayVar)` yields the aggregate size; the table above matches;
       multi-dim arrays multiply all extents. **Done, pin v131.**
-- [ ] `SizeOf(T)` works for every named type kind (alias, array, pointer, enum,
-      set, string, record) — Symptom 2, still open.
+- [x] `SizeOf(T)` works for every named type kind (alias, array, pointer, enum,
+      set, string, record) — Symptom 2 type-name resolution. **Done, pin v134.**
 - [ ] `SizeOf(arr) div SizeOf(arr[0])` gives the element count — needs
       `SizeOf` to accept an arbitrary expression argument (indexed
       expression), not just a bare identifier; effectively part of Symptom 2's
-      "SizeOf should accept more than a name" scope.
+      "SizeOf should accept more than a name" scope. Still open.
 - [x] Regression test (`test/test_sizeof_array_typename.pas`) wired into
-      `make test`; self-host stays byte-identical. **Done, covers Symptom 1.**
+      `make test`; self-host stays byte-identical. **Done, covers Symptoms 1 and 2.**

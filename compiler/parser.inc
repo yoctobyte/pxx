@@ -3264,6 +3264,7 @@ var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, va
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
+    szAi, szFlatLen, szDi: Integer; szElemTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -4196,7 +4197,12 @@ begin
             prevTok := TypeSize(tyString)
           else
           begin
-            { Try record/class type }
+            { Try record/class type. A user `type X = ...` alias SHADOWS a
+              same-named builtin descriptor record (the compiler exposes
+              internal RTTI records like TProc/TParam under common names —
+              see ParseTypeKind's identical guard) — only accept the record
+              match if no user alias claims the same name, otherwise fall
+              through to the alias branch below. }
             idx := IsRecordType(name);
             if idx = REC_NONE then
             begin
@@ -4204,39 +4210,90 @@ begin
               if ci >= 0 then
                 idx := REC_UCLASS_BASE + ci;
             end;
-            if idx <> REC_NONE then
+            if (idx <> REC_NONE) and (FindTypeAlias(name) < 0) then
               prevTok := RecSize(idx)
             else
             begin
-              { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
-                SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
-                A record-by-value var uses its record size; everything else its
-                scalar type size (TypeSize returns pointer width for class/
-                pointer references). }
-              sci := FindSym(name);
-              if sci >= 0 then
+              { Named array type (`TArr = array[..] of T` / `array of T`):
+                mirrors ParseVarSection's FindArrayType check, which resolves
+                this BEFORE falling into ParseTypeKind's alias/enum lookup --
+                so it must be tried here too, ahead of FindTypeAlias/
+                FindEnumType below. A dynamic-array alias is a reference
+                (handle), so its SizeOf is just the pointer width, same as
+                any other managed handle. }
+              szAi := FindArrayType(name);
+              if szAi >= 0 then
               begin
-                if Syms[sci].IsArray then
-                begin
-                  { Array symbols store the ELEMENT type in TypeKind/ElemType
-                    (a recurring landmine throughout this codebase), so the
-                    aggregate size is elementSize * ArrLen (ArrLen already
-                    holds the flattened element count for N-D arrays too --
-                    see bug-sizeof-array-and-typename-wrong). }
-                  if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
-                    prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
-                  else
-                    prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
-                end
-                else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
-                  prevTok := RecSize(Syms[sci].RecName)
+                if ArrTypeIsDyn[szAi] then
+                  prevTok := TARGET_PTR_SIZE
                 else
-                  prevTok := TypeSize(Syms[sci].TypeKind);
+                begin
+                  if ArrTypeNDims[szAi] >= 2 then
+                  begin
+                    szFlatLen := 1;
+                    for szDi := 0 to ArrTypeNDims[szAi] - 1 do
+                      szFlatLen := szFlatLen * ArrTypeDimSpan[szAi * MAX_ARR_DIMS + szDi];
+                  end
+                  else
+                    szFlatLen := ArrTypeHi[szAi] - ArrTypeLo[szAi] + 1;
+                  szElemTk := IntToTypeKind(ArrTypeElemTk[szAi]);
+                  if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
+                    prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
+                  else
+                    prevTok := TypeSize(szElemTk) * szFlatLen;
+                end;
               end
               else
               begin
-                Error('SizeOf: unknown type or variable');
-                prevTok := 0;
+                { Named type alias (integer/pointer/set/enum/proc-type alias --
+                  anything ParseTypeKind resolves via FindTypeAlias/
+                  FindEnumType for a `var x: T` declaration) or a named enum
+                  type. Mirrors ParseTypeKind's tkIdent branch so `SizeOf(T)`
+                  accepts the same type names a variable declaration does
+                  (bug-sizeof-array-and-typename-wrong, symptom 2). }
+                aliasIdx := FindTypeAlias(name);
+                if aliasIdx >= 0 then
+                begin
+                  if AliasTk[aliasIdx] = Ord(tyRecord) then
+                    prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
+                  else
+                    prevTok := TypeSize(IntToTypeKind(AliasTk[aliasIdx]));
+                end
+                else if FindEnumType(name) >= 0 then
+                  prevTok := TypeSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
+                else
+                begin
+                  { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
+                    SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
+                    A record-by-value var uses its record size; everything else its
+                    scalar type size (TypeSize returns pointer width for class/
+                    pointer references). }
+                  sci := FindSym(name);
+                  if sci >= 0 then
+                  begin
+                    if Syms[sci].IsArray then
+                    begin
+                      { Array symbols store the ELEMENT type in TypeKind/ElemType
+                        (a recurring landmine throughout this codebase), so the
+                        aggregate size is elementSize * ArrLen (ArrLen already
+                        holds the flattened element count for N-D arrays too --
+                        see bug-sizeof-array-and-typename-wrong). }
+                      if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                        prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
+                      else
+                        prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                    end
+                    else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
+                      prevTok := RecSize(Syms[sci].RecName)
+                    else
+                      prevTok := TypeSize(Syms[sci].TypeKind);
+                  end
+                  else
+                  begin
+                    Error('SizeOf: unknown type or variable');
+                    prevTok := 0;
+                  end;
+                end;
               end;
             end;
           end;

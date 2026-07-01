@@ -964,7 +964,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_var_nd_array_string_init.pas /tmp/test_var_nd_array_string_init26
 	test "$$(/tmp/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
 	./$(COMPILER) test/test_sizeof_array_typename.pas /tmp/test_sizeof_array_typename26
-	test "$$(/tmp/test_sizeof_array_typename26)" = "$$(printf '40\n12\n16\n60\n36\n12')"
+	test "$$(/tmp/test_sizeof_array_typename26)" = "$$(printf '40\n12\n16\n60\n36\n12\n4\n40\n60\n8\n8\n4\n8\n12')"
 	./$(COMPILER) test/test_untyped_params.pas /tmp/test_untyped_params26
 	test "$$(/tmp/test_untyped_params26)" = "$$(printf '7 7 7 7 \n7 7 7 7 ')"
 	./$(COMPILER) test/test_string_delete_insert.pas /tmp/test_string_delete_insert26
