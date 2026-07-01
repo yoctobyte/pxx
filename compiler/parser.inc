@@ -8588,10 +8588,14 @@ begin
         ASTIVal[node] := -100;
         ASTLeft[node] := argSeq;
       end
-      else if CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude') then
+      else if (CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude')) and
+              (FindProc(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Include(s, v) / Exclude(s, v): set/clear bit v in set s at runtime.
-          Left = set lvalue, Right = value expr (lowered via IRLowerSetBitMutate). }
+          Left = set lvalue, Right = value expr (lowered via IRLowerSetBitMutate).
+          Guarded like New/Insert/Delete/Str above: a user proc of the same
+          name shadows this, and a plain variable named `include`/`exclude`
+          not followed by `(` is not the intrinsic. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('Include/Exclude: expected set variable');
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
@@ -8647,8 +8651,12 @@ begin
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := opNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
       end
-      else if CaseEqual(name, 'SetLength') then
+      else if CaseEqual(name, 'SetLength') and (FindProc('SetLength') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
+        { Guarded like New/Insert/Delete/Str above: a user proc named
+          `SetLength` shadows this, and a plain variable named
+          `setlength`/`SetLength` not followed by `(` is not the intrinsic. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
         { Bare function name as the SetLength target = the result var (FPC: `F`
@@ -8718,11 +8726,14 @@ begin
         end;
         node := BuildMultiSetLen(valNode, slIsArrTarget);
       end
-      else if CaseEqual(name, 'New') then
+      else if CaseEqual(name, 'New') and (FindProc('New') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
         { New(p): allocate SizeOf(p^) and store the block into the pointer p.
           Equivalent to p := GetMem(SizeOf(p^)); size comes from p's element
-          type. }
+          type. Guarded like Insert/Delete/Str: a user proc named `New`
+          shadows this, and a plain variable named `new`/`New` not followed
+          by `(` (assignment, etc.) is not the intrinsic. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('New: expected pointer variable');
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
@@ -8742,9 +8753,11 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if CaseEqual(name, 'Dispose') then
+      else if CaseEqual(name, 'Dispose') and (FindProc('Dispose') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
-        { Dispose(p): return the block to the free list (= FreeMem(p)). }
+        { Dispose(p): return the block to the free list (= FreeMem(p)).
+          Guarded like New above. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
         Expect(tkRParen, ')');
@@ -8753,13 +8766,14 @@ begin
         ASTIVal[node] := -Ord(tkFreeMem);
         ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
       end
-      else if CaseEqual(name, 'ReallocMem') then
+      else if CaseEqual(name, 'ReallocMem') and (FindProc('ReallocMem') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
       begin
         { ReallocMem(p, newsize): resize the block p points at, preserving
           min(oldsize, newsize) bytes, and store the new pointer back into p.
           Old size comes from the block's header; old block is freed. Modelled
           as p := <realloc>(p, newsize) (special id -103). p must be a simple
-          pointer variable. }
+          pointer variable. Guarded like New above. }
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;

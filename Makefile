@@ -1306,6 +1306,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_reallocmem26)" = "$$(printf '1\n50\n1\n1\n1\n77')"
 	./$(COMPILER) test/test_str_val.pas /tmp/test_str_val26
 	test "$$(/tmp/test_str_val26)" = "$$(printf '42\n-7\n0\n[  1234]\n100\n0\n-25\n0\n2\n1\nabc\n3')"
+	./$(COMPILER) test/test_intrinsic_name_var_no_collision.pas /tmp/test_intrinsic_name_var_no_collision26
+	test "$$(/tmp/test_intrinsic_name_var_no_collision26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7')"
 	./$(COMPILER) test/test_assign_types.pas /tmp/test_assign_types26
 	test "$$(/tmp/test_assign_types26)" = "$$(printf 'foobarbaz\nHi world!\nx\nQ\nhello\nY\n65')"
 	./$(COMPILER) test/test_method_named_result.pas /tmp/test_method_named_result26
