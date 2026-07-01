@@ -6106,6 +6106,8 @@ var
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
   curDeref: Integer;
 begin
+  if Syms[varIdx].TypeKind = tyAuto then
+    Error('for var .. in <generator>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
   nargs := 0;
@@ -6329,6 +6331,8 @@ var
   freeCall, tryNode: Integer;
   contTk: TTypeKind;
 begin
+  if Syms[varIdx].TypeKind = tyAuto then
+    Error('for var .. in <GetEnumerator>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
@@ -6433,6 +6437,13 @@ end;
 function ParseForInSetAST(varIdx, setSym: Integer): Integer;
 var bodyNode: Integer;
 begin
+  { Inline `for var x in setVar`: backfill x's type from the set's element
+    base type before the body is parsed (feature-inline-loop-var-rio). }
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    if SymSetElemTk[setSym] = Ord(tyChar) then Syms[varIdx].TypeKind := tyChar
+    else Syms[varIdx].TypeKind := tyInteger;
+  end;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
   Result := BuildForInSetLoop(varIdx, SymSetEnumId[setSym], SymSetElemTk[setSym],
@@ -6541,9 +6552,6 @@ begin
     Exit;
   end;
 
-  Expect(tkDo, 'do');
-  bodyNode := ParseStatementAST;
-
   contTk := Syms[contSym].TypeKind;
   { A real string container is a non-array string var. For `array of String` /
     `array of AnsiString` the var's TypeKind is the element base type
@@ -6555,6 +6563,19 @@ begin
   if isString then elemTk := Ord(tyChar)
   else if Syms[contSym].IsArray then elemTk := Ord(Syms[contSym].ElemType)
   else begin Error('for-in: variable is not a string or array'); elemTk := Ord(tyInteger); end;
+
+  { Inline `for var x in coll`: backfill x's inferred type from the
+    container's element type before the body is parsed, so a use of x
+    inside the body resolves (feature-inline-loop-var-rio). }
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
+    if (IntToTypeKind(elemTk) = tyRecord) and Syms[contSym].IsArray then
+      Syms[varIdx].RecName := Syms[contSym].ElemRecName;
+  end;
+
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, -1, contTk,
     isString, isStaticArr, Syms[contSym].IsArray,
@@ -6573,9 +6594,6 @@ var
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
 begin
-  Expect(tkDo, 'do');
-  bodyNode := ParseStatementAST;
-
   contTk := IntToTypeKind(UFldTk[fldIdx]);
   isArr := UFldIsArray[fldIdx];
   staticLen := UFldArrLen[fldIdx];
@@ -6585,6 +6603,21 @@ begin
   if isString then elemTk := Ord(tyChar)
   else if isArr then elemTk := UFldTk[fldIdx]
   else begin Error('for-in: implicit-Self field is not a string or array'); elemTk := Ord(tyInteger); end;
+
+  { Inline `for var x in SelfArrayField`: backfill x's type before the body is
+    parsed (feature-inline-loop-var-rio). A record-element field array has no
+    element-record lookup wired here (unlike the plain-var path's
+    Syms[].ElemRecName) -- reject explicitly rather than silently leave the
+    loop var's RecName unset. }
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    if IntToTypeKind(elemTk) = tyRecord then
+      Error('for var .. in <implicit-Self record-array field>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
+    Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
+  end;
+
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 1, -1, selfSym, fOff, fLen, -1, contTk,
     isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
@@ -6605,9 +6638,6 @@ var
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
 begin
-  Expect(tkDo, 'do');
-  bodyNode := ParseStatementAST;
-
   isArr := IsNodeArray(contNode);
   staticLen := -1;
   setEnumId := -1; setElemTk := 0;
@@ -6646,6 +6676,15 @@ begin
     node is cloned so the loop builder owns a private copy. }
   if contTk = tySet then
   begin
+    { Inline `for var x in obj.field` over a set: backfill before the body is
+      parsed, mirroring ParseForInSetAST (feature-inline-loop-var-rio). }
+    if Syms[varIdx].TypeKind = tyAuto then
+    begin
+      if setElemTk = Ord(tyChar) then Syms[varIdx].TypeKind := tyChar
+      else Syms[varIdx].TypeKind := tyInteger;
+    end;
+    Expect(tkDo, 'do');
+    bodyNode := ParseStatementAST;
     Result := BuildForInSetLoop(varIdx, setEnumId, setElemTk, CloneAST(contNode), bodyNode);
     Exit;
   end;
@@ -6653,6 +6692,24 @@ begin
   isStaticArr := isArr and (staticLen >= 0);
   isString := (not isArr) and ((contTk = tyString) or (contTk = tyAnsiString));
   if isString then elemTk := Ord(tyChar);
+
+  { Inline `for var x in obj.arr` / a qualified array/string source: backfill
+    x's type before the body is parsed (feature-inline-loop-var-rio). The
+    AN_FIELD source has no element-record lookup wired here (same limitation
+    as ParseForInFieldAST) -- reject explicitly for a record element rather
+    than silently leave RecName unset; the AN_IDENT source has one via
+    Syms[].ElemRecName, mirroring ParseForInVarAST. }
+  if Syms[varIdx].TypeKind = tyAuto then
+  begin
+    if (IntToTypeKind(elemTk) = tyRecord) and (ASTKind[contNode] <> AN_IDENT) then
+      Error('for var .. in <record-array field access>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
+    Syms[varIdx].TypeKind := IntToTypeKind(elemTk);
+    if (IntToTypeKind(elemTk) = tyRecord) and (ASTKind[contNode] = AN_IDENT) and isArr then
+      Syms[varIdx].RecName := Syms[ASTIVal[contNode]].ElemRecName;
+  end;
+
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 2, -1, -1, 0, 0, contNode, contTk,
     isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
@@ -6666,6 +6723,11 @@ var
   bodyNode, initN, condN, incN, whileN, innerSeq: Integer;
   cnt, vtk: Integer;
 begin
+  { Inline `for var x in TEnum`: enums are ordinal/integer-sized (no distinct
+    tyEnum), so backfilling x's type is just tyInteger, mirroring the
+    resolution ParseTypeKind already uses for a named enum type
+    (feature-inline-loop-var-rio). }
+  if Syms[varIdx].TypeKind = tyAuto then Syms[varIdx].TypeKind := tyInteger;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
@@ -7172,12 +7234,17 @@ begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
   if inlineVar then
   begin
-    { v1: counted `for var i := a to b` only — declare a fresh Integer counter.
-      The for-in form `for var x in c` (element-type inference into the loop var)
-      is filed separately: feature-inline-loop-var-rio. }
+    { Counted `for var i := a to b`: fresh Integer counter. For-in
+      `for var x in c`: fresh tyAuto local; each ParseForIn*AST variant that
+      supports it backfills Syms[varIdx].TypeKind (and RecName, for a record
+      element) from the iterable's element type before parsing the loop body,
+      so a use of x inside the body resolves -- see feature-inline-loop-var-rio.
+      Variants that don't support it yet (generator / GetEnumerator) reject a
+      tyAuto loop var with their own clear error. }
     if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIn) then
-      Error('for var .. in: inline loop variable in a for-in is not yet supported — declare the variable (feature-inline-loop-var-rio)');
-    varIdx := AllocVar(CurTok.SVal, tyInteger);
+      varIdx := AllocVar(CurTok.SVal, tyAuto)
+    else
+      varIdx := AllocVar(CurTok.SVal, tyInteger);
   end
   else
   begin
