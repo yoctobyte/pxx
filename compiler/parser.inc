@@ -11746,6 +11746,7 @@ var
   ins: array[0..7] of TRawToken;
   parentBegin, parentEnd: Integer;
   k: Integer;
+  shift, tmpPos: Integer;
   { captured enclosing locals/params (snapshot at the capture site) }
   capNm: array[0..MAX_NEST_CAPS-1] of AnsiString;
   capTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
@@ -11756,6 +11757,9 @@ var
   capCount: Integer;
   core: array[0..2*MAX_NEST_CAPS+3] of TRawToken;
   coreCount, nact, emitted: Integer;
+  coreSelf: array[0..2*MAX_NEST_CAPS+3] of TRawToken;
+  coreSelfCount: Integer;
+  nestSelfOff, nestSelfLen: Integer;
   ins2: array[0..2*MAX_NEST_CAPS+7] of TRawToken;
   ins2Count, rp: Integer;
 begin
@@ -11910,13 +11914,13 @@ begin
   mOff := NestStrOff(mangled); mLen := Length(mangled);
   Tokens[nameTokIdx].SOffset := mOff;
   Tokens[nameTokIdx].SLen := mLen;
-  { Body refs to the own name (result var / recursion) follow the mangle (in
-    place, no shift — done before the field-prefix inserts below). }
-  for k := 0 to nameCnt - 1 do
-  begin
-    Tokens[namePos[k]].SOffset := mOff;
-    Tokens[namePos[k]].SLen := mLen;
-  end;
+  { Body refs to the own name (result var / recursion) are handled below,
+    AFTER the field-prefix inserts (needSelf block) -- a self-referencing
+    call may need the same extra actuals (Self/captures) a sibling call
+    gets, which requires knowing whether the field-prefix pass shifted this
+    occurrence's token position first (bug-nested-proc-sibling-call-
+    unresolved symptom 2: a capturing nested routine's self-recursive call
+    was missing its hidden captured-frame argument). }
 
   { Record the lift descriptor consumed by ParseSubroutine to inject the captured
     params (Self + by-ref enclosing vars). }
@@ -11942,6 +11946,56 @@ begin
   end;
   Inc(LiftCount);
 
+  { Build the comma-separated actual list `Self, cap0, cap1, ...` (no outer
+    parens) for external call sites (enclosing body / sibling routines,
+    below). A self-recursive call site needs the same captured-var actuals
+    but CANNOT use the literal `Self` -- that identifier isn't in scope
+    inside the now-lifted, top-level routine body; the routine's own hidden
+    parameter is named `__nestself` instead (captured vars, by contrast, use
+    the SAME name either way, since the lifted routine's by-ref param shares
+    the captured var's original name). `coreSelf` mirrors `core` with that
+    one substitution, built alongside it so both are ready before the
+    needSelf block runs. Moved earlier than the original single use site so
+    both this and the self-splice below can share them. }
+  selfOff := NestStrOff('Self');
+  nestSelfOff := NestStrOff('__nestself'); nestSelfLen := 10;
+  for k := 0 to capCount - 1 do
+    capActOff[k] := NestStrOff(capNm[k]);
+  coreCount := 0; emitted := 0;
+  if needSelf then
+  begin
+    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+    core[coreCount].SOffset := selfOff; core[coreCount].SLen := 4; Inc(coreCount); Inc(emitted);
+  end;
+  for k := 0 to capCount - 1 do
+  begin
+    if emitted > 0 then
+    begin
+      core[coreCount].Kind := tkComma; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+      core[coreCount].SOffset := 0; core[coreCount].SLen := 0; Inc(coreCount);
+    end;
+    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+    core[coreCount].SOffset := capActOff[k]; core[coreCount].SLen := Length(capNm[k]); Inc(coreCount); Inc(emitted);
+  end;
+  nact := emitted;
+
+  coreSelfCount := 0; emitted := 0;
+  if needSelf then
+  begin
+    coreSelf[coreSelfCount].Kind := tkIdent; coreSelf[coreSelfCount].IVal := 0; coreSelf[coreSelfCount].Line := 0;
+    coreSelf[coreSelfCount].SOffset := nestSelfOff; coreSelf[coreSelfCount].SLen := nestSelfLen; Inc(coreSelfCount); Inc(emitted);
+  end;
+  for k := 0 to capCount - 1 do
+  begin
+    if emitted > 0 then
+    begin
+      coreSelf[coreSelfCount].Kind := tkComma; coreSelf[coreSelfCount].IVal := 0; coreSelf[coreSelfCount].Line := 0;
+      coreSelf[coreSelfCount].SOffset := 0; coreSelf[coreSelfCount].SLen := 0; Inc(coreSelfCount);
+    end;
+    coreSelf[coreSelfCount].Kind := tkIdent; coreSelf[coreSelfCount].IVal := 0; coreSelf[coreSelfCount].Line := 0;
+    coreSelf[coreSelfCount].SOffset := capActOff[k]; coreSelf[coreSelfCount].SLen := Length(capNm[k]); Inc(coreSelfCount); Inc(emitted);
+  end;
+
   { Body rewrites for Self capture: rename explicit `Self`, prefix `__nestself .`
     on each implicit field/method ref. Captured locals need no body rewrite — the
     injected by-ref param shares their name. }
@@ -11964,31 +12018,79 @@ begin
     NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);   { field prefixes shifted positions }
   end;
 
-  { Rewrite call sites in the enclosing body: rename to the mangled name and
-    append the extra actuals (`Self` then each captured var, by name). Find the
-    enclosing 'begin' by skipping any sibling nested routines that still carry a
-    body (later siblings, not yet forward-rewritten). }
-  selfOff := NestStrOff('Self');
-  for k := 0 to capCount - 1 do
-    capActOff[k] := NestStrOff(capNm[k]);
-  { build the comma-separated actual list `Self, cap0, cap1, ...` (no outer parens) }
-  coreCount := 0; emitted := 0;
-  if needSelf then
+  { Body refs to the own name (result-var write, or a self-recursive call):
+    rename to the mangled name; a genuine recursive CALL (not a result-var
+    write, detected by NOT being followed by `:=`) also needs the same extra
+    actuals (Self/captures) spliced in when this routine captures anything
+    (nact > 0) -- the lifted routine's own by-ref capture params share the
+    captured var's original name, so re-passing e.g. `acc` from inside a
+    recursive call correctly forwards the same by-ref binding transitively.
+    Without this, a capturing routine's self-call kept the OLD (pre-lift)
+    arity, one hidden arg short (bug-nested-proc-sibling-call-unresolved
+    symptom 2).
+
+    namePos[] positions were captured during the free-variable scan, in the
+    SAME pass as fieldPos[] -- and the needSelf block above may have already
+    inserted 2 tokens at each fieldPos[] location. Any namePos[k] whose
+    ORIGINAL position was past a given fieldPos[] entry has silently shifted
+    by +2 for it (insertions preserve relative order, so the total shift for
+    a stationary point is exactly 2 * count(fieldPos[j] < namePos[k]),
+    independent of processing order). Correct for that, then splice in
+    descending corrected-position order (mirroring fieldPos[]'s own pattern)
+    so each insertion doesn't invalidate a not-yet-processed lower position. }
+  for k := 0 to nameCnt - 1 do
   begin
-    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
-    core[coreCount].SOffset := selfOff; core[coreCount].SLen := 4; Inc(coreCount); Inc(emitted);
+    shift := 0;
+    for j := 0 to fieldCnt - 1 do
+      if fieldPos[j] < namePos[k] then Inc(shift, 2);
+    namePos[k] := namePos[k] + shift;
   end;
-  for k := 0 to capCount - 1 do
+  for k := 1 to nameCnt - 1 do
   begin
-    if emitted > 0 then
+    tmpPos := namePos[k]; j := k - 1;
+    while (j >= 0) and (namePos[j] < tmpPos) do
     begin
-      core[coreCount].Kind := tkComma; core[coreCount].IVal := 0; core[coreCount].Line := 0;
-      core[coreCount].SOffset := 0; core[coreCount].SLen := 0; Inc(coreCount);
+      namePos[j + 1] := namePos[j]; Dec(j);
     end;
-    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
-    core[coreCount].SOffset := capActOff[k]; core[coreCount].SLen := Length(capNm[k]); Inc(coreCount); Inc(emitted);
+    namePos[j + 1] := tmpPos;
   end;
-  nact := emitted;
+  for k := 0 to nameCnt - 1 do
+  begin
+    Tokens[namePos[k]].SOffset := mOff;
+    Tokens[namePos[k]].SLen := mLen;
+    if (nact > 0) and (Tokens[namePos[k] + 1].Kind <> tkAssign) then
+    begin
+      if Tokens[namePos[k] + 1].Kind = tkLParen then
+      begin
+        depth := 0; rp := namePos[k] + 1;
+        while rp < TokCount do
+        begin
+          if Tokens[rp].Kind = tkLParen then Inc(depth)
+          else if Tokens[rp].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
+          Inc(rp);
+        end;
+        ins2Count := 0;
+        if Tokens[namePos[k] + 2].Kind <> tkRParen then
+        begin
+          ins2[0].Kind := tkComma; ins2[0].IVal := 0; ins2[0].Line := Tokens[namePos[k]].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
+          ins2Count := 1;
+        end;
+        for j := 0 to coreSelfCount - 1 do begin ins2[ins2Count] := coreSelf[j]; ins2[ins2Count].Line := Tokens[namePos[k]].Line; Inc(ins2Count); end;
+        InsertTokens(rp, ins2, ins2Count);
+      end
+      else
+      begin
+        { bare self-call `name;` -> `name( __nestself, ... )` }
+        ins2[0].Kind := tkLParen; ins2[0].IVal := 0; ins2[0].Line := Tokens[namePos[k]].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
+        ins2Count := 1;
+        for j := 0 to coreSelfCount - 1 do begin ins2[ins2Count] := coreSelf[j]; ins2[ins2Count].Line := Tokens[namePos[k]].Line; Inc(ins2Count); end;
+        ins2[ins2Count].Kind := tkRParen; ins2[ins2Count].IVal := 0; ins2[ins2Count].Line := Tokens[namePos[k]].Line; ins2[ins2Count].SOffset := 0; ins2[ins2Count].SLen := 0; Inc(ins2Count);
+        InsertTokens(namePos[k] + 1, ins2, ins2Count);
+      end;
+    end;
+  end;
+  if (nact > 0) and (nameCnt > 0) then
+    NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);   { self-call splices may have shifted positions }
 
   i := finalCur; parentBegin := -1;
   while i < TokCount do
