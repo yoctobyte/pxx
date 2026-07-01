@@ -92,10 +92,12 @@ codegen untouched); pinned v65.
   arm32 record-param ABI widened to r0:r1 (caller + prologue), tracked here as the
   remaining arm32 item.
 
-  2026-07-01: this residual has its own ticket now —
-  [[bug-arm32-record-byvalue-over-4-bytes-abi-gap]] — found
-  independently via a crash repro, then traced back to this exact gap
-  (`IR_LOAD_SYM`/`IR_LOAD_MEM`/the by-value call-arg loop all still only
-  handle 4 bytes). Pick up there for the concrete 3-site fix list.
+  2026-07-01/02: **fixed** — see [[bug-arm32-record-byvalue-over-4-bytes-abi-gap]]
+  (pin v137). Found independently via a crash repro, traced back to this
+  exact gap, then widened at four sites: `IR_LOAD_SYM`, the by-value
+  call-arg push loop, the callee's prologue param-spill, and (found only
+  once the first three regressed a mixed-param case) `symtab.inc`'s
+  `AllocParam`, which reserved just `TARGET_PTR_SIZE` for any record param
+  — 8 bytes on 64-bit targets (already enough) but only 4 on arm32/i386.
 - **i386**: still rejects *any* by-value record param ("only ordinal/pointer
   parameters supported yet") — a broader i386 maturity gap, untouched.

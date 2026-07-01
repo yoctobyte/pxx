@@ -24,12 +24,11 @@ _none_
 
 _none_
 
-## backlog (78)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
-| bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
@@ -141,7 +140,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (402)
+## done (403)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -150,6 +149,7 @@ _none_
 | bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
 | bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
+| bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
@@ -565,7 +565,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
-- [A] bug-arm32-record-byvalue-over-4-bytes-abi-gap
 - [A] bug-c-arrow-on-array-store-of-call-result-clobbered
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack

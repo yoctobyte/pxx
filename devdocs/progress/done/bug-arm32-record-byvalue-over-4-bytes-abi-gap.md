@@ -7,7 +7,7 @@
 
 
 - **Type:** bug (arm32 backend — codegen, record-by-value call ABI) — Track A
-- **Status:** backlog
+- **Status:** done — fixed pin v137, 2026-07-01/02
 - **Severity:** medium — cross-target only (arm32), narrow trigger shape, but a
   clean SIGSEGV with no diagnostic.
 - **Opened:** 2026-07-01 (found while cross-verifying the fix for
@@ -144,3 +144,46 @@ filing separately since the symptom (specific two-call sequence) and area
   instead of the vague "investigate the two-call interaction" framing this
   ticket opened with — whoever picks it up next should start from the
   three call sites above, not re-derive them.
+
+## Fixed (2026-07-01/02, pin v137)
+
+Came back to this the same session after landing the nested-dynarray fix,
+since the root cause was now precise rather than vague. Widened all three
+call sites identified above (`IR_LOAD_SYM`, the by-value call-arg push loop,
+and — found by tracing the actual prologue spill code in `parser.inc` — the
+callee's param-spill loop, a fourth site not yet located when this ticket
+was first parked) to treat a plain by-value `tyRecord` param with
+`RecSize` in `(4, 8]` as two words, exactly mirroring the existing
+Int64/Double handling already proven correct at every register/stack
+boundary shape.
+
+**A fix at just those sites regressed a case that used to merely lose data**:
+a record arg mixed among scalar params (`f1(x: integer; r: TPlain; y:
+integer)`) now printed `x=8` instead of `1` — the record's second word
+correctly loaded into registers, but then WRITTEN past the end of the
+record's own 4-byte frame slot into the adjacent parameter's slot,
+corrupting it. Root cause: `compiler/symtab.inc`'s `AllocParam` (shared,
+target-independent!) always reserved exactly `TARGET_PTR_SIZE` bytes for
+ANY record param, which happens to be 8 on x86-64/aarch64 (already enough
+for any ≤8-byte record — invisible there) but only 4 on arm32/i386. Widened
+the reservation to the real `RecSize` (capped at 8, floored at
+`TARGET_PTR_SIZE`) for exactly this case — verified as a no-op on 64-bit
+targets via self-host byte-identical (the branch computes the identical
+value there), so only 32-bit targets actually change.
+
+This also almost certainly explains why this ticket's ORIGINAL two-call
+crash symptom existed at all: re-running the exact original repro
+(`modPlain(p)` then `modMan(m)`) after the full fix, the crash is gone and
+output matches the x86-64 oracle exactly (`1,2` then `1,orig`) — strong
+retroactive confirmation that the "silently drops data + (once partially
+fixed) corrupts the adjacent slot" bug was the real mechanism, not a
+separate register/stack-state issue from the small-record call as
+originally hypothesized in the Direction section above.
+
+Verified against the x86-64 oracle for: a lone record arg, a record BEFORE
+other scalar params, a record straddling the r0-r3/stack boundary, a record
+entirely on the stack, and a record with an odd (non-power-of-2, e.g. 5 or
+7 conceptual) byte size. `test/test_arm32_record_byval_wide.pas` added,
+wired into both `test-arm32` and `test-aarch64` (i386 still rejects any
+by-value record param outright — separate, pre-existing, unaffected). Full
+`make test` + all four cross suites (i386/arm32/aarch64/riscv32) green.
