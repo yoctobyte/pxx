@@ -47,6 +47,9 @@ examples/**/*.map
 
 # Release build output (tools/release.sh assembles dist/ each run; never commit it).
 /dist/
+# Docs website build output (tools/build_docs_site.py assembles it each run;
+# published via the pages.yml workflow, never committed).
+/_site/
 # Stray top-level build outputs (e.g. a misfired `gcc -o` that wrote literal "-o").
 /-o
 /-o.map
