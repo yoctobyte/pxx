@@ -1507,6 +1507,19 @@ begin
     else if isRefArg then
     begin
       if not IsASTLValue(argAST) then
+        needTemp := True
+      else if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
+              not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx] then
+        { A plain (no var/const/out) record param over 8 bytes is promoted to
+          by-ref purely for ABI efficiency (avoid a large by-value copy through
+          registers/stack) -- `isRefArg` is True here for that reason alone, NOT
+          because the user asked for aliasing. An lvalue argument passed
+          straight through by address would let the callee mutate the CALLER's
+          storage, breaking by-value semantics (bug-byvalue-record-managed-
+          field-aliases-caller). ProcParamExplicitByRef is False only for this
+          silently-promoted case (True for genuine var/out and for const,
+          which correctly keep aliasing semantics), so force the same private-
+          copy path used for a non-lvalue argument. }
         needTemp := True;
     end
     else
