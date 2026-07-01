@@ -1,8 +1,53 @@
 # EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host
 
 - **Type:** bug (codegen — critical, blocks in-progress work) — Track A
-- **Status:** done — fixed by reverting the 4 unsafe procedures, keeping the 4
-  verified-safe ones
+- **Status:** done — **TRUE ROOT CAUSE FOUND & FIXED (2026-07-01, v118).** The
+  `EmitAsmX64` conversion was **innocent**; it merely reshaped the allocator free
+  list enough to expose a pre-existing, all-programs OOM in the inline AnsiString
+  `SetLength` grow codegen. See "REAL ROOT CAUSE" below. (Earlier interim
+  resolution: reverted the 4 procedures — no longer the operative fix.)
+
+## REAL ROOT CAUSE (2026-07-01, the day-long hunt) — inline AnsiString SetLength grow doubled the reused block's *capacity*, not its *length*
+
+**One-byte fix in `compiler/ir_codegen.inc`** (the AnsiString `SetLength`
+grow-realloc branch): `mov rcx, [rsi-24]` (old block's *allocator capacity*) →
+`mov rcx, [rsi-8]` (old *length*). The `add rcx, rcx` (geometric ×2 headroom for
+amortized `AppendChar`) stays; it now doubles the length, not the block size.
+
+**Mechanism.** `PXXAlloc`'s free list is first-fit with **no block splitting**, so
+a short string can inherit a much larger freed block (e.g. the ~50 KB
+`IncExpanded` buffer that `ExpandIncludes` frees each call, or any big freed
+string). The grow-realloc path (taken when the string is shared, refcount > 1, or
+the block is genuinely too small) computed the new capacity as
+`2 × [data-24]` = **2 × the oversized block size**. So a length-2 string sitting
+in a 12 MB block grows to a **24 MB** allocation, whose block is then reused and
+doubled again → 24M→48M→… → OOM. The exact-2× arena sizes were the fingerprint.
+
+**Independent of the asm conversion.** Proven with a ~15-line program on the
+**clean committed compiler** (no conversion): free a big string, let a 1-char
+string reuse the block, grow it while shared → OOM. This is now the regression
+test `test/test_setlength_grow_capacity.pas` (wired into `make test-core`). The
+`EmitAsmX64` conversion only changed which blocks landed on the free list, lining
+up the trigger during self-host; raw-`EmitB` baseline's allocation order didn't.
+
+**Why the earlier investigation missed it:** ruled out (correctly) encoding bugs
+and double-frees, and verified the converted procedures were internally balanced
+— all true, but the corruption was one indirection away, in `SetLength`. It took
+`rr` reverse-execution from the OOM crash back to the first cause to see a
+length-2 string in a 12 MB block. Full debugging writeup:
+**`devdocs/dev/debugging-tips.md`**.
+
+**Validated:** `test_setlength_grow_capacity` (OOMs on old binary, passes on
+fixed), full `make test` green, FPC bootstrap gen1==gen2, `make stabilize` v118
+multi-gen converged, `make pin` v118. The `EmitAsmX64` conversion of
+`EmitHeapAllocLocked`/`Free` was separately re-verified to run clean on top of
+the fix (17- and 60-site repros), so it is now **unblocked** for
+feature-asm-structured-ir-library whenever that work resumes — but was left
+reverted here to keep this fix's scope to the one real bug.
+
+---
+
+### Original interim resolution (superseded)
 - **Severity:** critical — crashed the host machine's build twice (14GB RSS,
   OOM-killed `pascal26-build` and `gen1` processes) while stabilizing the
   in-progress `ir_codegen.inc` migration onto `EmitAsmX64`.

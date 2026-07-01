@@ -3640,8 +3640,8 @@ begin
               EmitB($48); EmitB($83); EmitB($C0); EmitB($11);           { add rax, 17 = needed payload }
               EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
               EmitB($0F); EmitB($84); pAnsiUseNeededNil := CodeLen; EmitI32(0); { jz use needed }
-              EmitB($48); EmitB($8B); EmitB($4E); EmitB($E8);           { mov rcx, [rsi-24] = old payload cap }
-              EmitB($48); EmitB($01); EmitB($C9);                       { add rcx, rcx }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length (NOT [rsi-24] block cap: a short string that reused an oversized freed block via first-fit would otherwise double the block size each grow -> 4M,8M,16M... OOM) }
+              EmitB($48); EmitB($01); EmitB($C9);                       { add rcx, rcx  (geometric headroom from the LENGTH, decoupled from block size) }
               EmitB($48); EmitB($39); EmitB($C1);                       { cmp rcx, rax }
               EmitB($0F); EmitB($82); pAnsiUseNeededSmall := CodeLen; EmitI32(0); { jb use needed }
               EmitB($48); EmitB($89); EmitB($C8);                       { mov rax, rcx }

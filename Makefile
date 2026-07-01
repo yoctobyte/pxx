@@ -366,6 +366,9 @@ test-core: $(COMPILER)
 	# frozen-string Result is per-call (reentrant) on direct/virtual/indirect calls
 	./$(COMPILER) test/test_frozen_string_reentrant.pas /tmp/test_frozen_string_reentrant26
 	test "$$(/tmp/test_frozen_string_reentrant26 | tail -1)" = "total ok 4 / 4"
+	# inline AnsiString SetLength grow must double the LENGTH, not a reused oversized block's capacity (else OOM)
+	./$(COMPILER) test/test_setlength_grow_capacity.pas /tmp/test_setlength_grow_capacity26
+	test "$$(/tmp/test_setlength_grow_capacity26)" = "$$(printf 'len=101\nfirst=a\nlast=b\nSETLENGTH_CAP_OK')"
 	# dynarray a+b is rejected at compile time (not a silent segfault)
 	! ./$(COMPILER) test/test_dynarray_concat_rejected.pas /tmp/test_dynarray_concat_rejected26 > /tmp/test_dynarray_concat_rejected.log 2>&1
 	grep -q "not supported for dynamic arrays" /tmp/test_dynarray_concat_rejected.log
