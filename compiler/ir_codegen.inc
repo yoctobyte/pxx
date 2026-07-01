@@ -125,15 +125,16 @@ end;
 
 procedure EmitAnsiStrReleaseLocked;
 { rax = managed-string data pointer. Caller holds the heap lock when threading
-  is enabled. }
+  is enabled. See EmitDynArrayReleaseLocked for why the jumps are manually
+  patched rather than via EmitAsmX64 labels. }
 var pNil, pNonZero: Integer;
 begin
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitAsmX64(['test rax, rax']);
   EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  if ThreadSafeMode then EmitB($F0);               { lock }
-  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
+  if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+  else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
-  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
+  EmitAsmX64(['sub rax, %', 16]);
   EmitHeapFreeLocked;
   Code[pNil] := Byte(CodeLen - (pNil + 1));
   Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
