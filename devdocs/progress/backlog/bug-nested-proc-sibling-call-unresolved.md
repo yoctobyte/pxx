@@ -1,7 +1,8 @@
 # Nested procedure can't call its sibling (and capturing self-recursion breaks)
 
 - **Type:** bug (parser / symtab / static-link — correctness) — Track A
-- **Status:** backlog
+- **Status:** backlog — **symptom 1 fixed** (pin v133, 2026-07-01); symptom 2
+  (capturing self-recursion arity) still open, see Log
 - **Opened:** 2026-06-30 (found in Track B latent-bug sweep, against stable v97)
 
 ## Symptom
@@ -93,3 +94,60 @@ vs. to call sites.
 - A capturing nested proc can recurse (direct and mutual).
 - Self-host stays byte-identical; add a regression test
   (`test/test_nested_proc_sibling_call.pas`).
+
+## Log
+- 2026-07-01 — Symptom 1 fixed, pin v133. Root cause matched the "Likely
+  cause" guess exactly: `ParseNestedRoutine`'s call-site rewrite (rename to
+  mangled name + splice captured actuals) only scanned the enclosing
+  routine's own `begin..end`, deliberately skipping not-yet-lifted sibling
+  bodies while locating that block. Fix: widened the rewrite loop's lower
+  bound from `parentBegin` to `finalCur` (`compiler/parser.inc`) so it also
+  covers those sibling bodies, reusing the exact same rename+splice logic.
+  Verified against FPC oracle output: plain sibling call, captured-variable
+  sibling call, chained sibling call, Self-capturing sibling call inside a
+  method. `test/test_nested_proc_sibling_call.pas` added, wired into
+  `make test`. Self-host byte-identical (this lifting mechanism isn't
+  exercised by the compiler's own source — worth noting for future pickups:
+  self-host passing gives zero signal on this feature's correctness).
+  Symptom 2 deliberately left open this pass — the fix shape is understood
+  (see below) but touches the same function's fragile token-insertion
+  ordering in a second, interacting way; separating them keeps each change
+  independently revertable.
+
+### Symptom 2 investigation notes (not yet attempted)
+
+The self-rename loop for a routine's own name (`namePos[]`, handles both the
+recursive-call case and the function-result-variable-write case) currently
+only overwrites `SOffset`/`SLen` in place — a pure relabel, chosen because it
+never changes token count. Fixing the arity bug means that when the routine
+captures anything (`nact > 0`), a genuine recursive **call** occurrence (not
+a `FuncName := ...` result write — distinguish by checking for a following
+`tkAssign`) also needs the same extra actuals spliced in (reusing the
+existing `core[]`/`coreCount` array already built for external call sites,
+since the lifted routine's own by-ref capture params share the captured
+var's original name, so re-passing e.g. `acc` from inside a recursive call
+correctly forwards the same reference).
+
+The complication: splicing turns the self-rename into an *insertion*, and
+`namePos[]` positions were captured in the same original free-variable scan
+pass as `fieldPos[]` (the Self-capture field-prefix insertions, which also
+insert tokens and already run earlier in the function). Since both arrays
+hold original (pre-edit) token positions, `namePos[]` entries need
+compensating for however many `fieldPos[]` insertions land before them
+(+2 tokens per such insertion, since positions are disjoint categories and
+insertions preserve relative order — the total shift for a stationary point
+is exactly `2 * count(fieldPos[j] < namePos[k])`, independent of processing
+order). Then splice in descending corrected-position order (same pattern
+`fieldPos[]`'s own loop already uses) so each insertion doesn't invalidate
+not-yet-processed lower positions.
+
+Worked through this on paper and it looks tractable and contained to
+`ParseNestedRoutine`, but there is **no existing regression test for the
+lambda-lift/capture feature at all** (confirmed by grepping `Makefile` and
+`test/*.pas` — `test_nested_proc_sibling_call.pas` added this session is the
+first), and the compiler's own self-host source contains zero nested
+routines (confirmed by grep), so self-host byte-identical gives no signal on
+correctness here — any mistake in the position-adjustment arithmetic would
+only be caught by hand-written test cases, not by the usual gates. Parking
+so this can get a clear head and thorough FPC-oracle-diffed testing rather
+than being rushed at the tail end of an overnight session.
