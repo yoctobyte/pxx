@@ -1827,7 +1827,24 @@ begin
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tyClass) or (tk = tyPointer) then
+  if (tk = tyRecord) and not isRef and not isArray and (RecSize(LastTypeRecId) <= 8) then
+  begin
+    { A genuinely by-value record (not var/const/out, not forced to by-ref by
+      size -- that only happens for RecSize > 8) is stored inline in this
+      param's own slot, not behind a pointer -- so the slot must hold the
+      whole record, not just one machine word. On a 64-bit target
+      TARGET_PTR_SIZE (8) already covers any RecSize <= 8, so this is a
+      no-op there; on a 32-bit target (TARGET_PTR_SIZE = 4) a 5-8 byte
+      record previously got only a 4-byte slot, so writing its second word
+      (e.g. the arm32 by-value record-arg fix in ir_codegen_arm32.inc /
+      parser.inc's prologue spill) silently overflowed into whatever symbol's
+      slot happened to sit right after it
+      (bug-arm32-record-byvalue-over-4-bytes-abi-gap). Never smaller than
+      TARGET_PTR_SIZE, matching the existing tiny-record (<=4-byte) case. }
+    sz := RecSize(LastTypeRecId);
+    if sz < TARGET_PTR_SIZE then sz := TARGET_PTR_SIZE;
+  end
+  else if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tyClass) or (tk = tyPointer) then
     sz := TARGET_PTR_SIZE
   else
     sz := TypeSize(tk);

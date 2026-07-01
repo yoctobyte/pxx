@@ -1887,6 +1887,8 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_hello)" = "Hello, World!"
 	./$(COMPILER) --target=aarch64 test/test_record_temp_byval_arg.pas /tmp/test_aarch64_rectemp
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rectemp)" = "$$(printf '18\n46')"
+	./$(COMPILER) --target=aarch64 test/test_arm32_record_byval_wide.pas /tmp/test_aarch64_recwide
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_single_in_aggregate.pas /tmp/test_aarch64_singleagg
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=aarch64 test/test_i386_arith.pas /tmp/test_aarch64_arith
@@ -2170,6 +2172,8 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_hello)" = "Hello, World!"
 	./$(COMPILER) --target=arm32 test/test_record_temp_byval_arg.pas /tmp/test_arm32_rectemp
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rectemp)" = "$$(printf '18\n46')"
+	./$(COMPILER) --target=arm32 test/test_arm32_record_byval_wide.pas /tmp/test_arm32_recwide
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=arm32 test/test_single_in_aggregate.pas /tmp/test_arm32_singleagg
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) --target=arm32 test/test_i386_arith.pas /tmp/test_arm32_arith

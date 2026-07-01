@@ -13262,7 +13262,12 @@ begin
       order, leaving the lowest-index stack word at the highest address; see
       ir_codegen_arm32.inc IR_CALL). }
     { A by-ref or open-array Int64 param is a single pointer word, not a 64-bit
-      value, so only count/spill it as two words when passed by value. }
+      value, so only count/spill it as two words when passed by value. A
+      by-value record over 4 bytes (up to 8) is likewise two words -- mirrors
+      the matching widening in ir_codegen_arm32.inc's IR_CALL arg-push loop
+      (bug-arm32-record-byvalue-over-4-bytes-abi-gap); without it this loop
+      counted such a param as one word while the caller (once fixed) pushes
+      two, desyncing every later param's stack offset. }
     pnWords := 0;
     for i := 0 to nparams-1 do
       if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
@@ -13271,6 +13276,12 @@ begin
           (Procs[procIdx].Params[i].TypeKind = tyExtended)) and
          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
         Inc(pnWords, 2)   { by-value 8-byte param (Int64/Double): two words }
+      else if (Procs[procIdx].Params[i].TypeKind = tyRecord) and
+              (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) and
+              (i < MAX_PROC_PARAMS) and
+              (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) > 4) and
+              (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) <= 8) then
+        Inc(pnWords, 2)   { by-value 5-8 byte record: two words }
       else Inc(pnWords, 1);
     pw := 0;
     for i := 0 to nparams-1 do
@@ -13279,9 +13290,11 @@ begin
       sz := ParamSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
-          (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
-         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      if (((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+           (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
+          (not Syms[idx].IsRef) and (not Syms[idx].IsArray)) or
+         ((Syms[idx].TypeKind = tyRecord) and not Syms[idx].IsRef and not Syms[idx].IsArray and
+          (RecSize(Syms[idx].RecName) > 4) and (RecSize(Syms[idx].RecName) <= 8)) then
       begin
         { lo = word pw -> [r9]; hi = word pw+1 -> [r9, #4] }
         if pw < 4 then EmitI32($E5890000 or (pw shl 12))

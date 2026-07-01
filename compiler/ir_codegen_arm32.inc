@@ -887,8 +887,18 @@ begin
           EmitLoadVariantAddrArm32(node);
           Exit;
         end;
-        if Is64BitArm32(tk) then
+        if Is64BitArm32(tk) or
+           ((tk = tyRecord) and not Syms[si].IsArray and
+            (RecSize(Syms[si].RecName) > 4) and (RecSize(Syms[si].RecName) <= 8)) then
         begin
+          { A 5-8 byte record VALUE (e.g. a by-value call argument load, or a
+            whole-record read) needs both words -- EmitLoadVar64Arm32 is type-
+            agnostic (raw 8-byte load, already by-ref-aware), so it works
+            unchanged for a record the same way it does for Int64/UInt64.
+            Without this, `tk = tyRecord` fell through to the 1-word
+            EmitLoadVarArm32 below, silently dropping the record's high 4
+            bytes for any record over 4 bytes
+            (bug-arm32-record-byvalue-over-4-bytes-abi-gap). }
           EmitLoadVar64Arm32(si);
           Exit;
         end;
@@ -1977,6 +1987,25 @@ begin
             { By-value Int64: pass the full 64 bits as two words (lo then hi).
               A by-ref/open-array Int64 param is just a pointer (falls through). }
             EmitNode64Arm32(IRA[argNode]);  { r0=lo, r1=hi }
+            EmitI32($E92D0001); { push {r0} (lo = word j) }
+            EmitI32($E92D0002); { push {r1} (hi = word j+1) }
+            Inc(j, 2);
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  (nArgs < MAX_PROC_PARAMS) and
+                  (Procs[procIdx].Params[nArgs].TypeKind = tyRecord) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) and
+                  (not Procs[procIdx].Params[nArgs].IsArray) and
+                  (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + nArgs]) > 4) and
+                  (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + nArgs]) <= 8) then
+          begin
+            { By-value record over 4 bytes (up to 8): pass both words, mirroring
+              Int64 above. IREmitNodeArm32 already yields r0:r1 for a 5-8 byte
+              record value (IR_LOAD_SYM was widened to match); without this
+              branch the record fell to the generic 1-word case below and
+              silently dropped its high word for every plain-value record over
+              4 bytes (bug-arm32-record-byvalue-over-4-bytes-abi-gap). }
+            IREmitNodeArm32(IRA[argNode]);  { r0=lo, r1=hi }
             EmitI32($E92D0001); { push {r0} (lo = word j) }
             EmitI32($E92D0002); { push {r1} (hi = word j+1) }
             Inc(j, 2);
