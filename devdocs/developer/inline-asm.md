@@ -102,11 +102,21 @@ so the asm body's `rax` survives as the return value.
   register first. Two memory/global operands in one instruction (`add
   globalA, globalB` or `add localA, localB`) was never possible — ModRM
   only has one r/m slot, pre-existing x86 limitation, not new.
-
-## Limitations / not yet implemented
-
-- **Explicit memory operands** `[reg]`, `[reg+disp]`, `[reg+reg*scale]`: not
-  parsed. Only bare-name memory (always `[rbp+disp32]`) is supported. No SIB.
+- **Explicit memory operands** `[reg]`, `[reg+disp]`, `[reg+reg*scale]`,
+  `[reg+reg*scale+disp]` (base register mandatory and always first; scale
+  must be 1/2/4/8). SIB encoding reused directly from `lib/asmcore`'s
+  `EmitModRMMem` (exported from `asmcore_x64` for exactly this — no second
+  SIB implementation in the compiler) via a new `AOP_MEMR` operand kind,
+  bridged through a throwaway `TAsmByteBuf`. `mov`/ALU/`lea`/unary/shifts/
+  `test`/`xchg`/`setcc`/`cmovcc` all work generically once `AsmModRM`
+  supported the new kind — only `mov [..], imm`/`push [..]`/`pop [..]`
+  needed their own native encode (the fast-path typed helpers
+  `x64_mov_mem_imm`/`x64_push_mem`/`x64_pop_mem` hardcode an `[rbp+disp]`
+  base, wrong for an arbitrary register). `rsp` can't be a SIB index (that
+  bit pattern is the dedicated "no index" encoding) — rejected with a clear
+  error. No operand-size keyword yet (`byte`/`word`/`dword`/`qword ptr`) —
+  a bare-memory instruction with no register to infer width from falls
+  back to the documented dword default, same as `AOP_MEM` already does.
 - **AT&T syntax** (`{$asmMode att}`) and `direct`: not implemented (directive
   is silently accepted but ignored, so att source would mis-encode).
 - **Operand-size disambiguation** (`byte ptr` / `word ptr` / `dword ptr`):
@@ -128,7 +138,8 @@ so the asm body's `rax` survives as the return value.
 2. ~~**Global-var operands** via a codegen-time encode path (or buffer-offset
    reloc list) so `EmitGlobRef` can patch absolute addresses.~~ **Done
    2026-07-01** — see Supported, above.
-3. **Explicit `[reg+disp]` memory** + SIB, for pointer-style access.
+3. ~~**Explicit `[reg+disp]` memory** + SIB, for pointer-style access.~~
+   **Done 2026-07-01** — see Supported, above.
 4. **Operand-size keywords** (`byte/word/dword/qword ptr`).
 5. Broaden register coverage edge cases (ah/ch/dh/bh high-byte regs are
    intentionally unsupported; document or reject clearly).

@@ -150,11 +150,28 @@ end;
 
 { Emit operand-size prefix + REX for an instruction whose register field is
   regField (an actual register, or an opcode-extension digit with regHigh=0)
-  and whose r/m is the operand in AsmOp[rmSlot]. opSize selects 1/2/4/8. }
+  and whose r/m is the operand in AsmOp[rmSlot]. opSize selects 1/2/4/8.
+  AOP_MEMR (explicit [reg+reg*scale+disp]) needs its own path: it's the only
+  r/m kind that can need REX.X (an index register >=8), which
+  EncPrefixAndREX's signature has no parameter for at all -- so this one
+  case bypasses it and calls AsmREX (which does support X) directly. The
+  $66 16-bit prefix is handled here too, same as EncPrefixAndREX's own
+  rule. }
 procedure AsmPrefixAndREX(opSize, regField, regHigh, rmSlot: Integer);
 var
-  rmReg: Integer;
+  rmReg, wBit, rBit, xBit, bBit: Integer;
 begin
+  if AsmOpKind[rmSlot] = AOP_MEMR then
+  begin
+    if opSize = 2 then AsmB($66);
+    wBit := 0; if opSize = 8 then wBit := 1;
+    rBit := 0; if regHigh <> 0 then rBit := 1;
+    bBit := 0; if AsmOpReg[rmSlot] >= 8 then bBit := 1;
+    xBit := 0; if AsmOpIndex[rmSlot] >= 8 then xBit := 1;
+    AsmREX(wBit, rBit, xBit, bBit, 0);
+    Exit;
+  end;
+
   rmReg := 0;
   if AsmOpKind[rmSlot] = AOP_REG then rmReg := AsmOpReg[rmSlot]
   else if AsmOpKind[rmSlot] = AOP_MEM then rmReg := rRBP;
@@ -166,6 +183,7 @@ end;
 
 { Emit ModRM (+disp) where modrm.reg = regField and r/m = AsmOp[rmSlot]. }
 procedure AsmModRM(regField, rmSlot: Integer);
+var sibBuf: TAsmByteBuf; sibOp: TAsmOperand; k: Integer;
 begin
   EncToAsmBuffer := True;
   if AsmOpKind[rmSlot] = AOP_REG then
@@ -180,17 +198,99 @@ begin
   begin
     EncModRMAbs(regField, Integer(AsmOpVal[rmSlot]));
   end
+  else if AsmOpKind[rmSlot] = AOP_MEMR then
+  begin
+    { Reuse lib/asmcore's SIB-capable EmitModRMMem (exported for exactly
+      this) rather than re-deriving SIB encoding a second time here --
+      "library work first, dial it into the compiler." Bridges through a
+      throwaway TAsmByteBuf since asmcore's buffer type isn't AsmBytes. }
+    EncToAsmBuffer := False;
+    sibOp := MemOpIndexed(AsmOpReg[rmSlot], AsmOpIndex[rmSlot], AsmOpScale[rmSlot], AsmOpVal[rmSlot]);
+    BufInit(sibBuf);
+    if not EmitModRMMem(sibBuf, regField, sibOp) then
+      Error('asm: ' + AsmCoreLastError);
+    for k := 0 to sibBuf.Len - 1 do AsmB(sibBuf.Bytes[k]);
+  end
   else
     Error('asm: bad r/m operand');
   EncToAsmBuffer := False;
 end;
 
 { Parse one operand into slot (0 or 1). Reads CurTok. }
+{ Parse an explicit memory operand: [reg] | [reg+disp] | [reg-disp] |
+  [reg+reg*scale] | [reg+reg*scale+disp] | [reg+reg*scale-disp]. The base
+  register is mandatory and always first; an index*scale term and a
+  displacement term are each optional, in either order, introduced by + or
+  -. No size keyword this slice (TODO #4, devdocs/developer/inline-asm.md)
+  -- AsmOpSize is left 0 and AsmOpSizeOf's final dword default applies when
+  no register operand in the same instruction disambiguates the width. }
+procedure AsmParseMemROperand(slot: Integer);
+var baseReg, baseSize, idxReg, idxSize, scale, sign: Integer; disp: Int64;
+    sawIndex, sawDisp: Boolean;
+begin
+  Next;   { consume '[' }
+  if CurTok.Kind <> tkIdent then Error('asm: expected a register after [');
+  if not AsmRegNum(CurTok.SVal, baseReg, baseSize) then
+    Error('asm: [..] base must be a register: ' + CurTok.SVal);
+  Next;
+  idxReg := -1; scale := 1; disp := 0; sawIndex := False; sawDisp := False;
+
+  while (CurTok.Kind = tkPlus) or (CurTok.Kind = tkMinus) do
+  begin
+    if CurTok.Kind = tkPlus then sign := 1 else sign := -1;
+    Next;
+    if CurTok.Kind = tkInteger then
+    begin
+      if sawDisp then Error('asm: [..] has more than one displacement term');
+      disp := Int64(sign) * CurTok.IVal;
+      sawDisp := True;
+      Next;
+    end
+    else if CurTok.Kind = tkIdent then
+    begin
+      if sign < 0 then Error('asm: [..] index register cannot be negated');
+      if sawIndex then Error('asm: [..] has more than one index term');
+      if not AsmRegNum(CurTok.SVal, idxReg, idxSize) then
+        Error('asm: [..] expected a register or integer: ' + CurTok.SVal);
+      Next;
+      if CurTok.Kind = tkStar then
+      begin
+        Next;
+        if CurTok.Kind <> tkInteger then Error('asm: [..] expected scale 1/2/4/8 after *');
+        scale := Integer(CurTok.IVal);
+        if (scale <> 1) and (scale <> 2) and (scale <> 4) and (scale <> 8) then
+          Error('asm: [..] scale must be 1, 2, 4, or 8');
+        Next;
+      end;
+      sawIndex := True;
+    end
+    else
+      Error('asm: [..] expected a register or integer after + or -');
+  end;
+
+  if CurTok.Kind <> tkRBrack then Error('asm: expected ] to close memory operand');
+  Next;
+
+  AsmOpKind[slot] := AOP_MEMR;
+  AsmOpReg[slot] := baseReg;
+  AsmOpIndex[slot] := idxReg;
+  AsmOpScale[slot] := scale;
+  AsmOpVal[slot] := disp;
+  AsmOpSize[slot] := 0;
+end;
+
 procedure AsmParseOperand(slot: Integer);
 var num, size, idx: Integer;
 begin
   AsmOpKind[slot] := AOP_NONE;
   AsmOpReg[slot] := 0; AsmOpSize[slot] := 0; AsmOpVal[slot] := 0;
+  AsmOpIndex[slot] := -1; AsmOpScale[slot] := 1;
+
+  if CurTok.Kind = tkLBrack then
+  begin
+    AsmParseMemROperand(slot);
+    Exit;
+  end;
 
   if CurTok.Kind = tkMinus then
   begin
@@ -315,8 +415,8 @@ begin
     AsmB($C0 or ((rf and 7) * 8) or (AsmOpReg[0] and 7));
     Exit;
   end;
-  { dest=reg, src=mem/global : reg,r/m form (reg field = dest reg, rm = mem) }
-  if (AsmOpKind[0] = AOP_REG) and ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_GLOBAL)) then
+  { dest=reg, src=mem/global/memr : reg,r/m form (reg field = dest reg, rm = mem) }
+  if (AsmOpKind[0] = AOP_REG) and ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_GLOBAL) or (AsmOpKind[1] = AOP_MEMR)) then
   begin
     opSize := AsmOpSize[0];
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
@@ -325,8 +425,8 @@ begin
     AsmModRM(rf, 1);
     Exit;
   end;
-  { dest=mem/global, src=reg : rm,reg form }
-  if ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) and (AsmOpKind[1] = AOP_REG) then
+  { dest=mem/global/memr, src=reg : rm,reg form }
+  if ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_MEMR)) and (AsmOpKind[1] = AOP_REG) then
   begin
     opSize := AsmOpSize[1];
     rf := AsmOpReg[1]; rh := 0; if rf >= 8 then rh := 1;
@@ -335,8 +435,8 @@ begin
     AsmModRM(rf, 0);
     Exit;
   end;
-  { dest=reg/mem/global, src=imm : 81 /ext id (or C7 /0 handled by caller for mov) }
-  if ((AsmOpKind[0] = AOP_REG) or (AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) and (AsmOpKind[1] = AOP_IMM) then
+  { dest=reg/mem/global/memr, src=imm : 81 /ext id (or C7 /0 handled by caller for mov) }
+  if ((AsmOpKind[0] = AOP_REG) or (AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL) or (AsmOpKind[0] = AOP_MEMR)) and (AsmOpKind[1] = AOP_IMM) then
   begin
     if immExt < 0 then Error('asm: immediate form not supported for this mnemonic');
     opSize := AsmOpSizeOf(1);
@@ -367,6 +467,20 @@ begin
     EncToAsmBuffer := True;
     x64_mov_mem_imm(AsmOpSizeOf(1), rRBP, AsmOpVal[0], AsmOpVal[1], True);
     EncToAsmBuffer := False;
+    Exit;
+  end;
+  if (AsmOpKind[0] = AOP_MEMR) and (AsmOpKind[1] = AOP_IMM) then
+  begin
+    { C6 /0 imm8 (1-byte) or C7 /0 imm32. Goes through the generic
+      AsmModRM/AsmPrefixAndREX (which both now handle AOP_MEMR) instead of
+      x64_mov_mem_imm, which hardcodes an [rbp+disp] base. }
+    opSize := AsmOpSizeOf(1);
+    AsmPrefixAndREX(opSize, 0, 0, 0);
+    if opSize = 1 then AsmB($C6) else AsmB($C7);
+    AsmModRM(0, 0);
+    if opSize = 1 then AsmB(Integer(AsmOpVal[1] and $FF))
+    else if opSize = 2 then AsmI16(AsmOpVal[1])
+    else AsmI32(AsmOpVal[1]);
     Exit;
   end;
   if (AsmOpKind[0] = AOP_GLOBAL) and (AsmOpKind[1] = AOP_IMM) then
@@ -445,10 +559,10 @@ begin
     Error('asm: xchg needs a register operand');
   end;
 
-  { lea reg, mem/global }
+  { lea reg, mem/global/memr }
   if CaseEqual(mn,'lea') then
   begin
-    if (AsmOpKind[0] <> AOP_REG) or ((AsmOpKind[1] <> AOP_MEM) and (AsmOpKind[1] <> AOP_GLOBAL)) then
+    if (AsmOpKind[0] <> AOP_REG) or ((AsmOpKind[1] <> AOP_MEM) and (AsmOpKind[1] <> AOP_GLOBAL) and (AsmOpKind[1] <> AOP_MEMR)) then
       Error('asm: lea needs reg, mem');
     opSize := AsmOpSize[0];
     rf := AsmOpReg[0]; rh := 0; if rf >= 8 then rh := 1;
@@ -526,6 +640,17 @@ begin
   { ---- push / pop ---- }
   if CaseEqual(mn,'push') then
   begin
+    if AsmOpKind[0] = AOP_MEMR then
+    begin
+      { push r/m64 = FF /6. No REX.W (push/pop default to 64-bit operand
+        size already; verified vs host `as` -- 0xFF 0x70 0x10 for
+        "push qword [rax+0x10]", no 48 prefix). opSize=0 is an inert
+        sentinel here: not 2 (no $66) and not 8 (no REX.W). }
+      AsmPrefixAndREX(0, 6, 0, 0);
+      AsmB($FF);
+      AsmModRM(6, 0);
+      Exit;
+    end;
     EncToAsmBuffer := True;
     if AsmOpKind[0] = AOP_REG then
       x64_push_reg(AsmOpReg[0])
@@ -540,6 +665,14 @@ begin
   end;
   if CaseEqual(mn,'pop') then
   begin
+    if AsmOpKind[0] = AOP_MEMR then
+    begin
+      { pop r/m64 = 8F /0. Same no-REX.W note as push above. }
+      AsmPrefixAndREX(0, 0, 0, 0);
+      AsmB($8F);
+      AsmModRM(0, 0);
+      Exit;
+    end;
     EncToAsmBuffer := True;
     if AsmOpKind[0] = AOP_REG then
       x64_pop_reg(AsmOpReg[0])

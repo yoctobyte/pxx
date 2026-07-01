@@ -248,6 +248,7 @@ const
   AOP_MEM    = 2;   { [rbp+disp32] — a named local/param }
   AOP_IMM    = 3;
   AOP_GLOBAL = 4;   { absolute [disp32] — a named global var, BSS-relative }
+  AOP_MEMR   = 5;   { explicit [reg], [reg+disp], [reg+reg*scale+disp] }
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -1134,9 +1135,11 @@ var
   AsmGlobFixCount: Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
-  AsmOpReg  : array[0..1] of Integer;   { register number 0..15 }
+  AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }
   AsmOpSize : array[0..1] of Integer;   { 1, 2, 4, 8 (bytes) }
-  AsmOpVal  : array[0..1] of Int64;     { immediate value, or mem disp for AOP_MEM }
+  AsmOpVal  : array[0..1] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
+  AsmOpIndex: array[0..1] of Integer;   { AOP_MEMR index reg, -1 = none }
+  AsmOpScale: array[0..1] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

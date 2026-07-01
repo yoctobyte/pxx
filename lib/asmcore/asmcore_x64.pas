@@ -44,6 +44,15 @@ function AsmEncodeX64(const instr: TAsmInstr;
 function AsmPrintX64(const instr: TAsmInstr): AnsiString;
 function AsmCoreLastError: AnsiString;
 
+{ Exported so the compiler's own token-based inline-asm encoder
+  (compiler/asmenc.inc) can reuse the SIB encoding here instead of
+  re-deriving it — "library work first, dial it into the compiler" rather
+  than maintaining two parallel SIB implementations. regField is the /r
+  register or /digit opcode extension, already masked to 0..7; caller has
+  already emitted any REX (incl. REX.X for an index register — see this
+  unit's EncodeRegMem for the bit-layout reference). }
+function EmitModRMMem(var buf: TAsmByteBuf; regField: Integer; const m: TAsmOperand): Boolean;
+
 implementation
 
 var
@@ -134,9 +143,13 @@ end;
   /r register or /digit opcode extension already masked to 0..7. Caller has
   already emitted any REX (incl. REX.X for the index register, where
   applicable — see EncodeRegMem). }
-procedure EmitModRMMem(var buf: TAsmByteBuf; regField: Integer; const m: TAsmOperand);
+function EmitModRMMem(var buf: TAsmByteBuf; regField: Integer; const m: TAsmOperand): Boolean;
 var rmField, modBits, scaleBits, sibIndex, sibBase: Integer; needSib, noBase, forceDisp8: Boolean;
 begin
+  Result := False;
+  if m.MemIndex = 4 then
+  begin LastError := 'asmcore_x64: rsp cannot be a SIB index register'; Exit; end;
+
   noBase := (m.MemBase = -1) and (m.MemIndex <> -1);
   needSib := noBase or (m.MemIndex <> -1) or ((m.MemBase and 7) = 4);  { index present, or rsp/r12 base }
 
@@ -170,6 +183,7 @@ begin
 
   if modBits = 1 then BufAppend(buf, Byte(m.MemDisp and $FF))
   else if (modBits = 2) or noBase then BufAppendI32(buf, m.MemDisp);
+  Result := True;
 end;
 
 { ALU "op r/m, r" primary opcode (32/64-bit form, dst=r/m src=reg). }
@@ -278,8 +292,7 @@ begin
   begin LastError := 'asmcore_x64: rsp cannot be a SIB index register'; Exit; end;
   EmitRex(buf, regOp.RegSize = 8, regOp.Reg >= 8, memOp.MemIndex >= 8, memOp.MemBase >= 8);
   BufAppend(buf, Byte(opcode));
-  EmitModRMMem(buf, regOp.Reg and 7, memOp);
-  Result := True;
+  Result := EmitModRMMem(buf, regOp.Reg and 7, memOp);
 end;
 
 { mov/lea reg, [rip+disp32] — a rip-relative patch site (REG_RIP sentinel).
