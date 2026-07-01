@@ -1440,6 +1440,20 @@ begin
       if CaseEqual(name, 'fpc') then
       begin MimicFpc := True; PasApplyMimicDefines; end
       else Error('unknown {$MIMIC} target (only FPC is supported): ' + name);
+    end
+    else if CaseEqual(command, 'asmmode') then
+    begin
+      { {$ASMMODE intel/att}: inline asm (compiler/asmenc.inc) is Intel
+        syntax only -- was previously silently accepted-and-ignored for
+        EVERY value, so `{$asmMode att}` compiled clean and mis-encoded
+        (AT&T operand order, no explicit "reg,mem" direction) instead of
+        erroring. feature-inline-asm-depth TODO #6: commit to Intel-only,
+        reject att explicitly rather than leave the trap in place. }
+      if CaseEqual(name, 'intel') then { no-op, the only supported mode }
+      else if CaseEqual(name, 'att') then
+        Error('{$asmMode att} not supported -- inline asm (asm...end) is Intel syntax only')
+      else
+        Error('unknown {$asmMode} value (intel is the only supported mode): ' + name);
     end;
     { Unsupported compatibility directives remain accepted comments. }
   end;

@@ -126,8 +126,14 @@ so the asm body's `rax` survives as the return value.
   `dec` (see `AsmTokIsWordLike` in `compiler/asmenc.inc`); `word`/`dword`/
   `qword`/`ptr` are plain `tkIdent`. `CurTok.SVal` holds the right text
   regardless of `Kind` either way.
-- **AT&T syntax** (`{$asmMode att}`) and `direct`: not implemented (directive
-  is silently accepted but ignored, so att source would mis-encode).
+- **AT&T syntax**: committed to Intel-only (2026-07-01) rather than
+  implemented — `{$asmMode att}` now errors cleanly
+  (`compiler/lexer.inc`'s `asmmode` directive handler) instead of being
+  silently accepted and mis-encoding (AT&T's operand order is reversed
+  from Intel's, so a compiled-clean `{$asmMode att}` program would have
+  produced wrong instructions with no warning). `{$asmMode intel}` still
+  a no-op (the only supported mode). `direct`: still not implemented,
+  no known real use case surfaced yet.
 - **`test x, x`** where both operands are the same memory var: illegal in
   x86 (needs one register); the FPC docs example does not encode as-is.
 - **xmm / floating-point / SSE / AVX**: none.
@@ -150,7 +156,9 @@ so the asm body's `rax` survives as the return value.
    2026-07-01** — see Supported, above.
 5. Broaden register coverage edge cases (ah/ch/dh/bh high-byte regs are
    intentionally unsupported; document or reject clearly).
-6. Eventually: AT&T mode, or commit to Intel-only and reject att explicitly.
+6. ~~Eventually: AT&T mode, or commit to Intel-only and reject att
+   explicitly.~~ **Done 2026-07-01** — committed to Intel-only, see
+   Limitations, above.
 
 ## Self-hosting constraints (when editing `asmenc.inc`)
 
