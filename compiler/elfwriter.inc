@@ -1335,7 +1335,7 @@ begin
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
   bssBase  := dataBase + DataLen;
-  entry    := LOAD_ADDR + codeOffset;
+  entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
 
@@ -1453,7 +1453,7 @@ begin
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
   bssBase  := dataBase + DataLen;
-  entry    := LOAD_ADDR + codeOffset;
+  entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
 

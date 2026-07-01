@@ -127,3 +127,42 @@ wiring, not new machinery.
   per [[feature-asm-structured-ir-library]]'s corrected understanding (the
   per-target `EmitAsmXxx` engines already do labels/branches/relocations —
   this is parser-identifier-resolution wiring, not new encoder work).
+- 2026-07-01 — **`extern`/`global` directives landed** (Track A), closing the
+  last "not in this increment yet" gap short of `-c`/`--shared`:
+  - `extern <name>[, "libname"]` (default `libc.so.6`) synthesizes a `Procs[]`
+    entry exactly like a Pascal `external 'lib'` declaration
+    (`ProcExternal`/`ProcLibrary`/`RegisterProc`), so `call <name>` reaches it
+    through the **existing** dynamic-call machinery
+    (`RegisterExternal`/`EmitExternalIndirectCall`, `PrepareDynamicData`/
+    `PatchDynCallSites` in `elfwriter.inc`) unmodified — no new ELF-writer
+    code needed for this part, exactly per the "current state of the linker
+    backend" audit above. `jmp`/`jcc` to an extern name is rejected with a
+    clear message (only `call`'s GOT-indirect form can reach it; a direct
+    rel32 jump can't).
+  - `global <label>`: overrides the ELF entry point (`entry := LOAD_ADDR +
+    codeOffset` in both `writeELF` variants, `elfwriter.inc`) with a chosen
+    code label's offset via a new `AsmEntryOff` global (`defs.inc`; always 0 —
+    inert — for every non-`.asm` compile, so no other frontend is affected).
+    First `global` naming an actual code label wins.
+  - Verified for real: `test/test_asm_extern.asm` calls libc `printf` (+
+    `fflush(NULL)` — see landmine below) via a hand-written `extern`
+    declaration and prints through real dynamic linking, no hand-rolled
+    syscall. `test/test_asm_entry_global.asm` proves `global` really
+    redirects execution (two `SYS_exit` sites with different codes, not
+    connected by any jump — only a working override reaches the second).
+    Both in `make test` (`test-asm`).
+  - **LANDMINE (real compiler bug, filed, not blocking):** a `var array[..] of
+    AnsiString` parameter silently loses its element writes in the **pxx
+    self-hosted** binary (works fine under a direct FPC build) — caught
+    because a first-draft helper took the extern name/index table by `var`
+    array param and the caller read back empty strings. Isolated to a minimal
+    repro, `const` array-of-AnsiString reads confirmed fine, only `var`/write
+    is broken. Worked around in `asmfront.inc` by having the helper return
+    scalars (`var outName: AnsiString; var outProcIdx: Integer`) and letting
+    the caller do the array write itself outside any array-typed parameter
+    boundary. See `bug-var-array-of-ansistring-param-loses-writes.md` — a
+    real, silent-data-corruption class of bug, left for Track A to pick up
+    separately.
+  - **Still deferred:** `-c` `ET_REL` object output, `--shared` `ET_DYN` `.so`
+    writer (the one genuinely net-new linker capability per the audit above —
+    `ET_DYN` doesn't exist anywhere in `elfwriter.inc` yet).

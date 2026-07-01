@@ -8,11 +8,22 @@
     - labels (`name:`, alone or prefixing an instruction)
     - branches: jmp / call / jcc <label>  (rel32, forward + backward resolved)
     - syscall and the rest of asmcore's grown instruction set
-    - `[base+disp]` memory operands
+    - `[base+disp]` memory operands, `section .text`/`section .data` +
+      db/dw/dd/dq, `[rel label]` rip-relative addressing
+    - `extern <name>[, "libname"]` (default libc.so.6): synthesizes a
+      Procs[] entry exactly like a Pascal `external 'lib'` declaration, so
+      `call <name>` routes through the existing GOT-indirect dynamic-call
+      machinery (RegisterExternal/EmitExternalIndirectCall,
+      PrepareDynamicData/PatchDynCallSites in elfwriter.inc) — no new ELF-
+      writer code. jmp/jcc to an extern name is rejected (only `call` goes
+      through an indirect GOT slot; a direct rel32 jump can't).
+    - `global <label>`: overrides the ELF entry point (default: start of
+      Code[]) with a chosen code label's offset (AsmEntryOff, defs.inc;
+      always 0 — a no-op — for every non-.asm compile).
 
   Still deferred to later increments (clear errors point at them):
-    - section/global/extern directives, db/dw/dd/dq data + a data section
-      (needs rip-relative relocation), .so/object output.
+    - `-c` ET_REL object output, `--shared` ET_DYN .so writer (see
+      feature-asm-source-frontend tasks #5/#6).
 
   Termination: as in the MVP, a fixed exit epilogue (`mov eax,60; syscall`) is
   appended after the program, so a program that falls through exits with the
@@ -253,17 +264,70 @@ begin
   end;
 end;
 
-{ Reject a directive that still needs the deferred (symbol-table / object-
-  output) machinery, with a clear pointer at the next increment. `section`
-  and `db`/`dw`/`dd`/`dq` are handled by the caller now (data section). }
-procedure AsmRejectIfUnsupported(const mnem: AnsiString; lineNo: Integer);
+const
+  ASM_FRONT_MAX_EXTERNS = 256;
+
+type
+  { Named array types, not `array of T` open params: pxx self-host currently
+    loses writes/reads through a `var`/`const array of AnsiString` open-array
+    parameter (see bug-open-array-managed-param-loses-writes) — a fixed
+    matching type on both sides sidesteps it. }
+  TAsmExternNames = array[0..ASM_FRONT_MAX_EXTERNS-1] of AnsiString;
+  TAsmExternProcs = array[0..ASM_FRONT_MAX_EXTERNS-1] of Integer;
+
+{ Look up a case-sensitive extern symbol name (real C link-time names are
+  case-sensitive, unlike this frontend's own lower-cased label table). }
+function AsmExternLookup(const nm: AnsiString; const externName: TAsmExternNames;
+  const externProcIdx: TAsmExternProcs; externCount: Integer; var procIdx: Integer): Boolean;
+var i: Integer;
 begin
-  if (mnem = 'extern') or (mnem = 'global') then
-    Error('asm:' + AsmIntToStr(lineNo) +
-      ': "' + mnem + '" needs a symbol table / object output — not in this ' +
-      'frontend increment yet (see feature-asm-source-frontend). Supported: ' +
-      'labels, jmp/call/jcc, syscall, asmcore''s register/imm/[mem]/[rel] ' +
-      'forms, and a "section .text"/"section .data" + db/dw/dd/dq data area.');
+  Result := False; procIdx := -1;
+  for i := 0 to externCount - 1 do
+    if externName[i] = nm then begin procIdx := externProcIdx[i]; Result := True; end;
+end;
+
+{ Parse an `extern <name>[, "libname"]` line: synthesizes a Procs[] entry
+  exactly like a Pascal `external 'lib'` declaration (RegisterProc + the
+  ProcExternal/ProcLibrary flags PrepareDynamicData/PatchDynCallSites already
+  know how to turn into a DT_NEEDED + GOT-indirect `call`), so no new ELF-
+  writer code is needed — the .asm frontend just needs to reach the existing
+  dynamic-link machinery. Default library is libc.so.6 (the overwhelmingly
+  common case for hand-written asm calling out; the raw `syscall` instruction
+  covers the kernel-only case without needing `extern` at all).
+
+  Returns the registered name + Procs[] index via scalar `var` params instead
+  of writing an extern-table array element itself — a `var array[..] of
+  AnsiString` param silently loses its write in the pxx self-hosted binary
+  (see bug-var-array-of-ansistring-param-loses-writes); the caller does the
+  array[externCount]:=... assignment directly on its own local instead. }
+procedure AsmParseExternLine(const restp0: AnsiString; lineNo: Integer;
+  var outName: AnsiString; var outProcIdx: Integer);
+var restp, nameTok, libTok: AnsiString; ci, procIdx: Integer;
+    dummyNames: array[0..0] of AnsiString; dummyTypes: array[0..0] of TTypeKind;
+begin
+  restp := AsmTrim(restp0);
+  if restp = '' then Error('asm:' + AsmIntToStr(lineNo) + ': "extern" needs a symbol name');
+  ci := Pos(',', restp);
+  if ci > 0 then
+  begin
+    nameTok := AsmTrim(Copy(restp, 1, ci - 1));
+    libTok := AsmTrim(Copy(restp, ci + 1, Length(restp) - ci));
+    if (Length(libTok) < 2) or (libTok[1] <> '"') or (libTok[Length(libTok)] <> '"') then
+      Error('asm:' + AsmIntToStr(lineNo) + ': extern library name must be quoted, e.g. extern foo, "libfoo.so"');
+    libTok := Copy(libTok, 2, Length(libTok) - 2);
+  end
+  else
+  begin
+    nameTok := restp;
+    libTok := 'libc.so.6';
+  end;
+  if nameTok = '' then Error('asm:' + AsmIntToStr(lineNo) + ': "extern" needs a symbol name');
+  procIdx := RegisterProc(nameTok, False, tyUnknown, 0, dummyNames, dummyTypes);
+  Procs[procIdx].BodyAddr := -1;
+  ProcExternal[procIdx] := True;
+  ProcLibrary[procIdx] := InternStr(libTok);
+  outName := nameTok;
+  outProcIdx := procIdx;
 end;
 
 const
@@ -297,6 +361,14 @@ var
   fixCount: Integer;
   found: Boolean; rel: Int64; tgt: Integer;
   labelPart: AnsiString;
+  { extern table + global entry-point override (layer-2 symbolic resolution
+    reusing the compiler's existing dynamic-link machinery) }
+  externName: TAsmExternNames;
+  externProcIdx: TAsmExternProcs;
+  externCount, externResolvedIdx, extIdx, j2: Integer;
+  externParsedName: AnsiString;
+  externParsedProcIdx: Integer;
+  globalEntryName: AnsiString;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('asm frontend: x86-64 only (matches lib/asmcore coverage)');
@@ -307,6 +379,8 @@ begin
   lblCount := 0;
   fixCount := 0;
   curSection := SEC_TEXT;
+  externCount := 0;
+  globalEntryName := '';
   BufInit(dataBuf);
 
   while i <= n do
@@ -362,6 +436,24 @@ begin
       Continue;
     end;
 
+    if mnem = 'extern' then
+    begin
+      if externCount >= ASM_FRONT_MAX_EXTERNS then
+        Error('asm:' + AsmIntToStr(lineNo) + ': too many extern declarations');
+      AsmParseExternLine(restp, lineNo, externParsedName, externParsedProcIdx);
+      externName[externCount] := externParsedName;
+      externProcIdx[externCount] := externParsedProcIdx;
+      Inc(externCount);
+      Continue;
+    end;
+
+    if mnem = 'global' then
+    begin
+      if restp = '' then Error('asm:' + AsmIntToStr(lineNo) + ': "global" needs a label name');
+      if globalEntryName = '' then globalEntryName := AsmLower(AsmTrim(restp));
+      Continue;
+    end;
+
     if curSection = SEC_DATA then
     begin
       AsmParseDataLine(mnem, restp, lineNo, dataBuf);
@@ -371,16 +463,25 @@ begin
     if (mnem = 'db') or (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') then
       Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs "section .data"');
 
-    AsmRejectIfUnsupported(mnem, lineNo);
-
     branchLabel := '';
     instr.Mnemonic := mnem;
 
     if AsmIsBranch(mnem) then
     begin
-      { the single operand is a label target -> rel32 patch site }
+      { the single operand is a label target -> rel32 patch site, unless
+        `call` names a declared `extern` symbol: that routes through the
+        existing GOT-indirect dynamic-call machinery instead (no rel32 patch
+        site at all, so it's handled and Continue'd before reaching the
+        shared encode block below). }
       if restp = '' then
         Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" needs a label target');
+      if (mnem = 'call') and AsmExternLookup(AsmTrim(restp), externName, externProcIdx, externCount, externResolvedIdx) then
+      begin
+        extIdx := RegisterExternal(externResolvedIdx);
+        EmitExternalIndirectCall(extIdx);
+        emittedAny := True;
+        Continue;
+      end;
       branchLabel := AsmLower(AsmTrim(restp));
       instr.OperandCount := 1;
       instr.Operands[0] := PatchOp(4);
@@ -463,8 +564,27 @@ begin
     for i := 0 to lblCount - 1 do
       if lblName[i] = fixName[k] then begin tgt := lblOff[i]; found := True; end;
     if not found then
+    begin
+      for j2 := 0 to externCount - 1 do
+        if AsmLower(externName[j2]) = fixName[k] then
+          Error('asm:' + AsmIntToStr(fixLine[k]) + ': "' + fixName[k] +
+            '" is declared extern -- only "call" can reach it (jmp/jcc unsupported for external targets)');
       Error('asm:' + AsmIntToStr(fixLine[k]) + ': undefined label "' + fixName[k] + '"');
+    end;
     rel := tgt - (fixPos[k] + 4);
     Patch32(fixPos[k], rel);
+  end;
+
+  { `global <label>`: override the ELF entry point (default = start of
+    Code[]) with a chosen code label's offset. First `global` naming an
+    actual code label wins; a program with none keeps the old default. }
+  if globalEntryName <> '' then
+  begin
+    found := False; tgt := 0;
+    for i := 0 to lblCount - 1 do
+      if (not lblIsData[i]) and (lblName[i] = globalEntryName) then begin tgt := lblOff[i]; found := True; end;
+    if not found then
+      Error('asm: "global ' + globalEntryName + '" -- no code label with that name');
+    AsmEntryOff := tgt;
   end;
 end;

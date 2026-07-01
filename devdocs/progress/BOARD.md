@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -44,6 +44,7 @@ _none_
 | bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
+| bug-var-array-of-ansistring-param-loses-writes | A | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
@@ -570,6 +571,7 @@ _none_
 - [A] bug-open-array-ctor-statement-call
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
+- [A] bug-var-array-of-ansistring-param-loses-writes
 - [A] chore-sqlite-static-capacity-bumps
 - [A] feature-asm-source-frontend
 - [A] feature-asm-structured-ir-library

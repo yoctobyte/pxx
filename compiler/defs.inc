@@ -1133,6 +1133,10 @@ var
   AsmBytesCount: Integer;
   AsmGlobFix: array[0..MAX_ASM_GLOBFIX-1] of TAsmGlobFix;
   AsmGlobFixCount: Integer;
+  { .asm frontend: code offset of a `global <label>` entry-point override
+    (feature-asm-source-frontend); 0 = default (start of Code[], unchanged
+    for every non-.asm compile). }
+  AsmEntryOff: Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
   AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }

@@ -287,6 +287,10 @@ test-asm: $(COMPILER)
 	/tmp/test_asm_loop26; test "$$?" = "45"
 	./$(COMPILER) test/test_asm_hello.asm /tmp/test_asm_hello26
 	test "$$(/tmp/test_asm_hello26)" = "Hello, asm world!"
+	./$(COMPILER) test/test_asm_entry_global.asm /tmp/test_asm_entry_global26
+	/tmp/test_asm_entry_global26; test "$$?" = "42"
+	./$(COMPILER) test/test_asm_extern.asm /tmp/test_asm_extern26
+	test "$$(/tmp/test_asm_extern26)" = "Hello from extern printf!"
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
