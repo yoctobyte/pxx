@@ -122,3 +122,4 @@
 2026-07-01T17:08:36Z  v122  100827b8af8cb35426cc516b0e6466515b5b2ce93880d08e1f8e517feb19478b  1a764edbecf9143b7c9f0e0024a9dd3ed5ddcf47  fix(x64): re-apply EmitAnsiStrReleaseLocked EmitAsmX64 conversion (v121)
 2026-07-01T17:38:43Z  v123  a743374726e1a5d2207234704472bf585bb98f14092646cf8aff541a22b0524e  b3db50ba4b9d7c816b0dfe674913789cf76cde7e  docs(progress): file anonymous inline record type ticket
 2026-07-01T17:53:38Z  v124  7a044468da9a28a025b5b97d857fd0dfd4e9f477c71b1a94d24428e6cae36076  14807b75d5626651cc48e5925aafdd54c7363bae  docs(progress): file EmitAsmX64 SIB-index gap ticket
+2026-07-01T18:04:20Z  v125  0ef3bdb0f29c626e1def1dfd839e14282d603fee449060634ddbb46c5cec2810  013a803abab393a82844b1293ed72b96b2b26f1b  fix(x64): EmitReadLine/EmitEof onto EmitAsmX64, mov-reg-imm compact form (v124)

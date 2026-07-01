@@ -762,117 +762,124 @@ begin
       publish it into the target slot (rax = slot address), releasing the old
       handle. Without this a managed string target fell through to the integer
       parser below and wrote garbage into the 8-byte handle slot. }
-    EmitB($50);                                                                   { push rax (target addr) }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);     { mov rax,[len] }
-    EmitB($48); EmitB($2B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { sub rax,[pos] }
-    EmitB($48); EmitB($89); EmitB($C7);                                           { mov rdi,rax (length) }
-    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);     { lea rsi,[buf] }
-    EmitB($48); EmitB($03); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { add rsi,[pos] (src) }
+    EmitAsmX64([
+      'push rax',                        { target addr }
+      'mov rax, [@glob]', BSS_LINE_LEN,
+      'sub rax, [@glob]', BSS_LINE_POS,
+      'mov rdi, rax',                    { length }
+      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'add rsi, [@glob]', BSS_LINE_POS   { src }
+    ]);
     IREmitCodeCall(AnsiStrFromLiteralAddr);                                        { rax = new managed handle }
-    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);     { mov rcx,[len] }
-    EmitB($48); EmitB($89); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { mov [pos],rcx (consume line) }
-    EmitB($50);                                                                   { push rax (new); stack: new,target }
-    EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08);                   { mov rcx,[rsp+8] = target addr }
-    EmitB($48); EmitB($8B); EmitB($01);                                           { mov rax,[rcx] = old handle }
-    EmitB($50);                                                                   { push old; stack: old,new,target }
-    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08);                   { mov rax,[rsp+8] = new }
-    EmitB($48); EmitB($89); EmitB($01);                                           { mov [rcx],rax = store new }
-    EmitB($58);                                                                   { pop rax = old }
+    EmitAsmX64([
+      'mov rcx, [@glob]', BSS_LINE_LEN,
+      'mov [@glob], rcx', BSS_LINE_POS,  { consume line }
+      'push rax',                        { new; stack: new,target }
+      'mov rcx, [rsp+8]',                { target addr }
+      'mov rax, [rcx]',                  { old handle }
+      'push rax',                        { old; stack: old,new,target }
+      'mov rax, [rsp+8]',                { new }
+      'mov [rcx], rax'                   { store new }
+    ]);
+    EmitAsmX64(['pop rax']);             { old }
     IREmitCodeCall(AnsiStrReleaseAddr);                                            { release old (nil-safe) }
-    EmitB($58);                                                                   { pop rax (new, discard) }
-    EmitB($58);                                                                   { pop rax (target, discard) }
+    EmitAsmX64(['pop rax', 'pop rax']);  { new, target (discard) }
     Exit;
   end;
   if tk = tyString then
   begin
-    EmitB($48); EmitB($89); EmitB($C7);                                          { mov rdi,rax }
-    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rcx,[len] }
-    EmitB($48); EmitB($2B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { sub rcx,[pos] }
-    EmitB($48); EmitB($89); EmitB($0F);                                          { mov [rdi],rcx }
-    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);    { lea rsi,[buf] }
-    EmitB($48); EmitB($03); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { add rsi,[pos] }
-    EmitB($48); EmitB($83); EmitB($C7); EmitB($08);                              { add rdi,8 }
-    EmitB($F3); EmitB($A4);                                                      { rep movsb }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rax,[len] }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov [pos],rax }
+    EmitAsmX64([
+      'mov rdi, rax',
+      'mov rcx, [@glob]', BSS_LINE_LEN,
+      'sub rcx, [@glob]', BSS_LINE_POS,
+      'mov [rdi], rcx',
+      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'add rsi, [@glob]', BSS_LINE_POS,
+      'add rdi, %', 8,
+      'rep movsb',
+      'mov rax, [@glob]', BSS_LINE_LEN,
+      'mov [@glob], rax', BSS_LINE_POS
+    ]);
     Exit;
   end;
   if tk = tyChar then
   begin
-    EmitB($48); EmitB($89); EmitB($C7);                                          { mov rdi,rax }
-    EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov rdx,[pos] }
-    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rcx,[len] }
-    EmitB($31); EmitB($C0);                                                      { xor eax,eax }
-    EmitB($48); EmitB($39); EmitB($CA);                                          { cmp rdx,rcx }
+    EmitAsmX64([
+      'mov rdi, rax',
+      'mov rdx, [@glob]', BSS_LINE_POS,
+      'mov rcx, [@glob]', BSS_LINE_LEN,
+      'xor eax, eax',
+      'cmp rdx, rcx'
+    ]);
     EmitB($0F); EmitB($8D); jDone := CodeLen; EmitI32(0);                         { jge nochar }
-    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);    { lea rsi,[buf] }
-    EmitB($48); EmitB($01); EmitB($D6);                                          { add rsi,rdx }
-    EmitB($48); EmitB($0F); EmitB($B6); EmitB($06);                              { movzx rax,byte[rsi] }
-    EmitB($48); EmitB($FF); EmitB($C2);                                          { inc rdx }
-    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov [pos],rdx }
+    EmitAsmX64([
+      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'add rsi, rdx',
+      'movzx rax, byte [rsi]',
+      'inc rdx',
+      'mov [@glob], rdx', BSS_LINE_POS
+    ]);
     Patch32(jDone, CodeLen - (jDone + 4));
-    EmitB($88); EmitB($07);                                                      { mov [rdi],al }
+    EmitAsmX64(['mov [rdi], al']);
     Exit;
   end;
   { integer family: r8 = negative flag, r9 = accumulator, rdx = cursor }
-  EmitB($48); EmitB($89); EmitB($C7);                                            { mov rdi,rax }
-  EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);      { mov rdx,[pos] }
-  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);      { mov rcx,[len] }
-  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);      { lea rsi,[buf] }
-  EmitB($4D); EmitB($31); EmitB($C0);                                            { xor r8,r8 (neg flag) }
-  EmitB($4D); EmitB($31); EmitB($C9);                                            { xor r9,r9 (acc) }
+  EmitAsmX64([
+    'mov rdi, rax',
+    'mov rdx, [@glob]', BSS_LINE_POS,
+    'mov rcx, [@glob]', BSS_LINE_LEN,
+    'lea rsi, [@glob]', BSS_LINE_BUF,
+    'xor r8, r8',    { neg flag }
+    'xor r9, r9'     { acc }
+  ]);
   { skip whitespace }
   skipLoop := CodeLen;
-  EmitB($48); EmitB($39); EmitB($CA);                                            { cmp rdx,rcx }
+  EmitAsmX64(['cmp rdx, rcx']);
   EmitB($0F); EmitB($8D); jEmpty := CodeLen; EmitI32(0);                          { jge applysign (empty) }
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($20);                                { cmp rax,32 }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
+  EmitAsmX64(['cmp rax, %', 32]);
   EmitB($0F); EmitB($84); jAdv := CodeLen; EmitI32(0);                            { je advws }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($09);                                { cmp rax,9 }
+  EmitAsmX64(['cmp rax, %', 9]);
   EmitB($0F); EmitB($85); jStart := CodeLen; EmitI32(0);                          { jne startsign }
   { advws: }
   Patch32(jAdv, CodeLen - (jAdv + 4));
-  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  EmitAsmX64(['inc rdx']);
   EmitB($E9); EmitI32(skipLoop - (CodeLen + 4));                                  { jmp skipLoop }
   { startsign: }
   Patch32(jStart, CodeLen - (jStart + 4));
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($2D);                                { cmp rax,45 '-' }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
+  EmitAsmX64(['cmp rax, %', 45]);                                                { '-' }
   EmitB($0F); EmitB($85); jSign := CodeLen; EmitI32(0);                           { jne digits }
-  EmitB($49); EmitB($C7); EmitB($C0); EmitI32(1);                                { mov r8,1 }
-  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  EmitAsmX64(['mov r8, %', 1, 'inc rdx']);
   { digits: }
   Patch32(jSign, CodeLen - (jSign + 4));
   digLoop := CodeLen;
-  EmitB($48); EmitB($39); EmitB($CA);                                            { cmp rdx,rcx }
+  EmitAsmX64(['cmp rdx, rcx']);
   EmitB($0F); EmitB($8D); jDigEnd := CodeLen; EmitI32(0);                         { jge applysign }
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($30);                                { cmp rax,48 }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
+  EmitAsmX64(['cmp rax, %', 48]);
   EmitB($0F); EmitB($8C); jLt := CodeLen; EmitI32(0);                             { jl applysign }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($39);                                { cmp rax,57 }
+  EmitAsmX64(['cmp rax, %', 57]);
   EmitB($0F); EmitB($8F); jGt := CodeLen; EmitI32(0);                             { jg applysign }
-  EmitB($4D); EmitB($6B); EmitB($C9); EmitB($0A);                                { imul r9,r9,10 }
-  EmitB($48); EmitB($83); EmitB($E8); EmitB($30);                                { sub rax,48 }
-  EmitB($49); EmitB($01); EmitB($C1);                                            { add r9,rax }
-  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  EmitB($4D); EmitB($6B); EmitB($C9); EmitB($0A);                                { imul r9,r9,10 -- 3-operand imul+imm not supported, isolated single site }
+  EmitAsmX64(['sub rax, %', 48, 'add r9, rax', 'inc rdx']);
   EmitB($E9); EmitI32(digLoop - (CodeLen + 4));                                   { jmp digLoop }
   { applysign: }
   Patch32(jEmpty,  CodeLen - (jEmpty + 4));
   Patch32(jDigEnd, CodeLen - (jDigEnd + 4));
   Patch32(jLt,     CodeLen - (jLt + 4));
   Patch32(jGt,     CodeLen - (jGt + 4));
-  EmitB($4D); EmitB($85); EmitB($C0);                                            { test r8,r8 }
+  EmitAsmX64(['test r8, r8']);
   EmitB($0F); EmitB($84); jNoSign := CodeLen; EmitI32(0);                         { jz nosign }
-  EmitB($49); EmitB($F7); EmitB($D9);                                            { neg r9 }
+  EmitAsmX64(['neg r9']);
   { nosign: }
   Patch32(jNoSign, CodeLen - (jNoSign + 4));
-  EmitB($4C); EmitB($89); EmitB($C8);                                            { mov rax,r9 }
-  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);      { mov [pos],rdx }
+  EmitAsmX64(['mov rax, r9', 'mov [@glob], rdx', BSS_LINE_POS]);
   sz := TypeSize(tk);
-  if sz = 1 then begin EmitB($88); EmitB($07); end                               { mov [rdi],al }
-  else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($07); end              { mov [rdi],ax }
-  else if sz = 4 then begin EmitB($89); EmitB($07); end                          { mov [rdi],eax }
-  else begin EmitB($48); EmitB($89); EmitB($07); end;                            { mov [rdi],rax }
+  if sz = 1 then EmitAsmX64(['mov [rdi], al'])
+  else if sz = 2 then EmitAsmX64(['mov [rdi], ax'])
+  else if sz = 4 then EmitAsmX64(['mov [rdi], eax'])
+  else EmitAsmX64(['mov [rdi], rax']);
 end;
 
 procedure EmitLoadVariantAddress(node: Integer);
@@ -882,17 +889,11 @@ begin
   begin
     symIdx := IRA[node];
     if Syms[symIdx].Kind = skGlobal then
-    begin
-      EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset);
-    end
+      EmitAsmX64(['lea rax, [@glob]', Syms[symIdx].Offset])
     else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
-    begin
-      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
-    end
+      EmitAsmX64(['mov rax, [rbp+%]', Syms[symIdx].Offset])
     else
-    begin
-      EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
-    end;
+      EmitAsmX64(['lea rax, [rbp+%]', Syms[symIdx].Offset]);
   end
   else if IRKind[node] = IR_LOAD_MEM then
   begin

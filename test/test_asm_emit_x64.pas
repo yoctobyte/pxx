@@ -291,6 +291,15 @@ begin
   AssertBytes('mov dword [@glob],0', [$C7,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('mov-abs glob reloc failed');
 
+  { --- general ALU reg,[@glob/@data] / [@glob/@data],reg (new form added for
+    the ir_codegen.inc EmitAsmX64 migration) --- }
+  ResetCode; EmitAsmX64(['sub rax, [@glob]', 4096]);
+  AssertBytes('sub rax,[@glob]', [$48,$2B,$04,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['add [@glob], rcx', 8192]);
+  AssertBytes('add [@glob],rcx', [$48,$01,$0C,$25,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['cmp rdx, [@glob]', 12288]);
+  AssertBytes('cmp rdx,[@glob]', [$48,$3B,$14,$25,$00,$00,$00,$00]);
+
   { --- push/pop, all registers (regression for bug-emitasmx64-heap-helpers-
     oom-selfhost: the REX.B-forcing path for r8-r15 was never covered here) ---
     Expected bytes cross-checked against llvm-mc-18 -triple=x86_64 -x86-asm-

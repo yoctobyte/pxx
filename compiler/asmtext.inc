@@ -745,6 +745,33 @@ begin
     Exit;
   end;
 
+  { ALU reg,[@glob/@data] and [@glob/@data],reg (absolute-address form). }
+  if ((k0 = 0) and ((k1 = 3) or (k1 = 4))) or (((k0 = 3) or (k0 = 4)) and (k1 = 0)) then
+  begin
+    if CaseEqual(mnem, 'add') then i := $01
+    else if CaseEqual(mnem, 'or')  then i := $09
+    else if CaseEqual(mnem, 'adc') then i := $11
+    else if CaseEqual(mnem, 'sbb') then i := $19
+    else if CaseEqual(mnem, 'and') then i := $21
+    else if CaseEqual(mnem, 'sub') then i := $29
+    else if CaseEqual(mnem, 'xor') then i := $31
+    else if CaseEqual(mnem, 'cmp') then i := $39
+    else begin Error('EmitAsmX64: unsupported reg/abs ALU mnemonic'); i := 0; end;
+    if k0 = 0 then
+    begin
+      EncPrefixAndREX(s0, r0, 0, False);
+      EncB(i + 2);
+      AsmEncAbsRM(r0, k1, md1);
+    end
+    else
+    begin
+      EncPrefixAndREX(s1, r1, 0, False);
+      EncB(i);
+      AsmEncAbsRM(r1, k0, md0);
+    end;
+    Exit;
+  end;
+
   { ALU r/m(mem),imm — needs an explicit operand size (e.g. cmp byte [rdx], 0). }
   if (k0 = 2) and (k1 = 1) then
   begin
