@@ -378,12 +378,22 @@ begin
   end;
   if CaseEqual(mnem, 'inc') or CaseEqual(mnem, 'dec') then
   begin
-    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
-      Error('EmitAsmX64: inc/dec expects a register (this slice)');
+    k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
     if CaseEqual(mnem, 'dec') then i := 1 else i := 0;   { FF /0 = inc, /1 = dec }
-    EncPrefixAndREX(s0, i, r0, False);
-    if s0 = 1 then EncB($FE) else EncB($FF);
-    EncModRMReg(i, r0);
+    if k0 = 0 then
+    begin
+      EncPrefixAndREX(s0, i, r0, False);
+      if s0 = 1 then EncB($FE) else EncB($FF);
+      EncModRMReg(i, r0);
+    end
+    else if k0 = 2 then
+    begin
+      if s0 = 0 then Error('EmitAsmX64: inc/dec mem needs an explicit size (byte/dword/qword)');
+      EncPrefixAndREXMem(s0, i, mb0, s0 = 1);
+      if s0 = 1 then EncB($FE) else EncB($FF);
+      EncModRMMem(i, mb0, md0, False);
+    end
+    else Error('EmitAsmX64: unsupported inc/dec form');
     Exit;
   end;
 

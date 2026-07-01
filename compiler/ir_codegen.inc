@@ -90,12 +90,13 @@ end;
 procedure EmitDynArrayRetainLocked;
 { rax = dynamic-array data pointer. Preserve rax. Caller holds the heap lock
   when threading is enabled. }
-var pNil: Integer;
 begin
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
-  Code[pNil] := Byte(CodeLen - (pNil + 1));
+  EmitAsmX64([
+    'test rax, rax',
+    'jz .done',
+    'inc qword [rax-16]',
+  '.done:'
+  ]);
 end;
 
 procedure EmitDynArrayRetain;
@@ -120,15 +121,22 @@ end;
 procedure EmitDynArrayReleaseLocked;
 { rax = dynamic-array data pointer. Decrement its refcount and return the
   allocator payload to the free list at zero. Caller holds the heap lock when
-  threading is enabled. }
+  threading is enabled.
+
+  jz/jnz targets are patched manually (not via EmitAsmX64's `.label` form)
+  because they jump past EmitHeapFreeLocked's EmitCallProc -- a label can only
+  be resolved within the SAME EmitAsmX64 call that defines it (its
+  label/forward-jump table resets at the start of every call), and a proc call
+  can't be expressed as an asmtext line. The straight-line instructions
+  themselves are still readable text, not raw opcodes. }
 var pNil, pNonZero: Integer;
 begin
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitAsmX64(['test rax, rax']);
   EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  if ThreadSafeMode then EmitB($F0);               { lock }
-  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
+  if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+  else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
-  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
+  EmitAsmX64(['sub rax, %', 16]);
   EmitHeapFreeLocked;
   Code[pNil] := Byte(CodeLen - (pNil + 1));
   Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
@@ -158,8 +166,10 @@ begin
   procIdx := FindProc('PXXRecordRetain');
   if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
 
-  EmitB($48); EmitB($89); EmitB($DF); { mov rdi, rbx }
-  EmitB($48); EmitB($BE); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))); { mov rsi, desc }
+  EmitAsmX64([
+    'mov rdi, rbx',
+    'mov rsi, @data', -(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))  { desc }
+  ]);
   EmitCallProc(procIdx);
 end;
 
@@ -171,8 +181,10 @@ begin
   procIdx := FindProc('PXXRecordRelease');
   if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
 
-  EmitB($48); EmitB($89); EmitB($DF); { mov rdi, rbx }
-  EmitB($48); EmitB($BE); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))); { mov rsi, desc }
+  EmitAsmX64([
+    'mov rdi, rbx',
+    'mov rsi, @data', -(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))  { desc }
+  ]);
   EmitCallProc(procIdx);
 end;
 
