@@ -1098,6 +1098,7 @@ var
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;
+  EmitSharedMode : Boolean;   { .asm frontend --shared: x86-64 ET_DYN .so output }
   { ESP32 bare-metal profile (--esp-profile=bare): emit a self-contained
     ET_EXEC image targeting the SoC SRAM map (code/data/bss/stack in IRAM),
     bootable directly via `qemu-system-* -M esp32c3 -kernel`, with no ESP-IDF
@@ -1159,6 +1160,20 @@ var
     extern's Procs[].Name (mirrors ObjProcStrOff/ObjExtStrOff's role in the
     xtensa/riscv32 ET_REL writer). }
   AsmGlobalSymStrOff: array[0..MAX_ASM_GLOBALS-1] of Integer;
+  { .asm frontend --shared (EmitSharedMode): `call <extern>` needs
+    position-independent GOT access (a fixed load address can't be assumed),
+    so it emits `call qword ptr [rip+disp32]` (FF 15) instead of either the
+    ET_EXEC absolute-GOT form or the -c PLT32-relocation form, and records
+    (code position of the disp32 field, RegisterExternal index) here.
+    writeELFSharedX64 resolves each disp32 the same way every other
+    rip-relative site in this compiler is resolved: target-(patch_pos+4),
+    once the GOT slot's (chosen-base-relative) virtual address is known --
+    the GOT slot itself is the *same* ExternalGotOff[]/Data[] slot
+    RegisterExternal already allocates for the ET_EXEC path, just filled by
+    the dynamic linker's R_X86_64_GLOB_DAT relocation instead of by us. }
+  AsmSoCallPos: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
+  AsmSoCallExtIdx: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
+  AsmSoCallCount: Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
   AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }

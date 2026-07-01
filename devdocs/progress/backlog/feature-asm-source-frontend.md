@@ -214,3 +214,99 @@ wiring, not new machinery.
   - **Still deferred:** `--shared` `ET_DYN` `.so` writer (task #6 of the
     `full asm support for all 3 heads` umbrella) — the one remaining
     genuinely net-new linker capability.
+- 2026-07-01 — **`--shared` `ET_DYN` shared-library output landed** (Track
+  A), new `writeELFSharedX64` in `elfwriter.inc` — closes the last gap in
+  the umbrella's acceptance criteria (`--shared foo.asm` produces a
+  `dlopen`-loadable `.so`).
+  - **No PIC codegen retrofit needed.** The `.asm` frontend's own addressing
+    was already position-independent by construction going in: labels/
+    branches are rip-relative, `[base+disp]` is register-relative,
+    immediates are immediates — there is no absolute-address operand form
+    in this frontend at all. The only thing that needed a genuinely new
+    encoding was `call <extern>`, which gained a *third* form (alongside
+    the ET_EXEC GOT-indirect-absolute and `-c` PLT32-relocation forms):
+    `call qword ptr [rip+disp32]` (`FF 15`) — a rip-relative GOT access
+    whose displacement is fixed at assemble time regardless of where the
+    `.so` eventually loads (`AsmSoCallPos`/`AsmSoCallExtIdx`, resolved in
+    `writeELFSharedX64` once the GOT region's address is known). The GOT
+    slot itself is the *same* `ExternalGotOff[]`/`Data[]` allocation
+    `RegisterExternal` already does for the `ET_EXEC` path — only filled by
+    the dynamic linker's `R_X86_64_GLOB_DAT` relocation instead of by us.
+    Net result: **zero `R_X86_64_RELATIVE` relocations needed** for this
+    frontend's own code/data at any load address.
+  - Preferred load base = 0 (vaddr == file offset throughout) — rip-relative
+    code doesn't care what base the loader picks, so there was no reason to
+    reserve a nonzero one.
+  - **No section headers.** The dynamic linker resolves everything through
+    `PT_DYNAMIC` and its `DT_SYMTAB`/`DT_STRTAB`/`DT_HASH` — confirmed by
+    testing `nm -D`/`objdump -T` (which enumerate dynamic symbols via the
+    hash table, no section headers needed) successfully against a
+    section-header-less `.so`, matching how the `ET_EXEC` writer already
+    omits them unless `-g`. Trade-off found empirically: **`ld`-time static
+    linking against the `.so` fails** (`error adding symbols: file in wrong
+    format`) — a real static linker's BFD-based symbol introspection wants
+    section headers even though the runtime loader doesn't need them. The
+    umbrella ticket's stated acceptance bar is "`dlopen` round-trip **or**
+    equivalent smoke test" — `dlopen`/`dlsym` against the real system
+    dynamic linker is fully verified (below), so this is a deliberate,
+    documented scope boundary for this increment, not a gap in what was
+    asked for. Full section-header support (`SHT_DYNSYM`/`SHT_STRTAB`/
+    `SHT_HASH`/`SHT_RELA`/`SHT_DYNAMIC` cross-referenced correctly) would
+    close it if `ld`-time linking against a `.asm`-built `.so` is ever
+    wanted.
+  - **Two real bugs found and fixed while building this** (both self-caught
+    via byte-level inspection before landing, not left in):
+    1. `.hash` table word-count miscounted by one word (4 bytes) —
+       `hashSize` used `(dynCount+3)*4` where the actual write loop
+       (`nbucket, nchain, bucket[0], chain[0..dynCount]`) emits
+       `(dynCount+4)` words. Every offset computed *after* the hash table
+       (`.rela.dyn`, the dynamic-entries block, `fileSize`) drifted by 4
+       bytes from where the writer actually was in the file, corrupting
+       every `Elf64_Dyn` entry (`readelf -d` showed tag values shifted into
+       the wrong 32-bit half, e.g. `DT_NEEDED` reading as `0x100000000`
+       instead of `0x1`). Caught by hex-dumping the dynamic section and
+       comparing against hand-computed offsets — `readelf -d`'s own
+       "offset" self-report wasn't enough to catch it, since that value
+       just echoes back whatever the `PT_DYNAMIC` phdr says, not what's
+       actually *at* that file position.
+    2. The rip-relative GOT-call patch (`Patch32(AsmSoCallPos[i], target -
+       (AsmSoCallPos[i]+4))`) used `AsmSoCallPos[i]` — a `Code[]`-internal,
+       0-based offset (same coordinate space `CodeLen` always uses) — as if
+       it were a full file/vaddr-relative position. It needed `textOff +
+       AsmSoCallPos[i]` instead: the CPU's actual rip-relative arithmetic
+       at runtime runs from the instruction's *true* address, not its
+       offset within the compiler's internal `Code[]` buffer. Every
+       internal `[rel label]`/branch fixup in this frontend was already
+       immune to this class of bug by construction (both the label's
+       recorded offset *and* the patch site's recorded offset live in the
+       same `Code[]`-relative coordinate space, so `textOff` cancels out of
+       the subtraction) — this was the *first* rip-relative reference in
+       the frontend to point at something **outside** `Code[]` (the GOT
+       slot, in the `Data[]`-equivalent region), which is exactly why the
+       coordinate-space mismatch had never surfaced before. Caught by
+       disassembling the actual patched call instruction, decoding its
+       target by hand, and finding the diff from the correct target was
+       exactly `textOff` (176 bytes) — not a coincidence once the two
+       coordinate spaces were named.
+  - **Verified for real**: `dlopen()`/`dlsym()` against the real system
+    dynamic linker (glibc), not a hand-rolled loader — both a pure exported
+    function (`so_add`, no relocations needed at all) and a function that
+    calls libc through the new rip-relative GOT mechanism (`so_greet`,
+    calling `puts`/`fflush`) resolve and execute correctly. `nm -D`/
+    `objdump -T` independently confirm the dynamic symbol table (both
+    tools enumerate symbols via `DT_HASH`, proving the hash table and
+    `.dynsym`/`.dynstr` are genuinely well-formed, not just readable by
+    `readelf -d`). Self-hosted `compiler/pascal26`'s `.so` output confirmed
+    **byte-identical** to the FPC-built compiler's. `test/test_asm_so.asm`
+    in `make test` (`test-asm`), gcc+dl-guarded like the `-c` object
+    writer's link checks.
+  - Full `make test` green; self-host bootstrap byte-identical.
+  - **All three heads of `feature-assembler-first-class-citizen` now have a
+    working increment** — head 3 (this ticket) covers `ET_EXEC`/`-c`/
+    `--shared` for x86-64; remaining work across the umbrella: head 2
+    (`-S` textual emit mode, x64 codegen — task #7 of the "full asm support
+    for all 3 heads" session goal), plus the previously-scoped multi-target
+    rollout (i386/aarch64/arm32/riscv32/xtensa) for this frontend, which
+    stayed explicitly out of scope for this session ("land x86-64 first
+    end-to-end... then the rollout to the other five is comparatively
+    cheap" per the umbrella ticket).

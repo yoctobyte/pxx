@@ -113,6 +113,7 @@ begin
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
+  EmitSharedMode := False;
   EspBareBoot := False;
   NoDefaultRtl := False;
   TargetPlatform := PLATFORM_POSIX;
@@ -259,6 +260,13 @@ begin
     else if option = '--emit-obj' then
     begin
       EmitObjMode := True;
+      Inc(i);
+    end
+    else if option = '--shared' then
+    begin
+      { .asm frontend only (feature-asm-source-frontend task #6): x86-64
+        ET_DYN shared-library output. }
+      EmitSharedMode := True;
       Inc(i);
     end
     else if option = '--esp-profile=bare' then
@@ -425,6 +433,9 @@ begin
   n := Length(outFile);
   if (n >= 2) and (outFile[n] = 'o') and (outFile[n-1] = '.') then
     EmitObjMode := True;
+  { A .so output name implies shared-library emission (same as --shared). }
+  if (n >= 3) and (outFile[n] = 'o') and (outFile[n-1] = 's') and (outFile[n-2] = '.') then
+    EmitSharedMode := True;
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
@@ -500,6 +511,7 @@ begin
   AsmEntryOff := 0;
   AsmObjCallCount := 0;
   AsmGlobalSymCount := 0;
+  AsmSoCallCount := 0;
   InLValueWrite := False;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0; IMTCount := 0;
@@ -605,7 +617,9 @@ begin
   if DebugTrace then
     for i := 0 to ProcCount - 1 do
       writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  if EmitObjMode then
+  if EmitSharedMode then
+    writeELFSharedX64(outFile)
+  else if EmitObjMode then
   begin
     if TargetArch = TARGET_X86_64 then
       writeELFRelX64(outFile)

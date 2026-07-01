@@ -307,6 +307,16 @@ test-asm: $(COMPILER)
 	  gcc /tmp/test_asm_obj26_caller.o /tmp/test_asm_obj26.o -o /tmp/test_asm_obj26_caller_exe 2>/dev/null && \
 	  /tmp/test_asm_obj26_caller_exe && echo "test-asm: .o exported symbol callable from C ok"; \
 	else echo "test-asm: gcc not installed; .o link check skipped"; fi
+	./$(COMPILER) test/test_asm_so.asm /tmp/test_asm_so26.so
+	readelf -h /tmp/test_asm_so26.so | grep -q 'DYN (Shared object file)'
+	readelf -h /tmp/test_asm_so26.so | grep -q 'X86-64'
+	readelf -d /tmp/test_asm_so26.so | grep -q 'NEEDED.*libc.so.6'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){fprintf(stderr,"dlopen: %%s\\n",dlerror());return 1;}int(*a)(int,int)=dlsym(h,"so_add");void(*g)(void)=dlsym(h,"so_greet");if(!a||!g){fprintf(stderr,"dlsym: %%s\\n",dlerror());return 1;}if(a(19,23)!=42){fprintf(stderr,"so_add wrong\\n");return 1;}g();return 0;}\n' > /tmp/test_asm_so26_dlopen.c; \
+	  gcc /tmp/test_asm_so26_dlopen.c -o /tmp/test_asm_so26_dlopen -ldl 2>/dev/null && \
+	  test "$$(/tmp/test_asm_so26_dlopen /tmp/test_asm_so26.so)" = "hello from shared lib" && \
+	  echo "test-asm: .so dlopen/dlsym round-trip (incl. extern-call GOT) ok" || { echo "test-asm: .so dlopen round-trip FAILED"; exit 1; }; \
+	else echo "test-asm: gcc not installed; .so dlopen check skipped"; fi
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26

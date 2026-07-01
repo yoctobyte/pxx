@@ -17,17 +17,32 @@
       PrepareDynamicData/PatchDynCallSites in elfwriter.inc) — no new ELF-
       writer code. jmp/jcc to an extern name is rejected (only `call` goes
       through an indirect GOT slot; a direct rel32 jump can't).
-    - `global <label>`: overrides the ELF entry point (default: start of
-      Code[]) with a chosen code label's offset (AsmEntryOff, defs.inc;
-      always 0 — a no-op — for every non-.asm compile).
-
-  Still deferred to later increments (clear errors point at them):
-    - `-c` ET_REL object output, `--shared` ET_DYN .so writer (see
-      feature-asm-source-frontend tasks #5/#6).
+    - `global <label>`: overrides the ELF entry point for a linked ET_EXEC
+      (default: start of Code[]) with a chosen code label's offset
+      (AsmEntryOff, defs.inc; always 0 — a no-op — for every non-.asm
+      compile), and/or exports the label as an ELF symbol in `-c`/`--shared`
+      output (AsmGlobalSym*, defs.inc) — every `global` becomes an export,
+      only the first non-data one also overrides the entry point.
+    - `-c`/`--emit-obj`: ET_REL object output (writeELFRelX64,
+      elfwriter.inc) — `call <extern>` emits a real `call rel32` +
+      R_X86_64_PLT32 relocation for an external linker to resolve, instead
+      of resolving it ourselves.
+    - `--shared`: ET_DYN shared-library output (writeELFSharedX64,
+      elfwriter.inc) — no PIC codegen retrofit needed (this frontend's own
+      addressing is already position-independent by construction); `call
+      <extern>` uses a rip-relative GOT access instead of either the
+      ET_EXEC or `-c` forms. dlopen/dlsym-loadable (verified against the
+      real system dynamic linker); not `ld`-linkable at static-link time
+      (no section headers — the runtime loader doesn't need them, but a
+      static linker's symbol-table introspection does; out of scope for
+      this increment, see feature-asm-source-frontend's log).
 
   Termination: as in the MVP, a fixed exit epilogue (`mov eax,60; syscall`) is
   appended after the program, so a program that falls through exits with the
-  value left in rdi. A program may also exit itself with an explicit `syscall`.
+  value left in rdi. A program may also exit itself with an explicit
+  `syscall`. `-c`/`--shared` output skips this epilogue entirely — both
+  produce a reusable compilation unit (for a real linker, or a dlopen-able
+  library), not a standalone process.
   x86-64 only. }
 
 { ---- tiny line helpers (self-contained; the compiler proper has its own) ---- }
@@ -497,6 +512,21 @@ begin
           Inc(AsmObjCallCount);
           EmitI32(0);
         end
+        else if EmitSharedMode then
+        begin
+          { position-independent GOT access: `call qword ptr [rip+disp32]`
+            (FF 15), not the ET_EXEC form's absolute GOT address (a .so can
+            load at any base). The GOT slot itself still comes from
+            RegisterExternal/ExternalGotOff -- same allocation, just filled
+            by the dynamic linker's R_X86_64_GLOB_DAT instead of by us. }
+          if AsmSoCallCount >= MAX_ASM_OBJ_CALLFIX then
+            Error('asm:' + AsmIntToStr(lineNo) + ': too many extern calls (shared-library mode)');
+          EmitB($FF); EmitB($15);
+          AsmSoCallPos[AsmSoCallCount] := CodeLen;
+          AsmSoCallExtIdx[AsmSoCallCount] := extIdx;
+          Inc(AsmSoCallCount);
+          EmitI32(0);
+        end
         else
           EmitExternalIndirectCall(extIdx);
         emittedAny := True;
@@ -562,12 +592,13 @@ begin
 
   { exit epilogue: SYS_exit(rdi). mov eax,60 ; syscall. A program that runs off
     the end exits with whatever it left in rdi (programs may also exit via an
-    explicit `syscall`). Object mode (-c) has no notion of "the program falls
-    off the end" -- a .asm compiled to an object is a reusable compilation
-    unit (functions/data for a real linker to combine), not a standalone
-    process; forcing an exit syscall onto it would be dead code at best and
-    actively wrong if the object gets linked as a library. }
-  if not EmitObjMode then
+    explicit `syscall`). Object mode (-c) and shared-library mode (--shared)
+    have no notion of "the program falls off the end" -- both produce a
+    reusable compilation unit (functions/data for a real linker, or a
+    dlopen-able library), not a standalone process; forcing an exit syscall
+    onto it would be dead code at best and actively wrong if it gets linked
+    into / loaded by something else. }
+  if not (EmitObjMode or EmitSharedMode) then
   begin
     EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60 }
     EmitB($0F); EmitB($05);                                       { syscall }

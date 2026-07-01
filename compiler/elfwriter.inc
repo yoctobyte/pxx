@@ -2385,6 +2385,215 @@ begin
 {$endif}
 end;
 
+{ x86-64 ET_DYN shared-library writer for the .asm frontend's `--shared` mode
+  (feature-asm-source-frontend task #6). No PIC codegen retrofit needed: the
+  .asm frontend's own addressing is already position-independent by
+  construction (labels/branches are rip-relative, `[base+disp]` is register-
+  relative, immediates are immediates -- there is no absolute-address
+  operand form in this frontend at all), and `call <extern>` in this mode
+  uses a rip-relative GOT access (see the EmitSharedMode branch in
+  ParseAsmProgram) whose displacement is fixed at assemble time regardless
+  of where the .so eventually loads. So there are zero R_X86_64_RELATIVE
+  relocations to emit for our own code/data -- the only relocations this .so
+  needs are R_X86_64_GLOB_DAT entries filling each extern's GOT slot, which
+  the dynamic linker processes via PT_DYNAMIC (the same mechanism
+  PrepareDynamicData/PatchDynamicData already use for a linked ET_EXEC's
+  dynamic imports).
+  No section headers: the dynamic linker (and a real linker consuming this
+  .so, e.g. `gcc -shared`/`ld -lfoo`) resolves everything through
+  PT_DYNAMIC and its DT_SYMTAB/DT_STRTAB/DT_HASH -- section headers are
+  supplementary, not required (the ET_EXEC writer already omits them too
+  unless `-g`).
+  Preferred load base = 0 (vaddr == file offset throughout): rip-relative
+  code doesn't care what base the loader eventually picks, so there's no
+  reason to reserve a nonzero preferred address.
+  File layout (written sequentially; the self-hosted writer cannot seek):
+  ehdr, 2 phdrs (PT_LOAD, PT_DYNAMIC), .text (Code[]), GOT (Data[]),
+  .dynstr, .dynsym, .hash, .rela.dyn, dynamic entries. }
+procedure writeELFSharedX64(const outPath: AnsiString);
+var
+  i, j, libIdx, dynCount, numDynSyms, neededCount: Integer;
+  found: Boolean;
+  textOff, dataOff, dynstrOff, dynsymOff, hashOff, relaDynOff, dynamicOff: Integer;
+  dynstrSize, hashSize, dynamicSize, fileSize, phOff: Integer;
+  strOffExport: array[0..MAX_ASM_GLOBALS-1] of Integer;
+  strOffImport: array[0..MAX_EXTERNAL-1] of Integer;
+  neededLibStr: array[0..MAX_EXTERNAL-1] of Integer;
+  neededLibOff: array[0..MAX_EXTERNAL-1] of Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('--shared: .asm frontend shared-library output is x86-64 only');
+
+  dynCount := AsmGlobalSymCount + ExternalCount;
+  numDynSyms := dynCount + 1;   { + null symbol }
+
+  { .dynstr: 0 = empty, then export names, then import (extern) names }
+  dynstrSize := 1;
+  for i := 0 to AsmGlobalSymCount - 1 do
+  begin
+    strOffExport[i] := dynstrSize;
+    dynstrSize := dynstrSize + Length(AsmGlobalSymName[i]) + 1;
+  end;
+  for i := 0 to ExternalCount - 1 do
+  begin
+    strOffImport[i] := dynstrSize;
+    dynstrSize := dynstrSize + Length(Procs[ExternalProc[i]].Name) + 1;
+  end;
+
+  { DT_NEEDED: one per distinct imported library (Strs[] index dedup, same
+    as PrepareDynamicData). }
+  neededCount := 0;
+  for i := 0 to ExternalCount - 1 do
+  begin
+    libIdx := ProcLibrary[ExternalProc[i]];
+    found := False;
+    for j := 0 to neededCount - 1 do
+      if neededLibStr[j] = libIdx then found := True;
+    if not found then
+    begin
+      neededLibStr[neededCount] := libIdx;
+      neededLibOff[neededCount] := dynstrSize;
+      dynstrSize := dynstrSize + Length(Strs[libIdx].Text) + 1;
+      Inc(neededCount);
+    end;
+  end;
+
+  { .hash word count: nbucket + nchain (2) + bucket[0] (1) + chain[0..dynCount] (dynCount+1) = dynCount+4 words. }
+  hashSize := (dynCount + 4) * 4;
+  { DT_NEEDED*, DT_HASH, DT_STRTAB, DT_STRSZ, DT_SYMTAB, DT_SYMENT, DT_RELA,
+    DT_RELASZ, DT_RELAENT, DT_NULL -- 9 fixed entries, Elf64_Dyn = 16 bytes. }
+  dynamicSize := (neededCount + 9) * 16;
+
+  phOff := ELF_HEADER_SIZE;
+  textOff := phOff + 2 * PROG_HEADER_SIZE;
+  dataOff := AlignTo(textOff + CodeLen, 8);
+  dynstrOff := dataOff + DataLen;
+  dynsymOff := AlignTo(dynstrOff + dynstrSize, 8);
+  hashOff := dynsymOff + numDynSyms * 24;
+  relaDynOff := AlignTo(hashOff + hashSize, 8);
+  dynamicOff := relaDynOff + ExternalCount * 24;
+  fileSize := dynamicOff + dynamicSize;
+
+  { resolve each --shared extern call's rip-relative GOT displacement, now
+    that dataOff (the GOT region's vaddr, base 0 == file offset) is known --
+    same target-(patch_pos+4) formula every other rip-relative site in this
+    compiler uses. AsmSoCallPos[i] is a Code[]-internal (0-based) offset,
+    same as CodeLen always is; the *vaddr* of that patch site is textOff +
+    AsmSoCallPos[i] (textOff = start of Code[] within the file/address
+    space), which is what the CPU's actual rip-relative arithmetic runs
+    from at runtime -- using the bare Code[]-relative position here (missing
+    the +textOff) produced a displacement too large by exactly textOff.
+    Must happen before Code[] is written out below. }
+  for i := 0 to AsmSoCallCount - 1 do
+    Patch32(AsmSoCallPos[i], (dataOff + ExternalGotOff[AsmSoCallExtIdx[i]]) - (textOff + AsmSoCallPos[i] + 4));
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF64 ehdr, ET_DYN, no section headers }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 64, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,3);writeU16(f,62);writeU32(f,1);           { ET_DYN, EM_X86_64 }
+  writeU64(f,0);writeU64(f,phOff);writeU64(f,0);        { entry=0, phoff, shoff=0 }
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,2);
+  writeU16(f,0);writeU16(f,0);writeU16(f,0);   { shentsize/shnum/shstrndx = 0 }
+
+  { PT_LOAD: whole file, RWX (same single-segment simplification the ET_EXEC
+    writer already uses). }
+  writeU32(f,1);writeU32(f,7);
+  writeU64(f,0);writeU64(f,0);writeU64(f,0);
+  writeU64(f,fileSize);writeU64(f,fileSize);writeU64(f,$200000);
+
+  { PT_DYNAMIC }
+  writeU32(f,2);writeU32(f,6);
+  writeU64(f,dynamicOff);writeU64(f,dynamicOff);writeU64(f,dynamicOff);
+  writeU64(f,dynamicSize);writeU64(f,dynamicSize);writeU64(f,8);
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+{$endif}
+  writePad(f, dataOff - (textOff + CodeLen));
+
+{$ifdef FPC}
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+{$else}
+  if DataLen > 0 then syswrite(f,Data,DataLen);
+{$endif}
+  writePad(f, dynstrOff - (dataOff + DataLen));
+
+  { .dynstr }
+  writeU8(f, 0);
+  for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
+  for i := 0 to ExternalCount - 1 do writeStrZ(f, Procs[ExternalProc[i]].Name);
+  for i := 0 to neededCount - 1 do writeStrZ(f, Strs[neededLibStr[i]].Text);
+  writePad(f, dynsymOff - (dynstrOff + dynstrSize));
+
+  { .dynsym: null, then export syms (defined -- st_value is a real virtual
+    address here, base 0 so textOff+offset-into-Code[]; shndx=1 is a
+    placeholder, there is no real section header table to match it against
+    -- what matters for dynamic symbol resolution is shndx<>SHN_UNDEF and
+    st_value), then import syms (UND). }
+  writeSym64(f, 0, 0, 0, 0, 0);
+  for i := 0 to AsmGlobalSymCount - 1 do
+    writeSym64(f, strOffExport[i], $10, 1, textOff + AsmGlobalSymOff[i], 0);
+  for i := 0 to ExternalCount - 1 do
+    writeSym64(f, strOffImport[i], $10, 0, 0, 0);
+
+  { .hash: SysV DT_HASH, single bucket (same naive-but-correct scheme
+    PrepareDynamicData already uses for the ET_EXEC path). }
+  writeU32(f, 1); writeU32(f, numDynSyms);
+  if dynCount > 0 then writeU32(f, 1) else writeU32(f, 0);
+  writeU32(f, 0);
+  for i := 1 to dynCount do
+  begin
+    if i < dynCount then writeU32(f, i + 1) else writeU32(f, 0);
+  end;
+  writePad(f, relaDynOff - (hashOff + hashSize));
+
+  { .rela.dyn: one R_X86_64_GLOB_DAT per extern, filling its GOT slot
+    (already allocated by RegisterExternal in Data[]/ExternalGotOff) with
+    the dynamic linker's resolved runtime address at load time. Import
+    symbol index = 1 (null) + AsmGlobalSymCount (exports) + i. }
+  for i := 0 to ExternalCount - 1 do
+    writeRela64(f, dataOff + ExternalGotOff[i], 1 + AsmGlobalSymCount + i, 6, 0);
+
+  { PT_DYNAMIC entries }
+  for i := 0 to neededCount - 1 do
+  begin
+    writeU64(f, 1); writeU64(f, neededLibOff[i]);   { DT_NEEDED }
+  end;
+  writeU64(f, 4); writeU64(f, hashOff);              { DT_HASH }
+  writeU64(f, 5); writeU64(f, dynstrOff);            { DT_STRTAB }
+  writeU64(f, 10); writeU64(f, dynstrSize);          { DT_STRSZ }
+  writeU64(f, 6); writeU64(f, dynsymOff);            { DT_SYMTAB }
+  writeU64(f, 11); writeU64(f, 24);                  { DT_SYMENT }
+  writeU64(f, 7); writeU64(f, relaDynOff);           { DT_RELA }
+  writeU64(f, 8); writeU64(f, ExternalCount * 24);   { DT_RELASZ }
+  writeU64(f, 9); writeU64(f, 24);                   { DT_RELAENT }
+  writeU64(f, 0); writeU64(f, 0);                    { DT_NULL }
+
+{$ifdef FPC}
+  Close(f);
+{$else}
+  sysfchmod(f, 420); { chmod 644 — a .so is not executable }
+  sysclose(f);
+{$endif}
+end;
+
 {$ifndef FPC}
 function sysgetdents64(fd: Integer; var buf; count: Integer): Integer;
 begin
