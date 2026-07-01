@@ -9429,6 +9429,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
     moreDims: Boolean; elemProcSig: Integer;
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+    initDepth, scOff, scLen: Integer;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -9681,19 +9682,62 @@ begin
 	        if not isArr then Error('parenthesised initializer requires an array variable');
 	        Next;
 	        initElem := 0;
-	        repeat
-	          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-	          if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
-	          initVal := ParseInitVal;
-	          PendingInitSym[PendingInitCount]  := idx;
-	          PendingInitElem[PendingInitCount] := arrLo + initElem;
-          PendingInitFOff[PendingInitCount] := -1;
-	          PendingInitVal[PendingInitCount]  := initVal;
-	          PendingInitTk[PendingInitCount]   := Ord(elemTk);
-	          Inc(PendingInitCount);
-	          Inc(initElem);
-	        until not Eat(tkComma);
-	        Expect(tkRParen, ')');
+	        { N-D array initializers nest one paren level per dimension
+	          (`array[0..1,0..2] of T = ((a,b,c),(d,e,f))`); the flat store
+	          fills in row-major order regardless of nesting depth, same as
+	          ParseConstSection's array-constant loop. This used to be a flat
+	          comma list (1-D only, no paren-depth tracking at all), so any
+	          2+ dimensional var initializer broke structurally -- see
+	          bug-array-const-too-many-elements-synapse. }
+	        initDepth := 1;
+	        while initDepth > 0 do
+	        begin
+	          if CurTok.Kind = tkLParen then begin Next; Inc(initDepth); end
+	          else if CurTok.Kind = tkRParen then begin Next; Dec(initDepth); end
+	          else if CurTok.Kind = tkComma then Next
+	          else
+	          begin
+	            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
+	            if elemTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
+	            begin
+	              { String/AnsiString elements can't go through ParseInitVal/
+	                ConstEval -- ConstEvalFactor only special-cases single-char
+	                literals as an ordinal; a multi-char literal falls through
+	                without consuming the token, desyncing initElem from the
+	                real token stream (same underlying bug as
+	                bug-const-array-of-ansistring-literal-too-many-elements,
+	                fixed there for ParseConstSection but never mirrored here
+	                for ParseVarSection). Capture the literal's span directly
+	                and record it as a Kind=1 (string literal) init, same as
+	                ParseConstSection's array-constant string handling. }
+	              if CurTok.Kind <> tkString then
+	                Error('array constant: expected a string or char literal');
+	              scOff := Tokens[TokPos-1].SOffset;
+	              scLen := Tokens[TokPos-1].SLen;
+	              Next;
+	              PendingInitSym[PendingInitCount]    := idx;
+	              PendingInitElem[PendingInitCount]   := arrLo + initElem;
+	              PendingInitFOff[PendingInitCount]   := -1;
+	              PendingInitKind[PendingInitCount]   := 1;
+	              PendingInitVal[PendingInitCount]     := scOff;
+	              PendingInitValAux[PendingInitCount] := scLen;
+	              PendingInitTk[PendingInitCount]     := Ord(elemTk);
+	            end
+	            else
+	            begin
+	              initVal := ParseInitVal;
+	              PendingInitSym[PendingInitCount]  := idx;
+	              PendingInitElem[PendingInitCount] := arrLo + initElem;
+	              PendingInitFOff[PendingInitCount] := -1;
+	              PendingInitKind[PendingInitCount] := 0;
+	              PendingInitVal[PendingInitCount]  := initVal;
+	              PendingInitTk[PendingInitCount]   := Ord(elemTk);
+	            end;
+	            Inc(PendingInitCount);
+	            Inc(initElem);
+	          end;
+	        end;
 	      end
 	      else
 	      begin

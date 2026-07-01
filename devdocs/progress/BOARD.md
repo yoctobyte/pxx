@@ -29,7 +29,6 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
-| bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
@@ -95,6 +94,7 @@ _none_
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
+| feature-sysutils-decodedate-missing | A | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
@@ -145,7 +145,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (396)
+## done (397)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -155,6 +155,7 @@ _none_
 | bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
 | bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
+| bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
@@ -563,7 +564,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
-- [A] bug-array-const-too-many-elements-synapse
 - [A] bug-array-ctor-statement-arg-after-dynarray-record-param
 - [A] bug-byvalue-record-managed-field-aliases-caller
 - [A] bug-c-arrow-on-array-store-of-call-result-clobbered
@@ -627,6 +627,7 @@ _none_
 - [A] feature-require-forward-strict-mode
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
+- [A] feature-sysutils-decodedate-missing
 - [B] feature-threadsafe-heap-contract
 - [A] feature-threadsafe-heap-optimize
 - [A] feature-threadsafe-io-serialization

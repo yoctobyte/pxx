@@ -127,3 +127,4 @@
 2026-07-01T18:41:46Z  v127  b0d10304fb33d7593c2bb6711ca921a31a0bae01dc702e6f139af0ffa2b5d143  584097c3ac6e4e6c3fb22860e1c30845f350b5e4  docs(progress): close out this session's ir_codegen.inc EmitAsmX64 push
 2026-07-01T19:01:28Z  v128  037f32945849f1cc4b601737cb835518cf4b2c60639ee2d253ee6693107c1d2f  5d399f301938723b9d433d13088393b32569c302  docs(progress): file i386 try/except segfault + cross-target E.Message bug
 2026-07-01T19:28:16Z  v129  22c552dbb8844339a90200a6ddd2d70154991ac36a8b42793bf7519ed0bf5c25  2f49905767ff9d8b5ac6bffbd75ee770b647a148  fix(except): on E: BaseClass now catches derived exceptions (v128)
+2026-07-01T19:45:28Z  v130  ce22f69b91950a41a300fe120cda830f40bbbd2aef746433d649eefaaff3af1d  eb4e1cf51930297be01ab1b6334f4086661c465e  fix(typecast): narrowing ordinal rvalue casts now truncate correctly (v129)
