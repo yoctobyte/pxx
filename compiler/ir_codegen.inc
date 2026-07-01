@@ -1983,8 +1983,22 @@ begin
                 (The read path is unchanged — handled via EmitLoadVar elsewhere.) }
               begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end
             else if InLValueWrite and
-               ((Syms[symIdx].TypeKind = tyAnsiString) or
+               (((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) or
                 (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1))) then
+              { lea rax,[rbp+off]: address of a genuinely LOCAL slot (scalar
+                AnsiString var, or a local dynamic array's handle slot -- both
+                need their own address, not a dereference). Excluding IsArray
+                from the TypeKind=tyAnsiString disjunct matters because an
+                array symbol's TypeKind holds its ELEMENT type: without the
+                guard, a var/out array-of-AnsiString PARAMETER (element type
+                tyAnsiString, but IsArray -- its slot holds a FORWARDED
+                pointer, not the data itself) wrongly matched here and got the
+                address of its own local param slot instead of a dereference,
+                silently discarding every write on return and reading/
+                releasing whatever garbage the "old value" load found at that
+                address (bug-var-array-of-ansistring-param-loses-writes).
+                Mirrors the same not-IsArray guard already used two branches
+                up (the scalar var/out AnsiString write path). }
               begin EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end
             else
               begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;

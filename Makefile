@@ -975,6 +975,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_array_of_string26)" = "$$(printf 'aa bb cc dd \na b c d \nxx yy zz \nzzz bb')"
 	./$(COMPILER) test/test_case_else_multistmt.pas /tmp/test_case_else_multistmt26
 	test "$$(/tmp/test_case_else_multistmt26)" = "$$(printf '5 a\n1 b\n4 c')"
+	./$(COMPILER) test/test_var_array_of_string.pas /tmp/test_var_array_of_string26
+	test "$$(/tmp/test_var_array_of_string26)" = "$$(printf 'hello0 unset1 unset2 hello3\nhello0 open1 open2 hello3\nafter\nhello0 hello3\nloop total=330000 final=padding-value-to-exercise-realloc-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')"
 	./$(COMPILER) test/test_record_typecast.pas /tmp/test_record_typecast26
 	test "$$(/tmp/test_record_typecast26)" = "$$(printf '77\n88\n77\n88\n165')"
 	./$(COMPILER) test/test_funcname_field.pas /tmp/test_funcname_field26
