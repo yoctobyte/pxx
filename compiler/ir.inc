@@ -1960,6 +1960,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
+    narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
@@ -2535,7 +2536,40 @@ begin
           Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
         end
         else
-          IRTk[Result] := ASTTk[node];
+        begin
+          { Narrowing (or same/narrower-width reinterpret) ordinal rvalue cast,
+            e.g. byte(i)/word(i)/cardinal(i)/shortint(i): assigning to a
+            variable of the narrower type truncates for free (the store only
+            writes N bytes), but a bare rvalue cast has no store to piggyback
+            on, so the full-width value would otherwise pass straight through
+            unmasked. Force the width conversion explicitly: mask to the
+            target width, then for signed targets re-derive the sign via the
+            standard two's-complement identity (v xor signbit) - signbit,
+            which correctly reinterprets the just-masked low N bits as signed
+            regardless of what the wider source value looked like. }
+          narrowSize := TypeSize(castTk);
+          castIsSigned := (castTk = tyInteger) or (castTk = tyInt8) or
+                          (castTk = tyInt16) or (castTk = tyInt32) or
+                          (castTk = tyNativeInt);
+          if (narrowSize < 8) and (castTk <> tyBoolean) and (castTk <> tyChar) and
+             (castTk <> tyPointer) and TypeIsOrdinal(castTk) then
+          begin
+            right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                               (Int64(1) shl (narrowSize * 8)) - 1, ASTTk[node]);
+            Result := IRAppend(IR_BINOP, Result, right, Ord(tkAnd), 0, ASTTk[node]);
+            if castIsSigned then
+            begin
+              right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                                 Int64(1) shl (narrowSize * 8 - 1), ASTTk[node]);
+              Result := IRAppend(IR_BINOP, Result, right, Ord(tkXor), 0, ASTTk[node]);
+              right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                                 Int64(1) shl (narrowSize * 8 - 1), ASTTk[node]);
+              Result := IRAppend(IR_BINOP, Result, right, Ord(tkMinus), 0, ASTTk[node]);
+            end;
+          end
+          else
+            IRTk[Result] := ASTTk[node];
+        end;
       end;
     end;
 

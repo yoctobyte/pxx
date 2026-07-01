@@ -957,6 +957,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_var_open_array_field26)" = "$$(printf '256\n1284')"
 	./$(COMPILER) test/test_static_array_length.pas /tmp/test_static_array_length26
 	test "$$(/tmp/test_static_array_length26)" = "$$(printf '3\n2\n64\n60')"
+	./$(COMPILER) test/test_narrowing_typecast_rvalue.pas /tmp/test_narrowing_typecast_rvalue26
+	test "$$(/tmp/test_narrowing_typecast_rvalue26)" = "$$(printf '44\ncmp-ok\n44\n44\n4464\n4294967295\n4294967295\n-1\n-56\n5\n5')"
 	./$(COMPILER) test/test_untyped_params.pas /tmp/test_untyped_params26
 	test "$$(/tmp/test_untyped_params26)" = "$$(printf '7 7 7 7 \n7 7 7 7 ')"
 	./$(COMPILER) test/test_string_delete_insert.pas /tmp/test_string_delete_insert26

@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | bug-emitasmx64-no-sib-index-silent-misparse | A | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
 | bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
-| bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
 | bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
@@ -146,7 +145,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (395)
+## done (396)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -282,6 +281,7 @@ _none_
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
+| bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
@@ -573,7 +573,6 @@ _none_
 - [A] bug-emitasmx64-no-sib-index-silent-misparse
 - [A] bug-i386-try-except-segfault
 - [A] bug-integer-div-zero-sigfpe-uncatchable
-- [A] bug-narrowing-typecast-rvalue-no-truncate
 - [A] bug-nested-dynarray-cross-segfault
 - [A] bug-nested-proc-sibling-call-unresolved
 - [A] bug-sizeof-array-and-typename-wrong

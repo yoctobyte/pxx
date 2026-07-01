@@ -3694,13 +3694,45 @@ begin
     end;
     tkInteger_T, tkLongWord_T:
     begin
-      op := Ord(CurTok.Kind);
-      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
-      ASTTk[node] := Ord(tyInteger);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
+      { 'byte'/'longword' collide with 'integer'/'longint' on token KIND (all
+        four lex as tkInteger_T/tkLongWord_T -- see asmenc.inc's documented
+        landmine on this), so disambiguate on the source text, same technique
+        SizeOf's type-name parsing already uses. A genuine byte/cardinal cast
+        needs real width truncation (AN_PTR_CAST, routes through the masking
+        logic in ir.inc's AN_PTR_CAST case) -- not the Integer/LongWord
+        "value-pun" passthrough (AN_CALL, result bit pattern = operand's,
+        unchanged), which stays exactly as it was for actual Integer/LongInt
+        casts. See bug-narrowing-typecast-rvalue-no-truncate. }
+      if CaseEqual(CurTok.SVal, 'byte') then
+      begin
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := -1;
+        ASTTk[node] := Ord(tyUInt8);
+        CurASTNode := node;
+        LastExprTk := tyUInt8;
+      end
+      else if CaseEqual(CurTok.SVal, 'longword') then
+      begin
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := -1;
+        ASTTk[node] := Ord(tyUInt32);
+        CurASTNode := node;
+        LastExprTk := tyUInt32;
+      end
+      else
+      begin
+        op := Ord(CurTok.Kind);
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+        ASTTk[node] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+      end;
     end;
     tkChar_T, tkBoolean_T:
     begin
