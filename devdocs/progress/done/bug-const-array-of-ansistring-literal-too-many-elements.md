@@ -131,4 +131,4 @@ Matches FPC output exactly (`fpc` build of the same source). New
 green, self-host bootstrap byte-identical (pinned v115).
 
 ## Log
-- 2026-07-01 — resolved, commit HEAD.
+- 2026-07-01 — resolved, commit 0dcf95f0.

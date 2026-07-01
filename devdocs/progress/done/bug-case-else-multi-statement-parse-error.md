@@ -123,4 +123,4 @@ and matches FPC's output exactly. New `test/test_case_else_multistmt.pas` in
 bug-const-array-of-ansistring-literal-too-many-elements fix).
 
 ## Log
-- 2026-07-01 — resolved, commit HEAD.
+- 2026-07-01 — resolved, commit 0dcf95f0.
