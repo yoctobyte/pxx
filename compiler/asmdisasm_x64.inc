@@ -79,57 +79,39 @@ end;
 { 64-bit GP register name, 0..15 (already REX-extended), width 1/2/4/8 bytes.
   hasRex distinguishes the 8-bit spl/bpl/sil/dil encoding (REX present) from
   legacy ah/ch/dh/bh (no REX, regnum 4..7). }
-{ No `const array[..] of AnsiString = (...)` literals anywhere: a genuine
-  pxx self-host parser gap ("too many array constant elements" even though
-  the initializer count matches the declared length -- no existing code in
-  this codebase uses that construct at all, confirmed by grep, so this is
-  untested territory rather than a usage mistake). Neither top-level nor
-  function-local placement avoided it. Sidestepped with plain `case`
-  lookups instead, which are used pervasively and proven safe throughout
-  the compiler; unrelated to the earlier var-array-of-AnsiString param bug
-  (a different fragile spot in the same "array + AnsiString" family). See
-  bug-const-array-of-ansistring-literal-too-many-elements.md. }
 function DisReg(regnum, width: Integer; hasRex: Boolean): AnsiString;
+const
+  RegNames8: array[0..15] of AnsiString = (
+    'rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi',
+    'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15');
+  RegNames4: array[0..15] of AnsiString = (
+    'eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi',
+    'r8d', 'r9d', 'r10d', 'r11d', 'r12d', 'r13d', 'r14d', 'r15d');
+  RegNames2: array[0..15] of AnsiString = (
+    'ax', 'cx', 'dx', 'bx', 'sp', 'bp', 'si', 'di',
+    'r8w', 'r9w', 'r10w', 'r11w', 'r12w', 'r13w', 'r14w', 'r15w');
+  RegNames1NoRex: array[0..7] of AnsiString = (
+    'al', 'cl', 'dl', 'bl', 'ah', 'ch', 'dh', 'bh');
+  RegNames1Rex: array[0..15] of AnsiString = (
+    'al', 'cl', 'dl', 'bl', 'spl', 'bpl', 'sil', 'dil',
+    'r8b', 'r9b', 'r10b', 'r11b', 'r12b', 'r13b', 'r14b', 'r15b');
 begin
   case width of
-    8: case regnum of
-         0: Result := 'rax'; 1: Result := 'rcx'; 2: Result := 'rdx'; 3: Result := 'rbx';
-         4: Result := 'rsp'; 5: Result := 'rbp'; 6: Result := 'rsi'; 7: Result := 'rdi';
-         8: Result := 'r8'; 9: Result := 'r9'; 10: Result := 'r10'; 11: Result := 'r11';
-         12: Result := 'r12'; 13: Result := 'r13'; 14: Result := 'r14'; 15: Result := 'r15';
+    8: if (regnum >= 0) and (regnum <= 15) then Result := RegNames8[regnum]
        else Result := '?reg' + DisIntToStr(regnum);
-       end;
-    4: case regnum of
-         0: Result := 'eax'; 1: Result := 'ecx'; 2: Result := 'edx'; 3: Result := 'ebx';
-         4: Result := 'esp'; 5: Result := 'ebp'; 6: Result := 'esi'; 7: Result := 'edi';
-         8: Result := 'r8d'; 9: Result := 'r9d'; 10: Result := 'r10d'; 11: Result := 'r11d';
-         12: Result := 'r12d'; 13: Result := 'r13d'; 14: Result := 'r14d'; 15: Result := 'r15d';
+    4: if (regnum >= 0) and (regnum <= 15) then Result := RegNames4[regnum]
        else Result := '?reg' + DisIntToStr(regnum);
-       end;
-    2: case regnum of
-         0: Result := 'ax'; 1: Result := 'cx'; 2: Result := 'dx'; 3: Result := 'bx';
-         4: Result := 'sp'; 5: Result := 'bp'; 6: Result := 'si'; 7: Result := 'di';
-         8: Result := 'r8w'; 9: Result := 'r9w'; 10: Result := 'r10w'; 11: Result := 'r11w';
-         12: Result := 'r12w'; 13: Result := 'r13w'; 14: Result := 'r14w'; 15: Result := 'r15w';
+    2: if (regnum >= 0) and (regnum <= 15) then Result := RegNames2[regnum]
        else Result := '?reg' + DisIntToStr(regnum);
-       end;
     1: if (not hasRex) and (regnum < 8) then
        begin
-         case regnum of
-           0: Result := 'al'; 1: Result := 'cl'; 2: Result := 'dl'; 3: Result := 'bl';
-           4: Result := 'ah'; 5: Result := 'ch'; 6: Result := 'dh'; 7: Result := 'bh';
+         if (regnum >= 0) and (regnum <= 7) then Result := RegNames1NoRex[regnum]
          else Result := '?reg' + DisIntToStr(regnum);
-         end;
        end
        else
        begin
-         case regnum of
-           0: Result := 'al'; 1: Result := 'cl'; 2: Result := 'dl'; 3: Result := 'bl';
-           4: Result := 'spl'; 5: Result := 'bpl'; 6: Result := 'sil'; 7: Result := 'dil';
-           8: Result := 'r8b'; 9: Result := 'r9b'; 10: Result := 'r10b'; 11: Result := 'r11b';
-           12: Result := 'r12b'; 13: Result := 'r13b'; 14: Result := 'r14b'; 15: Result := 'r15b';
+         if (regnum >= 0) and (regnum <= 15) then Result := RegNames1Rex[regnum]
          else Result := '?reg' + DisIntToStr(regnum);
-         end;
        end;
   else
     Result := '?reg' + DisIntToStr(regnum);
@@ -284,32 +266,31 @@ begin
 end;
 
 function DisAluName(idx: Integer): AnsiString;
+const
+  AluNames: array[0..7] of AnsiString = (
+    'add', 'or', 'adc', 'sbb', 'and', 'sub', 'xor', 'cmp');
 begin
-  case idx of
-    0: Result := 'add'; 1: Result := 'or'; 2: Result := 'adc'; 3: Result := 'sbb';
-    4: Result := 'and'; 5: Result := 'sub'; 6: Result := 'xor'; 7: Result := 'cmp';
+  if (idx >= 0) and (idx <= 7) then Result := AluNames[idx]
   else Result := '?alu';
-  end;
 end;
 
 function DisShiftName(idx: Integer): AnsiString;
+const
+  ShiftNames: array[0..7] of AnsiString = (
+    'rol', 'ror', 'rcl', 'rcr', 'shl', 'shr', 'sal', 'sar');
 begin
-  case idx of
-    0: Result := 'rol'; 1: Result := 'ror'; 2: Result := 'rcl'; 3: Result := 'rcr';
-    4: Result := 'shl'; 5: Result := 'shr'; 6: Result := 'sal'; 7: Result := 'sar';
+  if (idx >= 0) and (idx <= 7) then Result := ShiftNames[idx]
   else Result := '?shift';
-  end;
 end;
 
 function DisCcName(idx: Integer): AnsiString;
+const
+  CcNames: array[0..15] of AnsiString = (
+    'o', 'no', 'b', 'ae', 'e', 'ne', 'be', 'a',
+    's', 'ns', 'p', 'np', 'l', 'ge', 'le', 'g');
 begin
-  case idx of
-    0: Result := 'o'; 1: Result := 'no'; 2: Result := 'b'; 3: Result := 'ae';
-    4: Result := 'e'; 5: Result := 'ne'; 6: Result := 'be'; 7: Result := 'a';
-    8: Result := 's'; 9: Result := 'ns'; 10: Result := 'p'; 11: Result := 'np';
-    12: Result := 'l'; 13: Result := 'ge'; 14: Result := 'le'; 15: Result := 'g';
+  if (idx >= 0) and (idx <= 15) then Result := CcNames[idx]
   else Result := '?cc';
-  end;
 end;
 
 { Decode one instruction at Code[pos]. Returns bytes consumed (>=1) and the
@@ -777,11 +758,7 @@ begin
       4: begin text := 'jmp ' + DisRmText(mrm, 8, hasRex); Result := (p + 1 + mrm.Consumed) - pos; Exit; end;
       6: begin text := 'push ' + DisRmText(mrm, 8, hasRex); Result := (p + 1 + mrm.Consumed) - pos; Exit; end;
     else
-    begin
-      { must be begin/end, not a bare multi-statement else -- pxx parser
-        gap, see bug-case-else-multi-statement-parse-error.md }
       text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit;
-    end;
     end;
     if not mrm.IsReg then
     begin

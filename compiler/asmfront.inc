@@ -283,10 +283,6 @@ const
   ASM_FRONT_MAX_EXTERNS = 256;
 
 type
-  { Named array types, not `array of T` open params: pxx self-host currently
-    loses writes/reads through a `var`/`const array of AnsiString` open-array
-    parameter (see bug-open-array-managed-param-loses-writes) — a fixed
-    matching type on both sides sidesteps it. }
   TAsmExternNames = array[0..ASM_FRONT_MAX_EXTERNS-1] of AnsiString;
   TAsmExternProcs = array[0..ASM_FRONT_MAX_EXTERNS-1] of Integer;
 
@@ -310,13 +306,11 @@ end;
   common case for hand-written asm calling out; the raw `syscall` instruction
   covers the kernel-only case without needing `extern` at all).
 
-  Returns the registered name + Procs[] index via scalar `var` params instead
-  of writing an extern-table array element itself — a `var array[..] of
-  AnsiString` param silently loses its write in the pxx self-hosted binary
-  (see bug-var-array-of-ansistring-param-loses-writes); the caller does the
-  array[externCount]:=... assignment directly on its own local instead. }
+  Writes the parsed entry straight into the caller's extern table at
+  `externCount` (`var` array param, by-ref writeback). }
 procedure AsmParseExternLine(const restp0: AnsiString; lineNo: Integer;
-  var outName: AnsiString; var outProcIdx: Integer);
+  var externName: TAsmExternNames; var externProcIdx: TAsmExternProcs;
+  externCount: Integer);
 var restp, nameTok, libTok: AnsiString; ci, procIdx: Integer;
     dummyNames: array[0..0] of AnsiString; dummyTypes: array[0..0] of TTypeKind;
 begin
@@ -341,8 +335,8 @@ begin
   Procs[procIdx].BodyAddr := -1;
   ProcExternal[procIdx] := True;
   ProcLibrary[procIdx] := InternStr(libTok);
-  outName := nameTok;
-  outProcIdx := procIdx;
+  externName[externCount] := nameTok;
+  externProcIdx[externCount] := procIdx;
 end;
 
 const
@@ -381,8 +375,6 @@ var
   externName: TAsmExternNames;
   externProcIdx: TAsmExternProcs;
   externCount, externResolvedIdx, extIdx, j2: Integer;
-  externParsedName: AnsiString;
-  externParsedProcIdx: Integer;
   globalNames: array[0..MAX_ASM_GLOBALS-1] of AnsiString;
   globalCount: Integer;
   isDataLbl, entrySet: Boolean;
@@ -457,9 +449,7 @@ begin
     begin
       if externCount >= ASM_FRONT_MAX_EXTERNS then
         Error('asm:' + AsmIntToStr(lineNo) + ': too many extern declarations');
-      AsmParseExternLine(restp, lineNo, externParsedName, externParsedProcIdx);
-      externName[externCount] := externParsedName;
-      externProcIdx[externCount] := externParsedProcIdx;
+      AsmParseExternLine(restp, lineNo, externName, externProcIdx, externCount);
       Inc(externCount);
       Continue;
     end;
