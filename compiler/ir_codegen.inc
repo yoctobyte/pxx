@@ -110,12 +110,13 @@ end;
 procedure EmitAnsiStrRetainLocked;
 { rax = managed-string data pointer. Preserve rax. Caller holds the heap lock
   when threading is enabled. }
-var pNil: Integer;
 begin
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
-  Code[pNil] := Byte(CodeLen - (pNil + 1));
+  EmitAsmX64([
+    'test rax, rax',
+    'jz .done',
+    'inc qword [rax-16]',
+  '.done:'
+  ]);
 end;
 
 procedure EmitDynArrayReleaseLocked;

@@ -83,6 +83,16 @@ once it reliably detects ineligible bodies and degrades to a call.
 - Jump-to-jump / branch threading.
 - Tiny-leaf auto-inline — only where inlining is *provably not larger* (call
   sequence ≥ body), no cost-model measurement needed.
+- Short-form (rel8) branch encoding in `EmitAsmX64`'s forward-label idiom
+  (`asmtext.inc`'s `.label`/`jz .label` mechanism, used pervasively for
+  `.done`-style short jumps in `ir_codegen.inc`'s ARC helpers). It always
+  emits the 6-byte near/rel32 form even when the target is a few bytes away
+  and a 2-byte rel8 `jz`/`jnz`/`jmp` would do — 4 bytes/use, deterministic,
+  found while re-verifying `EmitAsmX64` against `llvm-mc` in
+  [[bug-emitasmx64-heap-helpers-oom-selfhost]]. Backward labels already
+  resolve at fixed distance so could pick short-form directly; forward labels
+  would need a two-pass size-then-patch (or over-allocate then shrink) — same
+  shape as any assembler's branch-relaxation pass.
 
 **O2 (speed, size may grow):**
 - `inline;` honored generally + aggressive auto-inline behind a node-count cost
