@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ _none_
 | bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
+| feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
@@ -576,6 +577,7 @@ _none_
 - [A] bug-sizeof-array-and-typename-wrong
 - [A] bug-typed-const-array-of-string-broken
 - [A] chore-sqlite-static-capacity-bumps
+- [A] feature-anonymous-record-type
 - [A] feature-asm-source-frontend
 - [A] feature-asm-structured-ir-library
 - [A] feature-asm-textual-emit-mode
