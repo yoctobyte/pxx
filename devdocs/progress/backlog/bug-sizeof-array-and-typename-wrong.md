@@ -1,9 +1,12 @@
 # `SizeOf` wrong for static arrays, and rejects most named types
 
 - **Type:** bug (SizeOf / consteval — correctness) — Track A
-- **Status:** backlog — **Symptom 1 fixed** (pin v131, 2026-07-01); **Symptom 2
-  type-name resolution fixed** (pin v134, 2026-07-01); the `SizeOf(arr[0])`
-  arbitrary-expression-argument part of Symptom 2 is still open, see below
+- **Status:** done for 1-D arrays — Symptom 1 fixed (pin v131), Symptom 2
+  type-name resolution fixed (pin v134), `SizeOf(arr[i])` fixed for 1-D
+  arrays (pin v139), all 2026-07-01/02. Indexing an N-D array with fewer
+  indices than dimensions (`m[0]` for a 2-D array, which yields a row/
+  sub-array, not a scalar) is still open — see below — but no longer
+  silently wrong: it now raises a clear error instead.
 - **Severity:** high — `SizeOf(arr)` silently returns the wrong number (no error),
   breaking the ubiquitous `SizeOf(buf)` (I/O length) and
   `SizeOf(arr) div SizeOf(arr[0])` (element count) idioms.
@@ -135,9 +138,29 @@ tighter; not a regression, just this dialect's existing set-size model.
 the `TProc` shadow case) instead of a new file. Self-host byte-identical,
 full `make test` green.
 
-**Still open:** `SizeOf(arr) div SizeOf(arr[0])` (an arbitrary INDEXED
-EXPRESSION as the argument, not just a bare identifier/type name) — not
-attempted this pass, see Acceptance below.
+**Fixed (2026-07-02, pin v139):** `SizeOf(arr[i])` — the key insight that
+shrunk this from "needs arbitrary expression support" to a small fix: the
+index expression's VALUE is never evaluated by `SizeOf` (exactly like a
+type name's own contents aren't), so there's no need to actually parse it
+as an expression at all — just skip the balanced brackets and report the
+array's element size. Scoped to genuinely 1-D arrays (`SymArrNDims <= 1`):
+a single index into an N-D array yields a ROW (sub-array), not the scalar
+element (`m[0]` for `array[0..2,0..2]` is 3 integers, not 1) — computing
+that correctly depends on how many indices are given, which the balanced-
+bracket-skip approach can't see. Rather than silently report the wrong
+(scalar) size for that case, it now raises `SizeOf: indexed access on a
+multi-dimensional array is not yet supported` — caught the wrong-answer
+risk by diffing against real FPC output before landing, not by guessing.
+Verified against FPC for scalar/record array elements, the element-count
+idiom, and an index expression that itself references the array being
+sized (to confirm it's truly unevaluated). Cross-verified identical on
+arm32/aarch64/i386. `test/test_sizeof_array_typename.pas` extended, full
+`make test` green.
+
+**Still open:** `SizeOf(m[0])` for a genuinely multi-dimensional array with
+fewer indices than dimensions (should yield the row/sub-array size) — now
+a clean, honest error rather than the earlier "arbitrary expression"
+framing or a silent wrong answer.
 
 ## Likely cause
 
@@ -153,9 +176,10 @@ same underlying "byte size of this type" helper that record types already use.
       multi-dim arrays multiply all extents. **Done, pin v131.**
 - [x] `SizeOf(T)` works for every named type kind (alias, array, pointer, enum,
       set, string, record) — Symptom 2 type-name resolution. **Done, pin v134.**
-- [ ] `SizeOf(arr) div SizeOf(arr[0])` gives the element count — needs
-      `SizeOf` to accept an arbitrary expression argument (indexed
-      expression), not just a bare identifier; effectively part of Symptom 2's
-      "SizeOf should accept more than a name" scope. Still open.
+- [x] `SizeOf(arr) div SizeOf(arr[0])` gives the element count, for a 1-D
+      array. **Done, pin v139.**
+- [ ] `SizeOf(m[0])` for a multi-dimensional array with fewer indices than
+      dimensions (row/sub-array size) — still open, now a clean error
+      instead of a silent wrong answer.
 - [x] Regression test (`test/test_sizeof_array_typename.pas`) wired into
       `make test`; self-host stays byte-identical. **Done, covers Symptoms 1 and 2.**
