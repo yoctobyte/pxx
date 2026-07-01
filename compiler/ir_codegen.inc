@@ -33,29 +33,19 @@ procedure EmitHeapAllocLocked;
   the heap lock when threading is enabled. }
 var procIdx: Integer;
 begin
-  EmitB($56);                                     { push rsi }
-  EmitB($57);                                     { push rdi }
-  EmitB($51);                                     { push rcx }
-  EmitB($52);                                     { push rdx }
-  EmitB($41); EmitB($50);                         { push r8 }
-  EmitB($41); EmitB($51);                         { push r9 }
-  EmitB($41); EmitB($52);                         { push r10 }
-  EmitB($41); EmitB($53);                         { push r11 }
-
-  EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (size) }
-  EmitB($48); EmitB($C7); EmitB($C6); EmitI32(8);  { mov rsi, 8    (alignment) }
+  EmitAsmX64([
+    'push rsi', 'push rdi', 'push rcx', 'push rdx',
+    'push r8', 'push r9', 'push r10', 'push r11',
+    'mov rdi, rax',      { size }
+    'mov rsi, %', 8       { alignment }
+  ]);
   procIdx := FindProc('PXXAlloc');
   if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
   EmitCallProc(procIdx);                               { rax = returned pointer }
-
-  EmitB($41); EmitB($5B);                         { pop r11 }
-  EmitB($41); EmitB($5A);                         { pop r10 }
-  EmitB($41); EmitB($59);                         { pop r9 }
-  EmitB($41); EmitB($58);                         { pop r8 }
-  EmitB($5A);                                     { pop rdx }
-  EmitB($59);                                     { pop rcx }
-  EmitB($5F);                                     { pop rdi }
-  EmitB($5E);                                     { pop rsi }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdx', 'pop rcx', 'pop rdi', 'pop rsi'
+  ]);
 end;
 
 procedure EmitHeapFreeLocked;
@@ -63,28 +53,18 @@ procedure EmitHeapFreeLocked;
   lock when threading is enabled. nil is ignored. }
 var procIdx: Integer;
 begin
-  EmitB($56);                                     { push rsi }
-  EmitB($57);                                     { push rdi }
-  EmitB($51);                                     { push rcx }
-  EmitB($52);                                     { push rdx }
-  EmitB($41); EmitB($50);                         { push r8 }
-  EmitB($41); EmitB($51);                         { push r9 }
-  EmitB($41); EmitB($52);                         { push r10 }
-  EmitB($41); EmitB($53);                         { push r11 }
-
-  EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (pointer) }
+  EmitAsmX64([
+    'push rsi', 'push rdi', 'push rcx', 'push rdx',
+    'push r8', 'push r9', 'push r10', 'push r11',
+    'mov rdi, rax'   { pointer }
+  ]);
   procIdx := FindProc('PXXFree');
   if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
   EmitCallProc(procIdx);
-
-  EmitB($41); EmitB($5B);                         { pop r11 }
-  EmitB($41); EmitB($5A);                         { pop r10 }
-  EmitB($41); EmitB($59);                         { pop r9 }
-  EmitB($41); EmitB($58);                         { pop r8 }
-  EmitB($5A);                                     { pop rdx }
-  EmitB($59);                                     { pop rcx }
-  EmitB($5F);                                     { pop rdi }
-  EmitB($5E);                                     { pop rsi }
+  EmitAsmX64([
+    'pop r11', 'pop r10', 'pop r9', 'pop r8',
+    'pop rdx', 'pop rcx', 'pop rdi', 'pop rsi'
+  ]);
 end;
 
 procedure EmitDynArrayRetainLocked;
