@@ -280,11 +280,39 @@ begin
 end;
 
 procedure AsmParseOperand(slot: Integer);
-var num, size, idx: Integer;
+var num, size, idx, sizeKw: Integer;
 begin
   AsmOpKind[slot] := AOP_NONE;
   AsmOpReg[slot] := 0; AsmOpSize[slot] := 0; AsmOpVal[slot] := 0;
   AsmOpIndex[slot] := -1; AsmOpScale[slot] := 1;
+
+  { Operand-size keyword: byte/word/dword/qword [ptr] [reg...]. Only
+    disambiguates an explicit bracketed memory operand (AOP_MEMR) -- a named
+    local/param/global (AOP_MEM/AOP_GLOBAL) already has its size from the
+    Pascal var's own declared type, no keyword needed or accepted there.
+    `byte` lexes as tkInteger_T (shared with `integer`), not tkIdent --
+    same keyword-collision class already hit for and/or/div/dec (see
+    AsmTokIsWordLike) -- CurTok.SVal still holds the right text regardless
+    of Kind, confirmed empirically 2026-07-01; word/dword/qword/ptr are
+    plain tkIdent. }
+  sizeKw := 0;
+  if (CurTok.Kind = tkIdent) or (CurTok.Kind = tkInteger_T) then
+  begin
+    if CaseEqual(CurTok.SVal, 'byte') then sizeKw := 1
+    else if CaseEqual(CurTok.SVal, 'word') then sizeKw := 2
+    else if CaseEqual(CurTok.SVal, 'dword') then sizeKw := 4
+    else if CaseEqual(CurTok.SVal, 'qword') then sizeKw := 8;
+  end;
+  if sizeKw <> 0 then
+  begin
+    Next;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'ptr') then Next;   { 'ptr' is optional }
+    if CurTok.Kind <> tkLBrack then
+      Error('asm: expected [ after the size keyword');
+    AsmParseMemROperand(slot);
+    AsmOpSize[slot] := sizeKw;
+    Exit;
+  end;
 
   if CurTok.Kind = tkLBrack then
   begin
@@ -353,6 +381,11 @@ begin
   if (nops >= 2) and (AsmOpKind[1] = AOP_REG) then begin Result := AsmOpSize[1]; Exit; end;
   if (nops >= 1) and ((AsmOpKind[0] = AOP_MEM) or (AsmOpKind[0] = AOP_GLOBAL)) then begin Result := AsmOpSize[0]; Exit; end;
   if (nops >= 2) and ((AsmOpKind[1] = AOP_MEM) or (AsmOpKind[1] = AOP_GLOBAL)) then begin Result := AsmOpSize[1]; Exit; end;
+  { AOP_MEMR only carries a real size when an explicit byte/word/dword/qword
+    keyword set it (AsmParseOperand); 0 means "unknown", fall through to the
+    dword default below rather than trusting a meaningless 0. }
+  if (nops >= 1) and (AsmOpKind[0] = AOP_MEMR) and (AsmOpSize[0] <> 0) then begin Result := AsmOpSize[0]; Exit; end;
+  if (nops >= 2) and (AsmOpKind[1] = AOP_MEMR) and (AsmOpSize[1] <> 0) then begin Result := AsmOpSize[1]; Exit; end;
   Result := 4;
 end;
 

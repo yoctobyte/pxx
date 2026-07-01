@@ -114,14 +114,20 @@ so the asm body's `rax` survives as the return value.
   `x64_mov_mem_imm`/`x64_push_mem`/`x64_pop_mem` hardcode an `[rbp+disp]`
   base, wrong for an arbitrary register). `rsp` can't be a SIB index (that
   bit pattern is the dedicated "no index" encoding) — rejected with a clear
-  error. No operand-size keyword yet (`byte`/`word`/`dword`/`qword ptr`) —
-  a bare-memory instruction with no register to infer width from falls
-  back to the documented dword default, same as `AOP_MEM` already does.
+  error.
+- **Operand-size keywords**: `byte`/`word`/`dword`/`qword [ptr]` before a
+  bracketed memory operand (`inc byte [rbx]`, `mov dword ptr [rbx], 1000`)
+  — disambiguates a bare-memory instruction's width when no register
+  operand is present to infer it from (only applies to `[reg...]` forms;
+  a named local/param/global already has its size from the Pascal var's
+  own declared type, no keyword needed or accepted there). LANDMINE:
+  `byte` lexes as `tkInteger_T` (shared with the `integer` type keyword),
+  **not** `tkIdent` — the same keyword-collision class as `and`/`or`/`div`/
+  `dec` (see `AsmTokIsWordLike` in `compiler/asmenc.inc`); `word`/`dword`/
+  `qword`/`ptr` are plain `tkIdent`. `CurTok.SVal` holds the right text
+  regardless of `Kind` either way.
 - **AT&T syntax** (`{$asmMode att}`) and `direct`: not implemented (directive
   is silently accepted but ignored, so att source would mis-encode).
-- **Operand-size disambiguation** (`byte ptr` / `word ptr` / `dword ptr`):
-  not parsed. Size is inferred from the register operand; a mem+imm with no
-  register defaults from the var type, else dword.
 - **`test x, x`** where both operands are the same memory var: illegal in
   x86 (needs one register); the FPC docs example does not encode as-is.
 - **xmm / floating-point / SSE / AVX**: none.
@@ -140,7 +146,8 @@ so the asm body's `rax` survives as the return value.
    2026-07-01** — see Supported, above.
 3. ~~**Explicit `[reg+disp]` memory** + SIB, for pointer-style access.~~
    **Done 2026-07-01** — see Supported, above.
-4. **Operand-size keywords** (`byte/word/dword/qword ptr`).
+4. ~~**Operand-size keywords** (`byte/word/dword/qword ptr`).~~ **Done
+   2026-07-01** — see Supported, above.
 5. Broaden register coverage edge cases (ah/ch/dh/bh high-byte regs are
    intentionally unsupported; document or reject clearly).
 6. Eventually: AT&T mode, or commit to Intel-only and reject att explicitly.

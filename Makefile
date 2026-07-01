@@ -694,6 +694,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_asm_global26)" = "$$(printf '11 12 23\nTRUE')"
 	./$(COMPILER) test/test_asm_memr.pas /tmp/test_asm_memr26
 	test "$$(/tmp/test_asm_memr26)" = "$$(printf '0\n20\n30\n40\n999\n1\n110\n1')"
+	./$(COMPILER) test/test_asm_sizekw.pas /tmp/test_asm_sizekw26
+	test "$$(/tmp/test_asm_sizekw26)" = "$$(printf '6\n7\n232 3 0 0\n300')"
 	./$(COMPILER) test/test_coswitch.pas /tmp/test_coswitch26
 	test "$$(/tmp/test_coswitch26)" = "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
 	./$(COMPILER) test/test_not.pas /tmp/test_not26
