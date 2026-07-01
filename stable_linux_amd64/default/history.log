@@ -110,3 +110,4 @@
 2026-07-01T01:08:43Z  v110  f4df76bcc68c26fd81868c404676cede2bd610c086bf73960607b4ed84204786  456f0eda2eaefa76b7a2b4563230093e90eb151e  feat(asm): .asm frontend gains -c/--emit-obj ET_REL object output
 2026-07-01T01:30:13Z  v111  fb45a5454374a7fe43ad6ff6cabd8bd0f821cfbd87f808a5bc4358937a404e26  357b417a74964f9e1c3be45c659049289d67d9c7  feat(asm): .asm frontend gains --shared ET_DYN shared-library output
 2026-07-01T02:18:07Z  v112  0386cddd61456104d2d3a7d7a10ed18ff19d5841916edceadb3f7b7f471998bf  22dbf6ab3106e1fc27b4f4a4d63ebd7d647f1d79  feat(compiler): -S x86-64 disassembler for textual emit mode (head 2)
+2026-07-01T06:56:48Z  v113  c0e6e109f82f5340db2a5a3cb77608988ba203cd20d8646239962637bbdcb898  730b6a752d036306cf9f789386384cbdd5712fd9  fix(compiler): fixed array to open-array param no longer stack-copies
