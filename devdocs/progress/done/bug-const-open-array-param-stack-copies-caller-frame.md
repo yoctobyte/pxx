@@ -1,7 +1,7 @@
 # Bug: passing a FIXED-size array to an `array of T` open-array parameter stack-copies into the caller's frame
 
 - **Type:** bug — Track A (compiler internals, codegen / calling convention)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-01
 - **Found by:** building the `-S` x86-64 disassembler (feature-asm-textual-emit-mode
   task #7) — `WriteDisassemblyX64` called `DisOne(Code, pos, CodeLen, ...)`
@@ -177,3 +177,6 @@ in.
   (not dynamic arrays — those are confirmed unaffected) as open-array
   parameters, to gauge real-world exposure elsewhere in the compiler/RTL/
   user code today.
+
+## Log
+- 2026-07-01 — resolved, commit 730b6a75.
