@@ -1,7 +1,13 @@
 # Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio)
 
 - **Type:** feature (language / parser) — Track A
-- **Status:** backlog — counted form `for var i := a to b` DONE (2026-06-30); for-in inline remains
+- **Status:** done — counted form `for var i := a to b` DONE (2026-06-30);
+  for-in inline `for var x in coll` DONE (2026-07-02, pin v142) for array/
+  string/record/set containers (plain var, implicit-Self field, qualified
+  lvalue) and enum types. GetEnumerator/generator containers and an
+  implicit-Self record-array field are explicitly out of scope (own clear
+  error) — see "Remaining" below, kept as a narrower follow-on rather than
+  blocking the common cases.
 - **Opened:** 2026-06-30
 - **Origin:** carved out of the `--auto-locals` idea (feature-implicit-identifier-
   binding-strictness-switch) after a design pass. This is the **typed, standard,
@@ -62,10 +68,12 @@ leans Delphi-compatible elsewhere).
 
 ## Acceptance
 
-- `for var i := 0 to N do` and `for var x in coll do` compile + run, `i`/`x`
-  correctly typed; existing pre-declared `for` unchanged; `--no-auto-var` still
-  compiles pre-declared loops (only the inline form is gated). Self-host
-  byte-identical. Tests for counted + for-in inline forms.
+- [x] `for var i := 0 to N do` and `for var x in coll do` compile + run, `i`/`x`
+      correctly typed; existing pre-declared `for` unchanged; `--no-auto-var` still
+      compiles pre-declared loops (only the inline form is gated). Self-host
+      byte-identical. Tests for counted + for-in inline forms. **Done, pin v142
+      (array/string/record/set/enum-type containers); GetEnumerator/generator/
+      implicit-Self-record-array-field explicitly out of scope, own clear error.**
 
 ## v1 done (2026-06-30, Track A) — counted form
 
@@ -75,17 +83,38 @@ counter (gated on `EnableAutoVar`; classic pre-declared `for` unchanged).
 tyInteger)` instead of `FindSym`. Nested `for var` works. Self-host byte-identical;
 `make test` green (`test/test_for_var_inline.pas`, oracle `10 / 6`).
 
-## Remaining — for-in inline `for var x in coll`
+## for-in inline done (2026-07-02, pin v142)
 
-Filed-but-not-done; cleanly rejected for now with a pointer to this ticket.
-**Root cause located:** the for-in body is parsed (`ParseStatementAST`) *before*
-the loop variable's type is set, so a `tyAuto` inline var read in the body hits
-`use of auto variable before type is inferred` (parser.inc ~4223). The element
-type IS computed in `ParseForInVarAST` (parser.inc ~6176: `elemTk` = `tyChar` for a
-string, `Syms[contSym].ElemType` for an array) but only *after* the body and never
-written back to the loop var. Fix: in `ParseForInVarAST` (and the sibling
-`ParseForInFieldAST` / `ParseForInNodeAST` / enum / set / generator paths reachable
-by an inline var), compute the element type **before** parsing the body and, when
-`Syms[varIdx].TypeKind = tyAuto`, set it (`TypeKind := ElemType`; copy `ElemRecName`
-for record elements). Then `for var x in a` types `x` = element type. v1 was kept
-counted-only to keep the for-in change testable on its own.
+`ParseForStatementAST` now allocates the loop var `tyAuto` (instead of
+rejecting) when the header is `for var x in ...`. Each `ParseForIn*AST`
+variant that can resolve the iterable's element type ahead of the body now
+does so **before** calling `ParseStatementAST` and backfills
+`Syms[varIdx].TypeKind` (+ `RecName` for a record element) when it's
+`tyAuto`, exactly as the root-cause note above predicted:
+
+- `ParseForInVarAST` / `ParseForInFieldAST` / `ParseForInNodeAST` — array
+  (incl. array-of-record) and string containers, plain var / implicit-Self
+  field / qualified lvalue.
+- `ParseForInSetAST` (+ the qualified-set branch inside `ParseForInNodeAST`)
+  — set-of-enum / set-of-Char membership scan.
+- `ParseForInEnumTypeAST` — `for var x in TEnum`; enums have no distinct
+  type kind (ordinal/Integer-sized per `ParseTypeKind`), so this is just
+  backfilling `tyInteger`.
+
+**Explicitly out of scope, own clear error instead of silent mishandling:**
+- `ParseForInGeneratorAST` / `ParseForInEnumeratorAST` (GetEnumerator
+  structural enumerator) — both need a further property/yield-type lookup
+  this pass didn't do; a `tyAuto` loop var into either now errors "inline
+  loop variable not yet supported here" rather than miscompiling.
+- An implicit-Self **record**-array field (`ParseForInFieldAST` /
+  `ParseForInNodeAST`'s `AN_FIELD` branch) — no element-record lookup is
+  wired for that source shape (unlike a plain record-array var's
+  `Syms[].ElemRecName`); also errors explicitly rather than leaving
+  `RecName` unset.
+
+Verified: identical output between the new inline form and the existing
+pre-declared-var form across array/string/record/set containers; the two
+guarded-rejection paths give a clean compile error, not a crash. Front-end
+only, self-host byte-identical, cross-target identical (i386/arm32/
+aarch64), full `make test` green. `test/test_for_var_inline.pas` extended
+to cover all four working container kinds.
