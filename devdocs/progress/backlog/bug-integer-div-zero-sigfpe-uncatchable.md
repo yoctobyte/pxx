@@ -93,3 +93,36 @@ bigger than it looks:
   probably decide the builtin-exception-availability question first — it
   likely affects [[bug-i386-try-except-segfault]]'s `E.Message`-empty
   observation too (both are exception-machinery edges).
+
+## Scoping note 2 (2026-07-01, a smaller fallback considered, also not attempted)
+
+Reconsidered the ticket's own "at minimum" fallback goal — a clean abort
+(print a message, `exit(1)`) instead of a raw core-dumping SIGFPE, WITHOUT
+full catchable-exception integration. This sidesteps the architecture
+question above entirely (no `Exception`/`uses sysutils` dependency needed —
+just a portable `PXXDivZeroAbort`-style runtime helper, the same shape as
+existing helpers like `PXXDynSetLen`), so it looked promising at first.
+
+Sized it before writing code: div/mod codegen isn't one call site per
+target, it's roughly 10+ across all 6 backends —
+- 32-bit-word div/mod: `ir_codegen.inc` (x86-64), `ir_codegen386.inc`,
+  `ir_codegen_arm32.inc`, `ir_codegen_aarch64.inc`, `ir_codegen_riscv32.inc`,
+  `ir_codegen_xtensa.inc` each have their own inline `idiv`/`sdiv`/`udiv`
+  emission (different instruction encodings, different register
+  conventions, xtensa additionally branches on `XtensaSoftDivide` for a
+  software-divide call vs hardware).
+- 64-bit div/mod on the 32-bit targets is a SEPARATE code path again on
+  each of i386/arm32/riscv32/xtensa (`EmitIDivMod64Core_386`,
+  `EmitIDivMod64Arm32`, `EmitIDivMod64RISCV32`, `EmitIDivMod64Xtensa` —
+  software long-division routines, not a single hardware instruction).
+
+That's core arithmetic — the single most heavily-exercised operation in any
+program — on every target, each needing a zero-check correctly inserted
+into already-delicate assembly-emission code (getting a register/flag
+subtly wrong here wouldn't just miss the ticket's goal, it could silently
+corrupt ordinary division results). Wide blast radius for a solo overnight
+pass with no one to review; parking this narrower framing for whoever
+picks it up next rather than rushing ~10 site edits across 6 backends at
+this hour. The good news: this fallback version genuinely doesn't need the
+architecture decision above, so it's a smaller, well-defined, mechanical
+(if wide) task once someone has a clear multi-hour block for it.
