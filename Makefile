@@ -357,6 +357,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_int_arg_to_float_param26)" = "$$(printf '80.0\n50.0\n1.0 2.0 3.0\n2.500 2.500 2.500')"
 	./$(COMPILER) test/test_record_temp_byval_arg.pas /tmp/test_record_temp_byval_arg26
 	test "$$(/tmp/test_record_temp_byval_arg26)" = "$$(printf '18\n46')"
+	./$(COMPILER) test/test_ctor_string_literal_arg.pas /tmp/test_ctor_string_literal_arg26
+	test "$$(/tmp/test_ctor_string_literal_arg26)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) test/test_single_in_aggregate.pas /tmp/test_single_in_aggregate26
 	test "$$(/tmp/test_single_in_aggregate26)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
@@ -1645,6 +1647,8 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_exception.pas /tmp/test_i386_exception
 	./$(COMPILER) test/test_cross_exception.pas /tmp/test_i386_exception_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_exception)" = "$$(/tmp/test_i386_exception_x64)"
+	./$(COMPILER) --target=i386 test/test_ctor_string_literal_arg.pas /tmp/test_i386_ctorstrlit
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=i386 test/test_cross_float.pas /tmp/test_i386_float
 	./$(COMPILER) test/test_cross_float.pas /tmp/test_i386_float_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_float)" = "$$(/tmp/test_i386_float_x64)"
@@ -1889,6 +1893,8 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_hello)" = "Hello, World!"
 	./$(COMPILER) --target=aarch64 test/test_record_temp_byval_arg.pas /tmp/test_aarch64_rectemp
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rectemp)" = "$$(printf '18\n46')"
+	./$(COMPILER) --target=aarch64 test/test_ctor_string_literal_arg.pas /tmp/test_aarch64_ctorstrlit
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=aarch64 test/test_arm32_record_byval_wide.pas /tmp/test_aarch64_recwide
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_single_in_aggregate.pas /tmp/test_aarch64_singleagg
@@ -2174,6 +2180,8 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_hello)" = "Hello, World!"
 	./$(COMPILER) --target=arm32 test/test_record_temp_byval_arg.pas /tmp/test_arm32_rectemp
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rectemp)" = "$$(printf '18\n46')"
+	./$(COMPILER) --target=arm32 test/test_ctor_string_literal_arg.pas /tmp/test_arm32_ctorstrlit
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=arm32 test/test_arm32_record_byval_wide.pas /tmp/test_arm32_recwide
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=arm32 test/test_single_in_aggregate.pas /tmp/test_arm32_singleagg

@@ -3680,10 +3680,32 @@ begin
           local's store releases the previous value (loop reuse) and the epilog's
           managed-local release frees it at scope exit. Only fires under managed
           strings (tyAnsiString exists only with PXX_MANAGED_STRING), so the
-          self-hosted compiler build is unaffected. }
+          self-hosted compiler build is unaffected.
+
+          The `cpi >= 0` gate excluded constructor calls entirely: a class
+          instantiation lowers with cpi = -Ord(tkGetMem) (negative), so a
+          string-literal argument to a constructor's `const s: string` param
+          never got this materialization -- the raw, un-materialized value
+          reached codegen tagged with its ORIGINAL (frozen tyString) type
+          instead of a real managed handle, which every backend's by-value
+          call-arg path then pushed as if it were already a heap pointer.
+          Symptom: `Exception.Create('literal')` and any other constructor
+          taking a string-literal argument read back an empty/garbage
+          message field on EVERY target that supports managed strings (not
+          just one backend -- confirmed on arm32/aarch64/i386 before finding
+          this was the shared root cause, not a per-backend codegen gap).
+          `slot` (the constructor's own proc index) is resolved fresh in the
+          same iteration by the isRefArg block above, only when
+          `-cpi = Ord(tkGetMem)` and `pathIdx > 0` (the SIZE pseudo-arg at
+          pathIdx=0 is excluded, matching that block's own guard exactly, so
+          this never reads slot from a stale earlier iteration). }
         argIsManagedTemp :=
-          (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (not isRefArg) and
+          (((cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+            (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString)) or
+           ((cpi < 0) and (-cpi = Ord(tkGetMem)) and (pathIdx > 0) and
+            (slot >= 0) and (pathIdx < Procs[slot].ParamCount) and
+            (Procs[slot].Params[pathIdx].TypeKind = tyAnsiString))) and
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
