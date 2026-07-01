@@ -3028,6 +3028,27 @@ begin
           end;
         end;
 
+      IR_EXC_MATCH_HIT:
+        begin
+          lblId := IRA[i];
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($E5910000);                                         { ldr r0, [r1] }
+          EmitLoadImmArm32(1, Integer(IRIVal[i]));                    { r1 = expected }
+          EmitI32($E1500001);                                         { cmp r0, r1 }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($0A000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff)) { beq label }
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($0A000000);
+          end;
+        end;
+
       IR_EXC_CLEAR:
         begin
           EmitI32($E3A00000);                                         { mov r0, #0 }

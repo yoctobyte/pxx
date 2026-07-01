@@ -125,3 +125,4 @@
 2026-07-01T18:04:20Z  v125  0ef3bdb0f29c626e1def1dfd839e14282d603fee449060634ddbb46c5cec2810  013a803abab393a82844b1293ed72b96b2b26f1b  fix(x64): EmitReadLine/EmitEof onto EmitAsmX64, mov-reg-imm compact form (v124)
 2026-07-01T18:15:22Z  v126  a98ba3605e86239038f409f4de6ad5a03fc590a6a0b700fca87c9e62cd1b4b61  61d6c631d4edcb3d7d3c9a2f36972f89441c101e  fix(x64): EmitReadVarParse/EmitLoadVariantAddress onto EmitAsmX64 (v125)
 2026-07-01T18:41:46Z  v127  b0d10304fb33d7593c2bb6711ca921a31a0bae01dc702e6f139af0ffa2b5d143  584097c3ac6e4e6c3fb22860e1c30845f350b5e4  docs(progress): close out this session's ir_codegen.inc EmitAsmX64 push
+2026-07-01T19:01:28Z  v128  037f32945849f1cc4b601737cb835518cf4b2c60639ee2d253ee6693107c1d2f  5d399f301938723b9d433d13088393b32569c302  docs(progress): file i386 try/except segfault + cross-target E.Message bug

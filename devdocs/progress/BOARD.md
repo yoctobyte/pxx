@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,7 +37,6 @@ _none_
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-emitasmx64-no-sib-index-silent-misparse | A | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
-| bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -147,7 +146,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (394)
+## done (395)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -242,6 +241,7 @@ _none_
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-emitasmx64-heap-helpers-oom-selfhost | A | bug | EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
+| bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
 | bug-float-field-record-function-return | A | bug | `Single` field/element inside a record or array stores/loads as zero | — |
@@ -571,7 +571,6 @@ _none_
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-emitasmx64-no-sib-index-silent-misparse
-- [A] bug-except-base-handler-misses-derived
 - [A] bug-i386-try-except-segfault
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] bug-narrowing-typecast-rvalue-no-truncate

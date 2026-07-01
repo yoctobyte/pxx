@@ -2757,6 +2757,27 @@ begin
           end;
         end;
 
+      IR_EXC_MATCH_HIT:
+        begin
+          lblId := IRA[i];
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($F9400020);                                         { ldr x0, [x1] }
+          EmitLoadImmA64(1, Integer(IRIVal[i]));                      { x1 = expected }
+          EmitI32($EB01001F);                                         { cmp x0, x1 (subs xzr, x0, x1) }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($54000000 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { b.eq label }
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($54000000);
+          end;
+        end;
+
       IR_EXC_CLEAR:
         begin
           EmitI32($D2800000);                                         { movz x0, #0 }

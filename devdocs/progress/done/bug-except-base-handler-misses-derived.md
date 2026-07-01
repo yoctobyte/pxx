@@ -1,11 +1,48 @@
 # `except on E: BaseClass` does not catch a derived exception
 
 - **Type:** bug (exception machinery — correctness) — Track A
-- **Status:** backlog
+- **Status:** done — fixed 2026-07-01, pin v128
 - **Severity:** high — breaks the standard `on E: Exception do` catch-all; any
   code that raises a subclass of `Exception` and catches it with a base handler
   escapes as an unhandled exception (process aborts).
 - **Opened:** 2026-06-30 (Track B latent-bug sweep, against stable v97)
+
+## Resolution
+
+Confirmed the predicted cause exactly: `IR_EXC_MATCH`'s codegen compared the
+raised class id for identity only. Fix reuses the existing `is`/`as` ancestry
+walk (`IsClassDescOrSelf`, already used by `IRLowerClassMatch`) at IR-lowering
+time (`ir.inc`'s `AN_TRY_EXCEPT` case): for each `on E: T` handler, enumerate
+every class descending from `T` (closed-world, compile-time) and emit one new
+`IR_EXC_MATCH_HIT` node per descendant — a positive-polarity sibling of
+`IR_EXC_MATCH` (jumps *into* the handler body on a match, instead of jumping
+*away* on a mismatch) — followed by the original exact-match `IR_EXC_MATCH`
+for `T` itself, whose existing fall-through lands on the same body label.
+
+New IR opcode `IR_EXC_MATCH_HIT` (`defs.inc`), implemented in all 4 backends
+that support exceptions (x64, i386, arm32, aarch64 — mirrors each target's
+existing `IR_EXC_MATCH` codegen with the branch condition flipped: `je`/`jz`/
+`beq`/`b.eq` instead of `jne`/`jnz`/`bne`/`b.ne`). riscv32/xtensa don't
+implement exceptions at all (pre-existing, unaffected).
+
+Verified: the `poly` example from this ticket, plus a fuller regression
+(`test/test_except_derived_caught_by_base.pas`) covering direct-derived,
+two-level-derived (grandchild), exact-match-still-works, most-specific-first
+ordering across multiple `on` clauses, and a negative case (unrelated sibling
+class not caught by an unrelated handler, falls through to the real
+catch-all) — all pass on x86-64 natively and the class-*matching* logic was
+independently confirmed correct on i386/arm32/aarch64 via cross-compile +
+QEMU.
+
+**Two separate, pre-existing bugs found (not fixed) while cross-verifying,
+filed separately:** [[bug-i386-try-except-segfault]] — i386 SIGSEGVs on a
+basic `try...except` block in some code shapes (confirmed on the pre-fix
+baseline, unrelated to this fix); and `E.Message` returns empty on all 3
+cross targets even without a crash (x86-64 native is correct) — noted in the
+same ticket since found together, may need splitting out.
+
+Full `make test` green (x86-64), self-host byte-identical (gen1==gen2, no
+lag), `make stabilize` green.
 
 ## Symptom
 

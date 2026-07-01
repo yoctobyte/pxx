@@ -78,6 +78,7 @@ begin
     IR_EXC_LEAVE: Result := 'exc_leave';
     IR_RAISE: Result := 'raise';
     IR_EXC_MATCH: Result := 'exc_match';
+    IR_EXC_MATCH_HIT: Result := 'exc_match_hit';
     IR_EXC_STORE: Result := 'exc_store';
     IR_EXC_CLEAR: Result := 'exc_clear';
     IR_TERMINATE: Result := 'terminate';
@@ -350,7 +351,7 @@ begin
         IRRequireOptionalNode(IRB[i], 'call_ind first arg');
       end;
 
-      IR_EXC_ENTER, IR_EXC_MATCH:
+      IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT:
       begin
         lblId := IRA[i];
         if (lblId < 0) or (lblId >= MAX_IR) then
@@ -1958,6 +1959,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
+    excTargetCi, excBodyLabel, excDescCi: Integer;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
@@ -4282,7 +4284,20 @@ begin
         if ASTIVal[handlerNode] >= 0 then
         begin
           handlerNextLabel := IRNewLabel;
+          { `on E: T` must catch T and every descendant of T (Delphi/FPC
+            is-a semantics), not just an exact class match. ASTIVal here is
+            recId-space (REC_UCLASS_BASE + ci); IsClassDescOrSelf walks raw
+            UCls indices (same helper `is`/`as` use via IRLowerClassMatch).
+            Emit one IR_EXC_MATCH_HIT (jump-to-body-on-match) per proper
+            descendant, then the original exact-match IR_EXC_MATCH last so
+            its existing fall-through-on-match still lands on the body. }
+          excTargetCi := ASTIVal[handlerNode] - REC_UCLASS_BASE;
+          excBodyLabel := IRNewLabel;
+          for excDescCi := 0 to UClsCount - 1 do
+            if (excDescCi <> excTargetCi) and IsClassDescOrSelf(excDescCi, excTargetCi) then
+              last := IRAppend(IR_EXC_MATCH_HIT, excBodyLabel, -1, -1, REC_UCLASS_BASE + excDescCi, 0);
           last := IRAppend(IR_EXC_MATCH, handlerNextLabel, -1, -1, ASTIVal[handlerNode], 0);
+          last := IRAppend(IR_LABEL, -1, -1, -1, excBodyLabel, 0);
         end;
         if ASTSOffset[handlerNode] >= 0 then
           last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0);

@@ -4658,6 +4658,26 @@ begin
           end;
         end;
 
+      IR_EXC_MATCH_HIT:
+        begin
+          lblId := IRA[i];
+          EmitAsmX64(['mov rax, [@glob]', BSS_EXC_CLS, 'cmp rax, %', Integer(IRIVal[i])]);
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($84);
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($84);
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
       IR_CALL:
         begin
           if IRIVal[i] = 1 then

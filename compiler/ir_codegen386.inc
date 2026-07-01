@@ -3592,6 +3592,26 @@ begin
           end;
         end;
 
+      IR_EXC_MATCH_HIT:
+        begin
+          lblId := IRA[i];
+          EmitB($A1); EmitGlobRef(BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
+          EmitB($3D); EmitI32(Integer(IRIVal[i])); { cmp eax, imm32 }
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($84);                            { jz rel32 }
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($84);
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
       IR_EXC_CLEAR:
         begin
           EmitB($31); EmitB($C0); { xor eax, eax }

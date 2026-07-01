@@ -1510,6 +1510,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_exception_finally26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n12')"
 	./$(COMPILER) test/test_exception_typed.pas /tmp/test_exception_typed26
 	test "$$(/tmp/test_exception_typed26)" = "$$(printf '41\n42\n43\n44\n45')"
+	./$(COMPILER) test/test_except_derived_caught_by_base.pas /tmp/test_except_derived_caught_by_base26
+	test "$$(/tmp/test_except_derived_caught_by_base26)" = "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas /tmp/test_empty_class_shorthand26
 	test "$$(/tmp/test_empty_class_shorthand26)" = "$$(printf 'EBase ok: base error\nEDerived ok: derived error')"
 	! ./$(COMPILER) test/test_reraise_error.pas /tmp/test_reraise_error26 > /tmp/test_reraise_error.log 2>&1
