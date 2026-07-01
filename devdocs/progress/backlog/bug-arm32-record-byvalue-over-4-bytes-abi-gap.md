@@ -1,4 +1,10 @@
-# arm32: a ≤8-byte by-value record call immediately followed by a managed-field record call segfaults
+# arm32: by-value record params over 4 bytes drop their high word (ABI gap)
+
+<!-- was: "arm32: a ≤8-byte by-value record call immediately followed by a
+     managed-field record call segfaults" — renamed once the root cause
+     turned out to be the already-known >4-byte record-arg ABI gap, not a
+     two-call interaction. -->
+
 
 - **Type:** bug (arm32 backend — codegen, record-by-value call ABI) — Track A
 - **Status:** backlog
@@ -95,3 +101,46 @@ filing separately since the symptom (specific two-call sequence) and area
   the pre-fix v134 baseline (`git stash` back to before the fix, same crash)
   — this bug predates that work and is unrelated to it. Not investigated
   further this session — out of scope for the pass that found it.
+- 2026-07-01 (later, same session) — Root-caused. This is the SAME gap
+  [[bug-aarch64-arm32-record-temp-byvalue-arg]] (done, v65) explicitly
+  flagged as a deferred residual: *"arm32 records > 4 bytes: the arm32
+  by-value record-param marshalling/prologue only carries the low 4 bytes
+  ... a >4-byte record arg is wrong on arm32. Needs the arm32 record-param
+  ABI widened to r0:r1 (caller + prologue)"* — `TPlain` (two `Integer`
+  fields, 8 bytes) is exactly this shape.
+
+  Confirmed three separate spots in `ir_codegen_arm32.inc` all still only
+  handle a *4-byte* by-value record, silently dropping the high word for a
+  5-8 byte one:
+  1. `IR_LOAD_SYM` (loading a record VALUE from a plain variable, e.g.
+     `modPlain(p)`'s argument): gates 64-bit handling on `Is64BitArm32(tk)`,
+     which only recognizes `tyInt64`/`tyUInt64` — a same-size `tyRecord`
+     falls through to the generic 1-word `EmitLoadVarArm32`.
+  2. `IR_LOAD_MEM`'s own comment already says as much: *"tyRecord (<=4-byte
+     by-value record) loads its packed bytes into r0 ... Records >4 bytes
+     need the arm32 record-param marshalling widened"*.
+  3. The generic by-value call-argument loop (`IR_CALL`, the "word-based
+     argument passing" section) has explicit 2-word handling for
+     `tyAnsiString`/`tyInt64`/`tyUInt64`/float params but NO case for a
+     plain by-value `tyRecord` param — it falls to the 1-word `else`
+     branch regardless of `RecSize`.
+
+  This means `modPlain(p)` only ever pushes ONE word for `p`'s 8 bytes (the
+  `a` field; `b` is silently dropped) — a real, separate data-correctness
+  bug in its own right, independent of whatever then causes the SECOND
+  call to crash. Whether that single missing word also desyncs the stack
+  balance for everything after `modPlain` returns (my working theory for
+  why the *next* call specifically crashes) is not yet confirmed with a
+  memory/register trace — flagging as the most likely mechanism, not a
+  proven one.
+
+  **Not attempted this session**: fixing this properly means widening the
+  arm32 by-value record ABI at all three points above (caller value-load,
+  caller arg-push, and very likely the CALLEE's prologue/param-reception
+  path too, which I have not yet located) — real, non-trivial call-ABI
+  surgery with a large blast radius (touches every by-value record call on
+  arm32), late in a solo overnight pass with no one to sanity-check a
+  mistake here. Parking with this much narrower, concrete root cause
+  instead of the vague "investigate the two-call interaction" framing this
+  ticket opened with — whoever picks it up next should start from the
+  three call sites above, not re-derive them.

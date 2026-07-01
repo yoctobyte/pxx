@@ -91,5 +91,11 @@ codegen untouched); pinned v65.
   high word before this fix), so a >4-byte record arg is wrong on arm32. Needs the
   arm32 record-param ABI widened to r0:r1 (caller + prologue), tracked here as the
   remaining arm32 item.
+
+  2026-07-01: this residual has its own ticket now —
+  [[bug-arm32-record-byvalue-over-4-bytes-abi-gap]] — found
+  independently via a crash repro, then traced back to this exact gap
+  (`IR_LOAD_SYM`/`IR_LOAD_MEM`/the by-value call-arg loop all still only
+  handle 4 bytes). Pick up there for the concrete 3-site fix list.
 - **i386**: still rejects *any* by-value record param ("only ordinal/pointer
   parameters supported yet") — a broader i386 maturity gap, untouched.

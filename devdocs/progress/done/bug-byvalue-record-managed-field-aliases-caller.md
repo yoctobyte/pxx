@@ -98,4 +98,4 @@ Found and filed separately while cross-verifying: a pre-existing arm32-only
 SIGSEGV in a specific two-call sequence (small ≤8-byte record call
 immediately followed by a managed-record call) — confirmed present on the
 pre-fix binary too, unrelated to this fix
-([[bug-arm32-small-record-arg-then-managed-record-arg-segfault]]).
+([[bug-arm32-record-byvalue-over-4-bytes-abi-gap]]).

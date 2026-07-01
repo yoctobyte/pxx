@@ -29,7 +29,7 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
-| bug-arm32-small-record-arg-then-managed-record-arg-segfault | A | bug | arm32: a ≤8-byte by-value record call immediately followed by a managed-field record call segfaults | — |
+| bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
@@ -565,7 +565,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
-- [A] bug-arm32-small-record-arg-then-managed-record-arg-segfault
+- [A] bug-arm32-record-byvalue-over-4-bytes-abi-gap
 - [A] bug-c-arrow-on-array-store-of-call-result-clobbered
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
