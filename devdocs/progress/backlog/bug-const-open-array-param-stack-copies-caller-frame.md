@@ -11,6 +11,29 @@
   when actually running `-S` on a real program — `WriteDisassemblyX64`'s own
   stack frame turned out to be ~8 MB (matching `MAX_CODE` almost exactly:
   8389256 bytes), blowing the default 8 MB (`ulimit -s`) stack.
+- **Relation:** [[feature-warn-oversized-stack-frame]] (done) is the *detector*
+  that caught this — its per-frame check is exactly what printed the warning
+  that led here. That ticket's own scope, though, was declared locals ("small
+  data belongs on the stack, big data on the heap" as a rule you apply when
+  *you* write `var buf: array[0..N] of T`). This bug is a different cause the
+  detector wasn't built with in mind: nobody declared a large local here at
+  all — `Caller`/`WriteDisassemblyX64` have no big locals; they just passed an
+  *existing* array by `const`/`var` reference, and the compiler silently
+  manufactured an unrequested copy. The warning correctly caught the symptom;
+  this ticket is the actual disease (open-array parameter marshalling doing a
+  value-copy where Pascal semantics — and the caller's own code — expect
+  pass-by-reference). Not a duplicate of the detector ticket, a distinct root
+  cause it happened to expose.
+- **Note on realistic exposure:** the repro below uses a `Byte` array to
+  reach 8 MB in one declaration for a clean minimal repro, but the bug isn't
+  Byte-specific — any element type is exposed proportionally to
+  `elementCount × SizeOf(element)`. In practice this mostly matters for large
+  flat scalar buffers (`array of Byte`/`Integer`, i.e. exactly this
+  compiler's own `Code[]`/`Data[]` shape) or arrays with very large element
+  counts; an `array of AnsiString` copies cheaply (8-byte handles per
+  element) and a frozen-`string` array would need tens of thousands of
+  elements in one parameter to matter — not a realistic shape in practice,
+  don't over-index on it when scoping the fix.
 
 ## Repro (minimal, isolated)
 
