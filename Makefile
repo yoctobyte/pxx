@@ -317,6 +317,14 @@ test-asm: $(COMPILER)
 	  test "$$(/tmp/test_asm_so26_dlopen /tmp/test_asm_so26.so)" = "hello from shared lib" && \
 	  echo "test-asm: .so dlopen/dlsym round-trip (incl. extern-call GOT) ok" || { echo "test-asm: .so dlopen round-trip FAILED"; exit 1; }; \
 	else echo "test-asm: gcc not installed; .so dlopen check skipped"; fi
+	./$(COMPILER) -S test/hello.pas /tmp/test_asm_dis_hello26
+	test -f /tmp/test_asm_dis_hello26.s
+	grep -q "^    call " /tmp/test_asm_dis_hello26.s
+	grep -q "^    ret$$" /tmp/test_asm_dis_hello26.s
+	! grep -q "^    db " /tmp/test_asm_dis_hello26.s
+	./$(COMPILER) -S compiler/compiler.pas /tmp/test_asm_dis_self26
+	test -f /tmp/test_asm_dis_self26.s
+	! grep -q "^    db " /tmp/test_asm_dis_self26.s
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26

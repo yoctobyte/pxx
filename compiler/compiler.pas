@@ -82,6 +82,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include ir_codegen_riscv32.inc}
 {$include ir_codegen_xtensa.inc}
 {$include ir_codegen.inc}
+{$include asmdisasm_x64.inc}
 {$include cparser.inc}
 {$include bparser.inc}
 {$include pyparser.inc}
@@ -114,6 +115,7 @@ begin
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   EmitSharedMode := False;
+  EmitAsmTextMode := False;
   EspBareBoot := False;
   NoDefaultRtl := False;
   TargetPlatform := PLATFORM_POSIX;
@@ -267,6 +269,15 @@ begin
       { .asm frontend only (feature-asm-source-frontend task #6): x86-64
         ET_DYN shared-library output. }
       EmitSharedMode := True;
+      Inc(i);
+    end
+    else if option = '-S' then
+    begin
+      { head 2 (feature-asm-textual-emit-mode): also write <out>.s, a best-
+        effort x86-64 disassembly of whatever codegen just produced -- any
+        source language, x86-64 only. Additive: the normal binary output
+        (ET_EXEC/-c/--shared, whichever else was requested) still happens. }
+      EmitAsmTextMode := True;
       Inc(i);
     end
     else if option = '--esp-profile=bare' then
@@ -631,6 +642,12 @@ begin
     writeELF32(outFile)
   else
     writeELF(outFile);
+
+  if EmitAsmTextMode then
+  begin
+    WriteDisassemblyX64(outFile + '.s');
+    writeln('ok: ', outFile + '.s', '  [-S disassembly]');
+  end;
 
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,']');

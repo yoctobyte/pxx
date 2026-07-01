@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (86)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,10 @@ _none_
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-case-else-multi-statement-parse-error | A | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
+| bug-const-array-of-ansistring-literal-too-many-elements | A | bug | Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count | — |
+| bug-const-open-array-param-stack-copies-caller-frame | A | bug | Bug: `const array of T` open-array parameter stack-copies into the caller's frame | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -562,7 +565,10 @@ _none_
 - [A] bug-c-arrow-on-array-store-of-call-result-clobbered
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
+- [A] bug-case-else-multi-statement-parse-error
 - [A] bug-compiler-uses-unit-interactions
+- [A] bug-const-array-of-ansistring-literal-too-many-elements
+- [A] bug-const-open-array-param-stack-copies-caller-frame
 - [A] bug-except-base-handler-misses-derived
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] bug-narrowing-typecast-rvalue-no-truncate

@@ -1099,6 +1099,9 @@ var
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;
   EmitSharedMode : Boolean;   { .asm frontend --shared: x86-64 ET_DYN .so output }
+  EmitAsmTextMode : Boolean;  { -S: also write <outFile>.s, a best-effort x86-64
+                                 disassembly of whatever codegen just produced
+                                 (feature-asm-textual-emit-mode, head 2) }
   { ESP32 bare-metal profile (--esp-profile=bare): emit a self-contained
     ET_EXEC image targeting the SoC SRAM map (code/data/bss/stack in IRAM),
     bootable directly via `qemu-system-* -M esp32c3 -kernel`, with no ESP-IDF
@@ -1174,6 +1177,12 @@ var
   AsmSoCallPos: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
   AsmSoCallExtIdx: array[0..MAX_ASM_OBJ_CALLFIX-1] of Integer;
   AsmSoCallCount: Integer;
+  { -S (WriteDisassemblyX64): O(1) "does a proc start/does a branch land
+    here" lookup table, one entry per possible Code[] position. A LOCAL
+    `array of Integer` (SetLength-based) here previously triggered pxx's
+    oversized-stack-frame warning at ~8MB (MAX_CODE) -- a global sidesteps
+    it entirely (BSS, not stack), matching the warning's own suggestion. }
+  AsmDisProcAtPos: array[0..MAX_CODE] of Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
   AsmOpKind : array[0..1] of Integer;   { AOP_* }
   AsmOpReg  : array[0..1] of Integer;   { register number 0..15; AOP_MEMR base reg }
