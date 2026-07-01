@@ -1,7 +1,8 @@
 # Array-constructor statement-arg fails differently when a preceding param has a dynarray field
 
 - **Type:** bug (parser / call lowering — correctness) — Track A
-- **Status:** backlog
+- **Status:** done — already fixed as a side effect of
+  [[bug-open-array-ctor-statement-call]]'s fix; re-verified 2026-07-01, see Log
 - **Severity:** low — workaround is trivial (bind the literal to a named
   const first), but the error message is actively misleading.
 - **Opened:** 2026-06-30 (found while building lib/asmcore, Track B)
@@ -67,3 +68,12 @@ Check('hi', b, expect);   { compiles fine }
 ## Log
 - 2026-06-30 — Opened (Track B, found while building lib/asmcore — see
   [[feature-asmcore-encoder-library]]).
+- 2026-07-01 — Re-tested against current binary (pin v135): the exact repro
+  above, and the other two isolation-table shapes (`f([4,5])` alone, and a
+  non-dynarray record param before the open-array literal), all now compile
+  and run correctly, matching real FPC output exactly. `bug-open-array-ctor-
+  statement-call`'s fix evidently covered this shape too even though it
+  wasn't specifically tested there. Added the dynarray-field-record-param
+  case to `test/test_open_array_ctor_stmt.pas` (already wired into
+  `make test`) rather than a new file, so this shape stays covered going
+  forward. No code change needed — closing as already-fixed.

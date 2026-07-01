@@ -928,7 +928,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_open_array_managed.pas /tmp/test_const_open_array_managed26
 	test "$$(/tmp/test_const_open_array_managed26)" = "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
 	./$(COMPILER) test/test_open_array_ctor_stmt.pas /tmp/test_open_array_ctor_stmt26
-	test "$$(/tmp/test_open_array_ctor_stmt26)" = "$$(printf '3\n1 2 3 ')"
+	test "$$(/tmp/test_open_array_ctor_stmt26)" = "$$(printf '3\n1 2 3 \n\nhi 5')"
 	./$(COMPILER) test/test_open_array_no_leak.pas /tmp/test_open_array_no_leak26
 	test "$$(/tmp/test_open_array_no_leak26)" = "ok 1000000"
 	@if [ -x /usr/bin/time ]; then \

@@ -24,13 +24,12 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (79)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-arm32-small-record-arg-then-managed-record-arg-segfault | A | bug | arm32: a ≤8-byte by-value record call immediately followed by a managed-field record call segfaults | — |
-| bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
@@ -143,7 +142,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (400)
+## done (401)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -154,6 +153,7 @@ _none_
 | bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
 | bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
+| bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-asmcore-fpc-bootstrap | A | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
@@ -566,7 +566,6 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-arm32-small-record-arg-then-managed-record-arg-segfault
-- [A] bug-array-ctor-statement-arg-after-dynarray-record-param
 - [A] bug-c-arrow-on-array-store-of-call-result-clobbered
 - [A] bug-c-signed-arith-shift-right
 - [A] bug-c-vararg-vastart-named-fp-stack
