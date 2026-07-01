@@ -28,7 +28,8 @@ file. Without an output path, it derives one from the source name and refuses to
 overwrite the source.
 
 An output path ending in `.o` also selects object-output mode, the same as
-passing `--emit-obj`.
+passing `--emit-obj`. An output path ending in `.so` selects shared-library
+mode, the same as passing `--shared`.
 
 ## Options
 
@@ -39,7 +40,9 @@ passing `--emit-obj`.
 | `--xtensa-cpu=lx6` | Use the older ESP32 LX6 software divide/mod profile. |
 | `--xtensa-fpu` | Use Xtensa hardware single-precision float operations where supported. |
 | `--esp-profile=bare` | Select the bare-metal ESP platform profile for `riscv32` or `xtensa`. |
-| `--emit-obj` | Emit a relocatable object instead of an executable. Currently for ESP-style object flows. |
+| `--emit-obj` | Emit a relocatable object (`.o`) instead of a linked executable, on any target. Same as an output path ending in `.o`. |
+| `--shared` | Emit an ET_DYN shared library (`.so`) instead of an executable. x86-64 only; introduced for and validated with the `.asm` assembly-source frontend. Same as an output path ending in `.so`. |
+| `-S` | Also write `<output>.s`, a best-effort x86-64 disassembly text dump of the emitted code. Additive — the normal output (executable, `--emit-obj`, or `--shared`) still happens. x86-64 only. |
 | `-g` | Emit DWARF debug information. |
 | `--debug` | Print compiler tracing diagnostics. |
 | `--dump-ir` | Print lowered IR while still emitting output. |

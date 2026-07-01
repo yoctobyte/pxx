@@ -12,6 +12,9 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 - Self-hosting Pascal compiler.
 - Direct ELF executable output: no assembler or linker subprocess for normal
   Pascal programs.
+- Alternate output modes for interop with other toolchains: `--emit-obj`
+  writes a relocatable `.o` on any target; `--shared` writes an x86-64 `.so`
+  (currently validated via the `.asm` assembly-source frontend).
 - Byte-identical fixedpoint builds are part of the development gate.
 - DWARF debug info with `-g` on Linux targets.
 

@@ -41,7 +41,20 @@ writeln(f:0:1);   { 3.5 }
 
 `string` is a managed, reference-counted, length-prefixed type — it grows
 automatically and frees itself. `Length`, `Copy`, `Pos`, `IntToStr`, and `+`
-concatenation all work on it.
+concatenation all work on it. This is the default.
+
+There is also an older **frozen** string ABI: a fixed-capacity inline buffer
+instead of a heap allocation, with no reference counting. Select it by
+undefining the managed-string symbol at compile time:
+
+```sh
+./pxx -uPXX_MANAGED_STRING hello.pas hello
+```
+
+The frozen ABI trades away automatic growth and copy-on-write for a smaller,
+simpler runtime footprint — useful for size-constrained targets or when you
+want to avoid heap traffic entirely. Prefer the default managed strings unless
+you have a specific reason to opt out.
 
 ## Enumerations
 

@@ -147,7 +147,7 @@ def main():
     for page in pages:
         depth = len(page["rel"].parts) - 1
         prefix = "../" * depth
-        body_html = markdown.markdown(page["body"], extensions=["fenced_code", "tables"])
+        body_html = markdown.markdown(page["body"], extensions=["fenced_code", "tables", "toc"])
         body_html = rewrite_links(body_html)
         nav_html = render_nav(nav, page["rel"], prefix)
         html_out = TEMPLATE.format(

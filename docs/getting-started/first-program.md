@@ -31,7 +31,10 @@ the output path. If you omit the output path, PXX derives one from the source
 name and refuses to overwrite the source file.
 
 PXX emits a final ELF executable directly. There is no assembler or linker
-subprocess in the normal path.
+subprocess in the normal path. That's the default, but not the only output
+PXX can produce — `--emit-obj` writes a relocatable `.o` instead, and its
+assembly-source frontend can write a shared `.so`; see the
+[command-line reference](../reference/cli.md).
 
 ## Next
 
