@@ -21,6 +21,10 @@ type
   PInt64Rec  = ^Int64;
   PDoubleRec = ^Double;
 
+  { Days (integer part) since 1899-12-30, with the time-of-day as the
+    fractional part — the standard FPC/Delphi representation. }
+  TDateTime = Double;
+
   Exception = class
     FMessage: string;
     FHelpContext: Integer;
@@ -149,6 +153,16 @@ function GetDirectoryContents(const path: AnsiString; var list: TFileInfoArray):
 
 { Execute a process in a pipeline, returning its PID and redirecting stdin/stdout via pipes if requested. }
 function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
+
+{ Gregorian calendar <-> TDateTime (days since 1899-12-30, FPC/Delphi's
+  epoch). EncodeDate/DecodeDate handle the whole-day part; EncodeTime/
+  DecodeTime the time-of-day fraction. Year 0 and negative years are
+  proleptic-Gregorian (there is no explicit valid-range check here, matching
+  FPC's own leniency in practice for this RTL's scope). }
+function EncodeDate(Year, Month, Day: Word): TDateTime;
+procedure DecodeDate(aDate: TDateTime; out Year, Month, Day: Word);
+function EncodeTime(Hour, Min, Sec, MSec: Word): TDateTime;
+procedure DecodeTime(aTime: TDateTime; out Hour, Min, Sec, MSec: Word);
 
 implementation
 
@@ -1069,6 +1083,82 @@ begin
   end;
 
   Result := pid;
+end;
+
+{ Howard Hinnant's public-domain "days_from_civil" / "civil_from_days"
+  algorithm (proleptic Gregorian calendar, days since 1970-01-01), chosen
+  over the classic FPC DivMod-table implementation because it is small
+  enough to re-derive and verify from scratch rather than recall from
+  memory, and because its era/yoe split is specifically designed to stay
+  correct under ordinary truncating (round-toward-zero) integer division --
+  exactly this dialect's `div`/`mod` semantics -- for negative (pre-epoch)
+  inputs too. TDateTime's epoch (1899-12-30) is applied as a constant day
+  offset from 1970-01-01, computed once via this same function so any
+  internal convention only has to be self-consistent, not independently
+  correct. Verified against real FPC SysUtils.DecodeDate/EncodeDate output
+  across leap years, month/year boundaries, and pre-1899 dates. }
+function DaysFromCivil(y, m, d: Int64): Int64;
+var era, yoe, doy, doe: Int64;
+begin
+  if m <= 2 then y := y - 1;
+  if y >= 0 then era := y div 400 else era := (y - 399) div 400;
+  yoe := y - era * 400;                                      { [0, 399] }
+  if m > 2 then doy := (153 * (m - 3) + 2) div 5 + d - 1
+  else doy := (153 * (m + 9) + 2) div 5 + d - 1;              { [0, 365] }
+  doe := yoe * 365 + yoe div 4 - yoe div 100 + doy;           { [0, 146096] }
+  Result := era * 146097 + doe - 719468;                      { days since 1970-01-01 }
+end;
+
+procedure CivilFromDays(z: Int64; var y, m, d: Int64);
+var era, doe, yoe, doy, mp: Int64;
+begin
+  z := z + 719468;
+  if z >= 0 then era := z div 146097 else era := (z - 146096) div 146097;
+  doe := z - era * 146097;                                            { [0, 146096] }
+  yoe := (doe - doe div 1460 + doe div 36524 - doe div 146096) div 365; { [0, 399] }
+  y := yoe + era * 400;
+  doy := doe - (365 * yoe + yoe div 4 - yoe div 100);                 { [0, 365] }
+  mp := (5 * doy + 2) div 153;                                        { [0, 11] }
+  d := doy - (153 * mp + 2) div 5 + 1;                                { [1, 31] }
+  if mp < 10 then m := mp + 3 else m := mp - 9;                       { [1, 12] }
+  if m <= 2 then y := y + 1;
+end;
+
+function EncodeDate(Year, Month, Day: Word): TDateTime;
+begin
+  Result := DaysFromCivil(Year, Month, Day) - DaysFromCivil(1899, 12, 30);
+end;
+
+procedure DecodeDate(aDate: TDateTime; out Year, Month, Day: Word);
+var y, m, d: Int64;
+begin
+  CivilFromDays(Trunc(aDate) + DaysFromCivil(1899, 12, 30), y, m, d);
+  Year := y; Month := m; Day := d;
+end;
+
+function EncodeTime(Hour, Min, Sec, MSec: Word): TDateTime;
+begin
+  Result := (Hour * 3600000 + Min * 60000 + Sec * 1000 + MSec) / 86400000.0;
+end;
+
+procedure DecodeTime(aTime: TDateTime; out Hour, Min, Sec, MSec: Word);
+var frac: Double; totalMSec: Int64;
+begin
+  { Matches real FPC/Delphi exactly (verified empirically, not assumed): the
+    date part truncates toward zero (Trunc, same as DecodeDate), and the
+    time-of-day part is the ABSOLUTE VALUE of the leftover fraction -- e.g.
+    EncodeDate(1899,12,29) + EncodeTime(6,0,0,0) = -0.75 decodes to
+    1899-12-30 18:00 in real FPC, not 1899-12-29 06:00 as a naive floor-
+    based split would give. }
+  frac := Abs(aTime - Trunc(aTime));
+  totalMSec := Round(frac * 86400000.0);
+  if totalMSec >= 86400000 then totalMSec := totalMSec - 86400000;  { rounding at the day boundary }
+  Hour := totalMSec div 3600000;
+  totalMSec := totalMSec mod 3600000;
+  Min := totalMSec div 60000;
+  totalMSec := totalMSec mod 60000;
+  Sec := totalMSec div 1000;
+  MSec := totalMSec mod 1000;
 end;
 
 end.

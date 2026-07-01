@@ -807,6 +807,8 @@ test-core: $(COMPILER)
 	test "$$(printf '10 32\n' | /tmp/test_case_io_casesensitive_intrinsics26)" = "$$(printf 'AB\n42')"
 	./$(COMPILER) test/test_uses_sysutils.pas /tmp/test_uses_sysutils26
 	test "$$(/tmp/test_uses_sysutils26)" = "sysutils noop ok"
+	./$(COMPILER) test/test_sysutils_datetime.pas /tmp/test_sysutils_datetime26
+	test "$$(/tmp/test_sysutils_datetime26)" = "$$(printf '2026-7-2\n2000-2-29\n1900-2-28\n1899-12-30 0.0\n1899-12-29 -1.0\n1969-12-31\n1800-1-1\n2026-7-2 14:30:15.500\n1899-12-30 18:0:0.0')"
 	./$(COMPILER) -Futest/case_units test/test_case_unit_lookup.pas /tmp/test_case_unit_lookup26
 	/tmp/test_case_unit_lookup26; test "$$?" = "42"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
