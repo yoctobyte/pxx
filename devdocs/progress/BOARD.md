@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (86)
+## backlog (85)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -38,7 +38,6 @@ _none_
 | bug-case-else-multi-statement-parse-error | A | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-const-array-of-ansistring-literal-too-many-elements | A | bug | Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count | — |
-| bug-const-open-array-param-stack-copies-caller-frame | A | bug | Bug: `const array of T` open-array parameter stack-copies into the caller's frame | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
@@ -149,7 +148,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (388)
+## done (389)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -230,6 +229,7 @@ _none_
 | bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
+| bug-const-open-array-param-stack-copies-caller-frame | A | bug | Bug: passing a FIXED-size array to an `array of T` open-array parameter stack-copies into the caller's frame | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
 | bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
@@ -568,7 +568,6 @@ _none_
 - [A] bug-case-else-multi-statement-parse-error
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-const-array-of-ansistring-literal-too-many-elements
-- [A] bug-const-open-array-param-stack-copies-caller-frame
 - [A] bug-except-base-handler-misses-derived
 - [A] bug-integer-div-zero-sigfpe-uncatchable
 - [A] bug-narrowing-typecast-rvalue-no-truncate

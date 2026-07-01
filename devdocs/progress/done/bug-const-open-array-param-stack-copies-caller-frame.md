@@ -178,5 +178,49 @@ in.
   parameters, to gauge real-world exposure elsewhere in the compiler/RTL/
   user code today.
 
+## Fixed (2026-07-01, Track A, commit 730b6a75, pinned v113)
+
+Size-gated at a new `MAX_OPEN_ARRAY_STACK_TEMP` (64 KB, `defs.inc`): arrays at
+or under the threshold keep the original frame-local `[len:8][data]` buffer
+path in `IRLowerCallArg` (`ir.inc`) byte-for-byte unchanged — zero risk to
+the overwhelmingly common small-array case, and the compiler's own source
+never crosses this threshold, so self-host/cross-bootstrap never exercise
+the new path at all (verified: bootstrap byte-identical). Above the
+threshold, both the const/value and var/out branches now manufacture a
+genuine managed dyn-array-of-byte temp instead (`AllocDynArray` +
+synthesized `SetLength` intrinsic call, mirroring `AN_VARREC_ARRAY`'s
+existing TVarRec-temp pattern for `array of const`) — heap-backed, bounded
+regardless of the source array's size, and released automatically by the
+routine's normal managed-local cleanup at scope exit. Its handle already has
+the `[len:8][data]` layout the open-array parameter expects, so the callee
+side (`Length`/`High`/indexing) needed zero changes. The `var`/`out`
+writeback flush sites (two call sites in the `AN_CALL` IR lowering) gained a
+small shared helper (`PendOAWBSrcAddr`) that branches on
+`Syms[temp].ArrLen < 0` (the existing dynamic-array sentinel) to compute the
+copy-back source correctly for either temp kind.
+
+**Landmine caught before landing:** the first attempt copied
+`AN_VARREC_ARRAY`'s inline `IR_DEFAULT_MEM` (zero the handle) immediately
+before the synthesized `SetLength` call, on the assumption this mirrored a
+proven-safe pattern. It doesn't generalize to a call site inside a loop: the
+inline zero orphans the *previous* iteration's already-allocated handle
+before `SetLength` gets a chance to see/reuse/release it, leaking on every
+iteration (~2 MB/call in the repro that caught it — RSS went from 4 MB to
+102 MB over 50 iterations of a 2 MB array). Fixed by removing the inline
+zero entirely and relying solely on the prologue-level `SymIsHiddenArgTemp`
+nil-init (runs once at function entry, correctly leaves a non-nil handle
+alone on later loop iterations) plus `SetLength`'s own already-correct
+resize-of-an-existing-handle semantics — the same behavior any ordinary
+array-growing user code already depends on. `AN_VARREC_ARRAY` itself was not
+touched or audited for the same class of bug (out of scope here; worth a
+look if anyone hits an array-of-const-inside-a-loop leak later).
+
+**Verified:** full `make test` + all four cross targets (i386/aarch64/arm32/
+riscv32) green; self-host bootstrap byte-identical; the original crash repro
+and a var/writeback repro both correct with zero stack-frame warning at
+`--debug`; new `test/test_big_static_array_open_param.pas` (small+large
+arrays, const+var paths, writeback correctness, 50-iteration RSS leak guard)
+wired into `make test-core`.
+
 ## Log
 - 2026-07-01 — resolved, commit 730b6a75.
