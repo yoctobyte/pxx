@@ -3264,7 +3264,7 @@ var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, va
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
-    szAi, szFlatLen, szDi, szBrDepth: Integer; szElemTk: TTypeKind;
+    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase: Integer; szElemTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -4307,8 +4307,51 @@ begin
                     end
                     else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
                     begin
-                      Error('SizeOf: indexed access on a multi-dimensional array is not yet supported');
-                      prevTok := 0;
+                      { SizeOf(m[i]) / SizeOf(m[i,j,..]) on a genuine N-D fixed
+                        array (SymArrNDims[sci] >= 2 -- the <= 1 case is
+                        handled above): mirrors the two subscript forms real
+                        indexing supports (BuildPartialNDRowIndex /
+                        BuildFlatNDIndex) -- a single subscript names a whole
+                        row (sub-array), one subscript per dimension names a
+                        scalar element. Indices are never evaluated (same
+                        rationale as the 1-D case above), so just count
+                        top-level commas while skipping the balanced
+                        brackets. }
+                      Next;                { consume the identifier; CurTok = '[' }
+                      Next;                { consume '['; CurTok = start of first index expr }
+                      szBrDepth := 1; szNIdx := 1;
+                      while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
+                      begin
+                        if CurTok.Kind = tkLBrack then Inc(szBrDepth)
+                        else if CurTok.Kind = tkRBrack then Dec(szBrDepth)
+                        else if (CurTok.Kind = tkComma) and (szBrDepth = 1) then Inc(szNIdx);
+                        if szBrDepth > 0 then Next;
+                      end;
+                      { CurTok = ']'; the shared trailing Next below moves past
+                        it to the enclosing SizeOf(...)'s ')'. }
+                      szBase := sci * MAX_ARR_DIMS;
+                      if szNIdx = 1 then
+                      begin
+                        szFlatLen := 1;
+                        for szDi := 1 to SymArrNDims[sci] - 1 do
+                          szFlatLen := szFlatLen * SymArrDimSpan[szBase + szDi];
+                        if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                          prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
+                        else
+                          prevTok := TypeSize(Syms[sci].ElemType) * szFlatLen;
+                      end
+                      else if szNIdx = SymArrNDims[sci] then
+                      begin
+                        if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                          prevTok := RecSize(Syms[sci].ElemRecName)
+                        else
+                          prevTok := TypeSize(Syms[sci].ElemType);
+                      end
+                      else
+                      begin
+                        Error('SizeOf: wrong number of array subscripts');
+                        prevTok := 0;
+                      end;
                     end
                     else if Syms[sci].IsArray then
                     begin

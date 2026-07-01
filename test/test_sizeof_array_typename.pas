@@ -18,6 +18,8 @@ var
   bytes: array[0..15] of byte;
   recs:  array[0..4] of TRec;
   m:     array[0..2,0..2] of integer;
+  n:     array[0..1,0..2,0..4] of integer;
+  mr:    array[0..1,0..2] of TRec;
   r:     TRec;
 begin
   writeln(SizeOf(arr10));   { 40 }
@@ -44,4 +46,16 @@ begin
   writeln(SizeOf(recs[0]));                     { 12, record element }
   writeln(SizeOf(recs) div SizeOf(recs[0]));    { 5 }
   writeln(SizeOf(arr10[arr10[0] + 1]));         { 4, index expression itself untouched/unevaluated }
+
+  { SizeOf(m[i]) / SizeOf(m[i,j,..]) on a genuine N-D fixed array: a single
+    leading subscript names a whole row (sub-array); one subscript per
+    dimension names the scalar element -- mirrors the two subscript forms
+    real N-D indexing itself supports. }
+  writeln(SizeOf(m[0]));       { row: 3 ints = 12 }
+  writeln(SizeOf(m[0,0]));     { scalar: 4 }
+  writeln(SizeOf(n));          { 2*3*5*4 = 120 }
+  writeln(SizeOf(n[0]));       { row: 3*5*4 = 60 }
+  writeln(SizeOf(n[0,0,0]));   { scalar: 4 }
+  writeln(SizeOf(mr[0]));      { row: 3*12 = 36 }
+  writeln(SizeOf(mr[0,0]));    { scalar: 12 }
 end.
