@@ -151,3 +151,63 @@ observes this discipline — match it.)
   than touching the lexer. `test/test_asm_branch.pas` (label + `jg` loop),
   `test/test_asm_keywords.pas` (and/or/xor/not/dec/div regression), both in
   `make test`. Self-host + threadsafe-self-host byte-identical.
+- 2026-07-01 — **`ir_codegen.inc` (x64) migration resumed and taken most of
+  the way**, v119→v126, 8 chunks each independently self-hosted (capped
+  `ulimit -v 3G`) + `make test` + `make stabilize`-verified before landing.
+  Re-applied the 4 procedures reverted in
+  [[bug-emitasmx64-heap-helpers-oom-selfhost]] (root cause was a real,
+  unrelated `SetLength` bug, fixed at v118 — the `EmitAsmX64` conversions
+  were innocent all along) and then converted essentially every remaining
+  procedure in the file: `EmitDynArrayReleaseLockedForSym/ForNode`,
+  `EmitDynArrayUnique`, `EmitAnsiStrFromLiteral`, `EmitAnsiStringRuntime`'s 4
+  embedded ARC helpers, `EmitLoadManagedHandleRdi`, `EmitPublishManagedString`,
+  `EmitArgvToStringManaged`, `IREmitLeaveExceptionFrames`,
+  `IREmitStoreCharAsString`, `EmitVariantClear/Retain`,
+  `EmitAnsiStrFromInlineString`, `EmitReadLine`, `EmitEof`,
+  `EmitReadVarParse`, `EmitLoadVariantAddress`, `EmitWriteVariant`,
+  `EmitSetcc`, and the label/exception dispatch in `IREmitMachineCode`.
+  `EmitAsmX64` call count in the file: 10 → 40+; raw `EmitB` call count:
+  ~3748 → ~2900 (nearly all of the remainder is inside the two procedures
+  below).
+
+  **Deliberately stopped short of `EmitVarBinOp` and `IREmitNode`** (user
+  call, asked directly and decided: leave them raw). Together these hold
+  ~2880 of the remaining raw `EmitB` calls (`EmitVarBinOp` ~510,
+  `IREmitNode` ~2371 — the latter is the central per-IR-node codegen
+  dispatcher, ~3100 lines). Both are qualitatively different from
+  everything converted so far: interleaved manual `Patch8`/`Patch32`
+  short-jump control flow every 2-4 lines (variant string/char/nil
+  sub-case dispatch in `EmitVarBinOp`; the IR-opcode `case` dispatch itself
+  in `IREmitNode`), so the mechanical win per edit is smaller and the risk
+  of a silently-wrong jump target is higher than anything landed this
+  session — a genuinely worse effort/value ratio than the rest of the
+  file, not just "more of the same." Revisit if there's a specific reason
+  to (e.g. someone needs the `-S` disassembly of these procedures to read
+  as cleanly as the rest, or a bug is suspected in one of them and
+  readable text would help debug it) — otherwise low priority.
+
+  **Five real encoder gaps found and fixed along the way** (all in
+  `compiler/asmtext.inc`/`x64enc.inc`, all oracle-tested against
+  `llvm-mc`, all landed): `mov [mem], imm` wasn't wired to the dispatch
+  table (encoder existed, unused); `lea reg, [@glob]/[@data]` (only `mov`
+  had absolute-address support); `inc`/`dec [@glob]/[@data]`; general ALU
+  (`add`/`sub`/`cmp`/`and`/`or`/`xor`/`adc`/`sbb`) `reg,[@glob]/[@data]`
+  and `[@glob]/[@data],reg` forms; and `x64_mov_reg_imm` now picks the
+  compact `mov r/m64, imm32` (0xC7) form when the value round-trips
+  through `Int32`, instead of always the 10-byte movabs form (a silent
+  3-byte-per-site regression the migration would otherwise have
+  introduced everywhere it loads a small constant into a 64-bit
+  register — found retroactively affecting the already-shipped v120
+  `EmitHeapAllocLocked`, harmless there since it's size-only). Also
+  documented (not fixed, out of scope): `EmitAsmX64` has no
+  `[base+index-register]` (SIB) support — see
+  [[bug-emitasmx64-no-sib-index-silent-misparse]] — it fails safely
+  (`Error`/`Halt`) rather than silently, contra that ticket's first-draft
+  (and corrected) claim.
+
+  Also caught and self-corrected before landing: bracket-less
+  `mov reg, @glob` (movabs address-load, opcode `0xB8+r`) is a
+  *completely different instruction* from bracketed `mov reg, [@glob]`
+  (SIB-absolute dereference, opcode `0x8B`) — four early conversions
+  used the wrong one; caught by re-deriving each original opcode before
+  trusting a text-mnemonic substitution, not by any test failing.
