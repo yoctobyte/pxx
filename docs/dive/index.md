@@ -5,20 +5,21 @@ order: 5
 
 # Dive
 
-Everything on this page is true today, on this checkout. No slides, no
-roadmap talk — read this once and you'll know what PXX actually is, fast.
-Full documentation is linked at the bottom if you want more.
+A single-page technical overview of PXX, verified against this checkout. The
+rest of the documentation, linked at the end, covers each topic in depth.
 
-## What is it
+## Overview
 
-**PXX** (dialect name **pascal26**) is a Pascal compiler that writes its own
-Linux ELF executables directly — no external assembler, no external linker,
-no libc in the default path. One person, one from-scratch codebase: lexer,
-parser, IR, six CPU backends, its own runtime library, its own GTK-based
-widget set. Nothing borrowed from FPC, Borland, or anyone else — but it
-speaks FPC's Object Pascal dialect, so existing Pascal knowledge carries over.
+PXX (dialect name pascal26) is a from-scratch, self-hosting Pascal compiler.
+It emits Linux ELF executables directly: no external assembler, no external
+linker, and no libc dependency in the default build path. The lexer, parser,
+intermediate representation, all six backends, the runtime library, and the
+GTK-based component library are original code written for this project. The
+dialect follows Free Pascal's naming and semantics where practical, but the
+implementation is independent — nothing is copied or ported from FPC,
+Borland, or elsewhere.
 
-## See it work
+## Example
 
 ```pascal
 program hello;
@@ -36,83 +37,88 @@ end.
 Hello, world!
 ```
 
-That compile produced a real static ELF binary, in one step, with no `as`,
-`ld`, or `gcc` anywhere in the process.
+This produces a complete static ELF binary in one step, with no external
+assembler, linker, or C compiler invoked during the build.
 
-## Why it's worth a second look
+## Design points
 
-- **Self-hosting, provably.** The compiler is written in its own dialect and
-  compiles itself to a byte-identical fixed point — build 2 must equal
-  build 3, exactly, on every target that self-hosts. That's the development
-  gate, not a claim; it fails the build if it's not true.
-- **Small by choice, not by accident.** Default managed-string build: ~31 KB
-  hello-world. Switch to the frozen-string ABI (`-uPXX_MANAGED_STRING`) and
-  the same program is a 287-byte static ELF. Verified on this checkout.
-- **Six targets, one compiler.** x86-64, i386, aarch64, arm32 all self-host
-  byte-identical; xtensa and riscv32 target bare-metal ESP32. `--target=`
-  picks the backend, nothing else changes.
-- **More than Pascal.** The same backend also compiles a C frontend
-  (real-world C — SQLite, Lua fixtures pass), a Python-like dialect
-  (Nil Python, `.npy`), and its own assembly-source frontend.
+- **Self-hosting.** The compiler is written in its own dialect. The
+  development gate requires it to compile itself to a byte-identical fixed
+  point — build 2 must equal build 3, exactly, on every self-hosting target.
+- **Two string ABIs.** The default build uses managed, reference-counted
+  strings; a `hello world` executable is approximately 31 KB. Compiling with
+  `-uPXX_MANAGED_STRING` selects an older frozen-string ABI with no dynamic
+  allocation for strings; the same program is a 287-byte static ELF. Both
+  figures were verified on this checkout. See
+  [Types](../language/types.md#strings).
+- **Six targets, one compiler.** x86-64, i386, aarch64, and arm32 self-host
+  byte-identical; xtensa and riscv32 target bare-metal ESP32 as emit-only
+  backends. `--target=` selects the backend.
+- **Multiple frontends.** The same backend also compiles a C frontend
+  (tested against real-world C, including SQLite and Lua sources), a
+  statically-typed Python-like dialect (Nil Python, `.npy`), and an
+  assembly-source frontend.
 
 <details markdown="1">
-<summary><strong>How does it actually turn source into a binary?</strong></summary>
+<summary>Compilation pipeline</summary>
 
-One pass, no external tools:
+Compilation proceeds through five stages, with no external tools invoked:
 
-1. **Lexer** — source text to tokens. Dispatches by file extension: `.pas`
+1. **Lexer** — source text to tokens. Dispatched by file extension: `.pas`
    Pascal, `.c` C, `.npy` Nil Python, `.bas` early BASIC.
 2. **Parser** — tokens to an AST. Frontends share expression-parsing and
    type-checking where their semantics overlap.
-3. **IR** — AST lowers to a linear intermediate representation, target-agnostic.
-4. **Codegen** — IR lowers to target machine bytes. Six backends, one IR.
-5. **ELF writer** — the compiler's own linker. Static binary by default; adds
-   `PT_DYNAMIC`/`DT_NEEDED`/GOT/PLT automatically if you import a C library.
+3. **IR** — the AST lowers to a linear, target-agnostic intermediate
+   representation.
+4. **Codegen** — the IR lowers to target machine bytes. Six backends share
+   one IR.
+5. **ELF writer** — the compiler's own linker. Static output by default;
+   `PT_DYNAMIC`/`DT_NEEDED`/GOT/PLT are added automatically when a C library
+   is imported.
 
-No optimization passes exist yet — no constant folding, no register
-allocation, no dead-code elimination. What you write is what gets emitted.
+There is no optimization pass: no constant folding, no register allocation,
+no dead-code elimination. Emitted code corresponds directly to the source.
 
-See [Architecture](../reference/architecture.md) for the full picture.
+See [Architecture](../reference/architecture.md) for the full pipeline.
 </details>
 
 <details markdown="1">
-<summary><strong>What's actually solid vs. still rough?</strong></summary>
+<summary>Current status</summary>
 
-Solid: the core Pascal language — classes, interfaces, generics, exceptions,
-managed strings, dynamic arrays — compiles on all four Linux self-host
-targets (verified: a class-based program builds clean on x86-64, i386,
-aarch64, and arm32 alike), plus the C and Nil Python frontends against
-real-world C headers/libraries, and DWARF debug info on all four Linux
-targets.
+Established: the core Pascal language — classes, interfaces, generics,
+exceptions, managed strings, dynamic arrays — compiles on all four Linux
+self-host targets. A minimal class-based program was verified to build
+cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
+and Nil Python frontends compile against real-world C headers and libraries.
+DWARF debug information (`-g`) is available on all four Linux targets.
 
-Rough, honestly: the two ESP32 targets (xtensa, riscv32) don't support
-classes yet, and are emit-only — not self-host targets; there's no built-in
-optimizer at all (no constant folding, no register allocation); integer
-arithmetic wraps without overflow checks; `private`/`protected` are parsed
-but not access-enforced; Nil Python is capped at 4 parameters and has no
-pointer syntax of its own. Full list: [Limits](../reference/limits.md).
+Known gaps: the two ESP32 targets (xtensa, riscv32) do not yet support
+classes and are emit-only, not self-host, targets. There is no optimizing
+pass. Integer arithmetic wraps without overflow checking. `private` and
+`protected` are parsed but not access-enforced. Nil Python is limited to
+four parameters per function and has no pointer syntax of its own. See
+[Limits](../reference/limits.md) for the complete list.
 
-This is early, experimental software — not something to point at
+PXX is early, experimental software. It should not be used for
 security-sensitive, safety-sensitive, financial, legal, or medical work.
 </details>
 
 <details markdown="1">
-<summary><strong>Can I actually use this?</strong></summary>
+<summary>Licensing</summary>
 
-Read it, build it, run it locally, study it — yes. Right now the repository
-grants **no open-source or other license**: default copyright applies, and
-public visibility on GitHub is not itself permission to copy, modify,
-redistribute, or rely on the code. This may change later. See
+The repository currently grants no open-source or other license. Default
+copyright applies: the code may be read, built, and run locally, but public
+visibility on GitHub does not itself grant permission to copy, modify,
+redistribute, or otherwise rely on it. This position may change in the
+future. See
 [`LICENSE.md`](https://github.com/yoctobyte/pxx/blob/master/LICENSE.md) in
-the repository for the exact, current terms.
+the repository for the current terms.
 </details>
 
-## Go deeper
+## Further reading
 
-- [Install](../install/) and [Getting started](../getting-started/) — set up
-  the pinned compiler and compile your own first program.
-- [Language reference](../language/) — the full Pascal dialect.
-- [Standard library](../library/) — the RTL and PCL units.
-- [Targets](../targets/) — cross-compilation, ESP32, the C and Nil Python
-  frontends in depth.
-- [Reference](../reference/) — command line, architecture, limits, glossary.
+- [Install](../install/) and [Getting started](../getting-started/)
+- [Language reference](../language/)
+- [Standard library](../library/)
+- [Targets](../targets/)
+- [Reference](../reference/)

@@ -14,9 +14,9 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
 > security-sensitive, safety-sensitive, financial, legal, medical, or public
 > network-facing work.
 
-**New here? → [Dive](./dive/)** — one page, five minutes, everything that
-makes PXX worth a second look, with a working example and no need to browse
-the rest of this documentation first.
+[Dive](./dive/) is a single-page technical overview of the project, for
+readers who want the substance without browsing the rest of this
+documentation first.
 
 ## Highlights
 
@@ -39,7 +39,7 @@ the rest of this documentation first.
 
 ## Where to go next
 
-- [Dive](./dive/) — the fast, five-minute version of this whole project.
+- [Dive](./dive/) — a single-page technical overview.
 - [Install](./install/) — set up the pinned compiler and `pxx` wrapper.
 - [Getting started](./getting-started/) — compile and run your first program.
 - [Features](./features/) — what PXX can do today.
