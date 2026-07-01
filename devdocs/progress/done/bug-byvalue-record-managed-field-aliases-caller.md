@@ -1,7 +1,7 @@
 # By-value record param with a managed field aliases the caller (mutations leak)
 
 - **Type:** bug (ABI / param passing — correctness) — Track A
-- **Status:** backlog
+- **Status:** done — fixed pin v135, 2026-07-01
 - **Severity:** high — silent caller-data corruption; records with a `string`
   (or other managed) field are everywhere, and a plain (non-`var`) parameter is
   expected to be an independent copy.
@@ -63,3 +63,39 @@ assignment path already performs.
   semantics.
 - Regression test (`test/test_byvalue_record_managed_copy.pas`) wired into
   `make test`; self-host stays byte-identical; cross targets consistent.
+
+## Fixed (2026-07-01, pin v135)
+
+Root cause matched the "Likely cause" guess closely, with one refinement:
+it's not that the by-ref fast path is taken "for any record carrying a
+managed field" specifically — it's taken for ANY record over 8 bytes
+(managed or not; `compiler/parser.inc`'s `RecSize(ptypesRec[i]) > 8` check,
+an ABI efficiency decision to avoid a large by-value copy through registers/
+stack). The actual gap was in `compiler/ir.inc`'s `IRLowerCallArg`: the
+by-ref-argument branch only forced a caller-side private copy
+(`needTemp := True`) when the argument was NOT an lvalue (e.g. a function
+result) — an lvalue argument (the common case, `modMan(m)`) was passed
+straight through by address with no copy, so every write leaked back into
+the caller regardless of managed content.
+
+The fix needed a way to tell "by-ref because the user wrote `var`/`out`/
+`const`" from "by-ref only because of the size-driven ABI promotion of an
+originally plain param" — and that flag (`ProcParamExplicitByRef`) already
+existed in the codebase (added earlier for a related lvalue-requirement
+relaxation) but was never consulted at this call site. Now an lvalue
+argument to a size-promoted plain param also gets the private-copy
+treatment; genuine `var`/`out`/`const` params are untouched and keep their
+correct aliasing/borrowing semantics.
+
+Verified against real FPC output for plain/const/var/by-value-of-call-result
+record params, both with and without a managed field, plus a non-managed
+`>8`-byte record (bonus: this class of bug affected ANY large plain record,
+not just managed ones — now fixed uniformly).
+`test/test_byvalue_record_managed_copy.pas` added. Self-host byte-identical,
+full `make test` green, all cross suites (i386/arm32/aarch64/riscv32) green.
+
+Found and filed separately while cross-verifying: a pre-existing arm32-only
+SIGSEGV in a specific two-call sequence (small ≤8-byte record call
+immediately followed by a managed-record call) — confirmed present on the
+pre-fix binary too, unrelated to this fix
+([[bug-arm32-small-record-arg-then-managed-record-arg-segfault]]).
