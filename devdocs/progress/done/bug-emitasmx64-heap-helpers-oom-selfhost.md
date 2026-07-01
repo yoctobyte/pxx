@@ -153,13 +153,21 @@ cause. More likely candidates to check next:
 
 ## Resolution
 
-Reverted **4** procedures back to raw `EmitB` (not 3 — `EmitAnsiStrRetainLocked`
-turned out unsafe too, see above): `EmitHeapAllocLocked`, `EmitHeapFreeLocked`,
-`EmitAnsiStrRetainLocked`, `EmitAnsiStrReleaseLocked`. Kept the 4 verified-safe
-conversions: `EmitDynArrayRetainLocked`, `EmitDynArrayReleaseLocked`,
-`EmitManagedRecordRetain`, `EmitManagedRecordReleaseLocked` — plus
-`asmtext.inc`'s `inc/dec [mem]` addition (needed by
-`EmitDynArrayRetainLocked`, itself verified byte-correct and deterministic).
+Reverted **4** procedures back to raw `EmitB`: `EmitHeapAllocLocked`,
+`EmitHeapFreeLocked`, `EmitAnsiStrRetainLocked`, `EmitAnsiStrReleaseLocked`.
+Kept the 4 verified-safe conversions: `EmitDynArrayRetainLocked`,
+`EmitDynArrayReleaseLocked`, `EmitManagedRecordRetain`,
+`EmitManagedRecordReleaseLocked` — plus `asmtext.inc`'s `inc/dec [mem]`
+addition (needed by `EmitDynArrayRetainLocked`, itself verified byte-correct
+and deterministic).
+
+**Update (see "Root-cause follow-up" below):** of these 4 reverted, only 3
+(`EmitHeapAllocLocked`, `EmitHeapFreeLocked`, `EmitAnsiStrReleaseLocked`) are
+genuinely broken. `EmitAnsiStrRetainLocked` was reverted on a false positive
+— its "non-determinism" was an artifact of a fixedpoint check that's too
+shallow for this class of change, not a real bug. Left reverted anyway since
+there's no harm in it and re-applying wasn't the point of this ticket; safe
+to re-convert whenever someone next touches this code.
 
 Verified clean after the revert:
 - Capped self-host (`ulimit -v 3000000`) succeeds, no OOM.
@@ -188,3 +196,90 @@ anything right now since the working code (raw `EmitB`) is back in place.
       reproducing the original crash, wired into `make test` — not yet added;
       the repro snippet above is a good starting point if the `EmitAsmX64`
       migration is re-attempted for the 4 reverted procedures.
+
+## Root-cause follow-up (later session, 2026-07-01)
+
+User asked to dig into *why* the 4 reverted procedures actually break. Two
+important corrections came out of this:
+
+### Correction 1: `EmitAnsiStrRetainLocked` was never actually buggy
+
+The "non-determinism" finding above (build vs verify differ by 4 bytes) is a
+**false positive** caused by an insufficient fixedpoint check, not a real bug.
+Root cause: `EmitAnsiStrRetainLocked`/`EmitAnsiStrReleaseLocked` etc. are part
+of *the compiler's own codegen logic* — used to emit the ARC helper functions
+embedded in **any** program the compiler builds, including the compiler
+itself. When old-host (built before this diff existed) compiles the new
+source to produce gen1, old-host emits gen1's *own* embedded ARC helpers
+using **old-host's own already-compiled (old, raw-`EmitB`) logic** — the new
+source's `EmitAsmX64`-based logic doesn't "activate" for the compiler's own
+runtime needs until it's actually running inside a binary. Gen1 *does*
+correctly contain the new logic (old-host translated the source correctly),
+so when gen1 runs to compile the source again (producing gen2), gen2's
+embedded helpers *do* use the new logic. Net effect: **gen1 uses old ARC
+helpers for itself but gen2 uses new ones — one inherent generation of lag
+whenever a change touches the compiler's own runtime-helper codegen**, not a
+correctness bug. Confirmed empirically: isolated `EmitAnsiStrRetainLocked`
+alone, gen1 ≠ gen2 (byte 97, `74 04` short `je` vs `0F 84 04000000` long
+`je` — raw bytes confirmed via `xxd`), but **gen2 == gen3** (built gen3 from
+gen2; byte-identical). `make test`'s 2-generation `cmp` (comparable to
+build-vs-verify) is the wrong granularity for this class of change; it needs
+a 3rd generation to actually test stability. `EmitAnsiStrRetainLocked` can be
+safely re-converted to `EmitAsmX64` if someone revisits this — it was
+reverted unnecessarily, though harmlessly.
+
+This does **not** apply to the other three procedures below: each of those
+crashes outright (SIGSEGV, gen2 never gets produced), which is unambiguous —
+a crash can't be explained away by generation lag.
+
+### `EmitHeapAllocLocked`/`EmitHeapFreeLocked`: confirmed real, encoding ruled out
+
+Extended `test/test_asm_emit_x64.pas` (commit aeba3c2e) with the previously
+uncovered instruction forms (`push`/`pop` r8-r15, `inc`/`dec [mem]`, `lock
+dec [mem]`, the `.done` forward-jump idiom), each cross-checked against a
+live `llvm-mc-18 -triple=x86_64 -x86-asm-syntax=intel -show-encoding` run.
+**Every instruction used by the broken procedures encodes byte-for-byte
+identical to the oracle** — this is conclusively not a wrong-bytes / 32-vs-64
+-bit-truncation bug in the encoder itself (a plausible-sounding theory that
+didn't pan out). One real (harmless) finding: `EmitAsmX64` always emits the
+6-byte near/rel32 form for a same-call forward label reference, where an
+optimizing assembler like `llvm-mc` picks the 2-byte short form (it resolves
+sizes in a later pass) — 4 bytes bigger per use, deterministically, not a bug
+by itself but it's *what exposed* the gen1-vs-gen2 lag above (shifted overall
+code layout enough to be visible).
+
+The OOM itself remains explained by the "Leading theory" above (array-of-const
+temp construction happening at every one of the many *compile-time* call
+sites `EmitHeapAllocLocked`/`EmitHeapFreeLocked` are inlined at) — this part
+is still not nailed down to an exact statement, but is now doubly confirmed
+real (not a bootstrap artifact, not an encoding bug) via a repro needing only
+one compiler process, no self-hosting.
+
+### `EmitAnsiStrReleaseLocked`: confirmed real but still no small repro
+
+Like `EmitAnsiStrRetainLocked`, this procedure has extra direct (inlined,
+compile-time-invoked) call sites beyond its one-time cached-subroutine setup
+— `compiler/ir_codegen.inc:3766` and `:3787`, both inside the `SetLength`
+implementation's shrink/grow/zero paths for a plain `AnsiString` variable
+(*not* an array of `AnsiString` — an easy misread; confirmed by re-reading
+the surrounding `if (Syms[symIdx].TypeKind = tyAnsiString) and not
+Syms[symIdx].IsArray` guard). Two synthetic repros tried this session — many
+procedures growing/shrinking a dynamic array of `AnsiString`, and many
+procedures doing `SetLength` shrink-then-grow on a plain `AnsiString` var,
+up to 400 sites — **neither reproduced the crash**, unlike
+`EmitHeapAllocLocked`'s clean 17-site threshold. Whatever triggers this one
+either needs a much higher site count, a different code shape entirely (not
+yet tried: exception-handler string cleanup, class-field strings, or the
+`ThreadSafeMode`/`lock` variant), or genuinely needs `compiler.pas`'s own
+scale/complexity rather than raw repetition count. Re-confirmed the crash
+itself is real and not bootstrap-lag: isolating this procedure alone and
+self-hosting reliably SIGSEGVs *while producing gen2* (gen2 never completes),
+which can't be explained by "just needs one more generation" the way a mere
+byte-difference could.
+
+**Still open** if anyone wants to pick this up: find `EmitAnsiStrReleaseLocked`'s
+actual trigger condition, and pin down the exact array-of-const-cleanup
+mechanism (or find a different one) that explains why compile-time-invoked
+`EmitAsmX64` calls leak/corrupt after a threshold. Not blocking — raw `EmitB`
+is back in place for all 3 genuinely-broken procedures and `make test` is
+green.
