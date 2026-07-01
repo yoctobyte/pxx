@@ -912,20 +912,19 @@ procedure EmitWriteVariant;
   caller-saved set like the other write helpers; balances its own stack. }
 var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3: Integer;
 begin
-  EmitB($50);                                  { push rax            -> [rsp]=addr }
-  EmitB($48); EmitB($8B); EmitB($00);          { mov rax, [rax]       ; tag }
+  EmitAsmX64(['push rax', 'mov rax, [rax]']);  { [rsp]=addr; rax=tag }
 
-  EmitB($48); EmitB($3D); EmitI32(VT_INT);     { cmp rax, VT_INT }
+  EmitAsmX64(['cmp rax, %', VT_INT]);
   EmitB($0F); EmitB($84); pInt := CodeLen; EmitI32(0);
-  EmitB($48); EmitB($3D); EmitI32(VT_INT64);   { cmp rax, VT_INT64 }
+  EmitAsmX64(['cmp rax, %', VT_INT64]);
   EmitB($0F); EmitB($84); pInt64 := CodeLen; EmitI32(0);
-  EmitB($48); EmitB($3D); EmitI32(VT_BOOL);    { cmp rax, VT_BOOL }
+  EmitAsmX64(['cmp rax, %', VT_BOOL]);
   EmitB($0F); EmitB($84); pBool := CodeLen; EmitI32(0);
-  EmitB($48); EmitB($3D); EmitI32(VT_DOUBLE);  { cmp rax, VT_DOUBLE }
+  EmitAsmX64(['cmp rax, %', VT_DOUBLE]);
   EmitB($0F); EmitB($84); pDbl := CodeLen; EmitI32(0);
-  EmitB($48); EmitB($3D); EmitI32(VT_CHAR);    { cmp rax, VT_CHAR }
+  EmitAsmX64(['cmp rax, %', VT_CHAR]);
   EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
-  EmitB($48); EmitB($3D); EmitI32(VT_STRING);  { cmp rax, VT_STRING }
+  EmitAsmX64(['cmp rax, %', VT_STRING]);
   EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
   EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/object): nothing }
 
@@ -933,34 +932,31 @@ begin
   Patch32(pInt,   CodeLen - (pInt   + 4));
   Patch32(pInt64, CodeLen - (pInt64 + 4));
   Patch32(pBool,  CodeLen - (pBool  + 4));
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp]   ; addr }
-  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] ; payload }
+  EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]']);   { addr; payload }
   EmitwriteInt;
   EmitB($E9); pEnd1 := CodeLen; EmitI32(0);
 
   { double: payload bits -> xmm0 }
   Patch32(pDbl, CodeLen - (pDbl + 4));
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
-  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
-  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+  EmitAsmX64(['mov rax, [rsp]', 'mov rax, [rax+8]', 'movq xmm0, rax']);
   EmitWriteFloatNat;
   EmitB($E9); pEnd2 := CodeLen; EmitI32(0);
 
   { char: payload low byte }
   Patch32(pChar, CodeLen - (pChar + 4));
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
-  EmitB($0F); EmitB($B6); EmitB($40); EmitB($08);   { movzx eax, byte [rax+8] }
+  EmitAsmX64(['mov rax, [rsp]', 'movzx eax, byte [rax+8]']);
   EmitwriteChar;
   EmitB($E9); pEnd3 := CodeLen; EmitI32(0);
 
   { managed string: payload points after the refcount/length header }
   Patch32(pStr, CodeLen - (pStr + 4));
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
-  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
-  EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
+  EmitAsmX64([
+    'mov rax, [rsp]',
+    'mov rax, [rax+8]',
+    'test rax, rax'
+  ]);
   EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0); { jz Lend }
-  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
-  EmitB($48); EmitB($8B); EmitB($50); EmitB($F8);   { mov rdx, [rax-8] }
+  EmitAsmX64(['mov rsi, rax', 'mov rdx, [rax-8]']);
   MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
   { Lend }
@@ -969,36 +965,35 @@ begin
   Patch32(pEnd1, CodeLen - (pEnd1 + 4));
   Patch32(pEnd2, CodeLen - (pEnd2 + 4));
   Patch32(pEnd3, CodeLen - (pEnd3 + 4));
-  EmitB($48); EmitB($83); EmitB($C4); EmitB($08);   { add rsp, 8       ; discard addr }
+  EmitAsmX64(['add rsp, %', 8]);   { discard addr }
 end;
 
 procedure EmitSetcc(opTk: Integer; signed: Boolean);
 { Flags already set (cmp / comisd). Emit setcc al + movzx eax,al -> rax = 0/1.
   signed=True for integer cmp; False (unsigned/comisd) for double comisd. }
+var mnem: AnsiString;
 begin
-  EmitB($0F);
   if signed then
   begin
-    if      opTk = Ord(tkLt)  then EmitB($9C)   { setl  }
-    else if opTk = Ord(tkLe)  then EmitB($9E)   { setle }
-    else if opTk = Ord(tkGt)  then EmitB($9F)   { setg  }
-    else if opTk = Ord(tkGe)  then EmitB($9D)   { setge }
-    else if opTk = Ord(tkEq)  then EmitB($94)   { sete  }
-    else if opTk = Ord(tkNeq) then EmitB($95)   { setne }
-    else Error('Variant compare: unsupported operator');
+    if      opTk = Ord(tkLt)  then mnem := 'setl al'
+    else if opTk = Ord(tkLe)  then mnem := 'setle al'
+    else if opTk = Ord(tkGt)  then mnem := 'setg al'
+    else if opTk = Ord(tkGe)  then mnem := 'setge al'
+    else if opTk = Ord(tkEq)  then mnem := 'sete al'
+    else if opTk = Ord(tkNeq) then mnem := 'setne al'
+    else begin Error('Variant compare: unsupported operator'); mnem := ''; end;
   end
   else
   begin
-    if      opTk = Ord(tkLt)  then EmitB($92)   { setb  }
-    else if opTk = Ord(tkLe)  then EmitB($96)   { setbe }
-    else if opTk = Ord(tkGt)  then EmitB($97)   { seta  }
-    else if opTk = Ord(tkGe)  then EmitB($93)   { setae }
-    else if opTk = Ord(tkEq)  then EmitB($94)   { sete  }
-    else if opTk = Ord(tkNeq) then EmitB($95)   { setne }
-    else Error('Variant compare: unsupported operator');
+    if      opTk = Ord(tkLt)  then mnem := 'setb al'
+    else if opTk = Ord(tkLe)  then mnem := 'setbe al'
+    else if opTk = Ord(tkGt)  then mnem := 'seta al'
+    else if opTk = Ord(tkGe)  then mnem := 'setae al'
+    else if opTk = Ord(tkEq)  then mnem := 'sete al'
+    else if opTk = Ord(tkNeq) then mnem := 'setne al'
+    else begin Error('Variant compare: unsupported operator'); mnem := ''; end;
   end;
-  EmitB($C0);                                  { ...al }
-  EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
+  EmitAsmX64([mnem, 'movzx eax, al']);
 end;
 
 procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
@@ -4552,13 +4547,15 @@ begin
           { Managed-record temp (e.g. a hidden aggregate-result dest): zero the
             full record so every managed field starts nil, not just the first
             qword. }
-          EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[i].Offset);   { lea rdi, [rbp+off] }
-          EmitB($48); EmitB($31); EmitB($C0);                            { xor rax, rax }
-          EmitB($48); EmitB($C7); EmitB($C1); EmitI32(RecSize(Syms[i].RecName)); { mov rcx, RecSize }
-          EmitB($F3); EmitB($AA);                                        { rep stosb }
+          EmitAsmX64([
+            'lea rdi, [rbp+%]', Syms[i].Offset,
+            'xor rax, rax',
+            'mov rcx, %', RecSize(Syms[i].RecName),
+            'rep stosb'
+          ]);
         end
         else
-          begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); end; { mov qword [rbp+off], 0 }
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
       end;
 
   for i := 0 to IRCount - 1 do
@@ -4595,7 +4592,7 @@ begin
         begin
           lblId := IRA[i];
           IREmitNode(IRB[i]); { evaluate condition -> rax }
-          EmitB($48); EmitB($85); EmitB($C0); { test rax, rax }
+          EmitAsmX64(['test rax, rax']);
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($84); { jz 32-bit rel }
@@ -4615,14 +4612,16 @@ begin
       IR_EXC_ENTER:
         begin
           lblId := IRA[i];
-          EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
-          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-          EmitB($48); EmitB($89); EmitB($04); EmitB($24);
-          EmitB($48); EmitB($89); EmitB($E0);
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-          EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+          EmitAsmX64([
+            'sub rsp, %', EXC_FRAME_SIZE,
+            'mov rax, [@glob]', BSS_EXC_TOP,
+            'mov [rsp], rax',
+            'mov rax, rsp',
+            'mov [@glob], rax', BSS_EXC_TOP,
+            'lea rdi, [rsp+%]', EXC_JMP_OFFSET
+          ]);
           IREmitCodeCall(ExcSetJmpAddr);
-          EmitB($85); EmitB($C0);
+          EmitAsmX64(['test eax, eax']);
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($85);
@@ -4642,8 +4641,7 @@ begin
       IR_EXC_MATCH:
         begin
           lblId := IRA[i];
-          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
-          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[i]));
+          EmitAsmX64(['mov rax, [@glob]', BSS_EXC_CLS, 'cmp rax, %', Integer(IRIVal[i])]);
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($85);
