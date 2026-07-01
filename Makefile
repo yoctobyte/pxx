@@ -929,6 +929,15 @@ test-core: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' /tmp/oanl.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "open-array temp leak regressed: RSS $${rss}KB (>10MB over 2M calls)"; exit 1; else echo "open-array-no-leak: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; open-array RSS leak guard skipped"; fi
+	./$(COMPILER) test/test_big_static_array_open_param.pas /tmp/test_big_static_array_open_param26
+	test "$$(/tmp/test_big_static_array_open_param26)" = "$$(printf 'small const sum: 6\nsmall var: 0 1 2\nbig const sum (zeros): 0\nbig var writeback correct: TRUE\nbig const sum (filled): 267386880\nleak-loop total: 13369344000')"
+	./$(COMPILER) --debug test/test_big_static_array_open_param.pas /tmp/test_big_static_array_open_param_dbg26 > /tmp/big_static_open_array.log 2>&1
+	@if grep -qi "stack frame" /tmp/big_static_open_array.log; then echo "bug-const-open-array-param-stack-copies-caller-frame REGRESSED: oversized-stack-frame warning fired"; grep -i "stack frame" /tmp/big_static_open_array.log; exit 1; else echo "big-static-array-open-param: no oversized frame, OK"; fi
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v /tmp/test_big_static_array_open_param26 2>/tmp/bsoa.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' /tmp/bsoa.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 50000 ]; then echo "big-array open-array temp leak regressed: RSS $${rss}KB (>50MB over 51 calls of a 2MB array)"; exit 1; else echo "big-static-array-open-param-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; big-array open-array RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_abs_sqr.pas /tmp/test_abs_sqr26
 	test "$$(/tmp/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
 	./$(COMPILER) test/test_upcase_pos.pas /tmp/test_upcase_pos26

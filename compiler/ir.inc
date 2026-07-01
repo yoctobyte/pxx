@@ -1177,6 +1177,24 @@ begin
               (ASTKind[node] = AN_DEREF);
 end;
 
+{ Source data address for a `var`/`out` open-array writeback temp (PendOAWB*).
+  The temp is either the frame-local `[len:8][data]` byte buffer (SLOTADDR+8
+  skips the header) or, for a large source array, a genuine managed dyn-array
+  (its handle, IR_LEA, already points past its own length header) -- see
+  bug-const-open-array-param-stack-copies-caller-frame. Syms[].ArrLen < 0 is
+  the existing dynamic-array sentinel (AllocDynArray, symtab.inc), reused here
+  rather than adding new parallel bookkeeping. }
+function PendOAWBSrcAddr(tempSym: Integer): Integer;
+begin
+  if Syms[tempSym].ArrLen < 0 then
+    Result := IRAppend(IR_LEA, tempSym, -1, -1, 0, Ord(tyPointer))
+  else
+    Result := IRAppend(IR_BINOP,
+      IRAppend(IR_SLOTADDR, tempSym, -1, -1, 0, Ord(tyPointer)),
+      IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+      Ord(tkPlus), 0, Ord(tyPointer));
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -1255,6 +1273,56 @@ begin
         caCount := Syms[caArgSym].ArrLen;
         if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
         else caElemSz := TypeSize(caElemTk);
+        if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
+        begin
+          { Large source array: a frame-local `[len:8][data]` buffer here would
+            scale the CALLER's stack frame 1:1 with the array's declared size —
+            harmless for a small array, a SIGSEGV risk for a big one (the
+            caller's frame can exceed the ~8 MB default process stack).
+            bug-const-open-array-param-stack-copies-caller-frame. Manufacture a
+            genuine managed dyn-array-of-byte temp instead — heap-backed
+            (bounded, independent of the source array's size) and released
+            automatically by the routine's normal managed-local cleanup at
+            scope exit, exactly like `array of const`'s TVarRec temp
+            (AN_VARREC_ARRAY below) already relies on; its handle already has
+            the `[len:8][data]` layout the open-array param expects, with no
+            manual header bookkeeping needed. }
+          caSym := AllocDynArray('', tyUInt8, 1);
+          { SymIsHiddenArgTemp triggers the codegen PROLOGUE's one-time nil-
+            init for this synthesized-mid-lowering local (runs once at
+            function entry, before this call site's code -- including
+            before a loop containing this call runs any iteration). No
+            *inline* zero here on top of that: this call site's code can
+            execute many times (a loop), and an inline zero right before
+            each SetLength would orphan the PREVIOUS iteration's handle
+            without releasing it -- SetLength itself already correctly
+            resizes/reuses an existing non-nil handle (ordinary array-
+            growing semantics), so trust it instead of re-zeroing. (First
+            attempt at this fix did add an inline zero, copying
+            AN_VARREC_ARRAY's pattern without noticing that literal's own
+            call site can equally be inside a loop -- caught here via a
+            50-iteration RSS-ceiling test leaking ~2 MB/call; fixed by
+            removing the inline zero, not by chasing AN_VARREC_ARRAY.) }
+          SymIsHiddenArgTemp[caSym] := True;
+          { SetLength(caSym, caCount*caElemSz): synthesize the dyn-array
+            SetLength (-102) intrinsic call, exactly as AN_VARREC_ARRAY does. }
+          caIdent := AllocNode(AN_IDENT);
+          ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+          caCountLit := AllocNode(AN_INT_LIT);
+          ASTIVal[caCountLit] := caCount * caElemSz; ASTTk[caCountLit] := Ord(tyInteger);
+          caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+          caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+          ASTRight[caArg1] := caArg2;
+          caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+          ASTLeft[caSlCall] := caArg1;
+          value := IRLowerAST(caSlCall);
+          IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
+          IRAppend(IR_COPY_REC, IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+            IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, caCount * caElemSz, Ord(tyRecord));
+          Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+          Exit;
+        end;
         { Copy the fixed array into a frame/BSS-local `[len:8][data]` buffer and
           pass `&data` — the open-array param reads its length at [data-8] and
           indexes `data`. A plain byte buffer (not a heap dyn array) auto-frees
@@ -1340,6 +1408,43 @@ begin
     begin
       if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
       else caElemSz := TypeSize(caElemTk);
+      if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
+      begin
+        { Large source array: same reasoning as the const/value path above —
+          a heap-backed managed dyn-array temp instead of a frame-local
+          buffer, so the caller's frame stays bounded regardless of the
+          source array's size. The flush loops below (IRAppendCall,
+          AN_CALL/AN_CALL_IND) detect this case by `Syms[temp].ArrLen < 0`
+          (the dynamic-array sentinel) and copy back via the handle (IR_LEA)
+          instead of the byte-buffer's SLOTADDR+8 convention. }
+        caSym := AllocDynArray('', tyUInt8, 1);
+        { No inline zero before SetLength here — see the matching comment in
+          the const/value path above (this call site can equally be inside
+          a loop; SymIsHiddenArgTemp's one-time prologue nil-init plus
+          SetLength's own correct resize-of-existing-handle semantics is
+          the right combination, not a per-visit re-zero). }
+        SymIsHiddenArgTemp[caSym] := True;
+        caIdent := AllocNode(AN_IDENT);
+        ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+        caCountLit := AllocNode(AN_INT_LIT);
+        ASTIVal[caCountLit] := caCount * caElemSz; ASTTk[caCountLit] := Ord(tyInteger);
+        caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+        caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+        ASTRight[caArg1] := caArg2;
+        caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+        ASTLeft[caSlCall] := caArg1;
+        value := IRLowerAST(caSlCall);
+        IRIVal[value] := 1;
+        { copy-IN: static array (var or field) -> the dyn-array temp's data }
+        IRAppend(IR_COPY_REC, IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+          IRLowerAddress(argAST), -1, caCount * caElemSz, Ord(tyRecord));
+        PendOAWBTemp[PendOAWBCount] := caSym;
+        PendOAWBDest[PendOAWBCount] := argAST;
+        PendOAWBSize[PendOAWBCount] := caCount * caElemSz;
+        Inc(PendOAWBCount);
+        Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
       { Frame/BSS-local `[len:8][data]` buffer (same no-leak, recursion-safe shape
         as the const/value path above), plus a registered copy-OUT so the callee's
         writes propagate back to the caller's array after the call. }
@@ -3622,10 +3727,7 @@ begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
               IRLowerAddress(PendOAWBDest[PendOAWBCount]),
-              IRAppend(IR_BINOP,
-                IRAppend(IR_SLOTADDR, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
-                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                Ord(tkPlus), 0, Ord(tyPointer)),
+              PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
           Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
@@ -3636,10 +3738,7 @@ begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
               IRLowerAddress(PendOAWBDest[PendOAWBCount]),
-              IRAppend(IR_BINOP,
-                IRAppend(IR_SLOTADDR, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
-                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-                Ord(tkPlus), 0, Ord(tyPointer)),
+              PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
       end;

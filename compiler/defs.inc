@@ -40,6 +40,19 @@ const
                                     chain); a single fat frame risks overflow as a
                                     runtime SIGSEGV (e.g. the FPC-seed 8 MB-local bug,
                                     project_fpc_seed_segfault_done). 0 disables. }
+  MAX_OPEN_ARRAY_STACK_TEMP = 65536; { bug-const-open-array-param-stack-copies-caller-frame:
+                                    a fixed array passed to an `array of T` open-array
+                                    parameter needs a `[len:8][data]`-shaped temp built
+                                    in the CALLER's frame. Below this size (64 KB) it's
+                                    a frame/BSS-local buffer (fast, auto-frees, proven
+                                    correct/leak-free) same as always; above it, a
+                                    managed heap dyn-array temp instead (bounded, never
+                                    grows the caller's frame regardless of the source
+                                    array's size, released automatically at scope exit).
+                                    The compiler's own source never crosses this
+                                    threshold, so self-host/cross-bootstrap never
+                                    exercise the heap path — it's addressable only by
+                                    user code hitting the large-array shape. }
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
   MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
