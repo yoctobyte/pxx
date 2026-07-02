@@ -5042,7 +5042,24 @@ function ResolveNodeRec(node: Integer): Integer;
 var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
 begin
   if ASTKind[node] = AN_IDENT then
-    Result := Syms[ASTIVal[node]].RecName
+  begin
+    { Array symbols store their ELEMENT record in ElemRecName, not RecName
+      (RecName is for a plain scalar/record-typed symbol) -- a recurring
+      landmine throughout this codebase. Reachable from C's `arr->field`
+      where `arr` is an array (C array-to-pointer decay lets `->` apply to
+      an array; CNodeIsPointer's array exclusion means cparser.inc builds a
+      plain AN_FIELD directly over the array AN_IDENT, not a dereferenced
+      pointer, so this path sees an array base where Pascal code never
+      would). Reading RecName there previously resolved REC_NONE, which
+      cascaded into the field's type tag defaulting to tyInteger (4 bytes)
+      instead of the real (often 8-byte pointer) field type — the
+      truncated/sign-extended values in
+      bug-c-arrow-on-array-store-of-call-result-clobbered. }
+    if Syms[ASTIVal[node]].IsArray then
+      Result := Syms[ASTIVal[node]].ElemRecName
+    else
+      Result := Syms[ASTIVal[node]].RecName;
+  end
   else if ASTKind[node] = AN_AS_CAST then
     { `obj as T` yields type T — so (obj as T).field/.method resolves against T. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
