@@ -64,13 +64,15 @@ process resumes correctly (restorer works under strace scrutiny); works with
 
 ## Constraints (user, 2026-07-02)
 
-- **Minimal-hello-world budget**: handler install is boilerplate (rt_sigaction
-  calls + restorer stub + handler code) — it must NOT be unconditionally baked
-  into every binary. Emit/link only when something actually consumes it (float
-  mask opt-in, a user SetSignalHandler call, a diagnostics flag), and provide
-  an explicit opt-out for whatever default is chosen. Follow the existing
-  needsHeap/needsAnsiRuntime detection pattern: pay only when used. Pin the
-  minimal hello-world code size in a test if a default-on consumer ever lands.
+- **Default ON, opt-out, NO auto-detection** (user, revised 2026-07-02):
+  signal support is enabled by default on PC targets — no needsHeap-style
+  feature sniffing to decide whether to emit it; predictable behavior beats
+  cleverness here (Ctrl-C/SIGTERM handling should just work in every normal
+  binary). A single explicit `--no-signals` (or similar) opts out entirely
+  for the minimal-hello-world case. Keep the default install lean (the
+  boilerplate is rt_sigaction calls + restorer stub + a small dispatch
+  handler — measure and record what it costs hello world; pin the opted-out
+  size in a test).
 - **PC (Linux) platforms only**: x86-64 / i386 / arm32 / aarch64 Linux.
   ESP targets (xtensa/riscv32 bare-metal) have no kernel, no signals — the
   API must compile away / hard-error cleanly there, and any codepath whose
