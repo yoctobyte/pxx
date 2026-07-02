@@ -273,6 +273,9 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	./$(COMPILER) --threadsafe test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
 	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
+	# TThread Synchronize/Queue/CheckSynchronize main-thread marshalling + auto-join virtual destructor
+	./$(COMPILER) --threadsafe test/test_tthread_sync.pas /tmp/test_tthread_sync26
+	test "$$(/tmp/test_tthread_sync26)" = "$$(printf 'sync=200 expected=200\nonmain=200 expected=200\nqueue=200 expected=200\nautojoin OK\nTTHREAD SYNC OK')"
 	# statement-atomic threaded writeln: every concurrent output line is whole (--threadsafe I/O lock)
 	./$(COMPILER) --threadsafe test/test_thread_writeln_interleave.pas /tmp/test_thread_writeln_interleave26
 	/tmp/test_thread_writeln_interleave26 > /tmp/twi26.out

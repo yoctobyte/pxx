@@ -58,3 +58,27 @@ test-threads. NOTE: unqualified property access in a method is a pxx gap
 `Self.ReturnValue` for now — filed Track A. Still remaining: Synchronize/Queue,
 virtual destructor/auto-join (needs virtual TObject.Destroy), OnTerminate,
 CurrentThread, classes re-export.
+
+## Update — Synchronize/Queue + auto-join destructor (2026-07-02, v152)
+
+Pure-RTL slice in palthreadobj (compiler binary unchanged, hash identical):
+- `Synchronize(m)` / `Queue(m)` with `m: TThreadMethod` (TMethod-shaped record,
+  built by `m := @Self.SomeMethod`) + unit-level `CheckSynchronize` pump and
+  `MainThreadID`. Mutex-guarded linked queue; Synchronize entries live on the
+  caller's stack with a per-entry futex the main thread sets+wakes; Queue
+  entries are heap-owned and freed by the pump. Called on the main thread both
+  invoke directly (FPC parity). Console programs must pump CheckSynchronize —
+  same contract as FPC.
+- `destructor Destroy; virtual;` — auto-join: Terminate (cooperative) +
+  WaitFor, so a bare `t.Free` on a running thread is safe. Descendants
+  `override` + `inherited Destroy` (works: virtual dtor in own class + Free
+  dispatch verified).
+- test_tthread_sync in make test-threads (4 workers × 50 sync + 50 queue,
+  main-tid asserted for every marshalled call; auto-join on a spinning
+  thread); 20/20 repeat runs clean.
+- Parser gaps found (worked around in test, not filed as blockers):
+  `@Self.Method` directly as a call ARGUMENT (assignment-side only today) and
+  indexed `arr[i].Free`.
+
+Still remaining: FreeOnTerminate (self-free needs join-self guard),
+OnTerminate, CurrentThread, Suspend/Resume, classes re-export.
