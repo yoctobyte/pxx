@@ -150,3 +150,4 @@
 2026-07-02T14:37:29Z  v150  4a265fe797b5a0731577a34aba1517651d28fc75646396f8f3382057dc312aa9  8175c9eda3c1e80053521b40af3e1d322f1d6438  chore(stable): pin v149 (Move soft-alias, json comment, docs)
 2026-07-02T14:52:58Z  v151  4cb9a4ab9ac58c4c06a82ebc81582f147755234fd722a5615d3751725a218342  1e6921174ea50108dbcad97de23ebe26b6d27d03  chore(progress): resolve bug-implicit-self-method-loses-to-unit-proc (v150)
 2026-07-02T15:07:43Z  v152  4cb9a4ab9ac58c4c06a82ebc81582f147755234fd722a5615d3751725a218342  e1e7070973ba4c2ecda4f65d875e9f9953da7b10  chore(stable): pin v151 (threadsafe heap contract)
+2026-07-02T15:46:46Z  v153  a557bca440c4c2db9be0e81a7a0329671639d0d604adbcdbe59ff462f5b1cb19  7a1c9f901a6b7984eba7baf9575e6d51b5cdf5bc  chore(stable): pin v152 (TThread Synchronize/Queue; binary identical to v151)
