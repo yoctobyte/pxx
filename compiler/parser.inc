@@ -11,6 +11,7 @@ procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
 procedure EmitSignalRuntime; forward;
+procedure EmitIoLockStubs; forward;
 
 
 function AllocNode(kind: Integer): Integer;
@@ -15533,6 +15534,8 @@ begin
   BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
+  BSS_IO_OWNER    := BSSSize; Inc(BSSSize, 8);
+  BSS_IO_DEPTH    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
   BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
   ExceptionUsed := False;
@@ -15882,6 +15885,9 @@ begin
     predictable process behavior beats size sniffing; the whole runtime is
     ~200 bytes). See feature-signal-handlers. }
   if (TargetArch = TARGET_X86_64) and not NoSignals then EmitSignalRuntime;
+  { --threadsafe statement-atomic I/O lock stubs (x86-64 only, like the
+    threadsafe atomics themselves). }
+  if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 

@@ -24,13 +24,14 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
+| bug-tthread-execute-writeln-crash | A | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -574,6 +575,7 @@ _none_
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-max-proc-params-32-selfmiscompile
+- [A] bug-tthread-execute-writeln-crash
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend

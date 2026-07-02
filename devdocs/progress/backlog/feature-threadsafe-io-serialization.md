@@ -33,3 +33,27 @@ single-thread output and size are unchanged without it.
 
 Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
 single-threaded self-build stays byte-identical; no libc (Linux syscalls only).
+
+## Progress — 2026-07-02, lock infrastructure LANDED (v146); acceptance blocked
+
+The statement-atomic I/O lock is in and single-thread-verified:
+
+- New IR_IO_LOCK(66)/IR_IO_UNLOCK(67), emitted by AN_WRITE/AN_WRITELN and
+  AN_READLN/AN_READ lowering around the WHOLE statement — only under
+  `--threadsafe` + x86-64 (matching the threadsafe atomics), so the default
+  single-threaded build is untouched (self-host byte-identical, the gate).
+- EmitIoLockStubs (ir_codegen.inc): REENTRANT owner-tid spinlock over new
+  BSS_IO_OWNER/BSS_IO_DEPTH — gettid(186) per statement (no TLS yet), lock
+  cmpxchg acquire (raw bytes — cmpxchg not in the asmtext table yet), plain
+  store release (x86 TSO). Reentrancy matters: `writeln(F(x))` where F
+  writes takes the lock twice on the same thread — verified no deadlock,
+  output order unchanged vs unlocked/FPC. Also guards the shared
+  INTBUF/LINE_BUF/PEEK_* scratch for reads.
+- Gate so far: test/test_threadsafe_io_lock.pas (--threadsafe, reentrant +
+  ordering pin) in make test; suite + test-threads green; pinned v146.
+
+**Acceptance (non-interleaved threaded output) is BLOCKED**: threads that
+writeln crash TODAY, pre-existing, even on pinned v145 without this lock —
+filed as [[bug-tthread-execute-writeln-crash]] with repro + gdb evidence.
+When that is fixed, the two-thread interleave test becomes this ticket's
+closing gate. Parking in backlog until then.

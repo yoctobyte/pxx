@@ -344,6 +344,8 @@ const
   IR_ATOMIC       = 63;  { IRIVal = op (ATOMIC_XCHG/CAS/ADD); IRA = IR_ARG chain (addr, then operands). x86-64 emits a 32-bit lock-prefixed read-modify-write on addr^ and returns the OLD value in the accumulator. Substrate for futex mutexes/atomic counters. }
   IR_EXC_MATCH_HIT = 64; { Positive-polarity sibling of IR_EXC_MATCH: IRA = label, IRIVal = class id; jumps to the label when the raised class EQUALS the id (vs. IR_EXC_MATCH's jump-away-on-mismatch). Used to chain "raised class is any descendant of the handler's target class" checks -- see IsClassDescOrSelf's usage in AN_TRY_EXCEPT lowering. }
   IR_SET_SIGNAL    = 65; { SetSignalHandler(sig, @proc): IRA = signal-number value node, IRB = handler-address value node (0/nil = revert to default on next delivery). Lowers to a call of the emitted SigSetHook stub (store hook slot + rt_sigaction install). x86-64 Linux only; other targets Error at codegen. }
+  IR_IO_LOCK       = 66; { --threadsafe statement-atomic console I/O: acquire the reentrant owner-tid I/O spinlock (BSS_IO_OWNER/BSS_IO_DEPTH). Emitted by AN_WRITE/AN_WRITELN/AN_READ* lowering around the whole statement, x86-64 + ThreadSafeMode only. Reentrant so a write-arg calling a writing function cannot self-deadlock. }
+  IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
@@ -1326,6 +1328,8 @@ var
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   BSS_PEEK_VALID  : Integer;  { Eof one-byte stdin pushback: 1 if a byte is held }
   BSS_PEEK_BYTE   : Integer;  { the held pushback byte (consumed by next read) }
+  BSS_IO_OWNER    : Integer;  { --threadsafe I/O statement lock: owning thread id (gettid), 0 = free }
+  BSS_IO_DEPTH    : Integer;  { --threadsafe I/O statement lock: reentrancy depth of the owner }
   BSS_SIG_HOOKS   : Integer;  { 64 qword slots: user handler proc address per signal 1..64 (slot = (sig-1)*8), 0 = none. Written by SetSignalHandler, read by the emitted signal dispatch stub. }
   BSS_SIG_SCRATCH : Integer;  { 32-byte kernel struct sigaction build area for the install/redefault stubs (handler, flags, restorer, mask) }
   ExceptionUsed   : Boolean;
@@ -1371,6 +1375,8 @@ var
   SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }
   SigInstallAddr  : Integer;  { code offset of the callable install routine: edi = signal number -> rt_sigaction(sig, dispatch) }
   SigSetHookAddr  : Integer;  { code offset of the SetSignalHandler stub: edi = signal, rsi = handler address -> store hook slot, fall through into SigInstallAddr }
+  IOLockAddr  : Integer;  { code offset of the --threadsafe I/O statement-lock acquire stub (reentrant owner-tid spinlock over BSS_IO_OWNER/DEPTH) }
+  IOUnlockAddr: Integer;  { code offset of the matching release stub }
   Div0StubAddr : Integer;  { code offset of the shared div-by-zero abort stub
                              (write "Runtime error 200 ..." + exit_group(200)),
                              emitted unconditionally on x86-64; the fallback

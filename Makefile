@@ -365,6 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	# --threadsafe I/O statement lock: reentrant (write-arg writes), single-thread output unchanged
+	./$(COMPILER) --threadsafe test/test_threadsafe_io_lock.pas /tmp/test_threadsafe_io_lock26
+	test "$$(/tmp/test_threadsafe_io_lock26)" = "$$(printf 'outer inner 21\n42\nline1 10\nline2 20\nline3 30\ndone')"
 	# Move/FillChar with no uses (builtin home, FPC System parity; overlap-safe Move pinned)
 	./$(COMPILER) test/test_move_fillchar_nouses.pas /tmp/test_move_fillchar_nouses26
 	test "$$(/tmp/test_move_fillchar_nouses26 | tail -1)" = "total ok 4 / 4"

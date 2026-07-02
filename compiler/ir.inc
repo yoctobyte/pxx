@@ -424,6 +424,9 @@ begin
         IRRequireNode(IRB[i], 'set_signal handler');
       end;
 
+      IR_IO_LOCK, IR_IO_UNLOCK:
+        begin end;
+
     else
       Error('unknown IR opcode');
     end;
@@ -4726,6 +4729,12 @@ begin
 
     AN_WRITE, AN_WRITELN:
     begin
+      { --threadsafe: one write/writeln statement = one atomic emission.
+        Bracket the whole statement with the reentrant I/O lock (also guards
+        the shared INTBUF/LINE_BUF scratch). x86-64 only — --threadsafe
+        atomics are x86-64-only today. }
+      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+        IRAppend(IR_IO_LOCK, -1, -1, -1, 0, 0);
       first := -1;
       last := -1;
       { Target fd, threaded into each IR_WRITE/IR_WRITELN's ival slot so codegen
@@ -4795,11 +4804,17 @@ begin
         Result := IRAppend(IR_WRITELN, first, last, -1, writeFd, 0)
       else
         Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
+      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+        IRAppend(IR_IO_UNLOCK, -1, -1, -1, 0, 0);
     end;
 
     AN_READLN, AN_READ:
     begin
-      { Read one line from stdin, then parse each lvalue target from it by type. }
+      { Read one line from stdin, then parse each lvalue target from it by type.
+        --threadsafe: same statement-atomic I/O lock as write/writeln (guards
+        the shared LINE_BUF/LINE_POS/PEEK_* scratch too). }
+      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+        IRAppend(IR_IO_LOCK, -1, -1, -1, 0, 0);
       first := IRAppend(IR_READLINE, -1, -1, -1, 0, 0);
       last := first;
       item := ASTLeft[node];
@@ -4817,6 +4832,8 @@ begin
         last := outNode;
       end;
       Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
+      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+        IRAppend(IR_IO_UNLOCK, -1, -1, -1, 0, 0);
     end;
 
     AN_BLOCK:
