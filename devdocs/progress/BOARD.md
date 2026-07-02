@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (69)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -93,6 +93,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
+| task-license-mpl2-rollout | A | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
@@ -639,6 +640,7 @@ _none_
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
+- [A] task-license-mpl2-rollout
 - [B] task-remove-sysutils-move-fillchar-copies
 - [B] task-sqlite-libc-free-runtime-bringup
 - [B+C] wish-compile-gnu-pascal
