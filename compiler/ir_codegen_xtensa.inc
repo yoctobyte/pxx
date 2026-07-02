@@ -1733,6 +1733,68 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_PROCADDR:
+      begin
+        { @proc -> a2 = the routine's absolute code address, via an inline
+          L32R literal patched to entry+BodyAddr by the ELF writer (same
+          fixup as riscv32's auipc+literal shape). }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        XtensaEmitLitHeader;
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI32(0);                       { literal: absolute proc addr (patched) }
+        xtensa_l32r(reg_xtensa_a2, $FFFF);
+      end;
+
+    IR_CALL_IND:
+      begin
+        if IRCallDest[node] >= 0 then
+          Error('target xtensa: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { Indirect call through a proc-typed value (e.g. the PXXDivZeroHook
+          runtime hook). v1 mirrors arm32: scalar word args only (no by-value
+          Int64/float marshalling through a proc pointer yet). Spill the callee
+          first, then the arg words, load the ABI arg registers from the slots,
+          load the callee into a8, and callx8/callx0 through it. }
+        argBase := XtSpillDepth;
+        IREmitNodeXtensa(IRA[node]);          { a2 = callee address }
+        XtensaPushA2;                         { callee @ argBase (call0: deepest) }
+        argNode := IRB[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeXtensa(IRA[argNode]);
+          XtensaPushA2;
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 6 then
+          Error('target xtensa: indirect call with more than 6 argument words not supported');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          for i := 0 to nArgs - 1 do
+            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + 4 + i * 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase);      { callee }
+          XtSpillDepth := argBase;
+          xtensa_callx8(reg_xtensa_a8);
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+          if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+            xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
+        end
+        else
+        begin
+          { Call0: moving-sp pushes — arg i sits at (nArgs-1-i)*4, the callee
+            deepest at nArgs*4. }
+          for i := 0 to nArgs - 1 do
+            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);    { callee }
+          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+          xtensa_callx0(reg_xtensa_a8);
+        end;
+      end;
+
     else
       Error('target xtensa: unsupported node in IR codegen: ' + IROpName(IRKind[node]));
   end;
@@ -1794,6 +1856,12 @@ begin
       IR_CALL:
         begin
           if IRIVal[i] = 1 then
+            IREmitNodeXtensa(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
             IREmitNodeXtensa(i);
         end;
 

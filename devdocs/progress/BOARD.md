@@ -24,13 +24,17 @@ _none_
 
 _none_
 
-## backlog (69)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
+| bug-c-math-round-undefined-symbol | A+B | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-static-local-initializer-reruns-every-call | A/C | bug | C `static` local with an initializer re-runs the initializer every call | — |
+| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
+| bug-integer-to-enum-typecast-undefined-variable | A | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -38,10 +42,12 @@ _none_
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
+| feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
@@ -80,6 +86,7 @@ _none_
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+| feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | (done, v151), ~~feature-threadsafe-heap-contract~~ |
@@ -578,7 +585,11 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [C] bug-c-cast-as-call-arg-parse-error
+- [A+B] bug-c-math-round-undefined-symbol
 - [C] bug-c-printf-without-stdio-include-varargs
+- [A/C] bug-c-static-local-initializer-reruns-every-call
+- [A] bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program
+- [A] bug-integer-to-enum-typecast-undefined-variable
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
@@ -586,10 +597,12 @@ _none_
 - [A] feature-asm-textual-emit-mode
 - [A] feature-assembler-first-class-citizen
 - [C] feature-c-cross-target-feature-coverage
+- [C] feature-c-designated-init-compound-literals
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library
 - [A] feature-cdecl-indirect-cross-targets
 - [A] feature-cross-virtual-indirect-hidden-dest
+- [B] feature-crtl-strtok-missing
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-dns-resolver-library
@@ -628,6 +641,7 @@ _none_
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
 - [A] feature-signal-handlers
+- [A] feature-stackless-generator-yield-in-case
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
 - [A] feature-threadsafe-heap-optimize

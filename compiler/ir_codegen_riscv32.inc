@@ -1325,6 +1325,35 @@ begin
         end;
       end;
 
+    IR_CALL_IND:
+      begin
+        if IRCallDest[node] >= 0 then
+          Error('target riscv32: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { Indirect call through a proc-typed value (e.g. the PXXDivZeroHook
+          runtime hook). v1 mirrors arm32: scalar word args only (no by-value
+          Int64/float marshalling through a proc pointer yet). Push the callee
+          first (deepest), push arg words, load a0.. from the slots, load the
+          callee into t0, drop the block, jalr through t0. }
+        IREmitNodeRISCV32(IRA[node]);      { a0 = callee address }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        argNode := IRB[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeRISCV32(IRA[argNode]);
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 8 then
+          Error('target riscv32: indirect call with more than 8 argument words not supported');
+        for i := 0 to nArgs - 1 do
+          rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+        rv32_lw(reg_t0, reg_sp, nArgs * 4);              { callee (deepest) }
+        rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);      { drop args + callee }
+        rv32_jalr(reg_ra, reg_t0, 0);
+      end;
+
     IR_SETLEN_STR:
       begin
         { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
@@ -1341,7 +1370,7 @@ begin
       end;
 
     else
-      Error('target riscv32: unsupported node in IR codegen');
+      Error('target riscv32: unsupported node in IR codegen: ' + IROpName(IRKind[node]));
   end;
 end;
 
@@ -1397,6 +1426,12 @@ begin
       IR_CALL:
         begin
           if IRIVal[i] = 1 then
+            IREmitNodeRISCV32(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
             IREmitNodeRISCV32(i);
         end;
 
