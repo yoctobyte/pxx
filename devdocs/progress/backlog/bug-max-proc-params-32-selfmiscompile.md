@@ -64,3 +64,15 @@ touching compiler layout code.
 
 rr trace preserved the session of 2026-07-02 (~/.local/share/rr). Cap
 stays 16 with the definition-time error until this is fixed.
+
+Standalone repro attempt (same session): a small program with the exact
+TParam shape (`Name: AnsiString; TypeKind: Byte; SymIdx: Integer; IsRef,
+IsArray: Boolean`) inside a TProc-like record with `Params: array[0..31]`,
+nested variable-index stores incl. `SymIdx := -1` + Name re-assignment —
+**works perfectly** (SizeOf(TParam)=24 aligned, SizeOf(TProcX)=792, all 32
+entries verified, release-of-old fine). So NOT a general
+record-array-of-managed-record layout bug; the compiler-context trigger is
+something the small repro lacks (the real TProc's ~40 fields, MAX_PROCS-scale
+outer array / large BSS offsets, or the specific access pattern). Next probe:
+scale the standalone up field-by-field / array-size-by-array-size toward the
+real TProc until it breaks.
