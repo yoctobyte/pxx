@@ -155,14 +155,20 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 
 ## License
 
-No license has been selected or granted yet. This public repository is for
-inspection, study, discussion, and project collaboration while the compiler
-remains experimental. Do not use it for important, security-sensitive,
-safety-sensitive, financial, legal, medical, or infrastructure work, and do not
-expose software built with it to a network (see the **Security warning** near the
-top of this README).
+- **Compiler and tools:** [Mozilla Public License 2.0](LICENSE).
+- **Runtime and libraries** (`lib/rtl`, `lib/pcl`, `lib/crtl`, `lib/asmcore`,
+  `compiler/builtin`): [zlib](licenses/Zlib.txt) — the code embedded in
+  binaries the compiler produces places **no obligations on your programs**.
+- **Examples:** [0BSD](licenses/0BSD.txt). **Docs:** CC BY 4.0.
 
-See [LICENSE.md](LICENSE.md) for the full notice.
+See [LICENSE.md](LICENSE.md) for the per-directory map and
+[CONTRIBUTING.md](CONTRIBUTING.md) for the DCO sign-off required on
+contributions.
+
+The compiler remains experimental: do not use it for security-sensitive,
+safety-sensitive, financial, legal, medical, or infrastructure work, and do
+not expose software built with it to a network (see the **Security warning**
+near the top of this README).
 
 ## Acknowledgements
 

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== Thread runtime emission ===== }
 
 { The only machine-code part of libc-free threading: a bare clone+trampoline stub.

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 function Shl8_(shift: Integer): Integer;
 begin
   Shl8_ := 0;

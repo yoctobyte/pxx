@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit ecdsa_p256;
 { ECDSA signature verification on NIST P-256 (secp256r1) with SHA-256
   (ecdsa_secp256r1_sha256). Pure Pascal over lib/rtl/bignum + lib/rtl/sha256 —

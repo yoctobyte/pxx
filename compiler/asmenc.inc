@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmenc.inc — rudimentary x86-64 inline-assembler encoder (Intel syntax).
 
   Encodes a small but real subset of x86-64 into the AsmBytes buffer at

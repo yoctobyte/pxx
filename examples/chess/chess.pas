@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Chess;
 { Flagship demo — a small but real mailbox chess engine.
 

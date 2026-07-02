@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef PXX_CRTL_SYS_SOCKET_H
 #define PXX_CRTL_SYS_SOCKET_H 1
 

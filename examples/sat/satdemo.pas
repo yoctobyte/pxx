@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program SATDemo;
 { Deterministic oracle for the sat unit (Track B).
 

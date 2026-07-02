@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext_xtensa.inc — text-assembler for readable Xtensa codegen emission.
 
   EmitAsmXtensa is the Xtensa sibling of EmitAsmX64 (asmtext.inc): it takes an

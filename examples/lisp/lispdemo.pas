@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program LispDemo;
 { A small Lisp: S-expression reader, environment-based evaluator with closures,
   core special forms (quote/if/define/lambda/let/begin) and integer builtins.

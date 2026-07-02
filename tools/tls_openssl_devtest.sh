@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
 # Real-HTTPS devtest for the OpenSSL TLS backend (feature-tls-provider-abstraction).
 # Builds the client with the dlopen loader (-dPXX_DYNLIB_LIBC) and runs a blocking
 # HttpGet over https against a loopback `openssl s_server -www`.

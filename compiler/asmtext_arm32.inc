@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext_arm32.inc — text-assembler for readable ARM32 codegen emission.
 
   EmitAsmArm32 parses assembly strings and handles register mapping, % holes,

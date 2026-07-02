@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Mandelbrot;
 { Mandelbrot — a float-compute demo built on the Double arithmetic the math
   library exercises, with a portable fixed-point (Int64 Q4.28) kernel, a colour

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Boot a PXX program on an ESP32 chip under Espressif QEMU and print what
 # app_main wrote to the ROM console, with the IDF boot banner stripped.
 #

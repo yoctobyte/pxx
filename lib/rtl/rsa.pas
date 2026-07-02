@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit rsa;
 { RSA signature verification, PKCS#1 v1.5 with SHA-256 (rsa_pkcs1_sha256). Pure
   Pascal over lib/rtl/bignum + lib/rtl/sha256 — part of milestone M4 of

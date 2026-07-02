@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext_a64.inc — text-assembler for readable AArch64 codegen emission.
 
   EmitAsmA64 parses assembly strings and handles register mapping, % holes,

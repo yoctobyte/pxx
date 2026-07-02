@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 {$mode objfpc}{$H+}
 { Pascal26 Compiler — hand-rolled recursive-descent, zero external deps }
 

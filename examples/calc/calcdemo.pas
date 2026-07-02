@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program CalcDemo;
 { Deterministic oracle for the calc unit (Track B).
 

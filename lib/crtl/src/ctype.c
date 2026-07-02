@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: ASCII ctype helpers.
  *

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Emit a minimal static `exit(42)` ELF for a target architecture.
 
     tools/gen_arch_probe.py <i386|aarch64|arm32> <outfile>

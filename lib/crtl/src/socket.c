@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: BSD socket veneer over the Pascal PAL.
  *

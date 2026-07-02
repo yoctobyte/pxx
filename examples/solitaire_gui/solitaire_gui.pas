@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program solitaire_gui;
 { Klondike solitaire — PCL/GTK3 GUI front-end over the tested `klondike` engine.
   The board is custom-drawn in TPaintBox.OnPaint and played by dragging cards:

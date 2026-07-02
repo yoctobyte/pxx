@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit sockets;
 { FPC-compatible Sockets unit — IPv4 core (feature-synapse-compile-check + our
   own net stack). Provides the BSD socket surface FPC's Sockets exposes, over the

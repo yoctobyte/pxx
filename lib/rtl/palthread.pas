@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit palthread;
 { M1 libc-free thread PAL (meta-multithreading). Wraps the compiler's __pxxclone
   trampoline plus raw mmap/futex/munmap syscalls into a small, FPC-flavoured

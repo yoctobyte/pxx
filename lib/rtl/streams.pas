@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit streams;
 
 { Minimal read-only byte stream over an in-memory buffer. Part of the Phase 3

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== IR -> i386 machine code (cross target, minimal and growing) =====
 
   Vertical slices of the target-parameterized backend

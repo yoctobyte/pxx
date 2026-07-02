@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
 # Provision minimal aarch64 / arm32 (armel) guest runtimes (ld.so + libc) so
 # QEMU user-mode can run *dynamically linked* PXX binaries — needed only by the
 # external-C-call tests (test_*_extern). Static PXX binaries need no sysroot.

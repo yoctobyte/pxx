@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== BASIC Parser ===== }
 
 function ParseBStatement: Integer; forward;

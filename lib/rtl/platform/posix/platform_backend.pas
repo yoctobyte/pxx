@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit platform_backend;
 { POSIX PAL backend selected by -Fulib/rtl/platform/posix. }
 

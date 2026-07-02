@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { xtensaenc.inc — typed instruction encoders for Xtensa LX6/LX7 codegen }
 
 const

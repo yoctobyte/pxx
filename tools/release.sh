@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # tools/release.sh — PXX release tool.
 #
 #   Dry-run by DEFAULT (no side effects): builds all host binaries, generates the

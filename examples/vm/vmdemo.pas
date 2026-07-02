@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program VMDemo;
 { Deterministic oracle for the vm unit (Track B).
 

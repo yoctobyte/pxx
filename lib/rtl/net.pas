@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit net;
 { Target-neutral blocking IPv4 networking over the PAL socket surface.
 

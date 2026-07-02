@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit slsched;
 { Stackless-coroutine scheduler (PXX-only; never used in compiler.pas, per the
   FPC/PXX boundary).

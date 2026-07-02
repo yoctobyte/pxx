@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef GL_C_H
 #define GL_C_H
 

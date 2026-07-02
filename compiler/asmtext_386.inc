@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext_386.inc — text-assembler for readable i386 (x86-32) codegen emission.
 
   EmitAsm386 is the 32-bit sibling of EmitAsmX64; it shares the AsmText* string

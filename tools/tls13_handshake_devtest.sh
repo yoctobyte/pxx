@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
 # From-scratch TLS 1.3 client handshake against a loopback `openssl s_server
 # -tls1_3`: ClientHello -> ServerHello -> X25519 ECDHE -> key schedule -> decrypt
 # the server flight -> verify CertificateVerify + the cert CHAIN (leaf <- trusted

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== User-class helpers (must precede hardcoded record helpers) ===== }
 
 procedure IREmitCodeCall(addr: Integer); forward;

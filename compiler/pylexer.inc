@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== Nil Python Lexer ===== }
 
 function PyKeyword(const s: AnsiString): TTokenKind;

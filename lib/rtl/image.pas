@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit image;
 { Small byte-oriented RGBA bitmap core. Track B foundation for PNG and later
   image converters. Owns pixels in row-major order, 0-based coordinates. }

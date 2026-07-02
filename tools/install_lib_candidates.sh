@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
 # Fetch third-party library candidates into library_candidates/ (gitignored).
 #
 # Policy: external/third-party source NEVER lives in the repo — only this tool

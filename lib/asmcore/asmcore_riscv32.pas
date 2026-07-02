@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_riscv32;
 {$mode objfpc}{$H+}
 { riscv32 (RV32I) instruction encoder + textual printer — the fifth

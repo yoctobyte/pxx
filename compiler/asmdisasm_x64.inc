@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== x86-64 disassembler for `-S` / textual emit mode =====
   (feature-assembler-first-class-citizen head 2, feature-asm-textual-emit-mode)
 

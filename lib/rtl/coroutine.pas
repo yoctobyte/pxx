@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit coroutine;
 { Stackful-generator runtime (PXX-only — FPC has no generators; never used in
   compiler.pas, per the FPC/PXX boundary).

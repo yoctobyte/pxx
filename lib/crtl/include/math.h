@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef PXX_CRTL_MATH_H
 #define PXX_CRTL_MATH_H 1
 

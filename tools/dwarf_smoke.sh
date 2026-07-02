@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # DWARF Tier 1-3 (-g) smoke gate. Builds a tiny program with -g and asserts:
 #   T1  readelf --debug-dump=decodedline shows line rows for the source
 #   T1  gdb resolves+hits a line breakpoint, step tracks source lines

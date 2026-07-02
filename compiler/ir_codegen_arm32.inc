@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== IR -> ARM32 machine code (cross target, minimal and growing) =====
 
   ARM32 (ARMv7-A) target backend. Operates on fixed-width 32-bit instructions.

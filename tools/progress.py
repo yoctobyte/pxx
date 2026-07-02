@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Fast progress-board helper for devdocs/progress/.
 
 The old shell implementation is kept as tools/progress.sh.reference. This version

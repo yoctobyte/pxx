@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 {$define PXX_MANAGED_STRING}
 unit stdctrls;
 

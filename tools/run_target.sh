@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
 # Run a PXX-emitted binary for a given CPU target, under QEMU user-mode
 # emulation when the host cannot execute it natively.
 #

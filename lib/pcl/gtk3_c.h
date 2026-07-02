@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef GTK3_C_H
 #define GTK3_C_H
 

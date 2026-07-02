@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== Experimental IR Machine Code Generator ===== }
 
 procedure IREmitNode(node: Integer); forward;

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
 # file-ticket.sh — land a devdocs/progress ticket onto master so EVERY track sees
 # it, without disturbing your current branch/worktree.
 #

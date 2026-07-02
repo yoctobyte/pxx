@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program httpdemo;
 { frank2 native net-lib showcase — no external network needed.
 

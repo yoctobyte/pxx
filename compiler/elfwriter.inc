@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== ELF writer ===== }
 
 procedure PatchAddr8(pos: Integer; addr: Int64);

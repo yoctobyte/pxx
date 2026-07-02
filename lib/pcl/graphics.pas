@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit graphics;
 
 { PCL Graphics implementation wrapping Cairo drawing contexts. }

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit sat;
 
 { A small CNF-SAT solver: DIMACS parser + DPLL search (unit propagation via

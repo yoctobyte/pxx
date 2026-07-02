@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
 # Install the QEMU user-mode emulators used by the cross-target test
 # environment (see devdocs/progress/*/chore-qemu-test-env.md and
 # tools/run_target.sh). Needs sudo.

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== IR -> RISC-V 32-bit machine code (cross target) ===== }
 
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32);

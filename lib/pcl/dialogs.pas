@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dialogs;
 
 { Minimal PCL-compatible Dialogs unit over GTK message dialogs.

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { x64enc.inc — typed instruction encoders for x86-64 codegen }
 
 const

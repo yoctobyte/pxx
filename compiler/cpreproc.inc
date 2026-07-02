@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== C Preprocessor =====
   Text rewriting only: directives and macros are removed before C lexing. }
 

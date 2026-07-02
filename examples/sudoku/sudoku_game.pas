@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program SudokuGame;
 { Interactive Sudoku: a puzzle generator plus a line-oriented console UI.
 

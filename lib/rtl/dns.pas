@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dns;
 { Resolver facade (feature-dns-resolver-library): host -> A records using the
   "files dns" order — consult /etc/hosts first, then query a configured

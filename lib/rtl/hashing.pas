@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit hashing;
 { Reusable CRC32 and Adler32 checksums.
 

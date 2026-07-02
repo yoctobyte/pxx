@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit bitset;
 { Dynamic bit vector over packed Integer words. 0-based indexing.
   Track B; uses 32-bit words with proven ops (or/and/xor/shl/shr).

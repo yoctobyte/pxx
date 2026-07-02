@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: 0BSD
 # PXX -> ESP-IDF (ESP32-C3) lwIP socket smoke: compile main.pas to a relocatable
 # object against the ESP PAL backend, wrap it in an archive, drive the normal
 # IDF build, and (optionally) boot headless under Espressif QEMU and assert the

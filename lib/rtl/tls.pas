@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit tls;
 { Backend-neutral TLS seam (feature-tls-provider-abstraction).
 

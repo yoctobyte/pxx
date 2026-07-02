@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program BigMath;
 { Deterministic oracle for the bignum DivMod / ModPow / signed-arithmetic lane.
 

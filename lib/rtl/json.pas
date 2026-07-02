@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit json;
 
 { A small, self-contained JSON value tree with a recursive-descent parser and a

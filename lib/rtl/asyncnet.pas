@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asyncnet;
 { Async TCP sockets over PAL sockets plus the coroutine scheduler's reactor.
   Every call is non-blocking: on EAGAIN the coroutine parks on the reactor

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program PrimeSieve;
 uses sysutils;   { IntToStr }
 { Sieve of Eratosthenes with manual bit packing.

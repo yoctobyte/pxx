@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier: MPL-2.0
 # Install or update the ESP32 target toolchain used by PXX's esp32-idf profile.
 #
 # Defaults:

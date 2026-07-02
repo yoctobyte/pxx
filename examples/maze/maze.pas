@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Maze;
 { Seeded maze generator + BFS solver, ASCII over stdout/serial.
 

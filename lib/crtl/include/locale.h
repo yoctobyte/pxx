@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef PXX_CRTL_LOCALE_H
 #define PXX_CRTL_LOCALE_H 1
 /* Minimal "C" locale — lua only reads lconv.decimal_point. */

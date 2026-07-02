@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dns_wire_blocking;
 { Blocking DNS A-record resolver over PAL UDP — ties dns_wire_core (packet
   codec) to the PAL socket surface (feature-dns-resolver-library). One query to

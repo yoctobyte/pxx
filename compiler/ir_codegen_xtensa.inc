@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== IR -> Xtensa LX6/LX7 (Call0 ABI) machine code (cross target) ===== }
 { Register use: a2 = primary value, a3 = secondary, a4 = branch helper,
   a8/a9 = address/scratch temps, a15 = frame pointer, a1 = sp, a0 = ra. }

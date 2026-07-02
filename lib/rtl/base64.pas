@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit base64;
 { Standard RFC 4648 Base64 (alphabet A-Za-z0-9+/, '=' padding).
 

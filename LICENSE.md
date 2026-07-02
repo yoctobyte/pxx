@@ -1,24 +1,42 @@
-# No License Granted Yet
+# Licensing
 
-This repository is public so that the code can be inspected, studied, and
-discussed for research and educational purposes while the project is still
-experimental.
+frankonpiler (PXX / pascal26) is licensed per directory. Every source file
+carries a one-line `SPDX-License-Identifier` header; this table is the map.
 
-No open-source, free-software, commercial, or other license has been selected
-or granted yet. The fact that this repository is visible on GitHub does not
-grant permission to copy, modify, distribute, sublicense, sell, or use the code
-for any purpose beyond what applicable law independently allows.
+| Path | License | Text |
+| --- | --- | --- |
+| `compiler/**` (except `compiler/builtin/`) | MPL 2.0 | [LICENSE](LICENSE) |
+| `tools/**` | MPL 2.0 | [LICENSE](LICENSE) |
+| `compiler/builtin/**`, `lib/rtl/**`, `lib/pcl/**`, `lib/crtl/**`, `lib/asmcore/**` | zlib | [licenses/Zlib.txt](licenses/Zlib.txt) |
+| `examples/**` | 0BSD | [licenses/0BSD.txt](licenses/0BSD.txt) |
+| `docs/**` | CC BY 4.0 | <https://creativecommons.org/licenses/by/4.0/> |
+| everything else (tests, devdocs, build files) | MPL 2.0 | [LICENSE](LICENSE) |
 
-The compiler is not production software. It is incomplete, changing quickly,
-and should not be used for security-sensitive, safety-sensitive, financial,
-legal, medical, infrastructure, or otherwise important work.
+Why the split: the runtime and libraries under zlib are **embedded into every
+binary the compiler produces** — programs you compile with pascal26 are
+entirely yours, with no license obligations from the toolchain. The compiler
+itself is MPL 2.0: use it anywhere, link it with anything, but published
+modifications to its files stay open.
 
-The author makes no warranty, promise of fitness, support commitment, or
-guarantee that the code is correct, secure, portable, complete, or suitable for
-any particular use. Anyone who studies or experiments with the code does so at
-their own risk. Publication of this repository does not make the author
-responsible for any loss, damage, defect, or consequence arising from the code
-or from reliance on it.
+## Compiled output
 
-Licensing may be revisited later. Until an explicit license is added, assume
-that no rights are granted.
+Binaries produced by the compiler belong to their author. The runtime code
+embedded in them is zlib-licensed, which imposes no requirements on binary
+distribution.
+
+## Contributions
+
+External contributions require a Developer Certificate of Origin sign-off
+(`git commit -s`); see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Third-party code
+
+The repository contains no third-party code. Optional external material
+(the Lua test corpus, library candidate sources fetched by
+`tools/install_lib_candidates.sh`) is downloaded locally on demand, lives in
+git-ignored directories, and keeps its own upstream licenses.
+
+## No warranty
+
+The software is provided "as is", without warranty of any kind. It is under
+active development; see each license text for the full disclaimer.

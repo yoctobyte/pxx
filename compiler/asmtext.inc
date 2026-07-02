@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext.inc — text-assembler for readable codegen emission.
 
   EmitAsmX64 takes an interleaved `array of const`: each string is one x86-64

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program SudokuSolver;
 { Constraint backtracking Sudoku solver. Candidate sets are integer bitmasks
   (bit v set = value v present among a cell's peers) — `set of 1..9` cannot be

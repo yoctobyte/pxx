@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 #
 # install.sh — drop a `pxx` wrapper on your PATH that runs the pinned PXX
 # compiler with this checkout's library roots already on the unit search path.

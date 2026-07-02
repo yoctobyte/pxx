@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit classes;
 { Classic FPC-compatible Classes — the traditional, non-generic surface every
   FPC/Delphi program (and Synapse) expects: TList (a list of Pointer),

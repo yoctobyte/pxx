@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_i386;
 {$mode objfpc}{$H+}
 { i386 instruction encoder + textual printer — the third `lib/asmcore`

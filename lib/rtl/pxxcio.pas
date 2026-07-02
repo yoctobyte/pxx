@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit pxxcio;
 { C runtime IO bridge — the libc-free byte sink for the C frontend's stdio
   veneer (lib/crtl/src/stdio.c).

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit tls13_keys;
 { TLS 1.3 key schedule (RFC 8446 §7.1) over HKDF-SHA256 — the cryptographic core
   of the handshake, milestone M6 of feature-tls13-from-scratch. Library-free

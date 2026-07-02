@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== .asm -> executable frontend (feature-asm-source-frontend) =====
 
   Parses a hand-written x86-64 assembly file (Intel syntax, dst-first) and

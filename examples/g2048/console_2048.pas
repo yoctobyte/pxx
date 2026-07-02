@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program console_2048;
 { Console 2048 — the tested `g2048` engine rendered with the `screen` TUI
   manager. Arrow keys slide/merge; a tile spawns each move; score accrues; win

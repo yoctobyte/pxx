@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Differential probe: run small Pascal programs under the pinned pxx stable AND
 # FPC, diff their stdout, and report divergences. A cheap way to surface
 # FPC-parity bugs (this harness found bug-writeln-boolean-format,

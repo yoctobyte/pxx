@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit tls13_hs;
 { TLS 1.3 handshake messages (RFC 8446 §4) — the ClientHello builder and the
   ServerHello parser, plus small framing helpers and the transcript hash.

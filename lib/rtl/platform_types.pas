@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit platform_types;
 
 interface

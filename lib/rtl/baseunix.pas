@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit baseunix;
 { Minimal FPC-compatible BaseUnix shim (feature-synapse-compile-check).
 

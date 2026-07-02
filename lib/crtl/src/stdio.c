@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: stdio — printf family + the buffered-stream veneer.
  *

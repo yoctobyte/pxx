@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit gtk3widgets;
 
 interface

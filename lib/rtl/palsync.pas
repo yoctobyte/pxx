@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit palsync;
 { M2 libc-free synchronisation primitives (meta-multithreading). A futex-backed
   mutex built on the atomic intrinsics (__pxxatomic_cas/xchg) + PalFutexWait/Wake

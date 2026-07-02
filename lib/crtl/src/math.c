@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: math — bridges libm to the Pascal RTL math unit (lib/rtl/math.pas,
  * pulled by pxxcio's `uses math`). Project-owned, libc-free.

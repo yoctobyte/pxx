@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Generate agents/codemap/symbols.md — a concise "helicopter view" of the compiler
 source so a human or agent can navigate by reading one file instead of grepping
 the large .inc files.

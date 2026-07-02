@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program RayTracer;
 { Headless CPU ray tracer — a float-compute + records demo.
 

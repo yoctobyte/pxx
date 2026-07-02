@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { asmtext_rv32.inc — text-assembler for readable RISC-V RV32 codegen emission.
 
   EmitAsmRv32 is the RISC-V sibling of EmitAsmX64/EmitAsmXtensa. It parses

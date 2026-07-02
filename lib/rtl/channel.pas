@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit channel;
 { Bounded coroutine-to-coroutine channel (PXX-only). A fixed-size ring of Int64
   items; ChanSend blocks (CoYield) while full, ChanRecv blocks while empty. Pure

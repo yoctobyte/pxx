@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Esp32S3Hello;
 { Minimal PXX -> ESP-IDF Xtensa integration proof.
   Compiled with `--target=xtensa --xtensa-abi=windowed` to a relocatable

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_xtensa;
 {$mode objfpc}{$H+}
 { xtensa (LX6/LX7, ESP32 family) instruction encoder + textual printer — the

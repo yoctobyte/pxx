@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dns_async;
 { Async DNS resolution over the coroutine reactor (feature-own-net-http-lib).
   Same wire format as the blocking resolver (dns_wire_core builds/parses), but the

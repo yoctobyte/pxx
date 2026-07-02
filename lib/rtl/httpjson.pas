@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit httpjson;
 { JSON-over-HTTP convenience — ties the native HTTP client (http) to the JSON
   codec (json) for REST-style calls. Kept separate from http.pas so plain HTTP

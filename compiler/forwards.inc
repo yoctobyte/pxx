@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { FPC-seed / strict-mode forward declarations.
 
   FPC compiles single-pass: a call resolves only if a routine header sits ABOVE

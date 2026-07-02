@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit palthreadobj;
 { M3 native Pascal TThread (meta-multithreading). The "threads just work" surface:
   subclass TThread, override Execute, Start, WaitFor. FPC-flavoured subset, built

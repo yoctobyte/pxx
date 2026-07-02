@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # selfcheck.sh — post-install / hardware-bringup check. Run from inside an unpacked
 # release tree (next to compiler/, lib/, MANIFEST.sha256).
 #

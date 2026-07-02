@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== Nil Python Parser =====
 
   Expression operators accepted by the .npy lexer/parser boundary:

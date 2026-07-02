@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit gtk3;
 
 { Thin hand-written binding to libgtk-3.so.0 / libc.

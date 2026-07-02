@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Track B GUI test suite (Pxx Component Library).
 set -euo pipefail
 

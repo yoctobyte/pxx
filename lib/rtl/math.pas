@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit math;
 interface
 uses math_ext;

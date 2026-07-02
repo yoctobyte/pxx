@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== IR -> AArch64 machine code (cross target, minimal and growing) =====
 
   AArch64 (ARM64) target backend. Operates on fixed-width 32-bit instructions.

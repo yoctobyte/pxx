@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit platform_backend;
 { ESP-IDF/FreeRTOS PAL backend selected by -Fulib/rtl/platform/esp. }
 

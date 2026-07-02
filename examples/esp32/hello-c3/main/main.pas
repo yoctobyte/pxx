@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Esp32Hello;
 { Minimal PXX -> ESP-IDF integration proof (feature-esp32-idf-riscv32).
   Compiled with `--target=riscv32` to a relocatable main.o whose exported

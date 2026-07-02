@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 {$ifdef FPC}
 procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
 procedure LoadFileCI(const path: AnsiString; var dst: AnsiString); forward;

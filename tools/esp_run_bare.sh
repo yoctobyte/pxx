@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Boot a PXX program as a bare-metal ESP32 image (no ESP-IDF) under Espressif
 # QEMU and print exactly what the program wrote to UART0.
 #

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit classes_lite;
 
 { Phase 3 streaming runtime: a TComponent-lite base and a TReader that

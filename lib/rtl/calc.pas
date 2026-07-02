@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit calc;
 
 { Integer expression evaluator: recursive-descent parse-and-evaluate in one pass

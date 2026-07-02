@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program MathDemo;
 { Oracle + showcase for the float math library (Track B).
 

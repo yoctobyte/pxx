@@ -40,3 +40,19 @@
 
 LICENSE files in place, SPDX headers repo-wide, README/docs consistent,
 `make test` + self-host green after the header sweep, board regenerated.
+
+## Done (2026-07-02)
+
+- `LICENSE` = MPL 2.0 (canonical text); `licenses/Zlib.txt`, `licenses/0BSD.txt`;
+  `LICENSE.md` = per-directory map + third-party statement; `CONTRIBUTING.md`
+  with DCO sign-off requirement; README License section updated.
+- SPDX one-liner in all 229 tracked source files (MPL-2.0: compiler+tools;
+  Zlib: builtin/rtl/pcl/crtl/asmcore; 0BSD: examples). docs/devdocs/test
+  covered by the LICENSE.md map, no per-file headers.
+- Foreign-code audit: repo contains none. `test/dl.h` was a SYMLINK to the
+  system dlfcn.h (never committed content) — replaced with a minimal
+  project-owned prototype header (also fixes checkouts without glibc headers).
+  `library_candidates/` (FreeBSD regex etc.) and the Lua corpus are fetched on
+  demand into git-ignored paths.
+- Gates: full `make test` + `make lib-test` green; compiler binary
+  byte-identical after the header sweep (comments only) — no re-pin needed.

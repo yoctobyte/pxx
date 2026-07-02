@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit http;
 { Minimal native HTTP/1.1 client (our own net stack — NOT a Synapse shim).
   Built on lib/rtl/net (blocking TCP) + lib/rtl/dns (resolution). The request

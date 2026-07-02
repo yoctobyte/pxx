@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program JSONDemo;
 { Deterministic oracle for the json unit (Track B).
 

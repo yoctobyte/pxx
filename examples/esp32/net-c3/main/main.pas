@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Esp32NetSmoke;
 { PXX -> ESP-IDF lwIP socket smoke (ESP32-C3 / riscv32).
 

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program life;
 
 {$define PXX_MANAGED_STRING}

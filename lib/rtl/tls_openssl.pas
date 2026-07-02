@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit tls_openssl;
 { OpenSSL backend for the TLS seam (feature-tls-provider-abstraction, the OpenSSL
   half). Loads libssl.so.3 at runtime through the real dynlib loader

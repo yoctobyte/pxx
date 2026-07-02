@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program triangle;
 
 {$define PXX_MANAGED_STRING}

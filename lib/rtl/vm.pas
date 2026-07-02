@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit vm;
 
 { A tiny stack-bytecode machine: ~21-opcode ISA, a text assembler (mnemonics +

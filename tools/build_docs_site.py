@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Build the static docs website from docs/**/*.md into _site/.
 
 No framework, no content-model lock-in: reads the existing docs/ topic-folder

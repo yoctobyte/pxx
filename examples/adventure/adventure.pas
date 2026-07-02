@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 { =====================================================================
   ESCAPE FROM THE MACHINE — main program (thin).
   All mechanism lives in the Engine unit; all content in world.dat.

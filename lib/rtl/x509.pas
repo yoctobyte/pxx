@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit x509;
 { Minimal X.509 / DER parsing + certificate signature verification — milestone
   M5 of feature-tls13-from-scratch. Pure Pascal over the M4 verifiers

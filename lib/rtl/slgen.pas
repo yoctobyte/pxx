@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit slgen;
 { Stackless-generator runtime (PXX-only — FPC has no generators; never used in
   compiler.pas, per the FPC/PXX boundary).

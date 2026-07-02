@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit lfm;
 
 { Phase 5: LFM support, in-memory path.

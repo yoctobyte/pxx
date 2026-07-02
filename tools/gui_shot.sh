@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # gui_shot.sh — capture a screenshot of a PCL/GTK app on a private Xvfb display,
 # never touching the real screen (:0). Solves the foreground-grab + flaky-capture
 # pain documented in devdocs/developer/gui-testing.md.

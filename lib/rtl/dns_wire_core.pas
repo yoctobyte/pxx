@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dns_wire_core;
 { Pure-Pascal DNS wire codec (RFC 1035), transport-free — the shared packet
   core for the future dns_wire_blocking / dns_wire_async resolvers

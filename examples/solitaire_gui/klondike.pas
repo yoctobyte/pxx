@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 unit klondike;
 { Klondike solitaire engine — pure game logic, no UI. The board is a single
   global game held as fixed 2D arrays (13 piles x up to 52 cards + a per-pile

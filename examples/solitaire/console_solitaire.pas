@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program console_solitaire;
 { Console Klondike solitaire — the tested `klondike` engine rendered with the
   `screen` TUI manager (lib/rtl/screen.pas), no GUI. Keyboard play:

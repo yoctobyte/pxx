@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit collections;
 
 { A generic growable list backed by a managed `array of T` field. The element

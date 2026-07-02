@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program menudemo;
 { A real interactive TUI demo exercising the whole library end to end: full-screen
   mode (ScreenStart = raw + alt buffer + hidden cursor), a redraw/refresh loop, and

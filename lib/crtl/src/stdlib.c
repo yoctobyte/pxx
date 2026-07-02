@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 /*
  * C runtime: stdlib — allocator + process control + small helpers.
  *

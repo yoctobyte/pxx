@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: Zlib */
 #ifndef PXX_CRTL_SIGNAL_H
 #define PXX_CRTL_SIGNAL_H 1
 

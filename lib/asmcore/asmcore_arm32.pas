@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_arm32;
 {$mode objfpc}{$H+}
 { arm32 (AArch32, A32/ARM-mode) instruction encoder + textual printer — the

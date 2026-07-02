@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # setup.sh — install a PXX release. Run from inside an unpacked release tree
 # (the dir containing compiler/, lib/, examples/). Detects the native arch, points
 # `compiler/pxx` at the matching binary, and offers to put it on your PATH.

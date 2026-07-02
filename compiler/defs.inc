@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 const
 
   MAX_CODE      = 8388608;  { 8 MB; arm32's literal-pool-heavy self-host code exceeds 4 MB }

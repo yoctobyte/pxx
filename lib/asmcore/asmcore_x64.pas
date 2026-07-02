@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_x64;
 {$mode objfpc}{$H+}
 { x86-64 instruction encoder + textual printer.

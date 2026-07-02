@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit textfile;
 { Classic text-file primitives on top of PAL byte handles.
 

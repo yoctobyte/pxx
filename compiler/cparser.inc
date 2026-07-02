@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== C Parser ===== }
 
 function ParseCBlockAST: Integer; forward;

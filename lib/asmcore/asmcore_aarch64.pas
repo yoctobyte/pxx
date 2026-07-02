@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_aarch64;
 {$mode objfpc}{$H+}
 { aarch64 (AArch64/ARMv8-A) instruction encoder + textual printer — the

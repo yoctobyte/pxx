@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit lineedit;
 { A single-line text input widget for the TUI library — the editable buffer +
   cursor and the keystroke logic, kept separate from any terminal I/O so it is

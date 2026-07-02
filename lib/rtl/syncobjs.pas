@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit syncobjs;
 
 { Minimal single-threaded stand-in for FPC's SyncObjs unit. Lock operations

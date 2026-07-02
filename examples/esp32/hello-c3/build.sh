@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: 0BSD
 # PXX -> ESP-IDF (ESP32-C3) build: compile main.pas to a relocatable object,
 # wrap it in an archive, then drive the normal IDF build.
 #

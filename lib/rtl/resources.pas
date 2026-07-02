@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit resources;
 
 { Runtime access to embedded resources (see the R directive). The compiler

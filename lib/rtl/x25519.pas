@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit x25519;
 { X25519 (Curve25519 ECDH, RFC 7748). Pure Pascal, no external library — the M3
   key-exchange step of feature-tls13-from-scratch.

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit sha256;
 { SHA-256 (FIPS 180-4) + HMAC-SHA256 (RFC 2104) + HKDF-SHA256 (RFC 5869).
 

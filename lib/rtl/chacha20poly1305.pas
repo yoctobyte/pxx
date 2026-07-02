@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit chacha20poly1305;
 { ChaCha20 + Poly1305 + the ChaCha20-Poly1305 AEAD (RFC 8439). Pure Pascal, no
   external library — a TLS 1.3 AEAD (TLS_CHACHA20_POLY1305_SHA256) and the M2

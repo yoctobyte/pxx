@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { Embedded resources: turn each pending R-directive (name + file) into bytes in
   Data plus a runtime-walkable table. Mirrors the RTTI registry mechanism
   (EmitRTTI). The table is reached at runtime via the __resources intrinsic

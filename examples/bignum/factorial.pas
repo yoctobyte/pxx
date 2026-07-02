@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program Factorial;
 { Arbitrary-precision factorial — demo + deterministic oracle for lib/rtl/bignum.
 

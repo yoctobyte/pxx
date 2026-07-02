@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit dns_config;
 { POSIX resolver configuration parsing for the dns_wire path
   (feature-dns-resolver-library): dotted-quad IPv4 parsing and `/etc/resolv.conf`

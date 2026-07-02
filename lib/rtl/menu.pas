@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit menu;
 { A vertical selection list for the TUI library — the pure navigation logic
   (which item is selected after a key). Rendering is the caller's job (loop the

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit sysutils;
 { Canonical SysUtils-style helpers. Now that the compiler loads a real
   lib/rtl/sysutils on `uses sysutils` (bug-sysutils-unit-hard-skipped fixed,

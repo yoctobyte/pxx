@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 unit g2048;
 { 2048 engine — pure game logic, no UI. A global 4x4 grid (0 = empty, else a
   power of two). The merge logic lives in SlideLine (one 4-cell compress+merge)

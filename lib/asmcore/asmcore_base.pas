@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit asmcore_base;
 {$mode objfpc}{$H+}
 { Shared types for lib/asmcore: operands, instructions, patch sites, a

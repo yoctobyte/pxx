@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit zlib;
 { zlib/deflate inflate (RFC 1950 / RFC 1951).
 

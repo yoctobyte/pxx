@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { rv32enc.inc — typed instruction encoders for RISC-V RV32IMC codegen }
 
 const

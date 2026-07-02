@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit scheduler;
 { Cooperative single-thread coroutine scheduler (PXX-only; never used in
   compiler.pas, per the FPC/PXX boundary).

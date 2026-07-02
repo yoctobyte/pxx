@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: 0BSD }
 program fm;
 { Terminal file browser demo.
 

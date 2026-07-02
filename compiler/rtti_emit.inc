@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== RTTI emission (Phase 1: published-only, streaming-grade) =====
 
   Emits, for every class with >=1 published member, a compile-time RTTI blob

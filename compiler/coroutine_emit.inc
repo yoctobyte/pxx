@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: MPL-2.0 }
 { ===== Coroutine runtime emission ===== }
 
 { The only machine-code part of the stackful-coroutine / generator machinery: a

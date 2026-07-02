@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit bignum;
 { Arbitrary-precision signed integers. Schoolbook algorithms, correctness over
   speed. Limbs are base 1e9, little-endian, stored as Int64 (the partial
