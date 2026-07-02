@@ -1319,7 +1319,15 @@ begin
     end
     else if CaseEqual(command, 'threadsafe') then
     begin
-      if CaseEqual(name, 'on') then ThreadSafeMode := True
+      if CaseEqual(name, 'on') then
+      begin
+        { Same target gate as the --threadsafe CLI check: the locked runtime
+          is x86-64 only, so the directive must not silently produce an
+          unlocked "threadsafe" binary on cross targets. }
+        if TargetArch <> TARGET_X86_64 then
+          Error('{$threadsafe on} is x86-64 only: the heap/ARC/I-O locks are not implemented on this target yet');
+        ThreadSafeMode := True;
+      end
       else if CaseEqual(name, 'off') then ThreadSafeMode := False
       else Error('threadsafe requires on or off');
     end

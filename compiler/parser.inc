@@ -4315,6 +4315,12 @@ begin
           Lowers to a call to the bare clone+trampoline stub. Returns the child tid
           (Int64) in the parent; never returns in the child. }
         Next; { consume '__pxxclone' }
+        { Thread spawn requires the thread-safe runtime: without --threadsafe the
+          heap allocator, ARC refcounts and console I/O have no locking, so any
+          allocation/writeln from a second thread corrupts shared state. Fail at
+          compile time, not as a heisencrash (feature-threadsafe-heap-contract). }
+        if not ThreadSafeMode then
+          Error('__pxxclone (thread creation) requires --threadsafe or {$threadsafe on}: the default heap/ARC/console-I/O runtime is not thread-safe');
         { The clone+trampoline stub is emitted lazily (jmp-over) at the first IR_CLONE
           codegen — see EnsureCloneStub — so nothing to arrange here. }
         Expect(tkLParen, '(');

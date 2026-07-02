@@ -246,23 +246,32 @@ test-asm-emit:
 # the futex mutex (mutual-exclusion test). tids stay out of stdout so output is
 # deterministic.
 test-threads: $(COMPILER)
-	./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone26
+	./$(COMPILER) --threadsafe test/test_thread_clone.pas /tmp/test_thread_clone26
 	test "$$(/tmp/test_thread_clone26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nTHREADS OK')"
-	./$(COMPILER) test/test_palthread.pas /tmp/test_palthread26
+	./$(COMPILER) --threadsafe test/test_palthread.pas /tmp/test_palthread26
 	test "$$(/tmp/test_palthread26)" = "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
-	./$(COMPILER) test/test_atomic_counter.pas /tmp/test_atomic_counter26
+	./$(COMPILER) --threadsafe test/test_atomic_counter.pas /tmp/test_atomic_counter26
 	test "$$(/tmp/test_atomic_counter26)" = "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
-	./$(COMPILER) test/test_mutex.pas /tmp/test_mutex26
+	./$(COMPILER) --threadsafe test/test_mutex.pas /tmp/test_mutex26
 	test "$$(/tmp/test_mutex26)" = "$$(printf 'counter=400000 expected=400000\nMUTEX OK')"
-	./$(COMPILER) test/test_tthread.pas /tmp/test_tthread26
+	./$(COMPILER) --threadsafe test/test_tthread.pas /tmp/test_tthread26
 	test "$$(/tmp/test_tthread26)" = "$$(printf 'counter=400000 expected=400000\nTTHREAD OK')"
-	./$(COMPILER) test/test_event.pas /tmp/test_event26
+	./$(COMPILER) --threadsafe test/test_event.pas /tmp/test_event26
 	test "$$(/tmp/test_event26)" = "$$(printf 'passed=4 expected=4\nEVENT OK')"
 	./$(COMPILER) --threadsafe test/test_thread_heap.pas /tmp/test_thread_heap26
 	test "$$(/tmp/test_thread_heap26)" = "$$(printf 'errors=0\nHEAP OK')"
-	./$(COMPILER) test/test_critsec_once.pas /tmp/test_critsec_once26
+	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
+	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas /tmp/test_thread_heap_mixed26
+	test "$$(/tmp/test_thread_heap_mixed26)" = "$$(printf 'errors=0\nHEAP MIXED OK')"
+	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
+	! ./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone_guard26 > /tmp/test_thread_clone_guard.log 2>&1
+	grep -q "requires --threadsafe" /tmp/test_thread_clone_guard.log
+	# heap contract: --threadsafe on a target without the locked runtime is rejected
+	! ./$(COMPILER) --target=i386 --threadsafe test/hello.pas /tmp/test_threadsafe_i386_guard26 > /tmp/test_threadsafe_i386_guard.log 2>&1
+	grep -q "x86-64 only" /tmp/test_threadsafe_i386_guard.log
+	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
-	./$(COMPILER) test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
+	./$(COMPILER) --threadsafe test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
 	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
 	# statement-atomic threaded writeln: every concurrent output line is whole (--threadsafe I/O lock)
 	./$(COMPILER) --threadsafe test/test_thread_writeln_interleave.pas /tmp/test_thread_writeln_interleave26

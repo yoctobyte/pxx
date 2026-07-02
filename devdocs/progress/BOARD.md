@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -83,7 +83,6 @@ _none_
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
-| feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -133,7 +132,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (419)
+## done (420)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -531,6 +530,7 @@ _none_
 | feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
 | feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
+| feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
 | feature-transcendental-math | A | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
@@ -619,6 +619,7 @@ _none_
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-pal-thread-primitives
+- [A] feature-parallel-processing
 - [A] feature-pascal-tthread
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
@@ -626,7 +627,7 @@ _none_
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
-- [B] feature-threadsafe-heap-contract
+- [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
@@ -643,5 +644,4 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **2** — feature-threadsafe-heap-contract
 - **1** — task-sqlite-libc-free-runtime-bringup

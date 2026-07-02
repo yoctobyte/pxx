@@ -53,3 +53,25 @@ safety, and that contract may differ by memory-management mode.
 
 Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
 single-threaded self-build stays byte-identical; no libc (Linux syscalls only).
+
+## Resolution (2026-07-02, v151)
+
+- **Contract recorded** in `devdocs/dev/threading.md` ("Heap contract by
+  memory-management mode"): one allocator, four modes — hosted x86-64
+  `--threadsafe` (spinlock, the only supported threads+alloc combination),
+  hosted x86-64 default (threads rejected at compile time), 32-bit/aarch64
+  cross (`--threadsafe` rejected), ESP static arena (single-threaded by
+  contract, no clone/futex). Refcount atomics and heap lock kept as separate
+  layers both bound to `--threadsafe`.
+- **Stress test** `test/test_thread_heap_mixed.pas` (in `make test-threads`):
+  4 threads × 1500 iterations concurrently churning AnsiString
+  concat/SetLength, dynarray SetLength/element writes, dynarray-of-AnsiString,
+  class Create/Free, GetMem/ReallocMem/FreeMem — tag-verified, 0 errors.
+- **Clear failures for unsupported combos** (new): `__pxxclone` (under all of
+  PalThreadCreate/TThread) is a compile error without
+  `--threadsafe`/`{$threadsafe on}`; `--threadsafe` and `{$threadsafe on}`
+  are compile errors on non-x86-64 targets (previously silently emitted an
+  UNLOCKED "threadsafe" binary). Negative tests in `make test-threads`; all
+  thread tests now compile `--threadsafe`.
+- feature-syscall-pthread-shim can rely on this: pthread shim must require
+  `--threadsafe` (it gets that for free via the `__pxxclone` gate).

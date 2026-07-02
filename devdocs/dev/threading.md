@@ -85,6 +85,31 @@ An `Execute` that allocates concurrently (managed strings, `GetMem`, objects)
 **must** be compiled `--threadsafe`. Demonstrated by `test_thread_heap`: 4 threads ×
 12k `GetMem`/`FreeMem` = 0 errors with the flag; **SIGSEGV every run without it**.
 
+### Heap contract by memory-management mode (feature-threadsafe-heap-contract)
+
+There is ONE allocator (`compiler/builtin/builtinheap.pas`: free-list + bump
+arena over `mmap`, or a fixed static arena on ESP) and every allocation family
+routes through it — `GetMem`/`New`/`ReallocMem`, class `Create`, AnsiString,
+dynamic arrays, managed-record helpers. So the per-mode contract is about how
+that single allocator is *entered*:
+
+| Mode | Allocator backing | Threads + concurrent alloc |
+|---|---|---|
+| hosted x86-64, `--threadsafe` | mmap arenas, **spinlock** (`BSS_HEAP_LOCK`, `EmitAcquireHeapLock` wraps every alloc/free/realloc codegen site) + lock-prefixed ARC refcounts + statement-atomic console I/O | **supported** — the only supported combination |
+| hosted x86-64, default | same allocator, **no locking anywhere** | **rejected at compile time**: `__pxxclone` (under all of `PalThreadCreate`/`TThread`) errors without `--threadsafe` |
+| hosted 32-bit (i386/arm32) & aarch64 cross | same allocator, no lock implementation | `--threadsafe` / `{$threadsafe on}` **rejected at compile time** (was silently accepted, emitting an unlocked binary); the clone stub is x86-64-only anyway |
+| ESP static arena (xtensa / riscv32, bare) | single 64 KiB static arena, bump-only | single-threaded by contract; no `clone`/`futex` syscalls exist there, and `--threadsafe` is rejected like other cross targets. FreeRTOS tasks are outside the PXX runtime — allocating from more than one task is undefined |
+
+Refcounting vs heap safety stay SEPARATE layers: the lock-prefixed ARC
+refcount updates are necessary but not sufficient — concurrent
+allocation/free needs the heap spinlock, which is why both hang off the same
+`--threadsafe` mode rather than being independently selectable.
+
+Validated by `test_thread_heap` (raw GetMem/FreeMem) and
+`test_thread_heap_mixed` (concurrent AnsiString concat/SetLength, dynarray
+SetLength/element writes, dynarray-of-AnsiString, class Create/Free,
+GetMem/ReallocMem/FreeMem — 4 threads, tag-verified, 0 errors).
+
 The single-threaded self-host took shortcuts that are *not* yet thread-safe — most
 notably the per-process exception-chain head (`BSS_EXC_TOP`, shared by CoSwitch) and
 other shared globals. Those are tracked under
