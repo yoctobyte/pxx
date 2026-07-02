@@ -40,6 +40,18 @@ begin
   rv32_lw(rd, rd, 8);
 end;
 
+procedure IREmitLeaveExceptionFramesRISCV32(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    rv32_lw(reg_t2, reg_sp, 0);                   { prev EXC_TOP }
+    EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_TOP);
+    rv32_sw(reg_t2, reg_t1, 0);
+    rv32_addi(reg_sp, reg_sp, EXC_FRAME_SIZE_RV32);
+  end;
+end;
+
 procedure EmitSizedLoadRISCV32(rd, rs: Integer; sz: Integer; sgn: Boolean);
 begin
   if sz = 1 then
@@ -823,12 +835,41 @@ begin
         begin
           if sgn then rv32_lh(reg_a0, reg_a0, 0) else rv32_lhu(reg_a0, reg_a0, 0);
         end
+        else if (sz = 8) and Is64BitRISCV32(tk) then
+        begin
+          { 64-bit load through memory (Int64/Double array element / field):
+            two words into a0:a1. Was a single lw — the high word was stale. }
+          rv32_lw(reg_a1, reg_a0, 4);
+          rv32_lw(reg_a0, reg_a0, 0);
+        end
         else
           rv32_lw(reg_a0, reg_a0, 0);
       end;
 
     IR_STORE_MEM:
       begin
+        tk := IntToTypeKind(IRTk[node]);
+        sz := TypeSize(tk);
+        if (sz = 8) and Is64BitRISCV32(tk) then
+        begin
+          { 64-bit store through memory: spill both value words across the
+            address evaluation, then store the pair. Was single-word (the
+            high word of an Int64/Double field/element store was dropped). }
+          EmitNode64RISCV32(IRB[node]);              { a0:a1 = value }
+          rv32_addi(reg_sp, reg_sp, -8);
+          rv32_sw(reg_a0, reg_sp, 0);
+          rv32_sw(reg_a1, reg_sp, 4);
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeRISCV32(IRA[node]);              { a0 = dest addr }
+          InLValueWrite := savedLVW;
+          rv32_lw(reg_a1, reg_sp, 0);
+          rv32_lw(reg_t1, reg_sp, 4);
+          rv32_addi(reg_sp, reg_sp, 8);
+          rv32_sw(reg_a1, reg_a0, 0);
+          rv32_sw(reg_t1, reg_a0, 4);
+          Exit;
+        end;
         IREmitNodeRISCV32(IRB[node]);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
@@ -840,8 +881,6 @@ begin
         rv32_lw(reg_a1, reg_sp, 0);
         rv32_addi(reg_sp, reg_sp, 4);
 
-        tk := IntToTypeKind(IRTk[node]);
-        sz := TypeSize(tk);
         if sz = 1 then
           rv32_sb(reg_a1, reg_a0, 0)
         else if sz = 2 then
@@ -889,9 +928,13 @@ begin
         end;
 
         if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString) or
+            TypeIsFrozenString(IntToTypeKind(IRTk[left])) or TypeIsFrozenString(IntToTypeKind(IRTk[right]))) then
         begin
-          { Managed-string equality -> PXXStrEq(lenA, srcA, lenB, srcB) -> 1/0. }
+          { String equality (managed handle, frozen buffer, or char operands —
+            EmitStrOperandRISCV32 normalizes each) -> PXXStrEq -> 1/0.
+            Was gated on tyAnsiString only, so frozen = frozen (e.g.
+            ParamStr(1) = '--selftest') compared ADDRESSES. }
           IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
@@ -1045,12 +1088,40 @@ begin
         procIdx := IRA[node];
         if procIdx = -Ord(tkGetMem) then
         begin
-          { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
-          if IRC[node] >= REC_UCLASS_BASE then
-            Error('target riscv32: class instantiation not yet supported');
+          { GetMem / New / class instantiation. For a class: alloc, store the
+            VMT pointer at offset 0, run the ctor, return Self in a0 (mirrors
+            the arm32 shape at rv32 word width). }
+          j := IRC[node];                     { class idx (or < base) }
           argNode := IRB[node];               { size arg }
           IREmitNodeRISCV32(IRA[argNode]);    { size -> a0 }
           EmitHeapAllocLockedRISCV32;         { a0 = payload pointer }
+          if j < REC_UCLASS_BASE then
+            Exit;                             { plain GetMem }
+          EmitLoadDataRefRISCV32(reg_t1, UClsVMTOffset[j - REC_UCLASS_BASE]);
+          rv32_sw(reg_t1, reg_a0, 0);         { [Self] = VMT }
+          j := FindUMeth(j - REC_UCLASS_BASE, 'create');
+          if j < 0 then
+            Exit;                             { no ctor: instance in a0 }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { Self, deepest }
+          nArgs := 1;
+          argNode := IRB[node];               { size arg }
+          argNode := IRB[argNode];            { first explicit ctor arg }
+          while argNode <> -1 do
+          begin
+            IREmitNodeRISCV32(IRA[argNode]);
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs > 8 then
+            Error('target riscv32: constructor with more than 8 parameter words not supported');
+          for i := 0 to nArgs - 1 do
+            rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+          rv32_lw(reg_t1, reg_sp, (nArgs - 1) * 4);            { Self again }
+          rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);  { save Self }
+          EmitCallProc(UMthProc_[j]);
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { Self }
           Exit;
         end;
         if procIdx = -Ord(tkFreeMem) then
@@ -1174,6 +1245,71 @@ begin
             EmitCallProc(procIdx);                  { a0:a1 = double result }
             Exit;
           end;
+          if procIdx = -Ord(tkArgCount) then
+          begin
+            { ParamCount = argc - 1; initial sp (saved by the entry stub)
+              points at argc. }
+            EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
+            rv32_lw(reg_t1, reg_t1, 0);
+            rv32_lw(reg_a0, reg_t1, 0);
+            rv32_addi(reg_a0, reg_a0, -1);
+            Exit;
+          end;
+          if procIdx = -Ord(tkArgStr) then
+          begin
+            { ArgStr(index, strVar) — the 2-arg statement form (ParamStr(i)
+              expressions desugar to this with a hidden frozen temp). Fetch
+              argv[index], then fill the dest: frozen -> PXXCStrToFrozen;
+              managed -> PXXStrFromLit + PXXStrPublish. }
+            argNode := IRB[node];
+            if argNode = -1 then
+              Error('target riscv32: ArgStr expects an index');
+            IREmitNodeRISCV32(IRA[argNode]);          { a0 = index }
+            argNode := IRB[argNode];
+            if argNode = -1 then
+              Error('target riscv32: ArgStr expects a destination string');
+            valNode := IRA[argNode];
+            rv32_slli(reg_a0, reg_a0, 2);
+            EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
+            rv32_lw(reg_t1, reg_t1, 0);               { initial sp }
+            rv32_addi(reg_t1, reg_t1, 4);             { argv base }
+            rv32_add(reg_a0, reg_t1, reg_a0);
+            rv32_lw(reg_a0, reg_a0, 0);               { argv[index] (or junk past envp for a huge index — Pascal callers pass 0..ParamCount) }
+            if (IRKind[valNode] = IR_LOAD_SYM) and
+               (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
+            begin
+              { managed dest: handle = FromLit(strlen(src), src); publish }
+              rv32_addi(reg_a1, reg_a0, 0);           { a1 = src }
+              rv32_addi(reg_a2, reg_zero, 0);         { len }
+              i := CodeLen;                           { strlen loop }
+              rv32_add(reg_t0, reg_a1, reg_a2);
+              rv32_lbu(reg_t0, reg_t0, 0);
+              rv32_beq(reg_t0, reg_zero, 12);
+              rv32_addi(reg_a2, reg_a2, 1);
+              EmitI32(EncodeRISCVJAL(reg_zero, i - CodeLen));
+              rv32_addi(reg_a0, reg_a2, 0);           { a0 = len (a1 = src) }
+              i := FindProc('PXXStrFromLit');
+              if i < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(i);                        { a0 = handle }
+              rv32_addi(reg_a1, reg_a0, 0);           { a1 = handle }
+              EmitSlotAddrRISCV32(reg_a0, IRA[valNode]);
+              i := FindProc('PXXStrPublish');
+              if i < 0 then Error('compiler error: PXXStrPublish not found');
+              EmitCallProc(i);
+            end
+            else
+            begin
+              { frozen dest: buffer address then byte copy. Emitting the dest
+                lvalue may clobber a-regs, so park src on the stack. }
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              IREmitNodeRISCV32(valNode);             { a0 = dest buffer addr }
+              rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { a1 = src }
+              i := FindProc('PXXCStrToFrozen');
+              if i < 0 then Error('compiler error: PXXCStrToFrozen not found');
+              EmitCallProc(i);
+            end;
+            Exit;
+          end;
           if procIdx = -210 then
           begin
             { bare `Eof` (stdin) -> PXXStdinEof: Boolean (portable builtin,
@@ -1183,7 +1319,10 @@ begin
             EmitCallProc(procIdx);
             Exit;
           end;
-          Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
+          begin
+            ErrorIdent := 'builtin id ' + MangleSuffix(-procIdx);
+            Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
+          end;
         end;
 
         { Word-based argument passing (matches the callee spill in parser.inc):
@@ -1411,6 +1550,14 @@ begin
               EmitLoadImmRISCV32(reg_a1, j);
               procIdx := FindProc('PXXWriteStrMW');
               if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
+              EmitCallProc(procIdx);
+            end
+            else if TypeIsFrozenString(tk) then
+            begin
+              IREmitNodeRISCV32(valNode);              { a0 = buffer addr }
+              EmitLoadImmRISCV32(reg_a1, j);
+              procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
               EmitCallProc(procIdx);
             end
             else if Is64BitRISCV32(tk) or TypeIsOrdinal(tk) or (tk = tyUnknown) then
@@ -1706,6 +1853,33 @@ begin
           Error('target riscv32: read/readln target type not supported');
       end;
 
+    IR_VIRTUAL_CALL:
+      begin
+        if IRCallDest[node] >= 0 then
+          Error('target riscv32: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
+          Word-push args (Self = word 0, deepest), load a0.., load the VMT
+          pointer from [Self], call through [VMT + slot*8] (8-byte data slots,
+          address in the low word — mirrors arm32). }
+        argNode := IRA[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeRISCV32(IRA[argNode]);
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 8 then
+          Error('target riscv32: virtual call with more than 8 parameter words not supported');
+        for i := 0 to nArgs - 1 do
+          rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+        rv32_addi(reg_sp, reg_sp, nArgs * 4);
+        rv32_lw(reg_t1, reg_a0, 0);                     { VMT pointer }
+        rv32_lw(reg_t1, reg_t1, Integer(IRIVal[node]) * 8);
+        rv32_jalr(reg_ra, reg_t1, 0);
+      end;
+
     IR_SETLEN_STR:
       begin
         { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
@@ -1727,7 +1901,7 @@ begin
 end;
 
 procedure IREmitMachineCodeRISCV32;
-var i, lblId, pos, targetOffset, f: Integer;
+var i, lblId, pos, targetOffset, f, si: Integer;
     LabelFixupCount: Integer;
 begin
   for i := 0 to MAX_IR - 1 do
@@ -1775,6 +1949,112 @@ begin
           end;
         end;
 
+      IR_EXC_ENTER:
+        begin
+          { try: push a 32-byte frame ([0]=prev EXC_TOP, jmpbuf at +8), chain
+            it, setjmp; a raise longjmps back here with a0=1 -> jump to the
+            handler label (beq-skip + jal, so the handler can be far). }
+          lblId := IRA[i];
+          rv32_addi(reg_sp, reg_sp, -EXC_FRAME_SIZE_RV32);
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_TOP);
+          rv32_lw(reg_t2, reg_t1, 0);
+          rv32_sw(reg_t2, reg_sp, 0);
+          rv32_sw(reg_sp, reg_t1, 0);
+          rv32_addi(reg_a0, reg_sp, EXC_JMP_OFFSET_RV32);
+          EmitI32(EncodeRISCVJAL(reg_ra, ExcSetJmpAddr - CodeLen));
+          rv32_beq(reg_a0, reg_zero, 8);            { 0 = normal path: skip }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(EncodeRISCVJAL(reg_zero, 0));
+          end;
+        end;
+
+      IR_EXC_LEAVE:
+        IREmitLeaveExceptionFramesRISCV32(IRA[i]);
+
+      IR_RAISE:
+        begin
+          if IRA[i] <> -1 then
+          begin
+            IREmitNodeRISCV32(IRA[i]);              { a0 = exception object }
+            EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_OBJ);
+            rv32_sw(reg_a0, reg_t1, 0);
+            EmitLoadImmRISCV32(reg_a0, Integer(IRIVal[i]));   { class idx }
+            EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
+            rv32_sw(reg_a0, reg_t1, 0);
+          end;
+          EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen));
+        end;
+
+      IR_EXC_STORE:
+        begin
+          { `on E: EFoo do`: store the raised object into E's slot. }
+          si := IRA[i];
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_OBJ);
+          rv32_lw(reg_t2, reg_t1, 0);
+          EmitSlotAddrRISCV32(reg_t0, si);
+          rv32_sw(reg_t2, reg_t0, 0);
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          { jump to the label when the raised class <> this clause's class }
+          lblId := IRA[i];
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
+          rv32_lw(reg_t2, reg_t1, 0);
+          EmitLoadImmRISCV32(reg_t0, Integer(IRIVal[i]));
+          rv32_xor(reg_t2, reg_t2, reg_t0);
+          rv32_sltiu(reg_a0, reg_t2, 1);            { a0 = equal }
+          rv32_beq(reg_a0, reg_zero, 8);            { equal=0 -> take the jal }
+          rv32_jal(reg_zero, 8);                    { equal: skip the jal }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(EncodeRISCVJAL(reg_zero, 0));
+          end;
+        end;
+
+      IR_EXC_MATCH_HIT:
+        begin
+          { jump to the label when the raised class = this clause's class }
+          lblId := IRA[i];
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
+          rv32_lw(reg_t2, reg_t1, 0);
+          EmitLoadImmRISCV32(reg_t0, Integer(IRIVal[i]));
+          rv32_xor(reg_t2, reg_t2, reg_t0);
+          rv32_sltiu(reg_a0, reg_t2, 1);            { a0 = equal }
+          rv32_beq(reg_a0, reg_zero, 8);            { not equal: skip the jal }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(EncodeRISCVJAL(reg_zero, 0));
+          end;
+        end;
+
+      IR_EXC_CLEAR:
+        begin
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_OBJ);
+          rv32_sw(reg_zero, reg_t1, 0);
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
+          rv32_sw(reg_zero, reg_t1, 0);
+        end;
+
       IR_CALL:
         begin
           if IRIVal[i] = 1 then
@@ -1782,6 +2062,12 @@ begin
         end;
 
       IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
+            IREmitNodeRISCV32(i);
+        end;
+
+      IR_VIRTUAL_CALL:
         begin
           if IRStmtRoot[i] then
             IREmitNodeRISCV32(i);

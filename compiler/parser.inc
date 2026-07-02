@@ -16297,6 +16297,16 @@ begin
       EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
       EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
     end;
+    { Hosted: save the kernel-provided initial sp (points at argc) for
+      ParamCount/ParamStr, like the other hosted targets. }
+    if not EspBareBoot then
+    begin
+      rv32_auipc(reg_t1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitGlobRef(BSS_INITIAL_RSP);
+      rv32_lw(reg_t1, reg_t1, 8);       { t1 = &BSS_INITIAL_RSP }
+      rv32_sw(reg_sp, reg_t1, 0);
+    end;
     { RISC-V entry stub: jump to main body. }
     jmpPatch := CodeLen;
     EmitI32($0000006F);

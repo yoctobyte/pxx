@@ -236,6 +236,61 @@ begin
     end;
     EmitExit(1);
   end
+  else if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) then
+  begin
+    { Hosted riscv32. jmpbuf = s0, sp, ra (codegen never touches s1-s11 —
+      see the interrupt-prologue note in symtab.inc). Direct jal to
+      ExcSetJmp/ExcRaise doesn't push, so the stub's sp/ra ARE the try
+      point's. Glob addresses via the inline auipc+literal trick
+      (EmitLoadGlobAddrRISCV32 is declared later, in the backend include). }
+    ExcSetJmpAddr := CodeLen;
+    rv32_sw(reg_s0, reg_a0, 0);
+    rv32_sw(reg_sp, reg_a0, 4);
+    rv32_sw(reg_ra, reg_a0, 8);
+    rv32_addi(reg_a0, reg_zero, 0);
+    rv32_jalr(reg_zero, reg_ra, 0);                             { ret 0 }
+
+    ExcLongJmpAddr := CodeLen;
+    rv32_lw(reg_s0, reg_a0, 0);
+    rv32_lw(reg_sp, reg_a0, 4);
+    rv32_lw(reg_t0, reg_a0, 8);
+    rv32_addi(reg_a0, reg_zero, 1);
+    rv32_jalr(reg_zero, reg_t0, 0);                             { resume at try, a0=1 }
+
+    ExcRaiseAddr := CodeLen;
+    rv32_auipc(reg_t1, 0);                                      { &EXC_TOP literal }
+    rv32_jal(reg_zero, 8);
+    EmitGlobRef(BSS_EXC_TOP);
+    rv32_lw(reg_t1, reg_t1, 8);
+    rv32_lw(reg_a0, reg_t1, 0);                                 { top frame }
+    unhandledJmp := CodeLen;
+    rv32_beq(reg_a0, reg_zero, 0);                              { patched: unhandled }
+    rv32_addi(reg_a0, reg_a0, EXC_JMP_OFFSET_RV32);
+    EmitI32(EncodeRISCVJAL(reg_zero, ExcLongJmpAddr - CodeLen));
+    Patch32(unhandledJmp, EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - unhandledJmp));
+
+    if not NoUnhandledHandler then
+    begin
+      si := InternStr('Unhandled exception');
+      rv32_addi(reg_a0, reg_zero, 2);                           { stderr }
+      rv32_auipc(reg_a1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitDataRef(Strs[si].Offset + 8);
+      rv32_lw(reg_a1, reg_a1, 8);
+      EmitLoadImmRISCV32(reg_a2, Strs[si].Len);
+      rv32_addi(reg_a7, reg_zero, 64);                          { write }
+      EmitI32($00000073);
+      rv32_addi(reg_a0, reg_zero, 2);
+      rv32_auipc(reg_a1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitDataRef(NEWLINE_OFFSET);
+      rv32_lw(reg_a1, reg_a1, 8);
+      rv32_addi(reg_a2, reg_zero, 1);
+      rv32_addi(reg_a7, reg_zero, 64);
+      EmitI32($00000073);
+    end;
+    EmitExit(1);
+  end
   else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
     ExcSetJmpAddr := CodeLen;

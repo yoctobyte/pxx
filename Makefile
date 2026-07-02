@@ -2273,7 +2273,19 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_eof_stdin.pas /tmp/test_riscv32_eof
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_riscv32_eof_x64
 	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 /tmp/test_riscv32_eof)" = "$$(printf 'alpha\nbeta\ngamma' | /tmp/test_riscv32_eof_x64)"
-	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin ok"
+	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas /tmp/test_riscv32_exc
+	./$(COMPILER) test/test_cross_exception.pas /tmp/test_riscv32_exc_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_exc)" = "$$(/tmp/test_riscv32_exc_x64)"
+	./$(COMPILER) --target=riscv32 test/test_arm32_arg_runtime.pas /tmp/test_riscv32_pargs
+	./$(COMPILER) test/test_arm32_arg_runtime.pas /tmp/test_riscv32_pargs_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_pargs alpha beta)" = "$$(/tmp/test_riscv32_pargs_x64 alpha beta)"
+	./$(COMPILER) --target=riscv32 test/test_cross_typed_const.pas /tmp/test_riscv32_tc
+	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_riscv32_tc_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_tc)" = "$$(/tmp/test_riscv32_tc_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_global_init.pas /tmp/test_riscv32_gi
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_riscv32_gi_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_gi)" = "$$(/tmp/test_riscv32_gi_x64)"
+	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

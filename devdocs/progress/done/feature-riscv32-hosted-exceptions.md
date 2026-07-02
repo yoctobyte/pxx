@@ -31,3 +31,15 @@ is walled.
 
 ## Log
 - 2026-07-02 — Filed by Track A during riscv32 hosted bring-up.
+- 2026-07-03 — Track A: DONE. setjmp/longjmp frames (jmpbuf = s0/sp/ra, 32-byte
+  chained frames, BSS_EXC_* like i386/arm32) + all 7 IR_EXC_* ops; unhandled
+  handler writes to stderr. test_cross_exception output-identical on riscv32
+  (added to make test-riscv32). Same session also landed: class instantiation
+  (VMT + ctor), IR_VIRTUAL_CALL, ParamCount/ParamStr (ArgStr 2-arg statement
+  form, frozen + managed dests, entry stub saves initial sp), frozen-string
+  write + equality (PXXWriteFrozenW; PXXStrEq gate widened past
+  tyAnsiString-only), 64-bit IR_LOAD_MEM/IR_STORE_MEM (high word was
+  dropped/stale — fixed typed-const/global-init/multidim mismatches).
+  Chess compiles + runs selftest but miscounts/crashes — remaining runtime
+  corruption filed as bug-riscv32-chess-perft-runtime-corruption with full
+  bisection state.

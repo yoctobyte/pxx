@@ -682,6 +682,42 @@ begin
   if len > 0 then r := PXXSysWrite(1, Int64(p), len);
 end;
 
+{ Copy a NUL-terminated C string into a FROZEN string buffer (8-byte length
+  prefix + chars), capped at 255 chars. ParamStr's hidden temp dest. }
+procedure PXXCStrToFrozen(dst: Pointer; src: Pointer);
+var len, i: Int64;
+begin
+  len := 0;
+  if src <> nil then
+    while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
+  PWord(dst)^ := len;
+  PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
+  i := 0;
+  while i < len do
+  begin
+    PByte(Int64(dst) + 8 + i)^ := PByte(Int64(src) + i)^;
+    i := i + 1;
+  end;
+end;
+
+{ Publish a managed handle into a string slot, releasing the old one. }
+procedure PXXStrPublish(slot: Pointer; h: Pointer);
+var oldp: Pointer;
+begin
+  oldp := Pointer(PWord(slot)^);
+  PWord(slot)^ := Int64(h);
+  PXXStrDecRef(oldp);
+end;
+
+{ Frozen string buffer (8-byte length prefix + chars), right-aligned to wid. }
+procedure PXXWriteFrozenW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := PWord(p)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
+end;
+
 { NUL-terminated C string (PChar), nil-safe. }
 procedure PXXWriteCStr(p: Pointer);
 var len: Int64; r: Int64;
