@@ -152,3 +152,18 @@ reproduce" isn't the same as "confirmed fixed," but this ticket is now a
 much weaker candidate for further investigation time than it was — if it
 resurfaces, it'll likely be via a genuinely new report with a fresh
 concrete repro, not by re-trying variations on the original description.
+
+## CLOSED as not-reproducible (2026-07-02, user + Track A)
+
+Four independent failed repro attempts across two sessions, culminating in
+the exact original self-hosting scenario (real asmcore unit, re-exported
+LastError, original pre-workaround call site) compiling clean — while the
+decl-order gate itself was verified still active on a control case. The
+original June trigger no longer exists on the current binary, most plausibly
+fixed by intervening decl-order / symbol-resolution work. The workarounds in
+asmfront.inc are harmless and stay.
+
+Re-open ONLY with a fresh concrete repro (new report, failing case in hand)
+— not by re-trying variations of this description. The reverted FindSym fix
+shape (`SymUnitIdx[i] = CurrentUnitIdx` on the decl-order gates) is recorded
+above if a real trigger ever shows up.

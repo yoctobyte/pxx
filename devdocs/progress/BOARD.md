@@ -24,14 +24,13 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -559,11 +558,12 @@ _none_
 | track-c-ternary-string-literal-segfault | C | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (9)
+## rejected (10)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-invalid-symbol-in-lea-sqlite | C | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
+| bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
@@ -578,7 +578,6 @@ _none_
 - [A] audit-shared-global-reentrancy-thread-safety
 - [C] bug-c-cast-as-call-arg-parse-error
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A] bug-compiler-uses-unit-interactions
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
