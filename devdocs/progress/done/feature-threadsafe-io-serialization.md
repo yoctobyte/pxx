@@ -57,3 +57,14 @@ writeln crash TODAY, pre-existing, even on pinned v145 without this lock —
 filed as [[bug-tthread-execute-writeln-crash]] with repro + gdb evidence.
 When that is fixed, the two-thread interleave test becomes this ticket's
 closing gate. Parking in backlog until then.
+
+## Resolution — 2026-07-02, acceptance met (v147)
+
+The blocker ([[bug-tthread-execute-writeln-crash]]) turned out to be a
+constructor-arity stack desync, fixed same day. With it gone the acceptance
+holds: test/test_thread_writeln_interleave.pas (two threads x 200
+60-char writelns, --threadsafe) = 401/401 atomic lines across runs, and the
+same program WITHOUT --threadsafe interleaves ~98% of lines — the lock is
+doing exactly the serialization. Wired into make test-threads. Remaining
+nice-to-haves (exception-output serialization, futex instead of spin under
+contention, cross-target) can ride the epic's later milestones; closing.

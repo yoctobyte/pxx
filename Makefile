@@ -264,6 +264,11 @@ test-threads: $(COMPILER)
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	./$(COMPILER) test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
 	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
+	# statement-atomic threaded writeln: every concurrent output line is whole (--threadsafe I/O lock)
+	./$(COMPILER) --threadsafe test/test_thread_writeln_interleave.pas /tmp/test_thread_writeln_interleave26
+	/tmp/test_thread_writeln_interleave26 > /tmp/twi26.out
+	test "$$(wc -l < /tmp/twi26.out)" = "401"
+	test "$$(grep -cvE '^(A{60}|B{60}|done)$$' /tmp/twi26.out)" = "0"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
@@ -1309,6 +1314,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_case_sensitive26)" = "$$(printf '10\n20\nupper\nlower')"
 	! ./$(COMPILER) test/test_case_sensitive_error.pas /tmp/test_case_sensitive_error26 > /tmp/test_case_sensitive_error.log 2>&1
 	grep -q "undefined variable (VALUE)" /tmp/test_case_sensitive_error.log
+	# constructor arity is compile-checked (missing required arg used to desync the caller stack)
+	! ./$(COMPILER) test/test_ctor_arity_error.pas /tmp/test_ctor_arity_error26 > /tmp/test_ctor_arity_error.log 2>&1
+	grep -q "not enough arguments to constructor" /tmp/test_ctor_arity_error.log
 	! ./$(COMPILER) test/test_decl_order_global_error.pas /tmp/test_decl_order_global_error26 > /tmp/test_decl_order_global_error.log 2>&1
 	grep -q "declared later" /tmp/test_decl_order_global_error.log
 	grep -q "(gLate)" /tmp/test_decl_order_global_error.log

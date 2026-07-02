@@ -24,14 +24,13 @@ _none_
 
 _none_
 
-## backlog (72)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
-| bug-tthread-execute-writeln-crash | A | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -86,7 +85,6 @@ _none_
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
@@ -135,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (416)
+## done (418)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -333,6 +331,7 @@ _none_
 | bug-sysutils-unit-hard-skipped | A | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-textfile-primitives-not-ambient-in-units | A | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-tthread-execute-writeln-crash | A | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-unit-qualified-constant-not-resolved | A | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
 | bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
@@ -531,6 +530,7 @@ _none_
 | feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
 | feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
+| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
 | feature-transcendental-math | A | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
@@ -575,7 +575,6 @@ _none_
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-compiler-uses-unit-interactions
 - [A] bug-max-proc-params-32-selfmiscompile
-- [A] bug-tthread-execute-writeln-crash
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
@@ -628,7 +627,6 @@ _none_
 - [A] feature-sync-primitives-futex
 - [B] feature-threadsafe-heap-contract
 - [A] feature-threadsafe-heap-optimize
-- [A] feature-threadsafe-io-serialization
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
 - [B] feature-tls13-from-scratch
@@ -645,5 +643,4 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **2** — feature-threadsafe-heap-contract
-- **1** — feature-threadsafe-io-serialization
 - **1** — task-sqlite-libc-free-runtime-bringup

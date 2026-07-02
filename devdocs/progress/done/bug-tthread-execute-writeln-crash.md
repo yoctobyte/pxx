@@ -54,3 +54,34 @@ The new I/O statement lock (v146) is in place and single-thread-verified;
 once this crash is fixed, the interleave acceptance test
 (scratchpad tio.pas shape: two threads x 200 lines, every line must match
 ^(A{60}|B{60}|done)$) becomes the gate for BOTH tickets.
+
+## Resolution — 2026-07-02, hunted down same day (v147)
+
+**writeln was a complete decoy.** Bisection: one thread with writeln crashed;
+two threads with NO I/O crashed; the passing suite test differed in one
+detail — it called `TWorker.Create(True)` while the crashing repros called
+bare `TW.Create`, missing the required `CreateSuspended` argument. That
+should be a compile error (FPC) — pxx's class-construction parse collected
+whatever args were present with NO arity check.
+
+**Actual mechanism** (ir_codegen.inc ctor marshalling): the push loop pushes
+Self + the args ACTUALLY GIVEN; the pop loop pops exactly `ParamCount`
+registers. One missing argument = one extra pop = the caller's stack
+desynced by 8 bytes; every subsequent pop in the enclosing expression reads
+shifted garbage — hence garbage Self, nondeterministic fault sites, and a
+crash that moved when the program changed. Reproduced with a plain class,
+no threads: `TC.Create` (1-param ctor, 0 args) = same silent compile, same
+crash.
+
+**Fix**: compile-time constructor arity check in the construction parse —
+missing required args and extra args are now clean errors (FPC parity),
+with trailing-default fill wired for when class methods gain default
+params (declaring them is currently a separate parser gap). The codegen
+marshalling is untouched — it is correct once the arg count is right.
+
+Gates: test/test_ctor_arity_error.pas (must-not-compile, message grepped) in
+make test; test/test_thread_writeln_interleave.pas in make test-threads —
+the original crashing shape, now also the I/O-lock acceptance (401/401
+atomic lines under --threadsafe; without the flag the same binary shows
+~98% mixed lines, demonstrating the lock is what serializes). Suite +
+threads green; self-host byte-identical; pinned v147.

@@ -5125,6 +5125,52 @@ begin
         end;
         prevTok := RecSize(idx);
 
+        { Constructor ARITY check (FPC parity) + trailing-default fill. The
+          codegen's ctor marshalling pops exactly ParamCount registers, so a
+          missing (or extra) argument used to compile silently and desync the
+          caller's stack by 8 bytes per miscount — a garbage-Self /
+          nondeterministic-crash bug, not a wrong-answer one
+          (bug-tthread-execute-writeln-crash's true root cause). }
+        if idx >= REC_UCLASS_BASE then
+        begin
+          i := FindUMeth(idx - REC_UCLASS_BASE, 'create');
+          if i >= 0 then
+          begin
+            mpi := UMthProc_[i];
+            { count the explicit args parsed above }
+            mlastArg := 0;
+            argSeq := argsHead;
+            while argSeq <> -1 do
+            begin
+              Inc(mlastArg);
+              argSeq := ASTRight[argSeq];
+            end;
+            if mlastArg > Procs[mpi].ParamCount - 1 then
+              Error('too many arguments to constructor ' + name + '.Create');
+            { fill missing trailing args from declared defaults; a missing
+              non-default arg is a compile error like FPC }
+            while mlastArg < Procs[mpi].ParamCount - 1 do
+            begin
+              if not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + (mlastArg + 1)] then
+                Error('not enough arguments to constructor ' + name +
+                      '.Create (parameter ' + Procs[mpi].Params[mlastArg + 1].Name + ' has no default)');
+              exprNode := AllocNode(AN_INT_LIT);
+              ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
+              ASTTk[exprNode] := Ord(Procs[mpi].Params[mlastArg + 1].TypeKind);
+              argSeq := AllocNode(AN_ARG);
+              ASTLeft[argSeq] := exprNode;
+              if argsHead = -1 then
+                argsHead := argSeq
+              else
+                ASTRight[lastArg] := argSeq;
+              lastArg := argSeq;
+              Inc(mlastArg);
+            end;
+          end
+          else if argsHead <> -1 then
+            Error(name + ' has no constructor Create, but arguments were given');
+        end;
+
         { Construct GetMem(sz) AST node }
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -Ord(tkGetMem);
