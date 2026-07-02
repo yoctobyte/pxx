@@ -32,18 +32,26 @@ C99), so "no include ⇒ no real console printf" matches real compilers; the
 literal-only stub below is a pxx courtesy BEYOND the standard, kept so a
 dependency-free hello still prints.
 
-Implement honesty, not new binding:
+REFINED 2026-07-02 (user): reject ALL unresolved printf — no courtesy stub.
+C is multiplatform/minimal; assuming a std output without stdio is already
+an assumption, and our C is stable enough that test apps can be required to
+include stdio. The literal-only stub is a relic of early C bring-up days.
 
 1. **Explicit prototype, no include** (`int printf(const char*, ...);`):
-   currently a body-less extern — the call is silently swallowed. Make it a
-   clear COMPILE ERROR: "printf declared but has no implementation —
-   `#include <stdio.h>` (bundled libc-free impl) or `--system-libs`".
-2. **No include, no prototype** (`ParseCPrintfAST` stub, cparser.inc ~2939):
-   KEEP the literal-only stub for `printf("string literal")` — bare hello
-   keeps working with zero includes. But when EXTRA ARGS are present
-   (currently silently skipped, prints the raw format string): COMPILE
-   ERROR telling the user to `#include <stdio.h>`.
+   currently a body-less extern — call silently swallowed. COMPILE ERROR:
+   "printf declared but has no implementation — `#include <stdio.h>`
+   (bundled libc-free impl) or `--system-libs`".
+2. **No include, no prototype**: DELETE the `ParseCPrintfAST` literal-only
+   stub (cparser.inc ~2069 + its dispatch guard ~2939) outright. Bare
+   printf without a resolvable impl = same compile error as (1).
 3. `--system-libs`/`--system-libs=c` path unchanged (real libc printf).
 
 Result: every printf either formats correctly or fails loudly at compile
 time; nothing prints wrong output silently.
+
+Gate fallout to fix in the same change (tests that lean on the bare stub —
+add `#include <stdio.h>` and, where output was the raw format string,
+correct the expected output): `test/hello.c` (in `make test`, expected
+"Hello, World!" keeps working via the include), `test/macro_soup_lib.c`,
+`test/csqlite_layout_probe.c`, `test/csqlite_schema_exec_probe.c`. The
+cvararg gate tests already `#include "stdio.c"` and are unaffected.
