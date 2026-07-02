@@ -23,18 +23,28 @@ the kernel signal-return contract, per target:
 - Interaction with `--threadsafe` / clone(2) threads (signal masks are
   per-thread; handler table is process-wide).
 
-## Why (consumers, in priority order per user discussion)
+## Why (consumers — this is GENERAL signal infrastructure, not a math-error
+   helper; math traps are just one client. Scope per user 2026-07-02.)
 
-1. **Float exception traps** ([[feature-float-exception-mask-control]]): FPC
+1. **Graceful termination**: SIGINT (Ctrl-C) and SIGTERM (system shutdown,
+   `kill`, service managers) → run cleanup hooks (flush files, release locks,
+   restore terminal state — ansiterm/lineedit/TUI programs currently leave the
+   terminal raw on Ctrl-C) before exiting, and a user-facing API to register
+   handlers (`SetSignalHandler(SIGINT, @MyProc)` / FPC-compatible surface).
+   Long-running demos/servers (http, dns, scheduler) are the immediate users.
+2. **SIGPIPE**: networking code (net/sockets/tls/http) dies silently on a
+   closed peer today unless every write is guarded; standard practice =
+   ignore SIGPIPE process-wide and surface EPIPE as an error return.
+3. **Float exception traps** ([[feature-float-exception-mask-control]]): FPC
    unmasks FPU exceptions by default; emulating that (opt-in for us — user
    prefers quiet IEEE inf/NaN propagation as the default) requires catching
    SIGFPE and converting it to a runtime error / raised exception.
-2. **Div-zero without pre-checks**: an alternative detection path on x86 (not
-   needed now — the pre-divide check landed — but a handler would also catch
-   the still-unguarded `Low(Int64) div -1` overflow trap).
-3. **Diagnostics**: SIGSEGV → "segmentation fault at $ADDR in proc X" instead
-   of a bare core dump; SIGINT cleanup hooks; a future `SetSignalHandler`-style
-   user API.
+4. **Math traps not worth pre-checking**: the still-unguarded
+   `Low(Int64) div -1` overflow trap; an alternative div-zero path on x86
+   (pre-divide check already landed, v135).
+5. **Diagnostics**: SIGSEGV/SIGBUS → "segmentation fault at $ADDR in proc X"
+   instead of a bare core dump (huge for self-host debugging); SIGCHLD if
+   process spawning ever lands.
 
 ## Scope notes
 
