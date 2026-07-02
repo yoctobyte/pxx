@@ -152,3 +152,4 @@
 2026-07-02T15:07:43Z  v152  4cb9a4ab9ac58c4c06a82ebc81582f147755234fd722a5615d3751725a218342  e1e7070973ba4c2ecda4f65d875e9f9953da7b10  chore(stable): pin v151 (threadsafe heap contract)
 2026-07-02T15:46:46Z  v153  a557bca440c4c2db9be0e81a7a0329671639d0d604adbcdbe59ff462f5b1cb19  7a1c9f901a6b7984eba7baf9575e6d51b5cdf5bc  chore(stable): pin v152 (TThread Synchronize/Queue; binary identical to v151)
 2026-07-02T19:29:47Z  v154  8ae35a5e989e975655bbe206fc830ca37ceffbec176114bcfa8a33d14e2da9ee  4051545b93c4fb16011b413fd2f13ddf527b5223  feat(generators): allow yield inside case in stackless generators
+2026-07-02T22:48:26Z  v155  fe3e4b6c4d5c4851c309c0ea55f16f76e96d0a22c504c56cbce35acfd93c6454  596ac12b38db965a76120fc094b58a9c6721a761  fix(riscv32): chess perft byte-identical — hidden-temp nil-init, far branches, set-param ABI

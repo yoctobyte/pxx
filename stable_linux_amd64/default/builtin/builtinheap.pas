@@ -404,6 +404,331 @@ begin
   Result := Pointer(d);
 end;
 
+function PXXSysRead(fd, buf, count: NativeInt): Int64;
+begin
+  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(0, fd, buf, count);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(3, fd, buf, count);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(3, fd, buf, count);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(63, fd, buf, count);
+{$endif}
+{$ifdef CPU_RISCV32}
+  Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
+{$endif}
+end;
+
+
+function PXXSysWrite(fd, buf, count: NativeInt): Int64;
+begin
+  Result := 0;
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(1, fd, buf, count);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(4, fd, buf, count);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(4, fd, buf, count);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(64, fd, buf, count);
+{$endif}
+{$ifdef CPU_RISCV32}
+  Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
+{$endif}
+end;
+
+
+{ ===== Console input (read/readln) for the cross targets =====
+  x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
+  BSS_LINE_* scratch); the 32-bit/cross backends lower IR_READLINE /
+  IR_READ_VAR / IR_READ_DISCARD to these portable helpers instead. Semantics
+  mirror the x86-64 asm: one shared line buffer + cursor; a string target takes
+  the rest of the line; a char one byte; integer kinds skip blanks then parse
+  [-]digits. See feature-cross-readln-console-input. }
+var
+  PXXLineBuf: array[0..4095] of Byte;
+  PXXLineLen: Int64;
+  PXXLinePos: Int64;
+  PXXPeekByte: Byte;      { pushed-back stdin byte held by PXXStdinEof }
+  PXXPeekValid: Int64;
+
+procedure PXXReadLine;
+var n: Int64; b: Byte;
+begin
+  if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
+  PXXLinePos := 0;
+  PXXLineLen := 0;
+  while PXXLineLen < 4096 do
+  begin
+    { consume the byte Eof peeked (else it would be lost) before reading }
+    if PXXPeekValid <> 0 then
+    begin
+      b := PXXPeekByte;
+      PXXPeekValid := 0;
+      n := 1;
+    end
+    else
+      n := PXXSysRead(0, Int64(@b), 1);
+    if n <= 0 then Break;                 { EOF / error: empty or short line }
+    if b = 13 then Continue;              { skip \r }
+    if b = 10 then Break;                 { \n ends the line (not stored) }
+    PXXLineBuf[PXXLineLen] := b;
+    PXXLineLen := PXXLineLen + 1;
+  end;
+end;
+
+{ Bare `Eof` (stdin): not-eof while the line buffer holds unparsed content or a
+  pushed-back byte; otherwise peek one byte (stashed for the next PXXReadLine).
+  Mirrors the x86-64 EmitEof asm. }
+function PXXStdinEof: Boolean;
+var n: Int64;
+begin
+  if PXXLinePos < PXXLineLen then begin Result := False; Exit; end;
+  if PXXPeekValid <> 0 then begin Result := False; Exit; end;
+  n := PXXSysRead(0, Int64(@PXXPeekByte), 1);
+  if n <= 0 then
+    Result := True
+  else
+  begin
+    PXXPeekValid := 1;
+    Result := False;
+  end;
+end;
+
+procedure PXXReadDiscard;
+begin
+  PXXLinePos := PXXLineLen;
+end;
+
+{ readln(s: AnsiString): rest of the line -> fresh managed string, published
+  into the target slot (releases the old handle, nil-safe). }
+procedure PXXReadVarStrM(slot: Pointer);
+var len: Int64; oldp, newp: Pointer;
+begin
+  len := PXXLineLen - PXXLinePos;
+  if len < 0 then len := 0;
+  newp := PXXStrFromLit(len, @PXXLineBuf[PXXLinePos]);
+  PXXLinePos := PXXLineLen;
+  oldp := Pointer(PWord(slot)^);
+  PWord(slot)^ := Int64(newp);
+  PXXStrDecRef(oldp);
+end;
+
+{ readln(c: Char): one byte from the cursor, #0 when the line is exhausted. }
+procedure PXXReadVarChar(dst: Pointer);
+begin
+  if PXXLinePos < PXXLineLen then
+  begin
+    PByte(dst)^ := PXXLineBuf[PXXLinePos];
+    PXXLinePos := PXXLinePos + 1;
+  end
+  else
+    PByte(dst)^ := 0;
+end;
+
+{ readln(i: <integer family>): skip blanks/tabs, optional '-', digits; store
+  into dst at the target's width (sz = 1/2/4/8 bytes). }
+procedure PXXReadVarInt(dst: Pointer; sz: NativeInt);
+var v: Int64; neg: Boolean; b: Byte; d: Int64;
+begin
+  while (PXXLinePos < PXXLineLen) and
+        ((PXXLineBuf[PXXLinePos] = 32) or (PXXLineBuf[PXXLinePos] = 9)) do
+    PXXLinePos := PXXLinePos + 1;
+  neg := False;
+  if (PXXLinePos < PXXLineLen) and (PXXLineBuf[PXXLinePos] = 45) then
+  begin
+    neg := True;
+    PXXLinePos := PXXLinePos + 1;
+  end;
+  v := 0;
+  while PXXLinePos < PXXLineLen do
+  begin
+    b := PXXLineBuf[PXXLinePos];
+    if (b < 48) or (b > 57) then Break;
+    v := v * 10 + (b - 48);
+    PXXLinePos := PXXLinePos + 1;
+  end;
+  if neg then v := -v;
+  if sz = 1 then PByte(dst)^ := Byte(v)
+  else if sz = 2 then
+  begin
+    PByte(dst)^ := Byte(v);
+    PByte(Int64(dst) + 1)^ := Byte(v shr 8);
+  end
+  else if sz = 4 then
+  begin
+    d := Int64(dst);
+    PByte(d)^ := Byte(v);
+    PByte(d + 1)^ := Byte(v shr 8);
+    PByte(d + 2)^ := Byte(v shr 16);
+    PByte(d + 3)^ := Byte(v shr 24);
+  end
+  else
+  begin
+    d := Int64(dst);
+    PByte(d)^ := Byte(v);
+    PByte(d + 1)^ := Byte(v shr 8);
+    PByte(d + 2)^ := Byte(v shr 16);
+    PByte(d + 3)^ := Byte(v shr 24);
+    PByte(d + 4)^ := Byte(v shr 32);
+    PByte(d + 5)^ := Byte(v shr 40);
+    PByte(d + 6)^ := Byte(v shr 48);
+    PByte(d + 7)^ := Byte(v shr 56);
+  end;
+end;
+
+
+{ ===== Console output helpers (hosted riscv32; portable) =====
+  The riscv32 backend has no inline write codegen (its bare-metal ESP profile
+  makes write/writeln a no-op); the HOSTED riscv32 leg lowers IR_WRITE /
+  IR_WRITELN to these buffer-based helpers instead. Self-contained: they format
+  into a local buffer and emit ONE PXXSysWrite — no write()-statement recursion
+  (which would lower right back to the backend paths being implemented).
+  Any backend could adopt them; see bug-riscv32-hosted-writeln-hello-hangs. }
+
+procedure PXXWritePad(n: NativeInt);
+var sp: Byte; r: Int64;
+begin
+  sp := 32;
+  while n > 0 do
+  begin
+    r := PXXSysWrite(1, Int64(@sp), 1);
+    n := n - 1;
+  end;
+end;
+
+procedure PXXWriteCharW(c: NativeInt; wid: NativeInt);
+var b: Byte; r: Int64;
+begin
+  if wid > 1 then PXXWritePad(wid - 1);
+  b := Byte(c);
+  r := PXXSysWrite(1, Int64(@b), 1);
+end;
+
+procedure PXXWriteNL;
+var b: Byte; r: Int64;
+begin
+  b := 10;
+  r := PXXSysWrite(1, Int64(@b), 1);
+end;
+
+{ [-]decimal of v (uns<>0: treat the 64-bit pattern as unsigned), right-aligned
+  to wid (0 = none). }
+procedure PXXWriteDecW(v: Int64; uns: NativeInt; wid: NativeInt);
+var buf: array[0..23] of Byte; i, n: Integer; neg: Boolean; u: UInt64; t, d: Int64; r: Int64;
+begin
+  neg := False;
+  if (uns = 0) and (v < 0) then
+  begin
+    neg := True;
+    u := UInt64(-v);          { INT_MIN-safe: two's-complement negate }
+  end
+  else
+    u := UInt64(v);
+  i := 24;
+  repeat
+    { u div 10 without an unsigned 64-bit divide (the 32-bit backends only
+      have SIGNED Int64 div): floor(u/10) = floor((u shr 1)/5) exactly, and
+      u shr 1 < 2^63 makes the signed divide safe for the full u64 range. }
+    t := Int64(u shr 1) div 5;
+    d := Int64(u) - t * 10;   { 0..9 (wrap-consistent) }
+    i := i - 1;
+    buf[i] := 48 + Byte(d);
+    u := UInt64(t);
+  until u = 0;
+  if neg then
+  begin
+    i := i - 1;
+    buf[i] := 45;             { '-' }
+  end;
+  n := 24 - i;
+  if wid > n then PXXWritePad(wid - n);
+  r := PXXSysWrite(1, Int64(@buf[i]), n);
+end;
+
+{ TRUE/FALSE (FPC console form), right-aligned to wid. }
+procedure PXXWriteBoolW(v: NativeInt; wid: NativeInt);
+var buf: array[0..4] of Byte; n: Integer; r: Int64;
+begin
+  if v <> 0 then
+  begin
+    buf[0] := 84; buf[1] := 82; buf[2] := 85; buf[3] := 69;            { TRUE }
+    n := 4;
+  end
+  else
+  begin
+    buf[0] := 70; buf[1] := 65; buf[2] := 76; buf[3] := 83; buf[4] := 69; { FALSE }
+    n := 5;
+  end;
+  if wid > n then PXXWritePad(wid - n);
+  r := PXXSysWrite(1, Int64(@buf[0]), n);
+end;
+
+{ Managed AnsiString handle (nil = empty), right-aligned to wid. }
+procedure PXXWriteStrMW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := 0;
+  if p <> nil then len := PWord(Int64(p) - 8)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+end;
+
+{ Copy a NUL-terminated C string into a FROZEN string buffer (8-byte length
+  prefix + chars), capped at 255 chars. ParamStr's hidden temp dest. }
+procedure PXXCStrToFrozen(dst: Pointer; src: Pointer);
+var len, i: Int64;
+begin
+  len := 0;
+  if src <> nil then
+    while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
+  PWord(dst)^ := len;
+  PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
+  i := 0;
+  while i < len do
+  begin
+    PByte(Int64(dst) + 8 + i)^ := PByte(Int64(src) + i)^;
+    i := i + 1;
+  end;
+end;
+
+{ Publish a managed handle into a string slot, releasing the old one. }
+procedure PXXStrPublish(slot: Pointer; h: Pointer);
+var oldp: Pointer;
+begin
+  oldp := Pointer(PWord(slot)^);
+  PWord(slot)^ := Int64(h);
+  PXXStrDecRef(oldp);
+end;
+
+{ Frozen string buffer (8-byte length prefix + chars), right-aligned to wid. }
+procedure PXXWriteFrozenW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := PWord(p)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
+end;
+
+{ NUL-terminated C string (PChar), nil-safe. }
+procedure PXXWriteCStr(p: Pointer);
+var len: Int64; r: Int64;
+begin
+  if p = nil then Exit;
+  len := 0;
+  while PByte(Int64(p) + len)^ <> 0 do len := len + 1;
+  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+end;
+
+
 {$ifndef PXX_ESP}
 { Per-target syscall wrappers for the file-load helper. AArch64 has no plain
   open/lseek/read/close in the legacy slots, so it uses openat(AT_FDCWD=-100).
@@ -438,22 +763,6 @@ begin
 {$endif}
 {$ifdef CPUAARCH64}
   Result := __pxxrawsyscall(62, fd, offset, whence);
-{$endif}
-end;
-
-function PXXSysRead(fd, buf, count: NativeInt): Int64;
-begin
-{$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(0, fd, buf, count);
-{$endif}
-{$ifdef CPU_I386}
-  Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(3, fd, buf, count);
-{$endif}
-{$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(63, fd, buf, count);
 {$endif}
 end;
 

@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (72)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -82,7 +82,6 @@ _none_
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
-| feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
@@ -135,7 +134,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (427)
+## done (432)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -317,6 +316,8 @@ _none_
 | bug-read-write-reserved-as-method-names | A | bug | `Read` / `Write` can't be used as method names (reserved) | — |
 | bug-record-byvalue-arg-truncation | A | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | A | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
+| bug-riscv32-chess-perft-runtime-corruption | A | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
+| bug-riscv32-hosted-writeln-hello-hangs | A | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
@@ -409,6 +410,7 @@ _none_
 | feature-cross-managed-aggregates | A | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-cross-managed-string-cow | A | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | A | feature | Full parameter/result ABI on cross targets | — |
+| feature-cross-readln-console-input | A | feature | Cross targets: readln (console input) unsupported — chess demo wall #3 | — |
 | feature-cross-selfhost-aarch64 | A | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-arm32 | A | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-i386 | A | feature | Cross self-host: i386 generated compiler runs under Linux | — |
@@ -514,6 +516,7 @@ _none_
 | feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
+| feature-riscv32-hosted-exceptions | A | feature | riscv32 hosted: exception machinery (raise/try) — last wall before chess | — |
 | feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
 | feature-riscv32-var-param-forwarding | A | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
 | feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
@@ -526,6 +529,7 @@ _none_
 | feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
 | feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
+| feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
 | feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-subrange-type-decl | A | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
@@ -638,7 +642,6 @@ _none_
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
 - [A] feature-signal-handlers
-- [A] feature-stackless-generator-record-locals
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
 - [B] feature-syscall-pthread-shim
