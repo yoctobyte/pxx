@@ -130,3 +130,6 @@
 2026-07-01T19:45:28Z  v130  ce22f69b91950a41a300fe120cda830f40bbbd2aef746433d649eefaaff3af1d  eb4e1cf51930297be01ab1b6334f4086661c465e  fix(typecast): narrowing ordinal rvalue casts now truncate correctly (v129)
 2026-07-01T19:56:22Z  v131  a3ab055cfb4e511ba40706c2f4efd193699c3b2d4f1c658b8fcae659e0789965  705e3f36ff346e2339a14eeb3a1ec52b772b8fac  fix(parser): var-section N-D array initializers (v130)
 2026-07-02T04:39:11Z  v132  6020f346e29a871ccd3ff4e220c8e72cf3b113382cc1a720ff8630e246c539b2  378a31e1124e26ece1562d0ee209b0160f32f70d  feat: dynamic-array Insert/Delete intrinsics (FPC clamp semantics)
+2026-07-02T05:23:24Z  v133  f7cbf5a6faf15941368218f540c8eccb4e53b99b4e5c4d1e35ae789bf026df9b  296e0af3da5ac851db8b17eed6e42f1e76e6ebc9  docs(progress): close feature-dynarray-insert-delete (v132), file managed-elements follow-up
+2026-07-02T05:32:30Z  v134  100723075a39ab36ab4c276446edbf62da55644b27964a9c436406bdc3eebdb5  296e0af3da5ac851db8b17eed6e42f1e76e6ebc9  docs(progress): close feature-dynarray-insert-delete (v132), file managed-elements follow-up
+2026-07-02T05:41:58Z  v135  df55564289149ffcd8955a93b8c0cef713aa3d6e76642fe60624383dca299ea3  296e0af3da5ac851db8b17eed6e42f1e76e6ebc9  docs(progress): close feature-dynarray-insert-delete (v132), file managed-elements follow-up
