@@ -5084,7 +5084,14 @@ begin
             else
               castTk := tyString;
           end
-          else if CaseEqual(name, 'string') then castTk := tyString;
+          else if CaseEqual(name, 'string') then castTk := tyString
+          else if FindEnumType(name) >= 0 then
+            { Ordinal->enum typecast, TEnum(intExpr). Enums are integer-sized
+              ordinals (cf. ParseTypeKind / the SizeOf branch above), so the
+              cast is a plain integer reinterpret; the enum->ordinal direction
+              already worked via the Integer(...) case above.
+              See bug-integer-to-enum-typecast-undefined-variable. }
+            castTk := tyInteger;
 
           if castTk <> tyUnknown then
           begin
