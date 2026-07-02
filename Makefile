@@ -2262,7 +2262,18 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 /tmp/test_riscv32_cusweep; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/cunsigned_div_mod_b123.c /tmp/test_riscv32_cudiv
 	tools/run_target.sh riscv32 /tmp/test_riscv32_cudiv; test "$$?" = "42"
-	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div ok"
+	./$(COMPILER) --target=riscv32 test/hello.pas /tmp/test_riscv32_hello
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_hello)" = "Hello, World!"
+	./$(COMPILER) --target=riscv32 test/test_stackless_gen.pas /tmp/test_riscv32_slg
+	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_riscv32_slg_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_slg)" = "$$(/tmp/test_riscv32_slg_x64)"
+	./$(COMPILER) --target=riscv32 test/test_readln.pas /tmp/test_riscv32_readln
+	./$(COMPILER) test/test_readln.pas /tmp/test_riscv32_readln_x64
+	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 /tmp/test_riscv32_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | /tmp/test_riscv32_readln_x64)"
+	./$(COMPILER) --target=riscv32 test/test_eof_stdin.pas /tmp/test_riscv32_eof
+	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_riscv32_eof_x64
+	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 /tmp/test_riscv32_eof)" = "$$(printf 'alpha\nbeta\ngamma' | /tmp/test_riscv32_eof_x64)"
+	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

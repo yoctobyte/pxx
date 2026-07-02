@@ -44,6 +44,8 @@ function __pxx_ddiv(a: Int64; b: Int64): Int64;
 function __pxx_dcmp(a: Int64; b: Int64): Integer;
 { conversions }
 function __pxx_i2d(v: Integer): Int64;         { signed int -> double }
+function __pxx_l2d(v: Int64): Int64;            { signed int64 -> double (RNE) }
+function __pxx_ul2d(v: Int64): Int64;           { unsigned 64-bit pattern -> double (RNE) }
 function __pxx_d2i(a: Int64): Integer;          { double -> signed int, trunc to 0 }
 function __pxx_s2d(a: LongWord): Int64;         { single -> double (exact repack) }
 function __pxx_d2s(a: Int64): LongWord;         { double -> single (round-near-even) }
@@ -501,6 +503,47 @@ begin
   else begin sign := 0; uv := Int64(v); end;
   { 32-bit ints are exact in double; seed exp = bias + mantbits + 3 = 1078 }
   Result := dRoundPack(sign, 1078, uv);
+end;
+
+function __pxx_l2d(v: Int64): Int64;
+var sign: Integer; uv: Int64;
+begin
+  if v = 0 then begin Result := 0; Exit; end;
+  if v < 0 then
+  begin
+    sign := 1;
+    if v = (Int64(-$7FFFFFFFFFFFFFFF) - 1) then
+    begin
+      { -2^63: |v| is not representable in Int64 — pre-halve (exact: bit 0 is
+        clear) and bump the seed exponent instead. }
+      Result := dRoundPack(1, 1079, Int64(1) shl 62);
+      Exit;
+    end;
+    uv := -v;
+  end
+  else
+  begin
+    sign := 0;
+    uv := v;
+  end;
+  { same linear seed as i2d; dRoundPack normalizes any magnitude with RNE }
+  Result := dRoundPack(sign, 1078, uv);
+end;
+
+function __pxx_ul2d(v: Int64): Int64;
+var m: Int64;
+begin
+  if v = 0 then begin Result := 0; Exit; end;
+  if v >= 0 then
+    Result := dRoundPack(0, 1078, v)
+  else
+  begin
+    { top bit set (value >= 2^63): halve logically and fold the lost bit into
+      the lsb as a sticky (dRoundPack's guard/round/sticky live in the low
+      bits, so RNE is preserved); seed exponent +1 compensates. }
+    m := Int64(UInt64(v) shr 1) or (v and 1);
+    Result := dRoundPack(0, 1079, m);
+  end;
 end;
 
 function __pxx_d2i(a: Int64): Integer;

@@ -1634,8 +1634,9 @@ begin
       below and work for the bare ET_EXEC image on both riscv32 (auipc +
       inline literal) and xtensa (L32R inline literal) — each IR_PROCADDR
       emits a Patch32-friendly word. Method fixups remain unsupported. }
-    if MethodFixCount > 0 then
-      Error('target esp32: method-address fixups not yet supported');
+    { Method-address fixups (VMT slots in the data blob) use the generic
+      PatchDataU64 loop below — 8-byte slots, 32-bit address in the low dword,
+      same as i386/arm32. Nothing esp-specific remains. }
   end;
 
   phnum := 1;

@@ -441,7 +441,9 @@ begin
     this (e.g. a hosted RTOS on xtensa later). }
   if not PlatformExplicit then
   begin
-    if EspBareBoot or (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    { riscv32 is dual-role: bare ESP32-C3 (--esp-profile=bare) OR hosted linux
+      (qemu-user) — only the bare profile is esp. xtensa has no hosted leg. }
+    if EspBareBoot or (TargetArch = TARGET_XTENSA) then
       TargetPlatform := PLATFORM_ESP
     else
       TargetPlatform := PLATFORM_POSIX;
@@ -490,8 +492,8 @@ begin
     compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
     ESP targets select their own backend and are excluded from default RTL. }
-  if (not NoDefaultRtl) and
-     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
+     ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
   begin
     { ExeDir-anchored (the installed layout: <root>/compiler/ -> ../lib/...) plus
       a CWD-relative fallback, mirroring ParseUsesUnit's own search chain. The

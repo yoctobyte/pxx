@@ -510,7 +510,12 @@ begin
   begin
     if (ntk = tyInt64) or (ntk = tyUInt64) then
     begin
-      Error('target riscv32: Int64-to-float conversion not yet supported');
+      EmitNode64RISCV32(node);                 { a0:a1 = 64-bit int }
+      if ntk = tyUInt64 then procIdx := FindProc('__pxx_ul2d')
+      else procIdx := FindProc('__pxx_l2d');
+      if procIdx < 0 then Error('compiler error: __pxx_l2d not found (uses softfloat?)');
+      EmitCallProc(procIdx);                   { a0:a1 = double bits }
+      EmitFloatConvRISCV32(tyDouble, wantTk);
       Exit;
     end;
     IREmitNodeRISCV32(node);                   { a0 = 32-bit int }
@@ -1011,8 +1016,28 @@ begin
             rv32_xori(reg_a0, reg_a0, 1);
           end;
         end
+        else if op = Ord(tkIn) then
+        begin
+          { Set membership: a0 = element, a1 = set address. Branch-free:
+            in-range flag (elem < 256) gates both the byte offset (so an
+            out-of-range element never derefs past the 32-byte set) and the
+            result bit. Result 0/1 -> a0. }
+          rv32_sltiu(reg_t2, reg_a0, 256);        { t2 = in-range (0/1) }
+          rv32_sub(reg_t0, reg_zero, reg_t2);     { t0 = 0 or 0xFFFFFFFF mask }
+          rv32_srli(reg_t1, reg_a0, 3);           { byte index }
+          rv32_and(reg_t1, reg_t1, reg_t0);       { clamp to 0 when out of range }
+          rv32_add(reg_t1, reg_a1, reg_t1);
+          rv32_lbu(reg_t1, reg_t1, 0);            { set byte }
+          rv32_andi(reg_t0, reg_a0, 7);           { bit index }
+          rv32_srl(reg_t1, reg_t1, reg_t0);
+          rv32_andi(reg_t1, reg_t1, 1);
+          rv32_and(reg_a0, reg_t1, reg_t2);
+        end
         else
+        begin
+          ErrorIdent := 'op ' + MangleSuffix(op);
           Error('target riscv32: unsupported binary operator');
+        end;
       end;
 
     IR_CALL:
@@ -1069,8 +1094,13 @@ begin
           if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
             Error('target riscv32: SetLength only supports dynamic arrays yet');
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target riscv32: SetLength on a var-array parameter not yet supported');
-          EmitSlotAddrRISCV32(reg_a0, si);    { a0 = slot address (not the handle) }
+          begin
+            { var-array param: the frame slot holds the CALLER's slot address }
+            EmitSlotAddrRISCV32(reg_a0, si);
+            rv32_lw(reg_a0, reg_a0, 0);
+          end
+          else
+            EmitSlotAddrRISCV32(reg_a0, si);  { a0 = slot address (not the handle) }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push slot }
           IREmitNodeRISCV32(IRA[valNode]);    { a0 = n }
           rv32_addi(reg_a1, reg_a0, 0);       { a1 = n }
@@ -1142,6 +1172,15 @@ begin
             procIdx := FindProc(sVal);
             if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
             EmitCallProc(procIdx);                  { a0:a1 = double result }
+            Exit;
+          end;
+          if procIdx = -210 then
+          begin
+            { bare `Eof` (stdin) -> PXXStdinEof: Boolean (portable builtin,
+              shares the peek byte with PXXReadLine). Hosted only. }
+            procIdx := FindProc('PXXStdinEof');
+            if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
+            EmitCallProc(procIdx);
             Exit;
           end;
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
@@ -1216,7 +1255,27 @@ begin
         end;
 
         if nArgs > 8 then
-          Error('target riscv32: more than 8 call argument words not supported yet');
+        begin
+          { Words 8+ pass on the stack: keep the WHOLE pushed word block live
+            across the call (the callee reads word k >= 8 at
+            [entry_sp + (nArgs-1-k)*4], see the parser.inc rv32 param spill),
+            load a0..a7 from their slots, and free everything after return. }
+          for i := 0 to 7 do
+            rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             RetViaHiddenDest(Procs[procIdx].RetType) then
+          begin
+            rv32_lw(reg_t1, reg_sp, nArgs * 4);        { hidden dest (deepest) }
+            EmitCallProc(procIdx);
+            rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);
+          end
+          else
+          begin
+            EmitCallProc(procIdx);
+            rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          end;
+          Exit;
+        end;
 
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
@@ -1233,9 +1292,153 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_SYSCALL:
+      begin
+        { Raw linux syscall (hosted qemu-user): args (nr, a0..a5) pushed, then
+          popped into a7 (number) and a0..a5. 32-bit result in a0,
+          sign-extended into a0:a1 (Int64 result; negative = -errno). }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeRISCV32(IRA[argNode]);
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        rv32_lw(reg_a7, reg_sp, (nArgs - 1) * 4);          { syscall number }
+        for i := 1 to nArgs - 1 do
+          rv32_lw(reg_a0 + i - 1, reg_sp, (nArgs - 1 - i) * 4);
+        rv32_addi(reg_sp, reg_sp, nArgs * 4);
+        EmitI32($00000073);                                { ecall }
+        rv32_srai(reg_a1, reg_a0, 31);
+      end;
+
     IR_WRITE, IR_WRITELN:
       begin
-        { Bare-metal: write/writeln does nothing. }
+        if EspBareBoot then
+        begin
+          { Bare-metal: write/writeln does nothing (UART output is explicit
+            MMIO in user code, see test_esp_bare.pas). }
+        end
+        else if IRKind[node] = IR_WRITELN then
+        begin
+          procIdx := FindProc('PXXWriteNL');
+          if procIdx < 0 then Error('compiler error: PXXWriteNL not found');
+          EmitCallProc(procIdx);
+        end
+        else
+        begin
+          { Hosted: route every write argument through the portable
+            buffer-based builtin helpers (PXXWrite*W in builtinheap.pas) —
+            no inline write codegen on this backend.
+            See bug-riscv32-hosted-writeln-hello-hangs. }
+          valNode := IRA[node];
+          j := IRB[node];                    { field width, 0 = none }
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            si := InternStr(sVal);
+            if (j > 0) and (j > Strs[si].Len) then
+            begin
+              EmitLoadImmRISCV32(reg_a0, j - Strs[si].Len);
+              procIdx := FindProc('PXXWritePad');
+              if procIdx < 0 then Error('compiler error: PXXWritePad not found');
+              EmitCallProc(procIdx);
+            end;
+            if Strs[si].Len > 0 then
+            begin
+              { write(1, data+8, len) — inline syscall, no helper needed }
+              EmitLoadImmRISCV32(reg_a0, 1);
+              EmitLoadDataRefRISCV32(reg_a1, Strs[si].Offset + 8);
+              EmitLoadImmRISCV32(reg_a2, Strs[si].Len);
+              EmitLoadImmRISCV32(reg_a7, 64);          { __NR_write }
+              EmitI32($00000073);                      { ecall }
+            end;
+          end
+          else
+          begin
+            tk := IntToTypeKind(IRTk[node]);
+            if IRC[node] = -3 then
+            begin
+              { write(PChar): NUL-terminated C string }
+              IREmitNodeRISCV32(valNode);
+              procIdx := FindProc('PXXWriteCStr');
+              if procIdx < 0 then Error('compiler error: PXXWriteCStr not found');
+              EmitCallProc(procIdx);
+            end
+            else if TypeIsFloat(tk) then
+            begin
+              { a0:a1 = double bits; pass their stack address to the portable
+                float writers (which format via write()-free helpers here). }
+              EmitFloatOperandRISCV32(valNode, tyDouble);
+              rv32_addi(reg_sp, reg_sp, -8);
+              rv32_sw(reg_a0, reg_sp, 0);
+              rv32_sw(reg_a1, reg_sp, 4);
+              rv32_addi(reg_a0, reg_sp, 0);            { a0 = &double }
+              i := IRC[node];                          { decimals }
+              if i >= 0 then
+              begin
+                EmitLoadImmRISCV32(reg_a1, i);
+                procIdx := FindProc('PXXWriteFloatFixed');
+              end
+              else if i = -2 then
+                procIdx := FindProc('PXXWriteFloatNat')
+              else
+                procIdx := FindProc('PXXWriteFloatSci');
+              if procIdx < 0 then Error('compiler error: float writer not found');
+              EmitCallProc(procIdx);
+              rv32_addi(reg_sp, reg_sp, 8);
+            end
+            else if tk = tyChar then
+            begin
+              IREmitNodeRISCV32(valNode);
+              EmitLoadImmRISCV32(reg_a1, j);
+              procIdx := FindProc('PXXWriteCharW');
+              if procIdx < 0 then Error('compiler error: PXXWriteCharW not found');
+              EmitCallProc(procIdx);
+            end
+            else if tk = tyBoolean then
+            begin
+              IREmitNodeRISCV32(valNode);
+              EmitLoadImmRISCV32(reg_a1, j);
+              procIdx := FindProc('PXXWriteBoolW');
+              if procIdx < 0 then Error('compiler error: PXXWriteBoolW not found');
+              EmitCallProc(procIdx);
+            end
+            else if tk = tyAnsiString then
+            begin
+              IREmitNodeRISCV32(valNode);              { a0 = handle }
+              EmitLoadImmRISCV32(reg_a1, j);
+              procIdx := FindProc('PXXWriteStrMW');
+              if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
+              EmitCallProc(procIdx);
+            end
+            else if Is64BitRISCV32(tk) or TypeIsOrdinal(tk) or (tk = tyUnknown) then
+            begin
+              { PXXWriteDecW(v: Int64; uns, wid) — v = a0:a1 (2 words) }
+              if Is64BitRISCV32(tk) then
+                EmitNode64RISCV32(valNode)             { a0:a1 = value }
+              else
+              begin
+                IREmitNodeRISCV32(valNode);
+                if (tk <> tyUnknown) and not TypeSigned(tk) then
+                  EmitLoadImmRISCV32(reg_a1, 0)        { zero-extend }
+                else
+                  rv32_srai(reg_a1, reg_a0, 31);       { sign-extend }
+              end;
+              if (tk <> tyUnknown) and not TypeSigned(tk) then
+                EmitLoadImmRISCV32(reg_a2, 1)
+              else
+                EmitLoadImmRISCV32(reg_a2, 0);
+              EmitLoadImmRISCV32(reg_a3, j);
+              procIdx := FindProc('PXXWriteDecW');
+              if procIdx < 0 then Error('compiler error: PXXWriteDecW not found');
+              EmitCallProc(procIdx);
+            end
+            else
+              Error('target riscv32: write of this type not supported (hosted)');
+          end;
+        end;
       end;
 
     IR_TERMINATE:
@@ -1290,11 +1493,20 @@ begin
           EmitLoadImmRISCV32(reg_t0, Integer($80000000));
           rv32_xor(reg_a0, reg_a0, reg_t0);
         end
+        else if Is64BitRISCV32(tk) then
+        begin
+          { Full 64-bit two's-complement negate: lo' = 0-lo, hi' = 0-hi-borrow
+            (borrow = lo <> 0). Was low-word-only — unary minus on a runtime
+            Int64 left the high word stale (surfaced as garbage decimals from
+            PXXWriteDecW's u := -v). }
+          EmitNode64RISCV32(IRA[node]);          { a0:a1 = value }
+          rv32_sltu(reg_t1, reg_zero, reg_a0);   { borrow = lo <> 0 }
+          rv32_sub(reg_a0, reg_zero, reg_a0);
+          rv32_sub(reg_a1, reg_zero, reg_a1);
+          rv32_sub(reg_a1, reg_a1, reg_t1);
+        end
         else
         begin
-          { LANDMINE: low-word-only — negates a0, ignores a1, so unary minus on a
-            runtime Int64/UInt64 is WRONG (high word stale). Harmless for the
-            softfloat kernels (never integer-negate an Int64). }
           IREmitNodeRISCV32(IRA[node]);
           rv32_sub(reg_a0, reg_zero, reg_a0);
         end;
@@ -1352,6 +1564,146 @@ begin
         rv32_lw(reg_t0, reg_sp, nArgs * 4);              { callee (deepest) }
         rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);      { drop args + callee }
         rv32_jalr(reg_ra, reg_t0, 0);
+      end;
+
+    IR_SET_LIT:
+      EmitLoadDataRefRISCV32(reg_a0, Integer(IRIVal[node]));  { a0 = set blob addr }
+
+    IR_SET_COPY:
+      begin
+        { Copy the 32-byte set from src (IRB) to dest (IRA), 8 words. }
+        IREmitNodeRISCV32(IRB[node]);            { a0 = source addr }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRA[node]);            { a0 = dest addr }
+        rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = src }
+        for i := 0 to 7 do
+        begin
+          rv32_lw(reg_t0, reg_a1, i * 4);
+          rv32_sw(reg_t0, reg_a0, i * 4);
+        end;
+      end;
+
+    IR_SET_BINOP:
+      begin
+        { Set +/-/* over 8 words into the BSS scratch (IRIVal). }
+        IREmitNodeRISCV32(IRA[node]);            { a0 = lhs addr }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRB[node]);            { a0 = rhs addr }
+        rv32_addi(reg_a1, reg_a0, 0);            { a1 = rhs }
+        rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = lhs }
+        EmitLoadGlobAddrRISCV32(reg_a2, Integer(IRIVal[node]));     { a2 = scratch }
+        for i := 0 to 7 do
+        begin
+          rv32_lw(reg_t0, reg_a0, i * 4);
+          rv32_lw(reg_t1, reg_a1, i * 4);
+          if IntToTokenKind(IRC[node]) = tkPlus then
+            rv32_or(reg_t0, reg_t0, reg_t1)
+          else if IntToTokenKind(IRC[node]) = tkStar then
+            rv32_and(reg_t0, reg_t0, reg_t1)
+          else if IntToTokenKind(IRC[node]) = tkMinus then
+          begin
+            rv32_xori(reg_t1, reg_t1, -1);       { not rhs }
+            rv32_and(reg_t0, reg_t0, reg_t1);
+          end;
+          rv32_sw(reg_t0, reg_a2, i * 4);
+        end;
+        rv32_addi(reg_a0, reg_a2, 0);            { result addr }
+      end;
+
+    IR_SET_CMP:
+      begin
+        { Compare two 32-byte sets. t3 = accumulated differences, t4 =
+          subset-direction violations (mirrors the aarch64 shape, 8 words). }
+        IREmitNodeRISCV32(IRA[node]);            { a0 = lhs addr }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRB[node]);            { a0 = rhs addr }
+        rv32_addi(reg_a1, reg_a0, 0);            { a1 = rhs }
+        rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = lhs }
+        rv32_addi(reg_t3, reg_zero, 0);          { differences }
+        rv32_addi(reg_t4, reg_zero, 0);          { violations }
+        for i := 0 to 7 do
+        begin
+          rv32_lw(reg_t0, reg_a0, i * 4);        { lhs word }
+          rv32_lw(reg_t1, reg_a1, i * 4);        { rhs word }
+          rv32_xor(reg_t2, reg_t0, reg_t1);
+          rv32_or(reg_t3, reg_t3, reg_t2);
+          if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+          begin
+            rv32_xori(reg_t2, reg_t1, -1);       { not rhs }
+            rv32_and(reg_t2, reg_t0, reg_t2);    { lhs and not rhs }
+            rv32_or(reg_t4, reg_t4, reg_t2);
+          end
+          else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            rv32_xori(reg_t2, reg_t0, -1);       { not lhs }
+            rv32_and(reg_t2, reg_t1, reg_t2);    { rhs and not lhs }
+            rv32_or(reg_t4, reg_t4, reg_t2);
+          end;
+        end;
+        if IRC[node] = Ord(tkEq) then
+          rv32_sltiu(reg_a0, reg_t3, 1)          { diffs = 0 }
+        else if IRC[node] = Ord(tkNeq) then
+        begin
+          rv32_sltu(reg_a0, reg_zero, reg_t3);   { diffs <> 0 }
+        end
+        else if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkGe)) then
+          rv32_sltiu(reg_a0, reg_t4, 1)          { no violations }
+        else
+        begin
+          { tkLt / tkGt: proper = subset AND unequal }
+          rv32_sltiu(reg_t0, reg_t4, 1);
+          rv32_sltu(reg_t1, reg_zero, reg_t3);
+          rv32_and(reg_a0, reg_t0, reg_t1);
+        end;
+      end;
+
+    IR_READLINE:
+      begin
+        procIdx := FindProc('PXXReadLine');
+        if procIdx < 0 then Error('compiler error: PXXReadLine not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_DISCARD:
+      begin
+        procIdx := FindProc('PXXReadDiscard');
+        if procIdx < 0 then Error('compiler error: PXXReadDiscard not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_VAR:
+      begin
+        { Parse one read/readln target from the shared line buffer via the
+          portable builtin helpers. A managed string wants its SLOT address —
+          force lvalue-write mode (mirrors the other backends). }
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeRISCV32(IRA[node]);    { a0 = slot address }
+          InLValueWrite := savedLVW;
+          procIdx := FindProc('PXXReadVarStrM');
+          if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found');
+          EmitCallProc(procIdx);
+        end
+        else if tk = tyChar then
+        begin
+          IREmitNodeRISCV32(IRA[node]);    { a0 = target address }
+          procIdx := FindProc('PXXReadVarChar');
+          if procIdx < 0 then Error('compiler error: PXXReadVarChar not found');
+          EmitCallProc(procIdx);
+        end
+        else if TypeIsOrdinal(tk) then
+        begin
+          IREmitNodeRISCV32(IRA[node]);    { a0 = target address }
+          EmitLoadImmRISCV32(reg_a1, TypeSize(tk));
+          procIdx := FindProc('PXXReadVarInt');
+          if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
+          EmitCallProc(procIdx);
+        end
+        else
+          Error('target riscv32: read/readln target type not supported');
       end;
 
     IR_SETLEN_STR:
@@ -1440,6 +1792,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
 
       else

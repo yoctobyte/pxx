@@ -58,6 +58,9 @@ function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, s
 
 implementation
 
+{$ifdef CPU_AARCH64}{$define PAL_GENERIC_SYSCALLS}{$endif}
+{$ifdef CPU_RISCV32}{$define PAL_GENERIC_SYSCALLS}{$endif}
+
 const
   PAL_PLATFORM_POSIX = 1;
 
@@ -105,6 +108,21 @@ const
   SYS_sendto=290; SYS_recvfrom=292; SYS_ppoll=336;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
+{$endif}
+{$ifdef CPU_RISCV32}
+  { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
+    lseek is llseek(62) with a split 64-bit offset — PalSeek below only passes
+    small offsets, and qemu-user tolerates the plain form for them; the
+    time-related calls keep the legacy generic numbers qemu implements. }
+  SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
+  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
+  SYS_unlinkat = 35; SYS_renameat = 38;
+  SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
+  SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
+  SYS_getsockopt=209; SYS_getsockname=204;
+  SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
+  SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
+  SYS_clock_gettime = 113;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_REMOVEDIR = $200;
@@ -548,7 +566,7 @@ end;
 
 function PalBackendVfork: Integer;
 begin
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
   Result := Integer(__pxxrawsyscall(SYS_clone, $11, 0, 0, 0, 0, 0)); { SIGCHLD only -> fork (own COW address space) }
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_fork, 0, 0, 0, 0, 0, 0));
@@ -567,7 +585,7 @@ end;
 
 function PalBackendDup2(oldFd, newFd: Integer): Integer;
 begin
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
   Result := Integer(__pxxrawsyscall(SYS_dup3, oldFd, newFd, 0, 0, 0, 0));
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_dup2, oldFd, newFd, 0, 0, 0, 0));
@@ -592,7 +610,7 @@ begin
 { Real fork (not vfork): the child gets its own copy-on-write address space, so
   it can safely run this Pascal child path (dup2/close/execve) without clobbering
   the parent's stack -- the shared-VM vfork hazard the ticket warned about. }
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
   pid := Integer(__pxxrawsyscall(SYS_clone, $11, 0, 0, 0, 0, 0)); { SIGCHLD only -> fork }
 {$else}
   pid := Integer(__pxxrawsyscall(SYS_fork, 0, 0, 0, 0, 0, 0));
@@ -603,7 +621,7 @@ begin
     { Child process }
     if stdinReadFd <> -1 then
     begin
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
       res := Integer(__pxxrawsyscall(SYS_dup3, stdinReadFd, 0, 0, 0, 0, 0));
 {$else}
       res := Integer(__pxxrawsyscall(SYS_dup2, stdinReadFd, 0, 0, 0, 0, 0));
@@ -614,7 +632,7 @@ begin
 
     if stdoutWriteFd <> -1 then
     begin
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
       res := Integer(__pxxrawsyscall(SYS_dup3, stdoutWriteFd, 1, 0, 0, 0, 0));
 {$else}
       res := Integer(__pxxrawsyscall(SYS_dup2, stdoutWriteFd, 1, 0, 0, 0, 0));
@@ -632,7 +650,7 @@ begin
 {$ifdef CPU_I386}
     res := Integer(__pxxrawsyscall(1, 127, 0, 0, 0, 0, 0));
 {$endif}
-{$ifdef CPU_AARCH64}
+{$ifdef PAL_GENERIC_SYSCALLS}
     res := Integer(__pxxrawsyscall(93, 127, 0, 0, 0, 0, 0));
 {$endif}
 {$ifdef CPU_ARM32}

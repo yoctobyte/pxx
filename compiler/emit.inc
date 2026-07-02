@@ -170,8 +170,17 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    { Bare-metal: no exit syscall — park in a self-loop. }
-    EmitI32($0000006F); { jal zero, 0 }
+    if EspBareBoot then
+      { Bare-metal: no exit syscall — park in a self-loop. }
+      EmitI32($0000006F) { jal zero, 0 }
+    else
+    begin
+      { Hosted linux (qemu-user): exit_group(94). Raw encodings — rv32enc.inc
+        is included after this file. imm12 covers the 0..255 exit-code range. }
+      EmitI32($05E00893);                              { addi a7, x0, 94 }
+      EmitI32($00000513 or ((code and $FF) shl 20));   { addi a0, x0, code }
+      EmitI32($00000073);                              { ecall }
+    end;
     Exit;
   end;
   if TargetArch = TARGET_I386 then

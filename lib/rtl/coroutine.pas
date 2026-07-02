@@ -21,13 +21,16 @@ unit coroutine;
 
 interface
 
+{$ifdef CPUX86_64}
 function CoAlloc(bodyAddr: Pointer; nparams, p0, p1, p2, p3: Int64): Pointer;
 function CoNext(g: Pointer): Boolean;
 function CoCurrent(g: Pointer): Int64;
 procedure CoFree(g: Pointer);
+{$endif}
 
 implementation
 
+{$ifdef CPUX86_64}
 const
   CO_STACK = 65536;   { per-generator heap stack (matches CO_STACK_BYTES) }
 
@@ -97,5 +100,10 @@ begin
   FreeMem(Pointer(PW(inst + 32)^));   { heap stack }
   FreeMem(g);                          { instance }
 end;
+{$endif}
+{ Non-x86-64 targets: the stackful backend is x86-64-only (the compiler rejects
+  `; generator;` without `stackless` there), so this unit compiles to nothing —
+  letting a program that says `uses coroutine` still build for cross targets
+  when its generators are all stackless. }
 
 end.

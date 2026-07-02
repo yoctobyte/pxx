@@ -14180,33 +14180,63 @@ begin
   else if TargetArch = TARGET_RISCV32 then
   begin
     { RV32 word-based convention: args arrive in a0..a7 (word k in a[k]); each
-      scalar param is one word, a by-value Int64/UInt64 is two (lo then hi). The
-      call side (ir_codegen_riscv32.inc IR_CALL) pushes the matching word layout.
-      Up to 8 words total (no stack args yet). }
+      scalar param is one word, a by-value Int64/UInt64 is two (lo then hi).
+      Words 8+ stay on the CALLER's stack (it keeps the whole pushed word
+      block live across the call when the total exceeds 8): word k sits at
+      [entry_sp + (pnWords-1-k)*4] = [s0 + 16 + (pnWords-1-k)*4] after the
+      ra/s0 prologue. The call side (ir_codegen_riscv32.inc IR_CALL) pushes
+      the matching layout. }
+    pnWords := 0;
+    for i := 0 to nparams-1 do
+      if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyUInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyDouble)) and
+         (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
+        Inc(pnWords, 2)
+      else
+        Inc(pnWords, 1);
     pw := 0;
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
-      if pw >= 8 then
-        Error('target riscv32: more than 8 parameter words not yet supported');
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
-        rv32_sw(reg_a0 + pw, reg_t0, 0);       { lo (word pw) }
-        if pw + 1 >= 8 then
-          Error('target riscv32: more than 8 parameter words not yet supported');
-        rv32_sw(reg_a0 + pw + 1, reg_t0, 4);   { hi (word pw+1) }
+        if pw < 8 then
+          rv32_sw(reg_a0 + pw, reg_t0, 0)                       { lo (word pw) }
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - pw) * 4);
+          rv32_sw(reg_t1, reg_t0, 0);
+        end;
+        if pw + 1 < 8 then
+          rv32_sw(reg_a0 + pw + 1, reg_t0, 4)                   { hi (word pw+1) }
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - (pw + 1)) * 4);
+          rv32_sw(reg_t1, reg_t0, 4);
+        end;
         Inc(pw, 2);
       end
       else
       begin
-        if sz = 1 then rv32_sb(reg_a0 + pw, reg_t0, 0)
-        else if sz = 2 then rv32_sh(reg_a0 + pw, reg_t0, 0)
-        else rv32_sw(reg_a0 + pw, reg_t0, 0);
+        if pw < 8 then
+        begin
+          if sz = 1 then rv32_sb(reg_a0 + pw, reg_t0, 0)
+          else if sz = 2 then rv32_sh(reg_a0 + pw, reg_t0, 0)
+          else rv32_sw(reg_a0 + pw, reg_t0, 0);
+        end
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - pw) * 4);
+          if sz = 1 then rv32_sb(reg_t1, reg_t0, 0)
+          else if sz = 2 then rv32_sh(reg_t1, reg_t0, 0)
+          else rv32_sw(reg_t1, reg_t0, 0);
+        end;
         Inc(pw, 1);
       end;
     end;
@@ -15396,7 +15426,7 @@ begin
       Close resolve. Same gating as the program-level default surface; idempotent
       via the CompiledUnits guard, so an explicit `uses textfile` is harmless. }
     if unitNeedsText and (not NoDefaultRtl) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
     begin
       ParseUsesUnit('builtin');
       ParseUsesUnit('textfile');
@@ -15972,7 +16002,7 @@ begin
     avoids building a string for every token. An explicit `uses textfile` still
     loads it regardless (handled in the token loop below). }
   if (not NoDefaultRtl) and
-     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+     (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
   begin
     usesTextfile := False;
     for i := 0 to TokCount - 1 do
@@ -16135,7 +16165,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Copy(...)` on a string lowers to the __pxxStrCopy substring helper in
       the builtin unit (see ParseFactor). Pull the unit so the helper resolves;
@@ -16143,7 +16173,7 @@ begin
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /
       __pxxStrInsert in the builtin unit (see ParseStatementAST). Pull the unit so
@@ -16152,7 +16182,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Abs(...)` / `Sqr(...)` lower to the __pxxAbs*/__pxxSqr* helpers in the
       builtin unit (see ParseFactor). Pull the unit so they resolve; a user
@@ -16160,14 +16190,14 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'abs') or CaseEqual(GetTokenStr(i), 'sqr')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `UpCase(...)` / `Pos(...)` lower to __pxxUpCase / __pxxPos in the
       builtin unit (see ParseFactor); pull it so they resolve. ESP can't. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Move(...)` / `FillChar(...)`: System memory primitives live in the
       builtin unit (FPC keeps them in System, no `uses` needed). Pull the unit
@@ -16176,7 +16206,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
       x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
@@ -16185,7 +16215,7 @@ begin
        (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
     if (Tokens[i].Kind = tkUses) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { A PChar/PAnsiChar in scope may be converted to string — implicitly in a
       `string` assignment or string-param call, or explicitly via string(pc).
@@ -16195,7 +16225,7 @@ begin
       builtins) never drags in builtin.pas. ESP can't compile builtin. }
     if (not NoDefaultRtl) and (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'pchar') or CaseEqual(GetTokenStr(i), 'pansichar')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     Inc(i);
   end;
@@ -16301,6 +16331,14 @@ begin
   { Compile the runtime units before user declarations, so their proc bodies
     land in the proc region after the entry jump and are resolvable. builtinheap
     (allocator + PXXStr*) first, then the Str/Val/Variant conversions. }
+  { The ESP-class targets have no FPU codegen: every float op lowers to the
+    __pxx_* soft-float kernels. Pull the softfloat unit implicitly (like
+    builtinheap) so hosted riscv32 programs with floats (sysutils pulls float
+    code) do not each need a manual `uses softfloat`. FIRST — the builtinheap/
+    builtin float bodies compile against the kernels. }
+  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+     (needHeapUnit or needsBuiltin) then
+    ParseUsesUnit('softfloat');
   if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   { Implicit text-file unit (classic `Text`/Assign/Reset/... surface), loaded

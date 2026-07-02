@@ -404,45 +404,9 @@ begin
   Result := Pointer(d);
 end;
 
-{$ifndef PXX_ESP}
-{ Per-target syscall wrappers for the file-load helper. AArch64 has no plain
-  open/lseek/read/close in the legacy slots, so it uses openat(AT_FDCWD=-100).
-  i386/arm32 use 32-bit lseek (files < 2 GiB); good enough for source loads.
-  ESP has no filesystem here, so the whole group is excluded. }
-function PXXSysOpenRO(path: Pointer): Int64;
-begin
-{$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(2, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_I386}
-  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
-{$endif}
-{$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
-{$endif}
-end;
-
-function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
-begin
-{$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(8, fd, offset, whence);
-{$endif}
-{$ifdef CPU_I386}
-  Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(19, fd, offset, whence);
-{$endif}
-{$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(62, fd, offset, whence);
-{$endif}
-end;
-
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
+  Result := 0;   { xtensa (bare-only): no read syscall — dead stub there }
 {$ifdef CPUX86_64}
   Result := __pxxrawsyscall(0, fd, buf, count);
 {$endif}
@@ -455,23 +419,32 @@ begin
 {$ifdef CPUAARCH64}
   Result := __pxxrawsyscall(63, fd, buf, count);
 {$endif}
+{$ifdef CPU_RISCV32}
+  Result := __pxxrawsyscall(63, fd, buf, count);   { hosted linux (qemu-user) }
+{$endif}
 end;
 
-function PXXSysClose(fd: NativeInt): Int64;
+
+function PXXSysWrite(fd, buf, count: NativeInt): Int64;
 begin
+  Result := 0;
 {$ifdef CPUX86_64}
-  Result := __pxxrawsyscall(3, fd);
+  Result := __pxxrawsyscall(1, fd, buf, count);
 {$endif}
 {$ifdef CPU_I386}
-  Result := __pxxrawsyscall(6, fd);
+  Result := __pxxrawsyscall(4, fd, buf, count);
 {$endif}
 {$ifdef CPU_ARM32}
-  Result := __pxxrawsyscall(6, fd);
+  Result := __pxxrawsyscall(4, fd, buf, count);
 {$endif}
 {$ifdef CPUAARCH64}
-  Result := __pxxrawsyscall(57, fd);
+  Result := __pxxrawsyscall(64, fd, buf, count);
+{$endif}
+{$ifdef CPU_RISCV32}
+  Result := __pxxrawsyscall(64, fd, buf, count);   { hosted linux (qemu-user) }
 {$endif}
 end;
+
 
 { ===== Console input (read/readln) for the cross targets =====
   x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
@@ -610,6 +583,167 @@ begin
     PByte(d + 6)^ := Byte(v shr 48);
     PByte(d + 7)^ := Byte(v shr 56);
   end;
+end;
+
+
+{ ===== Console output helpers (hosted riscv32; portable) =====
+  The riscv32 backend has no inline write codegen (its bare-metal ESP profile
+  makes write/writeln a no-op); the HOSTED riscv32 leg lowers IR_WRITE /
+  IR_WRITELN to these buffer-based helpers instead. Self-contained: they format
+  into a local buffer and emit ONE PXXSysWrite — no write()-statement recursion
+  (which would lower right back to the backend paths being implemented).
+  Any backend could adopt them; see bug-riscv32-hosted-writeln-hello-hangs. }
+
+procedure PXXWritePad(n: NativeInt);
+var sp: Byte; r: Int64;
+begin
+  sp := 32;
+  while n > 0 do
+  begin
+    r := PXXSysWrite(1, Int64(@sp), 1);
+    n := n - 1;
+  end;
+end;
+
+procedure PXXWriteCharW(c: NativeInt; wid: NativeInt);
+var b: Byte; r: Int64;
+begin
+  if wid > 1 then PXXWritePad(wid - 1);
+  b := Byte(c);
+  r := PXXSysWrite(1, Int64(@b), 1);
+end;
+
+procedure PXXWriteNL;
+var b: Byte; r: Int64;
+begin
+  b := 10;
+  r := PXXSysWrite(1, Int64(@b), 1);
+end;
+
+{ [-]decimal of v (uns<>0: treat the 64-bit pattern as unsigned), right-aligned
+  to wid (0 = none). }
+procedure PXXWriteDecW(v: Int64; uns: NativeInt; wid: NativeInt);
+var buf: array[0..23] of Byte; i, n: Integer; neg: Boolean; u: UInt64; t, d: Int64; r: Int64;
+begin
+  neg := False;
+  if (uns = 0) and (v < 0) then
+  begin
+    neg := True;
+    u := UInt64(-v);          { INT_MIN-safe: two's-complement negate }
+  end
+  else
+    u := UInt64(v);
+  i := 24;
+  repeat
+    { u div 10 without an unsigned 64-bit divide (the 32-bit backends only
+      have SIGNED Int64 div): floor(u/10) = floor((u shr 1)/5) exactly, and
+      u shr 1 < 2^63 makes the signed divide safe for the full u64 range. }
+    t := Int64(u shr 1) div 5;
+    d := Int64(u) - t * 10;   { 0..9 (wrap-consistent) }
+    i := i - 1;
+    buf[i] := 48 + Byte(d);
+    u := UInt64(t);
+  until u = 0;
+  if neg then
+  begin
+    i := i - 1;
+    buf[i] := 45;             { '-' }
+  end;
+  n := 24 - i;
+  if wid > n then PXXWritePad(wid - n);
+  r := PXXSysWrite(1, Int64(@buf[i]), n);
+end;
+
+{ TRUE/FALSE (FPC console form), right-aligned to wid. }
+procedure PXXWriteBoolW(v: NativeInt; wid: NativeInt);
+var buf: array[0..4] of Byte; n: Integer; r: Int64;
+begin
+  if v <> 0 then
+  begin
+    buf[0] := 84; buf[1] := 82; buf[2] := 85; buf[3] := 69;            { TRUE }
+    n := 4;
+  end
+  else
+  begin
+    buf[0] := 70; buf[1] := 65; buf[2] := 76; buf[3] := 83; buf[4] := 69; { FALSE }
+    n := 5;
+  end;
+  if wid > n then PXXWritePad(wid - n);
+  r := PXXSysWrite(1, Int64(@buf[0]), n);
+end;
+
+{ Managed AnsiString handle (nil = empty), right-aligned to wid. }
+procedure PXXWriteStrMW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := 0;
+  if p <> nil then len := PWord(Int64(p) - 8)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+end;
+
+{ NUL-terminated C string (PChar), nil-safe. }
+procedure PXXWriteCStr(p: Pointer);
+var len: Int64; r: Int64;
+begin
+  if p = nil then Exit;
+  len := 0;
+  while PByte(Int64(p) + len)^ <> 0 do len := len + 1;
+  if len > 0 then r := PXXSysWrite(1, Int64(p), len);
+end;
+
+
+{$ifndef PXX_ESP}
+{ Per-target syscall wrappers for the file-load helper. AArch64 has no plain
+  open/lseek/read/close in the legacy slots, so it uses openat(AT_FDCWD=-100).
+  i386/arm32 use 32-bit lseek (files < 2 GiB); good enough for source loads.
+  ESP has no filesystem here, so the whole group is excluded. }
+function PXXSysOpenRO(path: Pointer): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(2, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$endif}
+end;
+
+function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(8, fd, offset, whence);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(19, fd, offset, whence);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(19, fd, offset, whence);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(62, fd, offset, whence);
+{$endif}
+end;
+
+function PXXSysClose(fd: NativeInt): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(3, fd);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(6, fd);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(6, fd);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(57, fd);
+{$endif}
 end;
 
 { Read an entire file into a fresh managed string. path = nul-terminated
