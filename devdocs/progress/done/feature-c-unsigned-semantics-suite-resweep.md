@@ -1,7 +1,7 @@
 # Re-sweep the whole C suite for remaining unsigned-semantics gaps
 
 - **Type:** feature (test coverage / bug hunt) — Track A (shared codegen) + C frontend
-- **Status:** backlog
+- **Status:** done (2026-07-02)
 - **Opened:** 2026-06-30
 - **Found by:** pattern from two just-fixed unsigned bugs
   ([[bug-c-unsigned-int-32bit-arithmetic-semantics]] v91,
@@ -87,3 +87,36 @@ Each is a hypothesis to confirm/refute with a minimal repro, NOT a known bug yet
 Probe found a real residual: C signed arithmetic right shift is wrong on x86-64 —
 `int s = -2; (s >> 1)` returns a value != -1 (should be -1, arithmetic shift). So
 this sweep is justified, not speculative; start here.
+
+## Resweep done (2026-07-02, pin — see bug-c-signed-arith-shift-right for the fix pin)
+
+Fixed the confirmed gap first: [[bug-c-signed-arith-shift-right]] (v146,
+all 6 backends, each encoding assembler-verified). Then systematically
+worked through every OTHER hypothesis this ticket listed, verifying each
+against a real gcc oracle before concluding:
+
+- `(0x80000000u >> 1) == 0x40000000u` — logical shr of unsigned, unaffected
+  by the signed-shift fix. Matches.
+- `unsigned char c = 200; c*2 == 400` and `(unsigned char)300 == 44` —
+  narrow-type promotion + truncation. Matches.
+- `unsigned short s = 60000; s+10000 == 70000`. Matches.
+- Mixed-width `unsigned long * unsigned int`. Matches.
+- `(unsigned int)negativeInt < unsignedVar` comparison after cast. Matches.
+- Bare (no-suffix) large hex literal `0x100000000` typed wide enough to
+  hold its value (assigned to `long`, round-trips exactly). Matches.
+- `UL`/`ULL` suffix width (`0xFFFFFFFFu` as `unsigned long`, `0x100000000ULL`
+  as `unsigned long long`). Matches.
+- Mixed signed/unsigned `+` (usual arithmetic conversions). Matches.
+- Negative literal assigned to `unsigned int` wraps to the expected value.
+  Matches.
+- Unsigned modulo/hashing idiom (`h = h*31 + i`, the lua/sqlite hot path).
+  Matches.
+- Unsigned wraparound loop bound (`for (n = 3; n-- > 0;)` runs exactly 3
+  times, not near-infinitely from a signed misread of the post-decrement
+  compare). Matches.
+
+**Every hypothesis beyond the one already-fixed signed-shift gap already
+matched gcc — no further code changes needed.** All 13 checks folded into
+a permanent regression test, `test/cunsigned_semantics_sweep_b138.c`,
+wired into `make test` + all four cross suites (i386/arm32/aarch64/
+riscv32), all green. Self-host unaffected (test-only addition).

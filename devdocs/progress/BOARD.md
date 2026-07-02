@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
-| feature-c-unsigned-semantics-suite-resweep | A | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -134,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (410)
+## done (411)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -374,6 +373,7 @@ _none_
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
+| feature-c-unsigned-semantics-suite-resweep | A | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
@@ -579,7 +579,6 @@ _none_
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library
-- [A] feature-c-unsigned-semantics-suite-resweep
 - [A] feature-cdecl-indirect-cross-targets
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-demo-chess
