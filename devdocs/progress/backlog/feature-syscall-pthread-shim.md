@@ -5,8 +5,8 @@
   heap contract v151, I/O serialization v146). Track B (lib/crtl files) + C
   (cfront gaps). See "Entry point" below.
 - **Owner:** —
-- **Blocked-by:** ~~feature-threadsafe-heap-contract~~ (done v151),
-  ~~feature-threadsafe-io-serialization~~ (done v146)
+- **Blocked-by:** — (was feature-threadsafe-heap-contract, done v151, and
+  feature-threadsafe-io-serialization, done v146)
 - **Unblocks:** task-sqlite-libc-free-runtime-bringup
 - **Found / Opened:** 2026-06-28, Track B sqlite/pthread discussion
 

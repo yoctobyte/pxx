@@ -85,7 +85,7 @@ _none_
 | feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
-| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | (done, v151), ~~feature-threadsafe-heap-contract~~ |
+| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | (was, and, done, feature-threadsafe-heap-contract, v151, — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -657,7 +657,9 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — (done
+- **1** — (was
+- **1** — and
+- **1** — done
 - **1** — task-sqlite-libc-free-runtime-bringup
-- **1** — v151)
-- **1** — ~~feature-threadsafe-heap-contract~~
+- **1** — v151
+- **1** — —
