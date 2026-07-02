@@ -142,3 +142,4 @@
 2026-07-02T07:50:50Z  v142  538a6fd1b216371ba6a548dff37c61459cf2fca14455423cfaae61c2cc3ec74b  438e009e9b5c45df145a1f8abf0208cf5ea65379  docs(progress): managed-element Insert/Delete item 1 landed (v141); rest parked
 2026-07-02T08:13:03Z  v143  c397516c34073de3826e6e5f828de22bdb9443fa0a7c358de0dc59defa9b2ca0  855b731a84a2148ae096c1dd8dcd64c68b207b31  chore(stable): pin v142 (record/set element Insert)
 2026-07-02T08:43:00Z  v144  a3a86832f552fb483ff28a5367b006cf65017794cc39cdd0ca533a2fcae38ad5  e56fe087c846f35048f6498877602a860a2d176a  docs(progress): MAX_PROC_PARAMS-32 crash — standalone layout repro NEGATIVE, trigger is compiler-context-specific
+2026-07-02T08:54:02Z  v145  641c84a9b9afff7fc84e8c6739863b1c6422f9a131a7acff4515f9a3d4a14223  1299cf45139c7efd710e7cd525db38f4ffdb37a9  chore(stable): pin v144 (managed concat typing, loop stack-carve fix)
