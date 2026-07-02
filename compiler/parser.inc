@@ -8662,10 +8662,15 @@ begin
             element types only (a raw byte copy shares element handles with
             the OLD buffer, whose element-aware release would dangle them). }
           i := ASTIVal[valNode];
-          if (Syms[i].ElemType = tyAnsiString) or (Syms[i].ElemType = tyString) or
+          { AnsiString elements are supported: the lowering retains the kept
+            elements in the fresh buffer to balance the old buffer's
+            element-aware release (feature-dynarray-insert-delete-managed-
+            elements). Frozen strings / managed records / nested arrays are
+            still deferred. }
+          if (Syms[i].ElemType = tyString) or
              (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
              ((Syms[i].ElemType = tyRecord) and RecordHasManagedFields(Syms[i].ElemRecName)) then
-            Error('Delete: managed or nested element type not yet supported for dynamic-array Delete');
+            Error('Delete: frozen-string, managed-record or nested element type not yet supported for dynamic-array Delete');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
           Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
           Expect(tkRParen, ')');
@@ -8717,10 +8722,13 @@ begin
             restrictions as dynamic-array Delete above; records/sets need a
             memory store, deferred with them). }
           i := ASTIVal[valNode];
-          if (Syms[i].ElemType = tyAnsiString) or (Syms[i].ElemType = tyString) or
+          { AnsiString elements supported (see Delete above); records/sets need
+            a memory store into the gap, still deferred with frozen strings
+            and nested arrays. }
+          if (Syms[i].ElemType = tyString) or
              (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
              (Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet) then
-            Error('Insert: managed, record, set or nested element type not yet supported for dynamic-array Insert');
+            Error('Insert: frozen-string, record, set or nested element type not yet supported for dynamic-array Insert');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
           Expect(tkRParen, ')');
           if FindProc('PXXDynInsFill') < 0 then

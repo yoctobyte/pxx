@@ -1992,7 +1992,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
-    dcNewLenTmp, dcValTmp, dcGapTmp: Integer;
+    dcNewLenTmp, dcValTmp, dcGapTmp, dcZeroIdent: Integer;
     dcElemTk: TTypeKind;
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
@@ -2366,6 +2366,19 @@ begin
       ASTTk[dcTempIdent] := Ord(tyPointer);
       dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcCntTmp;
       ASTTk[dcCountIdent] := Ord(tyInteger);
+      { Empty the temp FIRST (SetLength(temp, 0)): in a loop the slot still
+        holds the previous pass's buffer, and PXXDynSetLen's grow path would
+        copy + element-retain its contents into the fresh block — refs the raw
+        fill below then overwrites (managed-element leak). From an empty
+        handle the sizing SetLength copies nothing. }
+      dcZeroIdent := AllocNode(AN_INT_LIT);
+      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -2464,6 +2477,19 @@ begin
       ASTTk[dcTempIdent] := Ord(tyPointer);
       dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcNewLenTmp;
       ASTTk[dcCountIdent] := Ord(tyInteger);
+      { Empty the temp FIRST (SetLength(temp, 0)): in a loop the slot still
+        holds the previous pass's buffer, and PXXDynSetLen's grow path would
+        copy + element-retain its contents into the fresh block — refs the raw
+        fill below then overwrites (managed-element leak). From an empty
+        handle the sizing SetLength copies nothing. }
+      dcZeroIdent := AllocNode(AN_INT_LIT);
+      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -2496,6 +2522,34 @@ begin
       IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
         -1, 0, Ord(tyPointer));
 
+      { AnsiString elements: retain every element now sitting in the fresh
+        buffer (raw byte copies share handles with the OLD buffer, whose
+        element-aware release fires when the assignment wrapper replaces the
+        array's handle). Kept elements gain the ref the new buffer owns; the
+        deleted range gains none, so the old-buffer release frees exactly those. Mirrors PXXDynSetLen's
+        RetainImmediate-after-copy pattern. }
+      if dcElemTk = tyAnsiString then
+      begin
+        procIdx := FindProc('PXXDynArrayRetainImmediate');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
+        first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcDestData, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
+                  -1, -1, 0, Ord(tyInteger));
+        IRB[first] := last;
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { depth = 1 }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { baseKind = 1 (string) }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        IRB[last] := argNode;                                  { baseRecDesc = nil }
+        dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
+        IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
+      end;
+
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;
 
@@ -2513,8 +2567,12 @@ begin
       dcIdxAst := ASTLeft[ASTRight[ASTRight[node]]];     { index }
 
       { Evaluate the value first (source argument order — it may itself touch
-        the array), into an element-typed temp. }
+        the array), into an element-typed temp. A managed (AnsiString) temp is
+        a lowering-time local: flag it for the codegen-prologue nil-init so
+        the ARC store's release-of-old sees nil, and scope exit balances the
+        store's retain. }
       dcValTmp := AllocVar('', dcElemTk);
+      if dcElemTk = tyAnsiString then SymIsHiddenArgTemp[dcValTmp] := True;
       IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(dcElemTk));
 
       dcSrcTmp := AllocVar('', tyPointer);
@@ -2544,6 +2602,19 @@ begin
       ASTTk[dcTempIdent] := Ord(tyPointer);
       dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcNewLenTmp;
       ASTTk[dcCountIdent] := Ord(tyInteger);
+      { Empty the temp FIRST (SetLength(temp, 0)): in a loop the slot still
+        holds the previous pass's buffer, and PXXDynSetLen's grow path would
+        copy + element-retain its contents into the fresh block — refs the raw
+        fill below then overwrites (managed-element leak). From an empty
+        handle the sizing SetLength copies nothing. }
+      dcZeroIdent := AllocNode(AN_INT_LIT);
+      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -2572,7 +2643,37 @@ begin
       IRAppend(IR_STORE_SYM, dcGapTmp, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
         -1, 0, Ord(tyPointer));
 
-      { Store the value into the gap (element-width memory store). }
+      { AnsiString elements: retain every element now sitting in the fresh
+        buffer (raw byte copies share handles with the OLD buffer, whose
+        element-aware release fires when the assignment wrapper replaces the
+        array's handle). Kept elements gain the ref the new buffer owns; the
+        still-nil gap is a no-op for the retain walk (the ARC-aware gap store below adds the inserted value's ref itself). Mirrors PXXDynSetLen's
+        RetainImmediate-after-copy pattern. }
+      if dcElemTk = tyAnsiString then
+      begin
+        procIdx := FindProc('PXXDynArrayRetainImmediate');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
+        first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcDestData, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
+                  -1, -1, 0, Ord(tyInteger));
+        IRB[first] := last;
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { depth = 1 }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { baseKind = 1 (string) }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        IRB[last] := argNode;                                  { baseRecDesc = nil }
+        dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
+        IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
+      end;
+
+      { Store the value into the gap (element-width memory store; a
+        tyAnsiString tag routes through IR_STORE_MEM's ARC path — retains the
+        value for the array, releases the nil gap). }
       IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
         IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(dcElemTk)), -1, 0, Ord(dcElemTk));
 

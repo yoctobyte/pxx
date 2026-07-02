@@ -94,6 +94,37 @@ begin
   end;
 end;
 
+{ ---- AnsiString elements: FPC semantics + refcount balance ---- }
+procedure ManagedElems;
+var a: array of AnsiString; s: AnsiString; k: Integer;
+begin
+  SetLength(a, 3);
+  a[0] := 'alpha'; a[1] := 'beta' + 'X'; a[2] := 'gamma';
+  Delete(a, 1, 1);
+  Chk(21, (Length(a) = 2) and (a[0] = 'alpha') and (a[1] = 'gamma'));
+  s := 'ins' + 'erted';
+  Insert(s, a, 1);
+  Chk(22, (Length(a) = 3) and (a[1] = 'inserted'));
+  Insert('lit', a, 0);
+  Insert(a[3], a, 4);                   { value reads the array itself }
+  Chk(23, (Length(a) = 5) and (a[0] = 'lit') and (a[4] = 'gamma'));
+  Delete(a, 0, 99);
+  Chk(24, Length(a) = 0);
+  Insert('solo', a, 0);
+  Chk(25, (Length(a) = 1) and (a[0] = 'solo') and (s = 'inserted'));
+  { churn: per-pass fresh-temp refcounts must balance (the SetLength(temp,0)
+    pre-empty — without it PXXDynSetLen's copy+retain of the previous pass's
+    elements leaked one ref per kept element per op) }
+  SetLength(a, 20);
+  for k := 0 to 19 do a[k] := 'item' + Chr(65 + k);
+  for k := 1 to 500 do
+  begin
+    Insert('mid' + Chr(65 + (k mod 26)), a, 10);
+    Delete(a, 10, 1);
+  end;
+  Chk(26, (Length(a) = 20) and (a[0] = 'itemA') and (a[19] = 'itemT'));
+end;
+
 { ---- string Insert/Delete unaffected ---- }
 procedure StringForms;
 var s: string;
@@ -130,5 +161,6 @@ begin
   Churn(false);
   StringForms;
   ExprArgs;
-  writeln('total ok ', okCount, ' / 20');
+  ManagedElems;
+  writeln('total ok ', okCount, ' / 26');
 end.

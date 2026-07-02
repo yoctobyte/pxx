@@ -38,3 +38,35 @@
 `Delete`/`Insert` on managed-element arrays are refcount-correct (no leak,
 no double-free — extend test_dynarray_insert_delete.pas with an AnsiString
 section + churn loop); record/set Insert works; self-host byte-identical.
+
+## Progress — 2026-07-02, item 1 (AnsiString elements) LANDED (v141)
+
+`array of AnsiString` now works for both Delete and Insert. Shape:
+
+- Fresh temp still raw-byte-fills from the intact old buffer, then
+  `PXXDynArrayRetainImmediate(destData, newLen, depth=1, baseKind=1, nil)`
+  retains every element now in the new buffer — balancing the old buffer's
+  element-aware release when the assignment wrapper swaps the handle. The
+  deleted range gains no ref, so the old-buffer release frees exactly those.
+  (PXXDynSetLen's own copy+retain pattern, reused.)
+- Insert's gap is still nil at retain time (no-op for the walk); the gap
+  store is tagged tyAnsiString so IR_STORE_MEM's existing ARC path retains
+  the inserted value for the array (and releases the nil gap). The value
+  temp is a managed lowering-time local → SymIsHiddenArgTemp prologue
+  nil-init; its own store-retain is balanced by scope-exit release.
+- **Leak found & fixed in all THREE fresh-temp sites (Copy too)**: in a loop
+  the temp slot still holds the previous pass's buffer, and the sizing
+  `SetLength(temp, n)` copies + element-RETAINS those old elements into the
+  fresh block — refs the raw fill then overwrites. 84MB RSS over a 200k-op
+  churn; fixed by emitting `SetLength(temp, 0)` first (empty handle → the
+  sizing call copies nothing). Churn now 3.8MB flat; non-managed churn
+  still 264KB.
+
+Gate: test_dynarray_insert_delete.pas grown to 26 cases (FPC-output
+identical, incl. self-referencing insert value + 1000-op managed churn);
+suite green; self-host byte-identical; pinned v141.
+
+**Still open in this ticket**: record/set element Insert (memory store into
+the gap), managed-record / nested-array elements, non-IDENT targets
+(obj.field), the FPC array-splice Insert form, riscv32/xtensa
+SymIsHiddenArgTemp prologue nil-init.
