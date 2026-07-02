@@ -70,3 +70,21 @@ suite green; self-host byte-identical; pinned v141.
 the gap), managed-record / nested-array elements, non-IDENT targets
 (obj.field), the FPC array-splice Insert form, riscv32/xtensa
 SymIsHiddenArgTemp prologue nil-init.
+
+## Progress — 2026-07-02, item 2 (record/set element Insert) LANDED (v142)
+
+Non-managed record and set elements now insert: the value is captured by
+ADDRESS (parser requires an addressable value — var/field/element/deref;
+rvalues stay a clean error) and memory-copied into the gap via IR_COPY_REC
+with the element size (RecSize for records, 32 for sets). Address capture is
+rebuild-safe: the old buffer stays intact until the assignment wrapper swaps
+the handle, so self-referencing `Insert(r[0], r, i)` reads valid memory
+(pinned in the test). The insert temp array now carries the element REC id
+(descriptor/element size), mirroring Delete.
+
+Gate: test_dynarray_insert_delete.pas at 30 cases (FPC-output identical);
+suite green; self-host byte-identical; pinned v142.
+
+**Still open**: managed-record / nested-array elements, frozen-string
+elements, rvalue record/set insert values, non-IDENT targets (obj.field),
+FPC array-splice Insert form, riscv32/xtensa SymIsHiddenArgTemp nil-init.

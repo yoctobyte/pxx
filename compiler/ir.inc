@@ -2562,18 +2562,31 @@ begin
         (parser-enforced). Right = AN_ARG chain [value, index]. }
       dcSrcSym := ASTIVal[ASTLeft[node]];
       dcElemTk := Syms[dcSrcSym].ElemType;
-      dcElemSz := TypeSize(dcElemTk);
+      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      else dcElemSz := TypeSize(dcElemTk);
       dcCntAst := ASTLeft[ASTRight[node]];               { value }
       dcIdxAst := ASTLeft[ASTRight[ASTRight[node]]];     { index }
 
       { Evaluate the value first (source argument order — it may itself touch
-        the array), into an element-typed temp. A managed (AnsiString) temp is
-        a lowering-time local: flag it for the codegen-prologue nil-init so
-        the ARC store's release-of-old sees nil, and scope exit balances the
-        store's retain. }
-      dcValTmp := AllocVar('', dcElemTk);
-      if dcElemTk = tyAnsiString then SymIsHiddenArgTemp[dcValTmp] := True;
-      IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(dcElemTk));
+        the array). Scalars go by value into an element-typed temp; a managed
+        (AnsiString) temp is a lowering-time local flagged for the
+        codegen-prologue nil-init so the ARC store's release-of-old sees nil
+        (scope exit balances the store's retain). Records/sets are captured by
+        ADDRESS (parser guarantees addressability) — safe across the rebuild:
+        the old buffer stays intact until the assignment wrapper swaps the
+        handle, so even `Insert(a[k], a, i)` reads valid memory. }
+      if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
+      begin
+        dcValTmp := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAddress(dcCntAst), -1, 0, Ord(tyPointer));
+      end
+      else
+      begin
+        dcValTmp := AllocVar('', dcElemTk);
+        if dcElemTk = tyAnsiString then SymIsHiddenArgTemp[dcValTmp] := True;
+        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(dcElemTk));
+      end;
 
       dcSrcTmp := AllocVar('', tyPointer);
       IRAppend(IR_STORE_SYM, dcSrcTmp,
@@ -2595,8 +2608,12 @@ begin
         -1, 0, Ord(tyInteger));
 
       { Fresh dyn-array local, prologue-nil'd via SymIsHiddenArgTemp (see
-        AN_DYN_COPY); SetLength(temp, newLen). }
+        AN_DYN_COPY); SetLength(temp, newLen). Record elements need the
+        element REC id on the temp (descriptor / element size). }
+      dcSavedRec := LastTypeRecId;
+      if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
       dcTempSym := AllocDynArray('', dcElemTk, 1);
+      LastTypeRecId := dcSavedRec;
       SymIsHiddenArgTemp[dcTempSym] := True;
       dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
       ASTTk[dcTempIdent] := Ord(tyPointer);
@@ -2671,11 +2688,17 @@ begin
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
 
-      { Store the value into the gap (element-width memory store; a
+      { Store the value into the gap. Scalars: element-width memory store (a
         tyAnsiString tag routes through IR_STORE_MEM's ARC path — retains the
-        value for the array, releases the nil gap). }
-      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
-        IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(dcElemTk)), -1, 0, Ord(dcElemTk));
+        value for the array, releases the nil gap). Records/sets: raw
+        element-size memory copy from the captured address (non-managed only,
+        parser-enforced). }
+      if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
+        IRAppend(IR_COPY_REC, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), -1, dcElemSz, Ord(tyRecord))
+      else
+        IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(dcElemTk)), -1, 0, Ord(dcElemTk));
 
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;

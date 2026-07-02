@@ -8722,13 +8722,17 @@ begin
             restrictions as dynamic-array Delete above; records/sets need a
             memory store, deferred with them). }
           i := ASTIVal[valNode];
-          { AnsiString elements supported (see Delete above); records/sets need
-            a memory store into the gap, still deferred with frozen strings
-            and nested arrays. }
+          { AnsiString elements supported (see Delete above). Non-managed
+            record and set elements too (memory-copied into the gap; the
+            value must be addressable). Frozen strings / managed records /
+            nested arrays still deferred. }
           if (Syms[i].ElemType = tyString) or
              (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
-             (Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet) then
-            Error('Insert: frozen-string, record, set or nested element type not yet supported for dynamic-array Insert');
+             ((Syms[i].ElemType = tyRecord) and RecordHasManagedFields(Syms[i].ElemRecName)) then
+            Error('Insert: frozen-string, managed-record or nested element type not yet supported for dynamic-array Insert');
+          if ((Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet)) and
+             not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
+            Error('Insert: record/set value must be a variable, field, element or dereference (addressable)');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
           Expect(tkRParen, ')');
           if FindProc('PXXDynInsFill') < 0 then

@@ -65,15 +65,35 @@ begin
   Chk(15, (Length(d) = 2) and (d[0] = 9.25) and (d[1] = 2.5));
 end;
 
-{ ---- non-managed record elements: Delete works (raw byte copy) ---- }
+{ ---- non-managed record elements: Delete + Insert (memory-copied gap) ---- }
 type TPt = record x, y: Integer; end;
+type TDay = (dMo, dTu, dWe, dTh, dFr);
+type TDays = set of TDay;
 procedure RecDelete;
-var r: array of TPt; i: Integer;
+var r: array of TPt; i: Integer; p: TPt;
 begin
   SetLength(r, 3);
   for i := 0 to 2 do begin r[i].x := i; r[i].y := i * 100; end;
   Delete(r, 1, 1);
   Chk(16, (Length(r) = 2) and (r[0].x = 0) and (r[1].x = 2) and (r[1].y = 200));
+  p.x := 9; p.y := 900;
+  Insert(p, r, 1);
+  Chk(27, (Length(r) = 3) and (r[1].x = 9) and (r[1].y = 900) and (r[2].x = 2));
+  Insert(r[0], r, 3);                   { self-referencing record value }
+  Chk(28, (Length(r) = 4) and (r[3].x = 0) and (r[3].y = 0));
+end;
+
+{ ---- set elements: Insert (32-byte memory copy) ---- }
+procedure SetElems;
+var ds: array of TDays; d: TDays;
+begin
+  d := [dMo, dWe];
+  Insert(d, ds, 0);
+  d := [dFr];
+  Insert(d, ds, 1);
+  Chk(29, (Length(ds) = 2) and (dWe in ds[0]) and not (dFr in ds[0]) and (dFr in ds[1]));
+  Delete(ds, 0, 1);
+  Chk(30, (Length(ds) = 1) and (dFr in ds[0]));
 end;
 
 { ---- loop churn in a proc: fresh-temp refcounts must balance (no leak /
@@ -162,5 +182,6 @@ begin
   StringForms;
   ExprArgs;
   ManagedElems;
-  writeln('total ok ', okCount, ' / 26');
+  SetElems;
+  writeln('total ok ', okCount, ' / 30');
 end.
