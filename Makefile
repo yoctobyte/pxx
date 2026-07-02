@@ -889,7 +889,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) examples/sudoku/sudoku.pas /tmp/test_sudoku26
 	test "$$(/tmp/test_sudoku26)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_stackless_gen26
-	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 ')"
+	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 \n99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 \n1 20 300 4 50 600 ')"
 	./$(COMPILER) test/test_scheduler.pas /tmp/test_scheduler26
 	test "$$(/tmp/test_scheduler26)" = "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
 	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_scheduler_exc26

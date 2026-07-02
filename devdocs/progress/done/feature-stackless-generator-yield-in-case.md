@@ -91,3 +91,13 @@ whole point). Likely blocks other cross-target generator code the same way.
   `done/feature-generators-yield.md`). Root-caused to the single wall blocking
   chess cross-target: everything else about the demo (movegen structure, perft
   oracle, x86-64 build) already validated.
+- 2026-07-02 — Track A: DONE. SLLowerCase flattens case to AST-level
+  test/goto (selector evaluated once into a plain temp — only consulted
+  before the first suspension), branch bodies recurse through SLLower;
+  ranges, multi-label, multi-yield branches, else, nesting in for all work.
+  SLCheckEligible accepts case (still rejects yield in the selector).
+  test/test_stackless_gen.pas extended (CaseGen/LoopCase), green on x86-64 +
+  i386/aarch64/arm32 cross. Chess acceptance NOT yet met — next wall is
+  record locals/element ("only ordinal/pointer locals are supported (v1)"),
+  filed as feature-stackless-generator-record-locals; chess.pas also needs
+  `stackless` added to GenMoves (stackful is x86-64-only by design).

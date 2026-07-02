@@ -7043,9 +7043,20 @@ begin
           Error('stackless generator: yield not allowed in a for-bound expression');
         SLCheckEligible(ASTRight[ASTRight[pairNode]]);
       end;
+    AN_CASE:
+      begin
+        if SLHasYield(ASTLeft[node]) then
+          Error('stackless generator: yield not allowed in a case selector');
+        pairNode := ASTRight[node];                  { branch chain }
+        while pairNode <> -1 do
+        begin
+          SLCheckEligible(ASTRight[ASTLeft[pairNode]]);  { branch stmt }
+          pairNode := ASTRight[pairNode];
+        end;
+      end;
     else
       if SLHasYield(node) then
-        Error('stackless generator: yield only allowed at top level or inside for/while/if (not in this construct)');
+        Error('stackless generator: yield only allowed at top level or inside for/while/if/case (not in this construct)');
   end;
 end;
 
@@ -7227,6 +7238,77 @@ begin
             GenMakeSeq(GenMakeLabel(endLbl), -1))))))));
 end;
 
+{ case with a yield in a branch: flatten to the same test/goto shape the IR
+  lowering (ir.inc AN_CASE) emits, but at the AST level so branch bodies can
+  recurse through SLLower and split at their yields. The selector is evaluated
+  ONCE into a plain (non-persistent) temp — it is only consulted by the label
+  tests, which all run before the first suspension; a resume jumps straight to
+  the label inside the chosen branch and never re-tests.
+  See feature-stackless-generator-yield-in-case. }
+function SLLowerCase(node, selfSym, retSym: Integer): Integer;
+var selTmp, setSel, endLbl, branchSeq, branchPair, labelsHead, stmtNode: Integer;
+    bodyLbl, nextLbl, skipLbl, labelNode, valNode, cv, hi: Integer;
+    tests, piece: Integer;
+begin
+  selTmp := AllocVar('', tyInt64);
+  setSel := GenMakeAssign(GenMakeIdent(selTmp, tyInt64), ASTLeft[node]);
+  endLbl := NewSyntheticLabel;
+  Result := GenMakeSeq(setSel, -1);
+
+  branchSeq := ASTRight[node];
+  while branchSeq <> -1 do
+  begin
+    branchPair := ASTLeft[branchSeq];
+    labelsHead := ASTLeft[branchPair];
+    stmtNode   := ASTRight[branchPair];
+    if labelsHead = -1 then
+    begin
+      { else clause (parser builds it last): body runs when every prior test
+        fell through; falls off into endLbl. }
+      Result := chainSeq(Result, SLLower(stmtNode, selfSym, retSym));
+    end
+    else
+    begin
+      bodyLbl := NewSyntheticLabel;
+      nextLbl := NewSyntheticLabel;
+      tests := -1;
+      labelNode := labelsHead;
+      while labelNode <> -1 do
+      begin
+        valNode := ASTLeft[labelNode];
+        cv := ASTIVal[valNode];
+        if ASTRight[valNode] <> -1 then
+        begin
+          { range lo..hi: below lo -> skip both tests; else <= hi -> body }
+          hi := ASTIVal[ASTRight[valNode]];
+          skipLbl := NewSyntheticLabel;
+          piece := GenMakeSeq(
+            GenMakeIfGoto(GenMakeCmp(Ord(tkLt),
+              GenMakeIdent(selTmp, tyInt64), GenMakeIntLit(cv)), skipLbl),
+            GenMakeSeq(
+              GenMakeIfGoto(GenMakeCmp(Ord(tkLe),
+                GenMakeIdent(selTmp, tyInt64), GenMakeIntLit(hi)), bodyLbl),
+              GenMakeSeq(GenMakeLabel(skipLbl), -1)));
+        end
+        else
+          piece := GenMakeIfGoto(GenMakeCmp(Ord(tkEq),
+            GenMakeIdent(selTmp, tyInt64), GenMakeIntLit(cv)), bodyLbl);
+        tests := chainSeq(tests, piece);
+        labelNode := ASTRight[labelNode];
+      end;
+      Result := chainSeq(Result,
+                GenMakeSeq(tests,
+                GenMakeSeq(GenMakeGoto(nextLbl),
+                GenMakeSeq(GenMakeLabel(bodyLbl),
+                chainSeq(SLLower(stmtNode, selfSym, retSym),
+                GenMakeSeq(GenMakeGoto(endLbl),
+                GenMakeSeq(GenMakeLabel(nextLbl), -1)))))));
+    end;
+    branchSeq := ASTRight[branchSeq];
+  end;
+  Result := chainSeq(Result, GenMakeSeq(GenMakeLabel(endLbl), -1));
+end;
+
 { Lower one statement (recursively). Constructs WITHOUT a yield are emitted
   verbatim — they reference the restored stack locals like any code. Constructs
   that (transitively) contain a yield are flattened to goto/label form. }
@@ -7246,6 +7328,7 @@ begin
     AN_IF:    Result := SLLowerIf(node, selfSym, retSym);
     AN_WHILE: Result := SLLowerWhile(node, selfSym, retSym);
     AN_FOR:   Result := SLLowerFor(node, selfSym, retSym);
+    AN_CASE:  Result := SLLowerCase(node, selfSym, retSym);
     else      Error('stackless generator: unsupported construct around yield');
   end;
 end;

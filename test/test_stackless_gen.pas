@@ -42,6 +42,34 @@ begin
   yield 30;
 end;
 
+{ yield inside a case statement: single labels, a range, a multi-yield branch,
+  else, and a top-level yield after the case (chess GenMoves' shape).
+  See feature-stackless-generator-yield-in-case. }
+function CaseGen(n: Integer): Integer; generator; stackless;
+begin
+  case n of
+    1: yield 10;
+    2: begin yield 20; yield 21; end;
+    3..5: yield 30;
+  else
+    yield 99;
+  end;
+  yield 100 + n;
+end;
+
+{ case nested in a for loop, yields split per branch }
+function LoopCase(n: Integer): Integer; generator; stackless;
+var i: Integer;
+begin
+  for i := 1 to n do
+    case i mod 3 of
+      0: yield i * 100;
+      1: yield i;
+    else
+      yield i * 10;
+    end;
+end;
+
 var x, s: Integer;
 begin
   for x in Squares(5) do write(x, ' ');         { 1 4 9 16 25 }
@@ -62,5 +90,12 @@ begin
 
   { sequential reuse: instance freed at exhaustion, fresh each loop }
   for x in Range(1, 3) do write(x, ' ');         { 1 2 3 }
+  writeln;
+
+  for s := 0 to 6 do
+    for x in CaseGen(s) do write(x, ' ');        { 99 100 10 101 20 21 102 30 103 30 104 30 105 99 106 }
+  writeln;
+
+  for x in LoopCase(6) do write(x, ' ');         { 1 20 300 4 50 600 }
   writeln;
 end.
