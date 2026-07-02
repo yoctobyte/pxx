@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
+| task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
@@ -635,6 +636,7 @@ _none_
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
+- [B] task-remove-sysutils-move-fillchar-copies
 - [B] task-sqlite-libc-free-runtime-bringup
 - [B+C] wish-compile-gnu-pascal
 

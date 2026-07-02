@@ -15759,6 +15759,15 @@ begin
        (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos')) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
+    { Bare `Move(...)` / `FillChar(...)`: System memory primitives live in the
+      builtin unit (FPC keeps them in System, no `uses` needed). Pull the unit
+      so they resolve; a user routine of the same name shadows at the call
+      site. ESP can't compile builtin. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
       x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
       and cannot compile the full builtin unit yet. }

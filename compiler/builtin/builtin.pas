@@ -56,7 +56,38 @@ function __pxxPos(const sub, s: AnsiString): Integer;
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
 
+{ System memory primitives (FPC keeps these in System, available with no
+  `uses`): pulled via the bare-name token pre-scan like Str/Val. Overlap-safe
+  Move (memmove semantics) and FillChar. Plain byte loops for now —
+  feature-move-fillchar-intrinsics tracks the optimized-intrinsic follow-up;
+  the copies in lib/rtl/sysutils.pas are shadowed by these (builtin registers
+  first) and their removal is a Track B follow-up. }
+procedure Move(const Source; var Dest; Count: Integer);
+procedure FillChar(var X; Count: Integer; Value: Byte);
+
 implementation
+
+procedure Move(const Source; var Dest; Count: Integer);
+var s, d: PByte; i: Integer;
+begin
+  if Count <= 0 then Exit;
+  s := PByte(@Source);
+  d := PByte(@Dest);
+  { Overlap-safe: when Dest is above Source and the ranges overlap, copy
+    backward so we don't clobber not-yet-copied bytes (memmove, not memcpy). }
+  if (Int64(d) > Int64(s)) and (Int64(d) < Int64(s) + Count) then
+    for i := Count - 1 downto 0 do d[i] := s[i]
+  else
+    for i := 0 to Count - 1 do d[i] := s[i];
+end;
+
+procedure FillChar(var X; Count: Integer; Value: Byte);
+var d: PByte; i: Integer;
+begin
+  d := PByte(@X);
+  for i := 0 to Count - 1 do d[i] := Value;
+end;
+
 
 type
   TVariantRecord = record

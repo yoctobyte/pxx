@@ -60,3 +60,16 @@ Once the plain-Pascal versions are in and proven, make `Move` and `FillChar`
   lands; nothing is blocked on the optimization.
 - Coordinate with whoever lands the RTL `Move`/`FillChar` so the intrinsic and
   the fallback agree on signatures and overlap semantics.
+
+## Progress — 2026-07-02, part 1 (proper home / no-uses) LANDED (v145)
+
+`Move` and `FillChar` now live in `compiler/builtin/builtin.pas` and resolve
+with NO `uses` clause: the ident+lparen token pre-scan pulls builtin for bare
+`move(`/`fillchar(` exactly like Str/Val/Copy/Abs (ESP excluded, user routine
+of the same name shadows). Overlap-safe (memmove) semantics pinned in
+test/test_move_fillchar_nouses.pas (make test).
+
+The sysutils copies are now shadowed (builtin registers first, identical
+code); REMOVING them is a Track B follow-up (lib/** ownership) —
+[[task-remove-sysutils-move-fillchar-copies]]. Part 2 (optimized intrinsic
+emission, rep movsb/stosb-class) remains this ticket's open scope.
