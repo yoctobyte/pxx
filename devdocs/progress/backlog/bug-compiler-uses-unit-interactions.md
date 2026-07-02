@@ -106,3 +106,49 @@ its behavior going forward. The fix shape is still probably right if/when
 someone reproduces the actual trigger — worth trying again starting from
 self-hosting the compiler with a temporarily-re-exported asmcore
 `LastError`, rather than a fresh standalone repro.
+
+## Investigation (2026-07-02, item 2 — tried the exact self-hosting repro this time, still could not reproduce)
+
+Did the experiment the note above said to try: on the CURRENT binary (no
+speculative `FindSym` fix applied — testing whether the original bug still
+exists at all, pre-fix), temporarily:
+
+1. Moved `asmcore_x64.pas`'s `var LastError: AnsiString;` from the
+   implementation section back into the interface section (restoring the
+   exact original shape the ticket describes — a real, currently-unexported
+   asmcore global made visible again).
+2. Changed `compiler/asmfront.inc`'s one call site from the
+   `AsmCoreLastError` accessor back to a **direct** `LastError` reference —
+   i.e. undid the very workaround this ticket says was needed, reproducing
+   the original pre-workaround code exactly.
+3. Rebuilt `compiler.pas` (self-hosting through the real, currently-`uses`d
+   asmcore unit — not a synthetic stand-in unit) with the current compiler
+   binary.
+
+**Compiled cleanly, no `undefined variable — it is a global declared later`
+error.** Sanity-checked the decl-order gate itself is still very much alive
+and not accidentally disabled by confirming a plain same-context "declared
+later" global (a normal `var gLate: Integer;` after the procedure that
+reads it) still correctly errors on the same test binary.
+
+Reverted both temporary edits (`git checkout --`) immediately after; no
+net change, `compiler/pascal26` binary untouched throughout (built to a
+`/tmp` output path, never overwriting the real committed binary).
+
+This is the most faithful repro attempt yet — the REAL asmcore_x64 unit,
+its REAL prior interface-global shape, referenced from the REAL
+`asmfront.inc` call site, self-hosting through the REAL `compiler.pas` —
+and it still doesn't reproduce. Combined with item 1 also not reproducing
+(prior session) and the previous session's two additional standalone/
+lib-rtl attempts also not reproducing, this is now four independent
+failed repro attempts across two sessions. Strong (though not certain —
+"tried and failed to reproduce" isn't proof of absence) evidence that
+whatever the original trigger was in June, it no longer exists on the
+current binary — plausibly fixed as a side effect of other decl-order/
+symbol-resolution work landed since (e.g. the declare-before-use gating
+refinements, or something in the several rounds of `FindSym`-adjacent
+work this project has done). Not closing outright since "couldn't
+reproduce" isn't the same as "confirmed fixed," but this ticket is now a
+much weaker candidate for further investigation time than it was — if it
+resurfaces, it'll likely be via a genuinely new report with a fresh
+concrete repro, not by re-trying variations on the original description.
