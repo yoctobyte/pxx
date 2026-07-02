@@ -62,6 +62,26 @@ parameters independently:
 `va_start` needs all three offsets: initial GP offset, initial FP offset, and the
 first variadic stack slot after any named stack-spilled parameters.
 
+## Re-confirmed (2026-07-02, Track A)
+
+Re-checked this ticket during a backlog re-scan (it's Track A/C, not C-only —
+see [[feedback_check_ticket_track_field_not_filename]]). Confirmed the
+"still open" repro shape still reproduces exactly as described: a variadic
+function with 7 named `int` params before `...` (spilling the 7th past the
+6 GP argument registers) reads the variadic tail wrong (`sumv(2.0,1..7,10,20)`
+returns the wrong total). Also confirmed the scope is correctly narrow, not
+wider than filed: a **non-variadic** C function with the same 7 named `int`
+params (no `...` at all) sums correctly — so this is specific to the
+variadic-machinery/stack-spill interaction, not a general many-param
+parameter-passing bug. Not attempting the fix this session: it requires
+prologue-level accounting (how a stack-spilled named param is read) plus
+`overflow_arg_area` placement, both touching core C-function parameter
+reception — a mistake here risks a subtle correctness bug across all C
+variadic functions, and this ticket's own "harder half" framing already
+reflects a prior investigation reaching the same conclusion. Left parked
+for a session with room for the fuller ABI-accounting work and time to test
+it thoroughly.
+
 ## Acceptance
 
 - Track named GP, named FP, and named stack-spilled parameter counts for C
