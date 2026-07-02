@@ -288,6 +288,18 @@ begin
   EmitB($91);
 end;
 
+procedure xtensa_sra(r, t: Integer);
+{ SRA r, t -> r := t >>> SAR (arithmetic; value in the t field, not s). Same
+  shape as SRL but op2=0xB instead of 9 -- verified byte-for-byte against a
+  real xtensa-lx106-elf-as assembly of `sra a2, a3` (bug-c-signed-arith-
+  shift-right, the C signed `>>` case; Pascal has no arithmetic-shift
+  operator so this is C-only). }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or 0);
+  EmitB($B1);
+end;
+
 procedure xtensa_ret;
 begin
   { RET = insn word $000080 (op0=0, t=8: SNM0/JR group), LE bytes 80 00 00. }

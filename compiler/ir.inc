@@ -183,7 +183,7 @@ begin
         IRRequireNode(IRA[i], 'binop left');
         IRRequireNode(IRB[i], 'binop right');
         op := IRC[i];
-        if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor))) then
+        if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor)) and (op <> Ord(tkShr))) then
           Error('invalid operator token kind in binop');
       end;
 

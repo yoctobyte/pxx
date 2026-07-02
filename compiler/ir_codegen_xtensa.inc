@@ -1303,6 +1303,13 @@ begin
           xtensa_ssr(reg_xtensa_a3);
           xtensa_srl(reg_xtensa_a2, reg_xtensa_a2);
         end
+        else if op = Ord(tkShr) then
+        begin
+          { C signed >> (bug-c-signed-arith-shift-right): arithmetic right
+            shift, same shape as the logical case but SRA instead of SRL. }
+          xtensa_ssr(reg_xtensa_a3);
+          xtensa_sra(reg_xtensa_a2, reg_xtensa_a2);
+        end
         else if op = Ord(tkAnd) then xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkOr) then xtensa_or(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkXor) then xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)

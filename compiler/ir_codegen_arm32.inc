@@ -1380,6 +1380,7 @@ begin
         else if op = Ord(tkXor) then EmitI32($E0200001)    { eor r0, r0, r1 }
         else if op = Ord(tkShl) then EmitI32($E1A00110)    { lsl r0, r0, r1 }
         else if op = Ord(tkIdent) then EmitI32($E1A00130)  { lsr r0, r0, r1 }
+        else if op = Ord(tkShr) then EmitI32($E1A00150)    { C signed >> (bug-c-signed-arith-shift-right); asr r0, r0, r1 }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin

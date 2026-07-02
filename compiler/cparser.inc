@@ -181,7 +181,24 @@ begin
     else
       ivalOp := Ord(tkDiv);
   end
-  else if cTok = Ord(tkShr) then ivalOp := Ord(tkIdent)   { shr encoded as tkIdent }
+  else if cTok = Ord(tkShr) then
+  begin
+    { C `>>` on a SIGNED operand is an arithmetic shift (sign-extends); on an
+      UNSIGNED operand it's logical, same as Pascal's `shr` (logical by
+      design). Both previously collapsed onto the same `tkIdent` sentinel
+      (the encoding every backend's codegen already uses for logical shr,
+      since Pascal's own `shr` lexes as a plain identifier with no dedicated
+      token) -- so C's signed `>>` always shifted in zeros instead of the
+      sign bit (bug-c-signed-arith-shift-right). `tkShr` itself (the C
+      lexer's dedicated `>>` token) was never otherwise reached by codegen,
+      so it's free to repurpose as the "arithmetic shr" sentinel for the
+      signed case; the unsigned case keeps the existing `tkIdent` logical
+      path unchanged. }
+    if TypeSigned(IntToTypeKind(ASTTk[l])) then
+      ivalOp := Ord(tkShr)
+    else
+      ivalOp := Ord(tkIdent);
+  end
   else if cTok = Ord(tkAmp) then ivalOp := Ord(tkAnd)     { bitwise AND }
   else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }
   { tkPlus/tkMinus/tkStar/tkMod/tkShl/tkXor/tkAnd(&&)/tkOr(||)/comparisons map

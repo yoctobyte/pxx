@@ -968,6 +968,7 @@ begin
         else if op = Ord(tkXor) then rv32_xor(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkShl) then rv32_sll(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkIdent) then rv32_srl(reg_a0, reg_a0, reg_a1) { 'shr' parses as ident }
+        else if op = Ord(tkShr) then rv32_sra(reg_a0, reg_a0, reg_a1)  { C signed >> (bug-c-signed-arith-shift-right) }
         else if op = Ord(tkEq) then
         begin
           rv32_sub(reg_a0, reg_a0, reg_a1);

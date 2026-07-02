@@ -1780,6 +1780,7 @@ begin
         else if op = Ord(tkXor) then begin EmitB($31); EmitB($C8); end   { xor eax, ecx }
         else if op = Ord(tkShl) then begin EmitB($D3); EmitB($E0); end   { shl eax, cl }
         else if op = Ord(tkIdent) then begin EmitB($D3); EmitB($E8); end { 'shr' parses as ident; shr eax, cl }
+        else if op = Ord(tkShr) then begin EmitB($D3); EmitB($F8); end   { C signed >> (bug-c-signed-arith-shift-right); sar eax, cl (ModRM /7) }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin

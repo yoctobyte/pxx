@@ -2629,6 +2629,16 @@ begin
                 begin EmitB($89); EmitB($C0); end;            { mov eax, eax (zero-extend) }
               EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
             end;
+          { C signed `>>` (bug-c-signed-arith-shift-right): arithmetic shift,
+            sign-extending. Mirrors the logical `shr` case above but with a
+            sign-extend (`cdqe`) instead of a zero-extend for a <8-byte
+            operand, and `sar` instead of `shr` (ModRM /7 vs /5). }
+          tkShr:
+            begin
+              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+                begin EmitB($48); EmitB($98); end;            { cdqe (sign-extend) }
+              EmitB($48); EmitB($D3); EmitB($F8);             { sar rax, cl }
+            end;
           { `shl` in a 64-bit register on a <8-byte operand leaves a value shifted
             into bit 31 looking positive (1 shl 31 read 2147483648, not
             -2147483648). Re-derive the narrow result from the low 32 bits: cdqe

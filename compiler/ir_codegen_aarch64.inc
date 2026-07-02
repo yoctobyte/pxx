@@ -1226,6 +1226,16 @@ begin
             EmitI32($2A0003E0);                            { mov w0, w0 }
           EmitI32($9AC12400);                              { lsr x0, x0, x1 }
         end
+        else if op = Ord(tkShr) then
+        begin
+          { C signed >> (bug-c-signed-arith-shift-right): arithmetic shift.
+            Mirrors the logical case above but sign-extends (`sxtw x0, w0`)
+            instead of zero-extending for a <8-byte operand, and uses asrv
+            instead of lsrv. }
+          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+            EmitI32($93407C00);                            { sxtw x0, w0 }
+          EmitI32($9AC12800);                              { asr x0, x0, x1 }
+        end
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
