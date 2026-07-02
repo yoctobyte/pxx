@@ -87,3 +87,33 @@ generalizes cleanly, before doing the rest.
 - Regression tests for each name; self-host byte-identical; full cross suite
   green (this is foundational-enough to warrant the full cross-target run,
   not just host).
+
+## Progress — 2026-07-02, pilot landed: `Length` converted (v137)
+
+The recommended pilot is in. Turned out much smaller than the wide estimate:
+`tkLength` had exactly TWO token-consuming sites — the lexer production and
+one ParseFactor case (everything else uses `-Ord(tkLength)` as an intrinsic
+CALL id, which is untouched — the enum member stays). Conversion shape:
+
+1. lexer.inc: drop the `'length' -> tkLength` production (comment left in
+   place); the name lexes as a plain tkIdent.
+2. ParseFactor ident dispatch: the old tkLength body moved next to Succ/Pred
+   with the standard soft-intrinsic guard —
+   `CaseEqual(name,'Length') and (procIdx < 0) and (FindSym(name) < 0) and
+   (next = '(')`. The `FindSym` guard is REQUIRED for FPC parity: verified
+   against real FPC 3.2.2 that a variable named `length` in scope shadows the
+   intrinsic and makes `Length(s)` a compile error — without the guard pxx
+   silently kept the intrinsic (divergence caught in testing).
+3. IsDeclNameTok: dead tkLength entry removed.
+
+Bonus: `LENGTH(...)` (any casing) now works — the old lexer production only
+matched `length`/`Length` exactly, so `LENGTH` was already a broken ident.
+
+Gate: test/test_soft_keyword_length.pas (9 cases — var/param/field/local
+shadow declarations, literal + static-array folds, casing, r-value; output
+byte-matched vs FPC) in make test; full suite green; self-host byte-identical.
+
+Remaining 12 (same recipe, per-name site analysis needed): value-context ones
+(`Chr`, `Ord`, `Low`, `High`) mirror Length; statement-context ones (`Inc`,
+`Dec`, `Exit`, `Halt`, `Break`, `Continue`, plus `GetMem`/`FreeMem`) also
+dispatch in ParseStatementAST and need the statement-side ident path.

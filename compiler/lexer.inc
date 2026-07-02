@@ -157,8 +157,11 @@ begin
     if (s[1]='P') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
     if (s[1]='r') and (s[2]='e') and (s[3]='c') and (s[4]='o') and (s[5]='r') and (s[6]='d') then Result := tkRecord;
     if CaseEqual(s, 'readln') then Result := tkReadln;
-    if (s[1]='l') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
-    if (s[1]='L') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
+    { 'length' deliberately NOT a keyword token: it lexes as a plain tkIdent and
+      ParseFactor dispatches on the name (soft keyword), so `var length: ...`
+      is a legal identifier like in FPC. Pilot conversion for
+      bug-hard-keyword-intrinsics-block-identifier-use; tkLength survives only
+      as the -Ord(tkLength) intrinsic CALL id. }
     if (s[1]='g') and (s[2]='e') and (s[3]='t') and (s[4]='m') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
     if (s[1]='G') and (s[2]='e') and (s[3]='t') and (s[4]='M') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
     if (s[1]='a') and (s[2]='r') and (s[3]='g') and (s[4]='s') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;

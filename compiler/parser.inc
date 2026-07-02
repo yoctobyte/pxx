@@ -224,7 +224,7 @@ begin
     Exit;
   end;
   case CurTok.Kind of
-    tkHalt, tkInc, tkDec, tkLength, tkGetMem, tkFreeMem, tkOrd, tkChr, tkExit,
+    tkHalt, tkInc, tkDec, tkGetMem, tkFreeMem, tkOrd, tkChr, tkExit,
     tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
     tkArgCount, tkArgStr, tkHigh, tkLow:
       IsDeclNameTok := True;
@@ -3816,56 +3816,6 @@ begin
       else
         Error('String(): operand must be Char or string');
     end;
-    tkLength:
-    begin
-      idx := FindSym(CurTok.SVal);
-      if (idx >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
-      begin
-        Next;
-        CurASTNode := ParseLValueAST(idx, TokPos - 2);
-        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-        Exit;
-      end;
-      Next; Expect(tkLParen, '(');
-      { Length of a string LITERAL folds to its char count at compile time
-        (FPC: Length('hello') = 5). Covers the common literal forms without the
-        runtime [-8]-header path, which only an lvalue string/array has. }
-      if CurTok.Kind = tkString then
-      begin
-        node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := Length(CurTok.SVal); ASTTk[node] := Ord(tyInteger);
-        Next; Expect(tkRParen, ')');
-        CurASTNode := node;
-        Exit;
-      end;
-      { Any string/array r-value: an lvalue (var/field/element) keeps the
-        force-addressed [data-8] header read; a non-lvalue managed-string value
-        (concat / function result) lowers as a value (IR side de-references the
-        handle directly — see IsASTLValue gate in ir.inc). ParseExpr also resolves
-        a bare ident / implicit-Self field exactly as ParseLValueAST did. }
-      ParseExpr;
-      valNode := CurASTNode;
-      Expect(tkRParen, ')');
-      { Length of a whole 1-D static array is a compile-time constant (FPC too):
-        the runtime -tkLength path reads a [data-8] length header, which only a
-        dyn array / open-array param has — a bare static array has none. Params
-        (incl. open arrays) and multi-dim keep the runtime path. }
-      if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
-         Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
-         (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] <= 1) then
-      begin
-        node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := Syms[ASTIVal[valNode]].ArrLen; ASTTk[node] := Ord(tyInteger);
-        CurASTNode := node;
-      end
-      else
-      begin
-        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        ASTLeft[node] := argSeq;
-        CurASTNode := node;
-      end;
-    end;
     tkHigh:
     begin
       { High(arr) := Length(arr) - 1. Reuses the Length call + a subtraction, so
@@ -4615,6 +4565,57 @@ begin
         node := AllocNode(AN_IS_TEST);
         ASTLeft[node] := exprNode; ASTIVal[node] := ci; ASTTk[node] := Ord(tyBoolean);
         CurASTNode := node; LastExprTk := tyBoolean;
+        Exit;
+      end;
+
+      { Length(x): soft-keyword intrinsic (lexes as a plain ident, so `var
+        length: ...` is a legal identifier like in FPC — pilot for
+        bug-hard-keyword-intrinsics-block-identifier-use). A user routine of
+        the same name shadows it, and a plain `length` not followed by `(`
+        resolves as an ordinary identifier via the normal paths below. }
+      if CaseEqual(name, 'Length') and (procIdx < 0) and (FindSym(name) < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        { Length of a string LITERAL folds to its char count at compile time
+          (FPC: Length('hello') = 5). Covers the common literal forms without
+          the runtime [-8]-header path, which only an lvalue string/array has. }
+        if CurTok.Kind = tkString then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := Length(CurTok.SVal); ASTTk[node] := Ord(tyInteger);
+          Next; Expect(tkRParen, ')');
+          CurASTNode := node;
+          Exit;
+        end;
+        { Any string/array r-value: an lvalue (var/field/element) keeps the
+          force-addressed [data-8] header read; a non-lvalue managed-string
+          value (concat / function result) lowers as a value (IR side
+          de-references the handle directly — see IsASTLValue gate in ir.inc). }
+        ParseExpr;
+        valNode := CurASTNode;
+        Expect(tkRParen, ')');
+        { Length of a whole 1-D static array is a compile-time constant (FPC
+          too): the runtime -tkLength path reads a [data-8] length header,
+          which only a dyn array / open-array param has — a bare static array
+          has none. Params (incl. open arrays) and multi-dim keep the runtime
+          path. }
+        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+           Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
+           (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] <= 1) then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := Syms[ASTIVal[valNode]].ArrLen; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else
+        begin
+          node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+          ASTLeft[node] := argSeq;
+          CurASTNode := node;
+        end;
+        LastExprTk := tyInteger;
         Exit;
       end;
 
