@@ -307,6 +307,14 @@ begin
       MaxStackFrameSize := PasOptionInt(option, 19);
       Inc(i);
     end
+    else if option = '--no-div-check' then
+    begin
+      { Opt out of the integer div/mod pre-divide zero check (default on, FPC
+        style: divide by zero = clean "Runtime error 200" instead of a raw
+        SIGFPE core dump). See bug-integer-div-zero-sigfpe-uncatchable. }
+      NoDivCheck := True;
+      Inc(i);
+    end
     else if option = '--lax-decl-order' then
     begin
       { Opt out of declare-before-use gating for forward-visible global vars

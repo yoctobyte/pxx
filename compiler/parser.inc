@@ -9,6 +9,7 @@ procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forwar
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
+procedure EmitDiv0Stub; forward;
 
 
 function AllocNode(kind: Integer): Integer;
@@ -15754,6 +15755,11 @@ begin
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
   if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
+  { Integer div-by-zero abort stub (Runtime error 200): unconditional, tiny, and
+    referenced by every div/mod site that has no builtinheap PXXDivZero to call.
+    x86-64 only for now (other backends keep their per-target hardware behavior
+    until their sites get the check — see bug-integer-div-zero-sigfpe-uncatchable). }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 

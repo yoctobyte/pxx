@@ -1342,6 +1342,7 @@ var
   CurBodyHdrTok    : Integer;    { token index of the routine body being compiled; high = see all (outside a body) }
   DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
+  NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
@@ -1358,6 +1359,11 @@ var
   CurGenSlotNext  : Integer;  { next persistent-slot index (offset = SL_OFF_SLOTS + 8*idx) }
   CurGenScopeBase : Integer;  { first sym idx of the current stackless generator's scope (save/restore only its own slots, never leaked globals) }
   GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
+  Div0StubAddr : Integer;  { code offset of the shared div-by-zero abort stub
+                             (write "Runtime error 200 ..." + exit_group(200)),
+                             emitted unconditionally on x86-64; the fallback
+                             call target when builtinheap (PXXDivZero) is not
+                             pulled in. See bug-integer-div-zero-sigfpe-uncatchable. }
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;

@@ -850,10 +850,37 @@ begin
     end
     else if isJmp or AsmTextJccCode(mnem, cc) then
     begin
-      { operand = label name }
+      { operand = label name, or a constant byte displacement (`jnz +5`,
+        `jmp -3`): bytes to skip relative to the END of the (short-form)
+        instruction — i.e. the raw rel8 field. For hops over emission the
+        assembler cannot see (an EmitCallProc between two EmitAsmX64 calls,
+        whose labels are per-call). Short range only (+-127). }
       while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
       target := '';
       while j <= Length(trimmed) do begin AppendChar(target, trimmed[j]); Inc(j); end;
+
+      if (Length(target) >= 1) and
+         ((target[1] = '+') or (target[1] = '-') or
+          ((target[1] >= '0') and (target[1] <= '9'))) then
+      begin
+        disp := 0; k := 1;
+        if (target[1] = '+') or (target[1] = '-') then k := 2;
+        if k > Length(target) then Error('EmitAsmX64: bad constant jump displacement');
+        while k <= Length(target) do
+        begin
+          if (target[k] < '0') or (target[k] > '9') then
+            Error('EmitAsmX64: bad constant jump displacement');
+          disp := disp * 10 + (Ord(target[k]) - Ord('0'));
+          Inc(k);
+        end;
+        if target[1] = '-' then disp := -disp;
+        if (disp < -128) or (disp > 127) then
+          Error('EmitAsmX64: constant jump displacement out of rel8 range');
+        if isJmp then EncB($EB) else EncB($70 + cc);
+        EncB(disp and $FF);
+        Inc(i);
+        continue;
+      end;
 
       defined := False; targetPos := 0;
       for k := 0 to AsmLblCount - 1 do

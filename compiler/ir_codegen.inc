@@ -381,6 +381,51 @@ begin
   ]);
 end;
 
+procedure EmitDiv0Stub;
+{ Shared integer-div-by-zero abort stub: write the FPC-style runtime error to
+  stdout (FPC prints runtime errors to output) and exit_group(200). Pure
+  syscalls, no unit dependency — the fallback target for programs that do not
+  pull builtinheap (whose PXXDivZero adds the raise-hook upgrade path). Emitted
+  unconditionally on x86-64, right after the entry stub. }
+var si: Integer;
+begin
+  Div0StubAddr := CodeLen;
+  si := InternStr('Runtime error 200 (division by zero)' + Chr(10));
+  EmitAsmX64([
+    'mov rax, %', 1,                        { sys_write }
+    'mov rdi, %', 1,                        { stdout }
+    'mov rsi, @data', Strs[si].Offset + 8,  { message bytes }
+    'mov rdx, %', Strs[si].Len,
+    'syscall',
+    'mov rax, %', 231,                      { sys_exit_group }
+    'mov rdi, %', 200,
+    'syscall'
+  ]);
+end;
+
+procedure EmitDivZeroCheckX64;
+{ Pre-divide zero check for integer div/mod (divisor in rcx): 2 instructions on
+  the fall-through path next to a ~20+-cycle idiv. Calls PXXDivZero (message +
+  Halt(200), hook-upgradable to a raised exception) when builtinheap is in the
+  program, else the unit-free Div0StubAddr — both never return. Both call forms
+  are exactly 5 bytes (E8 rel32), matching the jnz +5. Opt-out: --no-div-check. }
+var procIdx, callStart: Integer;
+begin
+  if NoDivCheck then Exit;
+  EmitAsmX64([
+    'test rcx, rcx',
+    'jnz +5'          { over the call below — must stay exactly 5 bytes }
+  ]);
+  callStart := CodeLen;
+  procIdx := FindProc('PXXDivZero');
+  if procIdx >= 0 then
+    EmitCallProc(procIdx)
+  else
+    IREmitCodeCall(Div0StubAddr);
+  if CodeLen - callStart <> 5 then
+    Error('compiler error: div-zero check call must be exactly 5 bytes (jnz +5 would land mid-instruction)');
+end;
+
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
@@ -2597,6 +2642,7 @@ begin
           
           tkDiv:
             begin
+              EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else
@@ -2604,6 +2650,7 @@ begin
             end;
           tkMod:
             begin
+              EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else

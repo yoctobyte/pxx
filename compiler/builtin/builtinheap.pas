@@ -1188,6 +1188,26 @@ begin
   Result := Pointer(Int64(destData) + headB);
 end;
 
+type
+  TPXXDivZeroProc = procedure;
+var
+  { Installed at startup by an exception-providing unit (future sysutils-style
+    hook) to convert division by zero into a raised, catchable exception —
+    mirrors FPC's System.ErrorProc design. Default nil = FPC-without-sysutils
+    behavior below. BSS, so nil without any initialization code. }
+  PXXDivZeroHook: TPXXDivZeroProc;
+
+{ Integer div/mod by zero. The backend's pre-divide check calls this instead of
+  letting the divide execute (x86 would raw-SIGFPE; ARM would silently yield 0).
+  FPC behavior: "Runtime error 200" + exit code 200. Never returns unless a
+  hook raises past it. }
+procedure PXXDivZero;
+begin
+  if PXXDivZeroHook <> nil then PXXDivZeroHook();
+  writeln('Runtime error 200 (division by zero)');
+  Halt(200);
+end;
+
 {$ifdef CPU_XTENSA}
 { Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;

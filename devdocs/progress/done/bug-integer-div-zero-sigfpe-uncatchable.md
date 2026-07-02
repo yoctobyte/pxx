@@ -164,3 +164,39 @@ Still parked; recording the narrower, precisely-counted x86-64 scope so a
 future pass (or the user) can weigh the real tradeoff (small code footprint
 vs. real precedent-setting/consistency questions) instead of over- or
 under-estimating the effort.
+
+## Resolution — 2026-07-02, Track A (x86-64 slice landed after user discussion)
+
+Discussed live with the user (the architecture questions the two parking notes
+raised are now answered):
+
+- **Detection**: pre-divide check (`test rcx,rcx; jnz +5; call ...`) at the one
+  x86-64 div/mod binop site. Default ON, FPC-style; `--no-div-check` opts out
+  (restores the raw SIGFPE). 2 instructions next to a ~20+-cycle idiv.
+- **No sysutils dependency** (user requirement "stick to builtins"): the check
+  calls `PXXDivZero` in builtinheap (message + Halt(200)) when that unit is in
+  the program, else a unit-free emitted stub `Div0StubAddr` (raw write +
+  exit_group syscalls) — both print `Runtime error 200 (division by zero)`,
+  exit code 200, matching FPC-without-sysutils behavior.
+- **Catchable-exception upgrade path built in but not populated**:
+  `PXXDivZeroHook` procvar in builtinheap mirrors FPC's System-unit
+  ErrorProc/hook design (FPC also only raises EDivByZero when sysutils'
+  initialization installs hooks at startup — it is NOT a compile-time import
+  check). Which unit installs the hook here (builtin-resident Exception vs
+  never) is deliberately deferred to
+  [[decide-int-div-zero-behavior-unification]].
+- **Variant div/mod**: PXXVarBinOp is Pascal compiled by the same backend, so
+  its internal div/mod got the check for free.
+- **Floats**: explicitly out of scope (user: quiet IEEE inf/NaN propagation is
+  the preferred default for real-world data; value pre-checks are the wrong
+  tool for floats anyway — overflow/denormals need the FPU mask mechanism).
+  Filed [[feature-float-exception-mask-control]] (blocked on
+  [[feature-signal-handlers]]).
+- **Remaining targets** (i386 SIGFPE, arm silent-0, riscv -1) + the still
+  unguarded `Low(Int64) div -1` overflow trap + default/switch polarity:
+  folded into [[decide-int-div-zero-behavior-unification]] (low prio, decision
+  ticket capturing the discussion's pros and cons).
+
+Gate: test/test_div_zero_re200.pas (div + mod paths, exit-code 200 + message
+oracle, non-zero divisors sanity) wired into make test; full suite green;
+self-host converged (3-gen, codegen change) byte-identical.
