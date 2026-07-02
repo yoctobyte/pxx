@@ -24,13 +24,12 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
-| bug-implicit-self-method-loses-to-unit-proc | A | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
 | bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -134,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (418)
+## done (419)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -258,6 +257,7 @@ _none_
 | bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
+| bug-implicit-self-method-loses-to-unit-proc | A | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
 | bug-import-class-sibling-call-corrupts-resolution | A | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
@@ -575,7 +575,6 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-compiler-uses-unit-interactions
-- [A] bug-implicit-self-method-loses-to-unit-proc
 - [A] bug-max-proc-params-32-selfmiscompile
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification

@@ -36,3 +36,16 @@ which already consult FindUMeth — the generic call path is what's missing it.
 adventure.pas compiles + demo green; minimal repro (method Move + uses unit
 with proc Move) FPC-parity; no change to plain overload resolution
 otherwise; self-host byte-identical.
+
+## Resolution (2026-07-02, v150)
+
+Fixed in parser.inc: after the idx/procIdx lookup in BOTH the statement and
+expression (factor) ident paths, procIdx is cleared when the name is
+unqualified, no local/param shadows it, and `FindUMeth(CurSelfClass, name)`
+hits — the existing implicit-Self dispatch then takes the call. Plain-proc
+resolution outside methods (and unit-qualified calls) unchanged.
+
+Test: `test/test_method_shadows_unit_proc.pas` (FPC-oracle-verified: method
+wins over sysutils.Move, same-file plain proc, and via the virtual path;
+plain proc still reachable outside methods). Adventure demo compiles + runs.
+Self-host byte-identical, full `make test` green, pinned v150.
