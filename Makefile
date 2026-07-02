@@ -408,6 +408,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_method_implicit_field26)" = "$$(printf '3\n2\n42\n0\n-1')"
 	./$(COMPILER) test/test_method_read_write_unqualified.pas /tmp/test_method_rw_unqual26
 	test "$$(/tmp/test_method_rw_unqual26)" = "$$(printf 'data=42\nr=43')"
+	# inside a method, the class's own method shadows a same-name plain proc (sysutils.Move vs TGame.Move)
+	./$(COMPILER) test/test_method_shadows_unit_proc.pas /tmp/test_method_shadows_unit_proc26
+	test "$$(/tmp/test_method_shadows_unit_proc26)" = "$$(printf 'tick=50\npos=5\nsteps=3\nplainHits=0\nb0=7 b1=8\nplainHits2=2')"
 	./$(COMPILER) test/test_forin_implicit_field.pas /tmp/test_forin_implicit_field26
 	test "$$(/tmp/test_forin_implicit_field26)" = "$$(printf '10\n42\n3\n121')"
 	./$(COMPILER) test/test_dynarray_global_after_method.pas /tmp/test_dynarray_global_after_method26

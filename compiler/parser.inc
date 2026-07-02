@@ -4423,6 +4423,18 @@ begin
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
         Error('use of auto variable before type is inferred');
 
+      { FPC scoping: inside a method, the enclosing class's own method shadows
+        a same-name plain proc from an outer/uses scope (innermost scope wins —
+        sysutils.Move vs TGame.Move). Clearing procIdx routes the name to the
+        implicit-Self dispatch below instead of plain-proc overload matching,
+        which knows nothing of methods. A local var/param (idx >= 0) still
+        shadows the method; a unit-qualified name (qUnit >= 0) stays explicit.
+        See bug-implicit-self-method-loses-to-unit-proc. }
+      if (procIdx >= 0) and (qUnit < 0) and (idx < 0) and
+         (CurSelfClass >= REC_UCLASS_BASE) and
+         (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
+        procIdx := -1;
+
       { `Eof` (standard input), no args -> Boolean. The textfile RTL declares
         `Eof(var f: Text)`, but a bare `Eof` / `Eof()` cannot bind that file arg,
         so the no-arg form routes to stdin Eof regardless of that proc; the
@@ -9149,6 +9161,16 @@ begin
           procIdx := FindProcInUnit(name, qUnit)
         else
           procIdx := FindProc(name);
+        { FPC scoping: the enclosing class's own method shadows a same-name
+          plain proc (innermost scope wins) — clear procIdx so the implicit-Self
+          dispatch below takes the call instead of plain-proc matching. Guarded
+          like that dispatch: si >= 0 (a local shadows the method) and unit-
+          qualified names keep the plain path. Companion to the same clear on
+          the expression side (bug-implicit-self-method-loses-to-unit-proc). }
+        if (procIdx >= 0) and (qUnit < 0) and (si < 0) and
+           (CurSelfClass >= REC_UCLASS_BASE) and
+           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
+          procIdx := -1;
         if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;
