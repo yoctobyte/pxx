@@ -6200,6 +6200,18 @@ begin
   ASTTk[Result] := Ord(tyInt64);
 end;
 
+{ SlSet(g, off, val) statement for the for-in desugar (the transform-side
+  GenSlSetStmt is declared later and takes the generator's self sym). }
+function GenSlSetStmt2(gIdx, off, valNode: Integer): Integer;
+var offLit: Integer;
+begin
+  offLit := AllocNode(AN_INT_LIT);
+  ASTIVal[offLit] := off;
+  ASTTk[offLit] := Ord(tyInt64);
+  Result := GenMakeCall6(FindProc('SlSet'), tyInt64,
+    GenMakeIdent(gIdx, tyPointer), offLit, valNode, -1, -1, -1);
+end;
+
 function ParseForInGeneratorAST(varIdx, gpi: Integer): Integer;
 var
   bodyNode, nargs, gIdx: Integer;
@@ -6219,7 +6231,26 @@ begin
   begin
     if CurTok.Kind <> tkRParen then
       repeat
-        ParseExpr;
+        { A record argument (a stackless generator's `const pos: TRec` param is
+          by-ref) is carried as its ADDRESS in the instance slot — the record
+          value itself doesn't fit the one-word SlAlloc args, and ParseExpr has
+          no value node for a bare record lvalue anyway. Parse it as an lvalue
+          and take its address; the record must outlive the loop (a caller-side
+          variable does). Stackless only: the stackful CoAlloc path keeps its
+          existing lowering untouched. }
+        if ProcIsStackless[gpi] and (CurTok.Kind = tkIdent) and
+           (FindSym(CurTok.SVal) >= 0) and
+           (Syms[FindSym(CurTok.SVal)].TypeKind = tyRecord) and
+           (not Syms[FindSym(CurTok.SVal)].IsArray) then
+        begin
+          sa1 := FindSym(CurTok.SVal); sa2 := TokPos - 1; Next;
+          instLit := AllocNode(AN_ADDR);
+          ASTLeft[instLit] := ParseLValueAST(sa1, sa2);
+          ASTTk[instLit] := Ord(tyPointer);
+          CurASTNode := instLit;
+        end
+        else
+          ParseExpr;
         case nargs of
           0: a0 := CurASTNode;
           1: a1 := CurASTNode;
@@ -6239,31 +6270,66 @@ begin
 
   if ProcIsStackless[gpi] then
   begin
-    { Stackless: alloc + zero an instance, store args; advance by calling the
-      generator's step function directly (the compiler knows it — PXX cannot call
-      through a stored proc pointer with args). CoCurrent/free are shared shape.
-        __g := SlAlloc(instSize, nargs, a0..a3);
+    { Stackless: alloc + zero an instance, then store each provided argument
+      into its persistent slot with its own SlSet — NOT the packed
+      SlAlloc(instSize, nargs, a0..a3): its 6 Int64 params are 12 argument
+      words, over the riscv32 backend's 8-word call limit. Advance by calling
+      the generator's step function directly (the compiler knows it — PXX
+      cannot call through a stored proc pointer with args).
+        __g := SlNew(instSize);
+        SlSet(__g, SLOTS+8k, ak) for each provided arg;
         while Gen(__g) do begin x := SlCurrent(__g); BODY end;
         SlFree(__g); }
-    if (FindProc('SlAlloc') < 0) or (FindProc('SlCurrent') < 0) or (FindProc('SlFree') < 0) then
+    if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) or
+       (FindProc('SlCurrent') < 0) or (FindProc('SlFree') < 0) then
       Error('for-in generator: the slgen unit is not in scope (add `uses slgen;`)');
     instLit := AllocNode(AN_INT_LIT); ASTIVal[instLit] := ProcGenInstSize[gpi]; ASTTk[instLit] := Ord(tyInt64);
-    callAlloc := GenMakeCall6(FindProc('SlAlloc'), tyPointer, instLit, nargsLit, a0, a1, a2, a3);
+    callAlloc := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
     assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
+    assignG := GenMakeSeq(assignG, -1);
+    if nargs >= 1 then
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 0, a0), -1));
+    if nargs >= 2 then
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 8, a1), -1));
+    if nargs >= 3 then
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 16, a2), -1));
+    if nargs >= 4 then
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 24, a3), -1));
 
     { advance = a direct call to the step function with the instance pointer.
       The step proc's ABI is (self + the declared params); only self is real (the
       declared params are restored from the instance), but the call must provide
       one arg per param — the internal-call codegen pops ParamCount registers, so
       a short arg list would unbalance the stack. Pad with zeros. }
+    { A by-ref (var / const-record) declared param can't be padded with a zero
+      literal: the call lowering marshals by-ref args via IRLowerAddress, and a
+      literal has no address. Pad those with the (addressable) instance var —
+      the callee never reads the incoming pad, its restore prologue overwrites
+      every param slot from the instance. }
     sa1 := -1; sa2 := -1; sa3 := -1; sa4 := -1;
-    if ProcGenParamCnt[gpi] >= 1 then sa1 := GenZeroLit;
-    if ProcGenParamCnt[gpi] >= 2 then sa2 := GenZeroLit;
-    if ProcGenParamCnt[gpi] >= 3 then sa3 := GenZeroLit;
-    if ProcGenParamCnt[gpi] >= 4 then sa4 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 1 then
+      if Procs[gpi].Params[1].IsRef then sa1 := GenMakeIdent(gIdx, tyPointer) else sa1 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 2 then
+      if Procs[gpi].Params[2].IsRef then sa2 := GenMakeIdent(gIdx, tyPointer) else sa2 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 3 then
+      if Procs[gpi].Params[3].IsRef then sa3 := GenMakeIdent(gIdx, tyPointer) else sa3 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 4 then
+      if Procs[gpi].Params[4].IsRef then sa4 := GenMakeIdent(gIdx, tyPointer) else sa4 := GenZeroLit;
     callNext := GenMakeCall6(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer), sa1, sa2, sa3, sa4, -1);
     callCur := GenMakeCall6(FindProc('SlCurrent'), tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
-    assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
+    if Syms[varIdx].TypeKind = tyRecord then
+    begin
+      { Record element: the CURRENT word holds the ADDRESS of the record region
+        at the instance tail (published at each yield) — deref and copy into the
+        loop variable, same shape as the stackful CoCurrent path below. }
+      curDeref := AllocNode(AN_DEREF);
+      ASTLeft[curDeref] := callCur;
+      ASTTk[curDeref] := Ord(tyRecord);
+      ASTIVal[curDeref] := Syms[varIdx].RecName;
+      assignX := GenMakeAssign(GenMakeIdent(varIdx, tyRecord), curDeref);
+    end
+    else
+      assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
 
     innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
     whileNode := AllocNode(AN_WHILE);
@@ -7060,8 +7126,38 @@ begin
   end;
 end;
 
+{ AN_SLOTADDR node for sym i — the address of the local's OWN slot. }
+function GenMakeSlotAddr(i: Integer): Integer;
+begin
+  Result := AllocNode(AN_SLOTADDR);
+  ASTIVal[Result] := i;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
+{ @lvalue as an AST node (AN_ADDR keeps by-ref auto-deref semantics — an IsRef
+  sym yields the caller's address, which is what a copy source wants). }
+function GenMakeAddrOf(lv: Integer): Integer;
+begin
+  Result := AllocNode(AN_ADDR);
+  ASTLeft[Result] := lv;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
+{ Deref of the slot address as one machine word (raw slot READ, no by-ref
+  auto-deref): used to checkpoint a by-ref param's pointer word. Pointer-typed,
+  NOT Int64: the frame slot is native-pointer-width — an 8-byte store through
+  this deref would clobber the neighbouring slot on the 32-bit targets. }
+function GenMakeSlotWord(i: Integer): Integer;
+begin
+  Result := AllocNode(AN_DEREF);
+  ASTLeft[Result] := GenMakeSlotAddr(i);
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 { Build a sequence of SlSet(self, slotOff, localValue) for every persistent slot
-  allocated so far — called at each yield to checkpoint live locals. }
+  allocated so far — called at each yield to checkpoint live locals. A by-ref
+  param saves its POINTER WORD via the raw slot read; a record local blob-copies
+  its bytes (SlBlob). }
 function SLSaveLocals(selfSym: Integer): Integer;
 var i, head, tail, stmt: Integer;
 begin
@@ -7069,15 +7165,28 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
-                           GenMakeIdent(i, Syms[i].TypeKind));
+      if Syms[i].IsRef then
+        stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
+                             GenMakeSlotWord(i))
+      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
+        stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(RecSize(Syms[i].RecName)), -1, -1)
+      else
+        stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
+                             GenMakeIdent(i, Syms[i].TypeKind));
       if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
       else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
     end;
   Result := head;
 end;
 
-{ Build assignments restoring every persistent slot into its local at step entry. }
+{ Build assignments restoring every persistent slot into its local at step entry.
+  By-ref params get the pointer word written RAW into their slot (a plain assign
+  to an IsRef sym would store through the — at this point garbage — pointer);
+  record locals blob-copy back (SlUnblob). }
 function SLRestoreLocals(selfSym: Integer): Integer;
 var i, head, tail, stmt: Integer;
 begin
@@ -7085,8 +7194,18 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      stmt := GenMakeAssign(GenMakeIdent(i, Syms[i].TypeKind),
-                            GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]));
+      if Syms[i].IsRef then
+        stmt := GenMakeAssign(GenMakeSlotWord(i),
+                              GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]))
+      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
+        stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(RecSize(Syms[i].RecName)), -1, -1)
+      else
+        stmt := GenMakeAssign(GenMakeIdent(i, Syms[i].TypeKind),
+                              GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]));
       if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
       else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
     end;
@@ -7102,7 +7221,11 @@ end;
 
 function SLLower(node, selfSym, retSym: Integer): Integer; forward;
 
-{ yield E -> current:=E; state:=k; save locals; Result:=True; Exit; Lk: }
+{ yield E -> current:=E; state:=k; save locals; Result:=True; Exit; Lk:
+  Record element: E is always an lvalue here (a record call result was already
+  materialised into a hidden temp at the yield parse site, parser.inc ~8690) —
+  blob-copy its bytes into the instance CURRENT region and publish the region's
+  address in the CURRENT word. }
 function SLLowerYield(node, selfSym, retSym: Integer): Integer;
 var k, resumeLbl, setCur, setState, saveSeq, setRes, exitNode: Integer;
 begin
@@ -7111,7 +7234,21 @@ begin
   resumeLbl := NewSyntheticLabel;
   GenStateLabelIdx[k] := resumeLbl;
 
-  setCur   := GenSlSetStmt(selfSym, SL_OFF_CURRENT, ASTLeft[node]);
+  if CurGenElemOff >= 0 then
+  begin
+    setCur := GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                GenMakeIdent(selfSym, tyPointer),
+                GenMakeIntLit(CurGenElemOff),
+                GenMakeAddrOf(ASTLeft[node]),
+                GenMakeIntLit(RecSize(CurGenElemRecId)), -1, -1);
+    setCur := GenMakeSeq(setCur,
+              GenMakeSeq(GenSlSetStmt(selfSym, SL_OFF_CURRENT,
+                GenMakeArith(Ord(tkPlus),
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(CurGenElemOff))), -1));
+  end
+  else
+    setCur := GenSlSetStmt(selfSym, SL_OFF_CURRENT, ASTLeft[node]);
   setState := GenSlSetStmt(selfSym, SL_OFF_STATE, GenMakeIntLit(k));
   saveSeq  := SLSaveLocals(selfSym);
   setRes   := GenMakeAssign(GenMakeIdent(retSym, tyBoolean), GenMakeBoolLit(1));
@@ -7173,6 +7310,37 @@ begin
             GenMakeSeq(GenMakeLabel(endLbl), -1))))));
 end;
 
+{ Rewrite break/continue belonging to a FLATTENED loop into gotos: the loop's
+  own AN_WHILE/AN_FOR node is gone after flattening, so a verbatim (yield-free)
+  subtree's break/continue would reach the normal IR path with no enclosing
+  loop ("continue outside loop"). Descends the body but NOT into nested loop
+  constructs — those own their break/continue (flattened nested loops rewrite
+  for themselves when SLLowerFor/While recurses). }
+procedure SLRewriteLoopJumps(node, contLbl, brkLbl: Integer);
+begin
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_FOR, AN_WHILE, AN_REPEAT: Exit;   { inner loop owns its break/continue }
+    AN_BREAK:
+      begin
+        ASTKind[node] := AN_GOTO;
+        ASTSOffset[node] := -1; ASTSLen[node] := 0;
+        ASTIVal[node] := brkLbl;
+      end;
+    AN_CONTINUE:
+      begin
+        ASTKind[node] := AN_GOTO;
+        ASTSOffset[node] := -1; ASTSLen[node] := 0;
+        ASTIVal[node] := contLbl;
+      end;
+    else
+      begin
+        SLRewriteLoopJumps(ASTLeft[node], contLbl, brkLbl);
+        SLRewriteLoopJumps(ASTRight[node], contLbl, brkLbl);
+      end;
+  end;
+end;
+
 function SLLowerWhile(node, selfSym, retSym: Integer): Integer;
 var cond, body, topLbl, endLbl, test, bodyLo: Integer;
 begin
@@ -7181,6 +7349,7 @@ begin
   topLbl := NewSyntheticLabel;
   endLbl := NewSyntheticLabel;
   test := GenMakeIfGoto(GenMakeCmp(Ord(tkEq), cond, GenMakeBoolLit(0)), endLbl);
+  SLRewriteLoopJumps(body, topLbl, endLbl);
   bodyLo := SLLower(body, selfSym, retSym);
   Result := GenMakeSeq(GenMakeLabel(topLbl),
             GenMakeSeq(test,
@@ -7192,7 +7361,7 @@ end;
 function SLLowerFor(node, selfSym, retSym: Integer): Integer;
 var pair1, pair2, forVarNode, varSym: Integer;
     initN, limitN, isDown, body: Integer;
-    limSym, topLbl, endLbl: Integer;
+    limSym, topLbl, endLbl, incLbl: Integer;
     setVar, setLim, test, bodyLo, incN, cmpOp: Integer;
     vTk: TTypeKind;
 begin
@@ -7209,6 +7378,7 @@ begin
   limSym := SLNewSlotVar(tyInt64);       { evaluate limit once (persistent) }
   topLbl := NewSyntheticLabel;
   endLbl := NewSyntheticLabel;
+  incLbl := NewSyntheticLabel;           { continue target: run the increment }
 
   setVar := GenMakeAssign(GenMakeIdent(varSym, vTk), initN);
   setLim := GenMakeAssign(GenMakeIdent(limSym, tyInt64), limitN);
@@ -7219,6 +7389,7 @@ begin
             GenMakeCmp(cmpOp, GenMakeIdent(varSym, vTk), GenMakeIdent(limSym, tyInt64)),
             endLbl);
 
+  SLRewriteLoopJumps(body, incLbl, endLbl);
   bodyLo := SLLower(body, selfSym, retSym);
 
   if isDown <> 0 then
@@ -7233,9 +7404,10 @@ begin
             GenMakeSeq(GenMakeLabel(topLbl),
             GenMakeSeq(test,
             chainSeq(bodyLo,
+            GenMakeSeq(GenMakeLabel(incLbl),
             GenMakeSeq(incN,
             GenMakeSeq(GenMakeGoto(topLbl),
-            GenMakeSeq(GenMakeLabel(endLbl), -1))))))));
+            GenMakeSeq(GenMakeLabel(endLbl), -1)))))))));
 end;
 
 { case with a yield in a branch: flatten to the same test/goto shape the IR
@@ -7333,6 +7505,17 @@ begin
   end;
 end;
 
+{ Any persistent record slot in the current generator scope? }
+function SLHasRecordSlot: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := CurGenScopeBase to SymCount - 1 do
+    if (SymGenSlot[i] >= 0) and (Syms[i].TypeKind = tyRecord) and
+       (not Syms[i].IsArray) and (not Syms[i].IsRef) then
+      begin Result := True; Exit; end;
+end;
+
 { Build the full step-function body AST for a stackless generator proc `procIdx`.
   Persistent slots for the declared params + body locals must already be assigned
   (SymGenSlot). Returns the AST to CompileAST; sets CurGenSlotNext to its final
@@ -7345,6 +7528,23 @@ begin
     Error('stackless generator: the slgen unit is not in scope (add `uses slgen;`)');
   selfSym := Procs[procIdx].Params[0].SymIdx;
   retSym  := Procs[procIdx].RetSymIdx;
+
+  { Record element type: reserve a record-sized CURRENT region at the current
+    instance tail (synthetic slot vars appended by the transform land after it —
+    offsets just need stability, not order). SL_OFF_CURRENT then holds a POINTER
+    to this region; for-in derefs it into the loop variable. }
+  CurGenElemOff := -1;
+  CurGenElemRecId := REC_NONE;
+  if ProcGenElemTk[procIdx] = tyRecord then
+  begin
+    CurGenElemRecId := ProcGenElemRec[procIdx];
+    CurGenElemOff := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+    Inc(CurGenSlotNext, (RecSize(CurGenElemRecId) + 7) div 8);
+  end;
+  { Record locals / record element need the blob helpers (older slgen lacks them). }
+  if (CurGenElemOff >= 0) or SLHasRecordSlot then
+    if (FindProc('SlBlob') < 0) or (FindProc('SlUnblob') < 0) then
+      Error('stackless generator: record support needs slgen SlBlob/SlUnblob (update lib/rtl/slgen.pas in scope)');
 
   CurGenStateCtr := 1;                   { state 0 = first entry (falls through) }
   bodyLo := SLLower(bodyAST, selfSym, retSym);
@@ -7392,10 +7592,32 @@ begin
     if (i = selfS) or (i = retS) then Continue;
     if (Syms[i].Kind <> skParam) and (Syms[i].Kind <> skLocal) then Continue;
     tk := Syms[i].TypeKind;
-    if Syms[i].IsArray or Syms[i].IsRef or
-       (tk = tyString) or (tk = tyAnsiString) or (tk = tyRecord) or
+    if Syms[i].IsRef then
+    begin
+      { by-ref (var/const-record) param: the slot persists the caller ADDRESS
+        (one pointer word); save/restore go through AN_SLOTADDR so the word
+        itself is copied, never the pointee. }
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext);
+      Continue;
+    end;
+    if (tk = tyRecord) and not Syms[i].IsArray then
+    begin
+      { record local: reserve RecSize bytes of slot region (rounded up to
+        words); save/restore blob-copy it (SlBlob/SlUnblob). Plain-data
+        records only — a record with managed (string/dynarray) fields would
+        need per-field ARC across suspensions and is rejected.
+        See feature-stackless-generator-record-locals. }
+      if RecordHasManagedFields(Syms[i].RecName) then
+        Error('stackless generator: a record local with managed (string/dynarray) fields is not supported');
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext, (RecSize(Syms[i].RecName) + 7) div 8);
+      Continue;
+    end;
+    if Syms[i].IsArray or
+       (tk = tyString) or (tk = tyAnsiString) or
        (tk = tySet) or (tk = tyVariant) then
-      Error('stackless generator: only ordinal/pointer locals are supported (v1)');
+      Error('stackless generator: only ordinal/pointer/record locals are supported (arrays/strings/sets/variants pending)');
     SymGenSlot[i] := CurGenSlotNext;
     Inc(CurGenSlotNext);
   end;
@@ -7949,7 +8171,7 @@ begin
   savedBlockId := CurBlockId;
   if EnableLazyVar then
   begin
-    if BlockCount >= 8191 then Error('too many blocks');
+    if BlockCount >= 32767 then Error('too many blocks');
     Inc(BlockCount);
     BlockParent[BlockCount] := CurBlockId;
     CurBlockId := BlockCount;
@@ -8624,7 +8846,7 @@ begin
       else if CaseEqual(name, 'AsyncGo') then
       begin
         { Spawn a `; async; stackless;` coroutine onto the stackless scheduler.
-          AsyncGo(@Body) desugars to SLSpawn(@Body, SlAlloc(instSize,0,0,0,0,0)):
+          AsyncGo(@Body) desugars to SLSpawn(@Body, SlNew(instSize)):
           the compiler supplies the step fn (the rewritten Body) and a zero-inited
           heap instance; the scheduler resumes it via an indirect (proc-typed)
           call (SLRunUntilDone). v1: the routine takes no params. }
@@ -8637,13 +8859,13 @@ begin
           Error('AsyncGo: argument must be @<an `; async; stackless;` routine>');
         Next;
         Expect(tkRParen, ')');
-        if (FindProc('SLSpawn') < 0) or (FindProc('SlAlloc') < 0) then
+        if (FindProc('SLSpawn') < 0) or (FindProc('SlNew') < 0) then
           Error('AsyncGo: slsched/slgen not in scope (add `uses slgen, slsched;`)');
         idx := AllocNode(AN_PROCADDR); ASTIVal[idx] := procIdx; ASTTk[idx] := Ord(tyPointer);
         valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := ProcGenInstSize[procIdx]; ASTTk[valNode] := Ord(tyInt64);
         node := GenMakeCall6(FindProc('SLSpawn'), tyPointer, idx,
-                  GenMakeCall6(FindProc('SlAlloc'), tyPointer, valNode,
-                    GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit),
+                  GenMakeCall6(FindProc('SlNew'), tyPointer, valNode,
+                    -1, -1, -1, -1, -1),
                   -1, -1, -1, -1);
       end
       else if CaseEqual(name, '__pxxcoswitch') then
@@ -13519,6 +13741,10 @@ begin
   if isStackless then
   begin
     ProcGenElemTk[procIdx] := IntToTypeKind(declElemTk);
+    if IntToTypeKind(declElemTk) = tyRecord then
+      ProcGenElemRec[procIdx] := retRecId
+    else
+      ProcGenElemRec[procIdx] := REC_NONE;
     ProcGenParamCnt[procIdx] := nparams - 1;   { exclude the injected __genself }
     if (nparams - 1) > CO_MAX_PARAMS then
       Error('generator: at most 4 parameters in v1');

@@ -13,7 +13,7 @@ unit slsched;
   the RAM-cheap path for constrained devices.
 
   The compiler spawns one via `AsyncGo(@Body)`, which desugars to
-  `SLSpawn(@Body, SlAlloc(instSize, ...))` (instance allocation in slgen).
+  `SLSpawn(@Body, SlNew(instSize))` (instance allocation in slgen).
   SLRunUntilDone round-robins the live set, resuming each coroutine one await-step
   per pass, until all finish. Resumption is an indirect call through the stored
   proc-typed step pointer (procedural types). }

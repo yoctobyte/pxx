@@ -954,7 +954,24 @@ begin
       end;
 
     IR_SLOTADDR:
-      EmitLoadVarAddrA64(IRA[node]);            { always the slot address }
+      begin
+        { Raw slot address, unconditionally (defs.inc contract) — NOT
+          EmitLoadVarAddrA64, whose by-ref auto-deref would hand back the
+          caller's address for a var/const-record param; the stackless
+          save/restore uses IR_SLOTADDR to write a by-ref param's own slot.
+          Mirrors the x86-64/i386/arm32 raw-lea implementations. }
+        if Syms[IRA[node]].Kind = skGlobal then
+        begin
+          EmitI32($18000040);  { ldr w0, [pc+8] }
+          EmitI32($14000002);  { b [pc+8] }
+          EmitGlobRef(Syms[IRA[node]].Offset);
+        end
+        else
+        begin
+          EmitLoadImmA64(0, Syms[IRA[node]].Offset);
+          EmitI32($8B0003A0);  { add x0, x29, x0 }
+        end;
+      end;
 
     IR_SETLEN_STR:
       begin

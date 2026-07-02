@@ -3070,6 +3070,12 @@ begin
       Result := IRLowerAddress(ASTLeft[node]);
     end;
 
+    AN_SLOTADDR:
+    begin
+      { Address of the variable's OWN slot — no by-ref auto-deref (see defs). }
+      Result := IRAppend(IR_SLOTADDR, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+    end;
+
     AN_PROCADDR:
     begin
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);

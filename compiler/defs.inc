@@ -59,7 +59,9 @@ const
   MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
   MAX_DBG_TYPES  = 4096;      { DWARF -g: distinct type DIEs }
   MAX_LOOP_FIXUPS = 256;
-  MAX_GOTO_LABELS = 64;
+  MAX_GOTO_LABELS = 2048; { was 64 — a stackless generator burns ~1 label per
+                            yield + 2-3 per flattened if/while/for/case; chess's
+                            GenMoves alone needs several hundred }
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
   MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
   MAX_PAS_DEFINE_CHARS = 32768;
@@ -262,6 +264,14 @@ const
   ATOMIC_XCHG = 0;  { xchg [addr], val          -> old (xchg to mem is implicitly locked) }
   ATOMIC_CAS  = 1;  { lock cmpxchg [addr]; args (addr, expected, newval) -> old }
   ATOMIC_ADD  = 2;  { lock xadd [addr], delta   -> old }
+
+  AN_SLOTADDR      = 77; { address of a variable's own stack/BSS slot (lea),
+                           bypassing the by-ref auto-deref an AN_ADDR on a var/
+                           const param gets in IRLowerAddress. ASTIVal = Syms[]
+                           idx; yields tyPointer. Lowers to IR_SLOTADDR. Used by
+                           the stackless-generator transform to save/restore a
+                           by-ref param's POINTER WORD itself (a plain AN_ASSIGN
+                           to an IsRef sym stores THROUGH the caller's address). }
 
   AN_CLONE         = 72; { __pxxclone(flags, childStack, entry, arg, ctidptr): Int64.
                            Left = AN_ARG chain (exactly 5). Lowers to IR_CLONE: moves
@@ -904,7 +914,7 @@ var
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
-  BlockParent: array[0..8191] of Integer;
+  BlockParent: array[0..32767] of Integer;
   BlockCount: Integer;
   CurBlockId: Integer;
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
@@ -927,6 +937,7 @@ var
   ProcBodyEnd     : array[0..MAX_PROCS-1] of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
   ProcDbgMain     : array[0..MAX_PROCS-1] of Boolean;   { DWARF -g: proc defined in the main source file (gets a DW_TAG_subprogram DIE) }
   ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
+  ProcGenElemRec  : array[0..MAX_PROCS-1] of Integer;   { stackless: record id when the element type is a record (REC_NONE otherwise); CURRENT then holds a POINTER to a record region at the instance tail }
   ProcGenParamCnt : array[0..MAX_PROCS-1] of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
   ProcGenInstSize : array[0..MAX_PROCS-1] of Integer;   { stackless: instance byte size (header + persistent slots) }
   ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
@@ -1371,6 +1382,8 @@ var
   CurGenStateCtr  : Integer;  { next state number to assign to a yield in the current stackless body }
   CurGenSlotNext  : Integer;  { next persistent-slot index (offset = SL_OFF_SLOTS + 8*idx) }
   CurGenScopeBase : Integer;  { first sym idx of the current stackless generator's scope (save/restore only its own slots, never leaked globals) }
+  CurGenElemOff   : Integer;  { record element: byte offset of the CURRENT record region in the instance (-1 = scalar element) }
+  CurGenElemRecId : Integer;  { record element: record id of the yielded record type }
   GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
   SigRestorerAddr : Integer;  { code offset of the SA_RESTORER stub (rt_sigreturn) — x86-64 requires a userspace restorer }
   SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }
