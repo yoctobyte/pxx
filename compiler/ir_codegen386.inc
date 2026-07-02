@@ -1284,6 +1284,63 @@ begin
         end;
       end;
 
+    IR_READLINE:
+      begin
+        procIdx := FindProc('PXXReadLine');
+        if procIdx < 0 then Error('compiler error: PXXReadLine not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_DISCARD:
+      begin
+        procIdx := FindProc('PXXReadDiscard');
+        if procIdx < 0 then Error('compiler error: PXXReadDiscard not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_VAR:
+      begin
+        { Parse one read/readln target from the shared line buffer via the
+          portable builtin helpers (x86-64 keeps its asm path). A managed
+          string wants its SLOT address, so force lvalue-write mode like the
+          x86-64 branch does. }
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNode386(IRA[node]);    { eax = slot address }
+          InLValueWrite := savedLValueWrite;
+          EmitB($50);                  { push slot addr }
+          procIdx := FindProc('PXXReadVarStrM');
+          if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found');
+          EmitCallProc(procIdx);
+          EmitB($81); EmitB($C4); EmitI32(4);   { add esp, 4 }
+        end
+        else if tk = tyChar then
+        begin
+          IREmitNode386(IRA[node]);    { eax = target address }
+          EmitB($50);
+          procIdx := FindProc('PXXReadVarChar');
+          if procIdx < 0 then Error('compiler error: PXXReadVarChar not found');
+          EmitCallProc(procIdx);
+          EmitB($81); EmitB($C4); EmitI32(4);
+        end
+        else if TypeIsOrdinal(tk) then
+        begin
+          IREmitNode386(IRA[node]);    { eax = target address }
+          EmitB($50);                  { push dst }
+          EmitB($B8); EmitI32(TypeSize(tk));    { mov eax, size }
+          EmitB($50);                  { push sz }
+          procIdx := FindProc('PXXReadVarInt');
+          if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
+          EmitCallProc(procIdx);
+          EmitB($81); EmitB($C4); EmitI32(8);
+        end
+        else
+          Error('target i386: read/readln target type not supported');
+      end;
+
     IR_SETLEN_STR:
       begin
         { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
@@ -2265,8 +2322,20 @@ begin
             EmitB($CD); EmitB($80);
             Exit;
           end
+          else if j = 210 then
+          begin
+            { bare `Eof` (stdin) -> PXXStdinEof: Boolean (portable builtin,
+              shares the peek byte with PXXReadLine). }
+            procIdx := FindProc('PXXStdinEof');
+            if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
+            EmitCallProc(procIdx);
+            Exit;
+          end
           else
+          begin
+            ErrorIdent := 'builtin id ' + MangleSuffix(-procIdx);
             Error('target i386: builtin/special call not yet supported');
+          end;
         end;
         if ProcExternal[procIdx] then
         begin

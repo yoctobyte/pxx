@@ -473,6 +473,145 @@ begin
 {$endif}
 end;
 
+{ ===== Console input (read/readln) for the cross targets =====
+  x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
+  BSS_LINE_* scratch); the 32-bit/cross backends lower IR_READLINE /
+  IR_READ_VAR / IR_READ_DISCARD to these portable helpers instead. Semantics
+  mirror the x86-64 asm: one shared line buffer + cursor; a string target takes
+  the rest of the line; a char one byte; integer kinds skip blanks then parse
+  [-]digits. See feature-cross-readln-console-input. }
+var
+  PXXLineBuf: array[0..4095] of Byte;
+  PXXLineLen: Int64;
+  PXXLinePos: Int64;
+  PXXPeekByte: Byte;      { pushed-back stdin byte held by PXXStdinEof }
+  PXXPeekValid: Int64;
+
+procedure PXXReadLine;
+var n: Int64; b: Byte;
+begin
+  if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
+  PXXLinePos := 0;
+  PXXLineLen := 0;
+  while PXXLineLen < 4096 do
+  begin
+    { consume the byte Eof peeked (else it would be lost) before reading }
+    if PXXPeekValid <> 0 then
+    begin
+      b := PXXPeekByte;
+      PXXPeekValid := 0;
+      n := 1;
+    end
+    else
+      n := PXXSysRead(0, Int64(@b), 1);
+    if n <= 0 then Break;                 { EOF / error: empty or short line }
+    if b = 13 then Continue;              { skip \r }
+    if b = 10 then Break;                 { \n ends the line (not stored) }
+    PXXLineBuf[PXXLineLen] := b;
+    PXXLineLen := PXXLineLen + 1;
+  end;
+end;
+
+{ Bare `Eof` (stdin): not-eof while the line buffer holds unparsed content or a
+  pushed-back byte; otherwise peek one byte (stashed for the next PXXReadLine).
+  Mirrors the x86-64 EmitEof asm. }
+function PXXStdinEof: Boolean;
+var n: Int64;
+begin
+  if PXXLinePos < PXXLineLen then begin Result := False; Exit; end;
+  if PXXPeekValid <> 0 then begin Result := False; Exit; end;
+  n := PXXSysRead(0, Int64(@PXXPeekByte), 1);
+  if n <= 0 then
+    Result := True
+  else
+  begin
+    PXXPeekValid := 1;
+    Result := False;
+  end;
+end;
+
+procedure PXXReadDiscard;
+begin
+  PXXLinePos := PXXLineLen;
+end;
+
+{ readln(s: AnsiString): rest of the line -> fresh managed string, published
+  into the target slot (releases the old handle, nil-safe). }
+procedure PXXReadVarStrM(slot: Pointer);
+var len: Int64; oldp, newp: Pointer;
+begin
+  len := PXXLineLen - PXXLinePos;
+  if len < 0 then len := 0;
+  newp := PXXStrFromLit(len, @PXXLineBuf[PXXLinePos]);
+  PXXLinePos := PXXLineLen;
+  oldp := Pointer(PWord(slot)^);
+  PWord(slot)^ := Int64(newp);
+  PXXStrDecRef(oldp);
+end;
+
+{ readln(c: Char): one byte from the cursor, #0 when the line is exhausted. }
+procedure PXXReadVarChar(dst: Pointer);
+begin
+  if PXXLinePos < PXXLineLen then
+  begin
+    PByte(dst)^ := PXXLineBuf[PXXLinePos];
+    PXXLinePos := PXXLinePos + 1;
+  end
+  else
+    PByte(dst)^ := 0;
+end;
+
+{ readln(i: <integer family>): skip blanks/tabs, optional '-', digits; store
+  into dst at the target's width (sz = 1/2/4/8 bytes). }
+procedure PXXReadVarInt(dst: Pointer; sz: NativeInt);
+var v: Int64; neg: Boolean; b: Byte; d: Int64;
+begin
+  while (PXXLinePos < PXXLineLen) and
+        ((PXXLineBuf[PXXLinePos] = 32) or (PXXLineBuf[PXXLinePos] = 9)) do
+    PXXLinePos := PXXLinePos + 1;
+  neg := False;
+  if (PXXLinePos < PXXLineLen) and (PXXLineBuf[PXXLinePos] = 45) then
+  begin
+    neg := True;
+    PXXLinePos := PXXLinePos + 1;
+  end;
+  v := 0;
+  while PXXLinePos < PXXLineLen do
+  begin
+    b := PXXLineBuf[PXXLinePos];
+    if (b < 48) or (b > 57) then Break;
+    v := v * 10 + (b - 48);
+    PXXLinePos := PXXLinePos + 1;
+  end;
+  if neg then v := -v;
+  if sz = 1 then PByte(dst)^ := Byte(v)
+  else if sz = 2 then
+  begin
+    PByte(dst)^ := Byte(v);
+    PByte(Int64(dst) + 1)^ := Byte(v shr 8);
+  end
+  else if sz = 4 then
+  begin
+    d := Int64(dst);
+    PByte(d)^ := Byte(v);
+    PByte(d + 1)^ := Byte(v shr 8);
+    PByte(d + 2)^ := Byte(v shr 16);
+    PByte(d + 3)^ := Byte(v shr 24);
+  end
+  else
+  begin
+    d := Int64(dst);
+    PByte(d)^ := Byte(v);
+    PByte(d + 1)^ := Byte(v shr 8);
+    PByte(d + 2)^ := Byte(v shr 16);
+    PByte(d + 3)^ := Byte(v shr 24);
+    PByte(d + 4)^ := Byte(v shr 32);
+    PByte(d + 5)^ := Byte(v shr 40);
+    PByte(d + 6)^ := Byte(v shr 48);
+    PByte(d + 7)^ := Byte(v shr 56);
+  end;
+end;
+
 { Read an entire file into a fresh managed string. path = nul-terminated
   managed-string data pointer (or nil). Returns the data pointer (refcount 1,
   length = bytes read, nul-terminated) or nil on open failure. Called from the

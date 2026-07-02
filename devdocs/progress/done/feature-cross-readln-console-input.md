@@ -35,3 +35,15 @@ i386/aarch64/arm32 cross targets: the REPL's `readln(line)` at chess.pas:897.
 ## Log
 - 2026-07-02 — Filed by Track A while resolving
   feature-stackless-generator-record-locals.
+- 2026-07-02 — Track A: DONE (i386/aarch64/arm32; riscv32 hosted still walled
+  by bug-riscv32-hosted-writeln-hello-hangs, ESP bare has no stdin).
+  Portable builtin helpers in builtinheap.pas (PXXReadLine/PXXReadDiscard/
+  PXXReadVarStrM/PXXReadVarChar/PXXReadVarInt/PXXStdinEof — shared line
+  buffer + Eof peek-byte pushback, mirroring the x86-64 asm semantics);
+  IR_READLINE/IR_READ_VAR/IR_READ_DISCARD + bare-Eof builtin id 210 lowered
+  to them in the 3 backends (x86-64 keeps its asm path untouched).
+  test_readln.pas + test_eof_stdin.pas added to all 3 cross gates
+  (output-identical vs x86-64 incl. the no-trailing-newline pushback case).
+  RESULT: stackless chess compiles on i386/aarch64/arm32 and perft --selftest
+  is BYTE-IDENTICAL to the x86-64 oracle on all three (CHECKSUM
+  5554659317958071639, ALL OK).

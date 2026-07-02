@@ -973,6 +973,55 @@ begin
         end;
       end;
 
+    IR_READLINE:
+      begin
+        procIdx := FindProc('PXXReadLine');
+        if procIdx < 0 then Error('compiler error: PXXReadLine not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_DISCARD:
+      begin
+        procIdx := FindProc('PXXReadDiscard');
+        if procIdx < 0 then Error('compiler error: PXXReadDiscard not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_READ_VAR:
+      begin
+        { Parse one read/readln target from the shared line buffer via the
+          portable builtin helpers (x86-64 keeps its asm path). A managed
+          string wants its SLOT address — force lvalue-write mode. }
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeAarch64(IRA[node]);   { x0 = slot address }
+          InLValueWrite := savedLValueWrite;
+          procIdx := FindProc('PXXReadVarStrM');
+          if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found');
+          EmitCallProc(procIdx);
+        end
+        else if tk = tyChar then
+        begin
+          IREmitNodeAarch64(IRA[node]);   { x0 = target address }
+          procIdx := FindProc('PXXReadVarChar');
+          if procIdx < 0 then Error('compiler error: PXXReadVarChar not found');
+          EmitCallProc(procIdx);
+        end
+        else if TypeIsOrdinal(tk) then
+        begin
+          IREmitNodeAarch64(IRA[node]);   { x0 = target address }
+          EmitLoadImmA64(1, TypeSize(tk));      { x1 = size }
+          procIdx := FindProc('PXXReadVarInt');
+          if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
+          EmitCallProc(procIdx);
+        end
+        else
+          Error('target aarch64: read/readln target type not supported');
+      end;
+
     IR_SETLEN_STR:
       begin
         { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
@@ -1715,6 +1764,15 @@ begin
             EmitI32($F84107E0);                { x0 = fd }
             EmitLoadImmA64(8, 52);             { __NR_fchmod }
             EmitI32($D4000001);
+            Exit;
+          end
+          else if specialId = 210 then
+          begin
+            { bare `Eof` (stdin) -> PXXStdinEof: Boolean (portable builtin,
+              shares the peek byte with PXXReadLine). }
+            procIdx := FindProc('PXXStdinEof');
+            if procIdx < 0 then Error('compiler error: PXXStdinEof not found');
+            EmitCallProc(procIdx);
             Exit;
           end
           else
