@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit softfloat;
 
 { Software IEEE-754 floating-point kernels for targets without (full) hardware

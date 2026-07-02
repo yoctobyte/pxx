@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit builtin;
 
 { Conversion helpers backing the Str and Val built-ins. The compiler pulls this

@@ -1,3 +1,4 @@
+{ SPDX-License-Identifier: Zlib }
 unit builtinheap;
 
 { ESP (xtensa/riscv32) has no mmap and no OS heap of its own here; back the

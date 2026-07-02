@@ -24,17 +24,13 @@ _none_
 
 _none_
 
-## backlog (76)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
-| bug-c-math-round-undefined-symbol | A+B | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-c-static-local-initializer-reruns-every-call | A/C | bug | C `static` local with an initializer re-runs the initializer every call | — |
-| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
-| bug-integer-to-enum-typecast-undefined-variable | A | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -86,7 +82,7 @@ _none_
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
-| feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
+| feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | (done, v151), ~~feature-threadsafe-heap-contract~~ |
@@ -139,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (422)
+## done (427)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -187,6 +183,7 @@ _none_
 | bug-c-local-static-record-array-vfs-sqlite | C | bug | C: block-scope static record arrays in sqlite VFS init | — |
 | bug-c-lua-tests-regressed-segfault | C | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-main-argc-argv-not-wired | C | bug | C `main(argc, argv)` gets real argc/argv | — |
+| bug-c-math-round-undefined-symbol | A+B | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
 | bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-nested-anon-union-struct | C | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-null-pointer-literal-call-arg-sqlite | C | bug | C: null pointer literal call arg lowers as address in sqlite | — |
@@ -202,6 +199,7 @@ _none_
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | C | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | C | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | C | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
+| bug-c-static-local-initializer-reruns-every-call | A/C | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-c-ternary-middle-comma | C | bug | C: ternary middle arm rejects comma expression | — |
@@ -241,6 +239,7 @@ _none_
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-emitasmx64-heap-helpers-oom-selfhost | A | bug | EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host | — |
 | bug-emitasmx64-no-sib-index-silent-misparse | A | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
+| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
@@ -267,6 +266,7 @@ _none_
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
 | bug-import-class-sibling-call-corrupts-resolution | A | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
+| bug-integer-to-enum-typecast-undefined-variable | A | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-keywords-case-sensitive | A | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
 | bug-length-of-dynarray-call-result | A | bug | bug: `Length()` of a dynamic-array function-call result is wrong/crashes | — |
@@ -526,6 +526,7 @@ _none_
 | feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
 | feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
+| feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
 | feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-subrange-type-decl | A | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
@@ -585,11 +586,7 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [C] bug-c-cast-as-call-arg-parse-error
-- [A+B] bug-c-math-round-undefined-symbol
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A/C] bug-c-static-local-initializer-reruns-every-call
-- [A] bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program
-- [A] bug-integer-to-enum-typecast-undefined-variable
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
@@ -641,7 +638,7 @@ _none_
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
 - [A] feature-signal-handlers
-- [A] feature-stackless-generator-yield-in-case
+- [A] feature-stackless-generator-record-locals
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
 - [A] feature-threadsafe-heap-optimize
