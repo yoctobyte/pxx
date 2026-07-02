@@ -365,9 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
-	# Length/Ord/Chr/Low/High are soft keywords: declarable as identifiers, intrinsics unaffected when unshadowed
+	# all 13 former hard-keyword intrinsics are soft keywords: declarable as identifiers, intrinsics/statements unaffected when unshadowed
 	./$(COMPILER) test/test_soft_keyword_length.pas /tmp/test_soft_keyword_length26
-	test "$$(/tmp/test_soft_keyword_length26 | tail -1)" = "total ok 14 / 14"
+	test "$$(/tmp/test_soft_keyword_length26 | tail -1)" = "total ok 19 / 19"
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas /tmp/test_signal_handlers26
 	test "$$(/tmp/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"

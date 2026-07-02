@@ -24,14 +24,13 @@ _none_
 
 _none_
 
-## backlog (72)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
-| bug-hard-keyword-intrinsics-block-identifier-use | A | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
@@ -135,7 +134,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (413)
+## done (414)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -251,6 +250,7 @@ _none_
 | bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
 | bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
+| bug-hard-keyword-intrinsics-block-identifier-use | A | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
 | bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value set parameter unsupported | — |
@@ -572,7 +572,6 @@ _none_
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-c-vararg-vastart-named-fp-stack
 - [A] bug-compiler-uses-unit-interactions
-- [A] bug-hard-keyword-intrinsics-block-identifier-use
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-anonymous-record-type

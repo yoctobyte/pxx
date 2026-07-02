@@ -91,10 +91,6 @@ begin
     if (s[1]='m') and (s[2]='o') and (s[3]='d') then Result := tkMod;
     if (s[1]='s') and (s[2]='h') and (s[3]='l') then Result := tkShl;
     if (s[1]='S') and (s[2]='h') and (s[3]='l') then Result := tkShl;
-    if (s[1]='i') and (s[2]='n') and (s[3]='c') then Result := tkInc;
-    if (s[1]='I') and (s[2]='n') and (s[3]='c') then Result := tkInc;
-    if (s[1]='d') and (s[2]='e') and (s[3]='c') then Result := tkDec;
-    if (s[1]='D') and (s[2]='e') and (s[3]='c') then Result := tkDec;
     { 'ord'/'chr'/'low' (and 'high'/'length' below) are soft keywords: they lex
       as plain tkIdent and ParseFactor dispatches on the name, so they are
       legal identifiers like in FPC (bug-hard-keyword-intrinsics-block-
@@ -119,10 +115,6 @@ begin
     if (s[1]='t') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
     if (s[1]='T') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
     if CaseEqual(s, 'read') then Result := tkRead;
-    if (s[1]='h') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
-    if (s[1]='H') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
-    if (s[1]='e') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
-    if (s[1]='E') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
     if (s[1]='c') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
     if (s[1]='C') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
     if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='l') then Result := tkReal_T;
@@ -133,8 +125,6 @@ begin
   else if Length(s) = 5 then
   begin
     if (s[1]='b') and (s[2]='e') and (s[3]='g') and (s[4]='i') and (s[5]='n') then Result := tkBegin;
-    if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkBreak;
-    if (s[1]='B') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkBreak;
     if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
     if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
     if (s[1]='u') and (s[2]='n') and (s[3]='t') and (s[4]='i') and (s[5]='l') then Result := tkUntil;
@@ -158,10 +148,10 @@ begin
     { 'length' deliberately NOT a keyword token: it lexes as a plain tkIdent and
       ParseFactor dispatches on the name (soft keyword), so `var length: ...`
       is a legal identifier like in FPC. Pilot conversion for
-      bug-hard-keyword-intrinsics-block-identifier-use; tkLength survives only
-      as the -Ord(tkLength) intrinsic CALL id. }
-    if (s[1]='g') and (s[2]='e') and (s[3]='t') and (s[4]='m') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
-    if (s[1]='G') and (s[2]='e') and (s[3]='t') and (s[4]='M') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
+      bug-hard-keyword-intrinsics-block-identifier-use; likewise inc/dec/halt/
+      exit/break/continue/getmem/freemem, dispatched in ParseStatementAST (and
+      GetMem's function form in ParseFactor). The tk enum members survive only
+      as -Ord(tkXxx) intrinsic CALL ids and AN node selectors. }
     if (s[1]='a') and (s[2]='r') and (s[3]='g') and (s[4]='s') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
     if (s[1]='A') and (s[2]='r') and (s[3]='g') and (s[4]='S') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
     if (s[1]='s') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
@@ -179,8 +169,6 @@ begin
     if (s[1]='D') and (s[2]='e') and (s[3]='f') and (s[4]='a') and (s[5]='u') and (s[6]='l') and (s[7]='t') then Result := tkDefault;
     if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='g') and (s[5]='r') and (s[6]='a') and (s[7]='m') then Result := tkProgram;
     if (s[1]='f') and (s[2]='o') and (s[3]='r') and (s[4]='w') and (s[5]='a') and (s[6]='r') and (s[7]='d') then Result := tkForward;
-    if (s[1]='f') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='m') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
-    if (s[1]='F') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='M') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
     if CaseEqual(s, 'writeln') then Result := tkwriteln;
     if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='o') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
     if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='O') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
@@ -195,8 +183,6 @@ begin
   end
   else if Length(s) = 8 then
   begin
-    if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='t') and (s[5]='i') and (s[6]='n') and (s[7]='u') and (s[8]='e') then Result := tkContinue;
-    if (s[1]='C') and (s[2]='o') and (s[3]='n') and (s[4]='t') and (s[5]='i') and (s[6]='n') and (s[7]='u') and (s[8]='e') then Result := tkContinue;
     if (s[1]='o') and (s[2]='v') and (s[3]='e') and (s[4]='r') and (s[5]='l') and (s[6]='o') and (s[7]='a') and (s[8]='d') then Result := tkOverload;
     if (s[1]='O') and (s[2]='v') and (s[3]='e') and (s[4]='r') and (s[5]='l') and (s[6]='o') and (s[7]='a') and (s[8]='d') then Result := tkOverload;
     if (s[1]='f') and (s[2]='u') and (s[3]='n') and (s[4]='c') and (s[5]='t') and (s[6]='i') and (s[7]='o') and (s[8]='n') then Result := tkFunction;

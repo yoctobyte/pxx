@@ -132,3 +132,32 @@ variables). test_soft_keyword_length.pas extended to 14 cases.
 dispatch on token kind in ParseStatementAST (and Break/Continue/Exit are
 control flow, not calls), so the recipe needs the statement-side ident path;
 sized as its own pass.
+
+## Resolution — 2026-07-02, batch 3 completes all 13 (v139)
+
+Statement-context batch: `Inc`, `Dec`, `Exit`, `Halt`, `Break`, `Continue`,
+`GetMem`, `FreeMem` converted with the same recipe, extended to the
+ParseStatementAST ident chain (bodies moved verbatim behind
+`FindProc < 0 / FindSym < 0` guards; Inc/Dec/GetMem/FreeMem also require a
+following '('; Halt/Exit/Break/Continue are bare-or-paren statements).
+GetMem's function form got the matching ParseFactor branch.
+
+Two coupling points found and handled:
+- **DetectPascalRuntimeNeeds** scanned for `tkGetMem`/`tkFreeMem` token KINDS
+  to pull builtinheap — now matches the names in the existing
+  `GetTokenStr(i)` ident branch (like New/Dispose/SetLength already did).
+  NOTE for future conversions: any token-kind scan over `Tokens[]` (raw
+  tokens — SVal lives behind GetTokenStr, not `.SVal`) must move to the
+  name branch when its token dies.
+- C/Nil-Python/BASIC frontends share the tk enum but have their own lexers —
+  their `tkExit`/`tkBreak`/`tkContinue`/`tkHalt` uses are unaffected by the
+  Pascal lexer dropping the productions. `-Ord(tkXxx)` call ids and AN node
+  selectors keep every enum member alive. asmenc.inc's inc/dec
+  keyword-token special case is now dead-but-harmless (asm blocks see plain
+  idents, the normal mnemonic path).
+
+All 13 names in the ticket are now declarable identifiers with FPC-parity
+shadowing. Gate: test_soft_keyword_length.pas grown to 19 cases (statement
+semantics: Break/Continue/Inc-step/Dec-step, record-field Inc, GetMem both
+forms, FreeMem 2-arg, Exit both forms, terminal Halt(0)); FPC-output
+identical; full suite green; self-host byte-identical; pinned v139.

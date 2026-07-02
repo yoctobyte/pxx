@@ -1,10 +1,11 @@
 program test_soft_keyword_length;
-{ `Length`/`Ord`/`Chr`/`Low`/`High` are soft keywords (lex as plain
-  identifiers, ParseFactor dispatches on the name) —
-  bug-hard-keyword-intrinsics-block-identifier-use. FPC-parity pinned here:
-  all five are declarable as variable/param/field names; the intrinsics are
-  untouched where the name is not shadowed (a shadowing var makes `Length(x)`
-  a compile error in FPC — kept, but not testable in a green test). }
+{ All 13 former hard-keyword intrinsics are soft keywords (lex as plain
+  identifiers; ParseFactor / ParseStatementAST dispatch on the name) —
+  bug-hard-keyword-intrinsics-block-identifier-use: Length, Ord, Chr, Low,
+  High, Inc, Dec, Exit, Halt, Break, Continue, GetMem, FreeMem. FPC-parity
+  pinned here: all are declarable as variable/param/field names; the
+  intrinsic/statement forms are untouched where the name is not shadowed (a
+  shadowing symbol disables the intrinsic in that scope, like FPC). }
 type TE = (eA, eB, eC);
 var
   okCount: Integer;
@@ -34,7 +35,9 @@ type TBuf = record Length: Integer; end;
 function UserArea: Integer;
 begin UserArea := 0; end;
 
+type TPt = record x, y: Integer; end;
 var r: TBuf;
+var p: Pointer; q: ^Integer; r2: TPt;
 
 { ord/chr/low/high declarable and usable as plain locals }
 function OrdChrLowHighVars: Integer;
@@ -42,6 +45,38 @@ var ord, chr, low, high: Integer;
 begin
   ord := 1; chr := 2; low := 3; high := 4;
   OrdChrLowHighVars := ord + chr + low + high;
+end;
+
+{ the statement-context names as plain locals }
+function StmtNamesAsVars: Integer;
+var inc, dec, halt, break, continue, exit, getmem, freemem: Integer;
+begin
+  inc := 1; dec := 2; halt := 3; break := 4;
+  continue := 5; exit := 6; getmem := 7; freemem := 8;
+  StmtNamesAsVars := inc + dec + halt + break + continue + exit + getmem + freemem;
+end;
+
+{ Exit forms: bare and with a value }
+function EarlyExit(x: Integer): Integer;
+begin
+  if x > 5 then Exit(99);
+  EarlyExit := x;
+end;
+
+{ Break / Continue / Inc / Dec statement semantics }
+function LoopSemantics: Integer;
+var i, n: Integer;
+begin
+  n := 0;
+  for i := 1 to 10 do
+  begin
+    if i = 3 then Continue;
+    if i = 8 then Break;
+    Inc(n);
+  end;
+  Inc(n, 10);
+  Dec(n, 2);
+  LoopSemantics := n;   { 6 counted + 10 - 2 = 14 }
 end;
 
 begin
@@ -63,5 +98,18 @@ begin
   Chk(12, (Low(f) = 0) and (High(f) = 4) and (High(Byte) = 255));
   Chk(13, (Low(a) = 0) and (High(a) = 2));
   Chk(14, (Low(TE) = eA) and (High(TE) = eC));
-  writeln('total ok ', okCount, ' / 14');
+  Chk(15, StmtNamesAsVars = 36);
+  Chk(16, (EarlyExit(2) = 2) and (EarlyExit(9) = 99));
+  Chk(17, LoopSemantics = 14);
+  GetMem(p, 64);                          { statement form }
+  q := GetMem(8);                         { function form }
+  q^ := 77;
+  Chk(18, q^ = 77);
+  FreeMem(p);
+  FreeMem(q, 8);                          { two-arg form }
+  r2.x := 5; Inc(r2.x);                   { record-field lvalue }
+  Chk(19, r2.x = 6);
+  writeln('total ok ', okCount, ' / 19');
+  Halt(0);                                { Halt itself, explicit success }
+  writeln('unreachable after Halt');
 end.

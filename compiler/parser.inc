@@ -224,7 +224,6 @@ begin
     Exit;
   end;
   case CurTok.Kind of
-    tkHalt, tkInc, tkDec, tkGetMem, tkFreeMem, tkExit,
     tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
     tkArgCount, tkArgStr:
       IsDeclNameTok := True;
@@ -3797,17 +3796,6 @@ begin
       else
         Error('String(): operand must be Char or string');
     end;
-    tkGetMem:
-    begin
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      valNode := CurASTNode;
-      Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkGetMem);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
     tkSysOpen:
     begin
       Next; Expect(tkLParen, '(');
@@ -4479,6 +4467,23 @@ begin
         node := AllocNode(AN_IS_TEST);
         ASTLeft[node] := exprNode; ASTIVal[node] := ci; ASTTk[node] := Ord(tyBoolean);
         CurASTNode := node; LastExprTk := tyBoolean;
+        Exit;
+      end;
+
+      { GetMem(size): function form, soft keyword (statement form GetMem(p, n)
+        lives in ParseStatementAST). }
+      if CaseEqual(name, 'GetMem') and (procIdx < 0) and (FindSym(name) < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        valNode := CurASTNode;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkGetMem);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyPointer;
         Exit;
       end;
 
@@ -8260,33 +8265,6 @@ begin
       end;
     end;
 
-    tkHalt, tkExit:
-    begin
-      idx := Ord(CurTok.Kind); Next;
-      if idx = Ord(tkHalt) then
-        node := AllocNode(AN_HALT)
-      else
-        node := AllocNode(AN_EXIT);
-
-      if CurTok.Kind = tkLParen then
-      begin
-        Next; ParseExpr; Expect(tkRParen, ')');
-        ASTLeft[node] := CurASTNode;
-      end;
-    end;
-
-    tkBreak:
-    begin
-      Next;
-      node := AllocNode(AN_BREAK);
-    end;
-
-    tkContinue:
-    begin
-      Next;
-      node := AllocNode(AN_CONTINUE);
-    end;
-
     tkRaise:
     begin
       Next;
@@ -8303,87 +8281,6 @@ begin
       end;
       node := AllocNode(AN_RAISE);
       ASTLeft[node] := valNode;
-    end;
-
-    tkInc, tkDec:
-    begin
-      idx := Ord(CurTok.Kind); Next;
-      Expect(tkLParen, '(');
-      if CurTok.Kind <> tkIdent then Error('expected variable');
-      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-
-      { Parse the FULL target lvalue (consuming any .field / [i] / ^ selectors)
-        BEFORE the optional step and ')'. Inc/Dec accept any assignable lvalue,
-        exactly like a `var` parameter — a bare-symbol-only parse choked on
-        `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1 (an implicit-Self
-        field): ParseLValueAST resolves it (and still errors on a true unknown). }
-      valNode := ParseLValueAST(argIdx, identTokIdx);
-
-      if Eat(tkComma) then
-      begin
-        ParseExpr; stepsNode := CurASTNode;
-      end
-      else
-      begin
-        stepsNode := AllocNode(AN_INT_LIT);
-        ASTIVal[stepsNode] := 1;
-      end;
-      Expect(tkRParen, ')');
-
-      opNode := AllocNode(AN_BINOP);
-      if idx = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
-      ASTLeft[opNode] := valNode;
-      ASTRight[opNode] := stepsNode;
-
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := valNode;
-      ASTRight[node] := opNode;
-    end;
-
-    tkFreeMem:
-    begin
-      { FreeMem(p) or FreeMem(p, size): return the block to the free list. The
-        size argument (FPC's two-arg form) is accepted and ignored — the block's
-        own size header drives reuse. }
-      Next; Expect(tkLParen, '(');
-      ParseExpr;                       { pointer to free }
-      valNode := CurASTNode;
-      if CurTok.Kind = tkComma then begin Next; ParseExpr; end;  { size: accepted, ignored }
-      Expect(tkRParen, ')');
-
-      argSeq := AllocNode(AN_ARG);
-      ASTLeft[argSeq] := valNode;
-
-      node := AllocNode(AN_CALL);
-      ASTIVal[node] := -Ord(tkFreeMem);
-      ASTLeft[node] := argSeq;
-      ASTTk[node] := Ord(tyInteger);
-    end;
-
-    tkGetMem:
-    begin
-      { Two-argument procedure form GetMem(dest, size): allocate `size` bytes and
-        store the pointer into the lvalue `dest`. (The function form
-        `p := GetMem(size)` is handled in ParseFactor.) Without this, a bare
-        GetMem statement fell through to the default branch and was discarded —
-        the destination was never written. }
-      Next; Expect(tkLParen, '(');
-      ParseExpr;                       { destination lvalue (ident/field/index/deref) }
-      valNode := CurASTNode;
-      Expect(tkComma, ',');
-      ParseExpr;                       { size in bytes }
-      argSeq := AllocNode(AN_ARG);
-      ASTLeft[argSeq] := CurASTNode;
-      Expect(tkRParen, ')');
-
-      opNode := AllocNode(AN_CALL);
-      ASTIVal[opNode] := -Ord(tkGetMem);
-      ASTLeft[opNode] := argSeq;
-      ASTTk[opNode] := Ord(tyPointer);
-
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := valNode;
-      ASTRight[node] := opNode;
     end;
 
     tkSyswrite:
@@ -8620,6 +8517,111 @@ begin
           node := AllocNode(AN_SET_EXCL);
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
+      end
+      else if (CaseEqual(name, 'Halt') or CaseEqual(name, 'Exit')) and
+              (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        { Halt / Exit: soft-keyword statements (bare, or with an optional
+          (expr)). A user proc or in-scope symbol of the same name shadows —
+          bug-hard-keyword-intrinsics-block-identifier-use. }
+        if CaseEqual(name, 'Halt') then node := AllocNode(AN_HALT)
+        else node := AllocNode(AN_EXIT);
+        Next;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next; ParseExpr; Expect(tkRParen, ')');
+          ASTLeft[node] := CurASTNode;
+        end;
+      end
+      else if (CaseEqual(name, 'Break') or CaseEqual(name, 'Continue')) and
+              (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        { Break / Continue: bare soft-keyword statements. }
+        if CaseEqual(name, 'Break') then node := AllocNode(AN_BREAK)
+        else node := AllocNode(AN_CONTINUE);
+        Next;
+      end
+      else if (CaseEqual(name, 'Inc') or CaseEqual(name, 'Dec')) and
+              (FindProc(name) < 0) and (FindSym(name) < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Inc(x[,step]) / Dec(x[,step]): soft-keyword statements lowered to
+          x := x +/- step. }
+        if CaseEqual(name, 'Inc') then i := Ord(tkInc) else i := Ord(tkDec);
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('expected variable');
+        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+
+        { Parse the FULL target lvalue (consuming any .field / [i] / ^ selectors)
+          BEFORE the optional step and ')'. Inc/Dec accept any assignable lvalue,
+          exactly like a `var` parameter — a bare-symbol-only parse choked on
+          `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1 (an implicit-Self
+          field): ParseLValueAST resolves it (and still errors on a true unknown). }
+        valNode := ParseLValueAST(argIdx, identTokIdx);
+
+        if Eat(tkComma) then
+        begin
+          ParseExpr; stepsNode := CurASTNode;
+        end
+        else
+        begin
+          stepsNode := AllocNode(AN_INT_LIT);
+          ASTIVal[stepsNode] := 1;
+        end;
+        Expect(tkRParen, ')');
+
+        opNode := AllocNode(AN_BINOP);
+        if i = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
+        ASTLeft[opNode] := valNode;
+        ASTRight[opNode] := stepsNode;
+
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := opNode;
+      end
+      else if CaseEqual(name, 'FreeMem') and (FindProc(name) < 0) and
+              (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { FreeMem(p) or FreeMem(p, size): return the block to the free list. The
+          size argument (FPC's two-arg form) is accepted and ignored — the block's
+          own size header drives reuse. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;                       { pointer to free }
+        valNode := CurASTNode;
+        if CurTok.Kind = tkComma then begin Next; ParseExpr; end;  { size: accepted, ignored }
+        Expect(tkRParen, ')');
+
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := valNode;
+
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkFreeMem);
+        ASTLeft[node] := argSeq;
+        ASTTk[node] := Ord(tyInteger);
+      end
+      else if CaseEqual(name, 'GetMem') and (FindProc(name) < 0) and
+              (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Two-argument procedure form GetMem(dest, size): allocate `size` bytes and
+          store the pointer into the lvalue `dest`. (The function form
+          `p := GetMem(size)` is handled in ParseFactor.) }
+        Next; Expect(tkLParen, '(');
+        ParseExpr;                       { destination lvalue (ident/field/index/deref) }
+        valNode := CurASTNode;
+        Expect(tkComma, ',');
+        ParseExpr;                       { size in bytes }
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := CurASTNode;
+        Expect(tkRParen, ')');
+
+        opNode := AllocNode(AN_CALL);
+        ASTIVal[opNode] := -Ord(tkGetMem);
+        ASTLeft[opNode] := argSeq;
+        ASTTk[opNode] := Ord(tyPointer);
+
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := opNode;
       end
       else if CaseEqual(name, 'SetSignalHandler') and (FindProc('SetSignalHandler') < 0) and
               (Tokens[TokPos].Kind = tkLParen) then
@@ -15238,7 +15240,7 @@ begin
   i := 0;
   while i < TokCount do
   begin
-    if Tokens[i].Kind in [tkUses, tkArray, tkClass, tkGetMem, tkFreeMem] then
+    if Tokens[i].Kind in [tkUses, tkArray, tkClass] then
       needsHeap := True;
     { 32-bit cross targets write floats through the builtinheap Pascal
       helpers (PXXWriteFloat*), so any float-producing token pulls the unit.
@@ -15260,7 +15262,10 @@ begin
           CaseEqual(name, 'Real') or CaseEqual(name, 'Extended')) then
         needsHeap := True;
       if CaseEqual(name, 'New') or CaseEqual(name, 'Dispose') or
-         CaseEqual(name, 'ReallocMem') or CaseEqual(name, 'SetLength') then
+         CaseEqual(name, 'ReallocMem') or CaseEqual(name, 'SetLength') or
+         { getmem/freemem are soft keywords (plain idents) now — match by name
+           like New/Dispose, replacing the old tkGetMem/tkFreeMem kind check. }
+         CaseEqual(name, 'GetMem') or CaseEqual(name, 'FreeMem') then
         needsHeap := True;
     end;
     Inc(i);
