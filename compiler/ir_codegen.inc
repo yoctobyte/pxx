@@ -381,6 +381,124 @@ begin
   ]);
 end;
 
+procedure EmitCodeAbsToRdx(targetOff: Integer);
+{ rdx := absolute runtime address of code offset targetOff, via the
+  call/pop trick (position-independent; the delta from the pop instruction's
+  own offset to the target is an emit-time constant). Clobbers rdx only. }
+begin
+  EmitB($E8); EmitI32(0);                             { call +0 (pushes next-insn addr) }
+  EmitAsmX64(['pop rdx', 'add rdx, %', targetOff - CodeLen]);
+end;
+
+procedure EmitSignalRuntime;
+{ Default-on signal support, x86-64 Linux (feature-signal-handlers, first
+  slice; --no-signals opts out). Three stubs + a 64-slot hook table in BSS:
+
+  - restorer: SA_RESTORER target, plain rt_sigreturn (x86-64 has no kernel
+    auto-restorer for rt_sigaction handlers).
+  - dispatch: the installed handler for every signal we manage. Kernel plain
+    handler ABI (edi = signal number). A registered hook proc is called
+    (parameterless Pascal proc; runs in signal context — the kernel restores
+    the full interrupted register file on rt_sigreturn, so no saving here);
+    with no hook the signal is reverted to its default disposition and
+    re-raised, so an unhandled SIGINT/SIGTERM still terminates with proper
+    killed-by-signal status.
+  - sethook/install: SetSignalHandler entry (edi = sig, rsi = handler; store
+    the hook slot, fall through) and the plain installer (edi = sig; build
+    struct sigaction {dispatch, SA_RESTORER|SA_RESTART, restorer, 0} in BSS
+    scratch, rt_sigaction). SA_RESTART keeps interrupted blocking syscalls
+    transparent to programs whose hook returns.
+
+  The program entry installs dispatch for SIGINT(2) and SIGTERM(15). Hooks for
+  any other signal 1..64 install on the first SetSignalHandler call. }
+begin
+  { --- restorer --- }
+  SigRestorerAddr := CodeLen;
+  EmitAsmX64(['mov rax, %', 15, 'syscall']);          { rt_sigreturn }
+
+  { --- dispatch (edi = sig) --- }
+  SigDispatchAddr := CodeLen;
+  EmitAsmX64([
+    'cmp edi, %', 1,
+    'jb .out',
+    'cmp edi, %', 64,
+    'ja .out',
+    'mov rax, @glob', BSS_SIG_HOOKS,
+    'mov edx, edi',
+    'sub rdx, %', 1,
+    'add rdx, rdx',                                   { *8: slot offset }
+    'add rdx, rdx',
+    'add rdx, rdx',
+    'add rax, rdx',
+    'mov rax, [rax]',
+    'test rax, rax',
+    'jz .dfl',
+    'call rax',                                       { user hook; returning resumes the program }
+    '.out:',
+    'ret',                                            { -> restorer -> rt_sigreturn }
+    '.dfl:',
+    { no hook: revert to default disposition and re-raise. The signal is
+      blocked during this handler, so the re-raised one is delivered (with
+      default = terminate) right after rt_sigreturn unblocks it. }
+    'mov rcx, @glob', BSS_SIG_SCRATCH,
+    'xor edx, edx',
+    'mov [rcx], rdx',                                 { handler = SIG_DFL }
+    'mov [rcx+24], rdx'                               { mask = 0 }
+  ]);
+  EmitAsmX64(['mov edx, %', $04000000,                { flags = SA_RESTORER }
+    'mov [rcx+8], rdx']);
+  EmitCodeAbsToRdx(SigRestorerAddr);
+  EmitAsmX64([
+    'mov [rcx+16], rdx',                              { restorer }
+    'mov rsi, rcx',
+    'xor edx, edx',
+    'mov r10, %', 8,                                  { sigsetsize }
+    'mov rax, %', 13,                                 { rt_sigaction(sig, act, nil, 8) }
+    'syscall',
+    'mov esi, edi',                                   { kill(getpid(), sig) }
+    'mov rax, %', 39,                                 { getpid }
+    'syscall',
+    'mov rdi, rax',
+    'mov rax, %', 62,                                 { kill }
+    'syscall',
+    'ret'
+  ]);
+
+  { --- sethook (edi = sig, rsi = handler), falls through into install --- }
+  SigSetHookAddr := CodeLen;
+  EmitAsmX64([
+    'mov rcx, @glob', BSS_SIG_HOOKS,
+    'mov edx, edi',
+    'sub rdx, %', 1,
+    'and rdx, %', 63,                                 { keep the store in-table; dispatch bounds-checks reads, the kernel rejects a bad sig below }
+    'add rdx, rdx',
+    'add rdx, rdx',
+    'add rdx, rdx',
+    'add rcx, rdx',
+    'mov [rcx], rsi'
+  ]);
+
+  { --- install (edi = sig) --- }
+  SigInstallAddr := CodeLen;
+  EmitAsmX64(['mov rcx, @glob', BSS_SIG_SCRATCH]);
+  EmitCodeAbsToRdx(SigDispatchAddr);
+  EmitAsmX64(['mov [rcx], rdx']);                     { handler = dispatch }
+  EmitAsmX64(['mov edx, %', $14000000,                { flags = SA_RESTORER or SA_RESTART }
+    'mov [rcx+8], rdx']);
+  EmitCodeAbsToRdx(SigRestorerAddr);
+  EmitAsmX64([
+    'mov [rcx+16], rdx',                              { restorer }
+    'xor edx, edx',
+    'mov [rcx+24], rdx',                              { mask = 0 }
+    'mov rsi, rcx',
+    'xor edx, edx',
+    'mov r10, %', 8,
+    'mov rax, %', 13,                                 { rt_sigaction(sig, act, nil, 8) }
+    'syscall',
+    'ret'
+  ]);
+end;
+
 procedure EmitDiv0Stub;
 { Shared integer-div-by-zero abort stub: write the FPC-style runtime error to
   stdout (FPC prints runtime errors to output) and exit_group(200). Pure
@@ -1452,6 +1570,19 @@ begin
         sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
         si := InternStr(sVal);
         EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
+      end;
+
+    IR_SET_SIGNAL:
+      begin
+        { SetSignalHandler(sig, handler): edi = sig, rsi = handler ->
+          SigSetHook stub (store hook slot, fall through into the installer). }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        IREmitNode(IRB[node]);                  { rax = handler address }
+        EmitAsmX64('push rax');
+        IREmitNode(IRA[node]);                  { rax = signal number }
+        EmitAsmX64(['mov rdi, rax', 'pop rsi']);
+        IREmitCodeCall(SigSetHookAddr);
       end;
 
     IR_PROCADDR:
@@ -4759,7 +4890,7 @@ begin
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_SETLEN_DYN, IR_SETLEN_STR, IR_DEFAULT_MEM, IR_ZERO_SYM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
-      IR_COSWITCH, IR_YIELD,
+      IR_COSWITCH, IR_YIELD, IR_SET_SIGNAL,
       IR_ASM:
         begin
           IREmitNode(i);

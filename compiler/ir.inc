@@ -418,6 +418,12 @@ begin
         IRRequireNode(IRB[i], 'var_box value');
       end;
 
+      IR_SET_SIGNAL:
+      begin
+        IRRequireNode(IRA[i], 'set_signal sig');
+        IRRequireNode(IRB[i], 'set_signal handler');
+      end;
+
     else
       Error('unknown IR opcode');
     end;
@@ -2289,6 +2295,10 @@ begin
         Result := IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tySet));
       end;
     end;
+
+    AN_SET_SIGNAL:
+      Result := IRAppend(IR_SET_SIGNAL, IRLowerAST(ASTLeft[node]),
+                         IRLowerAST(ASTRight[node]), -1, 0, Ord(tyUnknown));
 
     AN_SET_INCL:
       IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), True);

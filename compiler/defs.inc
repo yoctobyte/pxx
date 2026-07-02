@@ -190,6 +190,10 @@ const
                            array of T with the range removed (assigned back onto
                            arr by the parser's AN_ASSIGN wrapper). Left = source
                            array ident; Right = AN_ARG chain [index, count]. }
+  AN_SET_SIGNAL    = 76; { SetSignalHandler(sig, @proc) statement: Left = signal
+                           number expr, Right = handler address expr (nil/0
+                           reverts to default disposition on next delivery).
+                           Lowers to IR_SET_SIGNAL. }
   AN_DYN_INSERT    = 75; { Insert(value, arr, index) over a dynamic array → fresh
                            array of T with value inserted (assigned back via
                            AN_ASSIGN like AN_DYN_DELETE). Left = source array
@@ -339,6 +343,7 @@ const
   IR_CLONE        = 62;  { IRA = first IR_ARG (flags, childStack, entry, arg, ctidptr — exactly 5); moves them into the SysV arg regs and calls the bare clone+trampoline stub (CloneStubAddr). Result (child tid) in the accumulator. Libc-free thread creation; x86-64 first, i386 next. }
   IR_ATOMIC       = 63;  { IRIVal = op (ATOMIC_XCHG/CAS/ADD); IRA = IR_ARG chain (addr, then operands). x86-64 emits a 32-bit lock-prefixed read-modify-write on addr^ and returns the OLD value in the accumulator. Substrate for futex mutexes/atomic counters. }
   IR_EXC_MATCH_HIT = 64; { Positive-polarity sibling of IR_EXC_MATCH: IRA = label, IRIVal = class id; jumps to the label when the raised class EQUALS the id (vs. IR_EXC_MATCH's jump-away-on-mismatch). Used to chain "raised class is any descendant of the handler's target class" checks -- see IsClassDescOrSelf's usage in AN_TRY_EXCEPT lowering. }
+  IR_SET_SIGNAL    = 65; { SetSignalHandler(sig, @proc): IRA = signal-number value node, IRB = handler-address value node (0/nil = revert to default on next delivery). Lowers to a call of the emitted SigSetHook stub (store hook slot + rt_sigaction install). x86-64 Linux only; other targets Error at codegen. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
@@ -1321,6 +1326,8 @@ var
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   BSS_PEEK_VALID  : Integer;  { Eof one-byte stdin pushback: 1 if a byte is held }
   BSS_PEEK_BYTE   : Integer;  { the held pushback byte (consumed by next read) }
+  BSS_SIG_HOOKS   : Integer;  { 64 qword slots: user handler proc address per signal 1..64 (slot = (sig-1)*8), 0 = none. Written by SetSignalHandler, read by the emitted signal dispatch stub. }
+  BSS_SIG_SCRATCH : Integer;  { 32-byte kernel struct sigaction build area for the install/redefault stubs (handler, flags, restorer, mask) }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
   InLValueWrite   : Boolean;
@@ -1343,6 +1350,7 @@ var
   DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
   NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
+  NoSignals        : Boolean;    { user opt-out (--no-signals): skip the default signal runtime (SIGINT/SIGTERM dispatch + SetSignalHandler support). Default ON, no auto-detection — user decision, see feature-signal-handlers. x86-64 Linux only for now. }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
@@ -1359,6 +1367,10 @@ var
   CurGenSlotNext  : Integer;  { next persistent-slot index (offset = SL_OFF_SLOTS + 8*idx) }
   CurGenScopeBase : Integer;  { first sym idx of the current stackless generator's scope (save/restore only its own slots, never leaked globals) }
   GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
+  SigRestorerAddr : Integer;  { code offset of the SA_RESTORER stub (rt_sigreturn) — x86-64 requires a userspace restorer }
+  SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }
+  SigInstallAddr  : Integer;  { code offset of the callable install routine: edi = signal number -> rt_sigaction(sig, dispatch) }
+  SigSetHookAddr  : Integer;  { code offset of the SetSignalHandler stub: edi = signal, rsi = handler address -> store hook slot, fall through into SigInstallAddr }
   Div0StubAddr : Integer;  { code offset of the shared div-by-zero abort stub
                              (write "Runtime error 200 ..." + exit_group(200)),
                              emitted unconditionally on x86-64; the fallback

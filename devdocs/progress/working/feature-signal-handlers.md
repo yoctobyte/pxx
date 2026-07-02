@@ -79,3 +79,40 @@ process resumes correctly (restorer works under strace scrutiny); works with
   behavior differs with signals installed (e.g. a blocking read returning
   EINTR, float traps vs quiet NaN) must keep its no-signals behavior on those
   targets. Document the divergence per codepath as they appear.
+
+## Progress — 2026-07-02, first slice LANDED (x86-64, v136)
+
+Core infrastructure + user API live on the primary target:
+
+- **Stubs** (`EmitSignalRuntime`, ir_codegen.inc, all EmitAsmX64): restorer
+  (`rt_sigreturn` — x86-64 requires SA_RESTORER), dispatch (kernel plain-
+  handler ABI, edi=sig; hook table lookup → `call hook`; no hook → rebuild
+  struct sigaction to SIG_DFL + re-raise via kill(getpid,sig), so unhandled
+  managed signals still die with proper killed-by-signal status), sethook
+  (edi=sig, rsi=handler → store BSS_SIG_HOOKS slot, falls through) + install
+  (edi=sig → rt_sigaction with {dispatch, SA_RESTORER|SA_RESTART, restorer,
+  0}). Code-absolute addresses inside structs via call/pop trick
+  (`EmitCodeAbsToRdx`) — position-independent, no new reloc kind.
+- **Default-on**: entry installs dispatch for SIGINT(2) + SIGTERM(15) before
+  unit inits. `--no-signals` opts out (no stubs, no installs; SetSignalHandler
+  then a clean compile error). **Measured cost: 272 bytes on hello world.**
+- **User API**: `SetSignalHandler(sig, @proc)` soft intrinsic (parser →
+  AN_SET_SIGNAL(76) → IR_SET_SIGNAL(65) → SigSetHook call). Parameterless
+  hooks, any signal 1..64 (installs on demand beyond the default set);
+  `SetSignalHandler(sig, nil)` reverts to default on next delivery. Hooks run
+  in signal context — kernel restores the full register file on return;
+  SA_RESTART keeps interrupted blocking syscalls transparent. Caveat
+  (documented): hooks that touch the heap/managed strings while the main
+  program is mid-allocation are unsafe (heap spinlock deadlock under
+  --threadsafe) — set flags, do work in the main loop.
+- Gate: test/test_signal_handlers.pas (hooks fire ×3 signals, program
+  survives, nil-revert dies 143) in make test; suite green; self-host
+  converged; pinned v136.
+
+**Remaining** (this ticket stays open): i386/arm32/aarch64 (per-target
+sigaction layouts + restorer conventions), SIGPIPE policy for the net stack
+(decided NOT default-ignored for now — a write-loop program must die on
+closed stdout; revisit with the net library), sigaltstack (hook on a guard-
+page fault reuses the faulting stack today), thread interaction beyond
+"handler table is process-wide", FPC-compat `Signal()`/sigaction surface,
+and the float-mask consumer ([[feature-float-exception-mask-control]]).

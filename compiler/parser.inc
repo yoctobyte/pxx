@@ -10,6 +10,7 @@ procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
+procedure EmitSignalRuntime; forward;
 
 
 function AllocNode(kind: Integer): Integer;
@@ -8610,6 +8611,23 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
       end
+      else if CaseEqual(name, 'SetSignalHandler') and (FindProc('SetSignalHandler') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { SetSignalHandler(sig, @proc): register a parameterless proc as the
+          handler for signal sig (1..64) and install the signal runtime's
+          dispatch for it; nil/0 reverts to the default disposition on the next
+          delivery. Guarded like the other soft intrinsics: a user proc of the
+          same name shadows this. x86-64 Linux only (IR_SET_SIGNAL errors on
+          other targets); --no-signals programs must not call it. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; opNode := CurASTNode;                              { sig }
+        Expect(tkComma, ',');
+        ParseExpr; valNode := CurASTNode;                             { handler }
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_SET_SIGNAL);
+        ASTLeft[node] := opNode; ASTRight[node] := valNode;
+      end
       else if CaseEqual(name, 'Delete') and (FindProc('Delete') < 0) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -15427,6 +15445,8 @@ begin
   BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
+  BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
+  BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
   ExceptionUsed := False;
   CoroutineUsed := False;
   CloneStubAddr := 0;        { 0 = clone+trampoline stub not yet emitted (lazy) }
@@ -15760,6 +15780,11 @@ begin
     x86-64 only for now (other backends keep their per-target hardware behavior
     until their sites get the check — see bug-integer-div-zero-sigfpe-uncatchable). }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { Signal runtime (restorer/dispatch/sethook/install stubs): default on for
+    the PC target, --no-signals opts out (user decision: no auto-detection —
+    predictable process behavior beats size sniffing; the whole runtime is
+    ~200 bytes). See feature-signal-handlers. }
+  if (TargetArch = TARGET_X86_64) and not NoSignals then EmitSignalRuntime;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 
@@ -15890,6 +15915,16 @@ begin
     Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
   else
     Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+
+  { Install the default-managed signals (SIGINT, SIGTERM) at program start —
+    graceful Ctrl-C / termination via the dispatch stub (no hook registered =
+    redefault + re-raise, so unhandled signals still kill with proper
+    killed-by-signal status). }
+  if (TargetArch = TARGET_X86_64) and not NoSignals then
+  begin
+    EmitAsmX64(['mov edi, %', 2]);   IREmitCodeCall(SigInstallAddr);   { SIGINT }
+    EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
+  end;
 
   { Run unit initialization sections before the program body, in dependency
     order (a used unit is fully parsed — and its init proc registered — before

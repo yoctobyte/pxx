@@ -365,6 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
+	./$(COMPILER) test/test_signal_handlers.pas /tmp/test_signal_handlers26
+	test "$$(/tmp/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
 	# integer div/mod by zero = clean Runtime error 200 + exit 200 (not a raw SIGFPE core dump)
 	./$(COMPILER) test/test_div_zero_re200.pas /tmp/test_div_zero_re20026
 	test "$$(/tmp/test_div_zero_re20026 || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"

@@ -307,6 +307,14 @@ begin
       MaxStackFrameSize := PasOptionInt(option, 19);
       Inc(i);
     end
+    else if option = '--no-signals' then
+    begin
+      { Opt out of the default signal runtime (SIGINT/SIGTERM graceful dispatch
+        + SetSignalHandler). Default on for PC targets; see
+        feature-signal-handlers. }
+      NoSignals := True;
+      Inc(i);
+    end
     else if option = '--no-div-check' then
     begin
       { Opt out of the integer div/mod pre-divide zero check (default on, FPC
