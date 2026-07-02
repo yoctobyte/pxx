@@ -50,7 +50,7 @@ _none_
 | feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
-| feature-dynarray-insert-delete | A | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
+| feature-dynarray-insert-delete-managed-elements | A | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
@@ -133,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (411)
+## done (412)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -421,6 +421,7 @@ _none_
 | feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
+| feature-dynarray-insert-delete | A | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
 | feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
@@ -587,7 +588,7 @@ _none_
 - [A] feature-dynamic-compiler-tables
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
-- [A] feature-dynarray-insert-delete
+- [A] feature-dynarray-insert-delete-managed-elements
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
 - [B] feature-embed-dwscript-rtti

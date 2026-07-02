@@ -106,3 +106,30 @@ tested — same staged approach `Copy` itself took.
 `Delete`/`Insert` on a dynamic array shift + resize correctly (with managed
 elements released/retained as appropriate); string forms unchanged; regression
 tests; self-host byte-identical.
+
+## Resolution — 2026-07-02, Track A (landed v132, commit 378a31e1)
+
+Implemented per the recommendation above: fresh-allocation shape for BOTH
+Delete and Insert (AN_DYN_DELETE=74 / AN_DYN_INSERT=75 on AN_DYN_COPY's
+template), parser wraps the node in `arr := <fresh temp>` so the existing
+dyn-array IR_STORE_SYM retain-new/release-old handles the handle swap. New
+builtin helpers PXXDynLen / PXXDynDelNewLen / PXXDynDelFill / PXXDynInsFill
+(head+tail forward copies from the intact old buffer — never
+self-overlapping, so the memmove-direction landmine is sidestepped
+entirely). Clamp semantics byte-matched against real FPC 3.2.2.
+
+Scope landed (narrower than the original acceptance, per the staged plan):
+plain depth-1 dyn-array VARIABLE targets, non-managed/non-nested element
+types; Insert additionally rejects record/set elements (needs a memory
+store). All out-of-scope shapes are clean compile errors. Follow-ups filed
+in [[feature-dynarray-insert-delete-managed-elements]].
+
+Bonus fix while here: the pre-existing **Copy-in-a-loop leak** — AN_DYN_COPY's
+inline DEFAULT_MEM re-zeroed the temp's slot every pass, leaking one block
+per iteration (786MB RSS / 200k iters on pinned v131). All three fresh-temp
+sites now use SymIsHiddenArgTemp (codegen-prologue nil-init, which also
+fixes the branch-not-taken garbage-handle-release hazard) and let SetLength
+release the prior handle; RSS flat at 264KB.
+
+Gate: test/test_dynarray_insert_delete.pas (20 cases, FPC-oracle) in
+`make test`; full suite green; self-host byte-identical; pinned v132.
