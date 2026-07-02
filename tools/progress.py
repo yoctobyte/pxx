@@ -363,6 +363,174 @@ class Board:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
 
+    def render_board_html(self) -> str:
+        """One self-contained BOARD.html: the board tables with each slug
+        linking to the full ticket rendered further down the same page.
+        Works from file:// — no server, no external assets."""
+        slugs = set(self.by_slug)
+
+        def esc(x: str) -> str:
+            return x.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+        def inline(x: str) -> str:
+            x = esc(x)
+            # [[wiki-link]] -> in-page anchor when the ticket exists
+            def wiki(m: re.Match) -> str:
+                sl = m.group(1)
+                if sl in slugs:
+                    return f'<a href="#t-{sl}">{sl}</a>'
+                return f"<em>{sl}</em>"
+            x = re.sub(r"\[\[([A-Za-z0-9_-]+)\]\]", wiki, x)
+            x = re.sub(r"`([^`]+)`", r"<code>\1</code>", x)
+            x = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", x)
+            x = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", x)
+            x = re.sub(r"~~([^~]+)~~", r"<del>\1</del>", x)
+            x = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r'<a href="\2">\1</a>', x)
+            # bare ticket slugs in prose become links too (cheap nicety)
+            return x
+
+        def md_html(text: str) -> str:
+            out: list[str] = []
+            in_code = False
+            in_list = False
+            in_table = False
+            for line in text.splitlines():
+                if line.strip().startswith("```"):
+                    if in_list:
+                        out.append("</ul>"); in_list = False
+                    if in_table:
+                        out.append("</table>"); in_table = False
+                    if in_code:
+                        out.append("</pre>")
+                    else:
+                        out.append("<pre>")
+                    in_code = not in_code
+                    continue
+                if in_code:
+                    out.append(esc(line))
+                    continue
+                stripped = line.strip()
+                if stripped.startswith("|") and stripped.endswith("|"):
+                    cells = [c.strip() for c in stripped.strip("|").split("|")]
+                    if all(re.fullmatch(r":?-{3,}:?", c) for c in cells):
+                        continue  # separator row
+                    if in_list:
+                        out.append("</ul>"); in_list = False
+                    if not in_table:
+                        out.append("<table>")
+                        in_table = True
+                    out.append("<tr>" + "".join(f"<td>{inline(c)}</td>" for c in cells) + "</tr>")
+                    continue
+                if in_table:
+                    out.append("</table>"); in_table = False
+                m = re.match(r"^(#{1,6})\s+(.*)$", line)
+                if m:
+                    if in_list:
+                        out.append("</ul>"); in_list = False
+                    lvl = min(len(m.group(1)) + 2, 6)  # demote: ticket h1 -> h3
+                    out.append(f"<h{lvl}>{inline(m.group(2))}</h{lvl}>")
+                    continue
+                m = re.match(r"^\s*[-*]\s+(.*)$", line)
+                if m:
+                    if not in_list:
+                        out.append("<ul>")
+                        in_list = True
+                    out.append(f"<li>{inline(m.group(1))}</li>")
+                    continue
+                if in_list and line[:1] == " " and stripped:
+                    # hanging-indent continuation of the previous bullet
+                    out[-1] = out[-1][:-5] + " " + inline(stripped) + "</li>"
+                    continue
+                if in_list:
+                    out.append("</ul>"); in_list = False
+                if not stripped:
+                    out.append("")
+                    continue
+                out.append(f"<p>{inline(line)}</p>")
+            if in_code:
+                out.append("</pre>")
+            if in_list:
+                out.append("</ul>")
+            if in_table:
+                out.append("</table>")
+            return "\n".join(out)
+
+        css = """
+body{font:15px/1.5 system-ui,sans-serif;margin:0 auto;max-width:70rem;padding:1rem 2rem 4rem;
+     background:#111418;color:#d6dbe1}
+a{color:#6cb6ff;text-decoration:none} a:hover{text-decoration:underline}
+h1,h2{border-bottom:1px solid #2a2f36;padding-bottom:.25rem}
+h1{font-size:1.5rem} h2{font-size:1.2rem;margin-top:2.2rem}
+h3{font-size:1.08rem;margin-top:2rem;color:#e8ecf1}
+table{border-collapse:collapse;margin:.6rem 0;width:100%} 
+td,th{border:1px solid #2a2f36;padding:.28rem .55rem;text-align:left;vertical-align:top}
+th{background:#1a1f26}
+code{background:#1d232b;padding:.08rem .3rem;border-radius:3px;font-size:.92em}
+pre{background:#1d232b;padding:.7rem .9rem;border-radius:5px;overflow-x:auto;font-size:.9em}
+pre code{background:none;padding:0}
+.badge{display:inline-block;font-size:.75em;padding:.1rem .5rem;border-radius:8px;
+       background:#1a2634;color:#9fc6ee;margin-left:.5rem;vertical-align:middle}
+.ticket{border:1px solid #2a2f36;border-radius:8px;padding:.2rem 1.2rem 1rem;margin:1.2rem 0;
+        background:#151a20}
+.top{font-size:.8em;float:right;margin-top:1.4rem}
+.gen{color:#7d8590;font-size:.85em}
+"""
+        h: list[str] = []
+        h.append("<!DOCTYPE html><html><head><meta charset='utf-8'>")
+        h.append("<meta name='viewport' content='width=device-width,initial-scale=1'>")
+        h.append("<title>frankonpiler board</title>")
+        h.append(f"<style>{css}</style></head><body>")
+        h.append("<h1>frankonpiler — progress board</h1>")
+        h.append("<p class='gen'>Generated by <code>tools/progress.sh board-md</code> "
+                 "alongside BOARD.md. Click a ticket to jump to its full text below; "
+                 "everything is in this one file, works offline.</p>")
+        counts = " · ".join(f"<a href='#s-{st}'>{st} {len(self.by_status[st])}</a>" for st in STATUSES)
+        h.append(f"<p>{counts}</p>")
+        for st in STATUSES:
+            tickets = self.by_status[st]
+            h.append(f"<h2 id='s-{st}'>{st} <span class='badge'>{len(tickets)}</span></h2>")
+            if not tickets:
+                h.append("<p class='gen'>none</p>")
+                continue
+            h.append("<table><tr><th>Ticket</th><th>Track</th><th>Type</th>"
+                     "<th>Summary</th><th>Blocked-by</th></tr>")
+            for t in tickets:
+                blockers = ", ".join(
+                    (f"<a href='#t-{b}'>{b}</a>" if b in slugs else esc(b)) for b in t.blockers
+                ) or "&mdash;"
+                h.append(
+                    f"<tr><td><a href='#t-{t.slug}'>{esc(t.slug)}</a></td>"
+                    f"<td>{esc(t.track)}</td><td>{esc(t.type)}</td>"
+                    f"<td>{inline(t.summary)}</td><td>{blockers}</td></tr>"
+                )
+            h.append("</table>")
+        h.append("<h2>Tickets</h2>")
+        for st in STATUSES:
+            for t in self.by_status[st]:
+                h.append(f"<div class='ticket' id='t-{t.slug}'>")
+                h.append("<a class='top' href='#'>&uarr; top</a>")
+                h.append(f"<h3>{esc(t.slug)} <span class='badge'>{st}</span>"
+                         f"<span class='badge'>Track {esc(t.track)}</span></h3>")
+                h.append(f"<p class='gen'><code>{esc(str(t.path.relative_to(ROOT)))}</code></p>")
+                h.append(md_html(t.text))
+                h.append("</div>")
+        h.append("</body></html>")
+        return "\n".join(h)
+
+    def write_board_html(self) -> None:
+        out = self.render_board_html()
+        dest = PROG / "BOARD.html"
+        fd, tmp_name = tempfile.mkstemp(prefix="BOARD.", suffix=".html", dir=str(PROG))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(out)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, dest)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
     def check(self, strict: bool = False) -> tuple[int, str]:
         problems = 0
         warning_count = 0
@@ -552,7 +720,9 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(board.cmd_board())
     elif cmd == "board-md":
         board.write_board_md()
+        board.write_board_html()
         print(f"wrote {PROG / 'BOARD.md'}")
+        print(f"wrote {PROG / 'BOARD.html'}")
     elif cmd == "check":
         rc, out = board.check(getattr(args, "strict", False))
         sys.stdout.write(out)
