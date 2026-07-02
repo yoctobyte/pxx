@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+_none_
 
 ## unfinished (3)
 
@@ -26,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -83,6 +81,7 @@ _none_
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
+| feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
@@ -622,6 +621,7 @@ _none_
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
+- [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
 - [B] feature-threadsafe-heap-contract
