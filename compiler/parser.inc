@@ -8430,6 +8430,22 @@ begin
     begin
       name := CurTok.SVal;
       qUnit := ConsumeUnitQualifier(name);
+      { Bare Move(...) / FillChar(...): soft-alias to the hidden builtin
+        helpers (__pxxMove/__pxxFillChar) so the System primitives resolve
+        with no `uses` (FPC parity) WITHOUT a real proc named Move/FillChar
+        that would shadow a user proc, an in-scope symbol, or a method of the
+        enclosing class (implicit-Self `Move(d)` inside a class with its own
+        Move must stay a method call — the adventure-demo regression). }
+      if (qUnit < 0) and (CaseEqual(name, 'Move') or CaseEqual(name, 'FillChar')) and
+         (Tokens[TokPos].Kind = tkLParen) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) and
+         ((CurSelfClass < REC_UCLASS_BASE) or
+          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
+         (FindProc('__pxxMove') >= 0) then
+      begin
+        if CaseEqual(name, 'Move') then name := '__pxxMove'
+        else name := '__pxxFillChar';
+      end;
       { Label definition: 'labelname:' as a statement }
       if Tokens[TokPos].Kind = tkColon then
       begin

@@ -24,12 +24,13 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
+| bug-implicit-self-method-loses-to-unit-proc | A | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
 | bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -574,6 +575,7 @@ _none_
 
 - [A] audit-shared-global-reentrancy-thread-safety
 - [A] bug-compiler-uses-unit-interactions
+- [A] bug-implicit-self-method-loses-to-unit-proc
 - [A] bug-max-proc-params-32-selfmiscompile
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification

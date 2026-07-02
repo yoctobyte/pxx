@@ -76,11 +76,13 @@ Two opt-in switches relax comment handling (both default **off**, matching
 Turbo Pascal / classic Delphi, which do not nest comments):
 
 ```pascal
-{$NESTEDCOMMENTS ON}   { nest { } and (* *): an inner opener raises the depth }
+{$NESTEDCOMMENTS OFF}  { flat comments; nesting is the DEFAULT (FPC parity) }
 {$CSTYLECOMMENTS ON}   { recognise C-style /* ... */ comments (non-nesting) }
 ```
 
-With `NESTEDCOMMENTS` off, a brace comment ends at the first `}` and a
+Nesting is ON by default (real FPC 3.2.2 behavior, verified — the earlier
+claim here that FPC does not nest was wrong; `{$mode delphi}` turns nesting
+off). With `NESTEDCOMMENTS` off, a brace comment ends at the first `}` and a
 paren-star comment at the first `*)`. `CSTYLECOMMENTS` is a pure extension
 (standard Pascal has no `/* */`); leaving it off keeps `/` adjacent to `*`
 parsing as division. Both accept `ON`/`OFF` and are case-insensitive.

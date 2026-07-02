@@ -57,17 +57,18 @@ function __pxxPos(const sub, s: AnsiString): Integer;
   do not pull in the Str/Val/Variant routines below. }
 
 { System memory primitives (FPC keeps these in System, available with no
-  `uses`): pulled via the bare-name token pre-scan like Str/Val. Overlap-safe
-  Move (memmove semantics) and FillChar. Plain byte loops for now —
-  feature-move-fillchar-intrinsics tracks the optimized-intrinsic follow-up;
-  the copies in lib/rtl/sysutils.pas are shadowed by these (builtin registers
-  first) and their removal is a Track B follow-up. }
-procedure Move(const Source; var Dest; Count: Integer);
-procedure FillChar(var X; Count: Integer; Value: Byte);
+  `uses`): pulled via the bare-name token pre-scan like Str/Val, and reached
+  through a parser soft-alias (bare `Move(`/`FillChar(` -> these hidden
+  names) so NO real proc named Move/FillChar exists to shadow a user's own
+  proc or a class method of the same name (that broke adventure's
+  TGame.Move). Overlap-safe Move (memmove) and FillChar; plain byte loops —
+  feature-move-fillchar-intrinsics tracks the optimized emission. }
+procedure __pxxMove(const Source; var Dest; Count: Integer);
+procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
 
 implementation
 
-procedure Move(const Source; var Dest; Count: Integer);
+procedure __pxxMove(const Source; var Dest; Count: Integer);
 var s, d: PByte; i: Integer;
 begin
   if Count <= 0 then Exit;
@@ -81,7 +82,7 @@ begin
     for i := 0 to Count - 1 do d[i] := s[i];
 end;
 
-procedure FillChar(var X; Count: Integer; Value: Byte);
+procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
 var d: PByte; i: Integer;
 begin
   d := PByte(@X);

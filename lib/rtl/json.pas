@@ -488,7 +488,7 @@ function TJSONReader.ParseObject: TJSONValue;
 var obj, child: TJSONValue; key: AnsiString;
 begin
   obj := JSONObject;
-  Self.FPos := Self.FPos + 1;          { consume '{' }
+  Self.FPos := Self.FPos + 1;          { consume the opening brace }
   Self.SkipWS;
   if Self.Peek = '}' then
   begin

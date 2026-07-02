@@ -71,3 +71,15 @@ The repro compiles and prints `after comment`; `make lib-test` passes
   mention directives. Repro compiles + prints `after comment`; `make test`
   green (exit 0), self-host byte-identical. Annotated the over-reached done
   ticket. Stabilized + pinned for Track B.
+
+## CORRECTION (2026-07-02) — this revert's FPC claim was wrong
+
+Re-verified against real FPC 3.2.2: FPC **does** nest `{ { } }` by default
+(default AND objfpc modes), and FPC **rejects** `{ consume '{' }` exactly like
+nested-pxx does — the claim above that "FPC compiles this fine" was incorrect
+(never reproduced against a real FPC). The lone-brace idiom is not FPC-legal;
+json.pas's comment was the bug, not the nesting. Default re-flipped to ON in
+v148 (`{$mode delphi}` = off, directive overrides), json.pas comment made
+FPC-legal, whole tree lexes byte-identically under nesting. This ping-pong
+(ON 06-23 → OFF 06-24 → ON 07-02) is settled by the empirical FPC matrix in
+test/test_nested_comments.pas.

@@ -4,7 +4,7 @@
 
 | Directive | Default | Effect |
 | --- | --- | --- |
-| `{$NESTEDCOMMENTS ON\|OFF}` | off | Nest `{ }` and `(* *)`. |
+| `{$NESTEDCOMMENTS ON\|OFF}` | **on** (off under `{$mode delphi}`) | Nest `{ }` and `(* *)` — real FPC default (verified 3.2.2); a lone `{` inside a brace comment opens a level, so `{ consume '{' }` is NOT legal FPC/pxx. |
 | `{$CSTYLECOMMENTS ON\|OFF}` | off | Recognize `/* … */`. |
 | `{$CASESENSITIVE ON\|OFF}` | off | Case-sensitive identifiers in this source. |
 | `{$LAZYCASING ON\|OFF}` | off | Allow a wrong-case call to a C-import (`external`) routine to resolve when exactly one matches case-insensitively (warns; ambiguous = error). |
