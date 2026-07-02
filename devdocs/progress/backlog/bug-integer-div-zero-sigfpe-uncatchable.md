@@ -126,3 +126,41 @@ picks it up next rather than rushing ~10 site edits across 6 backends at
 this hour. The good news: this fallback version genuinely doesn't need the
 architecture decision above, so it's a smaller, well-defined, mechanical
 (if wide) task once someone has a clear multi-hour block for it.
+
+## Scoping note 3 (2026-07-02, re-examined the x86-64-only slice specifically)
+
+Reconsidered once more with fresh eyes, this time actually counting the
+real `idiv` call sites in `ir_codegen.inc` (x86-64) rather than estimating:
+there are only **3** total (`grep -c idiv`), and 2 of those are inside a
+rare Variant-arithmetic helper (dynamic-typed `div`/`mod` on a `Variant`
+value, not the common path). The ordinary integer `div`/`mod` codegen most
+programs actually hit is really **one** code site
+(`ir_codegen.inc` ~2598-2612, the `tkDiv`/`tkMod` cases of the main binop
+dispatch). So "x86-64 only" is much narrower than the "~10+ sites across 6
+backends" framing above suggested when scoped to just this one target —
+worth recording precisely rather than leaving the wide estimate as the
+only data point.
+
+That narrower count does NOT change the parking decision, though, for two
+reasons independent of line count:
+
+1. **This would still be the first codegen-inserted runtime safety check
+   of any kind in the whole compiler** (confirmed again this pass: grepped
+   for any existing array-bounds-check / nil-deref-check / similar
+   precedent anywhere in `ir_codegen.inc`/`ir.inc` — genuinely none exist;
+   every runtime-detected failure today is a raw hardware trap). Even the
+   "no message, just `exit(1)`" minimal version is a new architectural
+   category, not a bug-fix-shaped change — the kind of precedent worth the
+   user weighing in on (does this open the door to bounds-checking, etc.,
+   or should it stay a one-off?), not something to decide by fiat overnight.
+2. **A single-target fix creates a real inconsistency**: x86-64 would get a
+   clean abort while i386/arm32/aarch64/riscv32/xtensa still raw-SIGFPE-crash
+   on the exact same source program — an asymmetry across targets that
+   itself deserves a decision (ship it now for the primary target and file
+   the rest as follow-ups? or hold for parity?) rather than silently
+   introducing target-dependent behavior for the same Pascal semantics.
+
+Still parked; recording the narrower, precisely-counted x86-64 scope so a
+future pass (or the user) can weigh the real tradeoff (small code footprint
+vs. real precedent-setting/consistency questions) instead of over- or
+under-estimating the effort.
