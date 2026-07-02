@@ -1111,6 +1111,83 @@ begin
   Result := dest;
 end;
 
+{ Dynamic-array Delete/Insert support. The compiler lowers Delete/Insert on a
+  dynamic array into a fresh SetLength'd temp filled from the (still intact)
+  old buffer via these helpers, then assigns the temp back — see
+  AN_DYN_DELETE / AN_DYN_INSERT in ir.inc. Copying old-buffer -> new-buffer is
+  never self-overlapping, so the forward-only PXXMemCopy applies in both
+  directions of the shift. }
+
+{ Element count of a dyn-array data block (0 for a nil/empty handle). }
+function PXXDynLen(srcData: Pointer): NativeInt;
+begin
+  if srcData = nil then Result := 0
+  else Result := PWord(Int64(srcData) - 8)^;
+end;
+
+{ Length after Delete(arr, index, count). FPC clamp semantics: index < 0 or
+  >= len removes nothing; count is clamped to [0 .. len-index]. }
+function PXXDynDelNewLen(srcData: Pointer; index: NativeInt; count: NativeInt): NativeInt;
+var len, removed: Int64;
+begin
+  len := PXXDynLen(srcData);
+  if (index < 0) or (index >= len) then removed := 0
+  else
+  begin
+    removed := count;
+    if removed > len - index then removed := len - index;
+    if removed < 0 then removed := 0;
+  end;
+  Result := len - removed;
+end;
+
+{ Fill the fresh Delete destination (PXXDynDelNewLen elements): head
+  [0..index) then tail [index+removed .. len), same clamping as above.
+  Returns destData (a function so the lowering can store the result to link
+  the call into the statement stream, like PXXMemCopy in AN_DYN_COPY). }
+function PXXDynDelFill(destData: Pointer; srcData: Pointer; index: NativeInt; count: NativeInt; elemSize: NativeInt): Pointer;
+var len, removed, headB, tailB: Int64; dummy: Pointer;
+begin
+  len := PXXDynLen(srcData);
+  if (index < 0) or (index >= len) then removed := 0
+  else
+  begin
+    removed := count;
+    if removed > len - index then removed := len - index;
+    if removed < 0 then removed := 0;
+  end;
+  Result := destData;
+  if removed = 0 then
+  begin
+    if len > 0 then dummy := PXXMemCopy(destData, srcData, len * elemSize);
+    Exit;
+  end;
+  headB := index * elemSize;
+  tailB := (len - index - removed) * elemSize;
+  if headB > 0 then dummy := PXXMemCopy(destData, srcData, headB);
+  if tailB > 0 then
+    dummy := PXXMemCopy(Pointer(Int64(destData) + headB),
+                        Pointer(Int64(srcData) + headB + removed * elemSize), tailB);
+end;
+
+{ Fill the fresh Insert destination (len+1 elements): head [0..pos), a
+  one-element gap at pos, tail [pos..len). pos = index clamped to [0..len]
+  (FPC semantics). Returns the gap's address for the element store. }
+function PXXDynInsFill(destData: Pointer; srcData: Pointer; index: NativeInt; elemSize: NativeInt): Pointer;
+var len, headB, tailB: Int64; dummy: Pointer;
+begin
+  len := PXXDynLen(srcData);
+  if index < 0 then index := 0;
+  if index > len then index := len;
+  headB := index * elemSize;
+  tailB := (len - index) * elemSize;
+  if headB > 0 then dummy := PXXMemCopy(destData, srcData, headB);
+  if tailB > 0 then
+    dummy := PXXMemCopy(Pointer(Int64(destData) + headB + elemSize),
+                        Pointer(Int64(srcData) + headB), tailB);
+  Result := Pointer(Int64(destData) + headB);
+end;
+
 {$ifdef CPU_XTENSA}
 { Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;

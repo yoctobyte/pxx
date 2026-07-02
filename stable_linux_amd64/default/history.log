@@ -129,3 +129,4 @@
 2026-07-01T19:28:16Z  v129  22c552dbb8844339a90200a6ddd2d70154991ac36a8b42793bf7519ed0bf5c25  2f49905767ff9d8b5ac6bffbd75ee770b647a148  fix(except): on E: BaseClass now catches derived exceptions (v128)
 2026-07-01T19:45:28Z  v130  ce22f69b91950a41a300fe120cda830f40bbbd2aef746433d649eefaaff3af1d  eb4e1cf51930297be01ab1b6334f4086661c465e  fix(typecast): narrowing ordinal rvalue casts now truncate correctly (v129)
 2026-07-01T19:56:22Z  v131  a3ab055cfb4e511ba40706c2f4efd193699c3b2d4f1c658b8fcae659e0789965  705e3f36ff346e2339a14eeb3a1ec52b772b8fac  fix(parser): var-section N-D array initializers (v130)
+2026-07-02T04:39:11Z  v132  6020f346e29a871ccd3ff4e220c8e72cf3b113382cc1a720ff8630e246c539b2  378a31e1124e26ece1562d0ee209b0160f32f70d  feat: dynamic-array Insert/Delete intrinsics (FPC clamp semantics)
