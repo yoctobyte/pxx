@@ -117,3 +117,18 @@ Remaining 12 (same recipe, per-name site analysis needed): value-context ones
 (`Chr`, `Ord`, `Low`, `High`) mirror Length; statement-context ones (`Inc`,
 `Dec`, `Exit`, `Halt`, `Break`, `Continue`, plus `GetMem`/`FreeMem`) also
 dispatch in ParseStatementAST and need the statement-side ident path.
+
+## Progress — 2026-07-02, batch 2: `Ord`, `Chr`, `Low`, `High` converted (v138)
+
+Same recipe as the Length pilot, verbatim body moves into the ParseFactor
+ident dispatch with the `procIdx < 0 / FindSym < 0 / next = '('` guard. Each
+had exactly one factor case + the lexer production(s); `-Ord(tkXxx)` call ids
+untouched. IsDeclNameTok's dead entries dropped. Verified FPC-output-identical
+(enum Low/High, type folds, array bounds, for-loop bounds, all four as plain
+variables). test_soft_keyword_length.pas extended to 14 cases.
+
+5 of 13 done. Remaining 8 are the statement-context ones (`Inc`, `Dec`,
+`Exit`, `Halt`, `Break`, `Continue`, `GetMem`, `FreeMem`) — these also
+dispatch on token kind in ParseStatementAST (and Break/Continue/Exit are
+control flow, not calls), so the recipe needs the statement-side ident path;
+sized as its own pass.

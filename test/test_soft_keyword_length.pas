@@ -1,10 +1,11 @@
 program test_soft_keyword_length;
-{ `Length` is a soft keyword (lexes as a plain identifier, ParseFactor
-  dispatches on the name) — pilot for
+{ `Length`/`Ord`/`Chr`/`Low`/`High` are soft keywords (lex as plain
+  identifiers, ParseFactor dispatches on the name) —
   bug-hard-keyword-intrinsics-block-identifier-use. FPC-parity pinned here:
-  Length is declarable as a variable/param/field name; the intrinsic is
+  all five are declarable as variable/param/field names; the intrinsics are
   untouched where the name is not shadowed (a shadowing var makes `Length(x)`
   a compile error in FPC — kept, but not testable in a green test). }
+type TE = (eA, eB, eC);
 var
   okCount: Integer;
   s: string;
@@ -35,6 +36,14 @@ begin UserArea := 0; end;
 
 var r: TBuf;
 
+{ ord/chr/low/high declarable and usable as plain locals }
+function OrdChrLowHighVars: Integer;
+var ord, chr, low, high: Integer;
+begin
+  ord := 1; chr := 2; low := 3; high := 4;
+  OrdChrLowHighVars := ord + chr + low + high;
+end;
+
 begin
   okCount := 0;
   Chk(1, Length('hello') = 5);            { literal fold }
@@ -49,5 +58,10 @@ begin
   r.Length := 9;
   Chk(8, r.Length = 9);
   Chk(9, Length(s + '!') = 7);            { r-value (concat result) }
-  writeln('total ok ', okCount, ' / 9');
+  Chk(10, OrdChrLowHighVars = 10);        { ord/chr/low/high as variables }
+  Chk(11, (Ord('A') = 65) and (Chr(66) = 'B') and (Ord(eC) = 2));
+  Chk(12, (Low(f) = 0) and (High(f) = 4) and (High(Byte) = 255));
+  Chk(13, (Low(a) = 0) and (High(a) = 2));
+  Chk(14, (Low(TE) = eA) and (High(TE) = eC));
+  writeln('total ok ', okCount, ' / 14');
 end.

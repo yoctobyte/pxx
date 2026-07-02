@@ -224,9 +224,9 @@ begin
     Exit;
   end;
   case CurTok.Kind of
-    tkHalt, tkInc, tkDec, tkGetMem, tkFreeMem, tkOrd, tkChr, tkExit,
+    tkHalt, tkInc, tkDec, tkGetMem, tkFreeMem, tkExit,
     tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
-    tkArgCount, tkArgStr, tkHigh, tkLow:
+    tkArgCount, tkArgStr:
       IsDeclNameTok := True;
   else
     IsDeclNameTok := False;
@@ -3676,25 +3676,6 @@ begin
       end;
       CurASTNode := node;
     end;
-    tkOrd, tkChr:
-    begin
-      idx := FindSym(CurTok.SVal);
-      if (idx >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
-      begin
-        Next;
-        CurASTNode := ParseLValueAST(idx, TokPos - 2);
-        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-        Exit;
-      end;
-      if CurTok.Kind = tkChr then LastExprTk := tyChar else LastExprTk := tyInteger;
-      op := Ord(CurTok.Kind);
-      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
-      if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
-    end;
     tkInteger_T, tkLongWord_T:
     begin
       { 'byte'/'longword' collide with 'integer'/'longint' on token KIND (all
@@ -3815,73 +3796,6 @@ begin
       end
       else
         Error('String(): operand must be Char or string');
-    end;
-    tkHigh:
-    begin
-      { High(arr) := Length(arr) - 1. Reuses the Length call + a subtraction, so
-        no new IR/codegen — works for open arrays, dyn arrays and (via Length)
-        static arrays alike. }
-      Next; Expect(tkLParen, '(');
-      { High(ordinalType) / High(enum) folds to a compile-time constant. }
-      if TryFoldHighLowType(True, node) then
-      begin
-        Expect(tkRParen, ')');
-        CurASTNode := node;
-        Exit;
-      end;
-      if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type');
-      idx := FindSym(CurTok.SVal); Next;
-      { See Length above: ParseLValueAST handles implicit-Self + undefined. }
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      Expect(tkRParen, ')');
-      { High of a whole 1-D static array folds to its upper index bound (see the
-        Length fold above for why the runtime path can't serve a static array).
-        The lower bound is in Syms[].ConstVal (0 for a 0-based array), so the
-        upper bound is ConstVal + count - 1 — NOT count - 1, which silently
-        miscompiled non-zero-based arrays (array[5..9] -> 4 instead of 9). }
-      if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
-         Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
-         (SymArrNDims[idx] <= 1) then
-      begin
-        CurASTNode := AllocNode(AN_INT_LIT);
-        ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
-      end
-      else
-      begin
-        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-        ASTLeft[node] := argSeq;
-        valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := 1; ASTTk[valNode] := Ord(tyInteger);
-        CurASTNode := AllocNode(AN_BINOP);
-        ASTIVal[CurASTNode] := Ord(tkMinus);
-        ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
-        ASTTk[CurASTNode] := Ord(tyInteger);
-      end;
-    end;
-    tkLow:
-    begin
-      { Low(ordinalType)/Low(enum) folds to a compile-time constant. Low of an
-        array variable is the declared lower index bound — Syms[].ConstVal for a
-        1-D static array (e.g. array[5..9] -> 5); 0 for open/dynamic arrays and
-        for 0-based statics. }
-      Next; Expect(tkLParen, '(');
-      if TryFoldHighLowType(False, node) then
-      begin
-        Expect(tkRParen, ')');
-        CurASTNode := node;
-        Exit;
-      end;
-      if CurTok.Kind <> tkIdent then Error('Low: expected array variable or ordinal type');
-      idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
-      Expect(tkRParen, ')');
-      CurASTNode := AllocNode(AN_INT_LIT);
-      if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
-         (SymArrNDims[idx] <= 1) then
-        ASTIVal[CurASTNode] := Syms[idx].ConstVal
-      else
-        ASTIVal[CurASTNode] := 0;
-      ASTTk[CurASTNode] := Ord(tyInteger);
     end;
     tkGetMem:
     begin
@@ -4565,6 +4479,101 @@ begin
         node := AllocNode(AN_IS_TEST);
         ASTLeft[node] := exprNode; ASTIVal[node] := ci; ASTTk[node] := Ord(tyBoolean);
         CurASTNode := node; LastExprTk := tyBoolean;
+        Exit;
+      end;
+
+      { Ord(x)/Chr(x): soft-keyword intrinsics (same recipe as Length below —
+        plain idents, name dispatch, user proc / in-scope symbol shadows,
+        must be followed by '('). }
+      if (CaseEqual(name, 'Ord') or CaseEqual(name, 'Chr')) and (procIdx < 0) and
+         (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        if CaseEqual(name, 'Chr') then
+        begin op := Ord(tkChr); LastExprTk := tyChar; end
+        else
+        begin op := Ord(tkOrd); LastExprTk := tyInteger; end;
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+        if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        Exit;
+      end;
+
+      { High(x): soft-keyword intrinsic. High(arr) := Length(arr) - 1 — reuses
+        the Length call + a subtraction, so no new IR/codegen; works for open
+        arrays, dyn arrays and (via the folds) static arrays alike. }
+      if CaseEqual(name, 'High') and (procIdx < 0) and (FindSym(name) < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        { High(ordinalType) / High(enum) folds to a compile-time constant. }
+        if TryFoldHighLowType(True, node) then
+        begin
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          Exit;
+        end;
+        if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type');
+        idx := FindSym(CurTok.SVal); Next;
+        { See Length below: ParseLValueAST handles implicit-Self + undefined. }
+        valNode := ParseLValueAST(idx, TokPos - 2);
+        Expect(tkRParen, ')');
+        { High of a whole 1-D static array folds to its upper index bound (see
+          the Length fold below for why the runtime path can't serve a static
+          array). The lower bound is in Syms[].ConstVal (0 for a 0-based
+          array), so the upper bound is ConstVal + count - 1 — NOT count - 1,
+          which silently miscompiled non-zero-based arrays (array[5..9] -> 4
+          instead of 9). }
+        if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+           Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
+           (SymArrNDims[idx] <= 1) then
+        begin
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
+        end
+        else
+        begin
+          node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+          ASTLeft[node] := argSeq;
+          valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := 1; ASTTk[valNode] := Ord(tyInteger);
+          CurASTNode := AllocNode(AN_BINOP);
+          ASTIVal[CurASTNode] := Ord(tkMinus);
+          ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end;
+        LastExprTk := tyInteger;
+        Exit;
+      end;
+
+      { Low(x): soft-keyword intrinsic. Low(ordinalType)/Low(enum) folds to a
+        compile-time constant. Low of an array variable is the declared lower
+        index bound — Syms[].ConstVal for a 1-D static array (array[5..9] ->
+        5); 0 for open/dynamic arrays and 0-based statics. }
+      if CaseEqual(name, 'Low') and (procIdx < 0) and (FindSym(name) < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        if TryFoldHighLowType(False, node) then
+        begin
+          Expect(tkRParen, ')');
+          CurASTNode := node;
+          Exit;
+        end;
+        if CurTok.Kind <> tkIdent then Error('Low: expected array variable or ordinal type');
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
+        Expect(tkRParen, ')');
+        CurASTNode := AllocNode(AN_INT_LIT);
+        if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
+           (SymArrNDims[idx] <= 1) then
+          ASTIVal[CurASTNode] := Syms[idx].ConstVal
+        else
+          ASTIVal[CurASTNode] := 0;
+        ASTTk[CurASTNode] := Ord(tyInteger);
+        LastExprTk := tyInteger;
         Exit;
       end;
 

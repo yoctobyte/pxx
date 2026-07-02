@@ -95,15 +95,15 @@ begin
     if (s[1]='I') and (s[2]='n') and (s[3]='c') then Result := tkInc;
     if (s[1]='d') and (s[2]='e') and (s[3]='c') then Result := tkDec;
     if (s[1]='D') and (s[2]='e') and (s[3]='c') then Result := tkDec;
-    if (s[1]='o') and (s[2]='r') and (s[3]='d') then Result := tkOrd;
-    if (s[1]='O') and (s[2]='r') and (s[3]='d') then Result := tkOrd;
-    if (s[1]='c') and (s[2]='h') and (s[3]='r') then Result := tkChr;
-    if (s[1]='C') and (s[2]='h') and (s[3]='r') then Result := tkChr;
+    { 'ord'/'chr'/'low' (and 'high'/'length' below) are soft keywords: they lex
+      as plain tkIdent and ParseFactor dispatches on the name, so they are
+      legal identifiers like in FPC (bug-hard-keyword-intrinsics-block-
+      identifier-use). Their tk enum members survive only as -Ord(tkXxx)
+      intrinsic CALL ids. }
     if (s[1]='t') and (s[2]='r') and (s[3]='y') then Result := tkTry;
     if (s[1]='T') and (s[2]='r') and (s[3]='y') then Result := tkTry;
     if (s[1]='n') and (s[2]='i') and (s[3]='l') then Result := tkNil;
     if (s[1]='N') and (s[2]='i') and (s[3]='l') then Result := tkNil;
-    if ((s[1]='l') or (s[1]='L')) and ((s[2]='o') or (s[2]='O')) and ((s[3]='w') or (s[3]='W')) then Result := tkLow;
   end
   else if Length(s) = 4 then
   begin
@@ -121,8 +121,6 @@ begin
     if CaseEqual(s, 'read') then Result := tkRead;
     if (s[1]='h') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
     if (s[1]='H') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
-    if (s[1]='h') and (s[2]='i') and (s[3]='g') and (s[4]='h') then Result := tkHigh;
-    if (s[1]='H') and (s[2]='i') and (s[3]='g') and (s[4]='h') then Result := tkHigh;
     if (s[1]='e') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
     if (s[1]='E') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
     if (s[1]='c') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
