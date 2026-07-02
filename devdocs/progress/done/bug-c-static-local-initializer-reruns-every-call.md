@@ -83,3 +83,10 @@ to fall through unchanged.
 - 2026-07-02 — Filed by Track B. Isolated via 3 minimal repros (no-initializer
   works, zero-initializer masked the bug by coincidence, non-zero initializer
   exposes it cleanly). No code touched — test/repro only.
+- 2026-07-02 — Track A: fixed. ParseCLocalDeclAST now wraps a static-local's
+  initializer chain in a one-time guard (`if guard == 0 { guard = 1; inits }`,
+  hidden BSS int guard, CWrapStaticInitOnce) at both block-build sites (incl.
+  the inline fn-ptr declarator early exit). Repro prints 11 12 13; new gate
+  test/cstatic_local_init_once_b139.c covers computed initializers, implicit
+  zero, multi-declarator lines. make test + test-lua green, self-host
+  byte-identical.

@@ -2108,6 +2108,37 @@ begin
   CurProc := savedCurProc;
 end;
 
+{ Wrap a static-local declaration's initializer chain (AN_SEQ head) in a
+  one-time guard: `if guard == 0 { guard = 1; <inits> }`. C runs a block-scope
+  static's initializer ONCE (load-time semantics), not on every function
+  entry; the storage moved to BSS but the init assignments stayed inline in
+  the body. The guard is a hidden BSS int (zero at load), so the un-guarded
+  first entry runs the inits and every later call skips them.
+  See bug-c-static-local-initializer-reruns-every-call. }
+function CWrapStaticInitOnce(head: Integer): Integer;
+var gsym, savedCurProc, idn, zero, cond, one, asn, seq1, pairN, ifn, blk: Integer;
+begin
+  savedCurProc := CurProc;
+  CurProc := -1;                       { guard is a global (BSS) slot }
+  gsym := AllocVar('$staticinit$' + MangleSuffix(SymCount), tyInteger);
+  CurProc := savedCurProc;
+  { cond: guard == 0 }
+  idn := AllocNode(AN_IDENT); ASTIVal[idn] := gsym; ASTTk[idn] := Ord(tyInteger);
+  zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
+  cond := AllocNode(AN_BINOP); ASTIVal[cond] := Ord(tkEq);
+  ASTLeft[cond] := idn; ASTRight[cond] := zero; ASTTk[cond] := Ord(tyBoolean);
+  { then-branch: guard := 1; <original init chain> }
+  idn := AllocNode(AN_IDENT); ASTIVal[idn] := gsym; ASTTk[idn] := Ord(tyInteger);
+  one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
+  asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := one;
+  ASTTk[asn] := Ord(tyInteger);
+  seq1 := AllocNode(AN_SEQ); ASTLeft[seq1] := asn; ASTRight[seq1] := head;
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := seq1;
+  pairN := AllocNode(AN_PAIR); ASTLeft[pairN] := blk; ASTRight[pairN] := -1;
+  ifn := AllocNode(AN_IF); ASTLeft[ifn] := cond; ASTRight[ifn] := pairN;
+  Result := ifn;
+end;
+
 { A local declaration line: <type> name [= init] (, name [= init])* ;
   Each name is allocated (a global slot in a top-level main where CurProc<0, a
   stack local inside a function) so subsequent statements resolve it; returns an
@@ -2168,7 +2199,14 @@ begin
     end;
     Eat(tkSemicolon);
     blk := AllocNode(AN_BLOCK);
-    ASTLeft[blk] := head;
+    if CLocalStaticDecl and (head <> -1) then
+    begin
+      seq := AllocNode(AN_SEQ);
+      ASTLeft[seq] := CWrapStaticInitOnce(head); ASTRight[seq] := -1;
+      ASTLeft[blk] := seq;
+    end
+    else
+      ASTLeft[blk] := head;
     Result := blk;
     Exit;
   end;
@@ -2547,7 +2585,15 @@ begin
   end;
   Eat(tkSemicolon);
   blk := AllocNode(AN_BLOCK);
-  ASTLeft[blk] := head;   { -1 = empty block, emits nothing }
+  if CLocalStaticDecl and (head <> -1) then
+  begin
+    { static locals: initializers run once, not per call }
+    seq := AllocNode(AN_SEQ);
+    ASTLeft[seq] := CWrapStaticInitOnce(head); ASTRight[seq] := -1;
+    ASTLeft[blk] := seq;
+  end
+  else
+    ASTLeft[blk] := head;   { -1 = empty block, emits nothing }
   Result := blk;
 end;
 
