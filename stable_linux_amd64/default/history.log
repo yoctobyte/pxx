@@ -145,3 +145,4 @@
 2026-07-02T08:54:02Z  v145  641c84a9b9afff7fc84e8c6739863b1c6422f9a131a7acff4515f9a3d4a14223  1299cf45139c7efd710e7cd525db38f4ffdb37a9  chore(stable): pin v144 (managed concat typing, loop stack-carve fix)
 2026-07-02T11:32:17Z  v146  1d5187de7286faff299805c2bbc8908741a1048a56886d41cac8d74958e10453  83f3d88f14bf9f0d91e1945a750935d62d8b9e61  chore(stable): pin v145 (builtin Move/FillChar)
 2026-07-02T12:06:20Z  v147  b2a05f0e41490c560bdaf2f0422dbadcb1aff2a09d687949f1d987e083032856  f6c04f12528d3e62ffc9fc0b0261357e63dd26a5  chore(stable): pin v146 (threadsafe I/O lock infra)
+2026-07-02T12:19:38Z  v148  5f8c275e2a388b9155c659c2355b18b5c858c7d2899da1d2b9aee1ab68cd1759  24049e80bb293727d4131085f4d8abd85f34459d  chore(stable): pin v147 (ctor arity check; threaded I/O acceptance)
