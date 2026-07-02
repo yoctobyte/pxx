@@ -3052,7 +3052,7 @@ end;
 function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
-    procCand: array[0..15] of Boolean; retryTypes: array[0..15] of TTypeKind;
+    procCand: array[0..MAX_PROC_PARAMS-1] of Boolean; retryTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     hasCand, needAddr, pcharRetry, hasPChar: Boolean;
 begin
   hasCand := False;
@@ -3259,7 +3259,7 @@ end;
 
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
-    nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
+    nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
@@ -8233,7 +8233,7 @@ function ParseStatementAST: Integer;
 var
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
-  nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
+  nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   isLn, slIsArrTarget, slIsDynArr: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
@@ -10974,15 +10974,15 @@ var
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
-  mPNames: array[0..15] of AnsiString;
-  mPTypes: array[0..15] of TTypeKind;
-  mPTypesRec: array[0..15] of Integer;
-  mPArr: array[0..15] of Boolean;
-  fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
-  fldNLens: array[0..15] of Integer;
+  mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mPArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  fldNOffs: array[0..MAX_PROC_PARAMS-1] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..MAX_PROC_PARAMS-1] of Integer;
   nFldNames, fni: Integer;
-  mPByRef: array[0..15] of Boolean;
-  mPUntyped: array[0..15] of Boolean;
+  mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPUntyped: array[0..MAX_PROC_PARAMS-1] of Boolean;
 begin
   Next;
   stopTypes := False;
@@ -12816,21 +12816,21 @@ var
   name     : AnsiString;
   retType  : TTypeKind;
   tk       : TTypeKind;
-  pnames    : array[0..15] of AnsiString;
-  ptypes    : array[0..15] of TTypeKind;
-  ptypesRec : array[0..15] of Integer;
-  ptypesPtrElemTk : array[0..15] of TTypeKind;
-  ptypesPtrElemRec : array[0..15] of Integer;
-  ptypesProcSig : array[0..15] of Integer;  { proc-typed param: signature index, -1 otherwise }
-  parr      : array[0..15] of Boolean;
-  pbyref    : array[0..15] of Boolean;
-  pconst    : array[0..15] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
-  puntyped  : array[0..15] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
-  pdefault  : array[0..15] of Boolean;  { param has a default value (`b: Integer = 10`) }
-  pdefaultval : array[0..15] of Int64;  { the constant-folded default ordinal }
+  pnames    : array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  ptypesProcSig : array[0..MAX_PROC_PARAMS-1] of Integer;  { proc-typed param: signature index, -1 otherwise }
+  parr      : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  pbyref    : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  pconst    : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
+  puntyped  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
+  pdefault  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param has a default value (`b: Integer = 10`) }
+  pdefaultval : array[0..MAX_PROC_PARAMS-1] of Int64;  { the constant-folded default ordinal }
   hasDefault : Boolean; defaultVal : Int64;
-  pNDims    : array[0..15] of Integer;
-  pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
+  pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
+  pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pDimLo    : array[0..95] of Integer;
   pDimSpan  : array[0..95] of Integer;
   paramNDims, paramDynDepth, paramAi, pdi: Integer;

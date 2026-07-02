@@ -9,7 +9,7 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
-  MAX_PROC_PARAMS = 16;
+  MAX_PROC_PARAMS = 32;
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
@@ -640,7 +640,7 @@ type
     IsFunc     : Boolean;
     RetType    : TTypeKind;
     ParamCount : Integer;
-    Params     : array[0..15] of TParam;
+    Params     : array[0..31] of TParam;   { literal 31: record-field bounds cannot use MAX_PROC_PARAMS-1 (const-expr gap); keep = MAX_PROC_PARAMS }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }
@@ -954,15 +954,15 @@ var
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
   CTypeFnRetIsFunc : Boolean; { last ParseCDeclType saw `ret (*Name(params))(...)`: a real function returning a fn pointer, not a fn-pointer variable }
   CTypeFnRetParamCount : Integer;
-  CTypeFnRetPTypes : array[0..15] of TTypeKind;
-  CTypeFnRetPNames : array[0..15] of AnsiString;
-  CTypeFnRetPDepths : array[0..15] of Integer;
-  CTypeFnRetPBaseTk : array[0..15] of Integer;
-  CTypeFnRetPBaseRec : array[0..15] of Integer;
-  CTypeFnRetPElemTk : array[0..15] of Integer;
-  CTypeFnRetPElemRec : array[0..15] of Integer;
-  CTypeFnRetPRecId : array[0..15] of Integer;
-  CTypeFnRetPProcSig : array[0..15] of Integer;
+  CTypeFnRetPTypes : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  CTypeFnRetPNames : array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  CTypeFnRetPDepths : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPBaseTk : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPBaseRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPRecId : array[0..MAX_PROC_PARAMS-1] of Integer;
+  CTypeFnRetPProcSig : array[0..MAX_PROC_PARAMS-1] of Integer;
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }

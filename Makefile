@@ -469,6 +469,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
+	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	./$(COMPILER) test/cparams_17_32_b150.c /tmp/cparams_17_32_26
+	test "$$(/tmp/cparams_17_32_26)" = "$$(printf 's=153\nt=528')"
 	./$(COMPILER) test/cexpr_b.c /tmp/cexpr_b26
 	/tmp/cexpr_b26; test "$$?" = "89"
 	./$(COMPILER) test/cstmt_c.c /tmp/cstmt_c26

@@ -24,13 +24,14 @@ _none_
 
 _none_
 
-## backlog (69)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
+| bug-c-cast-as-call-arg-parse-error | A | bug | C: cast expression as call argument fails to parse | — |
+| bug-c-printf-without-stdio-include-varargs | A | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
-| bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -132,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (420)
+## done (421)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -271,6 +272,7 @@ _none_
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
+| bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
 | bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-method-miscompiled-by-context | A | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
@@ -574,8 +576,9 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
+- [A] bug-c-cast-as-call-arg-parse-error
+- [A] bug-c-printf-without-stdio-include-varargs
 - [A] bug-compiler-uses-unit-interactions
-- [A] bug-max-proc-params-32-selfmiscompile
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend

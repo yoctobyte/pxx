@@ -1746,12 +1746,12 @@ var
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
   fpNParams, fpSig, fnRetNParams, pi: Integer;
-  fpPTypes: array[0..15] of TTypeKind;
-  fpPNames: array[0..15] of AnsiString;
-  fnRetPTypes: array[0..15] of TTypeKind;
-  fnRetPNames: array[0..15] of AnsiString;
-  fnRetPDepths, fnRetPBaseTk, fnRetPBaseRec, fnRetPElemTk, fnRetPElemRec: array[0..15] of Integer;
-  fnRetPRecId, fnRetPProcSig: array[0..15] of Integer;
+  fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  fpPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  fnRetPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  fnRetPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  fnRetPDepths, fnRetPBaseTk, fnRetPBaseRec, fnRetPElemTk, fnRetPElemRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  fnRetPRecId, fnRetPProcSig: array[0..MAX_PROC_PARAMS-1] of Integer;
   fnRetIsFunc: Boolean;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;

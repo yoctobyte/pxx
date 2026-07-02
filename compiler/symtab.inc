@@ -835,7 +835,16 @@ end;
 function BuiltinRecFieldArrayCount(rec, idx: Integer): Integer;
 begin
   Result := 0;
-  if (rec = REC_TPROC) and (idx = 4) then Result := 16;
+  { MUST track TProc.Params' declared bound in defs.inc. This descriptor is
+    what the compiler uses for its OWN TProc when self-compiling; a stale
+    count here silently laid out Procs[] with the old extent while code
+    written against the new bound overran into BodyAddr and beyond
+    (bug-max-proc-params-32-selfmiscompile: Params[16].Name aliased
+    BodyAddr = -1 -> AnsiStrRelease(-1) SIGSEGV). NOTE the value is baked
+    into the COMPILING binary, so growing MAX_PROC_PARAMS takes an extra
+    self-host generation to converge (gen1 mislays its own Procs; gen2+
+    are correct) — reseed with the converged binary. }
+  if (rec = REC_TPROC) and (idx = 4) then Result := MAX_PROC_PARAMS;
 end;
 
 function BuiltinRecFieldSize(rec, idx: Integer): Integer;
@@ -1171,16 +1180,18 @@ begin
   CheckBuiltinRecField(REC_TPARAM, 'IsRef', 280, tyBoolean, REC_NONE, False);
   CheckBuiltinRecField(REC_TPARAM, 'IsArray', 288, tyBoolean, REC_NONE, False);
 
-  CheckBuiltinRecSize(REC_TPROC, 5056, 'TProc');
+  { TProc trailing-field offsets scale with the Params bound (frozen TParam =
+    296 bytes/element), so express them via MAX_PROC_PARAMS. }
+  CheckBuiltinRecSize(REC_TPROC, 288 + MAX_PROC_PARAMS * 296 + 32, 'TProc');
   CheckBuiltinRecField(REC_TPROC, 'Name', 0, tyString, REC_NONE, False);
   CheckBuiltinRecField(REC_TPROC, 'IsFunc', 264, tyBoolean, REC_NONE, False);
   CheckBuiltinRecField(REC_TPROC, 'RetType', 272, tyInteger, REC_NONE, False);
   CheckBuiltinRecField(REC_TPROC, 'ParamCount', 280, tyInteger, REC_NONE, False);
   CheckBuiltinRecField(REC_TPROC, 'Params', 288, tyRecord, REC_TPARAM, True);
-  CheckBuiltinRecField(REC_TPROC, 'BodyAddr', 5024, tyInteger, REC_NONE, False);
-  CheckBuiltinRecField(REC_TPROC, 'FramePatch', 5032, tyInteger, REC_NONE, False);
-  CheckBuiltinRecField(REC_TPROC, 'RetSymIdx', 5040, tyInteger, REC_NONE, False);
-  CheckBuiltinRecField(REC_TPROC, 'ScopeBase', 5048, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'BodyAddr', 288 + MAX_PROC_PARAMS * 296, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'FramePatch', 288 + MAX_PROC_PARAMS * 296 + 8, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'RetSymIdx', 288 + MAX_PROC_PARAMS * 296 + 16, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'ScopeBase', 288 + MAX_PROC_PARAMS * 296 + 24, tyInteger, REC_NONE, False);
 
   CheckBuiltinRecSize(REC_TRAWTOKEN, 40, 'TRawToken');
   CheckBuiltinRecField(REC_TRAWTOKEN, 'Kind', 0, tyInteger, REC_NONE, False);

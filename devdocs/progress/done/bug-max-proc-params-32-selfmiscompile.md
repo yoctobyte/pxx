@@ -85,3 +85,39 @@ see test_concat_loop_stack.pas). The MAX_PROC_PARAMS-32 compiler crash
 (odd-aligned BSS slots, release of an int32 -1 through a Name-slot offset,
 rsp nowhere near the stack limit) remains unexplained and still reproduces
 only in the self-hosted-compiler context. The rr evidence above stands.
+
+## ROOT CAUSE FOUND + FIXED (2026-07-02, v153)
+
+`symtab.inc BuiltinRecFieldArrayCount(REC_TPROC, 4)` — the hardcoded builtin
+descriptor the compiler uses for its OWN `TProc` when self-compiling — still
+said **16** while defs.inc declared `Params: array[0..31]`. The descriptor
+overrides source layout for the builtin-named records (TProc/TParam/...), so
+`Procs[]` was allocated with the 16-param extent while `RegisterProc`'s code
+looped to 32: `Params[16].Name` aliased `BodyAddr` (just assigned `-1`) →
+`AnsiStrRelease(0xffffffff)` = the rr wild-jump. All the rr evidence matches
+(int32 -1 patterns = BodyAddr/FramePatch/RetSymIdx = -1 stores; ≡1 mod 8 =
+misaligned via descriptor's 8-byte-slot model vs source layout).
+
+Why every standalone repro was negative: user records never hit the builtin
+descriptor path — only the compiler's own TProc/TParam names do.
+
+Fix: descriptor count → `MAX_PROC_PARAMS`; ValidateBuiltinRecordLayout TProc
+size/offsets now MAX_PROC_PARAMS-derived. All 0..15 param arrays bumped
+(defs.inc CTypeFnRetP*, cparser fp*/fnRet*, parser argTypes/pnames/mP* etc.).
+BOOTSTRAP NOTE: the descriptor is baked into the COMPILING binary, so growing
+MAX_PROC_PARAMS requires the FPC cold bootstrap (or an extra self-host
+generation) to converge — `make bootstrap` handles it; done here.
+
+Diagnostic key: FPC-built -Cr range-checked compiler ran CLEAN (no source-level
+OOB) but its gen1 crashed → genuine layout-logic divergence, not memory
+corruption in the compiling process.
+
+Acceptance met: `test/cparams_17_32_b150.c` (17- and 32-param C defs + calls,
+gcc oracle s=153/t=528) in `make test`. make test + test-lua + test-threads
+green, self-host converged, pinned v153.
+
+Pre-existing gaps found en route (filed separately, NOT param-related —
+verified identical on pinned v152): bug-c-printf-without-stdio-include-varargs
+(explicit `int printf(...)` prototype → silent NO output; implicit printf
+prints the format string unformatted) and the `(int)x` cast-as-call-argument
+parse error (bug-c-cast-as-call-arg-parse-error).
