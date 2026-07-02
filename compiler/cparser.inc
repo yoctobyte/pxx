@@ -425,13 +425,20 @@ begin
         idx := FindSym('__va_save');
         a2 := AllocNode(AN_IDENT); ASTIVal[a2] := idx; ASTTk[a2] := Ord(tyRecord);
         node := AllocNode(AN_ADDR); ASTLeft[node] := a2; ASTTk[node] := Ord(tyPointer);
+        { Seed counts are capped at the register-class capacity (6 GP / 8 FP):
+          named params beyond those spill to the caller stack and never occupy
+          the register save area — an uncapped seed (e.g. gp_offset = 7*8)
+          would misindex it. The stack-spilled named params are skipped via
+          the __va_overflow anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
         if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
+        if ASTIVal[a3] > 6 then ASTIVal[a3] := 6;
         ASTTk[a3] := Ord(tyInteger);
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
         a5 := AllocNode(AN_INT_LIT);
         if CurProc >= 0 then ASTIVal[a5] := ProcNamedFP[CurProc] else ASTIVal[a5] := 0;
+        if ASTIVal[a5] > 8 then ASTIVal[a5] := 8;
         ASTTk[a5] := Ord(tyInteger);
         helper := FindProc('__pxx_va_start_impl');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
@@ -4328,18 +4335,18 @@ var
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId: Integer;
-  ptypes: array[0..15] of TTypeKind;
-  pnames: array[0..15] of AnsiString;
-  pdepths: array[0..15] of Integer;
-  pbasetk: array[0..15] of Integer;
-  pbaserec: array[0..15] of Integer;
-  pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
-  pelemrec: array[0..15] of Integer;
-  precid: array[0..15] of Integer;    { record id per tyRecord param (for isRef field access) }
-  pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
+  ptypes: array[0..31] of TTypeKind;
+  pnames: array[0..31] of AnsiString;
+  pdepths: array[0..31] of Integer;
+  pbasetk: array[0..31] of Integer;
+  pbaserec: array[0..31] of Integer;
+  pelemtk: array[0..31] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
+  pelemrec: array[0..31] of Integer;
+  precid: array[0..31] of Integer;    { record id per tyRecord param (for isRef field access) }
+  pprocsig: array[0..31] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
-  parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch: Boolean;
+  parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -4426,6 +4433,7 @@ begin
   begin
     Expect(tkLParen, '(');
     nparams := 0;
+    paramsOverflow := False;
     isVariadic := False;
     while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
     begin
@@ -4437,8 +4445,20 @@ begin
         begin
           { `(void)` empty parameter list — no actual parameter }
         end
-        else if nparams < MAX_PROC_PARAMS then
+        else
         begin
+          { A 17th+ parameter cannot be stored. For a DEFINITION that is fatal
+            (the dropped param would read as constant 0 in the body — the
+            bug-c-vararg-vastart-named-fp-stack follow-through); a
+            declaration-only prototype (GTK headers) keeps the old skip, since
+            the body never reads it (calling with >16 args stays unsupported).
+            The overflow flag is checked at the body branch below. }
+          if nparams >= MAX_PROC_PARAMS then
+          begin
+            paramsOverflow := True;
+            { keep parsing declarators into the LAST slot; nothing is stored }
+            nparams := MAX_PROC_PARAMS - 1;
+          end;
           ptypes[nparams] := ptype;
           pdepths[nparams] := CTypePtrDepth;
           pbasetk[nparams] := CTypePtrBaseTk;
@@ -4583,6 +4603,9 @@ begin
     Exit;
   end;
 
+  if paramsOverflow then
+    Error('C function definition: more than 16 parameters not supported (MAX_PROC_PARAMS)');
+
   if CHeaderMode then
   begin
     { A bodied function in a C program is a local definition compiled in pass 2;
@@ -4686,7 +4709,15 @@ begin
     to variadic functions, so non-variadic / Pascal codegen is unchanged. }
   if vaSaveSym >= 0 then
   begin
-    EmitB($48); EmitB($8D); EmitB($85); EmitI32(16);                          { lea rax, [rbp+16] }
+    { overflow_arg_area starts PAST any stack-spilled NAMED params (7th+ GP /
+      9th+ FP arg, 8 bytes each) — with e.g. 7 named ints the 7th sits at
+      [rbp+16] and the variadic tail begins at [rbp+24]. Anchoring at a flat
+      rbp+16 made va_arg re-read the spilled named params as variadic ones
+      (bug-c-vararg-vastart-named-fp-stack, the overflow-area half). }
+    sz := 0;
+    if ProcNamedGP[procIdx] > 6 then sz := (ProcNamedGP[procIdx] - 6) * 8;
+    if ProcNamedFP[procIdx] > 8 then sz := sz + (ProcNamedFP[procIdx] - 8) * 8;
+    EmitB($48); EmitB($8D); EmitB($85); EmitI32(16 + sz);                     { lea rax, [rbp+16+namedSpill] }
     EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset);   { mov [rbp+o], rax }
     EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
     EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
@@ -4911,6 +4942,12 @@ begin
           EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); { movss [rbp+off], xmm0 }
           Continue;
         end;
+        { Stack-spilled DOUBLE named param (9th+ FP arg): store the loaded
+          bits. This was missing — control fell through into the integer
+          register-homing code below and the slot kept garbage/zero
+          (bug-c-vararg-vastart-named-fp-stack, the named-param half). }
+        EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); { mov [rbp+off], rax }
+        Continue;
       end;
     end
     else if intIdx >= 6 then

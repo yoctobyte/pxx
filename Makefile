@@ -723,6 +723,9 @@ test-core: $(COMPILER)
 	/tmp/cunsigned_div_mod_b12326; test "$$?" = "42"
 	./$(COMPILER) test/cvararg_named_fp.c /tmp/cvararg_named_fp26
 	/tmp/cvararg_named_fp26; test "$$?" = "42"
+	# stack-spilled named params (7th+ GP / 9th+ FP) + overflow_arg_area anchor + capped va seeds (gcc-verified oracle)
+	./$(COMPILER) test/cvararg_stack_spill.c /tmp/cvararg_stack_spill26
+	test "$$(/tmp/cvararg_stack_spill26)" = "$$(printf '7060\n950.25\n7807800.75')"
 	./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c /tmp/crtl_tiny_regex_match26
 	test "$$(/tmp/crtl_tiny_regex_match26)" = "tiny-regex: all cases pass"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26

@@ -93,3 +93,32 @@ it thoroughly.
   - named parameters that spill to the stack before `...`;
   - mixed named GP/FP parameters before variadic GP/FP arguments.
 - Existing `printf` and many-argument vararg tests remain green.
+
+## Resolution — 2026-07-02, stack-spilled half fixed (v143)
+
+All three pieces of the "harder half" landed, plus a fourth bug found under it:
+
+1. **Stack-spilled named DOUBLE params read as garbage/0**: the x86-64 C param
+   homing loaded the spilled double into rax and then fell through into the
+   integer register-homing code without ever storing it (the tySingle case
+   Continue'd, the tyDouble case just... didn't). One missing
+   `mov [rbp+off], rax` + Continue. This was the v2_many_double repro.
+2. **overflow_arg_area anchored at a flat rbp+16**: now starts past the
+   stack-spilled named params (`16 + 8*max(0,ngp-6) + 8*max(0,nfp-8)`), so the
+   variadic tail no longer re-reads spilled named args (v3_many_gp repro:
+   tail summed 20, now 60, gcc-matched).
+3. **va_start seeds uncapped**: gp/fp seed counts are now capped at 6/8 —
+   named params beyond register capacity never occupy the save area.
+4. **Found underneath: the 17th+ C parameter was silently DROPPED**
+   (`else if nparams < MAX_PROC_PARAMS` skip) — it compiled and read as
+   constant 0 in the body. Now: hard error for a DEFINITION (body present);
+   declaration-only prototypes keep the skip (GTK headers declare >16-param
+   functions that are never called with that many args here). A first attempt
+   simply bumping MAX_PROC_PARAMS 16→32 made the (self-hosted) compiler
+   SEGFAULT compiling the 17-param repro — wild jump, likely a real
+   self-miscompile interaction with the grown TProc; filed as
+   [[bug-max-proc-params-32-selfmiscompile]] rather than debugged inline.
+
+Gate: test/cvararg_stack_spill.c (7-GP+variadic, 10-double, 8-GP+7-FP+mixed
+variadic tail; gcc-verified oracle) in make test; full suite + test-lua
+green; self-host byte-identical; pinned v143.
