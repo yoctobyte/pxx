@@ -134,3 +134,4 @@
 2026-07-02T05:32:30Z  v134  100723075a39ab36ab4c276446edbf62da55644b27964a9c436406bdc3eebdb5  296e0af3da5ac851db8b17eed6e42f1e76e6ebc9  docs(progress): close feature-dynarray-insert-delete (v132), file managed-elements follow-up
 2026-07-02T05:41:58Z  v135  df55564289149ffcd8955a93b8c0cef713aa3d6e76642fe60624383dca299ea3  296e0af3da5ac851db8b17eed6e42f1e76e6ebc9  docs(progress): close feature-dynarray-insert-delete (v132), file managed-elements follow-up
 2026-07-02T06:18:20Z  v136  40c36f3fdf3acb20a4e684d23c9fd0d62feb73e0d10c89d3c7a2947af28e525b  c37368b3e14a42b40727aee9db042abccb909ae1  docs(progress): signals default-on with --no-signals opt-out, no auto-detection (user decision)
+2026-07-02T06:32:16Z  v137  029d71786007d73a426f1a307ee4ad52443d50ef950f27b8f4ac9b39d104283f  8ac9245dafdeb0851aee086a85521a9484830cdc  docs(progress): park feature-signal-handlers in backlog (x86-64 slice done, cross targets remain)
