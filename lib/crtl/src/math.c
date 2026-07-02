@@ -42,6 +42,22 @@ double atan(double x)            { return ArcTan(x); }
 
 double fabs(double x) { return x < 0.0 ? -x : x; }
 
+/* trunc/round: Pascal's Trunc/Round are compiler INTRINSICS (lowered inline,
+   no linkable symbol), so unlike sqrt/floor/ceil there is nothing for the
+   case-insensitive extern bind to hit — a C call would survive to load time
+   as `undefined symbol` (bug-c-math-round-undefined-symbol). Pure-C impls;
+   note C round() is half-AWAY-FROM-ZERO, not Pascal Round's nearest-even.
+   The (long long) cast truncates toward zero (verified against the C
+   frontend's double->int64 lowering); |x| >= 2^63 is out of scope, like the
+   other loop-form helpers here. */
+double trunc(double x) {
+  return (double)(long long)x;
+}
+double round(double x) {
+  if (x >= 0.0) return (double)(long long)(x + 0.5);
+  return (double)(long long)(x - 0.5);
+}
+
 /* frexp: x = m * 2^e with 0.5 <= |m| < 1. Loop form (no bit reinterpret — the C
    `*(unsigned long*)&double` punning path is unreliable here). */
 double frexp(double x, int *e) {

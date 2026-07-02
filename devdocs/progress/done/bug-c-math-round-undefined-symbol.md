@@ -70,3 +70,11 @@ crtl gap instead of a runtime symbol-lookup crash.
 - 2026-07-02 — Filed by Track B. Isolated via minimal repro; rest of
   `math.h` (sqrt/pow/fabs/floor/ceil/fmod/log/exp/sin/cos/atan2) verified
   correct in the same session. No code touched — test/repro only.
+- 2026-07-02 — Track A (crtl side, no compiler change needed): pure-C
+  `trunc`/`round` added to lib/crtl/src/math.c alongside fabs/frexp/ldexp —
+  Pascal Round/Trunc are intrinsics with no linkable symbol, so the extern
+  bind had nothing to hit. C semantics implemented (round = half away from
+  zero, NOT Pascal nearest-even; trunc toward zero via the (long long) cast,
+  verified truncating). New gate test/cmath_round_trunc_b140.c incl.
+  round(2.5)=3 / round(-2.5)=-3 and floor/ceil still binding to the RTL.
+  make test green.

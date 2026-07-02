@@ -686,6 +686,8 @@ test-core: $(COMPILER)
 	/tmp/cunsigned_semantics_sweep_b13826; test "$$?" = "42"
 	./$(COMPILER) test/cstatic_local_init_once_b139.c /tmp/cstatic_local_init_once_b13926
 	/tmp/cstatic_local_init_once_b13926; test "$$?" = "42"
+	./$(COMPILER) test/cmath_round_trunc_b140.c /tmp/cmath_round_trunc_b14026
+	/tmp/cmath_round_trunc_b14026; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26
