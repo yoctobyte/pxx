@@ -148,3 +148,4 @@
 2026-07-02T12:19:38Z  v148  5f8c275e2a388b9155c659c2355b18b5c858c7d2899da1d2b9aee1ab68cd1759  24049e80bb293727d4131085f4d8abd85f34459d  chore(stable): pin v147 (ctor arity check; threaded I/O acceptance)
 2026-07-02T14:05:11Z  v149  0fcc8a4b08d64dd45a9881de506e8b595929601c36e1e35f64ec318920cbcce2  98041b33ac901393681024a325f334fc9ac31651  chore(stable): pin v148 (nested comments default)
 2026-07-02T14:37:29Z  v150  4a265fe797b5a0731577a34aba1517651d28fc75646396f8f3382057dc312aa9  8175c9eda3c1e80053521b40af3e1d322f1d6438  chore(stable): pin v149 (Move soft-alias, json comment, docs)
+2026-07-02T14:52:58Z  v151  4cb9a4ab9ac58c4c06a82ebc81582f147755234fd722a5615d3751725a218342  1e6921174ea50108dbcad97de23ebe26b6d27d03  chore(progress): resolve bug-implicit-self-method-loses-to-unit-proc (v150)
