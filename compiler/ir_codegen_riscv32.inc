@@ -1367,6 +1367,24 @@ begin
           end
           else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
              (i < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[i].TypeKind = tySet) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            { Set by-value param: the arg value is the 32-byte set's ADDRESS —
+              push all 8 words inline (mirrors i386) so the callee spill can
+              rebuild the full set in its 32-byte param slot. One address word
+              would leave the callee reading its own slot as set bytes. }
+            IREmitNodeRISCV32(IRA[argNode]);        { a0 = set address }
+            for j := 0 to 7 do
+            begin
+              rv32_lw(reg_t1, reg_a0, j * 4);
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+            end;
+            Inc(nArgs, 8);
+          end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
              ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
               (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
              (not Procs[procIdx].Params[i].IsRef) and
@@ -1901,9 +1919,35 @@ begin
 end;
 
 procedure IREmitMachineCodeRISCV32;
-var i, lblId, pos, targetOffset, f, si: Integer;
+var i, lblId, pos, targetOffset, f, si, procIdx: Integer;
     LabelFixupCount: Integer;
 begin
+  { Nil-init hidden owning locals synthesised for materialised managed-string
+    arguments (e.g. the concat temp in `raise E.Create('x: ' + c)`). They are
+    created during this body's IR lowering, AFTER the parser's prologue
+    zero-init pass, so they would otherwise hold stale stack bytes; the
+    epilogue's scope-exit DecRef would then release garbage and segfault
+    whenever the temp's own path never ran (the chess SetFEN crash). Mirrors
+    the x86-64/i386/arm32/aarch64 walkers. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
+      begin
+        if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+        begin
+          EmitSlotAddrRISCV32(reg_a0, i);
+          EmitLoadImmRISCV32(reg_a1, RecSize(Syms[i].RecName));
+          procIdx := FindProc('PXXMemZero');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          EmitCallProc(procIdx);
+        end
+        else
+        begin
+          EmitSlotAddrRISCV32(reg_t0, i);
+          rv32_sw(reg_zero, reg_t0, 0);
+        end;
+      end;
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
@@ -1935,17 +1979,22 @@ begin
 
       IR_JUMP_IF_FALSE:
         begin
+          { bne-skip + jal, NOT a lone beq: B-type immediates reach only
+            +-4KB, and a large routine (a flattened stackless generator, a big
+            MakeMove) silently TRUNCATED the offset — branches landed inside
+            unrelated code (chess perft counted 164). jal reaches +-1MB. }
           lblId := IRA[i];
           IREmitNodeRISCV32(IRB[i]);
+          EmitI32($00051463);                       { bne a0, zero, +8 }
           if LabelPositions[lblId] <> -1 then
-            EmitAsmRv32(['beq a0, zero, %', LabelPositions[lblId] - CodeLen])
+            EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
           else
           begin
             if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            EmitAsmRv32('beq a0, zero, 0');
+            EmitI32(EncodeRISCVJAL(reg_zero, 0));
           end;
         end;
 

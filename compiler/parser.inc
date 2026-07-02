@@ -13755,6 +13755,7 @@ begin
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
   Procs[procIdx].BodyAddr := CodeLen;
+  if DebugTrace then writeln('PROC ', Procs[procIdx].Name, ' @', CodeLen);
   for i := 0 to nparams-1 do
   begin
     Procs[procIdx].Params[i].IsArray := parr[i];
@@ -14193,6 +14194,9 @@ begin
           (Procs[procIdx].Params[i].TypeKind = tyDouble)) and
          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
         Inc(pnWords, 2)
+      else if (Procs[procIdx].Params[i].TypeKind = tySet) and
+         (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
+        Inc(pnWords, 8)   { by-value 32-byte set: 8 words inline (mirrors i386) }
       else
         Inc(pnWords, 1);
     pw := 0;
@@ -14202,7 +14206,25 @@ begin
       sz := ParamSize(idx);
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+      if (Syms[idx].TypeKind = tySet) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        { by-value set: rebuild all 8 words in the 32-byte param slot; word
+          pw+w comes from a[pw+w] or, past a7, from the caller-kept stack
+          block (same formula as the scalar stack-arg path). }
+        for sz := 0 to 7 do
+        begin
+          if pw + sz < 8 then
+            rv32_sw(reg_a0 + pw + sz, reg_t0, sz * 4)
+          else
+          begin
+            rv32_lw(reg_t1, reg_s0, 16 + (pnWords - 1 - (pw + sz)) * 4);
+            rv32_sw(reg_t1, reg_t0, sz * 4);
+          end;
+        end;
+        Inc(pw, 8);
+      end
+      else if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
@@ -14760,6 +14782,7 @@ begin
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
 
   { Patch frame size }
+  if DebugTrace then writeln('FRAME ', Procs[procIdx].Name, ' = ', FrameSize);
   PatchProcPrologue(patchPos, FrameSize);
 
   { Oversized stack-frame diagnostic: this routine's locals total FrameSize bytes,

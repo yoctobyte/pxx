@@ -2285,7 +2285,10 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_global_init.pas /tmp/test_riscv32_gi
 	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_riscv32_gi_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_gi)" = "$$(/tmp/test_riscv32_gi_x64)"
-	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init ok"
+	./$(COMPILER) --target=riscv32 test/test_cross_set_param.pas /tmp/test_riscv32_setp
+	./$(COMPILER) test/test_cross_set_param.pas /tmp/test_riscv32_setp_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_setp)" = "$$(/tmp/test_riscv32_setp_x64)"
+	@echo "riscv32 c-entry + c-args + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
