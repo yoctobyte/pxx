@@ -27,7 +27,9 @@ distribution.
 ## Contributions
 
 External contributions require a Developer Certificate of Origin sign-off
-(`git commit -s`); see [CONTRIBUTING.md](CONTRIBUTING.md).
+(`git commit -s`) and include a contributor license grant that permits the
+project to relicense contributed code if the project license ever needs to
+change; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Third-party code
 

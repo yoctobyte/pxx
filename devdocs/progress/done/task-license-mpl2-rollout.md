@@ -56,3 +56,15 @@ LICENSE files in place, SPDX headers repo-wide, README/docs consistent,
   demand into git-ignored paths.
 - Gates: full `make test` + `make lib-test` green; compiler binary
   byte-identical after the header sweep (comments only) — no re-pin needed.
+
+## Addendum (2026-07-02): contributor license grant
+
+User decision: pull requests additionally require a contributor license
+grant — contributor keeps copyright but grants the maintainer an
+irrevocable license including the right to RELICENSE, so the project can
+move off MPL 2.0 if it ever creates problems (no intention to, but the
+option must not depend on chasing past contributors). Implemented as a
+grant (not a waiver/assignment — waivers are unenforceable in several
+jurisdictions) in CONTRIBUTING.md; LICENSE.md references it. GitHub-side
+DCO enforcement + CI-before-compiler-PRs remain future work when
+contributions actually open up.
