@@ -169,6 +169,10 @@ class Ticket:
         line = first_bullet_value(self.text, "Type")
         if re.search(r"\bTrack[ -]?A/B\b|\bTrack[ -]?B/A\b", line, re.I):
             return "A+B"
+        if re.search(r"\bTrack[ -]?C\b", line, re.I):
+            return "C"
+        if re.search(r"\bTrack[ -]?D\b", line, re.I):
+            return "D"
         if re.search(r"\bTrack[ -]?B\b", line, re.I):
             return "B"
         if re.search(r"\bTrack[ -]?A\b", line, re.I):

@@ -29,8 +29,8 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
-| bug-c-cast-as-call-arg-parse-error | A | bug | C: cast expression as call argument fails to parse | — |
-| bug-c-printf-without-stdio-include-varargs | A | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
+| bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -38,7 +38,7 @@ _none_
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
+| feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
@@ -96,7 +96,7 @@ _none_
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
-| test-sqlite-external-vs-self-compiled-parity | A | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
+| test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
 
 ## rainy-day (19)
@@ -153,57 +153,57 @@ _none_
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
-| bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
+| bug-c-addr-of-global-array-element-const-index-wrong-offset | C | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
-| bug-c-call-inline-function-pointer-struct-member | A | bug | C: calling an inline function-pointer struct member mis-lowers | — |
-| bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
-| bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
+| bug-c-call-inline-function-pointer-struct-member | C | bug | C: calling an inline function-pointer struct member mis-lowers | — |
+| bug-c-chained-pointer-index-loses-base-type | C | bug | C chained pointer indexing loses base type | — |
+| bug-c-const-cast-in-array-dim | C | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
 | bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
-| bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
+| bug-c-crtl-missing-unistd-syscalls | C | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
-| bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
-| bug-c-external-function-address-dlsym-sqlite | A | bug | C: address of external libc function used as function pointer | — |
+| bug-c-double-vararg | C | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-external-function-address-dlsym-sqlite | C | bug | C: address of external libc function used as function pointer | — |
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
-| bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
-| bug-c-function-pointer-local-variable | A | bug | C: function-pointer local variable declaration not parsed | — |
-| bug-c-function-pointer-struct-member | A | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
-| bug-c-function-returning-function-pointer-prototype-sqlite | A | bug | C: function returning function pointer prototype not registered | — |
-| bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
-| bug-c-global-struct-array-fnptr-cast-init | A | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
+| bug-c-float-int-cast-and-spill | C | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-function-pointer-local-variable | C | bug | C: function-pointer local variable declaration not parsed | — |
+| bug-c-function-pointer-struct-member | C | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
+| bug-c-function-returning-function-pointer-prototype-sqlite | C | bug | C: function returning function pointer prototype not registered | — |
+| bug-c-global-double-init | C | bug | C: global `double`/`float` initializer stored as 0 | — |
+| bug-c-global-struct-array-fnptr-cast-init | C | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-header-case-sensitivity-lookup | A | bug | Case-sensitive C header lookup mismatch on Linux | — |
-| bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
-| bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
-| bug-c-local-static-const-multidim-array-init-sqlite | A | bug | C: local static const multidimensional array initializer in sqlite | — |
-| bug-c-local-static-record-array-vfs-sqlite | A | bug | C: block-scope static record arrays in sqlite VFS init | — |
-| bug-c-lua-tests-regressed-segfault | A | bug | C: lua runner tests regressed (segfault on most scripts) | — |
-| bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
+| bug-c-large-record-byval-param | C | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
+| bug-c-libc-data-symbol-stdio | C | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-local-static-const-multidim-array-init-sqlite | C | bug | C: local static const multidimensional array initializer in sqlite | — |
+| bug-c-local-static-record-array-vfs-sqlite | C | bug | C: block-scope static record arrays in sqlite VFS init | — |
+| bug-c-lua-tests-regressed-segfault | C | bug | C: lua runner tests regressed (segfault on most scripts) | — |
+| bug-c-main-argc-argv-not-wired | C | bug | C `main(argc, argv)` gets real argc/argv | — |
 | bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
-| bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
-| bug-c-null-pointer-literal-call-arg-sqlite | A | bug | C: null pointer literal call arg lowers as address in sqlite | — |
+| bug-c-nested-anon-union-struct | C | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
+| bug-c-null-pointer-literal-call-arg-sqlite | C | bug | C: null pointer literal call arg lowers as address in sqlite | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
-| bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
+| bug-c-preprocessor-defined-expression-sqlite | C | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
-| bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
+| bug-c-sizeof-array-yields-element-size | C | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
-| bug-c-sqlite-offsetof-style-field-address-array-bound | A | bug | C: sqlite offsetof-style field address in array bound | — |
-| bug-c-sqlite-sql-exec-schema-argv-pointer | A | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
-| bug-c-sqlite-sql-exec-schema-parse-corrupt | A | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
-| bug-c-sqlite-undefined-symbol-memsetdefault | A | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
-| bug-c-sqlite-unsupported-ternary-ir | A | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
+| bug-c-sqlite-offsetof-style-field-address-array-bound | C | bug | C: sqlite offsetof-style field address in array bound | — |
+| bug-c-sqlite-sql-exec-schema-argv-pointer | C | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
+| bug-c-sqlite-sql-exec-schema-parse-corrupt | C | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
+| bug-c-sqlite-undefined-symbol-memsetdefault | C | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
+| bug-c-sqlite-unsupported-ternary-ir | C | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
-| bug-c-ternary-middle-comma | A | bug | C: ternary middle arm rejects comma expression | — |
+| bug-c-ternary-middle-comma | C | bug | C: ternary middle arm rejects comma expression | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
-| bug-c-va-arg-local-fnptr-typedef-sqlite | A | bug | C: va_arg with local function-pointer typedef in sqlite | — |
+| bug-c-va-arg-local-fnptr-typedef-sqlite | C | bug | C: va_arg with local function-pointer typedef in sqlite | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
@@ -379,9 +379,9 @@ _none_
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
-| feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
+| feature-c-system-libs-granular-opt-out | C | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-unsigned-semantics-suite-resweep | A | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
-| feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
+| feature-c-varargs-design | C | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
@@ -556,14 +556,14 @@ _none_
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 | track-a-c-stdio-needs-pascal-import-and-data-relocs | A | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
 | track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
-| track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
-| track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
+| track-c-ternary-string-literal-segfault | C | track | C: ternary with two string-literal arms segfaults at runtime | — |
+| track-c-va-arg-nonint-lea | C | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
 ## rejected (9)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-c-invalid-symbol-in-lea-sqlite | A | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
+| bug-c-invalid-symbol-in-lea-sqlite | C | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
@@ -576,8 +576,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] audit-shared-global-reentrancy-thread-safety
-- [A] bug-c-cast-as-call-arg-parse-error
-- [A] bug-c-printf-without-stdio-include-varargs
+- [C] bug-c-cast-as-call-arg-parse-error
+- [C] bug-c-printf-without-stdio-include-varargs
 - [A] bug-compiler-uses-unit-interactions
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
@@ -585,7 +585,7 @@ _none_
 - [A] feature-asm-structured-ir-library
 - [A] feature-asm-textual-emit-mode
 - [A] feature-assembler-first-class-citizen
-- [A] feature-c-cross-target-feature-coverage
+- [C] feature-c-cross-target-feature-coverage
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library
 - [A] feature-cdecl-indirect-cross-targets
