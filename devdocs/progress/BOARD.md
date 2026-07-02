@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,6 @@ _none_
 | bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
-| feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
@@ -134,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (414)
+## done (415)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -359,6 +358,7 @@ _none_
 | feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
+| feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
 | feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
@@ -574,7 +574,6 @@ _none_
 - [A] bug-compiler-uses-unit-interactions
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
-- [A] feature-anonymous-record-type
 - [A] feature-asm-source-frontend
 - [A] feature-asm-structured-ir-library
 - [A] feature-asm-textual-emit-mode

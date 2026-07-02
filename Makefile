@@ -365,6 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	# anonymous inline record types (var x: record ... end) incl nested/packed/variant/managed-field
+	./$(COMPILER) test/test_anonymous_record.pas /tmp/test_anonymous_record26
+	test "$$(/tmp/test_anonymous_record26 | tail -1)" = "total ok 8 / 8"
 	# all 13 former hard-keyword intrinsics are soft keywords: declarable as identifiers, intrinsics/statements unaffected when unshadowed
 	./$(COMPILER) test/test_soft_keyword_length.pas /tmp/test_soft_keyword_length26
 	test "$$(/tmp/test_soft_keyword_length26 | tail -1)" = "total ok 19 / 19"

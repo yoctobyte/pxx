@@ -118,3 +118,41 @@ addition.
   ([[feature-asm-structured-ir-library]]); `test_asm_emit_x64.pas`/
   `test_asm_emit_386.pas` (FPC-only harnesses) use the anonymous-record form
   for scratch fixup tables, which is why it was never hit by self-host.
+
+## Resolution — 2026-07-02, landed (v140)
+
+Implemented per the ticket's own plan:
+
+1. **Extraction**: the ~270-line field-parsing loop moved verbatim out of
+   ParseTypeSection into `ParseRecordFields(ci, isPackedRecord)` (own locals,
+   forward-declared; named-record branch now calls it). Extraction verified
+   faithful — the intermediate build was byte-identical before the new case
+   was exercised.
+2. **ParseTypeKind gains a tkRecord/tkPacked case**: mint an unnamed UCls row
+   (`AddUClass(0,0)`, the EnsureMethodPtrRec precedent), parse fields with the
+   shared helper, `LastTypeRecId := REC_UCLASS_BASE + ci`, return tyRecord.
+   Var decls / array elements / params / nested fields all route through
+   ParseTypeKind, so they work with no per-site wiring (ticket's prediction
+   held). `packed record` accepted; `packed` + anything else errors (was
+   never routed here before).
+3. **Real bug found by the nested case — AddUField window relocation**: UCls
+   field storage is a contiguous `[UClsFBase, +UClsFCount)` window over
+   global UFld* arrays. A NESTED anonymous record parsed mid-record registers
+   its fields between two of the outer's, corrupting the outer's window
+   (repro: `p: record n: Integer; sub: record q: Integer; end; end` — p.n
+   read back p.sub.q's value). AddUField now relocates a class's
+   fields-so-far to the tail and re-bases when its window is strictly behind
+   the tail. Guard subtlety (caught by test/cglobal_struct_array_fnptr_cast_
+   b98.c segfaulting): the C struct parser re-anchors UClsFBase to the tail
+   with a stale UClsFCount before re-appending buffered fields — a window
+   extending PAST the tail is that manual-rebase state and must be left
+   alone (`<` not `<>` in the trigger).
+
+Extras that fell out: packed anon records (SizeOf pinned), case/variant
+sections (union overlay pinned), managed-string fields (ARC on scope exit,
+1000-iteration churn in the test; RSS-flat in a 100k manual run), var-param
+anon records (a pxx extension — real FPC rejects the form in parameter
+lists; kept since the ticket's acceptance asked for it).
+
+Gate: test/test_anonymous_record.pas (8 cases) in make test; full suite
+green; self-host byte-identical; pinned v140.

@@ -515,9 +515,50 @@ begin
 end;
 
 procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);
-var fi: Integer;
+var fi, k, src, dst: Integer;
 begin
   if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
+  { The field window [UClsFBase[ci] .. +UClsFCount[ci]) must stay contiguous
+    (FindUField/RecordHasManagedFields walk it as a range). A nested anonymous
+    record type parsed mid-record (feature-anonymous-record-type) mints its
+    own UCls row and registers ITS fields between two of ours — when that
+    happened, relocate our fields so far to the tail and re-base. }
+  { Strictly BEHIND the tail only: the C struct parser re-anchors UClsFBase[ci]
+    to the tail before re-appending buffered fields while UClsFCount[ci] still
+    holds a previous definition's count — that manual-rebase state (window
+    extending PAST the tail) must be left alone. }
+  if (UClsFCount[ci] > 0) and (UClsFBase[ci] + UClsFCount[ci] < UFldCount) then
+  begin
+    if UFldCount + UClsFCount[ci] >= MAX_UFIELD then
+      Error('too many record/class fields (MAX_UFIELD)');
+    dst := UFldCount;
+    for k := 0 to UClsFCount[ci] - 1 do
+    begin
+      src := UClsFBase[ci] + k;
+      UFldNOff[dst+k] := UFldNOff[src];  UFldNLen[dst+k] := UFldNLen[src];
+      UFldOff_[dst+k] := UFldOff_[src];  UFldTk[dst+k] := UFldTk[src];
+      UFldRec_[dst+k] := UFldRec_[src];  UFldProcSig[dst+k] := UFldProcSig[src];
+      UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
+      UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
+      UFldSetEnumId[dst+k] := UFldSetEnumId[src];
+      UFldSetElemTk[dst+k] := UFldSetElemTk[src];
+      UFldIsArray[dst+k] := UFldIsArray[src];  UFldArrLen[dst+k] := UFldArrLen[src];
+      UFldDynDepth[dst+k] := UFldDynDepth[src];
+      UFldArrNDims[dst+k] := UFldArrNDims[src];
+      UFldBitWidth[dst+k] := UFldBitWidth[src];
+      UFldBitShift[dst+k] := UFldBitShift[src];
+      UFldBitBytes[dst+k] := UFldBitBytes[src];
+      UFldPub[dst+k] := UFldPub[src];
+      for fi := 0 to MAX_ARR_DIMS - 1 do
+      begin
+        UFldArrDimLo[(dst+k) * MAX_ARR_DIMS + fi]   := UFldArrDimLo[src * MAX_ARR_DIMS + fi];
+        UFldArrDimSpan[(dst+k) * MAX_ARR_DIMS + fi] := UFldArrDimSpan[src * MAX_ARR_DIMS + fi];
+      end;
+    end;
+    UClsFBase[ci] := dst;
+    UFldCount := UFldCount + UClsFCount[ci];
+    if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
+  end;
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;

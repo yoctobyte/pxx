@@ -430,6 +430,7 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
@@ -9528,6 +9529,7 @@ end;
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci: Integer;
     childDepth, childBaseTk, childBaseRec: Integer;
+    wasPacked: Boolean;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
@@ -9539,6 +9541,31 @@ begin
   LastTypeEnumId := -1;
   LastTypeStrCap := 0;
   case CurTok.Kind of
+    tkRecord, tkPacked:
+    begin
+      { Anonymous inline record type literal — `var x: record ... end;`,
+        legal ISO/FPC anywhere a type is expected
+        (feature-anonymous-record-type). Mint an unnamed UCls row
+        (AddUClass(0,0), the EnsureMethodPtrRec precedent) and parse the
+        fields with the shared named-record field parser. `packed` reaching
+        here must introduce a record (`packed array` never routed through
+        ParseTypeKind before either). }
+      wasPacked := CurTok.Kind = tkPacked;
+      if wasPacked then
+      begin
+        Next;
+        Expect(tkRecord, 'record');
+      end
+      else
+        Next;
+      ci := AddUClass(0, 0);
+      UClsParent[ci] := -1;
+      UClsIsRecord[ci] := True;
+      ParseRecordFields(ci, wasPacked);
+      LastTypeRecId := REC_UCLASS_BASE + ci;
+      Result := tyRecord;
+      Exit;
+    end;
     tkCaret:
     begin
       Next;
@@ -10511,6 +10538,298 @@ begin
   end;
 end;
 
+{ Parse a record body's fields into UCls entry `ci`, from just after the
+  `record` keyword through its closing `end` (consumed). Shared by named
+  records (ParseTypeSection) and anonymous inline records
+  (ParseTypeKind's tkRecord/tkPacked case — feature-anonymous-record-type).
+  Handles comma field lists, nested fixed/dynamic array fields, and
+  case/variant sections; sets UClsSize_/UClsAlign. }
+procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean);
+var
+  arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize: Integer;
+  hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
+  variantBaseOff, variantMax, branchFieldOff: Integer;
+  tdLo, tdHi, tdi, classAlign: Integer;
+  isArr, fIsDyn: Boolean;
+  fTk: TTypeKind;
+  fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..15] of Integer;
+  tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+begin
+  curFieldOff := 0;
+  classAlign := 1;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind = tkIdent then
+    begin
+      { comma-separated names share one type: `X, Y: Integer` }
+      fldNOffs[0] := Tokens[TokPos-1].SOffset;
+      fldNLens[0] := Tokens[TokPos-1].SLen;
+      nFldNames := 1;
+      Next;
+      while CurTok.Kind = tkComma do
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+        fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+        fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+        Inc(nFldNames);
+        Next;
+      end;
+      Expect(tkColon, ':');
+      isArr := False;
+      arrLen := 1;
+      fIsDyn := False;
+      fDynDepth := 0;
+      fNDims := 0;
+      if CurTok.Kind = tkArray then
+      begin
+        Next;
+        if CurTok.Kind = tkLBrack then
+        begin
+          Next;
+          if CurTok.Kind = tkInteger then
+          begin
+            loVal := CurTok.IVal;
+            Next;
+            Expect(tkDotDot, '..');
+            if CurTok.Kind = tkInteger then
+            begin
+              hiVal := CurTok.IVal;
+              arrLen := hiVal - loVal + 1;
+              Next;
+            end;
+            { N-D field: collect dim0 then any comma dims. }
+            fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+            while CurTok.Kind = tkComma do
+            begin
+              Eat(tkComma);
+              if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
+              Expect(tkDotDot, '..');
+              if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
+              if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+              tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+              arrLen := arrLen * tdDimSpan[fNDims];
+              Inc(fNDims);
+            end;
+          end;
+          Expect(tkRBrack, ']');
+          Expect(tkOf, 'of');
+          fTk := ParseTypeKind;
+          fRec := LastTypeRecId;
+          isArr := True;
+        end
+        else
+        begin
+          { Dynamic-array field: `array of T`, including nested. }
+          fIsDyn := True;
+          fDynDepth := 1;
+          Expect(tkOf, 'of');
+          while CurTok.Kind = tkArray do
+          begin
+            Next;
+            Inc(fDynDepth);
+            Expect(tkOf, 'of');
+          end;
+          fTk := ParseTypeKind;
+          fRec := LastTypeRecId;
+        end;
+      end
+      else
+      begin
+        { Named dynamic-array type field (`TDynArr = array of T`): mirror
+          the inline `array of T` field so SetLength/Length/indexing see a
+          real dynamic array. Without this the field's UFldDynDepth stayed
+          0 and SetLength(Self.field, n) misrouted to the string path. }
+        fAi := -1;
+        if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+        if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+        begin
+          fIsDyn := True;
+          fDynDepth := ArrTypeDynDepth[fAi];
+          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+          fRec := ArrTypeElemRec[fAi];
+          Next;   { consume the named array type }
+        end
+        else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+        begin
+          { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+            make it a real array field (1-D or flattened N-D) so a.x[i]
+            indexes with the right stride. Without this ParseTypeKind drops
+            TG's dimension and the field collapses to a single base element
+            (corrupting r.field[i] and r.field passed as a var array arg). }
+          isArr := True;
+          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+          fRec := ArrTypeElemRec[fAi];
+          if ArrTypeNDims[fAi] >= 2 then
+          begin
+            fNDims := ArrTypeNDims[fAi];
+            arrLen := 1;
+            for tdi := 0 to fNDims - 1 do
+            begin
+              tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+              tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+              arrLen := arrLen * tdDimSpan[tdi];
+            end;
+          end
+          else
+          begin
+            fNDims := 1;
+            tdDimLo[0]   := ArrTypeLo[fAi];
+            tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+            arrLen := tdDimSpan[0];
+          end;
+          Next;   { consume the named array type }
+        end
+        else
+        begin
+          fTk := ParseTypeKind;
+          fRec := LastTypeRecId;
+        end;
+      end;
+      if fIsDyn then
+      begin
+        fSize := TARGET_PTR_SIZE;
+        fAlign := TARGET_PTR_SIZE;
+      end
+      else if fTk = tyString then
+      begin
+        fSize := LOCAL_STR_CAP + 8;
+        fAlign := TARGET_PTR_SIZE;
+      end
+      else if fTk = tyRecord then
+      begin
+        fSize := RecSize(fRec);
+        if fRec >= REC_UCLASS_BASE then
+          fAlign := UClsAlign[fRec - REC_UCLASS_BASE]
+        else
+          fAlign := TARGET_PTR_SIZE;
+      end
+      else
+      begin
+        fSize := TypeSize(fTk);
+        fAlign := TypeAlign(fTk);
+      end;
+      if isPackedRecord then
+        fAlign := 1
+      else if fAlign > TokPackRecords[TokPos - 1] then
+        fAlign := TokPackRecords[TokPos - 1];
+      if isArr then
+        fSize := fSize * arrLen;
+      for fni := 0 to nFldNames - 1 do
+      begin
+        curFieldOff := AlignTo(curFieldOff, fAlign);
+        AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+        UFldIsArray[UFldCount-1] := isArr or fIsDyn;
+        if fIsDyn then UFldArrLen[UFldCount-1] := -1
+        else UFldArrLen[UFldCount-1] := arrLen;
+        UFldDynDepth[UFldCount-1] := fDynDepth;
+        if fNDims >= 2 then
+        begin
+          UFldArrNDims[UFldCount-1] := fNDims;
+          for tdi := 0 to fNDims - 1 do
+          begin
+            UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
+            UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
+          end;
+        end;
+        curFieldOff := curFieldOff + fSize;
+      end;
+      if fAlign > classAlign then classAlign := fAlign;
+      Eat(tkSemicolon);
+    end
+    else if CurTok.Kind = tkCase then
+    begin
+      { Variant part: `case [tag: ] T of c1,..: (fields); ... end`. All
+        branches are a union — their fields share the same base offset, and
+        the record grows by the largest branch. (Previously `case` fell to
+        the skip-`else` below, so branch fields were laid out sequentially
+        and r.i:=x; r.c read 0.) Scalar / fixed-array / record branch
+        fields are supported. }
+      Next;   { consume 'case' }
+      if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
+      begin
+        { discriminant is also a real (tag) field: `case tag: T of` }
+        fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
+        Next; Next;   { tag name, ':' }
+        fTk := ParseTypeKind; fRec := LastTypeRecId;
+        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+        fAlign := TypeAlign(fTk);
+        if isPackedRecord then fAlign := 1;
+        curFieldOff := AlignTo(curFieldOff, fAlign);
+        AddUField(ci, fldNOffs[0], fldNLens[0], curFieldOff, Ord(fTk), fRec);
+        UFldIsArray[UFldCount-1] := False; UFldArrLen[UFldCount-1] := 1;
+        UFldDynDepth[UFldCount-1] := 0;
+        curFieldOff := curFieldOff + fSize;
+        if fAlign > classAlign then classAlign := fAlign;
+      end
+      else
+        ParseTypeKind;   { discriminant type only (no field) }
+      Expect(tkOf, 'of');
+      variantBaseOff := AlignTo(curFieldOff, TARGET_PTR_SIZE);
+      variantMax := 0;
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        { constant label list, e.g. `0, 1:` or `true:` — skip to ':' }
+        while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
+        Expect(tkColon, ':');
+        Expect(tkLParen, '(');
+        branchFieldOff := variantBaseOff;
+        while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind <> tkIdent then Error('expected field name in variant part');
+          fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
+          nFldNames := 1; Next;
+          while CurTok.Kind = tkComma do
+          begin
+            Next;
+            if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+            fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset; fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+            Inc(nFldNames); Next;
+          end;
+          Expect(tkColon, ':');
+          isArr := False; arrLen := 1;
+          if CurTok.Kind = tkArray then
+          begin
+            Next; Expect(tkLBrack, '[');
+            loVal := ConstEval; Expect(tkDotDot, '..'); hiVal := ConstEval;
+            arrLen := hiVal - loVal + 1;
+            Expect(tkRBrack, ']'); Expect(tkOf, 'of');
+            fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
+          end
+          else
+          begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
+          if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+          fAlign := TypeAlign(fTk);
+          if isPackedRecord then fAlign := 1;
+          if isArr then fSize := fSize * arrLen;
+          for fni := 0 to nFldNames - 1 do
+          begin
+            branchFieldOff := AlignTo(branchFieldOff, fAlign);
+            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
+            UFldIsArray[UFldCount-1] := isArr;
+            UFldArrLen[UFldCount-1] := arrLen;
+            UFldDynDepth[UFldCount-1] := 0;
+            branchFieldOff := branchFieldOff + fSize;
+          end;
+          if fAlign > classAlign then classAlign := fAlign;
+          Eat(tkSemicolon);
+        end;
+        Expect(tkRParen, ')');
+        Eat(tkSemicolon);
+        if (branchFieldOff - variantBaseOff) > variantMax then
+          variantMax := branchFieldOff - variantBaseOff;
+      end;
+      curFieldOff := variantBaseOff + variantMax;
+    end
+    else
+      Next;
+  end;
+  UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
+  UClsAlign[ci] := classAlign;
+  Expect(tkEnd, 'end');
+end;
+
 procedure ParseTypeSection;
 { Handles enum types, record/class type declarations }
 var
@@ -11369,278 +11688,7 @@ begin
         ci := AddUClass(tnOff, tnLen);
         UClsParent[ci] := -1;
         UClsIsRecord[ci] := True;
-        curFieldOff := 0;
-        classAlign := 1;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-        begin
-          if CurTok.Kind = tkIdent then
-          begin
-            { comma-separated names share one type: `X, Y: Integer` }
-            fldNOffs[0] := Tokens[TokPos-1].SOffset;
-            fldNLens[0] := Tokens[TokPos-1].SLen;
-            nFldNames := 1;
-            Next;
-            while CurTok.Kind = tkComma do
-            begin
-              Next;
-              if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-              fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
-              fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-              Inc(nFldNames);
-              Next;
-            end;
-            Expect(tkColon, ':');
-            isArr := False;
-            arrLen := 1;
-            fIsDyn := False;
-            fDynDepth := 0;
-            fNDims := 0;
-            if CurTok.Kind = tkArray then
-            begin
-              Next;
-              if CurTok.Kind = tkLBrack then
-              begin
-                Next;
-                if CurTok.Kind = tkInteger then
-                begin
-                  loVal := CurTok.IVal;
-                  Next;
-                  Expect(tkDotDot, '..');
-                  if CurTok.Kind = tkInteger then
-                  begin
-                    hiVal := CurTok.IVal;
-                    arrLen := hiVal - loVal + 1;
-                    Next;
-                  end;
-                  { N-D field: collect dim0 then any comma dims. }
-                  fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
-                  while CurTok.Kind = tkComma do
-                  begin
-                    Eat(tkComma);
-                    if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
-                    Expect(tkDotDot, '..');
-                    if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
-                    if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
-                    tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
-                    arrLen := arrLen * tdDimSpan[fNDims];
-                    Inc(fNDims);
-                  end;
-                end;
-                Expect(tkRBrack, ']');
-                Expect(tkOf, 'of');
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-                isArr := True;
-              end
-              else
-              begin
-                { Dynamic-array field: `array of T`, including nested. }
-                fIsDyn := True;
-                fDynDepth := 1;
-                Expect(tkOf, 'of');
-                while CurTok.Kind = tkArray do
-                begin
-                  Next;
-                  Inc(fDynDepth);
-                  Expect(tkOf, 'of');
-                end;
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-              end;
-            end
-            else
-            begin
-              { Named dynamic-array type field (`TDynArr = array of T`): mirror
-                the inline `array of T` field so SetLength/Length/indexing see a
-                real dynamic array. Without this the field's UFldDynDepth stayed
-                0 and SetLength(Self.field, n) misrouted to the string path. }
-              fAi := -1;
-              if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-              if (fAi >= 0) and ArrTypeIsDyn[fAi] then
-              begin
-                fIsDyn := True;
-                fDynDepth := ArrTypeDynDepth[fAi];
-                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-                fRec := ArrTypeElemRec[fAi];
-                Next;   { consume the named array type }
-              end
-              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
-              begin
-                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
-                  make it a real array field (1-D or flattened N-D) so a.x[i]
-                  indexes with the right stride. Without this ParseTypeKind drops
-                  TG's dimension and the field collapses to a single base element
-                  (corrupting r.field[i] and r.field passed as a var array arg). }
-                isArr := True;
-                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
-                fRec := ArrTypeElemRec[fAi];
-                if ArrTypeNDims[fAi] >= 2 then
-                begin
-                  fNDims := ArrTypeNDims[fAi];
-                  arrLen := 1;
-                  for tdi := 0 to fNDims - 1 do
-                  begin
-                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
-                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
-                    arrLen := arrLen * tdDimSpan[tdi];
-                  end;
-                end
-                else
-                begin
-                  fNDims := 1;
-                  tdDimLo[0]   := ArrTypeLo[fAi];
-                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
-                  arrLen := tdDimSpan[0];
-                end;
-                Next;   { consume the named array type }
-              end
-              else
-              begin
-                fTk := ParseTypeKind;
-                fRec := LastTypeRecId;
-              end;
-            end;
-            if fIsDyn then
-            begin
-              fSize := TARGET_PTR_SIZE;
-              fAlign := TARGET_PTR_SIZE;
-            end
-            else if fTk = tyString then
-            begin
-              fSize := LOCAL_STR_CAP + 8;
-              fAlign := TARGET_PTR_SIZE;
-            end
-            else if fTk = tyRecord then
-            begin
-              fSize := RecSize(fRec);
-              if fRec >= REC_UCLASS_BASE then
-                fAlign := UClsAlign[fRec - REC_UCLASS_BASE]
-              else
-                fAlign := TARGET_PTR_SIZE;
-            end
-            else
-            begin
-              fSize := TypeSize(fTk);
-              fAlign := TypeAlign(fTk);
-            end;
-            if isPackedRecord then
-              fAlign := 1
-            else if fAlign > TokPackRecords[TokPos - 1] then
-              fAlign := TokPackRecords[TokPos - 1];
-            if isArr then
-              fSize := fSize * arrLen;
-            for fni := 0 to nFldNames - 1 do
-            begin
-              curFieldOff := AlignTo(curFieldOff, fAlign);
-              AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-              UFldIsArray[UFldCount-1] := isArr or fIsDyn;
-              if fIsDyn then UFldArrLen[UFldCount-1] := -1
-              else UFldArrLen[UFldCount-1] := arrLen;
-              UFldDynDepth[UFldCount-1] := fDynDepth;
-              if fNDims >= 2 then
-              begin
-                UFldArrNDims[UFldCount-1] := fNDims;
-                for tdi := 0 to fNDims - 1 do
-                begin
-                  UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
-                  UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
-                end;
-              end;
-              curFieldOff := curFieldOff + fSize;
-            end;
-            if fAlign > classAlign then classAlign := fAlign;
-            Eat(tkSemicolon);
-          end
-          else if CurTok.Kind = tkCase then
-          begin
-            { Variant part: `case [tag: ] T of c1,..: (fields); ... end`. All
-              branches are a union — their fields share the same base offset, and
-              the record grows by the largest branch. (Previously `case` fell to
-              the skip-`else` below, so branch fields were laid out sequentially
-              and r.i:=x; r.c read 0.) Scalar / fixed-array / record branch
-              fields are supported. }
-            Next;   { consume 'case' }
-            if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
-            begin
-              { discriminant is also a real (tag) field: `case tag: T of` }
-              fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
-              Next; Next;   { tag name, ':' }
-              fTk := ParseTypeKind; fRec := LastTypeRecId;
-              if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
-              fAlign := TypeAlign(fTk);
-              if isPackedRecord then fAlign := 1;
-              curFieldOff := AlignTo(curFieldOff, fAlign);
-              AddUField(ci, fldNOffs[0], fldNLens[0], curFieldOff, Ord(fTk), fRec);
-              UFldIsArray[UFldCount-1] := False; UFldArrLen[UFldCount-1] := 1;
-              UFldDynDepth[UFldCount-1] := 0;
-              curFieldOff := curFieldOff + fSize;
-              if fAlign > classAlign then classAlign := fAlign;
-            end
-            else
-              ParseTypeKind;   { discriminant type only (no field) }
-            Expect(tkOf, 'of');
-            variantBaseOff := AlignTo(curFieldOff, TARGET_PTR_SIZE);
-            variantMax := 0;
-            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-            begin
-              { constant label list, e.g. `0, 1:` or `true:` — skip to ':' }
-              while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
-              Expect(tkColon, ':');
-              Expect(tkLParen, '(');
-              branchFieldOff := variantBaseOff;
-              while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
-              begin
-                if CurTok.Kind <> tkIdent then Error('expected field name in variant part');
-                fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
-                nFldNames := 1; Next;
-                while CurTok.Kind = tkComma do
-                begin
-                  Next;
-                  if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-                  fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset; fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-                  Inc(nFldNames); Next;
-                end;
-                Expect(tkColon, ':');
-                isArr := False; arrLen := 1;
-                if CurTok.Kind = tkArray then
-                begin
-                  Next; Expect(tkLBrack, '[');
-                  loVal := ConstEval; Expect(tkDotDot, '..'); hiVal := ConstEval;
-                  arrLen := hiVal - loVal + 1;
-                  Expect(tkRBrack, ']'); Expect(tkOf, 'of');
-                  fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
-                end
-                else
-                begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
-                if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
-                fAlign := TypeAlign(fTk);
-                if isPackedRecord then fAlign := 1;
-                if isArr then fSize := fSize * arrLen;
-                for fni := 0 to nFldNames - 1 do
-                begin
-                  branchFieldOff := AlignTo(branchFieldOff, fAlign);
-                  AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
-                  UFldIsArray[UFldCount-1] := isArr;
-                  UFldArrLen[UFldCount-1] := arrLen;
-                  UFldDynDepth[UFldCount-1] := 0;
-                  branchFieldOff := branchFieldOff + fSize;
-                end;
-                if fAlign > classAlign then classAlign := fAlign;
-                Eat(tkSemicolon);
-              end;
-              Expect(tkRParen, ')');
-              Eat(tkSemicolon);
-              if (branchFieldOff - variantBaseOff) > variantMax then
-                variantMax := branchFieldOff - variantBaseOff;
-            end;
-            curFieldOff := variantBaseOff + variantMax;
-          end
-          else
-            Next;
-        end;
-        UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
-        UClsAlign[ci] := classAlign;
-        Expect(tkEnd, 'end');
+        ParseRecordFields(ci, isPackedRecord);
       end
       else if CurTok.Kind = tkCaret then
       begin
