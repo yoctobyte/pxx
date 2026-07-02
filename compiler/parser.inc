@@ -5695,7 +5695,20 @@ begin
       ASTTk[node] := Ord(tyAnsiString)
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or
                           ((ASTTk[left] = Ord(tyChar)) and (ASTTk[right] = Ord(tyChar)))) then
-      ASTTk[node] := Ord(tyString)
+    begin
+      { Managed default: type literal/char concat as a MANAGED result. The
+        frozen concat codegen builds its result in a 272-byte buffer carved
+        off the stack with NO restore (documented in IRLowerCallArg) — fine
+        for a one-off, but `s := 'p' + Chr(i)` in a loop leaked 272 bytes of
+        stack per iteration and overflowed after ~30k iterations
+        (bug-frozen-concat-stack-carve-loop-overflow). The managed concat
+        path heap-allocates and already accepts tyString/tyChar operands.
+        Frozen self-build (-uPXX_MANAGED_STRING) keeps the old typing. }
+      if PasDefineExists('PXX_MANAGED_STRING') then
+        ASTTk[node] := Ord(tyAnsiString)
+      else
+        ASTTk[node] := Ord(tyString);
+    end
     else if ((op = tkPlus) or (op = tkMinus)) and
             (ASTTk[left] = Ord(tyPointer)) and
             TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then

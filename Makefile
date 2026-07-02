@@ -365,6 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	# literal/char concat in a loop must not eat stack (managed typing; frozen carve documented)
+	./$(COMPILER) test/test_concat_loop_stack.pas /tmp/test_concat_loop_stack26
+	test "$$(/tmp/test_concat_loop_stack26)" = "$$(printf 'pI\nab0z\nbad=0')"
 	# anonymous inline record types (var x: record ... end) incl nested/packed/variant/managed-field
 	./$(COMPILER) test/test_anonymous_record.pas /tmp/test_anonymous_record26
 	test "$$(/tmp/test_anonymous_record26 | tail -1)" = "total ok 8 / 8"

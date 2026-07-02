@@ -76,3 +76,12 @@ something the small repro lacks (the real TProc's ~40 fields, MAX_PROCS-scale
 outer array / large BSS offsets, or the specific access pattern). Next probe:
 scale the standalone up field-by-field / array-size-by-array-size toward the
 real TProc until it breaks.
+
+Correction (same session): the "scaled-up standalone repro" that crashed
+(32K-element record array + 1000-index loops) was a RED HERRING for this
+ticket — it was a different bug entirely: the frozen string-concat 272-byte
+stack carve leaking per loop iteration (fixed in v144, managed concat typing;
+see test_concat_loop_stack.pas). The MAX_PROC_PARAMS-32 compiler crash
+(odd-aligned BSS slots, release of an int32 -1 through a Name-slot offset,
+rsp nowhere near the stack limit) remains unexplained and still reproduces
+only in the self-hosted-compiler context. The rr evidence above stands.
