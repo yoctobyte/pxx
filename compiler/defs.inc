@@ -186,6 +186,14 @@ const
   AN_DYN_COPY      = 62; { Copy(arr, index [, count]) over a dynamic array → fresh
                            array of T. Left = source array ident; Right = AN_ARG
                            chain [index, count]. }
+  AN_DYN_DELETE    = 74; { Delete(arr, index, count) over a dynamic array → fresh
+                           array of T with the range removed (assigned back onto
+                           arr by the parser's AN_ASSIGN wrapper). Left = source
+                           array ident; Right = AN_ARG chain [index, count]. }
+  AN_DYN_INSERT    = 75; { Insert(value, arr, index) over a dynamic array → fresh
+                           array of T with value inserted (assigned back via
+                           AN_ASSIGN like AN_DYN_DELETE). Left = source array
+                           ident; Right = AN_ARG chain [value, index]. }
   AN_CLASS_CAST    = 63; { TClass(expr): hard reinterpret class typecast (no
                            runtime check, unlike AN_AS_CAST). Left = instance
                            expr; ASTIVal = target class ci. Classes are pointers

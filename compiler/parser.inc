@@ -8614,12 +8614,47 @@ begin
       begin
         { Delete(s, index, count): in-place string delete, lowered to the
           __pxxStrDelete builtin (eval-once; the var param + assign inside the
-          helper handle managed refcounting). String only for now — a user
-          `Delete` (e.g. a list method as a plain proc) shadows this. }
+          helper handle managed refcounting). A user `Delete` (e.g. a list
+          method as a plain proc) shadows this. A dynamic-array first argument
+          takes the AN_DYN_DELETE path below instead. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
+        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+           Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen = -1) then
+        begin
+          { Delete(arr, index, count) on a dynamic array: build a fresh array
+            with the range removed (AN_DYN_DELETE, AN_DYN_COPY's template) and
+            assign it back onto arr — the dyn-array IR_STORE_SYM path retains
+            the new handle and releases the old one, and the temp's scope-exit
+            release balances the retain. First cut: non-managed, depth-1
+            element types only (a raw byte copy shares element handles with
+            the OLD buffer, whose element-aware release would dangle them). }
+          i := ASTIVal[valNode];
+          if (Syms[i].ElemType = tyAnsiString) or (Syms[i].ElemType = tyString) or
+             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
+             ((Syms[i].ElemType = tyRecord) and RecordHasManagedFields(Syms[i].ElemRecName)) then
+            Error('Delete: managed or nested element type not yet supported for dynamic-array Delete');
+          Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
+          Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
+          Expect(tkRParen, ')');
+          if FindProc('PXXDynDelNewLen') < 0 then
+            Error('Delete: dynamic-array helper unavailable (needs the builtin unit; not on ESP)');
+          exprNode := AllocNode(AN_DYN_DELETE);
+          ASTLeft[exprNode] := valNode;
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := opNode;
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := stepsNode;
+          ASTRight[argSeq] := lastArg;
+          ASTRight[exprNode] := argSeq;
+          ASTTk[exprNode] := Ord(tyPointer);
+          argIdx := AllocNode(AN_IDENT);
+          ASTIVal[argIdx] := i; ASTTk[argIdx] := Ord(tyPointer);
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := argIdx; ASTRight[node] := exprNode;
+        end
+        else
+        begin
         if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
-          Error('Delete: string argument expected (dynamic-array Delete not yet supported)');
+          Error('Delete: string or plain dynamic-array variable expected (dyn-array fields/elements not yet supported)');
         Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
         Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
         Expect(tkRParen, ')');
@@ -8630,17 +8665,50 @@ begin
         lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode; ASTRight[argSeq] := lastArg;
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := stepsNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
+        end;
       end
       else if CaseEqual(name, 'Insert') and (FindProc('Insert') < 0) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Insert(src, s, index): in-place string insert, lowered to __pxxStrInsert.
-          src by value, s by ref (var param). String dest only for now. }
+          src by value, s by ref (var param). A dynamic-array destination takes
+          the AN_DYN_INSERT path below instead. }
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;                            { src }
         Expect(tkComma, ','); ParseExpr; valNode := CurASTNode;       { s (dest) }
+        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+           Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen = -1) then
+        begin
+          { Insert(value, arr, index) on a dynamic array: fresh (len+1)-element
+            array filled around a gap at the clamped index, value stored into
+            the gap, assigned back onto arr (same shape and element-type
+            restrictions as dynamic-array Delete above; records/sets need a
+            memory store, deferred with them). }
+          i := ASTIVal[valNode];
+          if (Syms[i].ElemType = tyAnsiString) or (Syms[i].ElemType = tyString) or
+             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
+             (Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet) then
+            Error('Insert: managed, record, set or nested element type not yet supported for dynamic-array Insert');
+          Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
+          Expect(tkRParen, ')');
+          if FindProc('PXXDynInsFill') < 0 then
+            Error('Insert: dynamic-array helper unavailable (needs the builtin unit; not on ESP)');
+          stepsNode := AllocNode(AN_DYN_INSERT);
+          ASTLeft[stepsNode] := valNode;
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;   { value }
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode;   { index }
+          ASTRight[argSeq] := lastArg;
+          ASTRight[stepsNode] := argSeq;
+          ASTTk[stepsNode] := Ord(tyPointer);
+          argIdx := AllocNode(AN_IDENT);
+          ASTIVal[argIdx] := i; ASTTk[argIdx] := Ord(tyPointer);
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := argIdx; ASTRight[node] := stepsNode;
+        end
+        else
+        begin
         if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
-          Error('Insert: string destination expected (dynamic-array Insert not yet supported)');
+          Error('Insert: string or plain dynamic-array variable destination expected (dyn-array fields/elements not yet supported)');
         Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;        { index }
         Expect(tkRParen, ')');
         i := FindProc('__pxxStrInsert');
@@ -8650,6 +8718,7 @@ begin
         lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := valNode; ASTRight[argSeq] := lastArg;
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := opNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
+        end;
       end
       else if CaseEqual(name, 'SetLength') and (FindProc('SetLength') < 0) and
               (Tokens[TokPos].Kind = tkLParen) then

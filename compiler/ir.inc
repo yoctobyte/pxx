@@ -1986,6 +1986,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
+    dcNewLenTmp, dcValTmp, dcGapTmp: Integer;
     dcElemTk: TTypeKind;
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
@@ -2337,13 +2338,18 @@ begin
       IRAppend(IR_STORE_SYM, dcCntTmp, IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)),
         -1, 0, Ord(tyInteger));
 
-      { Fresh dyn-array local of the source element type; zero its handle slot. }
+      { Fresh dyn-array local of the source element type. Lowering-time temp ->
+        flag for the codegen-prologue nil-init (SymIsHiddenArgTemp) instead of
+        an inline DEFAULT_MEM zero: the inline zero re-runs on every pass
+        through this statement, wiping the previous pass's handle without a
+        release (one block leaked per loop iteration — Copy-in-a-loop leak);
+        with a prologue-nil'd slot the SetLength below releases the old handle
+        itself. }
       dcSavedRec := LastTypeRecId;
       if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
       dcTempSym := AllocDynArray('', dcElemTk, 1);
       LastTypeRecId := dcSavedRec;
-      IRAppend(IR_DEFAULT_MEM, IRAppend(IR_SLOTADDR, dcTempSym, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+      SymIsHiddenArgTemp[dcTempSym] := True;
 
       { SetLength(temp, clampedCount) via the -102 dyn-array SetLength call. }
       dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
@@ -2389,6 +2395,177 @@ begin
         handle (pointer-sized), so tag it tyPointer (an element-typed tag would
         make the assignment store only the element's width and truncate the
         64-bit handle). }
+      Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_DYN_DELETE:
+    begin
+      { Delete(arr, index, count) over a dynamic array. AN_DYN_COPY's template:
+        build a fresh dyn-array temp of the post-delete length, fill it from
+        the still-intact old buffer (PXXDynDelFill: head + tail forward copies,
+        old->new is never self-overlapping), and yield the temp's handle — the
+        parser wraps this node in `arr := <this>`, whose dyn-array store
+        retains the new handle and releases the old buffer. Non-managed
+        element types only (parser-enforced): the raw byte copy shares element
+        handles with the old buffer, whose element-aware release would dangle
+        them. }
+      dcSrcSym := ASTIVal[ASTLeft[node]];
+      dcElemTk := Syms[dcSrcSym].ElemType;
+      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      else dcElemSz := TypeSize(dcElemTk);
+      dcIdxAst := ASTLeft[ASTRight[node]];
+      dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
+
+      { Materialize source data pointer, index and count once. }
+      dcSrcTmp := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcSrcTmp,
+        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      dcIdxTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
+      dcCntTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcCntTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyInteger));
+
+      { newLen := PXXDynDelNewLen(srcData, index, count) — FPC clamping. }
+      procIdx := FindProc('PXXDynDelNewLen');
+      if procIdx < 0 then Error('compiler error: PXXDynDelNewLen not found');
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
+                -1, -1, 0, Ord(tyInteger));
+      IRB[first] := last;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode;
+      dcNewLenTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcNewLenTmp, IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)),
+        -1, 0, Ord(tyInteger));
+
+      { Fresh dyn-array local of the source element type, prologue-nil'd via
+        SymIsHiddenArgTemp (not an inline zero, which would leak the previous
+        pass's handle in a loop — see AN_DYN_COPY above);
+        SetLength(temp, newLen) via the -102 dyn-array SetLength call. }
+      dcSavedRec := LastTypeRecId;
+      if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
+      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      LastTypeRecId := dcSavedRec;
+      SymIsHiddenArgTemp[dcTempSym] := True;
+      dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
+      ASTTk[dcTempIdent] := Ord(tyPointer);
+      dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcNewLenTmp;
+      ASTTk[dcCountIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
+
+      { PXXDynDelFill(destData, srcData, index, count, elemSize). Result stored
+        (ignored) so the call is linked into the statement stream, like
+        PXXMemCopy in AN_DYN_COPY. }
+      procIdx := FindProc('PXXDynDelFill');
+      if procIdx < 0 then Error('compiler error: PXXDynDelFill not found');
+      dcDestData := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcDestData,
+        IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcDestData, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer));
+      IRB[first] := last;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode; last := argNode;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode; last := argNode;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcElemSz, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode;
+      IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
+        -1, 0, Ord(tyPointer));
+
+      Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_DYN_INSERT:
+    begin
+      { Insert(value, arr, index) over a dynamic array — same fresh-temp shape
+        as AN_DYN_DELETE: (len+1)-element temp, head/tail copied around a gap
+        at the clamped index (PXXDynInsFill returns the gap's address), value
+        stored into the gap. Scalar/pointer element types only
+        (parser-enforced). Right = AN_ARG chain [value, index]. }
+      dcSrcSym := ASTIVal[ASTLeft[node]];
+      dcElemTk := Syms[dcSrcSym].ElemType;
+      dcElemSz := TypeSize(dcElemTk);
+      dcCntAst := ASTLeft[ASTRight[node]];               { value }
+      dcIdxAst := ASTLeft[ASTRight[ASTRight[node]]];     { index }
+
+      { Evaluate the value first (source argument order — it may itself touch
+        the array), into an element-typed temp. }
+      dcValTmp := AllocVar('', dcElemTk);
+      IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(dcElemTk));
+
+      dcSrcTmp := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcSrcTmp,
+        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      dcIdxTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
+
+      { newLen := PXXDynLen(srcData) + 1. }
+      procIdx := FindProc('PXXDynLen');
+      if procIdx < 0 then Error('compiler error: PXXDynLen not found');
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      dcNewLenTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcNewLenTmp, IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)),
+        -1, 0, Ord(tyInteger));
+      IRAppend(IR_STORE_SYM, dcNewLenTmp,
+        IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), Ord(tkPlus), 0, Ord(tyInteger)),
+        -1, 0, Ord(tyInteger));
+
+      { Fresh dyn-array local, prologue-nil'd via SymIsHiddenArgTemp (see
+        AN_DYN_COPY); SetLength(temp, newLen). }
+      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      SymIsHiddenArgTemp[dcTempSym] := True;
+      dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
+      ASTTk[dcTempIdent] := Ord(tyPointer);
+      dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcNewLenTmp;
+      ASTTk[dcCountIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
+
+      { gap := PXXDynInsFill(destData, srcData, index, elemSize). }
+      procIdx := FindProc('PXXDynInsFill');
+      if procIdx < 0 then Error('compiler error: PXXDynInsFill not found');
+      dcDestData := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcDestData,
+        IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcDestData, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer));
+      IRB[first] := last;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode; last := argNode;
+      argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcElemSz, Ord(tyInteger)),
+                   -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode;
+      dcGapTmp := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcGapTmp, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
+        -1, 0, Ord(tyPointer));
+
+      { Store the value into the gap (element-width memory store). }
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(dcElemTk)), -1, 0, Ord(dcElemTk));
+
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;
 

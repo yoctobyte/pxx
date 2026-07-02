@@ -365,6 +365,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/test_dynarray_torture26
 	test "$$(/tmp/test_dynarray_torture26 | tail -1)" = "total ok 27 / 27"
+	# dynamic-array Insert/Delete intrinsics (FPC clamp semantics, fresh-temp refcount balance)
+	./$(COMPILER) test/test_dynarray_insert_delete.pas /tmp/test_dynarray_insert_delete26
+	test "$$(/tmp/test_dynarray_insert_delete26 | tail -1)" = "total ok 20 / 20"
 	# frozen-string Result is per-call (reentrant) on direct/virtual/indirect calls
 	./$(COMPILER) test/test_frozen_string_reentrant.pas /tmp/test_frozen_string_reentrant26
 	test "$$(/tmp/test_frozen_string_reentrant26 | tail -1)" = "total ok 4 / 4"
