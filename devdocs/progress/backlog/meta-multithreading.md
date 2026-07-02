@@ -70,3 +70,9 @@ Synchronize/Queue + virtual destructor/auto-join; per-thread TLS (per-thread
 exception chain — ties to [[audit-shared-global-reentrancy-thread-safety]]);
 re-export TThread from `classes`; M5 heap *optimisation* (per-thread arenas).
 M4 C-pthread shim ([[feature-syscall-pthread-shim]]) can now reuse this PAL.
+
+2026-07-02 update: M0 COMPLETE (heap contract v151 + I/O lock v146 + clear
+guards: __pxxclone requires --threadsafe, cross-target --threadsafe rejected).
+M3 gained Synchronize/Queue/CheckSynchronize + auto-join destructor (v152).
+M4 is UNBLOCKED and ready for Track B/C — entry point written in
+[[feature-syscall-pthread-shim]].

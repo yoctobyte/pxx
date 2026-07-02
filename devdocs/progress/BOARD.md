@@ -83,7 +83,7 @@ _none_
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
-| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | feature-threadsafe-heap-contract, feature-threadsafe-io-serialization |
+| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | (done, v151), ~~feature-threadsafe-heap-contract~~ |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -630,7 +630,6 @@ _none_
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
 - [A] feature-sync-primitives-futex
-- [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
@@ -647,4 +646,7 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
+- **1** — (done
 - **1** — task-sqlite-libc-free-runtime-bringup
+- **1** — v151)
+- **1** — ~~feature-threadsafe-heap-contract~~

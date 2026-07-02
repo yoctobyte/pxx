@@ -1,9 +1,12 @@
 # Syscall-only pthread shim for libc-free C libraries
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** backlog — **READY, unblocked 2026-07-02** (both blockers closed:
+  heap contract v151, I/O serialization v146). Track B (lib/crtl files) + C
+  (cfront gaps). See "Entry point" below.
 - **Owner:** —
-- **Blocked-by:** feature-threadsafe-heap-contract, feature-threadsafe-io-serialization
+- **Blocked-by:** ~~feature-threadsafe-heap-contract~~ (done v151),
+  ~~feature-threadsafe-io-serialization~~ (done v146)
 - **Unblocks:** task-sqlite-libc-free-runtime-bringup
 - **Found / Opened:** 2026-06-28, Track B sqlite/pthread discussion
 
@@ -99,3 +102,38 @@ runtime guarantee exists.
 Still Track B (owns `lib/crtl/**`). First slice unchanged: mutex + once +
 self/equal, libc-free, no `DT_NEEDED` on libpthread. cond var + create/join follow.
 x86-64 first (the atomics/clone intrinsics are x86-64 today).
+
+## Entry point for Track B/C (2026-07-02, ground = pinned v153)
+
+Prereqs ALL LANDED — do not rebuild any of this:
+- PAL (M1–M3, x86-64, libc-free, green in `make test-threads`):
+  `lib/rtl/palthread.pas` (PalThreadCreate/Join, PalFutexWait/Wake,
+  PalThreadSelf), `lib/rtl/palsync.pas` (TMutex = Drepper 3-state futex,
+  TEvent, TRTLCriticalSection names, RunOnce), `lib/rtl/palthreadobj.pas`
+  (TThread + Synchronize/Queue). Compiler intrinsics: `__pxxclone`,
+  `__pxxatomic_xchg/cas/add`, `__pxxrawsyscall`.
+- Heap contract (v151): hosted x86-64 `--threadsafe` = the only supported
+  threads+alloc combo; every allocation family validated under concurrent
+  churn (test_thread_heap_mixed). Doc: `devdocs/dev/threading.md`.
+- `MAX_PROC_PARAMS` = 32 (v153): 17..32-param C function defs/calls work.
+
+Build order (first slice = NO pthread_create, per Scope above):
+1. `lib/crtl/include/pthread.h` subset + `lib/crtl/src/pthread.c` —
+   mutex/once/cond/self/equal only. Two impl options:
+   a. PREFERRED: bridge to the Pascal PAL via the pxxcio pattern (C extern
+      binds a bodied Pascal proc, auto-pull — see
+      `devdocs/dev/c-linking-and-crtl-autopull.md` and how `<stdio.h>`
+      pulls pxxcio.pas). One PAL, two consumers (meta-multithreading rule).
+   b. Raw `__pxxatomic_*` + `__pxxrawsyscall(SYS_futex,...)` directly in C.
+2. Acceptance test: libc-free C test with mutex contention + pthread_once +
+   cond producer/consumer, zero DT_NEEDED. No thread spawn in slice 1 →
+   plain compile, no --threadsafe needed (contention exercised from the
+   Pascal-thread side or single-thread semantics checks).
+3. LATER slice (pthread_create/join): route through PalThreadCreate. Note
+   the v151 gate: `__pxxclone` is a COMPILE ERROR without `--threadsafe` —
+   intended; C tests that spawn must compile `--threadsafe`.
+
+Lane rules: crtl impl files = Track B; cfront parse/lowering gaps = Track C
+(two known pre-filed: [[bug-c-cast-as-call-arg-parse-error]],
+[[bug-c-printf-without-stdio-include-varargs]]); anything in shared compiler
+internals (lexer/parser/ir/backends) = file a Track A ticket.
