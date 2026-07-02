@@ -136,3 +136,4 @@
 2026-07-02T06:18:20Z  v136  40c36f3fdf3acb20a4e684d23c9fd0d62feb73e0d10c89d3c7a2947af28e525b  c37368b3e14a42b40727aee9db042abccb909ae1  docs(progress): signals default-on with --no-signals opt-out, no auto-detection (user decision)
 2026-07-02T06:32:16Z  v137  029d71786007d73a426f1a307ee4ad52443d50ef950f27b8f4ac9b39d104283f  8ac9245dafdeb0851aee086a85521a9484830cdc  docs(progress): park feature-signal-handlers in backlog (x86-64 slice done, cross targets remain)
 2026-07-02T06:47:17Z  v138  3b37439313218b7e140a58692291d123e1f9ca1f9625389f0ce982e9411b2f75  1da51b33d9c373d2af7402f7829d46c4424a28da  chore(stable): pin v137 (soft-keyword Length)
+2026-07-02T07:05:00Z  v139  e0374a48ff403462382cebe84f95a7cf2c5caa4a3df28ca279dcc79a9d37a0fe  ff582251198b6e99dc48d71a7795440f379fa982  chore(stable): pin v138 (soft keywords Ord/Chr/Low/High)
