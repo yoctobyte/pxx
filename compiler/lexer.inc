@@ -580,7 +580,14 @@ begin
   InterfacesComMode := False;
   ComInterfaceUsed := False;
   CStyleComments := False;
-  NestedComments := False;  { FPC default: brace and paren-star comments do NOT nest; an inner open-brace is plain text. NESTEDCOMMENTS ON opts in. }
+  NestedComments := True;   { REAL FPC default (verified 3.2.2, fpc AND objfpc
+                              modes): same-type brace comments DO nest — the
+                              old False default here (claiming FPC parity) was
+                              wrong. {$mode delphi} turns nesting off (Delphi
+                              semantics); {$NESTEDCOMMENTS ON/OFF} overrides
+                              either way. Mixed-delimiter nesting ({ (* *) } /
+                              (* { } *)) is delimiter-inertness, not this flag,
+                              and always works. }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
@@ -1417,6 +1424,9 @@ begin
         (objfpc-ish) dialect — DelphiMode off. PXX is otherwise a single dialect
         superset, so non-delphi modes are accepted but inert. }
       DelphiMode := CaseEqual(name, 'delphi');
+      { Delphi does not nest same-type comments; FPC modes do. A later
+        {$NESTEDCOMMENTS ...} still overrides. }
+      NestedComments := not DelphiMode;
     end
     else if CaseEqual(command, 'mimic') then
     begin

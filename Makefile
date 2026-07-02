@@ -1314,6 +1314,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_case_sensitive26)" = "$$(printf '10\n20\nupper\nlower')"
 	! ./$(COMPILER) test/test_case_sensitive_error.pas /tmp/test_case_sensitive_error26 > /tmp/test_case_sensitive_error.log 2>&1
 	grep -q "undefined variable (VALUE)" /tmp/test_case_sensitive_error.log
+	# FPC-parity nested {} comments by default (delphi mode / NESTEDCOMMENTS OFF stay flat)
+	./$(COMPILER) test/test_nested_comments.pas /tmp/test_nested_comments26
+	test "$$(/tmp/test_nested_comments26)" = "$$(printf '3\nNESTED COMMENTS OK')"
 	# constructor arity is compile-checked (missing required arg used to desync the caller stack)
 	! ./$(COMPILER) test/test_ctor_arity_error.pas /tmp/test_ctor_arity_error26 > /tmp/test_ctor_arity_error.log 2>&1
 	grep -q "not enough arguments to constructor" /tmp/test_ctor_arity_error.log
