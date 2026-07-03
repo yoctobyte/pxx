@@ -16,6 +16,8 @@ const
   MAX_CALLFIX = 16384;
   MAX_GLOBFIX = 32768;
   MAX_ASM_GLOBFIX = 4096;
+  MAX_INLINE_ASM_LINES = 4096;
+  MAX_INLINE_ASM_HOLES = 1024;
   MAX_EXTERNAL = 16384;
   MAX_ASM_OBJ_CALLFIX = 4096;   { .asm frontend -c: extern calls needing an R_X86_64_PLT32 relocation }
   MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
@@ -1182,6 +1184,21 @@ var
   AsmBytesCount: Integer;
   AsmGlobFix: array[0..MAX_ASM_GLOBFIX-1] of TAsmGlobFix;
   AsmGlobFixCount: Integer;
+  { Inline asm on cross targets (riscv32 first): the parser cannot encode at
+    parse time like x86-64's AsmBytes path (the per-target EmitAsmXxx engines
+    emit at CodeLen, where EmitGlobRef/EmitDataRef fixups are natively
+    correct), so it captures the block as resolved TEXT lines here — Pascal
+    local/param names already substituted to frame references, globals to
+    @glob + a hole value — and the target's IR_ASM codegen case replays them
+    through its EmitAsmXxx engine. InlineAsmLineHole0[i] is the index into
+    InlineAsmHoleVal of line i's first hole value ('%' count in the line says
+    how many). }
+  InlineAsmLine: array[0..MAX_INLINE_ASM_LINES-1] of AnsiString;
+  InlineAsmLineHole0: array[0..MAX_INLINE_ASM_LINES-1] of Integer;
+  InlineAsmLineHoleN: array[0..MAX_INLINE_ASM_LINES-1] of Integer;
+  InlineAsmLineCount: Integer;
+  InlineAsmHoleVal: array[0..MAX_INLINE_ASM_HOLES-1] of Int64;
+  InlineAsmHoleCount: Integer;
   { .asm frontend: code offset of a `global <label>` entry-point override
     (feature-asm-source-frontend); 0 = default (start of Code[], unchanged
     for every non-.asm compile). }

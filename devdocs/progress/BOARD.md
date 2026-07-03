@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 
 ## unfinished (3)
 
@@ -24,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (72)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -65,7 +67,6 @@ _none_
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
-| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
@@ -627,7 +628,6 @@ _none_
 - [B] feature-ilja-tui
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-depth
-- [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
 - [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics

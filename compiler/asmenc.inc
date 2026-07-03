@@ -792,6 +792,185 @@ begin
   Result := AsmDispatch(mn, nops);
 end;
 
+{ ---- Cross-target inline asm: text capture (riscv32 first) ----
+
+  The per-target EmitAsmXxx engines (asmtext_rv32.inc ...) emit at CodeLen,
+  where label fixups and EmitGlobRef/EmitDataRef relocations are natively
+  correct — unlike the x86-64 AsmBytes path above, which must rebase its
+  fixups at codegen replay. So for cross targets the parser does NOT encode:
+  it captures the block as text lines (one InlineAsmLine[] entry each),
+  resolving Pascal identifiers NOW, while the symbol table is scoped:
+  locals/params become '<off>(s0)' frame references; `la reg,<globalvar>`
+  becomes 'la reg,@glob' plus a hole value carrying the BSS offset. The
+  target's IR_ASM codegen case replays the lines through its engine. }
+
+function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
+
+function AsmEncIntToStr(v: Int64): AnsiString;
+var tmp: AnsiString; i: Integer; neg: Boolean;
+begin
+  Result := '';
+  if v = 0 then begin AppendChar(Result, '0'); Exit; end;
+  neg := v < 0;
+  tmp := '';
+  while v <> 0 do
+  begin
+    i := Integer(v mod 10);
+    if i < 0 then i := -i;
+    AppendChar(tmp, Chr(Ord('0') + i));
+    v := v div 10;
+  end;
+  if neg then AppendChar(Result, '-');
+  for i := Length(tmp) downto 1 do AppendChar(Result, tmp[i]);
+end;
+
+procedure AsmAddInlineLine(const line: AnsiString; hole0, holeN: Integer);
+begin
+  if InlineAsmLineCount >= MAX_INLINE_ASM_LINES then
+    Error('asm: too many inline asm lines');
+  InlineAsmLine[InlineAsmLineCount] := line;
+  InlineAsmLineHole0[InlineAsmLineCount] := hole0;
+  InlineAsmLineHoleN[InlineAsmLineCount] := holeN;
+  Inc(InlineAsmLineCount);
+end;
+
+function AsmAddInlineHole(v: Int64): Integer;
+begin
+  if InlineAsmHoleCount >= MAX_INLINE_ASM_HOLES then
+    Error('asm: too many inline asm hole values');
+  InlineAsmHoleVal[InlineAsmHoleCount] := v;
+  Result := InlineAsmHoleCount;
+  Inc(InlineAsmHoleCount);
+end;
+
+function AsmRv32IsBranchOrJump(const mn: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mn,'j') or CaseEqual(mn,'jal')
+    or CaseEqual(mn,'beq') or CaseEqual(mn,'bne')
+    or CaseEqual(mn,'blt') or CaseEqual(mn,'bge')
+    or CaseEqual(mn,'bltu') or CaseEqual(mn,'bgeu');
+end;
+
+{ Append one operand-position identifier for the rv32 text path. Registers
+  pass through; on branch/jump lines every other identifier is a label and
+  passes through too; otherwise it must resolve in the symbol table:
+  local/param -> '<off>(s0)' (the slot, s0-relative — a var/ref param's slot
+  holds the ADDRESS, same raw-slot rule as the x86-64 path); a global is
+  rejected here (only `la reg,<name>` takes a global — no scratch register
+  to materialize its address through in an arbitrary operand position). }
+procedure AsmRv32AppendIdent(var line: AnsiString; const nm: AnsiString; branchLine: Boolean);
+var rnum, idx: Integer;
+begin
+  if AsmRv32RegNum(nm, rnum) then begin AppendString(line, nm); Exit; end;
+  if branchLine then begin AppendString(line, nm); Exit; end;
+  idx := FindSym(nm);
+  if idx < 0 then Error('asm: unknown symbol: ' + nm);
+  if Syms[idx].Kind = skGlobal then
+    Error('asm: global "' + nm + '": load its address into a register first (la <reg>, ' + nm + ')');
+  if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
+    Error('asm: operand must be a local, param, global, or register: ' + nm);
+  AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
+  AppendString(line, '(s0)');
+end;
+
+procedure AsmParseBodyTextRv32(var startOff, len: Integer);
+var
+  dir, line, nm: AnsiString;
+  dirLine, idx, rnum, hole0, holeN: Integer;
+  branchLine: Boolean;
+begin
+  startOff := InlineAsmLineCount;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if not AsmTokIsWordLike(CurTok.Kind) then
+    begin
+      Next;  { skip stray punctuation defensively, same as the x64 path }
+      Continue;
+    end;
+
+    dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;
+
+    if CurTok.Kind = tkColon then
+    begin
+      line := dir; AppendChar(line, ':');
+      AsmAddInlineLine(line, 0, 0);
+      Next;
+      Continue;
+    end;
+
+    { la <reg>, <name>: address materialization — the one place a Pascal
+      global is legal. Global -> 'la reg,@glob' + BSS-offset hole (the rv32
+      engine expands @glob into an auipc/jal/literal EmitGlobRef sequence at
+      codegen); local/param -> plain 'addi reg,s0,<off>'. }
+    if CaseEqual(dir, 'la') and (CurTok.Kind = tkIdent) and (CurTok.Line = dirLine)
+       and AsmRv32RegNum(CurTok.SVal, rnum) then
+    begin
+      nm := CurTok.SVal;
+      Next;
+      if CurTok.Kind <> tkComma then Error('asm: la needs <reg>, <name>');
+      Next;
+      if not AsmTokIsWordLike(CurTok.Kind) then Error('asm: la needs a variable name');
+      idx := FindSym(CurTok.SVal);
+      if idx < 0 then Error('asm: unknown symbol: ' + CurTok.SVal);
+      if Syms[idx].Kind = skGlobal then
+      begin
+        line := 'la ';
+        AppendString(line, nm);
+        AppendString(line, ',@glob');
+        AsmAddInlineLine(line, AsmAddInlineHole(Syms[idx].Offset), 1);
+      end
+      else if (Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam) then
+      begin
+        line := 'addi ';
+        AppendString(line, nm);
+        AppendString(line, ',s0,');
+        AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
+        AsmAddInlineLine(line, 0, 0);
+      end
+      else
+        Error('asm: la operand must be a local, param, or global: ' + CurTok.SVal);
+      Next;
+      Continue;
+    end;
+
+    line := dir;
+    AppendChar(line, ' ');
+    branchLine := AsmRv32IsBranchOrJump(dir);
+    hole0 := 0; holeN := 0;
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) and (CurTok.Line = dirLine) do
+    begin
+      if AsmTokIsWordLike(CurTok.Kind) then
+        AsmRv32AppendIdent(line, CurTok.SVal, branchLine)
+      else if CurTok.Kind = tkInteger then
+        AppendString(line, AsmEncIntToStr(CurTok.IVal))
+      else if CurTok.Kind = tkComma then AppendChar(line, ',')
+      else if CurTok.Kind = tkMinus then AppendChar(line, '-')
+      else if CurTok.Kind = tkLParen then AppendChar(line, '(')
+      else if CurTok.Kind = tkRParen then AppendChar(line, ')')
+      else
+        Error('asm: unexpected token in instruction: ' + dir);
+      Next;
+    end;
+    AsmAddInlineLine(line, hole0, holeN);
+  end;
+
+  Expect(tkEnd, 'end');
+
+  { Optional clobber list: ['reg', ...] — parsed and discarded, same as the
+    x86-64 path. }
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Eat(tkSemicolon);
+
+  len := InlineAsmLineCount - startOff;
+end;
+
 const
   ASM_MAX_LOCAL_LABELS = 256;
   ASM_MAX_LOCAL_FIXUPS = 512;
@@ -823,10 +1002,16 @@ var
   fixName: array[0..ASM_MAX_LOCAL_FIXUPS-1] of AnsiString;
   fixCount: Integer;
 begin
-  { The encoder below emits x86-64 bytes only; encoding them into a
-    cross-target ELF would be silently wrong. }
+  { The encoder below emits x86-64 bytes only. Cross targets take the text-
+    capture path instead (replayed through their EmitAsmXxx engine at
+    codegen); targets not wired yet get a clear error. }
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    AsmParseBodyTextRv32(startOff, len);
+    Exit;
+  end;
   if TargetArch <> TARGET_X86_64 then
-    Error('inline asm is x86-64 only; not supported for this target');
+    Error('inline asm not yet supported for this target (x86-64 and riscv32 so far)');
   startOff := AsmBytesCount;
   lblCount := 0;
   fixCount := 0;

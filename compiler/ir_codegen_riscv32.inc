@@ -609,6 +609,19 @@ begin
         EmitLoadDataRefRISCV32(reg_a0, Strs[si].Offset);
       end;
 
+    IR_ASM:
+      begin
+        { Inline asm block: replay the parse-time-captured text lines
+          (AsmParseBodyTextRv32, asmenc.inc) through the rv32 text engine.
+          Emitting here, at final code positions, makes label fixups and
+          @glob relocations natively correct — no AsmBytes-offset rebase
+          like the x86-64 path needs. Labels are scoped to the block. }
+        AsmRv32BlockBegin;
+        for i := IRA[node] to IRA[node] + IRB[node] - 1 do
+          AsmRv32ProcessInlineLine(i);
+        AsmRv32BlockResolve;
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> a0 = the routine's absolute code address. Load a PC-relative

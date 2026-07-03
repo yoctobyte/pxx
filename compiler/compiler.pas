@@ -544,6 +544,7 @@ begin
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0; WithStackDepth := 0; AsmBytesCount := 0;
   AsmGlobFixCount := 0;
+  InlineAsmLineCount := 0; InlineAsmHoleCount := 0;
   AsmEntryOff := 0;
   AsmObjCallCount := 0;
   AsmGlobalSymCount := 0;

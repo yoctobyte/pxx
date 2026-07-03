@@ -1,8 +1,8 @@
 # Inline assembly support for other architectures (i386, aarch64, arm32)
 
 - **Type:** feature — Track A
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Track A agent
 - **Opened:** 2026-06-21
 - **Relation:** Extends inline assembly to i386, aarch64, and arm32 targets — and, per the 2026-06-30 correction below, riscv32 and xtensa too, for full coverage under the umbrella [[feature-assembler-first-class-citizen]].
 
@@ -69,3 +69,18 @@ name tables per target:
 - 2026-06-30 — Corrected: the assumed-missing ARM/i386 encoders already
   exist (`asmtext_*.inc` family); rescoped from "build encoders" to "wire
   parser to existing engines," and broadened to include riscv32 + xtensa.
+- 2026-07-03 — riscv32 leg LANDED. Architecture differs from x86-64's
+  parse-time byte encoding on purpose: the cross engines (EmitAsmRv32 et al)
+  emit at CodeLen, where label fixups and EmitGlobRef/EmitDataRef relocations
+  are natively correct — so the parser captures the block as resolved TEXT
+  lines (AsmParseBodyTextRv32 in asmenc.inc: locals/params -> `off(s0)`,
+  `la reg,<global>` -> `la reg,@glob` + hole; explicit per-line hole COUNT
+  stored, since @glob consumes a hole without a `%`) into InlineAsmLine[],
+  and ir_codegen_riscv32.inc's new IR_ASM case replays them through the
+  refactored block API (AsmRv32BlockBegin / AsmRv32ProcessLine /
+  AsmRv32BlockResolve — extracted from EmitAsmRv32, byte-identical
+  restructure). No AsmBytes-offset rebasing needed. Non-wired targets keep a
+  clear parse error. Test: test/test_asm_rv32.pas (locals/params, label
+  loop, la/@glob global) wired into `make test-riscv32`, green under qemu.
+  Remaining scope: aarch64, arm32, i386 (same capture pattern, per-target
+  register table + frame base + engine), xtensa last/optional.
