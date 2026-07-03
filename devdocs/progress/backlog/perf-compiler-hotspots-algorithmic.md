@@ -14,19 +14,19 @@
 Self-compile = 10.4s (self-built) / 5.1s (FPC-built same source). Perf on the
 self-compile, symbolicated via the new `--proc-map` flag:
 
-| % cycles | proc | note |
-|---|---|---|
-| ~9.7% | FindProc + ProcNameMatches (2 hot sites) | linear scan over Procs[] per name lookup |
-| ~2.9% | StrEqual | the compares inside the scans |
-| ~4.4% | PXXAlloc (2 sites) | first-fit free-list walk + zero loop |
-| ~2.3% | PXXStrConcat (3 sites) | |
-| ~0.9% | AppendChar | byte-at-a-time string building |
-| ~0.7% | FindSym | same linear-scan family |
-| ~1.3% | IREmitMachineCode | walker dispatch |
-| ~0.8% | IRVerify | could be gated off for trusted self-compile? NO — keep, it catches lowering bugs |
+Full profile (4405 sample lines, per-proc cumulative — NOT the top-14
+truncation of the first pass, which undersold everything):
 
-So ≥ 13% of the self-compile is *name lookup by linear scan with string
-compares*, and ~5% is allocator walk.
+| family | cum% |
+|---|---|
+| name lookup: FindProc 16.2 + ProcNameMatches 9.3 + StrEqual 8.2 + FindSym 7.4 + IsBlockVisible 1.6 + MatchProcCall 1.8 + CaseEqual 1.1 + ProcArityMatches 0.6 | **~46%** |
+| string churn: PXXStrConcat 6.7 + PXXStrFromLit 2.4 + AppendChar 2.3 + AppendString 0.6 | ~12% |
+| allocator: PXXAlloc 8.2 + PXXRealloc 0.4 | ~9% |
+| IRVerify | 7.3% (keep — it catches lowering bugs) |
+| IREmitMachineCode | 7.5% (real emission work) |
+
+**Nearly half the self-compile is linear name scanning.** Item 1 alone
+should take 10.4s to roughly 6s.
 
 ## Scope (each independently landable, gate = make test + byte-identical self-host)
 
@@ -63,6 +63,5 @@ perf record ./x ...; perf report --stdio   # then join offsets against map.txt
 
 ## Acceptance
 
-Self-compile wall time measurably down (target: 10.4s -> <7s from this ticket
-alone); `make benchmark` numbers recorded in the log; full make test green;
+Self-compile wall time measurably down (target: 10.4s -> ~6s from this ticket alone, dominated by item 1); `make benchmark` numbers recorded in the log; full make test green;
 self-host byte-identical per landing.
