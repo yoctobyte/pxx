@@ -1,8 +1,8 @@
 # `object` — a rooted object-reference type
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Track A
 - **Opened:** 2026-06-16
 
 ## Idea
@@ -58,3 +58,20 @@ don't collide with a future value-`object` feature or confuse FPC-literate users
 - Acceptance: declare `object` vars/fields/params/arrays; assign any class
   instance; cast back and call a method; store mixed classes in `array of object`
   and dispatch via cast. Cross-target where classes are supported (x86-64 today).
+
+## Log
+- 2026-07-03 — Implemented (Track A). Design: NOT a new TTypeKind and NOT a
+  tyClass sentinel — `object` resolves in the type-name resolver
+  (parser.inc, next to `pointer`/`pchar`) to tyPointer with
+  PtrElemTk=tyClass, PtrElemRec=REC_NONE, mirroring the metaclass-alias
+  representation (least invasive of the sketch's options; the tyClass
+  element tag is the "this is an object" RTTI marker). Widening class→object
+  assignment, `TFoo(o)` cast-back with virtual dispatch, `array of object`,
+  record fields, params all work through existing pointer plumbing. Member
+  access on a bare object errors in ParseLValueAST (covers expression and
+  statement paths): "member access on a bare object reference; cast to a
+  concrete class first". Naming caution resolved: `object` was never a
+  keyword here (no legacy value-object support), no grammar collision.
+  Regressions: test_object_reference.pas + test_object_reference_error.pas
+  in `make test`. Self-host byte-identical (library-only feature; the
+  compiler itself never uses it, per FPC-seed constraint).

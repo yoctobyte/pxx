@@ -1797,6 +1797,16 @@ begin
         end;
       end;
 
+      { Bare `object` reference (tyPointer whose element is tyClass with NO
+        class id): member access cannot resolve — the reference carries no
+        class. Require an explicit cast to a concrete class first
+        (feature-object-reference-type). }
+      if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+         (Syms[ASTIVal[node]].TypeKind = tyPointer) and
+         (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
+         (Syms[ASTIVal[node]].PtrElemRec = REC_NONE) then
+        Error('member access on a bare object reference; cast to a concrete class first');
+
       { Check if it is a property on a class }
       mci := -1; pri := -1;
       if recName >= REC_UCLASS_BASE then
@@ -10209,6 +10219,21 @@ begin
       else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
       else if CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint') then Result := tyNativeUInt
       else if CaseEqual(lo, 'pointer') then Result := tyPointer
+      else if CaseEqual(lo, 'object') then
+      begin
+        { `object`: a rooted object reference — holds ANY class instance
+          (pointer-sized, VMT at offset 0), no specific class bound. Modelled
+          like the metaclass aliases: a tyPointer whose element is tyClass with
+          no class id (PtrElemRec stays REC_NONE — "some object"). Assignable
+          from any class reference; member access needs an explicit cast to a
+          concrete class (`TFoo(o).M`), which errors naturally on the bare
+          pointer. The tyClass element tag is what RTTI/tools key off to tell
+          it from a raw Pointer. NOT legacy Object Pascal's value-`object`
+          (record-with-methods); that syntax was never supported here.
+          See feature-object-reference-type. }
+        LastTypePointerElemTk := tyClass;
+        Result := tyPointer;
+      end
       else if CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar') then
       begin
         LastTypePointerElemTk := tyChar;

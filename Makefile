@@ -1345,6 +1345,11 @@ test-core: $(COMPILER)
 	grep -q "metaclass type mismatch: TOther is not TBase" /tmp/test_metaclass_descendant_error.log
 	! ./$(COMPILER) test/test_metaclass_narrowing_error.pas /tmp/test_metaclass_narrowing_error26 > /tmp/test_metaclass_narrowing_error.log 2>&1
 	grep -q "metaclass type mismatch: TBase is not TChild" /tmp/test_metaclass_narrowing_error.log
+	# object: rooted object-reference type (any instance; cast to touch members)
+	./$(COMPILER) test/test_object_reference.pas /tmp/test_object_reference26
+	test "$$(/tmp/test_object_reference26 | tail -1)" = "OK"
+	! ./$(COMPILER) test/test_object_reference_error.pas /tmp/test_object_reference_error26 > /tmp/test_object_reference_error.log 2>&1
+	grep -q "member access on a bare object reference" /tmp/test_object_reference_error.log
 	./$(COMPILER) test/test_case_insensitive.pas /tmp/test_case_insensitive26
 	test "$$(/tmp/test_case_insensitive26)" = "42"
 	./$(COMPILER) test/test_case_sensitive.pas /tmp/test_case_sensitive26

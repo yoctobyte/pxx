@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (68)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -68,7 +68,6 @@ _none_
 | feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
@@ -131,7 +130,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (437)
+## done (438)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -500,6 +499,7 @@ _none_
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
+| feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
@@ -631,7 +631,6 @@ _none_
 - [A] feature-net-lib-cross-target
 - [B] feature-networking
 - [A] feature-nilpy-idf-import
-- [A] feature-object-reference-type
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-pal-thread-primitives
