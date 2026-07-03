@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
+_none_
 
 ## unfinished (3)
 
@@ -26,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (71)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -67,6 +65,7 @@ _none_
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
+| feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
@@ -136,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (432)
+## done (433)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -480,6 +479,7 @@ _none_
 | feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 | feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
+| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-loop-var-rio | A | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
@@ -628,6 +628,7 @@ _none_
 - [B] feature-ilja-tui
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-depth
+- [A] feature-inline-asm-xtensa
 - [A] feature-inline-routines
 - [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics

@@ -1,7 +1,7 @@
 # Inline assembly support for other architectures (i386, aarch64, arm32)
 
 - **Type:** feature — Track A
-- **Status:** working
+- **Status:** done
 - **Owner:** Track A agent
 - **Opened:** 2026-06-21
 - **Relation:** Extends inline assembly to i386, aarch64, and arm32 targets — and, per the 2026-06-30 correction below, riscv32 and xtensa too, for full coverage under the umbrella [[feature-assembler-first-class-citizen]].
@@ -106,3 +106,10 @@ name tables per target:
   - Tests test_asm_a64/arm32/386.pas (locals/params + label loop + global,
     oracle output 42/55/42 identical across all 5 targets incl x86-64/rv32)
     wired into make test-aarch64 / test-arm32 / test-i386 — all green.
+- 2026-07-03 — RESOLVED. Five of six targets wired (x86-64 baseline +
+  riscv32/aarch64/arm32/i386 this ticket); xtensa split out to
+  [[feature-inline-asm-xtensa]] (backlog, deliberately low priority per user)
+  because its engine lacks the pieces the capture pattern leans on: no
+  @glob/@data reloc form, l32i offsets unsigned-only vs negative frame
+  offsets, ABI-dependent frame pointer. Everything else in this ticket's
+  scope is landed and gated.
