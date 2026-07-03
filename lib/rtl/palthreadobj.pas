@@ -72,12 +72,12 @@ type
       there. The main thread must pump CheckSynchronize (console programs have
       no event loop — same contract as FPC). Called ON the main thread it just
       invokes m directly. }
-    procedure Synchronize(m: TThreadMethod);
+    procedure Synchronize(const m: TThreadMethod);
 
     { Fire-and-forget variant: enqueue m for the main thread's next
       CheckSynchronize and return immediately (invoked directly when called on
       the main thread, like FPC). }
-    procedure Queue(m: TThreadMethod);
+    procedure Queue(const m: TThreadMethod);
 
     { Kernel thread id (0 until started). }
     function ThreadID: Int64;
@@ -165,7 +165,7 @@ var
   RegHead:  TThread;        { CurrentThread registry, guarded by SyncLock }
   MainThreadObj: TThread;   { lazy placeholder for CurrentThread on main }
 
-procedure SyncInvokeMethod(m: TThreadMethod);
+procedure SyncInvokeMethod(const m: TThreadMethod);
 var
   f: TSyncInvoke;
 begin
@@ -304,21 +304,12 @@ begin
   MutexUnlock(SyncLock);
 end;
 
-{ File-level trampoline: PalThreadCreate hands us the instance as the opaque arg. }
-procedure ThreadObjLauncher(arg: Pointer);
-var
-  t: TThread;
-  freeSelf: Boolean;
-begin
-  t := TThread(arg);
-  t.Execute;
-  if t.FOnTerminate.Code <> nil then
-    t.Synchronize(t.FOnTerminate);
-  freeSelf := t.FFreeOnTerm;
-  t.FFinished := True;
-  if freeSelf then
-    t.Free;    { Destroy sees the self-call: skips the join, parks the handle }
-end;
+{ ThreadObjLauncher's BODY is deliberately defined AFTER TThread.Synchronize:
+  its pre-body call to Synchronize(const m: TThreadMethod) — an 8-byte record
+  arg — mislowers on i386 when the callee body hasn't been compiled yet
+  (bug-method-call-before-body-byvalue-small-record-arg). Revert the reorder
+  when that is fixed. }
+procedure ThreadObjLauncher(arg: Pointer); forward;
 
 constructor TThread.Create(CreateSuspended: Boolean);
 begin
@@ -403,7 +394,7 @@ begin
   end;
 end;
 
-procedure TThread.Synchronize(m: TThreadMethod);
+procedure TThread.Synchronize(const m: TThreadMethod);
 var
   e: TSyncEntry;   { caller-stack entry: stable address, we block until done }
 begin
@@ -420,7 +411,29 @@ begin
     PalFutexWait(@e.DoneWord, 0);
 end;
 
-procedure TThread.Queue(m: TThreadMethod);
+{ File-level trampoline: PalThreadCreate hands us the instance as the opaque arg. }
+procedure ThreadObjLauncher(arg: Pointer);
+var
+  t: TThread;
+  freeSelf: Boolean;
+  mt: TThreadMethod;
+begin
+  t := TThread(arg);
+  t.Execute;
+  { Field-wise copy into a local before the call: reading the record FIELD as
+    a value trips the i386 backend's load-through-pointer gap; two pointer
+    loads are portable, and the local passes by const-ref. }
+  mt.Code := t.FOnTerminate.Code;
+  mt.Data := t.FOnTerminate.Data;
+  if mt.Code <> nil then
+    t.Synchronize(mt);
+  freeSelf := t.FFreeOnTerm;
+  t.FFinished := True;
+  if freeSelf then
+    t.Free;    { Destroy sees the self-call: skips the join, parks the handle }
+end;
+
+procedure TThread.Queue(const m: TThreadMethod);
 var
   e: PSyncEntry;
 begin

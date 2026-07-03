@@ -427,12 +427,13 @@ begin
     TARGET_PTR_SIZE := 8;
   if EspBareBoot and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
   begin writeln(StdErr, '--esp-profile=bare requires --target=riscv32 (esp32c3) or --target=xtensa (esp32s3)'); Halt(1); end;
-  { The thread-safe runtime (heap/ARC lock prefixes, statement-atomic I/O) is
-    implemented on x86-64 only; on other targets --threadsafe would silently
-    emit an UNLOCKED runtime. Fail clearly instead
-    (feature-threadsafe-heap-contract). }
-  if ThreadSafeMode and (TargetArch <> TARGET_X86_64) then
-  begin writeln(StdErr, '--threadsafe is x86-64 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
+  { The thread-safe runtime (heap/ARC locks, statement-atomic I/O) exists on
+    x86-64 (hand-emitted lock blobs) and i386 (Pascal softlock in builtinheap
+    via PXX_TS_SOFTLOCK + the 386 I/O lock stubs); on other targets
+    --threadsafe would silently emit an UNLOCKED runtime. Fail clearly instead
+    (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks). }
+  if ThreadSafeMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
+  begin writeln(StdErr, '--threadsafe is x86-64/i386 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   { Derive the platform from the target unless --platform= set it explicitly.

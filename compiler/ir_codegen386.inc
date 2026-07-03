@@ -99,12 +99,49 @@ end;
 
 procedure EmitAcquireHeapLock386;
 begin
-  { i386 threadsafe heap locking not implemented yet; non-threadsafe = no-op.
-    --threadsafe on i386 is rejected at the runtime guard. }
+  { i386 threadsafe heap locking lives in Pascal (builtinheap's PXXHeapSpin
+    under PXX_TS_SOFTLOCK), taken inside PXXAlloc/PXXFree — so the codegen-side
+    acquire is a no-op on this target. Kept as the structural mirror of
+    x86-64's EmitAcquireHeapLock call sites. }
 end;
 
 procedure EmitReleaseHeapLock386;
 begin
+end;
+
+procedure EmitIoLockStubs386;
+{ --threadsafe statement-atomic console I/O, the i386 port of EmitIoLockStubs:
+  a reentrant owner-tid spinlock (BSS_IO_OWNER = owning tid or 0, BSS_IO_DEPTH
+  = owner's nesting depth) so a write argument calling a writing function
+  cannot self-deadlock. gettid (224) via int 0x80 once per I/O statement.
+  Clobbers eax/ecx/esi + flags — called only at statement boundaries, where the
+  386 backend keeps no live evaluation registers. }
+var spinStart, d: Integer;
+begin
+  IOLockAddr := CodeLen;
+  EmitB($B8); EmitI32(224);                          { mov eax, 224 (gettid) }
+  EmitB($CD); EmitB($80);                            { int 0x80 }
+  EmitB($89); EmitB($C6);                            { mov esi, eax }
+  EmitB($39); EmitB($35); EmitGlobRef(BSS_IO_OWNER); { cmp [IO_OWNER], esi }
+  EmitB($74); EmitB(16);                             { je +16 (already ours -> depth bump, over the spin block) }
+  spinStart := CodeLen;
+  EmitB($31); EmitB($C0);                            { xor eax, eax (expect free) }
+  EmitB($89); EmitB($F1);                            { mov ecx, esi (take with our tid) }
+  EmitB($F0); EmitB($0F); EmitB($B1); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { lock cmpxchg [IO_OWNER], ecx }
+  EmitB($74); EmitB(2);                              { je +2 (got it -> depth bump) }
+  d := spinStart - (CodeLen + 2);
+  EmitB($EB); EmitB(d and $FF);                      { jmp back to the spin retry }
+  if CodeLen - spinStart <> 16 then
+    Error('compiler error: i386 I/O lock spin block must be exactly 16 bytes (je +16 above)');
+  EmitB($FF); EmitB($05); EmitGlobRef(BSS_IO_DEPTH); { inc dword [IO_DEPTH] }
+  EmitB($C3);                                        { ret }
+
+  IOUnlockAddr := CodeLen;
+  EmitB($FF); EmitB($0D); EmitGlobRef(BSS_IO_DEPTH); { dec dword [IO_DEPTH] }
+  EmitB($75); EmitB(8);                              { jnz +8 (still nested: keep ownership, over the clear) }
+  EmitB($31); EmitB($C9);                            { xor ecx, ecx }
+  EmitB($89); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { mov [IO_OWNER], ecx (release) }
+  EmitB($C3);                                        { ret }
 end;
 
 procedure EmitHeapAllocLocked386;
@@ -2669,6 +2706,12 @@ begin
         EmitB($E8); EmitI32(CoSwitchAddr - (CodeLen + 4)); { call CoSwitch }
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
       end;
+
+    IR_IO_LOCK:
+      begin EmitB($E8); EmitI32(IOLockAddr - (CodeLen + 4)); end;   { call IO lock }
+
+    IR_IO_UNLOCK:
+      begin EmitB($E8); EmitI32(IOUnlockAddr - (CodeLen + 4)); end; { call IO unlock }
 
     IR_CLONE:
       begin

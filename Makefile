@@ -267,8 +267,9 @@ test-threads: $(COMPILER)
 	! ./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone_guard26 > /tmp/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" /tmp/test_thread_clone_guard.log
 	# heap contract: --threadsafe on a target without the locked runtime is rejected
-	! ./$(COMPILER) --target=i386 --threadsafe test/hello.pas /tmp/test_threadsafe_i386_guard26 > /tmp/test_threadsafe_i386_guard.log 2>&1
-	grep -q "x86-64 only" /tmp/test_threadsafe_i386_guard.log
+	# (i386 got its locked runtime — feature-i386-threadsafe-locks — so the guard probe is arm32 now)
+	! ./$(COMPILER) --target=arm32 --threadsafe test/hello.pas /tmp/test_threadsafe_arm32_guard26 > /tmp/test_threadsafe_arm32_guard.log 2>&1
+	grep -q "x86-64/i386 only" /tmp/test_threadsafe_arm32_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# M2 final slice: 64-bit atomics + TConditionVariable
@@ -1711,6 +1712,19 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_atomic_i386.pas /tmp/test_i386_atomic
 	./$(COMPILER) test/test_atomic_i386.pas /tmp/test_i386_atomic_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_atomic)" = "$$(/tmp/test_i386_atomic_x64)"
+	# i386 --threadsafe: clone trampoline + softlock heap/ARC + TThread (feature-i386-threadsafe-locks)
+	./$(COMPILER) --threadsafe --target=i386 test/test_palthread.pas /tmp/test_i386_palthread
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_palthread | tail -1)" = "PALTHREAD OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_mutex.pas /tmp/test_i386_mutex
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_mutex | tail -1)" = "MUTEX OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_atomic_counter.pas /tmp/test_i386_atomiccnt
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_atomiccnt | tail -1)" = "ATOMIC OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_tthread.pas /tmp/test_i386_tthread
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_tthread | tail -1)" = "TTHREAD OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_tthread_sync.pas /tmp/test_i386_tthread_sync
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_tthread_sync | tail -1)" = "TTHREAD SYNC OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_threadsafe_i386_stress.pas /tmp/test_i386_tsstress
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_tsstress | tail -1)" = "HEAPSTRESS386 OK"
 	./$(COMPILER) --target=i386 test/test_i386_arith.pas /tmp/test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas /tmp/test_i386_arith_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_arith)" = "$$(/tmp/test_i386_arith_x64)"

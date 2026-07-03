@@ -4740,7 +4740,7 @@ begin
         Bracket the whole statement with the reentrant I/O lock (also guards
         the shared INTBUF/LINE_BUF scratch). x86-64 only — --threadsafe
         atomics are x86-64-only today. }
-      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+      if ThreadSafeMode and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) then
         IRAppend(IR_IO_LOCK, -1, -1, -1, 0, 0);
       first := -1;
       last := -1;
@@ -4811,7 +4811,7 @@ begin
         Result := IRAppend(IR_WRITELN, first, last, -1, writeFd, 0)
       else
         Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
-      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+      if ThreadSafeMode and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) then
         IRAppend(IR_IO_UNLOCK, -1, -1, -1, 0, 0);
     end;
 
@@ -4820,7 +4820,7 @@ begin
       { Read one line from stdin, then parse each lvalue target from it by type.
         --threadsafe: same statement-atomic I/O lock as write/writeln (guards
         the shared LINE_BUF/LINE_POS/PEEK_* scratch too). }
-      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+      if ThreadSafeMode and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) then
         IRAppend(IR_IO_LOCK, -1, -1, -1, 0, 0);
       first := IRAppend(IR_READLINE, -1, -1, -1, 0, 0);
       last := first;
@@ -4839,7 +4839,7 @@ begin
         last := outNode;
       end;
       Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
-      if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+      if ThreadSafeMode and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386)) then
         IRAppend(IR_IO_UNLOCK, -1, -1, -1, 0, 0);
     end;
 

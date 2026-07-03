@@ -13,6 +13,7 @@ procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
+procedure EmitIoLockStubs386; forward;
 
 
 function AllocNode(kind: Integer): Integer;
@@ -16471,6 +16472,7 @@ begin
   { --threadsafe statement-atomic I/O lock stubs (x86-64 only, like the
     threadsafe atomics themselves). }
   if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
+  if (TargetArch = TARGET_I386) and ThreadSafeMode then EmitIoLockStubs386;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 

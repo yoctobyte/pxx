@@ -30,6 +30,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-method-call-before-body-byvalue-small-record-arg | A | bug | Method call before body: by-value <=8-byte record arg mislowers (i386 error; x64 program-level unresolved-forward) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -59,7 +60,6 @@ _none_
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
-| feature-i386-threadsafe-locks | A | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -125,7 +125,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (444)
+## done (445)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -468,6 +468,7 @@ _none_
 | feature-high-low-of-type | A | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
 | feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
+| feature-i386-threadsafe-locks | A | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
 | feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
@@ -594,6 +595,7 @@ _none_
 
 - [C] bug-c-cast-as-call-arg-parse-error
 - [C] bug-c-printf-without-stdio-include-varargs
+- [A] bug-method-call-before-body-byvalue-small-record-arg
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
@@ -623,7 +625,6 @@ _none_
 - [A] feature-float-exception-mask-control
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
-- [A] feature-i386-threadsafe-locks
 - [B] feature-ilja-tui
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-xtensa
