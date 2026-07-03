@@ -276,6 +276,36 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
-Next passes queued (design above): branch-over-branch, inc/dec + imm-fold
-into BINOP operand, then store-reload once the liveness scaffold lands. Then
-DECIDE flipping pins to -O1-built.
+## Pin-flip to -O1-built — READY, awaiting Rene's OK (2026-07-03)
+
+The queued "decide flipping pins to -O1-built" is de-risked and ready:
+- **Transparency PROVEN**: an -O1-built compiler emits BYTE-IDENTICAL -O0
+  output vs an -O0-built compiler (`cmp` of both compiling compiler.pas at
+  -O0 = identical). So flipping the pinned binary is invisible to tracks
+  B/C/D — they consume -O0 output, same bytes — while handing them a ~25%
+  faster / ~9% smaller compiler. Reversible via git.
+- Backed by 3 passes of gates: full `make test` green under an -O1-built
+  compiler (each pass), self-host fixedpoint at BOTH -O0 and -O1.
+- NOT flipped unilaterally: it changes the shared stable binary every track
+  builds on, and Rene was away when asked. It is a one-shot action when he
+  OKs it: `make PXXFLAGS=-O1 stabilize` (or rebuild pinned with -O1) + pin +
+  push. Until then pins stay -O0-built (v167).
+
+## Branch pass — reassessed (2026-07-03)
+
+Literal "branch-over-branch (`jcc +2; jmp X` -> `j!cc X`)" has NO pervasive
+machine-generated source here: integer/float comparisons lower to
+`setcc al; movzx eax,al` (already good), not jcc-over-jmp (only one
+hand-written spot in the string-compare sequence, ir_codegen.inc ~1340). The
+REAL high-frequency branch win is **compare-into-branch fusion**:
+`IR_JUMP_IF_FALSE` whose condition is a comparison BINOP currently emits
+`cmp; setcc al; movzx eax,al; test rax,rax; jz label` (~8 wasted bytes +
+latency every if/loop) — fuse to `cmp; j!cc label` (inverted condition).
+Bigger, control-flow / fixup-touching change; gate to integer signed/unsigned
+scalar comparisons, fall back to the generic path for float/other. Its own
+careful pass (not rushed at a session tail — a half-applied Track A codegen
+change trips the self-host gate).
+
+Next passes queued: compare-into-branch fusion (branch pass, above);
+inc/dec + imm-fold into BINOP operand; store-reload once the liveness scaffold
+([[feature-callconv-register-args]]) lands. Pin-flip awaiting Rene's OK.
