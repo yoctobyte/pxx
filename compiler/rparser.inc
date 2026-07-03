@@ -19,12 +19,123 @@
   pyparser.inc's Nil-Python frontend has. Struct-typed params/returns are
   explicitly rejected for now (RTypeKindFromName below) to keep the calling
   convention scalar-only; passing structs by value/reference is follow-up
-  work, not this skeleton. }
+  work, not this skeleton.
+
+  ===== enum + match (feature-rust-match-enum-payload, sub-ticket 2/12) =====
+
+  No new shared AST node and no new TTypeKind: a tagged-union enum is built
+  entirely out of the existing UClass/AddUField/RecFieldType machinery that
+  already backs plain structs. An enum is a UClass (REnumCi[ci] marks it)
+  whose fields are: a synthetic `__tag` discriminant at offset 0, then every
+  variant's payload fields registered at the SAME overlapping byte range
+  (offset 8) with variant-qualified mangled names ("Circle.0",
+  "Rectangle.width") — AddUField/FindUField never assumed disjoint offsets,
+  they just do a name lookup within a class's field window, so this is a
+  real union with zero shared-internals changes. `match` desugars entirely
+  at parse time into a chain of AN_IF nodes comparing `__tag`, with each
+  arm's bound names materialized as ordinary fresh AllocVar locals assigned
+  from the mangled field before the arm body is parsed — "pattern-bind" is
+  just field-read + assign using vocabulary every frontend already has.
+
+  Deliberate skeleton narrowing (documented, not silently dropped):
+  - Enum values are constructed only as a `let` initializer (`let x =
+    Variant(...);` / `let x = Enum::Variant { .. };`), never as a general
+    subexpression — the same restriction plain struct literals already have
+    (no AST node represents "a whole struct/union value" flowing through an
+    expression; only named lvalue slots do).
+  - `match` is a statement, not an expression-with-value (no `let y = match
+    ...`) — same reason.
+  - match scrutinee must be a plain local variable (`match shape { ... }`),
+    not an arbitrary expression — sidesteps needing a general "resolve the
+    static record type of this AST node" helper; a temp-materializing
+    version is a small follow-up if a real test program needs it.
+  - Bare (unqualified) variant names must be unique across all enums in the
+    program; ambiguous names need the qualified `Enum::Variant` form.
+  - No exhaustiveness/reachability checking (explicit non-goal). Arm-local
+    binds do not roll back the symbol table (this compiler never pops
+    scope mid-function — see RWhile bodies), so two arms binding the same
+    name get two distinct, non-interfering stack slots each arm's own body
+    resolves to correctly; a name reused by code *after* the whole match
+    can be shadowed by a leftover arm binding — a known, narrow limitation
+    consistent with this compiler having no block scoping, not a new gap
+    this ticket introduces. }
 
 function RParseExpr: Integer; forward;
 function RParseBlock: Integer; forward;
 function RParseStatement: Integer; forward;
 function RParseIf: Integer; forward;
+
+const
+  RVAR_UNIT   = 0;
+  RVAR_TUPLE  = 1;
+  RVAR_STRUCT = 2;
+  R_MAX_VARIANTS = 4096;
+  R_MAX_MATCH_ARMS = 64;
+
+type
+  TREnumVariant = record
+    EnumCi: Integer;
+    Name: AnsiString;
+    Tag: Integer;
+    Kind: Integer;
+  end;
+  TRMatchArm = record
+    CondNode, BodyNode: Integer;
+    IsWildcard: Boolean;
+  end;
+
+var
+  REnumVariants: array[0..R_MAX_VARIANTS-1] of TREnumVariant;
+  REnumVariantCount: Integer;
+  REnumCi: array[0..MAX_UCLASS-1] of Boolean;
+
+function RStoredName(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := TokCharLen;
+  for i := 1 to Length(s) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('Rust: token char buffer overflow');
+    TokChars[TokCharLen] := s[i];
+    Inc(TokCharLen);
+  end;
+end;
+
+function RIntToStr(n: Integer): AnsiString;
+var rev, res: AnsiString; i: Integer;
+begin
+  rev := '';
+  if n = 0 then AppendChar(rev, '0')
+  else
+    while n > 0 do
+    begin
+      AppendChar(rev, Chr(Ord('0') + (n mod 10)));
+      n := n div 10;
+    end;
+  res := '';
+  for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
+  Result := res;
+end;
+
+function RFindVariantBare(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to REnumVariantCount - 1 do
+    if CaseEqual(REnumVariants[i].Name, name) then begin Result := i; Exit; end;
+end;
+
+function RFindVariantInEnum(enumCi: Integer; const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to REnumVariantCount - 1 do
+    if (REnumVariants[i].EnumCi = enumCi) and CaseEqual(REnumVariants[i].Name, name) then
+    begin
+      Result := i;
+      Exit;
+    end;
+end;
 
 function RSeqAppend(head, stmt: Integer): Integer;
 var tail: Integer;
@@ -338,8 +449,9 @@ end;
   exists for value-type structs, so the declaration is really N field
   stores chained by AN_SEQ). Trailing `;` is left for the caller. }
 function RParseLet: Integer;
-var name, typeName: AnsiString; symIdx, ci, structCi, fTokIdx: Integer;
-    annotTk: TTypeKind; hasType: Boolean;
+var name, typeName, variantName, fname, mangled: AnsiString;
+    symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
+    annotTk: TTypeKind; hasType, qualified: Boolean;
     identNode, fieldNode, valNode, assignNode, seq: Integer;
 begin
   Next; { let }
@@ -366,6 +478,86 @@ begin
     Exit;
   end;
   Next; { = }
+  { enum literal RHS: bare `Variant(...)`/`Variant { .. }`/`Variant`, or
+    qualified `Enum::Variant(...)`. Checked before the plain-struct-literal
+    branch below since both start with a tkIdent. }
+  ci2 := -1; vi := -1; qualified := False;
+  if CurTok.Kind = tkIdent then
+  begin
+    ci2 := FindUClass(CurTok.SVal);
+    if (ci2 >= 0) and REnumCi[ci2] and (Tokens[TokPos].Kind = tkPathSep) then
+      qualified := True
+    else if ci2 < 0 then
+      vi := RFindVariantBare(CurTok.SVal);
+  end;
+  if qualified or (vi >= 0) then
+  begin
+    if qualified then
+    begin
+      Next; Next; { EnumName :: }
+      if CurTok.Kind <> tkIdent then Error('Rust: expected variant name after ::');
+      vi := RFindVariantInEnum(ci2, CurTok.SVal);
+      if vi < 0 then Error('Rust: unknown variant ' + CurTok.SVal);
+    end;
+    variantName := REnumVariants[vi].Name;
+    Next; { variant name }
+    ci := REnumVariants[vi].EnumCi;
+    LastTypeRecId := REC_UCLASS_BASE + ci;
+    symIdx := AllocVar(name, tyRecord);
+    identNode := RMakeIdent(symIdx);
+    seq := -1;
+    tagOff := RStoredName('__tag');
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := identNode; ASTSOffset[fieldNode] := tagOff; ASTSLen[fieldNode] := 5;
+    ASTTk[fieldNode] := Ord(tyInt64);
+    tagNode := AllocNode(AN_INT_LIT); ASTIVal[tagNode] := REnumVariants[vi].Tag; ASTTk[tagNode] := Ord(tyInt64);
+    tagAssign := AllocNode(AN_ASSIGN); ASTLeft[tagAssign] := fieldNode; ASTRight[tagAssign] := tagNode;
+    seq := RSeqAppend(seq, tagAssign);
+    case REnumVariants[vi].Kind of
+      RVAR_TUPLE:
+      begin
+        Expect(tkLParen, '(');
+        k := 0;
+        if CurTok.Kind <> tkRParen then
+          repeat
+            valNode := RParseExpr;
+            mangled := variantName + '.' + RIntToStr(k);
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := identNode;
+            ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+            ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+            assignNode := AllocNode(AN_ASSIGN);
+            ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+            seq := RSeqAppend(seq, assignNode);
+            Inc(k);
+          until not Eat(tkComma);
+        Expect(tkRParen, ')');
+      end;
+      RVAR_STRUCT:
+      begin
+        Expect(tkBegin, '{');
+        while CurTok.Kind <> tkEnd do
+        begin
+          if CurTok.Kind <> tkIdent then Error('Rust: expected field name in variant literal');
+          fname := CurTok.SVal; Next;
+          Expect(tkColon, ':');
+          valNode := RParseExpr;
+          mangled := variantName + '.' + fname;
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := identNode;
+          ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+          ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+          assignNode := AllocNode(AN_ASSIGN);
+          ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+          seq := RSeqAppend(seq, assignNode);
+          if not Eat(tkComma) then Break;
+        end;
+        Expect(tkEnd, '}');
+      end;
+    end; { RVAR_UNIT: no payload }
+    Result := seq;
+    Exit;
+  end;
   { struct literal RHS: `Type { field: expr, ... }` }
   if (CurTok.Kind = tkIdent) and (FindUClass(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind = tkBegin) then
   begin
@@ -413,6 +605,156 @@ begin
   Result := assignNode;
 end;
 
+{ `match scrutinee { Pat1(a, b) => { .. }, Pat2 { f } => { .. }, _ => { .. } }`
+  Desugars entirely to a chain of AN_IF nodes comparing __tag; each arm's
+  bound names are fresh AllocVar locals assigned from the mangled payload
+  field before the arm body is parsed (see the file-header note on scoping).
+  Scrutinee must be a plain local variable of enum type (skeleton narrowing:
+  no temp-materializing of an arbitrary scrutinee expression yet). }
+function RParseMatch: Integer;
+var scrutSym, recId, enumCi, vi, i, armCount, bindSym,
+    tagFieldNode, tagValNode, condNode, bodyNode, bindsSeq, fieldNode, assignNode,
+    pairNode, chain, fTokIdx: Integer;
+    scrutIdent, variantName, bindName, mangled: AnsiString;
+    isWildcard: Boolean;
+    fieldTk: TTypeKind;
+    arms: array[0..R_MAX_MATCH_ARMS-1] of TRMatchArm;
+begin
+  Next; { 'match' identifier }
+  if CurTok.Kind <> tkIdent then Error('Rust: match scrutinee must be a plain variable for now');
+  scrutIdent := CurTok.SVal;
+  scrutSym := FindSym(scrutIdent);
+  if scrutSym < 0 then Error('Rust: undefined variable ' + scrutIdent);
+  Next;
+  recId := Syms[scrutSym].RecName;
+  if recId < REC_UCLASS_BASE then Error('Rust: match scrutinee must be an enum value');
+  enumCi := recId - REC_UCLASS_BASE;
+  if not REnumCi[enumCi] then Error('Rust: match scrutinee must be an enum value');
+
+  Expect(tkBegin, '{');
+  armCount := 0;
+  while CurTok.Kind <> tkEnd do
+  begin
+    if armCount >= R_MAX_MATCH_ARMS then Error('Rust: too many match arms (skeleton limit)');
+    isWildcard := False; vi := -1;
+    if CurTok.Kind <> tkIdent then Error('Rust: expected a pattern in match arm');
+    if CurTok.SVal = '_' then
+    begin
+      isWildcard := True;
+      Next;
+    end
+    else
+    begin
+      variantName := CurTok.SVal; Next;
+      if CurTok.Kind = tkPathSep then begin Next; variantName := CurTok.SVal; Next; end;
+      vi := RFindVariantInEnum(enumCi, variantName);
+      if vi < 0 then Error('Rust: unknown variant ' + variantName + ' in match');
+    end;
+
+    bindsSeq := -1;
+    if not isWildcard then
+    begin
+      case REnumVariants[vi].Kind of
+        RVAR_TUPLE:
+        begin
+          Expect(tkLParen, '(');
+          i := 0;
+          if CurTok.Kind <> tkRParen then
+            repeat
+              if CurTok.Kind <> tkIdent then Error('Rust: expected bind name in tuple pattern');
+              bindName := CurTok.SVal; Next;
+              if bindName <> '_' then
+              begin
+                mangled := variantName + '.' + RIntToStr(i);
+                fieldTk := RecFieldType(REC_UCLASS_BASE + enumCi, mangled);
+                if fieldTk = tyRecord then LastTypeRecId := RecFieldRecId(REC_UCLASS_BASE + enumCi, mangled)
+                else LastTypeRecId := REC_NONE;
+                bindSym := AllocVar(bindName, fieldTk);
+                fieldNode := AllocNode(AN_FIELD);
+                ASTLeft[fieldNode] := RMakeIdent(scrutSym);
+                ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+                ASTTk[fieldNode] := Ord(Syms[bindSym].TypeKind);
+                assignNode := AllocNode(AN_ASSIGN);
+                ASTLeft[assignNode] := RMakeIdent(bindSym); ASTRight[assignNode] := fieldNode;
+                bindsSeq := RSeqAppend(bindsSeq, assignNode);
+              end;
+              Inc(i);
+            until not Eat(tkComma);
+          Expect(tkRParen, ')');
+        end;
+        RVAR_STRUCT:
+        begin
+          Expect(tkBegin, '{');
+          while CurTok.Kind <> tkEnd do
+          begin
+            if CurTok.Kind <> tkIdent then Error('Rust: expected field name in struct pattern');
+            bindName := CurTok.SVal; fTokIdx := TokPos - 1; Next;
+            mangled := variantName + '.' + bindName;
+            fieldTk := RecFieldType(REC_UCLASS_BASE + enumCi, mangled);
+            if fieldTk = tyRecord then LastTypeRecId := RecFieldRecId(REC_UCLASS_BASE + enumCi, mangled)
+            else LastTypeRecId := REC_NONE;
+            bindSym := AllocVar(bindName, fieldTk);
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := RMakeIdent(scrutSym);
+            ASTSOffset[fieldNode] := RStoredName(mangled); ASTSLen[fieldNode] := Length(mangled);
+            ASTTk[fieldNode] := Ord(Syms[bindSym].TypeKind);
+            assignNode := AllocNode(AN_ASSIGN);
+            ASTLeft[assignNode] := RMakeIdent(bindSym); ASTRight[assignNode] := fieldNode;
+            bindsSeq := RSeqAppend(bindsSeq, assignNode);
+            if not Eat(tkComma) then Break;
+          end;
+          Expect(tkEnd, '}');
+        end;
+      end; { RVAR_UNIT: no pattern payload }
+    end;
+
+    { `=>` — two plain tokens (assign, then gt), same trick as `->` uses;
+      no dedicated fat-arrow token needed. }
+    if CurTok.Kind <> tkAssign then Error('Rust: expected => after match pattern');
+    Next;
+    if CurTok.Kind <> tkGt then Error('Rust: expected => after match pattern');
+    Next;
+
+    Expect(tkBegin, '{');
+    bodyNode := RSeqAppend(bindsSeq, RParseBlock);
+    Expect(tkEnd, '}');
+    Eat(tkComma);
+
+    arms[armCount].IsWildcard := isWildcard;
+    arms[armCount].BodyNode := bodyNode;
+    if not isWildcard then
+    begin
+      tagFieldNode := AllocNode(AN_FIELD);
+      ASTLeft[tagFieldNode] := RMakeIdent(scrutSym);
+      ASTSOffset[tagFieldNode] := RStoredName('__tag'); ASTSLen[tagFieldNode] := 5;
+      ASTTk[tagFieldNode] := Ord(tyInt64);
+      tagValNode := AllocNode(AN_INT_LIT);
+      ASTIVal[tagValNode] := REnumVariants[vi].Tag; ASTTk[tagValNode] := Ord(tyInt64);
+      arms[armCount].CondNode := RBinOp(tkEq, tagFieldNode, tagValNode, tyBoolean);
+    end;
+    Inc(armCount);
+  end;
+  Expect(tkEnd, '}');
+
+  { fold right-to-left into a nested if/else chain; no exhaustiveness check
+    (non-goal) — if nothing matches the value falls through as a no-op. }
+  chain := -1;
+  for i := armCount - 1 downto 0 do
+  begin
+    if arms[i].IsWildcard then
+      chain := arms[i].BodyNode
+    else
+    begin
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := arms[i].BodyNode; ASTRight[pairNode] := chain;
+      condNode := AllocNode(AN_IF);
+      ASTLeft[condNode] := arms[i].CondNode; ASTRight[condNode] := pairNode;
+      chain := condNode;
+    end;
+  end;
+  Result := chain;
+end;
+
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
 begin
@@ -435,6 +777,8 @@ begin
     tkBreak: begin Next; Expect(tkSemicolon, ';'); Result := AllocNode(AN_BREAK); Exit; end;
     tkContinue: begin Next; Expect(tkSemicolon, ';'); Result := AllocNode(AN_CONTINUE); Exit; end;
   end;
+
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'match') then begin Result := RParseMatch; Exit; end;
 
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkAssign) then
   begin
@@ -537,6 +881,94 @@ begin
   end;
 end;
 
+{ `enum Name { Unit, Tuple(T1, T2), Struct { f: T, ... } }`. One UClass per
+  enum: __tag discriminant at offset 0 (8 bytes), every variant's payload
+  fields registered at offset 8 with mangled names ("Variant.0",
+  "Variant.field") — a real union, all variants overlap the same bytes. }
+procedure RRegisterEnums;
+var i, j, k, ci, tag, curOff, maxEnd, align, sz, vi: Integer;
+    variantName, fieldName, mangled: AnsiString; tk: TTypeKind;
+begin
+  i := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'enum') and
+       (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkBegin) then
+    begin
+      ci := FindUClass(GetTokenStr(i + 1));
+      if ci < 0 then ci := AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
+      UClsIsRecord[ci] := True;
+      REnumCi[ci] := True;
+      AddUField(ci, RStoredName('__tag'), 5, 0, Ord(tyInt64), REC_NONE);
+      align := 8; maxEnd := 8; tag := 0;
+      j := i + 3;
+      while Tokens[j].Kind <> tkEnd do
+      begin
+        if Tokens[j].Kind <> tkIdent then Error('Rust: expected variant name in enum ' + GetTokenStr(i + 1));
+        variantName := GetTokenStr(j); Inc(j);
+        if REnumVariantCount >= R_MAX_VARIANTS then Error('Rust: too many enum variants');
+        vi := REnumVariantCount; Inc(REnumVariantCount);
+        REnumVariants[vi].EnumCi := ci;
+        REnumVariants[vi].Name := variantName;
+        REnumVariants[vi].Tag := tag;
+        curOff := 8;
+        if Tokens[j].Kind = tkLParen then
+        begin
+          REnumVariants[vi].Kind := RVAR_TUPLE;
+          Inc(j); k := 0;
+          while Tokens[j].Kind <> tkRParen do
+          begin
+            if Tokens[j].Kind <> tkIdent then Error('Rust: expected type in tuple variant ' + variantName);
+            tk := RTypeKindFromName(GetTokenStr(j), True);
+            Inc(j);
+            sz := TypeSize(tk);
+            if TypeAlign(tk) > align then align := TypeAlign(tk);
+            curOff := AlignTo(curOff, TypeAlign(tk));
+            mangled := variantName + '.' + RIntToStr(k);
+            AddUField(ci, RStoredName(mangled), Length(mangled), curOff, Ord(tk), LastTypeRecId);
+            Inc(curOff, sz);
+            if curOff > maxEnd then maxEnd := curOff;
+            Inc(k);
+            if Tokens[j].Kind = tkComma then Inc(j);
+          end;
+          Inc(j); { ) }
+        end
+        else if Tokens[j].Kind = tkBegin then
+        begin
+          REnumVariants[vi].Kind := RVAR_STRUCT;
+          Inc(j);
+          while Tokens[j].Kind <> tkEnd do
+          begin
+            if Tokens[j].Kind <> tkIdent then Error('Rust: expected field name in variant ' + variantName);
+            fieldName := GetTokenStr(j); Inc(j);
+            if Tokens[j].Kind <> tkColon then Error('Rust: expected : after field name');
+            Inc(j);
+            if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type');
+            tk := RTypeKindFromName(GetTokenStr(j), True);
+            Inc(j);
+            sz := TypeSize(tk);
+            if TypeAlign(tk) > align then align := TypeAlign(tk);
+            curOff := AlignTo(curOff, TypeAlign(tk));
+            mangled := variantName + '.' + fieldName;
+            AddUField(ci, RStoredName(mangled), Length(mangled), curOff, Ord(tk), LastTypeRecId);
+            Inc(curOff, sz);
+            if curOff > maxEnd then maxEnd := curOff;
+            if Tokens[j].Kind = tkComma then Inc(j);
+          end;
+          Inc(j); { consume the variant's closing brace }
+        end
+        else
+          REnumVariants[vi].Kind := RVAR_UNIT;
+        Inc(tag);
+        if Tokens[j].Kind = tkComma then Inc(j);
+      end;
+      UClsAlign[ci] := align;
+      UClsSize_[ci] := AlignTo(maxEnd, align);
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure RRegisterFnSignatures;
 var i, j, depth, nparams: Integer; name: AnsiString;
     pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
@@ -589,6 +1021,26 @@ begin
   { fields were already registered by RRegisterStructFields; nothing left to
     compile for a plain value-type struct declaration. }
   while CurTok.Kind <> tkEnd do Next;
+  Expect(tkEnd, '}');
+end;
+
+procedure RParseTopLevelEnum;
+var depth: Integer;
+begin
+  Next; { 'enum' identifier }
+  if CurTok.Kind <> tkIdent then Error('Rust: expected enum name');
+  Next;
+  Expect(tkBegin, '{');
+  { variants were already registered by RRegisterEnums; nothing left to
+    compile for the declaration itself. Depth-tracked: a struct-like variant
+    (`Square { side: i32 }`) has its own nested brace pair. }
+  depth := 1;
+  while depth > 0 do
+  begin
+    if CurTok.Kind = tkBegin then Inc(depth)
+    else if CurTok.Kind = tkEnd then Dec(depth);
+    if depth > 0 then Next;
+  end;
   Expect(tkEnd, '}');
 end;
 
@@ -682,8 +1134,10 @@ begin
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
 
+  REnumVariantCount := 0;
   RRegisterStructShells;
   RRegisterStructFields;
+  RRegisterEnums;
   RRegisterFnSignatures;
 
   mainIdx := FindProc('main');
@@ -692,8 +1146,9 @@ begin
   while CurTok.Kind <> tkEOF do
   begin
     if CurTok.Kind = tkRecord then RParseTopLevelStruct
+    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then RParseTopLevelEnum
     else if CurTok.Kind = tkFn then RParseTopLevelFn
-    else Error('Rust: expected fn or struct at top level');
+    else Error('Rust: expected fn, struct or enum at top level');
   end;
 
   ApplyCallFixups;
