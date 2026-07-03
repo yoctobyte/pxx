@@ -826,6 +826,7 @@ var
   DebugTrace : Boolean;
   DumpIR : Boolean;
   DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
+  OptLevel : Integer;     { -O0..-O3: optimization level. 0 (default) = the historic 1:1 emission — the self-host byte-identity gate runs at -O0 and is NEVER affected by opt passes; each pass gates on OptLevel >= its tier. }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

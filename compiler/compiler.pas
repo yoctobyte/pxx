@@ -102,6 +102,7 @@ begin
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
   DumpProcMap := False;
+  OptLevel := 0;
   DumpCpp := False;
   NoStdInc := False;
   CUseSystemLibs := False;
@@ -149,6 +150,11 @@ begin
     else if option = '--proc-map' then
     begin
       DumpProcMap := True;
+      Inc(i);
+    end
+    else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then
+    begin
+      OptLevel := Ord(option[3]) - Ord('0');
       Inc(i);
     end
     else if option = '--dump-cpp' then

@@ -190,3 +190,29 @@ Gate discipline per the table above: -O0 stays byte-identical (the self-host
 gate is UNCHANGED); each -O1 pass lands with a codegen-diff test (compile a
 corpus at -O0/-O1, run both, identical output) + `make test` under an
 -O1-built compiler + benchmark delta recorded here.
+
+## Progress — -O plumbing + pass 1 LANDED (2026-07-03)
+
+- `-O0..-O3` flag -> `OptLevel` (defs/compiler.pas); default 0, and every
+  pass gates on its tier, so the -O0 self-host byte-identity gate is
+  untouched by construction.
+- **Pass 1 (-O1): leaf-const BINOP operand direct load** (x86-64). A
+  constant right operand loads straight into rcx (`mov rcx, imm32/imm64`)
+  instead of push-left / eval-right / mov / pop — two stack ops and a
+  register shuffle gone per constant operand. Register contract downstream
+  is byte-for-byte identical (rax=left, rcx=right), so every consumer —
+  including the string-concat and float branches — is untouched.
+- **Gate: `make test-opt`** — 12-program differential corpus (each compiled
+  -O0 and -O1, runtime output cmp'd) + the -O1 self-compile fixedpoint
+  (-O1-built compiler rebuilds itself at -O1 to byte-identity). Also ran the
+  FULL `make test` under an -O1-BUILT compiler: green.
+- **Measured**: -O1-built compiler self-compiles in 4.64s vs 5.5s (-O0 built)
+  — ~16% faster; test binaries ~10% smaller (e.g. hello-class corpus
+  41.9k -> 37.0k). One pass.
+
+OPEN DECISION: pins stay -O0-built for now (byte-identity continuity for
+B/C). Flipping the pinned binary to -O1-built is free performance for every
+track once we trust the pass battery — revisit after 2-3 more passes.
+
+Next passes queued (design above): store-reload elimination, xor-zero,
+leaf-sym operand load, branch-over-branch.

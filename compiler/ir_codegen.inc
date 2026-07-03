@@ -2658,12 +2658,32 @@ begin
         right := IRB[node];
         op := IntToTokenKind(IRC[node]);
         
-        IREmitNode(left);
-        EmitB($50); { push rax }
-        
-        IREmitNode(right);
-        EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
-        EmitB($58); { pop rax }
+        if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) then
+        begin
+          { -O1 leaf-operand direct load: a constant right operand goes
+            straight into rcx — the push/eval/mov/pop dance (2 stack ops + a
+            reg shuffle per constant operand) collapses to one mov. Register
+            contract downstream is IDENTICAL: rax = left value, rcx = right
+            value; the constant's evaluation has no side effects. }
+          IREmitNode(left);
+          if (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) then
+          begin
+            EmitB($48); EmitB($C7); EmitB($C1); EmitI32(Integer(IRIVal[right])); { mov rcx, imm32 (sign-extended) }
+          end
+          else
+          begin
+            EmitB($48); EmitB($B9); EmitI64(IRIVal[right]);                      { movabs rcx, imm64 }
+          end;
+        end
+        else
+        begin
+          IREmitNode(left);
+          EmitB($50); { push rax }
+          
+          IREmitNode(right);
+          EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
+          EmitB($58); { pop rax }
+        end;
         
         if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = tkPlus) then
         begin

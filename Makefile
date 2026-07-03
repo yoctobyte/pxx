@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -2986,6 +2986,32 @@ test-smoke: $(COMPILER)
 	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
 	cp /tmp/pascal26-fixedpoint /tmp/pascal26-s5
+
+# test-opt: the -O gate (feature-optimization-levels). Differential corpus —
+# every program compiled at -O0 and -O1 must produce IDENTICAL runtime
+# output — plus the -O1 self-compile fixedpoint. Run whenever an opt pass
+# changes; -O0 stays covered by the ordinary byte-identity gates.
+test-opt: $(COMPILER)
+	for t in test_dynarray_torture test_dynarray_insert_delete \
+	         test_frozen_string_reentrant test_ansistring bootstrap_features \
+	         records procs test_cross_exception test_math_unit \
+	         test_metaclass_construct test_const_record_method_prebody; do \
+	  ./$(COMPILER) test/$$t.pas /tmp/opt0_$$t >/dev/null && \
+	  ./$(COMPILER) -O1 test/$$t.pas /tmp/opt1_$$t >/dev/null && \
+	  /tmp/opt0_$$t > /tmp/opt0_$$t.out && /tmp/opt1_$$t > /tmp/opt1_$$t.out && \
+	  cmp -s /tmp/opt0_$$t.out /tmp/opt1_$$t.out || { echo "OPT DIFF: $$t"; exit 1; }; \
+	done
+	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/opt0_atomic64 >/dev/null
+	./$(COMPILER) -O1 --threadsafe test/test_atomic64.pas /tmp/opt1_atomic64 >/dev/null
+	/tmp/opt0_atomic64 > /tmp/opt0_a64.out; /tmp/opt1_atomic64 > /tmp/opt1_a64.out
+	cmp /tmp/opt0_a64.out /tmp/opt1_a64.out
+	# -O1 self-compile fixedpoint: an -O1-built compiler rebuilding itself at
+	# -O1 must reach byte-identity too
+	./$(COMPILER) -O1 $(COMPILER_SRC) /tmp/pascal26-o1a
+	/tmp/pascal26-o1a -O1 $(COMPILER_SRC) /tmp/pascal26-o1b
+	/tmp/pascal26-o1b -O1 $(COMPILER_SRC) /tmp/pascal26-o1c
+	cmp /tmp/pascal26-o1b /tmp/pascal26-o1c
+	@echo "test-opt OK (differential corpus + -O1 fixedpoint)"
 
 # stabilize-fast: everyday iteration pin — test-smoke instead of the full
 # suite, and the already-proven fixedpoint binary is recorded directly (the
