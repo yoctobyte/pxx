@@ -165,3 +165,4 @@
 2026-07-03T14:38:24Z  v165  b11ebd19135931f07a3e181376613e3114e1cc84fd75c750c9d0a29a4afc85a9  429060459a2233d9c873e41703a14f883c4a6393  feat(opt): -O levels plumbing + first -O1 pass (leaf-const operand load)
 2026-07-03T15:06:11Z  v166  18da6464ead684ed01c18afac621287f0b590f25ad4f4840ad06739fdf2f1aeb  ec0331ac4583dd203211eeb38af02fdcf142a7ab  feat(opt): -O1 pass 2 — leaf-sym BINOP operand direct load (x86-64)
 2026-07-03T15:20:20Z  v167  cf89827b764b46c9160c95d05e3a18c1a5e54f1564b0245fcb0b4fd5efefd7d4  cd36b0c5d419177404968631a0782c951075471e  feat(opt): -O1 pass 3 — constant-load size peephole in MovRaxImm (x86-64)
+2026-07-03T16:29:04Z  v168  f1759f5346d5289c99951db5a5cee1947aaf835a251474ae8c95bc02d9e27804  4e0207eeef3ab0b307672f93fb67fee816e94191  docs(opt): cross-link store-reload ticket from umbrella

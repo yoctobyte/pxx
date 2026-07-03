@@ -276,7 +276,22 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
-## Pin-flip to -O1-built — READY, awaiting Rene's OK (2026-07-03)
+## Pin-flip to -O1-built — DONE, v168 (2026-07-03, Rene OK'd)
+
+Pinned binary is now **-O1-built** (`make PXXFLAGS=-O1 stabilize` + `make pin`).
+- v168 recorded; pinned binary 3.69MB (was 4.06MB -O0-built), self-code
+  code=3579597B. -O1 self-host fixedpoint byte-identical (s4==s5==next).
+- FULL `make test` ran with PXXFLAGS=-O1 — every test program compiled at -O1,
+  green (broader than the 12-program test-opt corpus).
+- Transparency verified on the LIVE pin: `stable_pinned` compiling
+  compiler.pas at -O0 = byte-identical to the -O0-built reference output. So
+  tracks B/C/D see identical -O0 output, just a ~25% faster / ~9% smaller
+  compiler on next pull. Reversible via git.
+- `-O0` self-host byte-identity contract itself is unchanged (every pass still
+  gates `OptLevel >= 1`); this only changes which binary is blessed, not the
+  emission model.
+
+### (prior) Pin-flip readiness note — kept for history
 
 The queued "decide flipping pins to -O1-built" is de-risked and ready:
 - **Transparency PROVEN**: an -O1-built compiler emits BYTE-IDENTICAL -O0
