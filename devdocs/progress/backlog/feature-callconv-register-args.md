@@ -43,3 +43,83 @@ chunk of the measured 2.04x generated-code gap (benchmark-compiler-runtime,
 Self-compile wall time drops measurably with -O2 (record in
 benchmark-compiler-runtime); full make test green under a -O2-built
 compiler; -O0 self-host byte-identical unchanged.
+
+## Design worked out 2026-07-03 (arc scoped, not yet implemented)
+
+**Current model (x86-64, mapped):** confirmed 2 memory round-trips + per-use
+reload:
+- Caller (ir_codegen.inc 3443-3523): eval each arg -> `push rax`; then pop into
+  rdi/rsi/rdx/rcx/r8/r9 (round-trip 1).
+- Callee prologue param spill (parser.inc 14480-14578): `mov [rbp+off], rdi/...`
+  spills all 6 reg args to frame slots (round-trip 2).
+- Param reads: `EmitLoadVar` skParam (symtab.inc ~2169) = `mov rax,[rbp+off]`
+  every use.
+- Param frame offsets: `AllocParam` (symtab.inc 1909-1979), `Syms[].Offset` neg.
+- TParam (defs.inc 653-659): SymIdx/IsRef/IsArray/TypeKind/Name.
+  TProc (661-671): Params[0..31], ParamCount, RetSymIdx, FramePatch.
+
+**Chosen approach — callee-side register RESIDENCY via callee-saved regs.**
+Park each non-pinned scalar param in a callee-saved register for the whole body
+instead of a frame slot: kills the spill (round-trip 2) AND every per-use
+reload. Caller stays UNCHANGED (still passes in rdi/rsi via push/pop) — half the
+theoretical win, but far lower risk and self-contained. Callee-saved regs
+survive calls by SysV ABI, so a resident param needs NO cross-call spill (the
+key simplifier).
+
+**Register budget (audited this session):**
+- `r14`, `r15`: ZERO x86-64 uses anywhere in emitted code (grep: only arm32
+  comments). Trivially safe — 2 param registers with no audit. **Phase-1 scope.**
+- `rbx`, `r12`, `r13`: used ONLY inside self-contained runtime helpers
+  (symtab.inc float/int formatters, heap alloc) that already `push`/`pop` them
+  (callee-saved discipline honored). Reusable for params AFTER a full audit that
+  EVERY such helper saves/restores them. **Phase-2 expansion.**
+
+**The invariant that makes it safe:** every routine (and helper) that USES a
+callee-saved reg must push it in prologue / pop in epilogue. Then: our helpers
+preserve them (verified push/pop), external SysV callees preserve them (ABI),
+and regcall routines preserve them (new prologue/epilogue). So a param in r14
+survives any call. -O0/-O1 keep the current spill model untouched (gate
+OptLevel>=2).
+
+**Pinned (must stay in frame, never register-resident):** IsRef (var/out/const
+by-ref), IsArray, float/record/set/variant types, any param whose address is
+taken (an IR_LEA / IR_SLOTADDR in the body references its SymIdx), and params
+captured by a nested/lifted routine (parser.inc 12505-12595). Everything else
+(plain int/ptr/char/bool/enum scalar) is register-eligible.
+
+## Phasing (each lands + self-host-gates independently, all behind -O2)
+
+0. **Addr-taken analysis (prereq, no codegen change).** Per body at CompileAST:
+   for each param of CurProc, eligible = scalar int/ptr, not IsRef/IsArray, and
+   no IR_LEA/IR_SLOTADDR references its SymIdx. Verify by instrumenting counts
+   over a self-compile = MEASURE the opportunity (how many params are eligible)
+   before committing. (Also unblocks [[feature-opt-store-reload-elimination]].)
+   NOTE: a first instrumentation attempt this session printed 0 — CurProc
+   validity/timing at the probe site needs checking; the analysis itself is
+   sound, the probe placement was off. Fix before trusting the number.
+1. **r14/r15 residency (x86-64, -O2).** Assign up to 2 eligible params to
+   r14/r15. Prologue: `push r14/r15` + `mov r14, rdi` (from the SysV incoming
+   reg) instead of the frame spill. EmitLoadVar/EmitStoreVar skParam: emit
+   `mov rax, r14` when resident. Epilogue: `pop r15/r14`. Gate every site
+   OptLevel>=2 + a per-Sym "resident register" field (or a side table).
+2. **Expand to rbx/r12/r13** after auditing the helpers save them (5 resident
+   params total).
+3. **Caller-side direct-eval** (optional, harder) — eval args straight into
+   arg regs without the push/pop, reclaiming round-trip 1. Needs care (nested
+   arg eval clobbers). Lower priority; measure whether phase 1-2 already closes
+   most of the gap first.
+4. Cross targets (aarch64 first) reuse the same eligibility analysis later —
+   only if the host win justifies it (per user: x86-64 is the priority; cross
+   optional).
+
+## Risk / why it's a careful multi-session arc
+
+The stack-machine codegen funnels everything through rax; residency works ONLY
+because callee-saved regs are never used as scratch in normal codegen (verified
+for r14/r15; helper-audited for rbx/r12/r13). Any emitted sequence that
+clobbers a resident reg without saving = silent param corruption. So phase 1
+must land minimally (r14/r15 only), full `make test` under a -O2-built compiler,
+-O2 self-host fixedpoint, before expanding. -O0 byte-identity stays the anchor.
+
+Status: **design + register audit + phasing done (this session); implementation
+not started.** Resume at phase 0 (fix the opportunity measurement), then phase 1.
