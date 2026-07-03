@@ -2675,11 +2675,23 @@ begin
             EmitB($48); EmitB($B9); EmitI64(IRIVal[right]);                      { movabs rcx, imm64 }
           end;
         end
+        else if (OptLevel >= 1) and LeafSymRcxLoadable(right) then
+        begin
+          { -O1 pass 2 leaf-sym operand direct load: a side-effect-free scalar
+            local/param/global right operand loads straight into rcx after the
+            left value is in rax — the push/eval/mov/pop dance collapses to one
+            load. Register contract downstream is IDENTICAL: rax = left, rcx =
+            right. A plain load has no side effects, so evaluating it after the
+            left is order-safe; loading directly into rcx (not rax then mov)
+            avoids clobbering the left value in rax. }
+          IREmitNode(left);
+          EmitLoadVarRcx(IRA[right]);
+        end
         else
         begin
           IREmitNode(left);
           EmitB($50); { push rax }
-          
+
           IREmitNode(right);
           EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
           EmitB($58); { pop rax }

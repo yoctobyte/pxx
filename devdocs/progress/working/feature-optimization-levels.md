@@ -214,5 +214,32 @@ OPEN DECISION: pins stay -O0-built for now (byte-identity continuity for
 B/C). Flipping the pinned binary to -O1-built is free performance for every
 track once we trust the pass battery — revisit after 2-3 more passes.
 
-Next passes queued (design above): store-reload elimination, xor-zero,
-leaf-sym operand load, branch-over-branch.
+## Progress — pass 2 LANDED (2026-07-03)
+
+- **Pass 2 (-O1): leaf-sym BINOP operand direct load** (x86-64). Extends
+  pass 1 from constants to side-effect-free scalar `IR_LOAD_SYM` right
+  operands: a plain local/param/global loads straight into rcx
+  (`EmitLoadVarRcx`, symtab.inc) after the left value is in rax — the
+  push-left / eval-right-into-rax / mov rcx,rax / pop-rax dance collapses to a
+  single load. Order-safe because a plain load has no side effects; the direct
+  rcx target avoids clobbering the left in rax. Register contract downstream
+  IDENTICAL (rax=left, rcx=right).
+- **Guard `LeafSymRcxLoadable`** (symtab.inc) admits ONLY skLocal /
+  skParam(non-ref) / skGlobal non-float, non-string(tyString/tyAnsiString/
+  frozen), non-array scalars. Every managed / float / by-ref / frozen /
+  skConst path stays on the general push/pop route untouched — the win is
+  Integer/Int64/Cardinal/pointer/char/bool/enum loads. `EmitLoadVarRcx`
+  mirrors `EmitLoadVar`'s scalar else-branch byte-for-byte with the reg field
+  switched rax(000)->rcx(001) ([rbp+disp] ModRM 85->8D; [abs] 04 25->0C 25;
+  mov eax->mov ecx).
+- **Gates**: `make test-opt` green (differential corpus + -O1 fixedpoint,
+  code=3779988B). `-O0` self-host fixedpoint byte-identical (sacred gate
+  UNTOUCHED — every branch gates `OptLevel >= 1`). FULL `make test` under an
+  -O1-BUILT compiler (pass 1+2): EXIT=0.
+- **Measured** (hyperfine -w2 -r5, self-compile): -O1-built (pass 1+2)
+  4.545s vs -O0-built 5.710s = **1.26x faster** (~20%); pass 2 adds ~4pts
+  over pass 1's 16%. -O1-built compiler binary 3.89MB vs -O0-built 4.06MB.
+
+Next passes queued (design above): store-reload elimination (IR-side),
+xor-zero / inc-dec / imm-fold peepholes, branch-over-branch. Then DECIDE
+flipping pins to -O1-built.

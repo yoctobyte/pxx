@@ -2317,6 +2317,94 @@ begin
   end;
 end;
 
+{ -O1 pass 2 (leaf-sym operand direct load): load a plain scalar local/param/
+  global straight into RCX, so a BINOP right operand that is a side-effect-free
+  IR_LOAD_SYM skips the push-left / eval-right-into-rax / mov rcx,rax / pop-rax
+  dance. Mirrors EmitLoadVar's scalar else-branch byte-for-byte with the reg
+  field switched rax(000)->rcx(001): [rbp+disp] ModRM 85->8D, [abs] ModRM+SIB
+  04 25->0C 25, mov eax->mov ecx (8B). Guarded by LeafSymRcxLoadable, which
+  admits only skLocal/skParam(non-ref)/skGlobal non-float, non-string,
+  non-array scalars — every managed/float/by-ref/frozen path stays on the
+  general push/pop route untouched. }
+function LeafSymRcxLoadable(node: Integer): Boolean;
+var idx: Integer; tk: TTypeKind;
+begin
+  LeafSymRcxLoadable := False;
+  if IRKind[node] <> IR_LOAD_SYM then Exit;
+  idx := IRA[node];
+  if Syms[idx].IsArray then Exit;
+  tk := Syms[idx].TypeKind;
+  if TypeIsFloat(tk) then Exit;
+  if (tk = tyString) or (tk = tyAnsiString) then Exit;
+  if TypeIsFrozenString(tk) then Exit;
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then Exit;
+  case Syms[idx].Kind of
+    skLocal, skParam, skGlobal: LeafSymRcxLoadable := True;
+  end;
+end;
+
+procedure EmitLoadVarRcx(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean;
+begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+  case Syms[idx].Kind of
+    skLocal, skParam:
+      begin
+        if sz = 1 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($8D); EmitI32(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($8D); EmitI32(Syms[idx].Offset); end;
+        end
+        else if sz = 2 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($8D); EmitI32(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($8D); EmitI32(Syms[idx].Offset); end;
+        end
+        else if sz = 4 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($63); EmitB($8D); EmitI32(Syms[idx].Offset); end
+          else
+            begin EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); end;
+        end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); end;
+      end;
+    skGlobal:
+      begin
+        if sz = 1 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        end
+        else if sz = 2 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        end
+        else if sz = 4 then
+        begin
+          if sgn then
+            begin EmitB($48); EmitB($63); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+          else
+            begin EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+      end;
+  end;
+end;
+
 procedure EmitStoreVar(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
