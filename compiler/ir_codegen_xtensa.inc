@@ -1885,6 +1885,20 @@ begin
   end;
 end;
 
+procedure IREmitLeaveExceptionFramesXtensa(count: Integer);
+{ Pop `count` exception frames: restore the saved prev EXC_TOP from each
+  frame head and free the 32-byte frame (Call0 moving sp). }
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);   { prev EXC_TOP }
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, EXC_FRAME_SIZE_XT);
+  end;
+end;
+
 procedure IREmitMachineCodeXtensa;
 var i, lblId, pos, f, procIdx: Integer;
     LabelFixupCount: Integer;
@@ -1981,6 +1995,115 @@ begin
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeXtensa(i);
+
+      { try/except (feature-esp-bare-exceptions), Call0 only: the windowed
+        ABI would need the register windows spilled before a longjmp-style sp
+        rewind, which bare-metal has no handlers for. Mirrors riscv32. }
+      IR_EXC_ENTER:
+        begin
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            Error('target xtensa: try/except requires the Call0 ABI (windowed needs register-window spills before unwind)');
+          { try: push a 32-byte frame ([0]=prev EXC_TOP, jmpbuf at +8), chain
+            it, setjmp; a raise longjmps back here with a2=1 -> jump to the
+            handler label (beq-skip + j, so the handler can be far). }
+          lblId := IRA[i];
+          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+          xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+          xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
+          xtensa_call0(ExcSetJmpAddr - CodeLen);
+          xtensa_movi(reg_xtensa_a4, 0);
+          xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal path: skip }
+          if LabelPositions[lblId] <> -1 then
+            xtensa_j(LabelPositions[lblId] - CodeLen)
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            xtensa_j(4);
+          end;
+        end;
+
+      IR_EXC_LEAVE:
+        IREmitLeaveExceptionFramesXtensa(IRA[i]);
+
+      IR_RAISE:
+        begin
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            Error('target xtensa: try/except requires the Call0 ABI (windowed needs register-window spills before unwind)');
+          if IRA[i] <> -1 then
+          begin
+            IREmitNodeXtensa(IRA[i]);                    { a2 = exception object }
+            EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_OBJ);
+            xtensa_s32i(reg_xtensa_a2, reg_xtensa_a3, 0);
+            EmitLoadConstXtensa(reg_xtensa_a2, Integer(IRIVal[i]));   { class idx }
+            EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
+            xtensa_s32i(reg_xtensa_a2, reg_xtensa_a3, 0);
+          end;
+          xtensa_call0(ExcRaiseAddr - CodeLen);
+        end;
+
+      IR_EXC_STORE:
+        begin
+          { `on E: EFoo do`: store the raised object into E's slot. }
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_OBJ);
+          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+          EmitSlotAddrXtensa(reg_xtensa_a8, IRA[i]);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 0);
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          { jump to the label when the raised class <> this clause's class }
+          lblId := IRA[i];
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a3, 0);
+          EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[i]));
+          xtensa_beq(reg_xtensa_a3, reg_xtensa_a4, 6);   { equal: skip the j }
+          if LabelPositions[lblId] <> -1 then
+            xtensa_j(LabelPositions[lblId] - CodeLen)
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            xtensa_j(4);
+          end;
+        end;
+
+      IR_EXC_MATCH_HIT:
+        begin
+          { jump to the label when the raised class = this clause's class }
+          lblId := IRA[i];
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a3, 0);
+          EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[i]));
+          xtensa_bne(reg_xtensa_a3, reg_xtensa_a4, 6);   { not equal: skip the j }
+          if LabelPositions[lblId] <> -1 then
+            xtensa_j(LabelPositions[lblId] - CodeLen)
+          else
+          begin
+            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            xtensa_j(4);
+          end;
+        end;
+
+      IR_EXC_CLEAR:
+        begin
+          xtensa_movi(reg_xtensa_a4, 0);
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_OBJ);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+        end;
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,

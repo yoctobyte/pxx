@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
-| feature-esp-bare-exceptions | A | feature | ESP bare: try/except (raise currently terminates) | — |
 | feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
@@ -128,7 +127,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (440)
+## done (441)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -447,6 +446,7 @@ _none_
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
+| feature-esp-bare-exceptions | A | feature | ESP bare: try/except (raise currently terminates) | — |
 | feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
 | feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
@@ -617,7 +617,6 @@ _none_
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
 - [A] feature-emission-size-dce
-- [A] feature-esp-bare-exceptions
 - [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-float-exception-mask-control

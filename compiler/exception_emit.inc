@@ -236,9 +236,13 @@ begin
     end;
     EmitExit(1);
   end
-  else if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) then
+  else if TargetArch = TARGET_RISCV32 then
   begin
-    { Hosted riscv32. jmpbuf = s0, sp, ra (codegen never touches s1-s11 —
+    { riscv32, hosted AND ESP bare (feature-esp-bare-exceptions): nothing in
+      the frames is hosted-specific; bare only skips the unhandled-message
+      write(2) below (no syscalls on bare — an unhandled raise parks via
+      EmitExit, same terminal behaviour as before, but handled raises now
+      unwind). jmpbuf = s0, sp, ra (codegen never touches s1-s11 —
       see the interrupt-prologue note in symtab.inc). Direct jal to
       ExcSetJmp/ExcRaise doesn't push, so the stub's sp/ra ARE the try
       point's. Glob addresses via the inline auipc+literal trick
@@ -269,7 +273,7 @@ begin
     EmitI32(EncodeRISCVJAL(reg_zero, ExcLongJmpAddr - CodeLen));
     Patch32(unhandledJmp, EncodeRISCVBEQ(reg_a0, reg_zero, CodeLen - unhandledJmp));
 
-    if not NoUnhandledHandler then
+    if (not NoUnhandledHandler) and (not EspBareBoot) then
     begin
       si := InternStr('Unhandled exception');
       rv32_addi(reg_a0, reg_zero, 2);                           { stderr }
@@ -291,8 +295,49 @@ begin
     end;
     EmitExit(1);
   end
+  else if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0) then
+  begin
+    { Xtensa Call0 (feature-esp-bare-exceptions). jmpbuf = a15 (frame ptr),
+      sp, a0 (return address) — the direct mirror of riscv32's (s0, sp, ra);
+      no register windows to spill on Call0. A direct call0 to
+      ExcSetJmp/ExcRaise doesn't push, so the stub's sp/a0 ARE the try
+      point's. Stubs are entered via call0, whose target must be 4-aligned
+      (3-byte instructions), hence the nop padding before each entry. There
+      is no hosted xtensa, so no unhandled-message write — an unhandled
+      raise parks via EmitExit(1), same as the old stub. }
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcSetJmpAddr := CodeLen;
+    xtensa_s32i(reg_xtensa_a15, reg_xtensa_a2, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 8);
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_ret;
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcLongJmpAddr := CodeLen;
+    xtensa_l32i(reg_xtensa_a15, reg_xtensa_a2, 0);
+    xtensa_l32i(reg_xtensa_sp, reg_xtensa_a2, 4);
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 8);
+    xtensa_movi(reg_xtensa_a2, 1);
+    xtensa_ret;                                                 { resume at try, a2=1 }
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcRaiseAddr := CodeLen;
+    XtensaEmitLitHeader;                                        { a3 = &EXC_TOP }
+    EmitGlobRef(BSS_EXC_TOP);
+    xtensa_l32r(reg_xtensa_a3, $FFFF);
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, 0);               { top frame }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);                { no handler -> park }
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, EXC_JMP_OFFSET_XT);
+    xtensa_j(ExcLongJmpAddr - CodeLen);
+    EmitExit(1);
+  end
   else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
+    { Xtensa windowed: a longjmp-style sp rewind needs the register windows
+      spilled first (window-overflow handler interplay) — not implemented.
+      The IR walker rejects try/raise on windowed with a clean error. }
     ExcSetJmpAddr := CodeLen;
     ExcLongJmpAddr := CodeLen;
     ExcRaiseAddr := CodeLen;
