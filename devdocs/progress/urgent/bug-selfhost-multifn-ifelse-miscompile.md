@@ -108,7 +108,62 @@ by Rust test programs but not caused by the Rust frontend's AST/IR usage
 - `make bootstrap` self-host stays byte-identical; the regression test's
   self-hosted output now matches its FPC-built output.
 
+## ROOT CAUSE FOUND — 2026-07-04 (Track A investigation)
+
+Reproduced read-only from `~/frank2` source built to /tmp (FPC-built frank2 → 20
+correct; PXX-built/self-hosted → **1** wrong; ticket said 2 — same class, wrong
+either way). Then narrowed with the `-S` disassembler + `--dump-ir`:
+
+**1. NOT the general if/else-if shape (ticket's frontend-agnostic hypothesis
+REFUTED).** The *identical* repro shape written in **Pascal** (`exit(n)` per
+branch) AND in **C** (`int main(){...return total;}`, `f1` uncalled, `classify`
+called) compiles **correctly and byte-identically** under both FPC-built and
+PXX-built `pascal26`. So the shared if/else-if / call / return codegen is fine.
+The trigger is specific to the **Rust frontend's IR shape**.
+
+**2. The trigger: the Rust frontend mis-lowers `else if`.** `--dump-ir` of
+`classify` (via frank2) shows the first `if`'s **else-branch lowered to an
+`IR_UNSUPPORTED` node** (sitting between the else-label and the merge-label),
+and the `else if` chain emitted *after* the merge label instead of nested inside
+the else. So `classify(1)`: `n==0`? no → jump to the else-label → lands on the
+`IR_UNSUPPORTED` node.
+
+**3. The divergence: `IR_UNSUPPORTED` is handled nondeterministically across
+self-host.** `IR_UNSUPPORTED` has NO codegen case in `ir_codegen.inc` (neither
+master nor frank2). As an unreferenced value node it *should* never be emitted:
+- **FPC-built** compiler: emits nothing there → control falls through the
+  else-label to the merge-label → the `n==1` check runs → returns 20 (correct).
+- **PXX-built** compiler: emits a spurious 5-instr block
+  (`movsxd rax,[rbp-4]; mov [rbp-8],eax; movsxd rax,[rbp-8]; leave; ret` =
+  "return n") AT the else-label → `classify(1)` returns `n=1` (wrong).
+Confirmed in the `-S` diff: the else-label (`je` target) points at the spurious
+block in the PXX build, at the real else-if in the FPC build.
+
+## Fix ownership (two distinct fixes)
+
+- **Track R (rparser, the real trigger):** `else if` must lower into the first
+  `if`'s ELSE branch (a nested `if`), NOT emit `IR_UNSUPPORTED` + a flattened
+  post-merge chain. Fixing this removes the trigger entirely — the highest
+  priority, and it's in the Rust work being merged now.
+- **Track A (self-host-safety hardening, independent):** `IR_UNSUPPORTED`
+  reaching codegen currently yields *nondeterministic output* across self-host
+  instead of a hard error. Codegen (`IREmitNode` + the driver loop) should
+  **hard-error on `IR_UNSUPPORTED`** so any frontend that emits it fails LOUDLY
+  at compile time rather than silently miscompiling. This would have caught the
+  bug the instant Track R's frontend emitted the node. Worth landing regardless
+  of the Rust fix — a general self-host guard. (Note: an unreferenced value node
+  is never visited by the top-level driver, so the guard must also cover the
+  case where such a node's presence perturbs label positioning — the precise
+  PXX-vs-FPC emission mechanism for the spurious block was not fully isolated;
+  the trigger + fix direction are solid.)
+
 ## Log
+- 2026-07-04 — Track A: reproduced (frank2→/tmp, read-only), refuted the
+  general-shape hypothesis (Pascal+C correct+byte-identical), root-caused to the
+  Rust frontend lowering `else if` to `IR_UNSUPPORTED` + codegen's
+  nondeterministic handling of it. Handed to Track R (trigger) + flagged the
+  Track A `IR_UNSUPPORTED`-should-hard-error hardening. No code changed (Rust
+  work mid-merge).
 - 2026-07-03 — filed from Track R sub-ticket 1/2 validation. Minimal repro
   above, several hypotheses ruled out (see "What's been ruled out"). Not
   self-resolved: this is shared `symtab.inc`/`ir.inc`/`ir_codegen.inc`
