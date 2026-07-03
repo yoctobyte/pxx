@@ -163,3 +163,4 @@
 2026-07-03T13:40:06Z  v163  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  8e1773b5bd3c67416b349f8cf60bdf12e59eda2c  perf(symtab): FindSym hash index — self-compile 5.9s (was 10.4s two commits ago)
 2026-07-03T14:15:37Z  v164  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  2cd811c5be15779a7bf464fea0e1237f0fb5ff5e  chore(stable): pin v163 — symtab hash indexes (self-compile 10.4s -> 5.9s)
 2026-07-03T14:38:24Z  v165  b11ebd19135931f07a3e181376613e3114e1cc84fd75c750c9d0a29a4afc85a9  429060459a2233d9c873e41703a14f883c4a6393  feat(opt): -O levels plumbing + first -O1 pass (leaf-const operand load)
+2026-07-03T15:06:11Z  v166  18da6464ead684ed01c18afac621287f0b590f25ad4f4840ad06739fdf2f1aeb  ec0331ac4583dd203211eeb38af02fdcf142a7ab  feat(opt): -O1 pass 2 — leaf-sym BINOP operand direct load (x86-64)
