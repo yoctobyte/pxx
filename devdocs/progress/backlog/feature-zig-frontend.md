@@ -12,11 +12,14 @@ Add a Zig-syntax frontend (5th, after Pascal / Nil-Python / C / Rust-planned)
 lowering to the existing shared IR/backends, same shape as the C frontend's v80
 bring-up (`clexer.inc`/`cparser.inc`/`cpreproc.inc` → shared IR). Zig is
 **C-style / systems**: manual memory (explicit allocators, no GC), structs,
-pointers, plain integers, C-like control flow — so it maps onto the current
-statically-typed IR **directly**, much like C, and is a materially smaller lift
-than the Rust frontend (no ownership/move model, no trait system). This is the
-easier of the two new-frontend requests; JS was parked as architecturally
-out-of-scope (see [[feature-js-frontend-parked]]).
+pointers, plain integers, C-like control flow — so its *type theory* maps onto
+the current statically-typed IR **directly**, much like C, with no
+ownership/move/trait system to model (simpler than Rust in that dimension). But
+"simpler type theory" does NOT mean trivial: reaching a subset that compiles
+real Zig is likely non-trivial because `comptime` is pervasive and the builtin
+surface is large — see "Notes on scale" below. It is the more *tractable* of the
+two new-frontend requests (JS parked as architecturally out-of-scope, see
+[[feature-js-frontend-parked]]), not an easy one.
 
 ## Explicit non-goals (scope cuts up front, like the C/Rust precedent)
 
@@ -57,6 +60,17 @@ out-of-scope (see [[feature-js-frontend-parked]]).
   Rust's [[feature-rust-borrowed-slice-type]] — share the type.
 - **Monomorphization** (`GenericFuncs`/specialization, defs.inc) — backs
   `comptime`-generic functions when that phase lands.
+- **Local type inference** (`tyAuto` + `EnableAutoVar`, parser.inc ~7731,
+  10250) — PXX already infers a binding's type from its initializer for inline
+  `var` (`var x := 5+3` in a statement block, `for var x in coll`). Verified
+  empirically: `var x := 5+3` → Integer, `var s := 'hi'` → string. This is the
+  SAME local-inference-from-initializer mechanism as Zig's `const x = expr` /
+  `var x = expr`, so Zig's inferred bindings reuse the existing expression
+  typer, not new machinery. Caveats: ours is currently gated on `EnableAutoVar`
+  and scoped to inline `var` (global declaration-section `var` still needs an
+  explicit type); Zig infers pervasively on every `const`/`var`. So the *local
+  inference* is a genuine reuse win — but note the boundary vs. Zig's
+  `comptime`-types below, which is the part we do NOT share.
 
 Much of the Rust RTL/type groundwork (tagged unions, slices, drop/defer) is
 directly shared with Zig — sequencing the two together would amortize it.
@@ -89,14 +103,40 @@ directly shared with Zig — sequencing the two together would amortize it.
    (`std.heap.page_allocator`-shape), `std.debug.print` / `std.log` wired to
    existing write machinery, `std.mem` basics (`copy`, `eql`, `span`).
 
-## Notes on scale (calibration, not a promise)
+## Notes on scale — Zig is NOT an easy source (2026-07-03, user flag)
 
-Smaller than the Rust umbrella (no ownership/move/trait system), comparable to
-the C frontend's multi-session bring-up. #1 gates everything. The
-correctness-sensitive piece is `defer`/`errdefer` ordering and error-union
-propagation (wrong = skipped cleanup / wrong error path, a runtime bug, not a
-compile error) — land those with tests first. Sequence with the Rust
-tagged-union/slice/drop work to share the primitives.
+Earlier framing ("smaller lift than Rust") is only half true and needs
+tempering. Zig has **no ownership/move/trait system**, so its *type theory* is
+simpler than Rust's — but reaching a **practically useful subset** (one that
+compiles real Zig) is likely NON-trivial, for reasons specific to Zig:
+
+- **`comptime` is pervasive, not a corner feature.** Zig has no separate
+  generics syntax — generics, type construction, conditional compilation, and
+  much of `std` are all `comptime`. Our "no comptime VM" cut (a reasonable v1
+  scope, like C/Rust's cuts) therefore excludes a LARGER fraction of real Zig
+  than "no `macro_rules!`" excludes of real Rust. Everyday `fn f(comptime T:
+  type)`, `@This()`, `@TypeOf`, `@hasField` etc. all lean on it. Impact:
+  "compiles real programs" is gated on comptime-generics much *earlier* than
+  the Rust equivalent.
+- **Huge builtin surface.** `@import`, `@sizeOf`, `@intCast`, `@ptrCast`,
+  `@field`, `@memcpy`, … (hundreds). Many are comptime-typed. Each needs
+  frontend handling; there is no "ignore and link" fallback like C headers.
+- **Error unions `!T` + optionals `?T` are threaded through everything** —
+  idiomatic Zig, so the tagged-union + `try`/`catch`/`orelse` propagation must
+  be solid EARLY (sub-ticket #3), not a late add.
+- **`defer`/`errdefer` ordering + error-path cleanup** — correctness-sensitive
+  (wrong = skipped cleanup / wrong error path, a runtime bug, not a compile
+  error). Land with tests first.
+- **Pre-1.0 moving target.** Zig syntax/semantics still shift between releases;
+  pin a target version.
+- **Allocator-passing idiom.** Every allocation takes an allocator param; `std`
+  leans on it. Mappable to our heap, but pervasive.
+
+Net: comparable-or-harder than the C frontend's multi-session bring-up to reach
+"compiles real Zig", *despite* the simpler type theory — the cost is
+`comptime` + builtins, not the type system. #1 gates everything; #3 (error
+unions/optionals) and #6 (comptime-generics) are the real gates on usefulness.
+Sequence with the Rust tagged-union/slice/drop work to share the primitives.
 
 ## Log
 - 2026-07-03 — umbrella opened from a feature request; filed alongside the Rust
