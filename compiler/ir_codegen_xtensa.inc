@@ -1338,12 +1338,53 @@ begin
         procIdx := IRA[node];
         if procIdx = -Ord(tkGetMem) then
         begin
-          { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
-          if IRC[node] >= REC_UCLASS_BASE then
-            Error('target xtensa: class instantiation not yet supported');
+          { GetMem / New / class instantiation. For a class: alloc, store the
+            VMT pointer at offset 0, run the ctor, return Self in a2 (mirrors
+            the riscv32 shape at xtensa conventions, windowed + Call0). }
+          j := IRC[node];                       { class idx (or < base) }
           argNode := IRB[node];                 { size arg }
           IREmitNodeXtensa(IRA[argNode]);       { size -> a2 }
           EmitHeapAllocLockedXtensa;            { a2 = payload pointer }
+          if j < REC_UCLASS_BASE then
+            Exit;                               { plain GetMem }
+          EmitLoadDataRefXtensa(reg_xtensa_a3, UClsVMTOffset[j - REC_UCLASS_BASE]);
+          xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);   { [Self] = VMT }
+          j := FindUMeth(j - REC_UCLASS_BASE, 'create');
+          if j < 0 then
+            Exit;                               { no ctor: instance in a2 }
+          argBase := XtSpillDepth;
+          XtensaPushA2;                         { Self = word 0 (call0: deepest) }
+          nArgs := 1;
+          argNode := IRB[node];                 { size arg }
+          argNode := IRB[argNode];              { first explicit ctor arg }
+          while argNode <> -1 do
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            XtensaPushA2;
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs > 6 then
+            Error('target xtensa: constructor with more than 6 parameter words not supported');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            for i := 0 to nArgs - 1 do
+              xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+            EmitCallProc(UMthProc_[j]);
+            { Self survives in its sp-relative slot (sp is constant). }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase);
+            XtSpillDepth := argBase;
+          end
+          else
+          begin
+            { Call0: word i sits at (nArgs-1-i)*4, Self deepest. Keep the block
+              across the call so Self can be reloaded, then drop it. }
+            for i := 0 to nArgs - 1 do
+              xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+            EmitCallProc(UMthProc_[j]);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, (nArgs - 1) * 4);  { Self }
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          end;
           Exit;
         end;
         if procIdx = -Ord(tkFreeMem) then
@@ -1791,6 +1832,50 @@ begin
             xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);    { callee }
           xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+          xtensa_callx0(reg_xtensa_a8);
+        end;
+      end;
+
+    IR_VIRTUAL_CALL:
+      begin
+        if IRCallDest[node] >= 0 then
+          Error('target xtensa: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
+          Word-push args (Self = word 0, deepest on Call0), load the arg
+          registers, read the VMT pointer from [Self], call through
+          [VMT + slot*8] (8-byte data slots, address in the low word — mirrors
+          riscv32/arm32). }
+        argBase := XtSpillDepth;
+        argNode := IRA[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeXtensa(IRA[argNode]);
+          XtensaPushA2;
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 6 then
+          Error('target xtensa: virtual call with more than 6 parameter words not supported');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          for i := 0 to nArgs - 1 do
+            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+          XtSpillDepth := argBase;
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a10, 0);              { VMT ptr from [Self] }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
+          xtensa_callx8(reg_xtensa_a8);
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+          if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+            xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
+        end
+        else
+        begin
+          for i := 0 to nArgs - 1 do
+            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 0);               { VMT ptr from [Self] }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
           xtensa_callx0(reg_xtensa_a8);
         end;
       end;

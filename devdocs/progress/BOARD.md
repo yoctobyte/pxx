@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (66)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -85,7 +85,6 @@ _none_
 | feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-xtensa-class-instantiation | A | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
@@ -129,7 +128,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (439)
+## done (440)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -557,6 +556,7 @@ _none_
 | feature-value-bearing-expressions-for-c | A | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-warn-oversized-stack-frame | A | feature | Warn on oversized stack locals / stack frames | — |
 | feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
+| feature-xtensa-class-instantiation | A | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
 | feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | idea-progress-board-md | B | idea | On-demand `BOARD.md` kanban grid | — |
@@ -648,7 +648,6 @@ _none_
 - [B] feature-tls13-from-scratch
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library
-- [A] feature-xtensa-class-instantiation
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict

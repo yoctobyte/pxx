@@ -129,7 +129,7 @@ available and validated against the x86-64 oracle.
 Most of the shared-IR language surface works on the ESP targets: records,
 sets, 64-bit integers, dynamic arrays, proc-typed variables (indirect
 calls), `@proc`, and stackless generators. Classes (with virtual dispatch)
-work on riscv32; xtensa does not support class instantiation yet.
+work on both ESP targets.
 `try`/`except` is not available on the bare profile — a `raise` terminates
 the program. Generators on any non-x86-64 target must use the stackless
 form:
