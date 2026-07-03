@@ -65,3 +65,11 @@ Scope for the *skeleton* specifically (deliberately small — this ticket is
   internals were modified beyond the same append-only token-enum + dispatch
   pattern the C frontend already established.
   Next: sub-ticket 2, [[feature-rust-match-enum-payload]].
+- 2026-07-03 — **correction**: re-validated after a `make bootstrap`
+  rebuild and the multi-fn correctness claim above does NOT hold for the
+  self-hosted binary — only the FPC-built one. Filed
+  [[bug-selfhost-multifn-ifelse-miscompile]] (urgent, Track A, shared
+  internals — not caused by this frontend's AST/IR usage, all shared node
+  kinds already used elsewhere). Not blocking: this ticket's own tests are
+  confirmed correct against the FPC-built compiler; see that bug ticket for
+  the self-host divergence and how Track R validates around it meanwhile.

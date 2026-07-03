@@ -85,3 +85,10 @@ that crate's shape needs the general union, not `tyVariant`.
     by code *after* the whole match statement could be shadowed by a
     leftover arm binding.
   Next: sub-ticket 3, [[feature-rust-generics-trait-bounds]].
+- 2026-07-03 — **correction**: same caveat as sub-ticket 1's log —
+  correctness verified against the FPC-built compiler, not the self-hosted
+  one; see [[bug-selfhost-multifn-ifelse-miscompile]] (filed urgent, Track
+  A, not caused by this frontend). t2.rs/t3.rs in this ticket's own
+  verification also have 3+ user functions and would very likely reproduce
+  that bug too if run through a fresh `make bootstrap` binary — re-check
+  once the bug ticket lands a fix.
