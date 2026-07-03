@@ -1697,6 +1697,8 @@ progress-check:
 test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/hello.pas /tmp/test_i386_hello
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_hello)" = "Hello, World!"
+	# net lib cross matrix: httpdemo builds on i386 (feature-net-lib-cross-target)
+	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/test_i386_httpdemo
 	./$(COMPILER) --target=i386 test/test_i386_arith.pas /tmp/test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas /tmp/test_i386_arith_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_arith)" = "$$(/tmp/test_i386_arith_x64)"
@@ -2339,6 +2341,11 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rectemp)" = "$$(printf '18\n46')"
 	./$(COMPILER) --target=arm32 test/test_ctor_string_literal_arg.pas /tmp/test_arm32_ctorstrlit
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	./$(COMPILER) --target=arm32 test/test_arm32_virtual_wide.pas /tmp/test_arm32_virtwide
+	./$(COMPILER) test/test_arm32_virtual_wide.pas /tmp/test_arm32_virtwide_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_virtwide)" = "$$(/tmp/test_arm32_virtwide_x64)"
+	# net lib cross matrix: httpdemo builds on arm32 (feature-net-lib-cross-target)
+	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/test_arm32_httpdemo
 	./$(COMPILER) --target=arm32 test/test_arm32_record_byval_wide.pas /tmp/test_arm32_recwide
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=arm32 test/test_single_in_aggregate.pas /tmp/test_arm32_singleagg

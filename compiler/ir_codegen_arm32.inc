@@ -2229,15 +2229,30 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs > 4 then
-          Error('target arm32: virtual call with more than 4 parameter words not supported');
-        for i := 0 to nArgs - 1 do
-          EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
-        EmitLoadImmArm32(8, nArgs * 4);
-        EmitI32($E08DD008);                          { add sp, sp, r8 (drop pushed words) }
-        EmitI32($E5909000);                          { ldr r9, [r0] (VMT ptr) }
-        EmitI32($E5999000 or (j * 8));               { ldr r9, [r9, #slot*8] }
-        EmitI32($E12FFF39);                          { blx r9 }
+        if nArgs <= 4 then
+        begin
+          for i := 0 to nArgs - 1 do
+            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+          EmitLoadImmArm32(8, nArgs * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop pushed words) }
+          EmitI32($E5909000);                        { ldr r9, [r0] (VMT ptr) }
+          EmitI32($E5999000 or (j * 8));             { ldr r9, [r9, #slot*8] }
+          EmitI32($E12FFF39);                        { blx r9 }
+        end
+        else
+        begin
+          { nArgs > 4: words 0-3 go to r0-r3, words 4..nArgs-1 stay on the
+            stack across the call — the callee reads them at
+            [fp + 8 + (pnWords-1-k)*4], exactly like the direct-call j>4 path
+            above. Drop the whole block after the call returns. }
+          for i := 0 to 3 do
+            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+          EmitI32($E5909000);                        { ldr r9, [r0] (VMT ptr) }
+          EmitI32($E5999000 or (j * 8));             { ldr r9, [r9, #slot*8] }
+          EmitI32($E12FFF39);                        { blx r9 }
+          EmitLoadImmArm32(8, nArgs * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args) }
+        end;
       end;
 
     IR_COSWITCH:

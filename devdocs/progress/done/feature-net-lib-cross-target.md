@@ -2,7 +2,7 @@
 
 - **Type:** feature (Track A — i386 / arm32 codegen)
 - **Track:** A — `compiler/**`
-- **Status:** backlog (filed by Track B)
+- **Status:** done
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-25
 - **Found-by:** [[feature-own-net-http-lib]] — cross-compiling
@@ -56,3 +56,14 @@ cross smoke once the backends accept it.
 ## TRIAGE (2026-06-30, multi-agent verify)
 
 UPDATE (verify): i386 sub-claim is OUTDATED — i386 now BUILDS httpdemo cleanly (procs=432), the old 'only ordinal/pointer params' failure is gone. **arm32 still fails**: 'target arm32: virtual call with more than 4 parameter words not supported'. Acceptance needs all targets, so still open — scope narrowed to the arm32 virtual-call >4-param-word gap.
+
+## Resolution (2026-07-03, Track A)
+
+arm32 IR_VIRTUAL_CALL no longer errors on >4 argument words: words 0-3 go to
+r0-r3 and words 4..n-1 stay on the stack across the call (callee reads them at
+[fp + 8 + (pnWords-1-k)*4]), mirroring the direct-call j>4 path; the whole
+block is dropped after the call. i386 had already healed (see TRIAGE).
+`httpdemo` now cross-builds on all four targets. Regressions:
+test/test_arm32_virtual_wide.pas (virtual proc + fn with 6-7 words incl Self,
+override dispatch, qemu-run against x64 golden) + httpdemo build smokes in
+`make test-arm32` / `make test-i386`.

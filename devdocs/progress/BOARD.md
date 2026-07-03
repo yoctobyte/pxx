@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (67)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -65,7 +65,6 @@ _none_
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
@@ -130,7 +129,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (438)
+## done (439)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -498,6 +497,7 @@ _none_
 | feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
+| feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
@@ -628,7 +628,6 @@ _none_
 - [A] feature-inline-asm-xtensa
 - [A] feature-inline-routines
 - [B] feature-move-fillchar-intrinsics
-- [A] feature-net-lib-cross-target
 - [B] feature-networking
 - [A] feature-nilpy-idf-import
 - [A] feature-optimization-levels
