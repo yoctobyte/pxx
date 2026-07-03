@@ -50,7 +50,28 @@ begin
   Code[pos] := v;
 end;
 
-procedure MovRaxImm(v: Int64); begin EmitB($48); EmitB($B8); EmitI64(v); end;
+{ -O1 pass 3 (constant-load size peephole): the historic form is always the
+  10-byte `movabs rax, imm64` (48 B8 + 8 bytes). Under -O1 shrink the common
+  small/zero constants — every consumer only cares that rax ends up holding v,
+  and these encodings zero/sign-extend to the full register:
+    v=0            -> `xor eax, eax`      (31 C0)          2 bytes
+    0..2^32-1      -> `mov eax, imm32`    (B8 + 4)         5 bytes (zero-ext)
+    -2^31..-1      -> `mov rax, imm32`    (48 C7 C0 + 4)   7 bytes (sign-ext)
+  MovRaxImm is x86-64-only (48 B8 is REX.W movabs); the 32-bit/ARM/RISC-V
+  backends never call it. Gated on OptLevel so -O0 stays byte-identical. }
+procedure MovRaxImm(v: Int64);
+begin
+  if OptLevel >= 1 then
+  begin
+    if v = 0 then
+      begin EmitB($31); EmitB($C0); Exit; end                                 { xor eax, eax }
+    else if (v >= 0) and (v <= $FFFFFFFF) then
+      begin EmitB($B8); EmitI32(v); Exit; end                                 { mov eax, imm32 (zero-extends) }
+    else if (v >= -2147483648) and (v <= 2147483647) then
+      begin EmitB($48); EmitB($C7); EmitB($C0); EmitI32(v); Exit; end;        { mov rax, imm32 (sign-extends) }
+  end;
+  EmitB($48); EmitB($B8); EmitI64(v);                                         { movabs rax, imm64 }
+end;
 procedure MovRbxImm(v: Int64); begin EmitB($48); EmitB($BB); EmitI64(v); end;
 procedure MovRdiImm(v: Int64); begin EmitB($48); EmitB($BF); EmitI64(v); end;
 procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;

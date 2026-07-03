@@ -240,6 +240,42 @@ track once we trust the pass battery — revisit after 2-3 more passes.
   4.545s vs -O0-built 5.710s = **1.26x faster** (~20%); pass 2 adds ~4pts
   over pass 1's 16%. -O1-built compiler binary 3.89MB vs -O0-built 4.06MB.
 
-Next passes queued (design above): store-reload elimination (IR-side),
-xor-zero / inc-dec / imm-fold peepholes, branch-over-branch. Then DECIDE
-flipping pins to -O1-built.
+## Progress — pass 3 LANDED (2026-07-03)
+
+- **Pass 3 (-O1): constant-load size peephole** (x86-64) in `MovRaxImm`
+  (emit.inc, the single choke point for constant->rax loads; x86-64-only,
+  the 32-bit/ARM/RISC-V backends never call it). The historic form is always
+  10-byte `movabs rax, imm64`; under -O1: `v=0` -> `xor eax,eax` (2B),
+  `0..2^32-1` -> `mov eax,imm32` (5B, zero-ext), `-2^31..-1` -> `mov rax,imm32`
+  (7B, sign-ext). Every consumer only needs rax = v; all three extend to the
+  full register.
+- **Gates**: `make test-opt` green (-O1 self-code shrank 3.78MB -> 3.58MB,
+  ~200KB from this pass alone). `-O0` self-host fixedpoint byte-identical
+  (sacred gate untouched). FULL `make test` under an -O1-BUILT compiler
+  (pass 1+2+3): EXIT=0.
+- **Measured**: primarily a SIZE win — -O1-built compiler binary 3.69MB vs
+  -O0-built 4.06MB (~9% smaller; ~200KB below pass-2's 3.89MB). Self-compile
+  speed steady 1.25x (xor/mov-eax are >= movabs speed, no regression; icache
+  benefit). Constant loads are pervasive so the byte savings compound across
+  the whole binary.
+
+## Store-reload elimination (queued pass 2 in handover) — DEFERRED, needs liveness scaffold
+
+Investigated the IR structure (flat post-order array; IR_BLOCK is a no-op range
+marker; a driver loop emits statement roots and recurses for operands). The
+redundant reload (`mov [slot],rax` then `mov rax,[slot]`) lives DEEP in the
+NEXT statement's expression tree, not as an adjacent statement root — so an
+IR-stream peephole over roots can't see it. Catching it needs a
+"value-in-register" tracker whose invalidation must fire on EVERY rax write,
+but rax is written by scattered raw `EmitB` calls throughout ir_codegen.inc with
+NO single choke point — airtight invalidation would require auditing hundreds of
+sites, and one miss = silent miscompile. Byte-level detection (matching emitted
+`Code[]`) is the forbidden path (fixups reference CodeLen). Correct
+implementation wants the liveness scaffold flagged for
+[[feature-callconv-register-args]] / ticket item 6. Deferred to that scaffold
+rather than land a risky tracker (correctness-first). Did the safe queued
+peepholes (pass 3 above) instead; branch-over-branch next.
+
+Next passes queued (design above): branch-over-branch, inc/dec + imm-fold
+into BINOP operand, then store-reload once the liveness scaffold lands. Then
+DECIDE flipping pins to -O1-built.
