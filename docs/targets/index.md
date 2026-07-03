@@ -15,8 +15,8 @@ PXX can emit native and cross-target output from the same compiler invocation.
 | `i386` | 32-bit Linux ELF executable. | Run directly on hosts with i386 support, or via `qemu-i386`. |
 | `aarch64` | 64-bit ARM Linux ELF executable. | Run via `qemu-aarch64` on non-ARM hosts. |
 | `arm32` | 32-bit ARM Linux ELF executable. | Run via `qemu-arm` on non-ARM hosts. |
-| `riscv32` | ESP32-C3 / embedded RISC-V output. | Use ESP32 helpers and vendor tooling. |
-| `xtensa` | ESP32-S2/S3 / embedded Xtensa output. | Use ESP32 helpers and vendor tooling. |
+| `riscv32` | ESP32-C3 bare-metal / ESP-IDF object, or 32-bit RISC-V Linux ELF. | See [ESP32 / Microcontrollers](./esp32.md); Linux binaries run via `qemu-riscv32`. |
+| `xtensa` | ESP32-S2/S3 bare-metal / ESP-IDF object. | See [ESP32 / Microcontrollers](./esp32.md). |
 
 Use `--target=ARCH` before the source file:
 

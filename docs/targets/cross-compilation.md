@@ -39,8 +39,13 @@ tools/esp_run_bare.sh --chip esp32c3 examples/esp32/hello-c3/main/main.pas
 tools/esp_run_bare.sh --chip esp32s3 examples/esp32/hello-s3/main/main.pas
 ```
 
-The ESP32 path is under active development. Treat it as an embedded bring-up
-surface rather than a general-purpose stable release target.
+See [ESP32 / Microcontrollers](./esp32.md) for the bare-metal and ESP-IDF
+integration modes, footprint numbers, and the soft-float contract.
+
+Hosted 32-bit RISC-V Linux is also a full target: plain
+`--target=riscv32` (without `--esp-profile=bare`) emits a Linux ELF that
+runs under `qemu-riscv32`, with console I/O, exceptions, classes and the
+rest of the shared-IR surface.
 
 ## Next
 
