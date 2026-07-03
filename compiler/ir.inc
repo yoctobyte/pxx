@@ -5288,19 +5288,47 @@ end;
   If a future IR pass (e.g. loop strength-reduction) starts PRODUCING
   const-const binops, revive const-fold then, gated the same way. }
 
+procedure IROptWarnMissedFoldFire(const what: AnsiString);
+{ Shared one-shot emit for the missed-optimization tripwire. `what` names the
+  opportunity + which pass to revive. -Werror promotes to a hard error. }
+begin
+  Inc(WarnCount);
+  WarnedMissedFold := True;
+  if WarnAsError then
+  begin
+    writeln('pascal26: error: ', what, ' reached codegen — revive the matching IR ',
+            'pass in IROptimize (feature-optimization-levels) (warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26: warning: ', what, ' reached codegen — an IR pass now produces it; ',
+          'revive the matching optimization in IROptimize (feature-optimization-levels)');
+end;
+
 procedure IROptWarnMissedFold;
 { Tripwire (runs LAST, after every other pass, so it also sees IR the passes
-  themselves produced). Const-fold + algebraic identities are NOT shipped
-  because nothing currently produces a foldable IR_BINOP (measured 0-fire). If
-  that ever changes — a new pass emits `const OP const`, or a neutral-identity
-  operand (x+0, x*1, x or 0, x xor 0, x and -1, x div 1) — warn ONCE per compile
-  so const-fold gets revived instead of silently leaving cycles on the floor.
-  div/mod const-const is EXCLUDED: `k div 0` legitimately survives to raise
-  runtime error 200, so it is not a "missed fold". -Werror promotes it. }
+  themselves produced). Three optimizations were measured 0-fire and NOT shipped
+  because PXX's frontends already eliminate them upstream — IR const-fold +
+  algebraic identities (no foldable IR_BINOP reaches the IR), and if-false /
+  if-true DCE (Pascal AND C fold const `if` conditions at AST time, so no
+  IR_JUMP_IF_FALSE with a constant condition reaches the IR — measured on both
+  frontends). If a future pass starts PRODUCING any of them, warn ONCE per
+  compile so the matching pass gets revived instead of silently leaving cycles
+  on the floor. Excludes const-const div/mod (`k div 0` legitimately survives to
+  raise runtime error 200). Strength reduction (x*2^k -> shl) is separately
+  deferred: also 0-fire (array access uses IR_INDEX, not an IR_BINOP multiply)
+  AND width-unsafe on the current shl path (its <8-byte cdqe fixup corrupts
+  offsets that overflow 32 bits). }
 var i, op: Integer; bothConst, ident: Boolean;
 begin
   if WarnedMissedFold then Exit;
   for i := 0 to IRCount - 1 do
+  begin
+    { const-condition branch -> would-be if-false / if-true DCE }
+    if (IRKind[i] = IR_JUMP_IF_FALSE) and (IRKind[IRB[i]] = IR_CONST_INT) then
+    begin
+      IROptWarnMissedFoldFire('a constant-condition IR_JUMP_IF_FALSE (if-false/if-true DCE)');
+      Exit;
+    end;
     if IRKind[i] = IR_BINOP then
     begin
       op := IRC[i];
@@ -5323,21 +5351,11 @@ begin
         ident := (IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 1);
       if bothConst or ident then
       begin
-        Inc(WarnCount);
-        WarnedMissedFold := True;
-        if WarnAsError then
-        begin
-          writeln('pascal26: error: a foldable IR_BINOP (const-const or identity operand) ',
-                  'reached codegen — revive IR const-fold/identities in IROptimize ',
-                  '(feature-optimization-levels) (warning promoted by -Werror)');
-          Halt(1);
-        end;
-        writeln('pascal26: warning: a foldable IR_BINOP (const-const or identity operand) ',
-                'reached codegen — an IR pass now produces foldable arithmetic; revive ',
-                'const-fold/identities in IROptimize (feature-optimization-levels)');
+        IROptWarnMissedFoldFire('a foldable IR_BINOP (const-const or identity operand; const-fold/identities)');
         Exit;
       end;
     end;
+  end;
 end;
 
 procedure IROptimize;

@@ -226,8 +226,8 @@ shared IR), with identical runtime output.
 |------|------|--------|------|
 | IR const-fold (`const OP const`) | IR (§3a) | **rejected — measured 0 fires** | PXX pre-folds upstream (ConstEval/AST); no const-const IR_BINOP reaches the IR for any frontend. Revive only if a future pass PRODUCES const-const binops. |
 | IR algebraic identities (`x*1`,`x+0`…) | IR (§3a) | **rejected — measured 0 fires** | lowering guards stride `if elemSize>1` (no `x*1`), source identities pre-simplified. Value-dropping forms (`x*0`) deliberately never attempted (side-effect hazard). |
-| Strength reduction (`x*2^k→shl`) | IR (§3a) | not started | value-preserving but needs exact width/sign analysis; deferred |
-| DCE of `if false` / const-true branches | IR (§3a) | queued | needs const-condition detection |
+| DCE of `if false` / const-true | IR (§3a) | **rejected — measured 0 fires** | Pascal AND C fold const `if` conditions at AST time (verified: `if DEBUG`, C `if(0)` → 0 const-condition IR_JUMP_IF_FALSE reaches IR). Tripwired. |
+| Strength reduction (`x*2^k→shl`) | IR (§3a) | **rejected — 0 fires + width-unsafe** | array access uses IR_INDEX (no IR_BINOP multiply); and the shl path's <8-byte cdqe fixup corrupts offsets that overflow 32 bits, so mul→shl is not value-safe there. Would need a no-fixup 64-bit shl. |
 | Relocate compare-fusion to an IR tag | IR (§3a) | idea | would give cross targets pass 4 |
 | imm-fold into BINOP (`add rax,imm32`) | emitter (§3b) | queued | x86-64, cheap |
 | inc/dec, rel8 short branches | emitter (§3b) | queued | x86-64, size |

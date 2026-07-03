@@ -276,6 +276,25 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
+## if-false DCE + strength reduction — MEASURED, REJECTED (2026-07-03)
+
+Measured BEFORE building (const-fold lesson applied):
+- **if-false / if-true DCE: 0 fires.** Both Pascal (`if DEBUG` with DEBUG=const
+  false) and C (`if(0)`/`if(1)`) fold const `if` conditions at AST time — no
+  IR_JUMP_IF_FALSE with a constant condition ever reaches the IR (verified on
+  both frontends + the compiler self-compile). Nothing to eliminate.
+- **Strength reduction (x*2^k -> shl): 0 fires AND width-unsafe.** Array access
+  lowers to IR_INDEX (stride baked in codegen), not an IR_BINOP multiply, so no
+  power-of-2 multiply reaches the IR (0 on self-compile). Separately, naive
+  mul->shl is NOT value-safe on the current shl path: its <8-byte cdqe fixup
+  sign-extends from bit 31, corrupting an offset that overflows 32 bits (imul
+  computes the full 64-bit product). Would need a dedicated no-fixup 64-bit shl.
+
+Neither shipped. **Tripwire extended** (IROptWarnMissedFold) to also warn on a
+constant-condition IR_JUMP_IF_FALSE, so if a frontend ever stops folding, we
+learn and revive if-false DCE. Validated: still silent on real code; the
+const-fold arm still fires on injection; -Werror promotes.
+
 ## IR const-fold + algebraic identities — MEASURED, REJECTED (2026-07-03)
 
 Implemented both as IR passes, instrumented, measured: **ZERO fires** on the
