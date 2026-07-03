@@ -10,6 +10,7 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
+  PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   MAX_PROC_PARAMS = 32;
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
@@ -922,6 +923,14 @@ var
   FrameSize : Integer;
 
   Procs     : array[0..MAX_PROCS-1] of TProc;
+  { FindProc hash index (perf-compiler-hotspots-algorithmic): buckets keyed on
+    the case-FOLDED name so exact and case-insensitive candidates share one
+    chain. Chains are FIFO (= registration order), so every walker keeps the
+    linear scan's first-match / overload-order semantics exactly. Procs are
+    append-only (ProcCount never rolls back), so there is no unlink path. }
+  ProcHashHead : array[0..PROC_HASH_SIZE-1] of Integer;
+  ProcHashTail : array[0..PROC_HASH_SIZE-1] of Integer;
+  ProcHashNext : array[0..MAX_PROCS-1] of Integer;
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcFlexColumn : array[0..MAX_PROCS-1] of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;

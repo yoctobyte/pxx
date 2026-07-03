@@ -537,6 +537,7 @@ begin
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
+  ProcHashReset;   { heads/tails to -1 (BSS zero is a valid proc idx) }
   CurrentUnitIdx := -1;
   CTypedefCount := 0;
   CTypedefCharLen := 0;

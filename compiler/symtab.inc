@@ -2975,23 +2975,82 @@ end;
 
 { ===== Procedure table ===== }
 
+{ FNV-1a over the case-folded name. $811C9DC5 / $01000193 are the published
+  32-bit FNV offset-basis and prime (avalanche constants, NOT integer limits);
+  the LongWord multiply wraps mod 2^32 by design. Result masked to the
+  power-of-two bucket count. }
+function NameFoldHash(const s: AnsiString): Integer;
+var i, b: Integer; h: LongWord;
+begin
+  h := LongWord($811C9DC5);
+  for i := 1 to Length(s) do
+  begin
+    b := Ord(s[i]);
+    if (b >= 65) and (b <= 90) then b := b + 32;   { fold A..Z }
+    h := (h xor LongWord(b)) * LongWord($01000193);
+  end;
+  Result := Integer(h and LongWord(PROC_HASH_SIZE - 1));
+end;
+
+procedure ProcHashReset;
+var i: Integer;
+begin
+  for i := 0 to PROC_HASH_SIZE - 1 do
+  begin
+    ProcHashHead[i] := -1;
+    ProcHashTail[i] := -1;
+  end;
+end;
+
+{ Append idx to its bucket's FIFO chain. Called once per RegisterProc; proc
+  names are immutable after registration, so the index never goes stale. }
+procedure ProcHashInsert(idx: Integer);
+var b: Integer;
+begin
+  b := NameFoldHash(Procs[idx].Name);
+  ProcHashNext[idx] := -1;
+  if ProcHashHead[b] < 0 then
+    ProcHashHead[b] := idx
+  else
+    ProcHashNext[ProcHashTail[b]] := idx;
+  ProcHashTail[b] := idx;
+end;
+
+{ First candidate (registration order) for a name; walk via ProcHashNext.
+  The chain holds every proc with the same FOLDED name (plus rare unrelated
+  collisions) — callers still do their own exact/CaseEqual compare. }
+function ProcChainHead(const name: AnsiString): Integer;
+begin
+  Result := ProcHashHead[NameFoldHash(name)];
+end;
+
 function FindProc(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
   { Exact-case match first — always, and the only path for case-sensitive
-    symbols (C imports, or Pascal in case-sensitive mode). }
-  for i := 0 to ProcCount-1 do
+    symbols (C imports, or Pascal in case-sensitive mode). Hash-chain walk
+    (FIFO = registration order) replaces the full linear scan; same result. }
+  i := ProcChainHead(lo);
+  while i >= 0 do
+  begin
     if Procs[i].Name = lo then begin Result := i; Exit; end;
+    i := ProcHashNext[i];
+  end;
   { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
     First match wins; ambiguity refinement (warn) is future work. External
     (C-import) symbols are excluded: a C linker symbol IS case-sensitive
     (`printf` <> `Printf`), so they match exact-only by default and relax only
-    under {$LAZYCASING ON} below. }
-  for i := 0 to ProcCount-1 do
+    under {$LAZYCASING ON} below. Same chain: folded-name buckets hold every
+    case variant. }
+  i := ProcChainHead(lo);
+  while i >= 0 do
+  begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
        CaseEqual(Procs[i].Name, lo) then
     begin Result := i; Exit; end;
+    i := ProcHashNext[i];
+  end;
   { LAZYCASING fallback: only for C-import symbols (external), only when the
     switch is on, and only when EXACTLY ONE matches case-insensitively. Resolves
     to that proc's exact declared spelling (ELF linkage is unaffected) and warns
@@ -3046,19 +3105,27 @@ end;
 function FindProcInUnit(const name: AnsiString; unitIdx: Integer): Integer;
 var i: Integer;
 begin
-  for i := 0 to ProcCount - 1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
     if (ProcUnitIdx[i] = unitIdx) and (Procs[i].Name = name) then
     begin
       Result := i;
       Exit;
     end;
-  for i := 0 to ProcCount - 1 do
+    i := ProcHashNext[i];
+  end;
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
     if (ProcUnitIdx[i] = unitIdx) and (not ProcCaseSensitive[i]) and
        CaseEqual(Procs[i].Name, name) then
     begin
       Result := i;
       Exit;
     end;
+    i := ProcHashNext[i];
+  end;
   Result := -1;
 end;
 
@@ -3066,13 +3133,17 @@ function HasNonOverloadProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
   Result := False;
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
     if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) and
        not ProcOverloadDirective[i] then
     begin
       Result := True;
       Exit;
     end;
+    i := ProcHashNext[i];
+  end;
 end;
 
 function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
@@ -3189,12 +3260,16 @@ function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
   Result := False;
-  for i := 0 to ProcCount - 1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
+  begin
     if ProcCaseSensitive[i] and (Procs[i].Name = name) then
     begin
       Result := True;
       Exit;
     end;
+    i := ProcHashNext[i];
+  end;
 end;
 
 { Does proc `idx` answer to `name`? Exact always; case-insensitively too for a
@@ -3241,7 +3316,8 @@ begin
     Exit;
   end;
   { Phase 1: Try exact match }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) then
     begin
@@ -3261,10 +3337,12 @@ begin
         end;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   { Phase 1b: Try exact match with return-lifting }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) then
     begin
@@ -3284,6 +3362,7 @@ begin
         end;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   { Phase 1c: a Char argument prefers a string-typed parameter over the ordinal
@@ -3292,7 +3371,8 @@ begin
     an f(string) overload exists (FPC ranks a char literal as a string). Runs
     before the general compatible phase so the string overload wins regardless of
     declaration order; every other arg must still be an exact type match. }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
     begin
@@ -3312,10 +3392,12 @@ begin
         Exit;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   { Phase 2: Try compatible match }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) then
     begin
@@ -3335,10 +3417,12 @@ begin
         end;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   { Phase 2b: Try compatible match with return-lifting }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) then
     begin
@@ -3358,12 +3442,14 @@ begin
         end;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   { Phase 2c: a class argument given to an interface parameter (the implicit
     class->interface coercion). Only fires when the param is a CORBA interface,
     so existing record/class overloads are unaffected. }
-  for i := 0 to ProcCount-1 do
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
     if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
     begin
@@ -3381,6 +3467,7 @@ begin
         Exit;
       end;
     end;
+    i := ProcHashNext[i];
   end;
 
   if not MatchQuiet then
@@ -3388,7 +3475,8 @@ begin
     writeln('Mismatch in MatchProcCall: name = ', name, ', nArgs = ', nArgs);
     for j := 0 to nArgs-1 do
       writeln('  arg[', j, '] = ', Ord(argTypes[j]));
-    for i := 0 to ProcCount-1 do
+    i := ProcChainHead(name);
+    while i >= 0 do
     begin
       if ProcNameMatches(i, name) then
       begin
@@ -3396,6 +3484,7 @@ begin
         for j := 0 to Procs[i].ParamCount-1 do
           writeln('    param[', j, '] = ', Ord(Procs[i].Params[j].TypeKind));
       end;
+      i := ProcHashNext[i];
     end;
   end;
 
@@ -3486,6 +3575,7 @@ begin
   if ProcCount >= MAX_PROCS then Error('too many procedures');
   if nParams > MAX_PROC_PARAMS then Error('too many procedure parameters');
   Procs[ProcCount].Name       := name;
+  ProcHashInsert(ProcCount);
   Procs[ProcCount].IsFunc     := isFunc;
   Procs[ProcCount].RetType    := retType;
   Procs[ProcCount].ParamCount := nParams;
