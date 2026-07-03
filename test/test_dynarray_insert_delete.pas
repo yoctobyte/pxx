@@ -83,6 +83,44 @@ begin
   Chk(28, (Length(r) = 4) and (r[3].x = 0) and (r[3].y = 0));
 end;
 
+{ ---- managed-field record elements: field-walk retain via layout desc ---- }
+type TMRec = record
+  Name: AnsiString;
+  Id: Integer;
+end;
+procedure ManagedRecElems;
+var m: array of TMRec; v: TMRec; k: Integer;
+begin
+  SetLength(m, 4);
+  for k := 0 to 3 do
+  begin
+    m[k].Name := 'n' + Chr(48 + k);   { concat: unique heap handles }
+    m[k].Id := k;
+  end;
+  Delete(m, 1, 2);
+  Chk(31, (Length(m) = 2) and (m[0].Name = 'n0') and (m[1].Name = 'n3') and (m[1].Id = 3));
+  v.Name := 'ins' + 'erted';
+  v.Id := 99;
+  Insert(v, m, 1);
+  Chk(32, (Length(m) = 3) and (m[1].Name = 'inserted') and (m[1].Id = 99));
+  Insert(m[0], m, 3);                  { self-referencing record value }
+  Chk(33, (Length(m) = 4) and (m[3].Name = 'n0') and (m[3].Id = 0));
+  Delete(m, 0, Length(m));
+  Chk(34, Length(m) = 0);
+  { churn: field refcounts must balance across the fresh-temp rebuilds }
+  SetLength(m, 2);
+  m[0].Name := 'x' + 'a'; m[0].Id := 1;
+  m[1].Name := 'y' + 'b'; m[1].Id := 2;
+  for k := 1 to 500 do
+  begin
+    v.Name := 'c' + Chr(48 + (k mod 10));
+    v.Id := k;
+    Insert(v, m, 1);
+    Delete(m, 1, 1);
+  end;
+  Chk(35, (Length(m) = 2) and (m[0].Name = 'xa') and (m[1].Name = 'yb') and (v.Name = 'c0'));
+end;
+
 { ---- set elements: Insert (32-byte memory copy) ---- }
 procedure SetElems;
 var ds: array of TDays; d: TDays;
@@ -182,6 +220,7 @@ begin
   StringForms;
   ExprArgs;
   ManagedElems;
+  ManagedRecElems;
   SetElems;
-  writeln('total ok ', okCount, ' / 30');
+  writeln('total ok ', okCount, ' / 35');
 end.

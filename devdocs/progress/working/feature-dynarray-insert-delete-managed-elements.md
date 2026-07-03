@@ -103,3 +103,40 @@ IRC=recId/-1, IRIVal=depth·baseKind) with per-backend desc load + helper
 call — 6 backend hookups; or (b) a generic "data-ref constant" IR node
 usable as a call argument, which would also unlock other descriptor-passing
 helpers from IR. (b) is the better investment.
+
+## Progress — 2026-07-03, managed-RECORD elements LANDED (+ generic IR_CONST_DATA)
+
+The blocker fell to a small generic node: **IR_CONST_DATA(68)** — IRIVal =
+Data[] offset OR a negative dataref sentinel, yields the absolute data
+address in the accumulator; implemented in all 6 backends (one EmitLoadDataRef
+line each) + added to every 32-bit walker's operand skip list (the 386-walker
+double-execute landmine). Any IR-level call can now pass a record layout
+descriptor.
+
+- **Delete**: retain block extended — managed-field record elements call
+  PXXDynArrayRetainImmediate(dest, newLen, depth=1, baseKind=3,
+  IR_CONST_DATA(-(RECORD_RTTI_DATAREF_BASE+ci))) — the existing helper's
+  record field-walk does the rest.
+- **Insert**: kept-elements retain identically (the zeroed gap is nil-field =
+  no-op for the walk); the gap store switches from raw IR_COPY_REC to
+  **IR_COPY_REC_MANAGED** (retain src fields, release dest — fresh zeros, nil
+  safe — then bulk copy), so the inserted value's field refs are owned by the
+  new buffer.
+- Parser gates relaxed (frozen-string + nested still rejected cleanly).
+- Descriptor availability: every managed-field record gets a layout blob
+  unconditionally (rtti_emit pass), sentinel resolves via UClsRTTIOff.
+
+Verified: test_dynarray_insert_delete.pas grown 30 -> 35 cases (managed-record
+delete/insert/self-referencing insert/delete-all/500-op churn), FPC-output
+identical; standalone 100k-op churn RSS flat at 264KB; cross-checked
+i386/arm32/aarch64 under qemu (identical output). riscv32: pre-existing
+envelope — builtinheap defines PXX_ESP for ALL riscv32 (hosted too), so
+PXXDynArrayRetainImmediate doesn't exist there and even AnsiString-element
+Delete already errored identically; not a regression (candidate follow-up:
+split PXX_ESP into arch vs profile in builtinheap).
+
+**Still open**: nested `array of array of T` elements, frozen-string
+elements, rvalue record/set insert values, non-IDENT targets (obj.field),
+FPC array-splice Insert form. (The riscv32/xtensa SymIsHiddenArgTemp
+prologue nil-init listed as item 5 landed separately in the v155-era
+riscv32 bring-up — both walkers have the loop now.)

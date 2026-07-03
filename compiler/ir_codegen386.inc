@@ -870,6 +870,12 @@ begin
         EmitB($B8); EmitDataRef(Strs[si].Offset);    { mov eax, str_struct_addr }
       end;
 
+    IR_CONST_DATA:
+      begin
+        { Absolute data address (sentinel-resolvable), see the x86-64 case. }
+        EmitB($B8); EmitDataRef(Integer(IRIVal[node]));
+      end;
+
     IR_LOAD_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'load');
@@ -3860,7 +3866,7 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
-      IR_ATOMIC, IR_CLONE, { value-producing: emitted by the consuming store, like x86-64 }
+      IR_ATOMIC, IR_CLONE, IR_CONST_DATA, { value-producing: emitted by the consuming store, like x86-64 }
       IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else

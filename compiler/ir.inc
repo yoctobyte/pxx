@@ -100,6 +100,7 @@ begin
     IR_ATOMIC: Result := 'atomic';
     IR_YIELD: Result := 'yield';
     IR_CALL_IND: Result := 'call_ind';
+    IR_CONST_DATA: Result := 'const_data';
   else
     Result := 'unknown';
   end;
@@ -426,6 +427,9 @@ begin
       end;
 
       IR_IO_LOCK, IR_IO_UNLOCK:
+        begin end;
+
+      IR_CONST_DATA:
         begin end;
 
     else
@@ -2532,7 +2536,8 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         deleted range gains none, so the old-buffer release frees exactly those. Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if dcElemTk = tyAnsiString then
+      if (dcElemTk = tyAnsiString) or
+         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
@@ -2544,12 +2549,29 @@ begin
         argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
                      -1, -1, 0, Ord(tyInteger));
         IRB[last] := argNode; last := argNode;                 { depth = 1 }
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
-                     -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { baseKind = 1 (string) }
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                     -1, -1, 0, Ord(tyPointer));
-        IRB[last] := argNode;                                  { baseRecDesc = nil }
+        if dcElemTk = tyAnsiString then
+        begin
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else
+        begin
+          { Managed-field record elements: field-walk retain via the record's
+            layout descriptor (IR_CONST_DATA yields the blob's data address —
+            the sentinel resolves to UClsRTTIOff at link fixup). }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
+          argNode := IRAppend(IR_ARG,
+                       IRAppend(IR_CONST_DATA, -1, -1, -1,
+                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = layout blob }
+        end;
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
@@ -2670,7 +2692,8 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         still-nil gap is a no-op for the retain walk (the ARC-aware gap store below adds the inserted value's ref itself). Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if dcElemTk = tyAnsiString then
+      if (dcElemTk = tyAnsiString) or
+         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
@@ -2682,12 +2705,30 @@ begin
         argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
                      -1, -1, 0, Ord(tyInteger));
         IRB[last] := argNode; last := argNode;                 { depth = 1 }
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
-                     -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { baseKind = 1 (string) }
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                     -1, -1, 0, Ord(tyPointer));
-        IRB[last] := argNode;                                  { baseRecDesc = nil }
+        if dcElemTk = tyAnsiString then
+        begin
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else
+        begin
+          { Managed-field record elements — see AN_DYN_DELETE. The still-zero
+            gap record is nil-field for the walk (retains nothing there); the
+            IR_COPY_REC_MANAGED gap store below adds the inserted value's own
+            field refs. }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
+          argNode := IRAppend(IR_ARG,
+                       IRAppend(IR_CONST_DATA, -1, -1, -1,
+                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = layout blob }
+        end;
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
@@ -2697,7 +2738,13 @@ begin
         value for the array, releases the nil gap). Records/sets: raw
         element-size memory copy from the captured address (non-managed only,
         parser-enforced). }
-      if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
+      if (dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec) then
+        { Managed-field record: ARC-correct copy — retain the source's fields,
+          release the destination's (the gap is fresh zeros, so nil-safe), then
+          bulk-copy. The retain is what the new buffer's ownership needs. }
+        IRAppend(IR_COPY_REC_MANAGED, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), dcElemRec, dcElemSz, Ord(tyRecord))
+      else if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
         IRAppend(IR_COPY_REC, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
           IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), -1, dcElemSz, Ord(tyRecord))
       else

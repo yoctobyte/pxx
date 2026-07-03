@@ -609,6 +609,10 @@ begin
         EmitLoadDataRefRISCV32(reg_a0, Strs[si].Offset);
       end;
 
+    IR_CONST_DATA:
+      { Absolute data address (sentinel-resolvable), see the x86-64 case. }
+      EmitLoadDataRefRISCV32(reg_a0, Integer(IRIVal[node]));
+
     IR_ASM:
       begin
         { Inline asm block: replay the parse-time-captured text lines
@@ -2140,7 +2144,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
+      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
 
       else

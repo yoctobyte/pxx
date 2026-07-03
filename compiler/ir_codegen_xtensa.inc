@@ -834,6 +834,10 @@ begin
         EmitLoadDataRefXtensa(reg_xtensa_a2, Strs[si].Offset);
       end;
 
+    IR_CONST_DATA:
+      { Absolute data address (sentinel-resolvable), see the x86-64 case. }
+      EmitLoadDataRefXtensa(reg_xtensa_a2, Integer(IRIVal[node]));
+
     IR_LOAD_SYM:
       if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
         EmitLoadVar64Xtensa(IRA[node])
@@ -2105,7 +2109,7 @@ begin
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
         end;
 
-      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
+      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK, IR_CONST_DATA,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
 

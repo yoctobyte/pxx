@@ -415,7 +415,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_div_zero_re20026 mod || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
 	# dynamic-array Insert/Delete intrinsics (FPC clamp semantics, fresh-temp refcount balance)
 	./$(COMPILER) test/test_dynarray_insert_delete.pas /tmp/test_dynarray_insert_delete26
-	test "$$(/tmp/test_dynarray_insert_delete26 | tail -1)" = "total ok 30 / 30"
+	test "$$(/tmp/test_dynarray_insert_delete26 | tail -1)" = "total ok 35 / 35"
 	# frozen-string Result is per-call (reentrant) on direct/virtual/indirect calls
 	./$(COMPILER) test/test_frozen_string_reentrant.pas /tmp/test_frozen_string_reentrant26
 	test "$$(/tmp/test_frozen_string_reentrant26 | tail -1)" = "total ok 4 / 4"

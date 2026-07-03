@@ -1616,6 +1616,13 @@ begin
         EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
       end;
 
+    IR_CONST_DATA:
+      begin
+        { Absolute data address; IRIVal may be a negative dataref sentinel
+          (record-desc/classref), resolved by the pre-link fixup pass. }
+        EmitB($48); EmitB($B8); EmitDataRef(Integer(IRIVal[node]));
+      end;
+
     IR_IO_LOCK:
       IREmitCodeCall(IOLockAddr);
 

@@ -9158,15 +9158,14 @@ begin
             element types only (a raw byte copy shares element handles with
             the OLD buffer, whose element-aware release would dangle them). }
           i := ASTIVal[valNode];
-          { AnsiString elements are supported: the lowering retains the kept
-            elements in the fresh buffer to balance the old buffer's
+          { AnsiString and managed-field record elements are supported: the
+            lowering retains the kept elements in the fresh buffer (records:
+            field-walk via the layout descriptor) to balance the old buffer's
             element-aware release (feature-dynarray-insert-delete-managed-
-            elements). Frozen strings / managed records / nested arrays are
-            still deferred. }
+            elements). Frozen strings / nested arrays are still deferred. }
           if (Syms[i].ElemType = tyString) or
-             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
-             ((Syms[i].ElemType = tyRecord) and RecordHasManagedFields(Syms[i].ElemRecName)) then
-            Error('Delete: frozen-string, managed-record or nested element type not yet supported for dynamic-array Delete');
+             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) then
+            Error('Delete: frozen-string or nested element type not yet supported for dynamic-array Delete');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
           Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
           Expect(tkRParen, ')');
@@ -9218,14 +9217,14 @@ begin
             restrictions as dynamic-array Delete above; records/sets need a
             memory store, deferred with them). }
           i := ASTIVal[valNode];
-          { AnsiString elements supported (see Delete above). Non-managed
-            record and set elements too (memory-copied into the gap; the
-            value must be addressable). Frozen strings / managed records /
-            nested arrays still deferred. }
+          { AnsiString and managed-field record elements supported (see Delete
+            above; the managed-record gap store is an ARC-correct
+            IR_COPY_REC_MANAGED). Non-managed record and set elements too
+            (memory-copied into the gap; the value must be addressable).
+            Frozen strings / nested arrays still deferred. }
           if (Syms[i].ElemType = tyString) or
-             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) or
-             ((Syms[i].ElemType = tyRecord) and RecordHasManagedFields(Syms[i].ElemRecName)) then
-            Error('Insert: frozen-string, managed-record or nested element type not yet supported for dynamic-array Insert');
+             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) then
+            Error('Insert: frozen-string or nested element type not yet supported for dynamic-array Insert');
           if ((Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet)) and
              not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
             Error('Insert: record/set value must be a variable, field, element or dereference (addressable)');
