@@ -446,6 +446,7 @@ begin
 end;
 
 
+{$ifndef PXX_ESP_BARE}
 { ===== Console input (read/readln) for the cross targets =====
   x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
   BSS_LINE_* scratch); the 32-bit/cross backends lower IR_READLINE /
@@ -728,6 +729,8 @@ begin
   if len > 0 then r := PXXSysWrite(1, Int64(p), len);
 end;
 
+
+{$endif}
 
 {$ifndef PXX_ESP}
 { Per-target syscall wrappers for the file-load helper. AArch64 has no plain

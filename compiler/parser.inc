@@ -16369,7 +16369,7 @@ begin
     builtinheap) so hosted riscv32 programs with floats (sysutils pulls float
     code) do not each need a manual `uses softfloat`. FIRST — the builtinheap/
     builtin float bodies compile against the kernels. }
-  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+  if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) and
      (needHeapUnit or needsBuiltin) then
     ParseUsesUnit('softfloat');
   if needHeapUnit then ParseUsesUnit('builtinheap');
