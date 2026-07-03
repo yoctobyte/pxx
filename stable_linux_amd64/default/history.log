@@ -156,3 +156,4 @@
 2026-07-03T05:36:09Z  v156  f3d124153d67ff5a892ba4e791443009cc0676d2bb7d79ecc87307a76bf53d64  c2e19f4d06f16ff64d023b7401b5d69a02178d10  fix(esp): keep bare images lean — no softfloat auto-pull, console helpers gated out
 2026-07-03T06:59:08Z  v157  005296e5104d10a79914d47d3c37cbfaf514b54afca0e9cc58d5eb4e23e9b7ab  7ff2e12368e974f47b46c2c9b726b2eb0fdd0f55  feat(asm): inline asm blocks on aarch64, arm32, i386 (feature-inline-asm-multi-arch legs 2-4)
 2026-07-03T07:27:44Z  v158  a0276b76dd3ebdb0e2e8629e9762035ae5dc856cf00a39b78a064be9e93247d6  6f21f88dd3040babb2add27308093b26bcfbd78a  feat(asm): .asm source frontend gains aarch64, arm32, i386 (engine-backed legs)
+2026-07-03T09:24:23Z  v159  b37059f6494b6847eee89eb85fd3104e3c122e738c9752335f72f87cd6ec03d4  fd9abfd3b27ad779326b286e35b3a8cc90484de7  feat(threads): M1 remainder — stack guard page + i386 clone/atomics mechanism
