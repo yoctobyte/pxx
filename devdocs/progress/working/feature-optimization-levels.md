@@ -259,7 +259,7 @@ track once we trust the pass battery — revisit after 2-3 more passes.
   benefit). Constant loads are pervasive so the byte savings compound across
   the whole binary.
 
-## Store-reload elimination (queued pass 2 in handover) — DEFERRED, needs liveness scaffold
+## Store-reload elimination (queued pass 2 in handover) — DEFERRED -> [[feature-opt-store-reload-elimination]]
 
 Investigated the IR structure (flat post-order array; IR_BLOCK is a no-op range
 marker; a driver loop emits statement roots and recurses for operands). The
