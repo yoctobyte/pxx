@@ -88,3 +88,18 @@ suite green; self-host byte-identical; pinned v142.
 **Still open**: managed-record / nested-array elements, frozen-string
 elements, rvalue record/set insert values, non-IDENT targets (obj.field),
 FPC array-splice Insert form, riscv32/xtensa SymIsHiddenArgTemp nil-init.
+
+## Analysis note — 2026-07-03 (Track A, scoping only)
+
+Why managed-RECORD / nested elements are the hard remainder: the retain walk
+needs the record layout DESCRIPTOR's data address as a runtime value, and no
+generic IR node yields one — the AnsiString slice got away with
+`PXXDynArrayRetainImmediate(..., baseKind=1, desc=nil)` precisely because
+strings need no descriptor. Existing desc consumers (IR_SETLEN_DYN,
+IR_COPY_REC_MANAGED) carry the REC ID in a node field and each backend loads
+`@data -(RECORD_RTTI_DATAREF_BASE + ci)` itself. So the clean path is either
+(a) a small new IR op (e.g. IR_DYN_RETAIN_IMM: IRA=destData, IRB=len,
+IRC=recId/-1, IRIVal=depth·baseKind) with per-backend desc load + helper
+call — 6 backend hookups; or (b) a generic "data-ref constant" IR node
+usable as a call argument, which would also unlock other descriptor-passing
+helpers from IR. (b) is the better investment.
