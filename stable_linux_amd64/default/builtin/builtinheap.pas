@@ -135,6 +135,15 @@ var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
   FreeList : Int64;   { head of the free list (payload address), 0 = empty }
+{$ifdef PXX_TS_SOFTLOCK}
+  { --threadsafe on targets without x86-64's hand-emitted lock blobs (i386):
+    a userspace spinlock guarding the allocator state (FreeList/HeapPtr/
+    HeapEnd), taken INSIDE PXXAlloc/PXXFree so every entry — a codegen'd call
+    site or another helper's internal allocation — is covered. Refcount ops
+    use __pxxatomic_* instead of the lock (see PXXStrIncRef & friends).
+    BSS-zeroed = free. }
+  PXXHeapSpin : Integer;
+{$endif}
   { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
     handle) returns its address so the C boundary sees a valid empty C string, as
     FPC guarantees — never a nil dereference. BSS-zeroed, so it is always #0. }
@@ -182,7 +191,15 @@ end;
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore: Int64;
+{$endif}
 begin
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := 0;
+  while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
+    tsIgnore := tsIgnore + 1;
+{$endif}
   if size <= 0 then size := 8;
   size := ((size + 7) div 8) * 8;          { round up to 8 }
 
@@ -206,6 +223,9 @@ begin
         i := i + 8;
       end;
       Result := Pointer(cur);
+{$ifdef PXX_TS_SOFTLOCK}
+      PXXHeapSpin := 0;
+{$endif}
       Exit;
     end;
     prev := cur;
@@ -225,16 +245,30 @@ begin
   HeapPtr := HeapPtr + need;
   PWord(base)^ := size;                     { size header }
   Result := Pointer(base + 8);              { payload }
+{$ifdef PXX_TS_SOFTLOCK}
+  PXXHeapSpin := 0;
+{$endif}
 end;
 
 procedure PXXFree(p: Pointer);
 var
   addr: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore: Int64;
+{$endif}
 begin
   addr := Int64(p);
   if addr = 0 then Exit;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := 0;
+  while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
+    tsIgnore := tsIgnore + 1;
+{$endif}
   PWord(addr)^ := FreeList;                 { next link in the payload }
   FreeList := addr;
+{$ifdef PXX_TS_SOFTLOCK}
+  PXXHeapSpin := 0;
+{$endif}
 end;
 
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
@@ -820,10 +854,19 @@ end;
   p-16) when the count reaches zero. nil is ignored. }
 procedure PXXStrIncRef(p: Pointer);
 var base: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+    tsIgnore: Int64;
+{$endif}
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  { threadsafe: atomic increment of the low refcount word (the count never
+    approaches 2^32, so the 8-byte header's high dword stays zero). }
+  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+{$else}
   PWord(base)^ := PWord(base)^ + 1;
+{$endif}
 end;
 
 procedure PXXStrDecRef(p: Pointer);
@@ -831,8 +874,12 @@ var base, rc: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+{$else}
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
+{$endif}
   if rc = 0 then PXXFree(Pointer(base));
 end;
 
@@ -955,10 +1002,17 @@ end;
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
 var base: Int64;
+{$ifdef PXX_TS_SOFTLOCK}
+    tsIgnore: Int64;
+{$endif}
 begin
   if p = nil then Exit;
   base := Int64(p) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  tsIgnore := __pxxatomic_add(Pointer(base), 1);
+{$else}
   PWord(base)^ := PWord(base)^ + 1;
+{$endif}
 end;
 
 procedure PXXDynArrayReleaseDepth(arrData: Pointer; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
@@ -970,8 +1024,12 @@ var
 begin
   if arrData = nil then Exit;
   base := Int64(arrData) - 16;
+{$ifdef PXX_TS_SOFTLOCK}
+  rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
+{$else}
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
+{$endif}
   if rc = 0 then
   begin
     len := PWord(Int64(arrData) - 8)^;
