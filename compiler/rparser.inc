@@ -64,6 +64,7 @@ function RParseExpr: Integer; forward;
 function RParseBlock: Integer; forward;
 function RParseStatement: Integer; forward;
 function RParseIf: Integer; forward;
+function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
 
 const
   RVAR_UNIT   = 0;
@@ -135,6 +136,120 @@ begin
       Result := i;
       Exit;
     end;
+end;
+
+{ ===== traits / impls / generic functions (feature-rust-generics-trait-bounds,
+  sub-ticket 3/12) =====
+
+  Same reuse-don't-extend-shared-internals approach as sub-ticket 2: no new
+  AST node, no touch of the existing Pascal GenericFuncs/Specializations
+  machinery in defs.inc (that pipeline is built around Pascal's explicit
+  `specialize T<Concrete>` surface syntax and its own materialization path;
+  Rust's generics are inferred-at-call-site, a different enough shape that a
+  small private one made more sense than forcing a fit).
+
+  - A trait is just a recorded name (RTraits) — "not a general
+    trait-coherence solver": bound checking is pure membership in RImpls,
+    it does not verify an impl actually provides every method a trait
+    declares.
+  - impl Type { fn m(&self, ...) { .. } } / impl Trait for Type { .. }:
+    methods are ordinary functions with a mangled name ("Type::m",
+    RegisterProc'd two-pass exactly like free functions) and a hidden
+    `self` parameter passed as a tyRecord pointer (the existing
+    Pascal var-record-parameter ABI already passes any tyRecord by address
+    — see ParamSize's TARGET_PTR_SIZE branch — so `&self`/`self` field
+    reads/writes need no new codegen). `impl Trait for Type` additionally
+    records (TypeCi, TraitName) in RImpls.
+  - A generic fn (`fn f<T: Bound>(x: T) -> T`) is never compiled directly:
+    its token range is buffered (RGenericFuncs), and each call site
+    triggers specialization by copying that token range to the end of the
+    shared Tokens[] buffer with every occurrence of `T` textually replaced
+    by the concrete type name, then compiling that copy exactly like a
+    normal top-level fn (mangled "f$Point"), memoized so a second call with
+    the same concrete type reuses the specialization via a plain FindProc.
+  - Deliberate narrowing, documented not dropped: generic FUNCTIONS only,
+    not generic STRUCTS (`struct Box<T>`) — a struct specialization needs a
+    whole new UClass per concrete type, a materially separate feature axis
+    from function specialization; T is inferred from the first parameter
+    only (no cross-checking against other T-typed params/return — they are
+    textually identical after substitution, so they can't disagree); one
+    type parameter per generic fn (no `<T, U>`). }
+
+const
+  R_MAX_TRAITS = 256;
+  R_MAX_IMPLS = 1024;
+  R_MAX_GENERIC_FUNCS = 64;
+  R_MAX_BOUNDS = 4;
+
+type
+  TRImpl = record
+    TypeCi: Integer;
+    TraitName: AnsiString;
+  end;
+  TRGenericFunc = record
+    Name, ParamName: AnsiString;
+    TokStart, TokCount: Integer;
+    { literal 3: record-field array bounds can't use R_MAX_BOUNDS-1 under
+      PXX self-host (same const-expr gap as TProc.Params — see defs.inc);
+      keep in sync with R_MAX_BOUNDS = 4. }
+    Bounds: array[0..3] of AnsiString;
+    BoundCount: Integer;
+  end;
+
+var
+  RTraits: array[0..R_MAX_TRAITS-1] of AnsiString;
+  RTraitCount: Integer;
+  RImpls: array[0..R_MAX_IMPLS-1] of TRImpl;
+  RImplCount: Integer;
+  RGenericFuncs: array[0..R_MAX_GENERIC_FUNCS-1] of TRGenericFunc;
+  RGenericFuncCount: Integer;
+
+function RFindTrait(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to RTraitCount - 1 do
+    if CaseEqual(RTraits[i], name) then begin Result := i; Exit; end;
+end;
+
+function RTypeImplementsTrait(ci: Integer; const traitName: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to RImplCount - 1 do
+    if (RImpls[i].TypeCi = ci) and CaseEqual(RImpls[i].TraitName, traitName) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function RFindGenericFunc(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to RGenericFuncCount - 1 do
+    if CaseEqual(RGenericFuncs[i].Name, name) then begin Result := i; Exit; end;
+end;
+
+function RTypeNameOf(ci: Integer): AnsiString;
+begin
+  Result := GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci]);
+end;
+
+{ Consumes an already-open `<...>` clause via CurTok/Next (CurTok must be
+  tkLt on entry); leaves CurTok on the token after the matching `>`. }
+procedure RSkipAngleClause;
+var depth: Integer;
+begin
+  depth := 1; Next;
+  while depth > 0 do
+  begin
+    if CurTok.Kind = tkLt then Inc(depth)
+    else if CurTok.Kind = tkGt then Dec(depth);
+    if depth > 0 then Next;
+  end;
+  Next; { consume the matching > }
 end;
 
 function RSeqAppend(head, stmt: Integer): Integer;
@@ -215,8 +330,41 @@ begin
   Result := node;
 end;
 
+{ Concrete type name for a generic-function call-site argument (used as the
+  specialization key / substituted into the buffered generic body). Scalar
+  types map back to their Rust spelling; a struct/enum argument must be a
+  plain variable (same narrowing as everywhere else a static record type is
+  needed without a general "resolve this AST node's type" helper). }
+function RConcreteTypeNameForArg(argNode: Integer): AnsiString;
+begin
+  case IntToTypeKind(ASTTk[argNode]) of
+    tyInteger: Result := 'i32';
+    tyInt64: Result := 'i64';
+    tyUInt32: Result := 'u32';
+    tyUInt64: Result := 'u64';
+    tyNativeInt: Result := 'isize';
+    tyNativeUInt: Result := 'usize';
+    tySingle: Result := 'f32';
+    tyDouble: Result := 'f64';
+    tyBoolean: Result := 'bool';
+    tyChar: Result := 'char';
+    tyRecord:
+    begin
+      if ASTKind[argNode] <> AN_IDENT then
+        Error('Rust: a struct/enum argument to a generic function must be a plain variable for now');
+      Result := RTypeNameOf(Syms[ASTIVal[argNode]].RecName - REC_UCLASS_BASE);
+    end;
+    else
+    begin
+      Error('Rust: unsupported argument type for generic function type inference');
+      Result := '';
+    end;
+  end;
+end;
+
 function RParsePrimary: Integer;
-var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx: Integer; name: AnsiString;
+var node, fieldNode, symIdx, procIdx, argNode, lastArg, fTokIdx, gfi, ci: Integer;
+    name, methodName, fullName: AnsiString;
 begin
   case CurTok.Kind of
     tkInteger:
@@ -249,7 +397,31 @@ begin
       if CurTok.Kind = tkLParen then
       begin
         procIdx := FindProc(name);
-        if procIdx < 0 then Error('Rust: call to undefined function ' + name);
+        if procIdx < 0 then
+        begin
+          gfi := RFindGenericFunc(name);
+          if gfi < 0 then Error('Rust: call to undefined function ' + name);
+          Next; { ( }
+          if CurTok.Kind = tkRParen then
+            Error('Rust: generic function ' + name + ' needs an argument to infer its type parameter');
+          argNode := RParseExpr; { first arg, parsed once, used both to infer T and as arg 0 }
+          procIdx := RSpecializeGenericFn(gfi, RConcreteTypeNameForArg(argNode));
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTTk[node] := Ord(Procs[procIdx].RetType);
+          lastArg := AllocNode(AN_ARG);
+          ASTLeft[lastArg] := argNode; ASTRight[lastArg] := -1;
+          ASTLeft[node] := lastArg;
+          while Eat(tkComma) do
+          begin
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+            ASTRight[lastArg] := argNode; lastArg := argNode;
+          end;
+          Expect(tkRParen, ')');
+          Result := node;
+          Exit;
+        end;
         Next;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
@@ -273,7 +445,36 @@ begin
       if CurTok.Kind = tkDot then
       begin
         Next;
-        if CurTok.Kind <> tkIdent then Error('Rust: expected field name after .');
+        if CurTok.Kind <> tkIdent then Error('Rust: expected field or method name after .');
+        if Tokens[TokPos].Kind = tkLParen then
+        begin
+          { method call: p.method(args) — self passed as &p (address); the
+            existing by-reference record-parameter ABI (see ParamSize) takes
+            the address of a plain identifier argument automatically, same
+            as any Pascal `var` record parameter. }
+          methodName := CurTok.SVal;
+          ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+          fullName := RTypeNameOf(ci) + '::' + methodName;
+          procIdx := FindProc(fullName);
+          if procIdx < 0 then Error('Rust: ' + RTypeNameOf(ci) + ' has no method ' + methodName);
+          Next; Next; { method name, ( }
+          fieldNode := AllocNode(AN_CALL);
+          ASTIVal[fieldNode] := procIdx;
+          ASTTk[fieldNode] := Ord(Procs[procIdx].RetType);
+          lastArg := AllocNode(AN_ARG);
+          ASTLeft[lastArg] := node; ASTRight[lastArg] := -1;
+          ASTLeft[fieldNode] := lastArg;
+          if CurTok.Kind <> tkRParen then
+            repeat
+              argNode := AllocNode(AN_ARG);
+              ASTLeft[argNode] := RParseExpr; ASTRight[argNode] := -1;
+              ASTRight[lastArg] := argNode; lastArg := argNode;
+            until not Eat(tkComma);
+          Expect(tkRParen, ')');
+          node := fieldNode;
+          Result := node;
+          Exit;
+        end;
         fTokIdx := TokPos - 1;
         fieldNode := AllocNode(AN_FIELD);
         ASTLeft[fieldNode] := node;
@@ -969,10 +1170,66 @@ begin
   end;
 end;
 
-procedure RRegisterFnSignatures;
-var i, j, depth, nparams: Integer; name: AnsiString;
+{ Registers the fn signature starting at Tokens[i] (must be tkFn); returns
+  the index just past it (the body's opening brace). Tolerates an optional
+  <...> clause right after the name (present, and already
+  concrete-substituted, on a specialized generic-fn copy — see
+  RSpecializeGenericFn; never present on an ordinary top-level fn, so this
+  is a no-op there). Shared by the main prescan below and by generic
+  specialization, so there is one signature-parsing implementation, not two. }
+function RRegisterFnSignatureAt(i: Integer): Integer;
+var j, depth, nparams, procIdx, k: Integer; name: AnsiString;
     pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
     retType: TTypeKind;
+begin
+  name := GetTokenStr(i + 1);
+  j := i + 2;
+  if Tokens[j].Kind = tkLt then
+  begin
+    depth := 1; Inc(j);
+    while depth > 0 do
+    begin
+      if Tokens[j].Kind = tkLt then Inc(depth)
+      else if Tokens[j].Kind = tkGt then Dec(depth);
+      Inc(j);
+    end;
+  end;
+  if Tokens[j].Kind <> tkLParen then Error('Rust: expected ( after function name ' + name);
+  Inc(j); nparams := 0;
+  while Tokens[j].Kind <> tkRParen do
+  begin
+    if Tokens[j].Kind = tkMut then Inc(j);
+    if nparams >= 4 then Error('Rust: too many parameters (skeleton limit is 4)');
+    if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + name);
+    pnames[nparams] := GetTokenStr(j); Inc(j);
+    if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
+    Inc(j);
+    if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
+    { struct/enum params allowed (always passed by address, same as self —
+      see RParseTopLevelFn/RRegisterImpls); struct RETURN values stay out of
+      scope, so the return type below still passes allowStruct=False. }
+    ptypes[nparams] := RTypeKindFromName(GetTokenStr(j), True);
+    Inc(j);
+    Inc(nparams);
+    if Tokens[j].Kind = tkComma then Inc(j);
+  end;
+  Inc(j); { consume ) }
+  retType := tyInteger; { Rust's () return; unused Result slot, same trick C's void uses }
+  if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
+  begin
+    j := j + 2;
+    if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
+    retType := RTypeKindFromName(GetTokenStr(j), False);
+    Inc(j);
+  end;
+  procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
+  for k := 0 to nparams - 1 do
+    if ptypes[k] = tyRecord then Procs[procIdx].Params[k].IsRef := True;
+  Result := j;
+end;
+
+procedure RRegisterFnSignatures;
+var i, depth: Integer;
 begin
   depth := 0; i := 0;
   while i < MainProgramTokCount do
@@ -981,32 +1238,198 @@ begin
     else if Tokens[i].Kind = tkEnd then Dec(depth)
     else if (depth = 0) and (Tokens[i].Kind = tkFn) and
             (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkLParen) then
+      RRegisterFnSignatureAt(i);
+    Inc(i);
+  end;
+end;
+
+{ `trait Name { fn sig(&self, ...) -> RetType; ... }` — signature-only
+  methods (no bodies, no nested braces), so a flat scan to the matching
+  closing brace is enough. Only the trait's NAME is recorded (RTraits): bound-checking is
+  pure (TypeCi, TraitName) membership in RImpls, not method-signature
+  verification (see the file-header note — not a coherence solver). }
+procedure RRegisterTraits;
+var i, j: Integer;
+begin
+  i := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'trait') and
+       (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkBegin) then
     begin
-      name := GetTokenStr(i + 1);
-      j := i + 3; nparams := 0;
-      while Tokens[j].Kind <> tkRParen do
+      if RTraitCount >= R_MAX_TRAITS then Error('Rust: too many traits');
+      RTraits[RTraitCount] := GetTokenStr(i + 1);
+      Inc(RTraitCount);
+      j := i + 3;
+      while Tokens[j].Kind <> tkEnd do Inc(j);
+    end;
+    Inc(i);
+  end;
+end;
+
+{ `impl [Trait for] Type { fn method(&self, ...) -> RetType { .. } ... }`.
+  Each method becomes an ordinary RegisterProc'd function named
+  "Type::method" with `self` prepended as param 0 (type tyRecord — always
+  pointer-passed under this ABI regardless of the record's own size, see
+  ParamSize; no new codegen needed for field access through it). An
+  `impl Trait for Type` additionally records (TypeCi, TraitName) in RImpls. }
+procedure RRegisterImpls;
+var i, j, ci, nparams, procIdx: Integer;
+    typeName, traitName, methodName, fullName: AnsiString;
+    pnamesFull: array[0..3] of AnsiString; ptypesFull: array[0..3] of TTypeKind;
+    retType: TTypeKind; hasTrait: Boolean;
+begin
+  i := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'impl') then
+    begin
+      hasTrait := False; traitName := '';
+      j := i + 1;
+      if (Tokens[j].Kind = tkIdent) and (Tokens[j + 1].Kind = tkIdent) and
+         (GetTokenStr(j + 1) = 'for') then
       begin
-        if Tokens[j].Kind = tkMut then Inc(j);
-        if nparams >= 4 then Error('Rust: too many parameters (skeleton limit is 4)');
-        if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + name);
-        pnames[nparams] := GetTokenStr(j); Inc(j);
-        if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
-        Inc(j);
-        if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
-        ptypes[nparams] := RTypeKindFromName(GetTokenStr(j), False);
-        Inc(j);
-        Inc(nparams);
-        if Tokens[j].Kind = tkComma then Inc(j);
-      end;
-      Inc(j); { consume ) }
-      retType := tyInteger; { Rust's () return; unused Result slot, same trick C's void uses }
-      if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
-      begin
+        traitName := GetTokenStr(j);
+        if RFindTrait(traitName) < 0 then Error('Rust: unknown trait ' + traitName);
+        hasTrait := True;
         j := j + 2;
-        if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
-        retType := RTypeKindFromName(GetTokenStr(j), False);
       end;
-      RegisterProc(name, True, retType, nparams, pnames, ptypes);
+      if Tokens[j].Kind <> tkIdent then Error('Rust: expected type name after impl');
+      typeName := GetTokenStr(j);
+      ci := FindUClass(typeName);
+      if ci < 0 then Error('Rust: impl for unknown type ' + typeName);
+      Inc(j);
+      if Tokens[j].Kind <> tkBegin then Error('Rust: expected { after impl ' + typeName);
+      if hasTrait then
+      begin
+        if RImplCount >= R_MAX_IMPLS then Error('Rust: too many impls');
+        RImpls[RImplCount].TypeCi := ci;
+        RImpls[RImplCount].TraitName := traitName;
+        Inc(RImplCount);
+      end;
+      Inc(j);
+      while Tokens[j].Kind <> tkEnd do
+      begin
+        if Tokens[j].Kind <> tkFn then Error('Rust: expected fn in impl block for ' + typeName);
+        Inc(j);
+        if Tokens[j].Kind <> tkIdent then Error('Rust: expected method name in impl ' + typeName);
+        methodName := GetTokenStr(j); Inc(j);
+        if Tokens[j].Kind <> tkLParen then Error('Rust: expected ( after method name ' + methodName);
+        Inc(j);
+        if Tokens[j].Kind = tkAmp then Inc(j);
+        if (Tokens[j].Kind <> tkIdent) or (GetTokenStr(j) <> 'self') then
+          Error('Rust: expected self as the first parameter of ' + methodName + ' (skeleton: no static/associated fns)');
+        Inc(j);
+        if Tokens[j].Kind = tkComma then Inc(j);
+        pnamesFull[0] := 'self'; ptypesFull[0] := tyRecord;
+        nparams := 0;
+        while Tokens[j].Kind <> tkRParen do
+        begin
+          if Tokens[j].Kind = tkMut then Inc(j);
+          if nparams >= 3 then Error('Rust: too many parameters (skeleton limit is 3 + self)');
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + methodName);
+          pnamesFull[nparams + 1] := GetTokenStr(j); Inc(j);
+          if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
+          Inc(j);
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
+          ptypesFull[nparams + 1] := RTypeKindFromName(GetTokenStr(j), False);
+          Inc(j);
+          Inc(nparams);
+          if Tokens[j].Kind = tkComma then Inc(j);
+        end;
+        Inc(j); { consume ) }
+        retType := tyInteger;
+        if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then
+        begin
+          j := j + 2;
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected return type after ->');
+          retType := RTypeKindFromName(GetTokenStr(j), False);
+          Inc(j);
+        end;
+        fullName := typeName + '::' + methodName;
+        procIdx := RegisterProc(fullName, True, retType, nparams + 1, pnamesFull, ptypesFull);
+        { RegisterProc always defaults Params[].IsRef to False — self is
+          always passed by address (see the file-header note), so this must
+          be set explicitly or the caller passes self by raw value while the
+          callee's AllocParam(isRef=True) dereferences it as a pointer,
+          reading garbage / segfaulting (found via testing, not by inspection). }
+        Procs[procIdx].Params[0].IsRef := True;
+        if Tokens[j].Kind <> tkBegin then Error('Rust: expected { for method body of ' + fullName);
+        Inc(j);
+        nparams := 1; { reuse as brace depth counter from here }
+        while nparams > 0 do
+        begin
+          if Tokens[j].Kind = tkBegin then Inc(nparams)
+          else if Tokens[j].Kind = tkEnd then Dec(nparams);
+          if nparams > 0 then Inc(j);
+        end;
+        Inc(j); { consume the method's closing brace }
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ `fn name<T[: Bound(+Bound)*]>(params-using-T) -> RetOrT { body }`. Never
+  compiled directly — buffers the whole declaration's token span
+  (RGenericFuncs) for RSpecializeGenericFn to copy-and-substitute per call
+  site. One type parameter, inferred from the first argument at the call
+  site (see RParsePrimary) — not parsed from an explicit `f::<T>(...)` the
+  way it would need to be if a bound also constrained the return type alone. }
+procedure RRegisterGenericFuncs;
+var i, j, depth, gfi: Integer; boundName: AnsiString; more: Boolean;
+begin
+  i := 0;
+  while i < MainProgramTokCount - 3 do
+  begin
+    if (Tokens[i].Kind = tkFn) and (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkLt) then
+    begin
+      if RGenericFuncCount >= R_MAX_GENERIC_FUNCS then Error('Rust: too many generic functions');
+      gfi := RGenericFuncCount; Inc(RGenericFuncCount);
+      RGenericFuncs[gfi].Name := GetTokenStr(i + 1);
+      j := i + 3;
+      if Tokens[j].Kind <> tkIdent then Error('Rust: expected type parameter name in ' + RGenericFuncs[gfi].Name);
+      RGenericFuncs[gfi].ParamName := GetTokenStr(j); Inc(j);
+      RGenericFuncs[gfi].BoundCount := 0;
+      if Tokens[j].Kind = tkColon then
+      begin
+        Inc(j);
+        more := True;
+        while more do
+        begin
+          if Tokens[j].Kind <> tkIdent then Error('Rust: expected trait bound name in ' + RGenericFuncs[gfi].Name);
+          boundName := GetTokenStr(j);
+          if RFindTrait(boundName) < 0 then Error('Rust: unknown trait ' + boundName + ' used as a bound');
+          if RGenericFuncs[gfi].BoundCount >= R_MAX_BOUNDS then Error('Rust: too many trait bounds');
+          RGenericFuncs[gfi].Bounds[RGenericFuncs[gfi].BoundCount] := boundName;
+          Inc(RGenericFuncs[gfi].BoundCount);
+          Inc(j);
+          if Tokens[j].Kind = tkPlus then begin Inc(j); more := True; end
+          else more := False;
+        end;
+      end;
+      if Tokens[j].Kind <> tkGt then Error('Rust: expected > closing the type parameter list of ' + RGenericFuncs[gfi].Name);
+      Inc(j);
+      RGenericFuncs[gfi].TokStart := i;
+      if Tokens[j].Kind <> tkLParen then Error('Rust: expected ( after the type parameter list');
+      depth := 1; Inc(j);
+      while depth > 0 do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then Dec(depth);
+        Inc(j);
+      end;
+      if (Tokens[j].Kind = tkMinus) and (Tokens[j + 1].Kind = tkGt) then j := j + 3;
+      if Tokens[j].Kind <> tkBegin then Error('Rust: expected { for the body of ' + RGenericFuncs[gfi].Name);
+      depth := 1; Inc(j);
+      while depth > 0 do
+      begin
+        if Tokens[j].Kind = tkBegin then Inc(depth)
+        else if Tokens[j].Kind = tkEnd then Dec(depth);
+        Inc(j);
+      end;
+      RGenericFuncs[gfi].TokCount := j - i;
+      i := j - 1; { outer Inc(i) below lands exactly at j }
     end;
     Inc(i);
   end;
@@ -1044,16 +1467,171 @@ begin
   Expect(tkEnd, '}');
 end;
 
+procedure RParseTopLevelTrait;
+begin
+  Next; { 'trait' identifier }
+  if CurTok.Kind <> tkIdent then Error('Rust: expected trait name');
+  Next;
+  Expect(tkBegin, '{');
+  { signature-only, no nested braces, already recorded by RRegisterTraits }
+  while CurTok.Kind <> tkEnd do Next;
+  Expect(tkEnd, '}');
+end;
+
+{ Skips a generic fn declaration entirely in the real (compiling) pass — it
+  is never compiled directly, only via RSpecializeGenericFn's per-call-site
+  copies. Pure token-skip (no parsing) since RRegisterGenericFuncs already
+  buffered everything needed. }
+procedure RSkipGenericFnDecl;
+var depth: Integer;
+begin
+  Next; { fn }
+  Next; { name }
+  if CurTok.Kind = tkLt then RSkipAngleClause;
+  Expect(tkLParen, '(');
+  depth := 1;
+  while depth > 0 do
+  begin
+    if CurTok.Kind = tkLParen then Inc(depth)
+    else if CurTok.Kind = tkRParen then Dec(depth);
+    if depth > 0 then Next;
+  end;
+  Next; { consume final ) }
+  if CurTok.Kind = tkMinus then
+  begin
+    Next;
+    if CurTok.Kind <> tkGt then Error('Rust: expected -> return type');
+    Next; Next; { >, return-type ident }
+  end;
+  Expect(tkBegin, '{');
+  depth := 1;
+  while depth > 0 do
+  begin
+    if CurTok.Kind = tkBegin then Inc(depth)
+    else if CurTok.Kind = tkEnd then Dec(depth);
+    if depth > 0 then Next;
+  end;
+  Expect(tkEnd, '}');
+end;
+
+{ `impl [Trait for] Type { fn method(&self, ...) -> RetType { .. } ... }` —
+  methods were already RegisterProc'd (mangled "Type::method") by
+  RRegisterImpls; this compiles each body, same shape as RParseTopLevelFn
+  but with `self` prepended as an implicit, always-by-reference param 0. }
+procedure RParseTopLevelImpl;
+var typeName, traitName, fname, pname, fullName: AnsiString;
+    ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
+    pnames: array[0..2] of AnsiString; ptypes: array[0..2] of TTypeKind;
+begin
+  Next; { impl }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
+  begin
+    traitName := CurTok.SVal;
+    Next; Next; { trait name, 'for' }
+  end;
+  if CurTok.Kind <> tkIdent then Error('Rust: expected type name after impl');
+  typeName := CurTok.SVal;
+  ci := FindUClass(typeName);
+  Next;
+  Expect(tkBegin, '{');
+  while CurTok.Kind <> tkEnd do
+  begin
+    if CurTok.Kind <> tkFn then Error('Rust: expected fn in impl block for ' + typeName);
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Rust: expected method name');
+    fname := CurTok.SVal; Next;
+    fullName := typeName + '::' + fname;
+    procIdx := FindProc(fullName);
+    if procIdx < 0 then Error('Rust: internal error — signature prescan missed ' + fullName);
+    Expect(tkLParen, '(');
+    if CurTok.Kind = tkAmp then Next;
+    if (CurTok.Kind <> tkIdent) or (CurTok.SVal <> 'self') then
+      Error('Rust: expected self as the first parameter of ' + fullName);
+    Next;
+    Eat(tkComma);
+    nparams := 0;
+    while CurTok.Kind <> tkRParen do
+    begin
+      if CurTok.Kind = tkMut then Next;
+      if nparams >= 3 then Error('Rust: too many parameters (skeleton limit is 3 + self)');
+      if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
+      pname := CurTok.SVal; Next;
+      Expect(tkColon, ':');
+      if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
+      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, False);
+      pnames[nparams] := pname;
+      Next;
+      Inc(nparams);
+      if not Eat(tkComma) then Break;
+    end;
+    Expect(tkRParen, ')');
+    if CurTok.Kind = tkMinus then
+    begin
+      Next; Expect(tkGt, '>');
+      if CurTok.Kind <> tkIdent then Error('Rust: expected return type after ->');
+      Next;
+    end;
+
+    savedSC := SymCount; savedFS := FrameSize;
+    FrameSize := 0; CurProc := procIdx;
+    Procs[procIdx].BodyAddr := CodeLen;
+    Procs[procIdx].ScopeBase := SymCount;
+    LastTypeRecId := REC_UCLASS_BASE + ci;
+    idx := AllocParam('self', tyRecord, True, False);
+    Procs[procIdx].Params[0].SymIdx := idx;
+    for i := 0 to nparams - 1 do
+    begin
+      idx := AllocParam(pnames[i], ptypes[i], False, False);
+      Procs[procIdx].Params[i + 1].SymIdx := idx;
+    end;
+    idx := AllocVar('Result', Procs[procIdx].RetType);
+    Procs[procIdx].RetSymIdx := idx;
+
+    patchPos := EmitProcPrologue;
+    Procs[procIdx].FramePatch := patchPos;
+    for i := 0 to nparams do { 0 = self, 1..nparams = real params }
+    begin
+      idx := Procs[procIdx].Params[i].SymIdx;
+      if ParamSize(idx) = 8 then EmitB($48);
+      EmitB($89);
+      case i of
+        0: EmitB($BD);
+        1: EmitB($B5);
+        2: EmitB($95);
+        3: EmitB($8D);
+      end;
+      EmitI32(Syms[idx].Offset);
+    end;
+
+    Expect(tkBegin, '{');
+    bodyNode := RParseBlock;
+    Expect(tkEnd, '}');
+
+    CompileAST(bodyNode);
+    EmitProcEpilog(Procs[procIdx].RetSymIdx);
+    PatchProcPrologue(patchPos, FrameSize);
+    SymRollbackTo(savedSC);
+    FrameSize := savedFS;
+    CurProc := -1;
+  end;
+  Expect(tkEnd, '}');
+end;
+
 procedure RParseTopLevelFn;
 var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
     pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
+    precids: array[0..3] of Integer;
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Rust: expected function name');
   name := CurTok.SVal; Next;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('Rust: internal error — signature prescan missed ' + name);
+  { A specialized generic-fn copy still carries its (already-substituted)
+    <...> clause textually, e.g. `fn identity$Point<Point>(...)` — tolerate
+    and discard it here; an ordinary top-level fn never has one. }
+  if CurTok.Kind = tkLt then RSkipAngleClause;
   Expect(tkLParen, '(');
   nparams := 0;
   while CurTok.Kind <> tkRParen do
@@ -1063,7 +1641,11 @@ begin
     pname := CurTok.SVal; Next;
     Expect(tkColon, ':');
     if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
-    ptypes[nparams] := RTypeKindFromName(CurTok.SVal, False);
+    { struct/enum params allowed (see RRegisterFnSignatureAt); RTypeKindFromName
+      sets LastTypeRecId as a side effect, which the NEXT param's lookup would
+      clobber before we get to AllocParam below — capture it per-param now. }
+    ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
+    precids[nparams] := LastTypeRecId;
     pnames[nparams] := pname;
     Next;
     Inc(nparams);
@@ -1083,7 +1665,13 @@ begin
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    if ptypes[i] = tyRecord then
+    begin
+      LastTypeRecId := precids[i];
+      idx := AllocParam(pnames[i], ptypes[i], True, False);
+    end
+    else
+      idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
   idx := AllocVar('Result', Procs[procIdx].RetType);
@@ -1094,7 +1682,7 @@ begin
   for i := 0 to nparams - 1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
-    if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
+    if ParamSize(idx) = 8 then EmitB($48);
     EmitB($89);
     case i of
       0: EmitB($BD);
@@ -1117,6 +1705,77 @@ begin
   CurProc := -1;
 end;
 
+{ Returns the procIdx of `name$concreteTypeName`, compiling it on first use
+  (memoized via a plain FindProc — a second call site with the same
+  concrete type just reuses it). Copies the generic fn's buffered token
+  range to the end of the shared Tokens[] buffer, substituting every
+  occurrence of the type-parameter identifier with the concrete type name
+  (and renaming the fn itself to the mangled name), then registers +
+  compiles that copy exactly like an ordinary top-level fn. }
+function RSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer;
+var mangledName: AnsiString;
+    procIdx, concreteCi, i, srcIdx, startTok, concreteOff, concreteLen, b, jmpPatch: Integer;
+    savedTokPos: Integer; savedCurTok: TToken;
+begin
+  mangledName := RGenericFuncs[gfi].Name + '$' + concreteTypeName;
+  procIdx := FindProc(mangledName);
+  if procIdx >= 0 then begin Result := procIdx; Exit; end;
+
+  concreteCi := FindUClass(concreteTypeName);
+  for b := 0 to RGenericFuncs[gfi].BoundCount - 1 do
+    if (concreteCi < 0) or not RTypeImplementsTrait(concreteCi, RGenericFuncs[gfi].Bounds[b]) then
+      Error('Rust: ' + concreteTypeName + ' does not implement required trait ' +
+            RGenericFuncs[gfi].Bounds[b] + ' (bound on generic function ' +
+            RGenericFuncs[gfi].Name + ')');
+
+  concreteOff := RStoredName(concreteTypeName); concreteLen := Length(concreteTypeName);
+  startTok := TokCount;
+  for i := 0 to RGenericFuncs[gfi].TokCount - 1 do
+  begin
+    srcIdx := RGenericFuncs[gfi].TokStart + i;
+    if TokCount >= MAX_TOKENS then Error('Rust: token buffer overflow specializing ' + RGenericFuncs[gfi].Name);
+    Tokens[TokCount] := Tokens[srcIdx];
+    if srcIdx = RGenericFuncs[gfi].TokStart + 1 then
+    begin
+      { the fn's own name token: rename to the mangled specialized name }
+      Tokens[TokCount].SOffset := RStoredName(mangledName);
+      Tokens[TokCount].SLen := Length(mangledName);
+    end
+    else if (Tokens[srcIdx].Kind = tkIdent) and CaseEqual(GetTokenStr(srcIdx), RGenericFuncs[gfi].ParamName) then
+    begin
+      Tokens[TokCount].SOffset := concreteOff;
+      Tokens[TokCount].SLen := concreteLen;
+    end;
+    Inc(TokCount);
+  end;
+
+  RRegisterFnSignatureAt(startTok);
+
+  { Specialization triggers mid-expression while parsing whatever function
+    called the generic one — e.g. inside main's own RParseBlock, BEFORE
+    main's body is handed to CompileAST. Without this jmp, the specialized
+    fn's prologue/body/epilogue would land in the code stream right after
+    main's already-emitted prologue with nothing to skip over it, and
+    execution would fall straight from main's prologue into the
+    specialization's body instead of main's own (found by testing: a
+    100%-reproducible segfault, not a hypothetical). Same bracketing
+    pattern ParsePyProgram uses to insert runtime setup code mid-stream. }
+  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+
+  savedTokPos := TokPos;
+  savedCurTok := CurTok;
+  TokPos := startTok;
+  Next; { load the copy's 'fn' token }
+  RParseTopLevelFn;
+  TokPos := savedTokPos;
+  CurTok := savedCurTok;
+
+  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+
+  Result := FindProc(mangledName);
+  if Result < 0 then Error('Rust: internal error specializing ' + RGenericFuncs[gfi].Name);
+end;
+
 procedure ParseRustProgram;
 var callPatch, mainIdx: Integer;
 begin
@@ -1135,9 +1794,13 @@ begin
   EmitB($0F); EmitB($05);            { syscall }
 
   REnumVariantCount := 0;
+  RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;
   RRegisterStructShells;
   RRegisterStructFields;
   RRegisterEnums;
+  RRegisterTraits;
+  RRegisterImpls;
+  RRegisterGenericFuncs;
   RRegisterFnSignatures;
 
   mainIdx := FindProc('main');
@@ -1147,8 +1810,11 @@ begin
   begin
     if CurTok.Kind = tkRecord then RParseTopLevelStruct
     else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then RParseTopLevelEnum
+    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'trait') then RParseTopLevelTrait
+    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'impl') then RParseTopLevelImpl
+    else if (CurTok.Kind = tkFn) and (Tokens[TokPos + 1].Kind = tkLt) then RSkipGenericFnDecl
     else if CurTok.Kind = tkFn then RParseTopLevelFn
-    else Error('Rust: expected fn, struct or enum at top level');
+    else Error('Rust: expected fn, struct, enum, trait or impl at top level');
   end;
 
   ApplyCallFixups;
