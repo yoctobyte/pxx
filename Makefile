@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -132,6 +132,37 @@ benchmark-compiler-runtime: $(COMPILER) benchmark-check
 	stat -c '%n %s bytes' /tmp/pascal26-runtime-fpc /tmp/pascal26-runtime-fpc-output /tmp/pascal26-runtime-self-output /tmp/hello-runtime-fpc /tmp/hello-runtime-self
 	test "$$(/tmp/hello-runtime-fpc)" = "Hello, World!"
 	test "$$(/tmp/hello-runtime-self)" = "Hello, World!"
+
+# benchmark-opt-levels: build the compiler at each -O tier with the current
+# self-hosted binary, prove every tier emits identical (correct) -O0 output,
+# report each tier binary's size, then hyperfine each tier self-compiling the
+# compiler (the standard heavy workload). -O2/-O3 currently ALIAS -O1 — all
+# landed -O1 passes gate OptLevel>=1 and no -O2/-O3-only pass exists yet — so
+# their rows track -O1 until the higher tiers gain distinct passes; they stay
+# in the table so the tiers remain visible as work lands.
+benchmark-opt-levels: $(COMPILER) benchmark-check
+	@echo "=== building the compiler at each -O tier ==="
+	./$(COMPILER) -O0 $(COMPILER_SRC) /tmp/pxx-opt-O0
+	./$(COMPILER) -O1 $(COMPILER_SRC) /tmp/pxx-opt-O1
+	./$(COMPILER) -O2 $(COMPILER_SRC) /tmp/pxx-opt-O2
+	./$(COMPILER) -O3 $(COMPILER_SRC) /tmp/pxx-opt-O3
+	@echo "=== correctness: every tier binary emits identical output (default -O0 emission) ==="
+	/tmp/pxx-opt-O0 $(COMPILER_SRC) /tmp/pxx-opt-out-O0 >/dev/null
+	/tmp/pxx-opt-O1 $(COMPILER_SRC) /tmp/pxx-opt-out-O1 >/dev/null
+	/tmp/pxx-opt-O2 $(COMPILER_SRC) /tmp/pxx-opt-out-O2 >/dev/null
+	/tmp/pxx-opt-O3 $(COMPILER_SRC) /tmp/pxx-opt-out-O3 >/dev/null
+	cmp /tmp/pxx-opt-out-O0 /tmp/pxx-opt-out-O1
+	cmp /tmp/pxx-opt-out-O0 /tmp/pxx-opt-out-O2
+	cmp /tmp/pxx-opt-out-O0 /tmp/pxx-opt-out-O3
+	@echo "=== compiler binary size per tier (smaller = tighter codegen) ==="
+	@stat -c '%n  %s bytes' /tmp/pxx-opt-O0 /tmp/pxx-opt-O1 /tmp/pxx-opt-O2 /tmp/pxx-opt-O3
+	@echo "=== self-compile time per tier ==="
+	$(HYPERFINE) --warmup 2 --runs $(BENCH_RUNTIME_RUNS) \
+	  --export-markdown /tmp/frankonpiler-opt-levels-bench.md \
+	  --command-name 'O0-built compiles compiler' '/tmp/pxx-opt-O0 $(COMPILER_SRC) /tmp/pxx-opt-sc0 >/dev/null' \
+	  --command-name 'O1-built compiles compiler' '/tmp/pxx-opt-O1 $(COMPILER_SRC) /tmp/pxx-opt-sc1 >/dev/null' \
+	  --command-name 'O2-built compiles compiler' '/tmp/pxx-opt-O2 $(COMPILER_SRC) /tmp/pxx-opt-sc2 >/dev/null' \
+	  --command-name 'O3-built compiles compiler' '/tmp/pxx-opt-O3 $(COMPILER_SRC) /tmp/pxx-opt-sc3 >/dev/null'
 
 test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
