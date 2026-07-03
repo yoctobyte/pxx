@@ -11524,9 +11524,10 @@ begin
             while (CurTok.Kind <> tkRParen) and not mDoneArgs do
             begin
               mIsByRef := False;
+              mSawConst := False;
               if (CurTok.Kind = tkVar) or ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
               begin mIsByRef := True; Next; end
-              else if CurTok.Kind = tkConst then Next;
+              else if CurTok.Kind = tkConst then begin mSawConst := True; Next; end;
               mStartIdx := mNParams; mDoneParam := False;
               while IsDeclNameTok and not mDoneParam do
               begin
@@ -11538,6 +11539,12 @@ begin
               mIsArr := False;
               if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
               else mTk := ParseTypeKind;
+              { `const` record/variant param = by-ref, matching ParseSubroutine
+                (sibling of the class-method fix; interface methods dispatch
+                indirectly, so the mismatch would corrupt the arg silently).
+                See bug-method-call-before-body-byvalue-small-record-arg. }
+              if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
+                mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
               begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
@@ -11789,6 +11796,14 @@ begin
                   else
                     mTk := ParseTypeKind;
                 end;
+                { A `const` record/variant param is passed by reference — must
+                  match ParseSubroutine's rule, or a call lowered BEFORE the
+                  implementation body uses the by-value convention while the
+                  compiled body expects an address (silently truncating on
+                  x86-64 only when RecSize<=8; a hard backend error on i386).
+                  See bug-method-call-before-body-byvalue-small-record-arg. }
+                if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
+                  mIsByRef := True;
                 for i := mStartIdx to mNParams-1 do
                 begin
                   mPTypes[i] := mTk;

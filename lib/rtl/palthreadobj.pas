@@ -304,12 +304,27 @@ begin
   MutexUnlock(SyncLock);
 end;
 
-{ ThreadObjLauncher's BODY is deliberately defined AFTER TThread.Synchronize:
-  its pre-body call to Synchronize(const m: TThreadMethod) — an 8-byte record
-  arg — mislowers on i386 when the callee body hasn't been compiled yet
-  (bug-method-call-before-body-byvalue-small-record-arg). Revert the reorder
-  when that is fixed. }
-procedure ThreadObjLauncher(arg: Pointer); forward;
+{ File-level trampoline: PalThreadCreate hands us the instance as the opaque arg. }
+procedure ThreadObjLauncher(arg: Pointer);
+var
+  t: TThread;
+  freeSelf: Boolean;
+  mt: TThreadMethod;
+begin
+  t := TThread(arg);
+  t.Execute;
+  { Field-wise copy into a local before the call: reading the record FIELD as
+    a value trips the i386 backend's load-through-pointer gap; two pointer
+    loads are portable, and the local passes by const-ref. }
+  mt.Code := t.FOnTerminate.Code;
+  mt.Data := t.FOnTerminate.Data;
+  if mt.Code <> nil then
+    t.Synchronize(mt);
+  freeSelf := t.FFreeOnTerm;
+  t.FFinished := True;
+  if freeSelf then
+    t.Free;    { Destroy sees the self-call: skips the join, parks the handle }
+end;
 
 constructor TThread.Create(CreateSuspended: Boolean);
 begin
@@ -409,28 +424,6 @@ begin
   SyncEnqueue(@e);
   while e.DoneWord = 0 do
     PalFutexWait(@e.DoneWord, 0);
-end;
-
-{ File-level trampoline: PalThreadCreate hands us the instance as the opaque arg. }
-procedure ThreadObjLauncher(arg: Pointer);
-var
-  t: TThread;
-  freeSelf: Boolean;
-  mt: TThreadMethod;
-begin
-  t := TThread(arg);
-  t.Execute;
-  { Field-wise copy into a local before the call: reading the record FIELD as
-    a value trips the i386 backend's load-through-pointer gap; two pointer
-    loads are portable, and the local passes by const-ref. }
-  mt.Code := t.FOnTerminate.Code;
-  mt.Data := t.FOnTerminate.Data;
-  if mt.Code <> nil then
-    t.Synchronize(mt);
-  freeSelf := t.FFreeOnTerm;
-  t.FFinished := True;
-  if freeSelf then
-    t.Free;    { Destroy sees the self-call: skips the join, parks the handle }
 end;
 
 procedure TThread.Queue(const m: TThreadMethod);

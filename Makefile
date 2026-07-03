@@ -1347,6 +1347,11 @@ test-core: $(COMPILER)
 	# flexcolumn directive: call args carry write-style :w:d modifiers
 	./$(COMPILER) test/test_flexcolumn.pas /tmp/test_flexcolumn26
 	test "$$(/tmp/test_flexcolumn26 | tail -1)" = "OK"
+	# const small-record method arg: pre-body call uses the by-ref convention
+	./$(COMPILER) test/test_const_record_method_prebody.pas /tmp/test_const_record_method_prebody26
+	test "$$(/tmp/test_const_record_method_prebody26 | tail -1)" = "OK"
+	./$(COMPILER) --target=i386 test/test_const_record_method_prebody.pas /tmp/test_i386_crmp
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_crmp | tail -1)" = "OK"
 	# metaclass descendant enforcement: class-of assignment is descendant-checked
 	./$(COMPILER) test/test_metaclass_descendant.pas /tmp/test_metaclass_descendant26
 	test "$$(/tmp/test_metaclass_descendant26 | tail -1)" = "OK"

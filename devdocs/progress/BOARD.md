@@ -24,13 +24,12 @@ _none_
 
 _none_
 
-## backlog (62)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-method-call-before-body-byvalue-small-record-arg | A | bug | Method call before body: by-value <=8-byte record arg mislowers (i386 error; x64 program-level unresolved-forward) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -125,7 +124,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (445)
+## done (446)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -271,6 +270,7 @@ _none_
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
+| bug-method-call-before-body-byvalue-small-record-arg | A | bug | Method call before body: by-value <=8-byte record arg mislowers (i386 error; x64 program-level unresolved-forward) | — |
 | bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-method-miscompiled-by-context | A | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
 | bug-method-ptr-no-coerce-pointer-arg | A | bug | bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument | — |
@@ -595,7 +595,6 @@ _none_
 
 - [C] bug-c-cast-as-call-arg-parse-error
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A] bug-method-call-before-body-byvalue-small-record-arg
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend

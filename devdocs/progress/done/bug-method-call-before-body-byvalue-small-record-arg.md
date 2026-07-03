@@ -2,7 +2,7 @@
 
 - **Type:** bug (shared internals — call lowering / decl order)
 - **Track:** A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-03
 - **Found while:** feature-i386-threadsafe-locks — palthreadobj's
   ThreadObjLauncher calls TThread.Synchronize(const m: TThreadMethod)
@@ -68,3 +68,23 @@ the site).
 
 The repro compiles and prints 5 on x86-64 and i386 (qemu) with the callee
 body in either position; make test + self-host byte-identical.
+
+## Root cause + fix (2026-07-03, Track A — same day)
+
+The CLASS-METHOD declaration header parser (and the interface-method one)
+skipped ParseSubroutine's `const record/variant -> by-ref` promotion
+(parser.inc ~13457), so the declared signature said by-VALUE while the
+implementation header (re-parsed by ParseSubroutine) said by-REF:
+
+- pre-body calls lowered by value (i386 hard error; on x86-64 the >8-byte
+  temp-copy path happened to pass an address, masking it for big records);
+- at the implementation, FindProcOverload compared the differing pbyref and
+  MISSED — registering a second proc and leaving the declared one an
+  unresolved forward (the x86-64 program-level symptom).
+
+Fix: apply the same promotion in both declaration parsers (class methods +
+interface methods; the proc-type path already had it from
+bug-proc-typed-call-const-record-arg — classic sibling-branch sweep).
+palthreadobj's launcher-reorder workaround REVERTED (original order works
+again). Regression: test/test_const_record_method_prebody.pas (x86-64 +
+i386 qemu) in make test. Self-host byte-identical.
