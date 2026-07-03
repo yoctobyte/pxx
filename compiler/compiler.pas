@@ -103,6 +103,7 @@ begin
   DumpIR := False;
   DumpProcMap := False;
   OptLevel := 0;
+  WarnedMissedFold := False;
   DumpCpp := False;
   NoStdInc := False;
   CUseSystemLibs := False;

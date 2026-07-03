@@ -5288,13 +5288,66 @@ end;
   If a future IR pass (e.g. loop strength-reduction) starts PRODUCING
   const-const binops, revive const-fold then, gated the same way. }
 
+procedure IROptWarnMissedFold;
+{ Tripwire (runs LAST, after every other pass, so it also sees IR the passes
+  themselves produced). Const-fold + algebraic identities are NOT shipped
+  because nothing currently produces a foldable IR_BINOP (measured 0-fire). If
+  that ever changes — a new pass emits `const OP const`, or a neutral-identity
+  operand (x+0, x*1, x or 0, x xor 0, x and -1, x div 1) — warn ONCE per compile
+  so const-fold gets revived instead of silently leaving cycles on the floor.
+  div/mod const-const is EXCLUDED: `k div 0` legitimately survives to raise
+  runtime error 200, so it is not a "missed fold". -Werror promotes it. }
+var i, op: Integer; bothConst, ident: Boolean;
+begin
+  if WarnedMissedFold then Exit;
+  for i := 0 to IRCount - 1 do
+    if IRKind[i] = IR_BINOP then
+    begin
+      op := IRC[i];
+      bothConst := (IRKind[IRA[i]] = IR_CONST_INT) and (IRKind[IRB[i]] = IR_CONST_INT) and
+                   ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar)) or
+                    (op = Ord(tkAnd)) or (op = Ord(tkOr)) or (op = Ord(tkXor)));
+      ident := False;
+      if (op = Ord(tkPlus)) or (op = Ord(tkOr)) or (op = Ord(tkXor)) then
+        ident := ((IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 0)) or
+                 ((IRKind[IRA[i]] = IR_CONST_INT) and (IRIVal[IRA[i]] = 0))
+      else if op = Ord(tkMinus) then
+        ident := (IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 0)
+      else if op = Ord(tkStar) then
+        ident := ((IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 1)) or
+                 ((IRKind[IRA[i]] = IR_CONST_INT) and (IRIVal[IRA[i]] = 1))
+      else if op = Ord(tkAnd) then
+        ident := ((IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = -1)) or
+                 ((IRKind[IRA[i]] = IR_CONST_INT) and (IRIVal[IRA[i]] = -1))
+      else if op = Ord(tkDiv) then
+        ident := (IRKind[IRB[i]] = IR_CONST_INT) and (IRIVal[IRB[i]] = 1);
+      if bothConst or ident then
+      begin
+        Inc(WarnCount);
+        WarnedMissedFold := True;
+        if WarnAsError then
+        begin
+          writeln('pascal26: error: a foldable IR_BINOP (const-const or identity operand) ',
+                  'reached codegen — revive IR const-fold/identities in IROptimize ',
+                  '(feature-optimization-levels) (warning promoted by -Werror)');
+          Halt(1);
+        end;
+        writeln('pascal26: warning: a foldable IR_BINOP (const-const or identity operand) ',
+                'reached codegen — an IR pass now produces foldable arithmetic; revive ',
+                'const-fold/identities in IROptimize (feature-optimization-levels)');
+        Exit;
+      end;
+    end;
+end;
+
 procedure IROptimize;
 { Ordered -O1 IR pass pipeline. Dead-code first (its NOPs expose more
-  jump-to-next-label pairs), then redundant-jump. New IR-level passes slot in
-  here — this is the shared, all-target, all-frontend home the optimization arc
-  builds on. (Const-fold / algebraic identities were measured and rejected as
-  no-ops on current IR — see the note above.) }
+  jump-to-next-label pairs), then redundant-jump. IROptWarnMissedFold runs LAST
+  as a tripwire (see its note + the const-fold NOTE above). New IR-level passes
+  slot in before the tripwire — this is the shared, all-target, all-frontend
+  home the optimization arc builds on. }
 begin
   IROptDeadCode;
   IROptRedundantJump;
+  IROptWarnMissedFold;
 end;
