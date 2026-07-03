@@ -545,7 +545,11 @@ type
     tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
     tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
     tkQuestion,
-    tkLogNot   { C `!` (logical not); distinct from `~` which stays tkNot }
+    tkLogNot,  { C `!` (logical not); distinct from `~` which stays tkNot }
+    { Rust-only keywords/punctuation (feature-rust-frontend-skeleton). `struct`
+      reuses tkRecord, `return` reuses tkExit, `break`/`continue` are shared —
+      only genuinely new shapes get their own token. }
+    tkFn, tkLet, tkMut, tkLoop, tkPathSep, tkDotDotEq, tkLifetime
   );
 
   TToken = record
@@ -1848,4 +1852,4 @@ begin
 end;
 
 var
-  isC, isBasic, isNilPy, isAsm: Boolean;
+  isC, isBasic, isNilPy, isAsm, isRust: Boolean;
