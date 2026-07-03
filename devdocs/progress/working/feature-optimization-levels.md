@@ -276,6 +276,19 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
+## IR const-fold + algebraic identities — MEASURED, REJECTED (2026-07-03)
+
+Implemented both as IR passes, instrumented, measured: **ZERO fires** on the
+whole compiler self-compile AND on synthetic foldable tests. PXX eliminates
+these upstream — Pascal folds source constants in ConstEval/AST; C + Nil-Python
+share the same AN_BINOP lowering; that lowering guards pointer/index stride
+`if elemSize > 1` (ir.inc ~3345/3359) so `index*1` is never emitted. No
+const-const IR_BINOP nor identity operand ever reaches the IR for any frontend.
+Correct but pure dead weight -> NOT shipped (measured-not-speculative, same call
+as the rejected allocator bins). A `{ NOTE ... }` in ir.inc records the finding
+and the revive condition (a future pass that PRODUCES const-const binops).
+Framework (DCE + redundant-jump) unchanged; still v170.
+
 ## Progress — shared-IR pass framework + DCE LANDED (2026-07-03)
 
 **Architectural pivot (Rene-endorsed):** optimization now has TWO homes —

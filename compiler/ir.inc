@@ -5275,12 +5275,25 @@ begin
     end;
 end;
 
+{ NOTE — IR-level constant folding + algebraic identities were implemented and
+  MEASURED (2026-07-03), then REJECTED: zero fires on the whole compiler
+  self-compile AND on synthetic tests. Reason: PXX already eliminates these
+  upstream, so no const-const IR_BINOP (nor an x*1 / x+0 identity operand) ever
+  reaches the IR for ANY frontend — Pascal folds source constants in ConstEval
+  / AST, the C and Nil-Python frontends share the same AN_BINOP lowering, and
+  that lowering guards pointer/index stride with `if elemSize > 1` (ir.inc
+  ~3345/3359) so `index * 1` is never emitted. The passes were correct but pure
+  dead weight (extra procs + self-host surface, no win), so they are not
+  shipped — measured-not-speculative, same call as the rejected allocator bins.
+  If a future IR pass (e.g. loop strength-reduction) starts PRODUCING
+  const-const binops, revive const-fold then, gated the same way. }
+
 procedure IROptimize;
 { Ordered -O1 IR pass pipeline. Dead-code first (its NOPs expose more
-  jump-to-next-label pairs), then redundant-jump. New IR-level passes
-  (constant-fold completion, algebraic identities, compare-into-branch
-  tagging, DCE of `if false`) slot in here — this is the shared, all-target,
-  all-frontend home the optimization arc builds on. }
+  jump-to-next-label pairs), then redundant-jump. New IR-level passes slot in
+  here — this is the shared, all-target, all-frontend home the optimization arc
+  builds on. (Const-fold / algebraic identities were measured and rejected as
+  no-ops on current IR — see the note above.) }
 begin
   IROptDeadCode;
   IROptRedundantJump;

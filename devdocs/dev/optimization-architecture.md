@@ -224,8 +224,9 @@ shared IR), with identical runtime output.
 
 | Work | Home | Status | Note |
 |------|------|--------|------|
-| Complete const folding (`Int64()` cast) | IR (§3a) | queued | all-target; `feature-const-eval-typecast-int64` |
-| Algebraic identities (`x*1`,`x+0`,`x*2→shl`) | IR (§3a) | queued | all-target |
+| IR const-fold (`const OP const`) | IR (§3a) | **rejected — measured 0 fires** | PXX pre-folds upstream (ConstEval/AST); no const-const IR_BINOP reaches the IR for any frontend. Revive only if a future pass PRODUCES const-const binops. |
+| IR algebraic identities (`x*1`,`x+0`…) | IR (§3a) | **rejected — measured 0 fires** | lowering guards stride `if elemSize>1` (no `x*1`), source identities pre-simplified. Value-dropping forms (`x*0`) deliberately never attempted (side-effect hazard). |
+| Strength reduction (`x*2^k→shl`) | IR (§3a) | not started | value-preserving but needs exact width/sign analysis; deferred |
 | DCE of `if false` / const-true branches | IR (§3a) | queued | needs const-condition detection |
 | Relocate compare-fusion to an IR tag | IR (§3a) | idea | would give cross targets pass 4 |
 | imm-fold into BINOP (`add rax,imm32`) | emitter (§3b) | queued | x86-64, cheap |
