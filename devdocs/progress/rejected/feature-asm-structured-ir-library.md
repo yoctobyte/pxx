@@ -211,3 +211,12 @@ observes this discipline — match it.)
   (SIB-absolute dereference, opcode `0x8B`) — four early conversions
   used the wrong one; caught by re-deriving each original opcode before
   trusting a text-mnemonic substitution, not by any test failing.
+- 2026-07-03 — **REJECTED (user decision).** Migrating the per-target
+  ir_codegen emitters onto lib/asmcore adds complexity with no real gain:
+  per-target emitter files are a feature (drop/add targets wholesale),
+  "cleaner code" is debatable, and asmcore already serves its purpose as the
+  REUSED library (inline asm, .asm frontend). The layer-1/layer-2 split
+  stays as-is: asmtext_*.inc engines remain the shared assembler surface;
+  x64enc/rv32enc/xtensaenc + raw-byte emitters stay put. The still-useful
+  scraps of this ticket (inline-asm gaps) live in
+  [[feature-inline-asm-depth]] and [[feature-inline-asm-multi-arch]].
