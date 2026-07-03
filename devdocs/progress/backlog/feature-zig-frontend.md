@@ -75,6 +75,43 @@ two new-frontend requests (JS parked as architecturally out-of-scope, see
 Much of the Rust RTL/type groundwork (tagged unions, slices, drop/defer) is
 directly shared with Zig — sequencing the two together would amortize it.
 
+## AST/IR gap map — "pure frontend" vs "needs shared internals" (2026-07-04)
+
+Verified against the current node/type inventory (defs.inc) + empirical checks.
+
+**Lowers onto EXISTING AST/IR — a skeleton subset is pure lexer+parser, zero
+Track-A internals change:**
+
+| Zig construct | Reuses today |
+|---|---|
+| `fn` / params / `return` | procs |
+| `i8..i64` / `u8..u64` / `usize` / `isize` | `tyInt8..Int64` / `tyUInt8..UInt64` / `tyNativeInt` / `tyNativeUInt` (1:1) |
+| `if` / `while` / `for` / `switch`-on-int / blocks | `AN_IF` / `AN_WHILE` / `AN_FOR` / `AN_SWITCH` |
+| `struct` + field access | `tyRecord` / `AN_FIELD` |
+| `*T` / `&x` / `.*` | `tyPointer` / `AN_ADDR` / `AN_DEREF` |
+| `[N]T` + indexing | arrays / `AN_INDEX` |
+| plain `enum` | existing enum table (verified `Ord`) |
+| `const x = expr` / `var x = expr` inference | `tyAuto` inline-var inference |
+| value-exprs (`a ? b : c`-ish, `++`, comma) | `AN_TERNARY` / `AN_INCDEC` / `AN_COMMA` (from C frontend) |
+
+**Needs NEW shared machinery (Track A internals — NOT lexer+parser), and each
+overlaps an already-planned Rust ticket:**
+
+| Zig construct | Missing today | Shared with |
+|---|---|---|
+| error unions `E!T`, `union(enum)` | generalized tagged union (only `tyVariant` 16-byte scalar + exception-match exist; no struct-payload tagged union) | [[feature-rust-match-enum-payload]] |
+| slices `[]T` / `[]const u8` | no `tySlice`; a ptr+len non-owning view type | [[feature-rust-borrowed-slice-type]] |
+| optionals `?T` | `?*T` = free (nullable ptr); `?i64`/`?struct` need has-value+payload (part tagged-union) | (tagged-union) |
+| `try` / `catch` / `orelse` | propagation lowering over the above | — |
+| `defer` / `errdefer` | MINOR: no `AN_DEFER`, but `AN_TRY_FINALLY` + `IRLowerCleanupToDepth` exist to desugar onto | [[feature-rust-drop-move-tracking]] |
+| `comptime` + builtins (`@import`/`@TypeOf`/…) | biggest semantic gap — no comptime VM | (subset out of v1) |
+
+**Bottom line:** skeleton (#1) = pure frontend, shippable, zero internals risk.
+A *useful* subset = skeleton + the 3 shared additions (tagged-union, slice,
+optional) — which ARE the Rust Track-A tickets. Zig and Rust share their hard
+parts; building either advances the other. The "auto typing" is on the free
+side; the tagged union is the real cost.
+
 ## Sub-tickets (split when work starts — don't flood the board yet)
 
 **Track A (compiler internals — shared AST/IR/symtab/backends):**
