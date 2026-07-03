@@ -162,3 +162,4 @@
 2026-07-03T12:00:28Z  v162  5a1f3e98af6a66d77ba95b7cee67a8112b61f3fe0cf6f35ad0b76ed02b1898fe  929f57f69f3469ff89dd7960a0415969bef7f96c  feat(ir): managed-record dynarray Insert/Delete + generic IR_CONST_DATA node
 2026-07-03T13:40:06Z  v163  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  8e1773b5bd3c67416b349f8cf60bdf12e59eda2c  perf(symtab): FindSym hash index — self-compile 5.9s (was 10.4s two commits ago)
 2026-07-03T14:15:37Z  v164  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  2cd811c5be15779a7bf464fea0e1237f0fb5ff5e  chore(stable): pin v163 — symtab hash indexes (self-compile 10.4s -> 5.9s)
+2026-07-03T14:38:24Z  v165  b11ebd19135931f07a3e181376613e3114e1cc84fd75c750c9d0a29a4afc85a9  429060459a2233d9c873e41703a14f883c4a6393  feat(opt): -O levels plumbing + first -O1 pass (leaf-const operand load)
