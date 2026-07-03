@@ -92,3 +92,6 @@ that crate's shape needs the general union, not `tyVariant`.
   verification also have 3+ user functions and would very likely reproduce
   that bug too if run through a fresh `make bootstrap` binary — re-check
   once the bug ticket lands a fix.
+- 2026-07-04 — merged to `master` (fast-forward, `a71356c`) alongside
+  sub-tickets 1 and 3. Unofficial/unsupported — see sub-ticket 1's log for
+  the rationale. Stays `working/`; sub-ticket 4 is next.

@@ -1,8 +1,8 @@
 # Rust frontend — umbrella
 
-- **Type:** feature — umbrella (spans Track A + Track B)
-- **Status:** backlog — design/scoping only, no code yet
-- **Owner:** —
+- **Type:** feature — umbrella (spans Track A + Track B) — working name **Track R**
+- **Status:** working — sub-tickets 1-3/12 landed on `master`, unofficial/unsupported
+- **Owner:** Claude (~/frank2)
 - **Opened:** 2026-07-03 (design discussion — see `devdocs/developer/historic/rust-frontend.md`)
 - **Priority:** unranked — this is a scoping ticket, not a greenlit build
 
@@ -116,3 +116,19 @@ compile-error risk).
   analysis done against `~/nextlevel` + its 3 crates.io deps. No code
   written yet; skeleton (#1) branches off `master` under Track A per the
   usual C-frontend precedent when work starts.
+- 2026-07-04 — sub-tickets 1-3 landed and merged to `master`
+  (`compiler/rlexer.inc`/`rparser.inc`, fast-forward `a71356c`) at the
+  user's direction: land early and often rather than accumulating on a
+  branch until the whole umbrella matures (the plan this ticket originally
+  described, mirroring the historic `feat/cfront` precedent). Explicitly
+  **unofficial and unsupported at this stage** — additive-only new files,
+  nothing else on `master` depends on `.rs` files existing, no shared
+  internals modified beyond the same append-only dispatch pattern C
+  already established. See [[feature-rust-frontend-skeleton]],
+  [[feature-rust-match-enum-payload]], [[feature-rust-generics-trait-bounds]]
+  for what each sub-ticket actually covers/narrows and their individual
+  verification logs. Also found and filed
+  [[bug-selfhost-multifn-ifelse-miscompile]] (urgent, Track A, shared
+  internals, pre-existing — not introduced by this frontend). Going
+  forward, sub-tickets land and merge to `master` directly instead of
+  branching. Next: sub-ticket 4, [[feature-rust-dyn-trait-dispatch]].

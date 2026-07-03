@@ -73,3 +73,12 @@ Scope for the *skeleton* specifically (deliberately small — this ticket is
   kinds already used elsewhere). Not blocking: this ticket's own tests are
   confirmed correct against the FPC-built compiler; see that bug ticket for
   the self-host divergence and how Track R validates around it meanwhile.
+- 2026-07-04 — merged `feature/rust-frontend-skeleton` to `master`
+  (fast-forward, `a71356c`) at the user's direction, alongside sub-tickets
+  2-3. **Unofficial/unsupported, not required by anything else on
+  `master`** — pure additive new files (`rlexer.inc`/`rparser.inc`) plus
+  the same append-only dispatch pattern C already uses; nothing else on
+  `master` depends on or is affected by `.rs` files existing. This ticket
+  stays `working/` (not `done/`) since sub-tickets 4-12 are still ahead;
+  going forward, Track R sub-tickets land and merge to `master` directly
+  rather than accumulating on the branch first.

@@ -110,3 +110,6 @@ code (`shakmaty` alone: 123 generic functions, 63 `impl<T>` blocks, 57
     specialization the umbrella's acceptance text lumps in but this
     landing does not cover.
   Next: sub-ticket 4, [[feature-rust-dyn-trait-dispatch]].
+- 2026-07-04 — merged to `master` (fast-forward, `a71356c`) alongside
+  sub-tickets 1-2. Unofficial/unsupported — see sub-ticket 1's log for the
+  rationale. Stays `working/`; sub-ticket 4 is next.

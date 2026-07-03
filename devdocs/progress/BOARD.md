@@ -10,12 +10,13 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | bug-selfhost-multifn-ifelse-miscompile | A | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-rust-frontend-skeleton | A | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-frontend | B | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | A | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | A | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
@@ -31,7 +32,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (74)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -85,7 +86,6 @@ _none_
 | feature-rust-derive-macros | A | feature | Rust frontend — derive-macro codegen | — |
 | feature-rust-drop-move-tracking | A | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
 | feature-rust-dyn-trait-dispatch | A | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-frontend | B | feature | Rust frontend — umbrella | — |
 | feature-rust-macro-rules | A | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
 | feature-rust-misc-semantics | A | feature | Rust frontend — integer overflow mode + format-string parser | — |
 | feature-rust-rtl-concurrency | B | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
@@ -666,7 +666,6 @@ _none_
 - [A] feature-rust-derive-macros
 - [A] feature-rust-drop-move-tracking
 - [A] feature-rust-dyn-trait-dispatch
-- [B] feature-rust-frontend
 - [A] feature-rust-macro-rules
 - [A] feature-rust-misc-semantics
 - [B] feature-rust-rtl-concurrency
