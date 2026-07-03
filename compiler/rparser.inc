@@ -601,7 +601,12 @@ begin
   begin
     Next;
     if CurTok.Kind = tkIf then
-      elseNode := RParseIf
+      { Bare `RParseIf` here (no parens) would read this function's own
+        implicit Result-alias pseudo-variable instead of recursing —
+        classic Pascal gotcha, caught by testing (an `else if` chain
+        silently lowered to IR_UNSUPPORTED downstream). Parens force an
+        actual call, matching pyparser.inc's PyParseIf()'s own precedent. }
+      elseNode := RParseIf()
     else
     begin
       Expect(tkBegin, '{');

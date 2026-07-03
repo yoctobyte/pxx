@@ -95,3 +95,5 @@ that crate's shape needs the general union, not `tyVariant`.
 - 2026-07-04 — merged to `master` (fast-forward, `a71356c`) alongside
   sub-tickets 1 and 3. Unofficial/unsupported — see sub-ticket 1's log for
   the rationale. Stays `working/`; sub-ticket 4 is next.
+- 2026-07-04 — [[bug-selfhost-multifn-ifelse-miscompile]] fixed; the
+  self-host caveat in the log above no longer applies.

@@ -82,3 +82,7 @@ Scope for the *skeleton* specifically (deliberately small — this ticket is
   stays `working/` (not `done/`) since sub-tickets 4-12 are still ahead;
   going forward, Track R sub-tickets land and merge to `master` directly
   rather than accumulating on the branch first.
+- 2026-07-04 — [[bug-selfhost-multifn-ifelse-miscompile]] fixed (a
+  parenthesis-less self-recursive call in `RParseIf` — see that ticket's
+  log). The self-host caveat above no longer applies: the self-hosted
+  compiler now agrees with the FPC-built one on this ticket's tests.
