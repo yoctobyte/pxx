@@ -1971,6 +1971,9 @@ test-i386: $(COMPILER)
 	# inline asm on i386: locals/params via [ebp±off] substitution, labels+jcc, mov/@glob global access
 	./$(COMPILER) --target=i386 test/test_asm_386.pas /tmp/test_i386_asm
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_asm)" = "$$(printf '42\n55\n42')"
+	# .asm source frontend on i386: labels/branches + global entry override, exit code = ebx
+	./$(COMPILER) --target=i386 test/test_asm_386_sum.asm /tmp/test_i386_asmfront
+	tools/run_target.sh i386 /tmp/test_i386_asmfront; test "$$?" = "55"
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + readln + eof-stdin ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
@@ -2261,6 +2264,9 @@ test-aarch64: $(COMPILER)
 	# ifdef-guarded multi-arch asm source, aarch64 leg
 	./$(COMPILER) --target=aarch64 test/test_asm_ifdef_multiarch.pas /tmp/test_aarch64_asmifdef
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asmifdef)" = "42"
+	# .asm source frontend on aarch64: labels/branches + global entry override, exit code = x0
+	./$(COMPILER) --target=aarch64 test/test_asm_a64_sum.asm /tmp/test_aarch64_asmfront
+	tools/run_target.sh aarch64 /tmp/test_aarch64_asmfront; test "$$?" = "55"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + readln + eof-stdin ok (output identical to x86-64)"
 
 test-riscv32: $(COMPILER)
@@ -2620,6 +2626,9 @@ test-arm32: $(COMPILER)
 	# inline asm on arm32: locals/params via [fp,off] substitution, labels+cond-suffixed branches, ldr/@glob global access
 	./$(COMPILER) --target=arm32 test/test_asm_arm32.pas /tmp/test_arm32_asm
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asm)" = "$$(printf '42\n55\n42')"
+	# .asm source frontend on arm32: labels/branches + global entry override, exit code = r0
+	./$(COMPILER) --target=arm32 test/test_asm_arm32_sum.asm /tmp/test_arm32_asmfront
+	tools/run_target.sh arm32 /tmp/test_arm32_asmfront; test "$$?" = "55"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + readln + eof-stdin ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----

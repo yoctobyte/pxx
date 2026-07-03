@@ -244,6 +244,14 @@ begin
   end;
   op0 := AsmTextTrim(op0); op1 := AsmTextTrim(op1); op2 := AsmTextTrim(op2);
 
+  { svc #imm16 — supervisor call (Linux syscall gate) }
+  if CaseEqual(mnem, 'svc') then
+  begin
+    imm := AsmA64Int(op0, holes, holeCur);
+    EmitI32($D4000001 or ((Integer(imm) and $FFFF) shl 5));
+    Exit;
+  end;
+
   { ret has optional operand }
   if CaseEqual(mnem, 'ret') then
   begin

@@ -346,34 +346,75 @@ const
   SEC_TEXT = 0;
   SEC_DATA = 1;
 
-{ .asm frontend, riscv32 leg (feature-asm-source-frontend multi-target
-  rollout). Unlike the x86-64 path below — which predates the insight that
-  the compiler's own per-target text engines are already label- and
-  relocation-aware — this leg feeds source lines straight through
-  asmtext_rv32.inc's AsmRv32BlockBegin/ProcessLine/BlockResolve (the same
-  API inline `asm...end` replays through), then lets the existing riscv32
-  ET_EXEC writer emit the image. Scope this increment: instructions +
-  labels + branches + `global <label>` entry override; a fall-through exit
-  epilogue (exit code = a0) mirrors the x86-64 frontend's contract.
-  `section`/`extern`/db and `-c`/`--shared` get clear errors. }
-procedure ParseAsmProgramRv32;
+{ .asm frontend, engine-backed legs (feature-asm-source-frontend multi-
+  target rollout): riscv32 / aarch64 / arm32 / i386. Unlike the x86-64 path
+  below — which predates the insight that the compiler's own per-target
+  text engines are already label- and relocation-aware — these legs feed
+  source lines straight through the target engine's
+  BlockBegin/ProcessLine/BlockResolve API (the same one inline `asm...end`
+  replays through), then let the existing per-target ET_EXEC writer emit
+  the image. Scope this increment: instructions + labels + branches +
+  `global <label>` entry override; a fall-through exit epilogue mirrors
+  the x86-64 frontend's contract (exit code = the target ABI's first
+  syscall-arg register: a0 / x0 / r0 / ebx). `section`/`extern`/db and
+  `-c`/`--shared` get clear errors. }
+
+procedure AsmFrontEngineLine(const line: AnsiString);
+var noHoles: array[0..0] of Int64;
+begin
+  noHoles[0] := 0;
+  if TargetArch = TARGET_RISCV32 then AsmRv32ProcessLine(line, noHoles, 0)
+  else if TargetArch = TARGET_AARCH64 then AsmA64ProcessLine(line, noHoles, 0)
+  else if TargetArch = TARGET_ARM32 then AsmArm32ProcessLine(line, noHoles, 0)
+  else Asm386ProcessLine(line, noHoles, 0);
+end;
+
+{ Find a code label recorded by the active target's engine (post-resolve). }
+function AsmFrontEngineFindLabel(const nm: AnsiString; var off: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    for k := 0 to AsmRvLblCount - 1 do
+      if AsmRvLblName[k] = nm then begin off := AsmRvLblPos[k]; Result := True; end;
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    for k := 0 to AsmA64LblCount - 1 do
+      if AsmA64LblName[k] = nm then begin off := AsmA64LblPos[k]; Result := True; end;
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    for k := 0 to AsmArm32LblCount - 1 do
+      if AsmArm32LblName[k] = nm then begin off := AsmArm32LblPos[k]; Result := True; end;
+  end
+  else
+  begin
+    for k := 0 to Asm386LblCount - 1 do
+      if Asm386LblName[k] = nm then begin off := Asm386LblPos[k]; Result := True; end;
+  end;
+end;
+
+procedure ParseAsmProgramEngine;
 var
   i, n, lineNo, ci, k: Integer;
   raw, line, labelPart: AnsiString;
-  noHoles: array[0..0] of Int64;
   globalNames: array[0..MAX_ASM_GLOBALS-1] of AnsiString;
   globalCount: Integer;
   entrySet: Boolean;
   mnem: AnsiString;
 begin
   if EmitObjMode then
-    Error('asm frontend: -c object output is x86-64 only so far (riscv32 .asm emits ET_EXEC)');
+    Error('asm frontend: -c object output is x86-64 only so far (this target''s .asm emits ET_EXEC)');
   if EmitSharedMode then
-    Error('asm frontend: --shared output is x86-64 only so far (riscv32 .asm emits ET_EXEC)');
+    Error('asm frontend: --shared output is x86-64 only so far (this target''s .asm emits ET_EXEC)');
 
-  noHoles[0] := 0;
   globalCount := 0;
-  AsmRv32BlockBegin;
+  if TargetArch = TARGET_RISCV32 then AsmRv32BlockBegin
+  else if TargetArch = TARGET_AARCH64 then AsmA64BlockBegin
+  else if TargetArch = TARGET_ARM32 then AsmArm32BlockBegin
+  else Asm386BlockBegin;
 
   n := Length(Source);
   i := 1;
@@ -417,7 +458,7 @@ begin
     end;
     if (mnem = 'section') or (mnem = 'extern') or (mnem = 'db') or
        (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') or (mnem = 'align') then
-      Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" not supported on riscv32 .asm yet (labels/instructions/global only this increment)');
+      Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" not supported on this target''s .asm yet (labels/instructions/global only this increment)');
 
     { a leading `name:` may prefix an instruction on the same line — the
       engine's label-def check wants the label alone, so split it off }
@@ -427,32 +468,53 @@ begin
       labelPart := AsmTrim(Copy(line, 1, ci - 1));
       if labelPart = '' then
         Error('asm:' + AsmIntToStr(lineNo) + ': empty label');
-      AsmRv32ProcessLine(labelPart + ':', noHoles, 0);
+      AsmFrontEngineLine(labelPart + ':');
       line := AsmTrim(Copy(line, ci + 1, Length(line) - ci));
       if line = '' then Continue;
     end;
 
-    AsmRv32ProcessLine(line, noHoles, 0);
+    AsmFrontEngineLine(line);
   end;
 
-  { fall-through exit epilogue: exit code = whatever the program left in a0
-    (mirrors the x86-64 frontend's rdi contract). SYS_exit = 93 on riscv. }
-  AsmRv32ProcessLine('addi a7, zero, 93', noHoles, 0);
-  AsmRv32ProcessLine('ecall', noHoles, 0);
+  { fall-through exit epilogue, per target ABI (mirrors x86-64's "exit code
+    in rdi" contract with each ABI's first syscall-arg register) }
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    AsmFrontEngineLine('addi a7, zero, 93');   { SYS_exit, exit code = a0 }
+    AsmFrontEngineLine('ecall');
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    AsmFrontEngineLine('mov x8, 93');          { SYS_exit, exit code = x0 }
+    AsmFrontEngineLine('svc 0');
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    AsmFrontEngineLine('mov r7, 1');           { EABI SYS_exit, exit code = r0 }
+    AsmFrontEngineLine('svc 0');
+  end
+  else
+  begin
+    AsmFrontEngineLine('mov eax, 1');          { i386 SYS_exit, exit code = ebx }
+    AsmFrontEngineLine('int 128');
+  end;
 
-  AsmRv32BlockResolve;
+  if TargetArch = TARGET_RISCV32 then AsmRv32BlockResolve
+  else if TargetArch = TARGET_AARCH64 then AsmA64BlockResolve
+  else if TargetArch = TARGET_ARM32 then AsmArm32BlockResolve
+  else Asm386BlockResolve;
 
   { first `global` naming a known code label overrides the ELF entry point }
   entrySet := False;
   for k := 0 to globalCount - 1 do
   begin
     if entrySet then Break;
-    for ci := 0 to AsmRvLblCount - 1 do
-      if (not entrySet) and (AsmRvLblName[ci] = globalNames[k]) then
-      begin
-        AsmEntryOff := AsmRvLblPos[ci];
-        entrySet := True;
-      end;
+    ci := 0;
+    if AsmFrontEngineFindLabel(globalNames[k], ci) then
+    begin
+      AsmEntryOff := ci;
+      entrySet := True;
+    end;
   end;
 end;
 
@@ -490,13 +552,14 @@ var
   globalCount: Integer;
   isDataLbl, entrySet: Boolean;
 begin
-  if TargetArch = TARGET_RISCV32 then
+  if (TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_AARCH64) or
+     (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_I386) then
   begin
-    ParseAsmProgramRv32;
+    ParseAsmProgramEngine;
     Exit;
   end;
   if TargetArch <> TARGET_X86_64 then
-    Error('asm frontend: x86-64 and riscv32 only so far (feature-asm-source-frontend)');
+    Error('asm frontend: xtensa .asm not supported yet (see feature-inline-asm-xtensa for the engine gaps)');
   n := Length(Source);
   i := 1;
   lineNo := 0;

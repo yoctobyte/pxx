@@ -199,6 +199,17 @@ begin
   rest := '';
   while i <= n do begin AppendChar(rest, line[i]); Inc(i); end;
 
+  { svc #imm24 — supervisor call (Linux EABI syscall gate). Checked BEFORE
+    the condition-suffix extraction below: 'vc' is itself a valid condition
+    code, so the stripper would otherwise mis-read 'svc' as 's'+VC. Always
+    AL; a condition-suffixed svc is out of scope. }
+  if CaseEqual(mnem, 'svc') then
+  begin
+    imm := AsmArm32Int(AsmTextTrim(rest), holes, holeCur);
+    EmitI32($E0000000 or $0F000000 or (Integer(imm) and $00FFFFFF));
+    Exit;
+  end;
+
   { Extract condition suffix if present }
   cond := 14; { AL default }
   baseMnem := mnem;

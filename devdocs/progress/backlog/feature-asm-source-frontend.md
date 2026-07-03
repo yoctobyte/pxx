@@ -332,3 +332,16 @@ wiring, not new machinery.
   Remaining rollout: i386/aarch64/arm32 (same pattern), xtensa (blocked on
   the same engine gaps as [[feature-inline-asm-xtensa]]), and -c/--shared
   beyond x86-64.
+- 2026-07-03 — **aarch64 + arm32 + i386 legs landed** (Track A): the rv32
+  path generalized into ParseAsmProgramEngine (asmfront.inc), dispatching
+  per target to the engines' shared BlockBegin/ProcessLine/BlockResolve
+  API; per-ABI fall-through exit epilogues (rv32 a7=93/ecall exit=a0;
+  aarch64 x8=93/svc exit=x0; arm32 r7=1/svc exit=r0; i386 eax=1/int 0x80
+  exit=ebx). `svc` added to the a64 and arm32 engines — arm32's had to be
+  matched BEFORE the condition-suffix stripper ('vc' is a valid cond code,
+  so 'svc' was being mis-read as 's'+VC and rejected). Four sum-loop
+  .asm tests (exit 55, pre-start exit-7 block proves the `global` entry
+  override) wired into their cross suites. All engine-backed targets now
+  parse .asm; xtensa gives a clear error pointing at
+  [[feature-inline-asm-xtensa]]. Remaining scope: -c/--shared beyond
+  x86-64, section/extern/db on the engine-backed targets.
