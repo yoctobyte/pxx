@@ -47,6 +47,31 @@ the historic 1:1 lowering unchanged.**
 | `-O2` | Fuller speed; size may grow. **Currently aliases -O1** (no -O2-only pass exists yet). Reserved for register calling convention + inlining. |
 | `-O3` | Aggressive, benchmark-gated. Currently aliases -O1. |
 
+### Level-assignment policy (the O1 / O2 line)
+
+`-O` level is **not** graded by "how sure am I it's correct" — correctness is a
+gate at *every* level (gate 3 below); a pass that can miscompile is a bug, not an
+`-O2` feature. Level is graded by **risk/payoff and provability**:
+
+- **`-O1` = provably safe.** Exact transforms with a decidable correctness
+  argument, no heuristic, no cost model, no code growth, and **no unproven
+  invariant**. If a pass's correctness rests on an assumption, that assumption
+  must be *airtight and documented* (e.g. DCE's "every landing site is an
+  IR_LABEL", §4) — the moment it could silently break, the pass is no longer
+  `-O1`.
+- **`-O2` = experimental / side-effecting / heuristic.** Anything that may not
+  always pay (cost-model-driven inlining, unrolling), grows code, changes the
+  ABI (register calling convention), or relies on analysis that could be
+  unsound in a corner (aliasing, liveness) lives here — behind the flag, opt-in,
+  benchmark-gated.
+
+Concretely: DCE and redundant-jump are `-O1` because their correctness is a
+*proof over today's IR* (no computed jumps exist). A **latent** hazard — e.g.
+a future jump-table `case` lowering that would break DCE's landing-site
+invariant — is flagged with guard-rail comments at both the pass
+(`IROptDeadCode`) and the likely introduction site (`AN_CASE` lowering) so
+adding one trips review. That is how an `-O1` pass stays honestly `-O1`.
+
 **The four gates every pass must pass** (non-negotiable, from the ticket):
 
 1. **Determinism.** No heuristic may depend on pointer values, allocation

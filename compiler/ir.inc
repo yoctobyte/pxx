@@ -4572,6 +4572,15 @@ begin
 
     AN_CASE:
     begin
+      { GUARD-RAIL — this lowers `case` to a COMPARE-CHAIN: every clause target
+        is an IR_LABEL reached by IR_JUMP_IF_FALSE/IR_JUMP. IROptDeadCode
+        (ir.inc) depends on the invariant that EVERY control-transfer landing
+        site is a stream IR_LABEL. If you ever rewrite this to a jump TABLE
+        (computed `jmp [base + idx*8]` to a non-label target), that invariant
+        breaks and -O1 dead-code elimination could delete a live landing site.
+        Before doing so: emit an IR_LABEL at every table target, or gate
+        IROptDeadCode off for bodies containing the computed jump. See
+        devdocs/dev/optimization-architecture.md §2 (O1 safety policy). }
       selectorValNode := IRLowerAST(ASTLeft[node]);
       endLabel := IRNewLabel;
       
@@ -5221,7 +5230,20 @@ procedure IROptDeadCode;
   code after) is reachable again. Labels are never removed. Operand/value nodes
   sit post-order-adjacent BEFORE their statement root, inside the same
   reachability region as that root, so a live statement never references a node
-  that lands in a dead region. }
+  that lands in a dead region.
+
+  *** CORRECTNESS INVARIANT (why this is provably safe, hence -O1 not -O2) ***
+  This pass is exact — no heuristic, no cost model — but it rests on ONE
+  invariant: EVERY control-transfer landing site is a stream IR_LABEL. It holds
+  today because PXX has NO computed/indirect jumps: `case` lowers to a
+  compare-chain (see AN_CASE guard-rail), exception handlers land on the
+  IR_EXC_ENTER label, goto targets are labels. If a future change introduces a
+  jump TABLE or any computed `jmp reg`/`jmp [mem]` whose target is not a stream
+  IR_LABEL, THIS PASS CAN DELETE A LIVE TARGET — re-gate it (skip bodies with
+  the computed jump) or materialise an IR_LABEL at each such target first. This
+  invariant is the line between -O1 (provably safe) and -O2 (experimental /
+  side-effecting): keep it airtight or move the pass. See
+  devdocs/dev/optimization-architecture.md §2. }
 var i: Integer; reachable: Boolean;
 begin
   reachable := True;
