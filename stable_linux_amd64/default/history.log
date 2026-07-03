@@ -168,3 +168,4 @@
 2026-07-03T16:29:04Z  v168  f1759f5346d5289c99951db5a5cee1947aaf835a251474ae8c95bc02d9e27804  4e0207eeef3ab0b307672f93fb67fee816e94191  docs(opt): cross-link store-reload ticket from umbrella
 2026-07-03T16:44:25Z  v169  8ffb777176223a446565cc19588ee9c73dd4f01367753edebb008453d2966c10  1fb75b9f0624a7066efd8169fbcb79face877fdb  feat(opt): -O1 pass 4 — compare-into-branch fusion (x86-64)
 2026-07-03T17:19:53Z  v170  5d08adb92b25325f375800c24d2a794008cbfb664402295aa831aa1517be9e41  6fdf27d8d2db1382fef490301bf6c5ac81e07899  feat(opt): shared-IR pass pipeline + dead-code/redundant-jump elimination
+2026-07-03T18:48:37Z  v171  4badda751724fcea497814c6b4cf221ae0526c4a15235edcd4ef155d3d121296  d5805830fe893410565fa6c95dddbba7655e519e  chore(board): move feature-opt-imm-fold-binop working -> done
