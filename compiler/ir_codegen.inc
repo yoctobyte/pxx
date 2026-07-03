@@ -5117,6 +5117,10 @@ begin
   IRReset;
   IRLowerAST(node);
   IRVerify;
+  { -O1+ shared-IR optimization pipeline (see ir.inc / IROptimize). Gated here
+    so -O0 emits the raw lowering byte-identically; runs after IRVerify (on
+    validated IR) and before IRDump so `--dump-ir` shows the optimized form. }
+  if OptLevel >= 1 then IROptimize;
   if DumpIR then IRDump;
   IREmitMachineCode;
 end;

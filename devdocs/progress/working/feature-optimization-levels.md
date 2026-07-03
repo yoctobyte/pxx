@@ -276,6 +276,34 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
+## Progress — shared-IR pass framework + DCE LANDED (2026-07-03)
+
+**Architectural pivot (Rene-endorsed):** optimization now has TWO homes —
+emitter-side peepholes (x86-64 only; passes 1-4) and a **shared-IR pass
+pipeline** run before codegen, seen by ALL 6 backends and ALL 4 frontends at
+once ("optimize prior, not post"). Full study doc:
+`devdocs/dev/optimization-architecture.md`.
+
+- **`IROptimize` pipeline** (`ir.inc`), called from `CompileAST` gated
+  `OptLevel>=1`, after IRLowerAST+IRVerify, before IREmitMachineCode. Runs
+  per procedure body (IRReset per body -> local reasoning, no cross-proc
+  boundary). Rewrites IR in place (dead node -> IR_NOP, every backend already
+  no-ops it); never touches emitted bytes.
+- **IR pass 1 — unreachable-code elimination** (`IROptDeadCode`): code between
+  an unconditional transfer (IR_JUMP/IR_TERMINATE/IR_RAISE) and the next
+  IR_LABEL is provably unreachable -> NOP. Operand nodes are post-order-adjacent
+  before their root (same region) so no live stmt references a dead node.
+- **IR pass 2 — redundant jump** (`IROptRedundantJump`): `jmp L; L:` (target is
+  the next stmt, skipping NOPs) -> NOP; fall-through reaches L identically.
+- **All-target PROVEN**: i386 (cross backend) -O1 code 46807B < -O0 47121B —
+  DCE fired via shared IR, identical runtime output. x86-64 -O1 much smaller
+  still (also has emitter peepholes 1-4) — illustrates the split cleanly.
+- **Gates**: `make test-opt` green (-O1 self-code 3502120->3496244B). `-O0`
+  self-host fixedpoint byte-identical (sacred). FULL `make test` under an
+  -O1-BUILT compiler: EXIT=0. (Compiler has little dead code, so the
+  self-compile delta is small — the FRAMEWORK is the deliverable; DCE/fold/
+  identities now plug in here, all-target.)
+
 ## Progress — pass 4 LANDED (2026-07-03): compare-into-branch fusion
 
 - **Pass 4 (-O1): compare-into-branch fusion** (x86-64). An `IR_BINOP`

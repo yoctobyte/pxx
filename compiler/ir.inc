@@ -5187,3 +5187,79 @@ begin
   end;
   DwarfLastLine := IRLine[i];
 end;
+
+{ ================================================================= }
+{  IR optimization pass pipeline (-O1+, shared across all backends) }
+{ ================================================================= }
+{ Full method + rationale: devdocs/dev/optimization-architecture.md.
+  Runs on the shared IR after lowering, BEFORE any backend codegen, so ONE
+  implementation optimizes every target (x86-64/i386/arm32/aarch64/riscv32/
+  xtensa) AND every frontend (Pascal/C/Nil-Python/.asm) at once. Gated by
+  OptLevel at the call site (CompileAST) — -O0 never runs it, so the -O0
+  self-host byte-identity gate is untouched by construction. Each pass rewrites
+  IR IN PLACE: dead nodes become IR_NOP (every backend already emits nothing
+  for IR_NOP) and redundant jumps are dropped. It NEVER rewrites emitted
+  machine bytes — branch fixups reference CodeLen and must not move. CompileAST
+  runs once per procedure body (IRReset clears the array each time), so every
+  pass here reasons over a single self-contained body: reachability and jump
+  adjacency are local, with no cross-procedure boundary to special-case. }
+
+function IRIsUncondTransfer(i: Integer): Boolean;
+{ Nothing falls through these: control leaves and can only re-enter at a label.
+  exit / return-from-proc lower to IR_TERMINATE, goto / break / continue /
+  structured control-flow tails to IR_JUMP, raise to IR_RAISE. }
+begin
+  IRIsUncondTransfer :=
+    (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE);
+end;
+
+procedure IROptDeadCode;
+{ Pass 1 — unreachable-code elimination. Walk the body tracking reachability.
+  Code between an unconditional transfer and the next IR_LABEL owns no label,
+  so nothing can jump INTO it and the transfer blocks fall-through -> provably
+  unreachable; NOP it. Any IR_LABEL is a potential jump target, so it (and the
+  code after) is reachable again. Labels are never removed. Operand/value nodes
+  sit post-order-adjacent BEFORE their statement root, inside the same
+  reachability region as that root, so a live statement never references a node
+  that lands in a dead region. }
+var i: Integer; reachable: Boolean;
+begin
+  reachable := True;
+  for i := 0 to IRCount - 1 do
+  begin
+    if IRKind[i] = IR_LABEL then
+      reachable := True
+    else if not reachable then
+      IRKind[i] := IR_NOP
+    else if IRIsUncondTransfer(i) then
+      reachable := False;
+  end;
+end;
+
+procedure IROptRedundantJump;
+{ Pass 2 — drop `jmp L; L:`. An unconditional jump whose target label is the
+  very next statement (only IR_NOPs, e.g. freshly-killed dead code, in between)
+  is a no-op: falling through reaches L identically. Frequent in if/loop
+  lowering (a then-branch tail jump over an absent else). }
+var i, j: Integer;
+begin
+  for i := 0 to IRCount - 1 do
+    if IRKind[i] = IR_JUMP then
+    begin
+      j := i + 1;
+      while (j < IRCount) and (IRKind[j] = IR_NOP) do Inc(j);
+      if (j < IRCount) and (IRKind[j] = IR_LABEL) and (IRIVal[j] = IRA[i]) then
+        IRKind[i] := IR_NOP;
+    end;
+end;
+
+procedure IROptimize;
+{ Ordered -O1 IR pass pipeline. Dead-code first (its NOPs expose more
+  jump-to-next-label pairs), then redundant-jump. New IR-level passes
+  (constant-fold completion, algebraic identities, compare-into-branch
+  tagging, DCE of `if false`) slot in here — this is the shared, all-target,
+  all-frontend home the optimization arc builds on. }
+begin
+  IROptDeadCode;
+  IROptRedundantJump;
+end;
