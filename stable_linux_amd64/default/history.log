@@ -161,3 +161,4 @@
 2026-07-03T10:10:08Z  v161  7ba7e92a081c7e0e5c203b81f2d9b7bcb31fbf0620b4abe5ba8e844710c78b59  af51750b581a975e1f693b95f6fda7c412804b44  fix(parser): const record method param — decl headers now promote to by-ref
 2026-07-03T12:00:28Z  v162  5a1f3e98af6a66d77ba95b7cee67a8112b61f3fe0cf6f35ad0b76ed02b1898fe  929f57f69f3469ff89dd7960a0415969bef7f96c  feat(ir): managed-record dynarray Insert/Delete + generic IR_CONST_DATA node
 2026-07-03T13:40:06Z  v163  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  8e1773b5bd3c67416b349f8cf60bdf12e59eda2c  perf(symtab): FindSym hash index — self-compile 5.9s (was 10.4s two commits ago)
+2026-07-03T14:15:37Z  v164  515aabc0f18ee69cd71003d0830f1aa28a65f0fd924d6fbe5728415af05b0e7b  2cd811c5be15779a7bf464fea0e1237f0fb5ff5e  chore(stable): pin v163 — symtab hash indexes (self-compile 10.4s -> 5.9s)

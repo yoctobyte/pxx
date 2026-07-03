@@ -314,3 +314,14 @@ zero-latency "see the other agent's commit instantly" property. **Not adopted** 
 recorded here so the option is on the table, not rediscovered cold. Revisit if
 shared-tree contention (halt-and-wait on builtin RTL, re-pin stalls) starts
 costing real time.
+
+
+## Iteration pins: `make stabilize-fast` (2026-07-03)
+
+`make stabilize-fast` = the everyday iteration pin: a curated smoke subset
+(`test-smoke`, regression-prone surfaces + the full self-host byte-identity
+chain) instead of the full suite, then the same recording step. ~18s wall.
+POLICY: fine for iteration; run full `make stabilize` before pushing a batch
+of work, for milestone pins, releases, and anything touching
+codegen/ABI/ELF. `make pin` blesses whichever was recorded last, as before.
+New features append a case to `test-smoke` AND their full-suite test.

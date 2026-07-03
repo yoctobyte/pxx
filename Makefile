@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -2947,12 +2947,63 @@ qemu-env-check: $(COMPILER)
 	  fi; \
 	done; exit $$fail
 
+
+# ---------------------------------------------------------------------------
+# test-smoke: the ITERATION gate (chore-fast-pin-tiered-tests). A curated
+# subset of historically regression-prone surfaces + the full self-host
+# byte-identity chain, in well under a minute. NOT a replacement for `test`:
+# milestone pins, pushes of batched work, releases and anything touching
+# codegen/ABI/ELF still run the full suite (stabilize, not stabilize-fast).
+# New features append a case here AND to their full-suite test.
+test-smoke: $(COMPILER)
+	./$(COMPILER) test/test_dynarray_torture.pas /tmp/smoke_dyntorture26
+	test "$$(/tmp/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
+	./$(COMPILER) test/test_dynarray_insert_delete.pas /tmp/smoke_dynid26
+	test "$$(/tmp/smoke_dynid26 | tail -1)" = "total ok 35 / 35"
+	./$(COMPILER) test/test_frozen_string_reentrant.pas /tmp/smoke_frozen26
+	test "$$(/tmp/smoke_frozen26 | tail -1)" = "total ok 4 / 4"
+	./$(COMPILER) test/test_ansistring.pas /tmp/smoke_ansistr26
+	test "$$(/tmp/smoke_ansistr26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
+	./$(COMPILER) test/test_class_of.pas /tmp/smoke_classof26
+	test "$$(/tmp/smoke_classof26)" = "TChild"
+	./$(COMPILER) test/test_metaclass_construct.pas /tmp/smoke_metactor26
+	test "$$(/tmp/smoke_metactor26)" = "$$(printf '50\n70\n3')"
+	./$(COMPILER) test/test_cross_exception.pas /tmp/smoke_exc26
+	test "$$(/tmp/smoke_exc26 | wc -l)" = "9"
+	./$(COMPILER) test/test_record_temp_byval_arg.pas /tmp/smoke_recbyval26
+	test "$$(/tmp/smoke_recbyval26)" = "$$(printf '18\n46')"
+	./$(COMPILER) test/test_const_record_method_prebody.pas /tmp/smoke_crmp26
+	test "$$(/tmp/smoke_crmp26 | tail -1)" = "OK"
+	./$(COMPILER) --threadsafe test/test_mutex.pas /tmp/smoke_mutex26
+	test "$$(/tmp/smoke_mutex26 | tail -1)" = "MUTEX OK"
+	./$(COMPILER) --threadsafe test/test_tthread_sync.pas /tmp/smoke_tthread26
+	test "$$(/tmp/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
+	# self-host byte-identity chain (the artifacts stabilize-core pins)
+	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self
+	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next
+	/tmp/pascal26-next test/bootstrap_features.pas /tmp/smoke_boot26
+	test "$$(/tmp/smoke_boot26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint
+	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
+	cp /tmp/pascal26-fixedpoint /tmp/pascal26-s5
+
+# stabilize-fast: everyday iteration pin — test-smoke instead of the full
+# suite, and the already-proven fixedpoint binary is recorded directly (the
+# full target's s4/s5 re-derivations only re-prove what cmp(next,fixedpoint)
+# established). Policy: fine for iteration; run full `stabilize` before
+# pushing a batch / milestone pins / releases.
+stabilize-fast: test-smoke
+	$(MAKE) stabilize-record
+
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
 	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4
 	cmp /tmp/pascal26-next /tmp/pascal26-s4
 	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
+	$(MAKE) stabilize-record
+
+stabilize-record:
 	@echo "=== recording stable binary ==="
 	@mkdir -p $(STABLE_DEFAULT_DIR)
 	@# Fixed-name overwrite (no per-version vN files): `latest` is a symlink to the

@@ -24,13 +24,12 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| chore-fast-pin-tiered-tests | A | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -127,7 +126,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (446)
+## done (447)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -356,6 +355,7 @@ _none_
 | bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
+| chore-fast-pin-tiered-tests | A | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
@@ -598,7 +598,6 @@ _none_
 
 - [C] bug-c-cast-as-call-arg-parse-error
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A] chore-fast-pin-tiered-tests
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend

@@ -1,7 +1,7 @@
 # Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s)
 
 - **Type:** chore (build/test infrastructure) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-03
 
 ## Problem
@@ -53,3 +53,23 @@ push-batch, releases, and anything touching codegen/ABI/ELF.
 `make stabilize-fast` green end-to-end in <=60s on the dev box today
 (<=20s once the perf siblings land); policy documented; full `stabilize`
 unchanged.
+
+## Resolution (2026-07-03, same day)
+
+Landed `test-smoke` (11 curated tests: dynarray torture + insert/delete,
+frozen-string reentrancy, AnsiString, class-of/metaclass ctor, exceptions,
+record byval, const-record prebody, mutex + TThread sync under
+--threadsafe) + the full self-host chain (self -> next -> fixedpoint,
+cmp = the byte-identity proof) producing the artifacts the recording step
+pins. `stabilize-fast` records the proven fixedpoint binary directly — the
+full target's s4/s5 re-derivations only re-prove what cmp(next,fixedpoint)
+already established, so the fast path skips exactly them and nothing else.
+Full `stabilize` (full `test` + s4/s5) unchanged, now sharing the
+`stabilize-record` step.
+
+**Measured: 18.0s wall** — the 20s goal met same-day, because
+[[perf-compiler-hotspots-algorithmic]] item 1 (symtab hashes) landed first
+and cut each self-compile 10.4s -> 5.9s. (The plan's arithmetic assumed
+~42s of compiles; hashing made the whole chain ~18s with tests included.)
+Policy documented in parallel-tracks.md. `make test` parallelism (item 4)
+not needed — left as a note, not done.
