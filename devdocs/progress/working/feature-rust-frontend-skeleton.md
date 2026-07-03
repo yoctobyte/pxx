@@ -1,8 +1,8 @@
 # Rust frontend — lexer/parser skeleton + entry point
 
-- **Type:** feature — Track A
-- **Status:** backlog
-- **Owner:** —
+- **Type:** feature — Track A (working name: **Track R**, Rust frontend)
+- **Status:** working
+- **Owner:** Claude (~/frank2, branch `feature/rust-frontend-skeleton`)
 - **Opened:** 2026-07-03
 - **Umbrella:** [[feature-rust-frontend]] — sub-ticket 1/12, gates all others.
 
@@ -41,3 +41,27 @@ Scope for the *skeleton* specifically (deliberately small — this ticket is
 ## Log
 - 2026-07-03 — split from [[feature-rust-frontend]] umbrella at ticket-craft
   time. No code written yet.
+- 2026-07-03 — skeleton landed: `compiler/rlexer.inc` + `compiler/rparser.inc`
+  (new, additive), `.rs` extension dispatch wired into `compiler.pas`
+  (`isRust` alongside `isC`/`isNilPy`/.../`isAsm`), 7 new `TTokenKind` values
+  appended at the tail of the enum in `defs.inc` (existing ordinals
+  untouched). Two-pass like the C frontend: pass 1 registers struct layouts
+  + fn signatures (forward calls resolve via `FindProc`), pass 2 compiles
+  bodies. x86-64 only, ≤4 scalar params (rdi/rsi/rdx/rcx), struct
+  params/returns explicitly rejected for now (scalar-only ABI) — plain
+  structs work as locals with field read/write. `println!`/`process::exit`
+  are out of scope (sub-ticket 12), so trivial test programs report results
+  via `fn main() -> i32`'s return value as the process exit code.
+  Verified: a hand-written trivial multi-fn program (struct literal + field
+  read, arithmetic, if/else-if/else, while, loop+break, function calls,
+  return) compiles and runs to the expected exit code. `make bootstrap`
+  3-stage self-host stays byte-identical. `make -k test` green except one
+  pre-existing, unrelated environment failure (`crtl_tiny_regex_match.c`
+  hits a missing clang system header path) confirmed present on unmodified
+  `master` too — not a regression from this change.
+  No Track A ticket needed: everything above is additive new files + generic
+  reuse of existing shared AST/symtab primitives (AllocVar/AllocParam/
+  RegisterProc/AddUClass/AddUField/RecFieldType/CompileAST/...), no shared
+  internals were modified beyond the same append-only token-enum + dispatch
+  pattern the C frontend already established.
+  Next: sub-ticket 2, [[feature-rust-match-enum-payload]].
