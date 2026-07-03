@@ -1,7 +1,7 @@
 # Inline assembler depth
 
 - **Type:** feature — Track A
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §5)
 - **Relation:** this ticket's scope (labels/branches, global-var operands,
@@ -22,9 +22,14 @@ IMT thunks for interfaces.
 - ~~Labels and branches (highest value).~~ **Done 2026-06-30** — see
   [[feature-asm-structured-ir-library]] log.
 - ~~Global-var operands.~~ **Done 2026-07-01** — see Log.
-- Explicit `[reg]` memory operands and SIB addressing.
-- Operand-size keywords.
-- AT&T syntax.
+- ~~Explicit `[reg]` memory operands and SIB addressing.~~ **Done
+  2026-07-01** (35264aa4) — `[reg+reg*scale+disp]`, AOP_MEMR, SIB via
+  lib/asmcore's EmitModRMMem; test_asm_memr.pas in make test.
+- ~~Operand-size keywords.~~ **Done 2026-07-01** (a948fb8b) —
+  byte/word/dword/qword [ptr]; test_asm_sizekw.pas in make test.
+- ~~AT&T syntax.~~ **Resolved 2026-07-01** (9f3f6e74) — decided the other
+  way: inline asm commits to Intel-only, `{$asmMode att}` gets a clean
+  reject (test_asm_att_reject.pas in make test).
 
 ## Acceptance
 
@@ -58,3 +63,13 @@ Each capability covered by an asm regression test; self-host fixedpoint holds.
   procedures, multiple globals, plus a `lea`-computed address checked
   against Pascal's own `@g`) in `make test`. Self-host + FPC bootstrap both
   byte-identical. Next up: explicit `[reg+disp]` memory operands + SIB.
+- 2026-07-03 — Ticket housekeeping: all scope items had already landed on
+  2026-07-01 (see strikethroughs above) but the ticket was never closed —
+  the log's "Next up" trail simply stopped after global-var operands.
+  Verified against make test (test_asm_memr / test_asm_sizekw /
+  test_asm_att_reject all wired and green) and git history. Nothing left;
+  moving to done. Sibling coverage note: the multi-arch rollout
+  ([[feature-inline-asm-multi-arch]], done 2026-07-03) gives cross targets
+  their engines' native memory-operand syntax (`off(reg)` on rv32,
+  `[x29,off]` on aarch64, `[fp,off]` on arm32, `[ebp±off]` on i386), so no
+  per-target depth work is outstanding either.
