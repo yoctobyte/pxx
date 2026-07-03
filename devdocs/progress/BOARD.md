@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-opt-imm-fold-binop | A | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 
 ## unfinished (3)

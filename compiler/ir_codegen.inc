@@ -2657,7 +2657,33 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IntToTokenKind(IRC[node]);
-        
+
+        { -O1 imm-fold: a constant right operand of an arith/logic op whose value
+          fits imm32 folds straight into the instruction's immediate, dropping
+          pass 1's separate `mov rcx, imm` — `mov rcx,k; add rax,rcx` becomes
+          `add rax, k`. All these forms sign-extend imm32 to 64 bits, identical
+          to the mov+op they replace, so no width fixup is needed. Excludes
+          float / tyAnsiString results (concat + ucomisd paths), comparisons
+          (cmp/fusion path), div/mod (no imm form) and shifts (width fixup). }
+        if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) and
+           (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
+           not TypeIsFloat(IntToTypeKind(IRTk[node])) and
+           (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
+           ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or
+            (op = tkAnd) or (op = tkOr) or (op = tkXor)) then
+        begin
+          IREmitNode(left);   { rax = left }
+          case op of
+            tkPlus:  begin EmitB($48); EmitB($05); EmitI32(IRIVal[right]); end;             { add rax, imm32 }
+            tkMinus: begin EmitB($48); EmitB($2D); EmitI32(IRIVal[right]); end;             { sub rax, imm32 }
+            tkAnd:   begin EmitB($48); EmitB($25); EmitI32(IRIVal[right]); end;             { and rax, imm32 }
+            tkOr:    begin EmitB($48); EmitB($0D); EmitI32(IRIVal[right]); end;             { or  rax, imm32 }
+            tkXor:   begin EmitB($48); EmitB($35); EmitI32(IRIVal[right]); end;             { xor rax, imm32 }
+            tkStar:  begin EmitB($48); EmitB($69); EmitB($C0); EmitI32(IRIVal[right]); end; { imul rax, rax, imm32 }
+          end;
+          Exit;
+        end;
+
         if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) then
         begin
           { -O1 leaf-operand direct load: a constant right operand goes
