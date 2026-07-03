@@ -101,6 +101,7 @@ begin
   DebugInfo := False;
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
+  DumpProcMap := False;
   DumpCpp := False;
   NoStdInc := False;
   CUseSystemLibs := False;
@@ -143,6 +144,11 @@ begin
     else if option = '--dump-ir' then
     begin
       DumpIR := True;
+      Inc(i);
+    end
+    else if option = '--proc-map' then
+    begin
+      DumpProcMap := True;
       Inc(i);
     end
     else if option = '--dump-cpp' then
@@ -655,6 +661,15 @@ begin
   if DebugTrace then
     for i := 0 to ProcCount - 1 do
       writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
+  { --proc-map: one "HEXVADDR name" line per emitted routine, for feeding a
+    profiler (perf script | awk lookup) — pxx binaries carry no .symtab. x86-64
+    static layout only (the optimization work targets the host first); the VA
+    matches the non-dynamic ELF entry math (LOAD_ADDR + CODE_OFFSET + BodyAddr;
+    a dynamic build shifts by the dynamic header delta). }
+  if DumpProcMap and (TargetArch = TARGET_X86_64) then
+    for i := 0 to ProcCount - 1 do
+      if Procs[i].BodyAddr >= 0 then
+        writeln(StdErr, 'PROC ', IntToHexStr(LOAD_ADDR + CODE_OFFSET + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then

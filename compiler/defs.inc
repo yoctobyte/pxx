@@ -823,6 +823,7 @@ var
 
   DebugTrace : Boolean;
   DumpIR : Boolean;
+  DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

@@ -4,9 +4,10 @@
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20 (design discussion — optimization strategy)
-- **Priority:** last. Correctness, breadth and self-host come first; optimization
-  is the final arc, not a detour. Do not start until the language/RTL surface is
-  settled.
+- **Priority:** ~~last~~ **GREENLIT 2026-07-03** (user decision): pin-time is
+  now the bottleneck (several minutes per pin; goal ~20s — see
+  [[chore-fast-pin-tiered-tests]]), and the language/RTL surface has settled
+  enough. Start with the low-hanging -O1 peepholes below.
 
 ## Motivation
 
@@ -148,3 +149,44 @@ four (each independently testable, low risk):
   optimize on shared IR; pass framework keyed off `-O`; per-pass level by
   safe-vs-risk not rulebook; four hard gates (determinism, per-level self-host,
   cross-level output oracle, O0 stays 1:1). Optimization is the last arc.
+
+## Measured baseline + concrete low-hanging fruit (2026-07-03, v162)
+
+`make benchmark-compiler-runtime`: identical compiler source, FPC-built binary
+5.1s vs pxx-built 10.4s for the same self-compile — generated code is
+**2.04x slower and 1.97x larger** (4.06MB vs 2.06MB). That gap is the -O
+budget. Sibling axes: [[perf-compiler-hotspots-algorithmic]] (compiler's own
+algorithms: FindProc linear scans = 13% of self-compile),
+[[feature-callconv-register-args]] (the -O2 ABI flag-day),
+[[feature-inline-routines]] (-O1/-O2 inlining).
+
+Cheapest first, all -O1 candidates (deterministic, local, peephole over the
+emitted stream or one-node IR context):
+
+1. **push/pop pair elision** — the stack-machine emits `push rax … pop rcx`
+   around nearly every binary op even when nothing intervenes; a small
+   emitter-level window (track last-emitted push, cancel matching pop into
+   `mov rcx, rax` or direct register use) removes two memory ops per operand
+   pair. Biggest single win, everywhere.
+2. **redundant load elimination** — `mov [slot], rax` immediately followed by
+   `mov rax, [slot]` (store-then-reload of the same slot) drops the reload.
+   Very common at statement seams.
+3. **constant peepholes** — `mov rax, 0` -> `xor eax, eax` (7 bytes -> 2);
+   `add rax, 1`/`sub rax, 1` -> `inc/dec`; compare-with-0 after arithmetic
+   that already set flags. Mostly size, some speed.
+4. **IR_CONST_INT into BINOP immediates** — `mov rcx, imm; add rax, rcx` ->
+   `add rax, imm` when the constant fits imm32. Kills a register shuffle per
+   constant operand.
+5. **branch-over-branch** — `jcc +2; jmp target` -> `j!cc target` where the
+   pattern appears from the comparison lowering.
+6. **dead store to hidden temps** — lowering-time temps written once and read
+   once immediately after can bypass the frame slot entirely (subset of 2).
+
+Suggested pass placement: 1–5 as an emitter-side peephole ring buffer (no IR
+change, applies to every backend that opts in — x86-64 first); 6 wants the
+liveness scaffold shared with [[feature-callconv-register-args]].
+
+Gate discipline per the table above: -O0 stays byte-identical (the self-host
+gate is UNCHANGED); each -O1 pass lands with a codegen-diff test (compile a
+corpus at -O0/-O1, run both, identical output) + `make test` under an
+-O1-built compiler + benchmark delta recorded here.

@@ -24,12 +24,13 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| chore-fast-pin-tiered-tests | A | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -39,6 +40,7 @@ _none_
 | feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
@@ -85,6 +87,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
+| perf-compiler-hotspots-algorithmic | A | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
@@ -595,6 +598,7 @@ _none_
 
 - [C] bug-c-cast-as-call-arg-parse-error
 - [C] bug-c-printf-without-stdio-include-varargs
+- [A] chore-fast-pin-tiered-tests
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend
@@ -604,6 +608,7 @@ _none_
 - [C] feature-c-designated-init-compound-literals
 - [C] feature-c-gtk3-header-final-wiring
 - [C] feature-c-runtime-library
+- [A] feature-callconv-register-args
 - [A] feature-cdecl-indirect-cross-targets
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
@@ -650,6 +655,7 @@ _none_
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
+- [A] perf-compiler-hotspots-algorithmic
 - [B] task-remove-sysutils-move-fillchar-copies
 - [B] task-sqlite-libc-free-runtime-bringup
 - [B+C] wish-compile-gnu-pascal

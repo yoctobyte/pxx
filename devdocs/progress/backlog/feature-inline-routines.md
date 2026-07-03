@@ -57,3 +57,18 @@ tiny hot helpers. If a folding pass lands later, inline compounds with it.
 - New oracle test exercising arg side-effect order, nested inline calls in one
   expression, and an ineligible case; `make test` green; `make cross-bootstrap`
   byte-identical on i386 + aarch64 + arm32.
+
+## Update — greenlit + auto-inline scope (2026-07-03)
+
+Part of the pin-time optimization campaign (see
+[[feature-optimization-levels]], measured 2.04x codegen gap). Additions to
+the original design:
+
+- **Auto-inline (-O2)**: beyond honouring explicit `inline;`, auto-select
+  candidates at -O2: leaf routines (no calls), body under a small IR-node
+  budget (~12 nodes), no address-taken params/locals, not virtual/indirect/
+  external/vararg, single return path. Explicit `inline;` keeps working at
+  -O1; auto-inline is additive and silent (a `--warn-inline` diag can list
+  decisions). The eligibility analysis (leaf/addr-taken/size) is the same
+  scaffold [[feature-callconv-register-args]] needs — build it once.
+- Self-host gate unchanged: -O0 byte-identical; inlining only under -O1+.
