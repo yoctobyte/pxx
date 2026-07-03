@@ -521,112 +521,88 @@ begin
   Error('EmitAsm386: unsupported instruction: ' + mnem);
 end;
 
-procedure EmitAsm386(const items: array of const); overload;
-var
-  i, n, h, nHoles, j, k: Integer;
-  line, trimmed, mnem, target: AnsiString;
-  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
-  cc, targetPos, disp: Integer;
-  isJmp, defined: Boolean;
+{ Block-scoped label state around Asm386ProcessLine calls. EmitAsm386 is one
+  begin/lines/resolve cycle; the inline-asm IR_ASM replay in
+  ir_codegen386.inc is another (labels are scoped to one asm block). }
+procedure Asm386BlockBegin;
 begin
   Asm386LblCount := 0; Asm386FwCount := 0;
-  n := Length(items);
-  i := 0;
-  while i < n do
+end;
+
+{ Process one already-hole-resolved line: label definition, jmp/jcc to a
+  label (recorded for Asm386BlockResolve when forward), or an ordinary
+  instruction via AsmTextLine386. }
+procedure Asm386ProcessLine(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
+var
+  trimmed, mnem, target: AnsiString;
+  j, k, cc, targetPos, disp: Integer;
+  isJmp, defined: Boolean;
+begin
+  trimmed := AsmTextTrim(line);
+
+  { first word = mnemonic }
+  mnem := ''; j := 1;
+  while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
+    begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+
+  isJmp := CaseEqual(mnem, 'jmp');
+  if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
   begin
-    if items[i].VType <> vtAnsiString then
-      Error('EmitAsm386: expected an instruction string');
-    line := AsmTextCStr(items[i].VAnsiString);
+    { label definition: `name:` (a bare line ending in ':') }
+    if Asm386LblCount >= ASM_386_MAX_LABELS then Error('EmitAsm386: too many labels');
+    Asm386LblName[Asm386LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+    Asm386LblPos[Asm386LblCount] := CodeLen;
+    Inc(Asm386LblCount);
+    Exit;
+  end;
 
-    { trim for label/jump classification }
-    trimmed := AsmTextTrim(line);
+  if isJmp or AsmTextJccCode(mnem, cc) then
+  begin
+    { operand = label name }
+    while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
+    target := '';
+    while j <= Length(trimmed) do begin AppendChar(target, trimmed[j]); Inc(j); end;
 
-    { first word = mnemonic }
-    mnem := ''; j := 1;
-    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
-      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+    defined := False; targetPos := 0;
+    for k := 0 to Asm386LblCount - 1 do
+      if Asm386LblName[k] = target then begin defined := True; targetPos := Asm386LblPos[k]; end;
 
-    isJmp := CaseEqual(mnem, 'jmp');
-    if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
+    if defined then
     begin
-      { label definition: `name:` (a bare line ending in ':') }
-      if Asm386LblCount >= ASM_386_MAX_LABELS then Error('EmitAsm386: too many labels');
-      Asm386LblName[Asm386LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
-      Asm386LblPos[Asm386LblCount] := CodeLen;
-      Inc(Asm386LblCount);
-      Inc(i);
-    end
-    else if isJmp or AsmTextJccCode(mnem, cc) then
-    begin
-      { operand = label name }
-      while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
-      target := '';
-      while j <= Length(trimmed) do begin AppendChar(target, trimmed[j]); Inc(j); end;
-
-      defined := False; targetPos := 0;
-      for k := 0 to Asm386LblCount - 1 do
-        if Asm386LblName[k] = target then begin defined := True; targetPos := Asm386LblPos[k]; end;
-
-      if defined then
+      { backward (or same-call known) target: short form if it reaches. }
+      disp := targetPos - (CodeLen + 2);
+      if (disp >= -128) and (disp <= 127) then
       begin
-        { backward (or same-call known) target: short form if it reaches. }
-        disp := targetPos - (CodeLen + 2);
-        if (disp >= -128) and (disp <= 127) then
-        begin
-          if isJmp then EncB($EB) else EncB($70 + cc);
-          EncB(disp and $FF);
-        end
-        else
-        begin
-          if isJmp then begin EncB($E9); EncI32(targetPos - (CodeLen + 4)); end
-          else begin EncB($0F); EncB($80 + cc); EncI32(targetPos - (CodeLen + 4)); end;
-        end;
+        if isJmp then EncB($EB) else EncB($70 + cc);
+        EncB(disp and $FF);
       end
       else
       begin
-        { forward target: emit the near (rel32) form and record a patch. }
-        if isJmp then EncB($E9) else begin EncB($0F); EncB($80 + cc); end;
-        if Asm386FwCount >= ASM_386_MAX_LABELS then Error('EmitAsm386: too many forward jumps');
-        Asm386FwName[Asm386FwCount] := target;
-        Asm386FwPatch[Asm386FwCount] := CodeLen;   { position of the rel32 displacement }
-        Inc(Asm386FwCount);
-        EncI32(0);
+        if isJmp then begin EncB($E9); EncI32(targetPos - (CodeLen + 4)); end
+        else begin EncB($0F); EncB($80 + cc); EncI32(targetPos - (CodeLen + 4)); end;
       end;
-      Inc(i);
     end
     else
     begin
-      { ordinary instruction: count `%` markers and bind following int holes }
-      nHoles := 0;
-      for h := 1 to Length(line) do
-        if line[h] = '%' then Inc(nHoles);
-      
-      { also count `@data` or `@glob` as hole consumers if present }
-      j := 1;
-      while j <= Length(line) do
-      begin
-        if (AsmTextCharAt(line, j) = '@') and
-           ((AsmTextSlice(line, j, 5) = '@data') or (AsmTextSlice(line, j, 5) = '@glob')) then
-        begin
-          Inc(nHoles);
-          j := j + 4;
-        end;
-        Inc(j);
-      end;
-
-      if nHoles > ASM_MAX_HOLES then Error('EmitAsm386: too many holes in one line');
-      for h := 0 to nHoles - 1 do
-      begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-          Error('EmitAsm386: missing integer hole value');
-        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-      end;
-      AsmTextLine386(line, holes, nHoles);
-      i := i + 1 + nHoles;
+      { forward target: emit the near (rel32) form and record a patch. }
+      if isJmp then EncB($E9) else begin EncB($0F); EncB($80 + cc); end;
+      if Asm386FwCount >= ASM_386_MAX_LABELS then Error('EmitAsm386: too many forward jumps');
+      Asm386FwName[Asm386FwCount] := target;
+      Asm386FwPatch[Asm386FwCount] := CodeLen;   { position of the rel32 displacement }
+      Inc(Asm386FwCount);
+      EncI32(0);
     end;
+    Exit;
   end;
 
-  { resolve forward jumps now that all labels are placed. }
+  { ordinary instruction }
+  AsmTextLine386(line, holes, nHoles);
+end;
+
+{ resolve forward jumps now that all labels are placed. }
+procedure Asm386BlockResolve;
+var j, k, targetPos: Integer;
+begin
   for k := 0 to Asm386FwCount - 1 do
   begin
     targetPos := -1;
@@ -635,6 +611,68 @@ begin
     if targetPos < 0 then Error('EmitAsm386: undefined label in jump');
     Patch32(Asm386FwPatch[k], targetPos - (Asm386FwPatch[k] + 4));
   end;
+end;
+
+{ Replay one parse-time-captured inline-asm line (AsmParseBodyText386, see
+  asmenc.inc). Hole values come from the InlineAsmHoleVal pool, count stored
+  explicitly per line (NOT derived from '%' — a @glob operand consumes a
+  hole without one). Caller brackets a block with Asm386BlockBegin/Resolve. }
+procedure Asm386ProcessInlineLine(idx: Integer);
+var
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+  k: Integer;
+begin
+  if InlineAsmLineHoleN[idx] > ASM_MAX_HOLES then
+    Error('EmitAsm386: too many holes in one line');
+  for k := 0 to InlineAsmLineHoleN[idx] - 1 do
+    holes[k] := InlineAsmHoleVal[InlineAsmLineHole0[idx] + k];
+  Asm386ProcessLine(InlineAsmLine[idx], holes, InlineAsmLineHoleN[idx]);
+end;
+
+procedure EmitAsm386(const items: array of const); overload;
+var
+  i, n, h, nHoles, j: Integer;
+  line: AnsiString;
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+begin
+  Asm386BlockBegin;
+  n := Length(items);
+  i := 0;
+  while i < n do
+  begin
+    if items[i].VType <> vtAnsiString then
+      Error('EmitAsm386: expected an instruction string');
+    line := AsmTextCStr(items[i].VAnsiString);
+
+    { count `%` markers and bind following int holes }
+    nHoles := 0;
+    for h := 1 to Length(line) do
+      if line[h] = '%' then Inc(nHoles);
+
+    { also count `@data` or `@glob` as hole consumers if present }
+    j := 1;
+    while j <= Length(line) do
+    begin
+      if (AsmTextCharAt(line, j) = '@') and
+         ((AsmTextSlice(line, j, 5) = '@data') or (AsmTextSlice(line, j, 5) = '@glob')) then
+      begin
+        Inc(nHoles);
+        j := j + 4;
+      end;
+      Inc(j);
+    end;
+
+    if nHoles > ASM_MAX_HOLES then Error('EmitAsm386: too many holes in one line');
+    for h := 0 to nHoles - 1 do
+    begin
+      if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
+        Error('EmitAsm386: missing integer hole value');
+      if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
+    end;
+    Asm386ProcessLine(line, holes, nHoles);
+    i := i + 1 + nHoles;
+  end;
+  Asm386BlockResolve;
 end;
 
 procedure EmitAsm386(const s: AnsiString); overload;

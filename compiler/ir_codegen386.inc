@@ -791,6 +791,18 @@ begin
   case IRKind[node] of
     IR_NOP, IR_BLOCK: ;
 
+    IR_ASM:
+      begin
+        { Inline asm block: replay the parse-time-captured text lines
+          (AsmParseBodyText386, asmenc.inc) through the i386 text engine.
+          Emitting here, at final code positions, makes label fixups and
+          @glob relocations natively correct. Labels are block-scoped. }
+        Asm386BlockBegin;
+        for i := IRA[node] to IRA[node] + IRB[node] - 1 do
+          Asm386ProcessInlineLine(i);
+        Asm386BlockResolve;
+      end;
+
     IR_CONST_INT:
       begin
         if TypeIsFloat(IntToTypeKind(IRTk[node])) then

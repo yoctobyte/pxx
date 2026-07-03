@@ -603,270 +603,225 @@ var
   AsmA64FwCond:   array[0..ASM_A64_MAX_LABELS - 1] of Integer;
   AsmA64FwCount:  Integer;
 
-procedure EmitAsmA64(const items: array of const); overload;
+{ Block-scoped label state around AsmA64ProcessLine calls. EmitAsmA64 is one
+  begin/lines/resolve cycle; the inline-asm IR_ASM replay in
+  ir_codegen_aarch64.inc is another (labels are scoped to one asm block). }
+procedure AsmA64BlockBegin;
+begin
+  AsmA64LblCount := 0; AsmA64FwCount := 0;
+end;
+
+{ Process one already-hole-resolved line: label definition, branch/jump/ldr
+  with a label target (recorded for AsmA64BlockResolve when forward), or an
+  ordinary instruction via AsmTextLineA64. }
+procedure AsmA64ProcessLine(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
 var
-  i, n, h, nHoles, j, k: Integer;
-  line, trimmed, mnem, rest, target, op0, op1: AnsiString;
-  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
-  rd, branchPos, targetPos, partIdx, condCode: Integer;
+  trimmed, mnem, rest, target, op0: AnsiString;
+  j, k, rd, branchPos, targetPos, partIdx, condCode: Integer;
   isJ, isBr, isLdr, defined: Boolean;
   is64: Boolean;
 begin
-  AsmA64LblCount := 0; AsmA64FwCount := 0;
-  n := Length(items);
-  i := 0;
-  while i < n do
+  trimmed := AsmTextTrim(line);
+
+  { first word = mnemonic }
+  mnem := ''; j := 1;
+  while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
+    begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+
+  { check instruction type for jumps/branches/literals }
+  isJ := CaseEqual(mnem, 'b') or CaseEqual(mnem, 'bl');
+  isBr := CaseEqual(mnem, 'cbz') or CaseEqual(mnem, 'cbnz') or
+          ((Length(mnem) > 2) and (AsmTextSlice(mnem, 1, 2) = 'b.')) or
+          ((Length(mnem) = 3) and (AsmTextCharAt(mnem, 1) = 'b') and AsmA64CondCode(AsmTextSlice(mnem, 2, 2), condCode));
+  isLdr := CaseEqual(mnem, 'ldr');
+
+  if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
   begin
-    if items[i].VType <> vtAnsiString then
-      Error('EmitAsmA64: expected an instruction string');
-    line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmTextTrim(line);
+    { label definition: a bare line ending in ':' }
+    if AsmA64LblCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many labels');
+    AsmA64LblName[AsmA64LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+    AsmA64LblPos[AsmA64LblCount] := CodeLen;
+    Inc(AsmA64LblCount);
+    Exit;
+  end;
 
-    { first word = mnemonic }
-    mnem := ''; j := 1;
-    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
-      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
-
-    { check instruction type for jumps/branches/literals }
-    isJ := CaseEqual(mnem, 'b') or CaseEqual(mnem, 'bl');
-    isBr := CaseEqual(mnem, 'cbz') or CaseEqual(mnem, 'cbnz') or
-            ((Length(mnem) > 2) and (AsmTextSlice(mnem, 1, 2) = 'b.')) or
-            ((Length(mnem) = 3) and (AsmTextCharAt(mnem, 1) = 'b') and AsmA64CondCode(AsmTextSlice(mnem, 2, 2), condCode));
-    isLdr := CaseEqual(mnem, 'ldr');
-
-    if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
+  if isJ then
+  begin
+    { unconditional branch: b/bl label }
+    target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    if AsmTextIsLabel(target) then
     begin
-      { label definition: a bare line ending in ':' }
-      if AsmA64LblCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many labels');
-      AsmA64LblName[AsmA64LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
-      AsmA64LblPos[AsmA64LblCount] := CodeLen;
-      Inc(AsmA64LblCount);
-      Inc(i);
-    end
-    else if isJ then
-    begin
-      { unconditional branch: b/bl label }
-      target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      if AsmTextIsLabel(target) then
+      branchPos := CodeLen;
+      defined := False; targetPos := 0;
+      for k := 0 to AsmA64LblCount - 1 do
+        if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
+      if defined then
       begin
-        branchPos := CodeLen;
-        defined := False; targetPos := 0;
-        for k := 0 to AsmA64LblCount - 1 do
-          if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
-        if defined then
-        begin
-          if CaseEqual(mnem, 'bl') then EmitI32($94000000 or (((targetPos - branchPos) div 4) and $03ffffff))
-          else EmitI32($14000000 or (((targetPos - branchPos) div 4) and $03ffffff));
-        end
-        else
-        begin
-          if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
-          AsmA64FwName[AsmA64FwCount] := target;
-          AsmA64FwPatch[AsmA64FwCount] := branchPos;
-          if CaseEqual(mnem, 'bl') then AsmA64FwType[AsmA64FwCount] := 1 else AsmA64FwType[AsmA64FwCount] := 0;
-          Inc(AsmA64FwCount);
-          if CaseEqual(mnem, 'bl') then EmitI32($94000000) else EmitI32($14000000);
-        end;
-        Inc(i);
+        if CaseEqual(mnem, 'bl') then EmitI32($94000000 or (((targetPos - branchPos) div 4) and $03ffffff))
+        else EmitI32($14000000 or (((targetPos - branchPos) div 4) and $03ffffff));
       end
       else
       begin
-        { ordinary instruction }
-        nHoles := 0;
-        for h := 1 to Length(line) do
-          if line[h] = '%' then Inc(nHoles);
-        if nHoles > ASM_MAX_HOLES then Error('EmitAsmA64: too many holes in one line');
-        for h := 0 to nHoles - 1 do
-        begin
-          if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-            Error('EmitAsmA64: missing integer hole value');
-          if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-        end;
-        AsmTextLineA64(line, holes, nHoles);
-        i := i + 1 + nHoles;
+        if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
+        AsmA64FwName[AsmA64FwCount] := target;
+        AsmA64FwPatch[AsmA64FwCount] := branchPos;
+        if CaseEqual(mnem, 'bl') then AsmA64FwType[AsmA64FwCount] := 1 else AsmA64FwType[AsmA64FwCount] := 0;
+        Inc(AsmA64FwCount);
+        if CaseEqual(mnem, 'bl') then EmitI32($94000000) else EmitI32($14000000);
       end;
-    end
-    else if isBr then
-    begin
-      { conditional branch: b.cond label, or cbz/cbnz rd, label }
-      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      if CaseEqual(mnem, 'cbz') or CaseEqual(mnem, 'cbnz') then
-      begin
-        op0 := ''; target := ''; partIdx := 0;
-        for k := 1 to Length(rest) do
-        begin
-          if rest[k] = ',' then Inc(partIdx)
-          else if partIdx = 0 then AppendChar(op0, rest[k])
-          else AppendChar(target, rest[k]);
-        end;
-        op0 := AsmTextTrim(op0);
-        target := AsmTextTrim(target);
-        if not AsmA64RegNum(op0, rd, is64) then Error('EmitAsmA64: expected register');
-      end
-      else
-      begin
-        target := rest;
-        if (Length(mnem) > 2) and (AsmTextSlice(mnem, 1, 2) = 'b.') then
-        begin
-          if not AsmA64CondCode(AsmTextSlice(mnem, 3, Length(mnem) - 2), condCode) then
-            Error('EmitAsmA64: invalid condition');
-        end
-        else
-        begin
-          if not AsmA64CondCode(AsmTextSlice(mnem, 2, 2), condCode) then
-            Error('EmitAsmA64: invalid condition');
-        end;
-      end;
+      Exit;
+    end;
+    AsmTextLineA64(line, holes, nHoles);
+    Exit;
+  end;
 
-      if AsmTextIsLabel(target) then
-      begin
-        branchPos := CodeLen;
-        defined := False; targetPos := 0;
-        for k := 0 to AsmA64LblCount - 1 do
-          if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
-        if defined then
-        begin
-          if CaseEqual(mnem, 'cbz') then
-          begin
-            if is64 then EmitI32($B4000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
-            else EmitI32($34000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
-          end
-          else if CaseEqual(mnem, 'cbnz') then
-          begin
-            if is64 then EmitI32($B5000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
-            else EmitI32($35000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
-          end
-          else
-            EmitI32($54000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or condCode);
-        end
-        else
-        begin
-          if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
-          AsmA64FwName[AsmA64FwCount] := target;
-          AsmA64FwPatch[AsmA64FwCount] := branchPos;
-          if CaseEqual(mnem, 'cbz') then
-          begin
-            AsmA64FwType[AsmA64FwCount] := 3;
-            AsmA64FwRt[AsmA64FwCount] := rd;
-            if is64 then EmitI32($B4000000 or rd) else EmitI32($34000000 or rd);
-          end
-          else if CaseEqual(mnem, 'cbnz') then
-          begin
-            AsmA64FwType[AsmA64FwCount] := 4;
-            AsmA64FwRt[AsmA64FwCount] := rd;
-            if is64 then EmitI32($B5000000 or rd) else EmitI32($35000000 or rd);
-          end
-          else
-          begin
-            AsmA64FwType[AsmA64FwCount] := 2;
-            AsmA64FwCond[AsmA64FwCount] := condCode;
-            EmitI32($54000000 or condCode);
-          end;
-          Inc(AsmA64FwCount);
-        end;
-        Inc(i);
-      end
-      else
-      begin
-        { ordinary instruction }
-        nHoles := 0;
-        for h := 1 to Length(line) do
-          if line[h] = '%' then Inc(nHoles);
-        if nHoles > ASM_MAX_HOLES then Error('EmitAsmA64: too many holes in one line');
-        for h := 0 to nHoles - 1 do
-        begin
-          if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-            Error('EmitAsmA64: missing integer hole value');
-          if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-        end;
-        AsmTextLineA64(line, holes, nHoles);
-        i := i + 1 + nHoles;
-      end;
-    end
-    else if isLdr then
+  if isBr then
+  begin
+    { conditional branch: b.cond label, or cbz/cbnz rd, label }
+    rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    if CaseEqual(mnem, 'cbz') or CaseEqual(mnem, 'cbnz') then
     begin
-      { check if PC-relative literal: ldr rd, label }
-      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
       op0 := ''; target := ''; partIdx := 0;
-      condCode := 0; { 0 = normal, 2 = inside memory operand (seen '[') }
       for k := 1 to Length(rest) do
       begin
-        if rest[k] = '[' then condCode := 2;
-        if (rest[k] = ',') and (condCode = 0) then Inc(partIdx)
+        if rest[k] = ',' then Inc(partIdx)
         else if partIdx = 0 then AppendChar(op0, rest[k])
         else AppendChar(target, rest[k]);
       end;
       op0 := AsmTextTrim(op0);
       target := AsmTextTrim(target);
-
-      if AsmA64RegNum(op0, rd, is64) and (AsmTextCharAt(target, 1) <> '[') and AsmTextIsLabel(target) and
-         not CaseEqual(target, '@data') and not CaseEqual(target, '@glob') then
-      begin
-        branchPos := CodeLen;
-        defined := False; targetPos := 0;
-        for k := 0 to AsmA64LblCount - 1 do
-          if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
-        if defined then
-        begin
-          if is64 then EmitI32($58000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
-          else EmitI32($18000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
-        end
-        else
-        begin
-          if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
-          AsmA64FwName[AsmA64FwCount] := target;
-          AsmA64FwPatch[AsmA64FwCount] := branchPos;
-          AsmA64FwType[AsmA64FwCount] := 5;
-          AsmA64FwRt[AsmA64FwCount] := rd;
-          if is64 then AsmA64FwCond[AsmA64FwCount] := 1 else AsmA64FwCond[AsmA64FwCount] := 0;
-          Inc(AsmA64FwCount);
-          if is64 then EmitI32($58000000 or rd) else EmitI32($18000000 or rd);
-        end;
-        Inc(i);
-      end
-      else
-      begin
-        { ordinary instruction }
-        nHoles := 0;
-        for h := 1 to Length(line) do
-          if line[h] = '%' then Inc(nHoles);
-        if nHoles > ASM_MAX_HOLES then Error('EmitAsmA64: too many holes in one line');
-        for h := 0 to nHoles - 1 do
-        begin
-          if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-            Error('EmitAsmA64: missing integer hole value');
-          if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-        end;
-        AsmTextLineA64(line, holes, nHoles);
-        i := i + 1 + nHoles;
-      end;
+      if not AsmA64RegNum(op0, rd, is64) then Error('EmitAsmA64: expected register');
     end
     else
     begin
-      { ordinary instruction }
-      nHoles := 0;
-      for h := 1 to Length(line) do
-        if line[h] = '%' then Inc(nHoles);
-      if nHoles > ASM_MAX_HOLES then Error('EmitAsmA64: too many holes in one line');
-      for h := 0 to nHoles - 1 do
+      target := rest;
+      if (Length(mnem) > 2) and (AsmTextSlice(mnem, 1, 2) = 'b.') then
       begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-          Error('EmitAsmA64: missing integer hole value');
-        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
+        if not AsmA64CondCode(AsmTextSlice(mnem, 3, Length(mnem) - 2), condCode) then
+          Error('EmitAsmA64: invalid condition');
+      end
+      else
+      begin
+        if not AsmA64CondCode(AsmTextSlice(mnem, 2, 2), condCode) then
+          Error('EmitAsmA64: invalid condition');
       end;
-      AsmTextLineA64(line, holes, nHoles);
-      i := i + 1 + nHoles;
     end;
+
+    if AsmTextIsLabel(target) then
+    begin
+      branchPos := CodeLen;
+      defined := False; targetPos := 0;
+      for k := 0 to AsmA64LblCount - 1 do
+        if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
+      if defined then
+      begin
+        if CaseEqual(mnem, 'cbz') then
+        begin
+          if is64 then EmitI32($B4000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
+          else EmitI32($34000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
+        end
+        else if CaseEqual(mnem, 'cbnz') then
+        begin
+          if is64 then EmitI32($B5000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
+          else EmitI32($35000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
+        end
+        else
+          EmitI32($54000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or condCode);
+      end
+      else
+      begin
+        if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
+        AsmA64FwName[AsmA64FwCount] := target;
+        AsmA64FwPatch[AsmA64FwCount] := branchPos;
+        if CaseEqual(mnem, 'cbz') then
+        begin
+          AsmA64FwType[AsmA64FwCount] := 3;
+          AsmA64FwRt[AsmA64FwCount] := rd;
+          if is64 then EmitI32($B4000000 or rd) else EmitI32($34000000 or rd);
+        end
+        else if CaseEqual(mnem, 'cbnz') then
+        begin
+          AsmA64FwType[AsmA64FwCount] := 4;
+          AsmA64FwRt[AsmA64FwCount] := rd;
+          if is64 then EmitI32($B5000000 or rd) else EmitI32($35000000 or rd);
+        end
+        else
+        begin
+          AsmA64FwType[AsmA64FwCount] := 2;
+          AsmA64FwCond[AsmA64FwCount] := condCode;
+          EmitI32($54000000 or condCode);
+        end;
+        Inc(AsmA64FwCount);
+      end;
+      Exit;
+    end;
+    AsmTextLineA64(line, holes, nHoles);
+    Exit;
   end;
 
-  { resolve forward jumps/branches now that all labels are placed }
+  if isLdr then
+  begin
+    { check if PC-relative literal: ldr rd, label }
+    rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    op0 := ''; target := ''; partIdx := 0;
+    condCode := 0; { 0 = normal, 2 = inside memory operand (seen '[') }
+    for k := 1 to Length(rest) do
+    begin
+      if rest[k] = '[' then condCode := 2;
+      if (rest[k] = ',') and (condCode = 0) then Inc(partIdx)
+      else if partIdx = 0 then AppendChar(op0, rest[k])
+      else AppendChar(target, rest[k]);
+    end;
+    op0 := AsmTextTrim(op0);
+    target := AsmTextTrim(target);
+
+    { '@' excludes relocation forms — 'ldr rd, @glob, %' carries a ',%' tail,
+      so a bare CaseEqual against '@glob' would misroute it to this label
+      path (latent before inline asm: no codegen caller used the form). }
+    if AsmA64RegNum(op0, rd, is64) and (AsmTextCharAt(target, 1) <> '[') and AsmTextIsLabel(target) and
+       (AsmTextCharAt(target, 1) <> '@') then
+    begin
+      branchPos := CodeLen;
+      defined := False; targetPos := 0;
+      for k := 0 to AsmA64LblCount - 1 do
+        if AsmA64LblName[k] = target then begin defined := True; targetPos := AsmA64LblPos[k]; end;
+      if defined then
+      begin
+        if is64 then EmitI32($58000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd)
+        else EmitI32($18000000 or ((((targetPos - branchPos) div 4) and $7ffff) shl 5) or rd);
+      end
+      else
+      begin
+        if AsmA64FwCount >= ASM_A64_MAX_LABELS then Error('EmitAsmA64: too many forward jumps');
+        AsmA64FwName[AsmA64FwCount] := target;
+        AsmA64FwPatch[AsmA64FwCount] := branchPos;
+        AsmA64FwType[AsmA64FwCount] := 5;
+        AsmA64FwRt[AsmA64FwCount] := rd;
+        if is64 then AsmA64FwCond[AsmA64FwCount] := 1 else AsmA64FwCond[AsmA64FwCount] := 0;
+        Inc(AsmA64FwCount);
+        if is64 then EmitI32($58000000 or rd) else EmitI32($18000000 or rd);
+      end;
+      Exit;
+    end;
+    AsmTextLineA64(line, holes, nHoles);
+    Exit;
+  end;
+
+  { ordinary instruction }
+  AsmTextLineA64(line, holes, nHoles);
+end;
+
+{ resolve forward jumps/branches now that all labels are placed }
+procedure AsmA64BlockResolve;
+var j, k, rd, branchPos, targetPos: Integer;
+begin
   for k := 0 to AsmA64FwCount - 1 do
   begin
     targetPos := -1;
     for j := 0 to AsmA64LblCount - 1 do
       if AsmA64LblName[j] = AsmA64FwName[k] then targetPos := AsmA64LblPos[j];
     if targetPos < 0 then Error('EmitAsmA64: undefined label in jump');
-    
+
     branchPos := AsmA64FwPatch[k];
     case AsmA64FwType[k] of
       0: { B }
@@ -901,6 +856,52 @@ begin
         end;
     end;
   end;
+end;
+
+{ Replay one parse-time-captured inline-asm line (AsmParseBodyText, see
+  asmenc.inc). Hole values come from the InlineAsmHoleVal pool, count stored
+  explicitly per line. Caller brackets a block with AsmA64BlockBegin/Resolve. }
+procedure AsmA64ProcessInlineLine(idx: Integer);
+var
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+  k: Integer;
+begin
+  if InlineAsmLineHoleN[idx] > ASM_MAX_HOLES then
+    Error('EmitAsmA64: too many holes in one line');
+  for k := 0 to InlineAsmLineHoleN[idx] - 1 do
+    holes[k] := InlineAsmHoleVal[InlineAsmLineHole0[idx] + k];
+  AsmA64ProcessLine(InlineAsmLine[idx], holes, InlineAsmLineHoleN[idx]);
+end;
+
+procedure EmitAsmA64(const items: array of const); overload;
+var
+  i, n, h, nHoles: Integer;
+  line: AnsiString;
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+begin
+  AsmA64BlockBegin;
+  n := Length(items);
+  i := 0;
+  while i < n do
+  begin
+    if items[i].VType <> vtAnsiString then
+      Error('EmitAsmA64: expected an instruction string');
+    line := AsmTextCStr(items[i].VAnsiString);
+
+    nHoles := 0;
+    for h := 1 to Length(line) do
+      if line[h] = '%' then Inc(nHoles);
+    if nHoles > ASM_MAX_HOLES then Error('EmitAsmA64: too many holes in one line');
+    for h := 0 to nHoles - 1 do
+    begin
+      if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
+        Error('EmitAsmA64: missing integer hole value');
+      if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
+    end;
+    AsmA64ProcessLine(line, holes, nHoles);
+    i := i + 1 + nHoles;
+  end;
+  AsmA64BlockResolve;
 end;
 
 procedure EmitAsmA64(const s: AnsiString); overload;

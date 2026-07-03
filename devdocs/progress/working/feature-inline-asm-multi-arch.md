@@ -82,5 +82,27 @@ name tables per target:
   restructure). No AsmBytes-offset rebasing needed. Non-wired targets keep a
   clear parse error. Test: test/test_asm_rv32.pas (locals/params, label
   loop, la/@glob global) wired into `make test-riscv32`, green under qemu.
-  Remaining scope: aarch64, arm32, i386 (same capture pattern, per-target
-  register table + frame base + engine), xtensa last/optional.
+  Remaining scope after this entry: xtensa only (last/optional).
+- 2026-07-03 — aarch64 + arm32 + i386 legs LANDED, same capture pattern:
+  - aarch64: locals/params -> `[x29,off]`; globals only via
+    `ldr <reg>, <name>` -> 'ldr reg,@glob,%' (address literal) + hole;
+    `b.eq` lexes as 'b' '.' 'eq' -> capture rejoins dotted mnemonics;
+    immediates written WITHOUT '#' (Pascal lexer reads #4 as char literal;
+    engine accepts both). FIXED latent engine bug: EmitAsmA64's ldr-literal
+    label detect compared the whole tail against '@glob' but the reloc form
+    carries ',%' -> misrouted to the label path (dormant: no codegen caller
+    used 'ldr rd,@glob' through EmitAsmA64 before).
+  - arm32: locals/params -> `[fp,off]`; globals via `ldr <reg>, <name>` ->
+    'ldr reg,@glob,%'; condition-suffixed b/bl (bne, bleq...) recognized as
+    branch lines at capture.
+  - i386: locals/params -> `[ebp±off]`; globals only via
+    `mov <reg>, <name>` -> 'mov reg,@glob' (address load) + hole — the 386
+    engine has no absolute-mem operand kind, unlike x86-64's AOP_GLOBAL, so
+    i386 global access derefs through a register; registers restricted to
+    the 32-bit-legal subset (no r8+/64-bit/xmm — clear error).
+  - Engines asmtext_a64/arm32/386.inc refactored to the same
+    BlockBegin/ProcessLine/BlockResolve + ProcessInlineLine API (pure
+    restructure); IR_ASM cases added to ir_codegen_aarch64/arm32/386.inc.
+  - Tests test_asm_a64/arm32/386.pas (locals/params + label loop + global,
+    oracle output 42/55/42 identical across all 5 targets incl x86-64/rv32)
+    wired into make test-aarch64 / test-arm32 / test-i386 — all green.

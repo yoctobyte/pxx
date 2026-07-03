@@ -395,114 +395,94 @@ var
   AsmArm32FwCond:   array[0..ASM_ARM32_MAX_LABELS - 1] of Integer;
   AsmArm32FwCount:  Integer;
 
-procedure EmitAsmArm32(const items: array of const); overload;
-var
-  i, n, h, nHoles, j, k: Integer;
-  line, trimmed, mnem, target: AnsiString;
-  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
-  rd, branchPos, targetPos, cond: Integer;
-  isJ, defined: Boolean;
-  baseMnem: AnsiString;
+{ Block-scoped label state around AsmArm32ProcessLine calls. EmitAsmArm32 is
+  one begin/lines/resolve cycle; the inline-asm IR_ASM replay in
+  ir_codegen_arm32.inc is another (labels are scoped to one asm block). }
+procedure AsmArm32BlockBegin;
 begin
   AsmArm32LblCount := 0; AsmArm32FwCount := 0;
-  n := Length(items);
-  i := 0;
-  while i < n do
+end;
+
+{ Process one already-hole-resolved line: label definition, b/bl (with
+  optional condition suffix) to a label (recorded for AsmArm32BlockResolve
+  when forward), or an ordinary instruction via AsmTextLineArm32. }
+procedure AsmArm32ProcessLine(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
+var
+  trimmed, mnem, target, baseMnem: AnsiString;
+  j, k, rd, branchPos, targetPos, cond: Integer;
+  isJ, defined: Boolean;
+begin
+  trimmed := AsmTextTrim(line);
+
+  mnem := ''; j := 1;
+  while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
+    begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+
+  cond := 14;
+  baseMnem := mnem;
+  if Length(mnem) >= 3 then
   begin
-    if items[i].VType <> vtAnsiString then
-      Error('EmitAsmArm32: expected an instruction string');
-    line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmTextTrim(line);
+    if AsmArm32CondCode(AsmTextSlice(mnem, Length(mnem) - 1, 2), cond) then
+      baseMnem := AsmTextSlice(mnem, 1, Length(mnem) - 2);
+  end;
 
-    mnem := ''; j := 1;
-    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
-      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+  isJ := CaseEqual(baseMnem, 'b') or CaseEqual(baseMnem, 'bl');
 
-    cond := 14;
-    baseMnem := mnem;
-    if Length(mnem) >= 3 then
+  if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
+  begin
+    if AsmArm32LblCount >= ASM_ARM32_MAX_LABELS then Error('EmitAsmArm32: too many labels');
+    AsmArm32LblName[AsmArm32LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+    AsmArm32LblPos[AsmArm32LblCount] := CodeLen;
+    Inc(AsmArm32LblCount);
+    Exit;
+  end;
+
+  if isJ then
+  begin
+    target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+    if AsmTextIsLabel(target) then
     begin
-      if AsmArm32CondCode(AsmTextSlice(mnem, Length(mnem) - 1, 2), cond) then
-        baseMnem := AsmTextSlice(mnem, 1, Length(mnem) - 2);
-    end;
-
-    isJ := CaseEqual(baseMnem, 'b') or CaseEqual(baseMnem, 'bl');
-
-    if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
-    begin
-      if AsmArm32LblCount >= ASM_ARM32_MAX_LABELS then Error('EmitAsmArm32: too many labels');
-      AsmArm32LblName[AsmArm32LblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
-      AsmArm32LblPos[AsmArm32LblCount] := CodeLen;
-      Inc(AsmArm32LblCount);
-      Inc(i);
-    end
-    else if isJ then
-    begin
-      target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      if AsmTextIsLabel(target) then
+      branchPos := CodeLen;
+      defined := False; targetPos := 0;
+      for k := 0 to AsmArm32LblCount - 1 do
+        if AsmArm32LblName[k] = target then begin defined := True; targetPos := AsmArm32LblPos[k]; end;
+      if defined then
       begin
-        branchPos := CodeLen;
-        defined := False; targetPos := 0;
-        for k := 0 to AsmArm32LblCount - 1 do
-          if AsmArm32LblName[k] = target then begin defined := True; targetPos := AsmArm32LblPos[k]; end;
-        if defined then
-        begin
-          rd := ((targetPos - branchPos) div 4) - 2;
-          if CaseEqual(baseMnem, 'bl') then EmitI32((cond shl 28) or $0B000000 or (rd and $00ffffff))
-          else EmitI32((cond shl 28) or $0A000000 or (rd and $00ffffff));
-        end
-        else
-        begin
-          if AsmArm32FwCount >= ASM_ARM32_MAX_LABELS then Error('EmitAsmArm32: too many forward jumps');
-          AsmArm32FwName[AsmArm32FwCount] := target;
-          AsmArm32FwPatch[AsmArm32FwCount] := branchPos;
-          if CaseEqual(baseMnem, 'bl') then AsmArm32FwType[AsmArm32FwCount] := 1 else AsmArm32FwType[AsmArm32FwCount] := 0;
-          AsmArm32FwCond[AsmArm32FwCount] := cond;
-          Inc(AsmArm32FwCount);
-          if CaseEqual(baseMnem, 'bl') then EmitI32((cond shl 28) or $0B000000) else EmitI32((cond shl 28) or $0A000000);
-        end;
-        Inc(i);
+        rd := ((targetPos - branchPos) div 4) - 2;
+        if CaseEqual(baseMnem, 'bl') then EmitI32((cond shl 28) or $0B000000 or (rd and $00ffffff))
+        else EmitI32((cond shl 28) or $0A000000 or (rd and $00ffffff));
       end
       else
       begin
-        nHoles := 0;
-        for h := 1 to Length(line) do
-          if line[h] = '%' then Inc(nHoles);
-        if nHoles > ASM_MAX_HOLES then Error('EmitAsmArm32: too many holes in one line');
-        for h := 0 to nHoles - 1 do
-        begin
-          if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-            Error('EmitAsmArm32: missing integer hole value');
-          if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-        end;
-        AsmTextLineArm32(line, holes, nHoles);
-        i := i + 1 + nHoles;
+        if AsmArm32FwCount >= ASM_ARM32_MAX_LABELS then Error('EmitAsmArm32: too many forward jumps');
+        AsmArm32FwName[AsmArm32FwCount] := target;
+        AsmArm32FwPatch[AsmArm32FwCount] := branchPos;
+        if CaseEqual(baseMnem, 'bl') then AsmArm32FwType[AsmArm32FwCount] := 1 else AsmArm32FwType[AsmArm32FwCount] := 0;
+        AsmArm32FwCond[AsmArm32FwCount] := cond;
+        Inc(AsmArm32FwCount);
+        if CaseEqual(baseMnem, 'bl') then EmitI32((cond shl 28) or $0B000000) else EmitI32((cond shl 28) or $0A000000);
       end;
-    end
-    else
-    begin
-      nHoles := 0;
-      for h := 1 to Length(line) do
-        if line[h] = '%' then Inc(nHoles);
-      if nHoles > ASM_MAX_HOLES then Error('EmitAsmArm32: too many holes in one line');
-      for h := 0 to nHoles - 1 do
-      begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
-          Error('EmitAsmArm32: missing integer hole value');
-        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
-      end;
-      AsmTextLineArm32(line, holes, nHoles);
-      i := i + 1 + nHoles;
+      Exit;
     end;
+    AsmTextLineArm32(line, holes, nHoles);
+    Exit;
   end;
 
+  { ordinary instruction }
+  AsmTextLineArm32(line, holes, nHoles);
+end;
+
+{ resolve forward jumps/branches now that all labels are placed }
+procedure AsmArm32BlockResolve;
+var j, k, rd, branchPos, targetPos, cond: Integer;
+begin
   for k := 0 to AsmArm32FwCount - 1 do
   begin
     targetPos := -1;
     for j := 0 to AsmArm32LblCount - 1 do
       if AsmArm32LblName[j] = AsmArm32FwName[k] then targetPos := AsmArm32LblPos[j];
     if targetPos < 0 then Error('EmitAsmArm32: undefined label in jump');
-    
+
     branchPos := AsmArm32FwPatch[k];
     rd := ((targetPos - branchPos) div 4) - 2;
     cond := AsmArm32FwCond[k];
@@ -511,6 +491,53 @@ begin
     else
       Patch32(branchPos, (cond shl 28) or $0A000000 or (rd and $00ffffff));
   end;
+end;
+
+{ Replay one parse-time-captured inline-asm line (AsmParseBodyText, see
+  asmenc.inc). Hole values come from the InlineAsmHoleVal pool, count stored
+  explicitly per line. Caller brackets a block with AsmArm32BlockBegin/
+  Resolve. }
+procedure AsmArm32ProcessInlineLine(idx: Integer);
+var
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+  k: Integer;
+begin
+  if InlineAsmLineHoleN[idx] > ASM_MAX_HOLES then
+    Error('EmitAsmArm32: too many holes in one line');
+  for k := 0 to InlineAsmLineHoleN[idx] - 1 do
+    holes[k] := InlineAsmHoleVal[InlineAsmLineHole0[idx] + k];
+  AsmArm32ProcessLine(InlineAsmLine[idx], holes, InlineAsmLineHoleN[idx]);
+end;
+
+procedure EmitAsmArm32(const items: array of const); overload;
+var
+  i, n, h, nHoles: Integer;
+  line: AnsiString;
+  holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+begin
+  AsmArm32BlockBegin;
+  n := Length(items);
+  i := 0;
+  while i < n do
+  begin
+    if items[i].VType <> vtAnsiString then
+      Error('EmitAsmArm32: expected an instruction string');
+    line := AsmTextCStr(items[i].VAnsiString);
+
+    nHoles := 0;
+    for h := 1 to Length(line) do
+      if line[h] = '%' then Inc(nHoles);
+    if nHoles > ASM_MAX_HOLES then Error('EmitAsmArm32: too many holes in one line');
+    for h := 0 to nHoles - 1 do
+    begin
+      if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
+        Error('EmitAsmArm32: missing integer hole value');
+      if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
+    end;
+    AsmArm32ProcessLine(line, holes, nHoles);
+    i := i + 1 + nHoles;
+  end;
+  AsmArm32BlockResolve;
 end;
 
 procedure EmitAsmArm32(const s: AnsiString); overload;

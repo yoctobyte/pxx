@@ -805,6 +805,10 @@ end;
   target's IR_ASM codegen case replays the lines through its engine. }
 
 function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
+function AsmA64RegNum(const opIn: AnsiString; var reg: Integer; var is64: Boolean): Boolean; forward;
+function AsmArm32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
+function AsmArm32CondCode(const condStr: AnsiString; var cond: Integer): Boolean; forward;
+function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean; forward;
 
 function AsmEncIntToStr(v: Int64): AnsiString;
 var tmp: AnsiString; i: Integer; neg: Boolean;
@@ -871,6 +875,315 @@ begin
     Error('asm: operand must be a local, param, global, or register: ' + nm);
   AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
   AppendString(line, '(s0)');
+end;
+
+function AsmA64IsBranchOrJump(const mn: AnsiString): Boolean;
+begin
+  Result := CaseEqual(mn,'b') or CaseEqual(mn,'bl')
+    or CaseEqual(mn,'cbz') or CaseEqual(mn,'cbnz')
+    or ((Length(mn) > 2) and (mn[1] = 'b') and (mn[2] = '.'));
+end;
+
+{ Append one operand-position identifier for the aarch64 text path.
+  Registers and branch-line labels pass through; a local/param becomes
+  '[x29,<off>]' (x29 = the aarch64 backend's frame pointer); a global is
+  legal only as `ldr <reg>, <name>` — it becomes the engine's
+  'ldr reg,@glob,%' address-literal form with a BSS-offset hole. }
+procedure AsmA64AppendIdent(var line: AnsiString; const nm, dir: AnsiString; branchLine: Boolean; var holeN: Integer);
+var rnum, idx: Integer; is64: Boolean;
+begin
+  if AsmA64RegNum(nm, rnum, is64) then begin AppendString(line, nm); Exit; end;
+  if branchLine then begin AppendString(line, nm); Exit; end;
+  idx := FindSym(nm);
+  if idx < 0 then Error('asm: unknown symbol: ' + nm);
+  if Syms[idx].Kind = skGlobal then
+  begin
+    if not CaseEqual(dir, 'ldr') then
+      Error('asm: global "' + nm + '": load its address into a register first (ldr <reg>, ' + nm + ')');
+    AppendString(line, '@glob,%');
+    AsmAddInlineHole(Syms[idx].Offset);
+    Inc(holeN);
+    Exit;
+  end;
+  if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
+    Error('asm: operand must be a local, param, global, or register: ' + nm);
+  AppendString(line, '[x29,');
+  AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
+  AppendChar(line, ']');
+end;
+
+procedure AsmParseBodyTextA64(var startOff, len: Integer);
+var
+  dir, line: AnsiString;
+  dirLine, hole0, holeN: Integer;
+  branchLine: Boolean;
+begin
+  startOff := InlineAsmLineCount;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if not AsmTokIsWordLike(CurTok.Kind) then
+    begin
+      Next;  { skip stray punctuation defensively, same as the x64 path }
+      Continue;
+    end;
+
+    dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;
+
+    if CurTok.Kind = tkColon then
+    begin
+      line := dir; AppendChar(line, ':');
+      AsmAddInlineLine(line, 0, 0);
+      Next;
+      Continue;
+    end;
+
+    { dotted condition suffix: b.eq lexes as 'b' '.' 'eq' }
+    if (CurTok.Kind = tkDot) and (CurTok.Line = dirLine) then
+    begin
+      AppendChar(dir, '.');
+      Next;
+      if not AsmTokIsWordLike(CurTok.Kind) or (CurTok.Line <> dirLine) then
+        Error('asm: expected a condition suffix after "."');
+      AppendString(dir, CurTok.SVal);
+      Next;
+    end;
+
+    line := dir;
+    AppendChar(line, ' ');
+    branchLine := AsmA64IsBranchOrJump(dir);
+    hole0 := InlineAsmHoleCount; holeN := 0;
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) and (CurTok.Line = dirLine) do
+    begin
+      if AsmTokIsWordLike(CurTok.Kind) then
+        AsmA64AppendIdent(line, CurTok.SVal, dir, branchLine, holeN)
+      else if CurTok.Kind = tkInteger then
+        AppendString(line, AsmEncIntToStr(CurTok.IVal))
+      else if CurTok.Kind = tkComma then AppendChar(line, ',')
+      else if CurTok.Kind = tkMinus then AppendChar(line, '-')
+      else if CurTok.Kind = tkLBrack then AppendChar(line, '[')
+      else if CurTok.Kind = tkRBrack then AppendChar(line, ']')
+      else
+        Error('asm: unexpected token in instruction: ' + dir + ' (write immediates without #)');
+      Next;
+    end;
+    AsmAddInlineLine(line, hole0, holeN);
+  end;
+
+  Expect(tkEnd, 'end');
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Eat(tkSemicolon);
+
+  len := InlineAsmLineCount - startOff;
+end;
+
+function AsmArm32IsBranchOrJump(const mn: AnsiString): Boolean;
+var cond, i: Integer; head: AnsiString;
+begin
+  Result := CaseEqual(mn,'b') or CaseEqual(mn,'bl');
+  if Result then Exit;
+  if Length(mn) < 3 then Exit;
+  { condition-suffixed b/bl: bne, bleq, ... — suffix = last 2 chars }
+  if not AsmArm32CondCode(AsmTail(mn, Length(mn) - 2), cond) then Exit;
+  head := '';
+  for i := 1 to Length(mn) - 2 do AppendChar(head, mn[i]);
+  Result := CaseEqual(head, 'b') or CaseEqual(head, 'bl');
+end;
+
+{ Append one operand-position identifier for the arm32 text path. Registers
+  and branch-line labels pass through; a local/param becomes '[fp,<off>]'
+  (fp = r11, the arm32 backend's frame pointer); a global is legal only as
+  `ldr <reg>, <name>` — it becomes the engine's 'ldr reg,@glob,%'
+  address-literal form with a BSS-offset hole. }
+procedure AsmArm32AppendIdent(var line: AnsiString; const nm, dir: AnsiString; branchLine: Boolean; var holeN: Integer);
+var rnum, idx: Integer;
+begin
+  if AsmArm32RegNum(nm, rnum) then begin AppendString(line, nm); Exit; end;
+  if branchLine then begin AppendString(line, nm); Exit; end;
+  idx := FindSym(nm);
+  if idx < 0 then Error('asm: unknown symbol: ' + nm);
+  if Syms[idx].Kind = skGlobal then
+  begin
+    if not CaseEqual(dir, 'ldr') then
+      Error('asm: global "' + nm + '": load its address into a register first (ldr <reg>, ' + nm + ')');
+    AppendString(line, '@glob,%');
+    AsmAddInlineHole(Syms[idx].Offset);
+    Inc(holeN);
+    Exit;
+  end;
+  if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
+    Error('asm: operand must be a local, param, global, or register: ' + nm);
+  AppendString(line, '[fp,');
+  AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
+  AppendChar(line, ']');
+end;
+
+procedure AsmParseBodyTextArm32(var startOff, len: Integer);
+var
+  dir, line: AnsiString;
+  dirLine, hole0, holeN: Integer;
+  branchLine: Boolean;
+begin
+  startOff := InlineAsmLineCount;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if not AsmTokIsWordLike(CurTok.Kind) then
+    begin
+      Next;  { skip stray punctuation defensively, same as the x64 path }
+      Continue;
+    end;
+
+    dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;
+
+    if CurTok.Kind = tkColon then
+    begin
+      line := dir; AppendChar(line, ':');
+      AsmAddInlineLine(line, 0, 0);
+      Next;
+      Continue;
+    end;
+
+    line := dir;
+    AppendChar(line, ' ');
+    branchLine := AsmArm32IsBranchOrJump(dir);
+    hole0 := InlineAsmHoleCount; holeN := 0;
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) and (CurTok.Line = dirLine) do
+    begin
+      if AsmTokIsWordLike(CurTok.Kind) then
+        AsmArm32AppendIdent(line, CurTok.SVal, dir, branchLine, holeN)
+      else if CurTok.Kind = tkInteger then
+        AppendString(line, AsmEncIntToStr(CurTok.IVal))
+      else if CurTok.Kind = tkComma then AppendChar(line, ',')
+      else if CurTok.Kind = tkMinus then AppendChar(line, '-')
+      else if CurTok.Kind = tkLBrack then AppendChar(line, '[')
+      else if CurTok.Kind = tkRBrack then AppendChar(line, ']')
+      else
+        Error('asm: unexpected token in instruction: ' + dir + ' (write immediates without #)');
+      Next;
+    end;
+    AsmAddInlineLine(line, hole0, holeN);
+  end;
+
+  Expect(tkEnd, 'end');
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Eat(tkSemicolon);
+
+  len := InlineAsmLineCount - startOff;
+end;
+
+function Asm386IsBranchOrJump(const mn: AnsiString): Boolean;
+var cc: Integer;
+begin
+  Result := CaseEqual(mn, 'jmp') or AsmTextJccCode(mn, cc);
+end;
+
+{ Append one operand-position identifier for the i386 text path. Registers
+  (the 32-bit-legal subset of the shared x86 table: no r8+, no 64-bit, no
+  xmm) and branch-line labels pass through; a local/param becomes
+  '[ebp<±off>]'; a global is legal only as `mov <reg>, <name>` — it becomes
+  the engine's 'mov reg,@glob' address-load form with a BSS-offset hole. }
+procedure Asm386AppendIdent(var line: AnsiString; const nm, dir: AnsiString; branchLine: Boolean; var holeN: Integer);
+var rnum, rsize, idx: Integer;
+begin
+  if AsmRegNum(nm, rnum, rsize) then
+  begin
+    if (rnum >= 8) or (rsize = 8) or (rsize = 16) then
+      Error('asm: register not available on i386: ' + nm);
+    AppendString(line, nm);
+    Exit;
+  end;
+  if branchLine then begin AppendString(line, nm); Exit; end;
+  idx := FindSym(nm);
+  if idx < 0 then Error('asm: unknown symbol: ' + nm);
+  if Syms[idx].Kind = skGlobal then
+  begin
+    if not CaseEqual(dir, 'mov') then
+      Error('asm: global "' + nm + '": load its address into a register first (mov <reg>, ' + nm + ')');
+    AppendString(line, '@glob');
+    AsmAddInlineHole(Syms[idx].Offset);
+    Inc(holeN);
+    Exit;
+  end;
+  if (Syms[idx].Kind <> skLocal) and (Syms[idx].Kind <> skParam) then
+    Error('asm: operand must be a local, param, global, or register: ' + nm);
+  AppendString(line, '[ebp');
+  if Syms[idx].Offset >= 0 then AppendChar(line, '+');
+  AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
+  AppendChar(line, ']');
+end;
+
+procedure AsmParseBodyText386(var startOff, len: Integer);
+var
+  dir, line: AnsiString;
+  dirLine, hole0, holeN: Integer;
+  branchLine: Boolean;
+begin
+  startOff := InlineAsmLineCount;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if not AsmTokIsWordLike(CurTok.Kind) then
+    begin
+      Next;  { skip stray punctuation defensively, same as the x64 path }
+      Continue;
+    end;
+
+    dir := CurTok.SVal;
+    dirLine := CurTok.Line;
+    Next;
+
+    if CurTok.Kind = tkColon then
+    begin
+      line := dir; AppendChar(line, ':');
+      AsmAddInlineLine(line, 0, 0);
+      Next;
+      Continue;
+    end;
+
+    line := dir;
+    AppendChar(line, ' ');
+    branchLine := Asm386IsBranchOrJump(dir);
+    hole0 := InlineAsmHoleCount; holeN := 0;
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) and (CurTok.Line = dirLine) do
+    begin
+      if AsmTokIsWordLike(CurTok.Kind) then
+        Asm386AppendIdent(line, CurTok.SVal, dir, branchLine, holeN)
+      else if CurTok.Kind = tkInteger then
+        AppendString(line, AsmEncIntToStr(CurTok.IVal))
+      else if CurTok.Kind = tkComma then AppendChar(line, ',')
+      else if CurTok.Kind = tkMinus then AppendChar(line, '-')
+      else if CurTok.Kind = tkPlus then AppendChar(line, '+')
+      else if CurTok.Kind = tkLBrack then AppendChar(line, '[')
+      else if CurTok.Kind = tkRBrack then AppendChar(line, ']')
+      else
+        Error('asm: unexpected token in instruction: ' + dir);
+      Next;
+    end;
+    AsmAddInlineLine(line, hole0, holeN);
+  end;
+
+  Expect(tkEnd, 'end');
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRBrack, ']');
+  end;
+  Eat(tkSemicolon);
+
+  len := InlineAsmLineCount - startOff;
 end;
 
 procedure AsmParseBodyTextRv32(var startOff, len: Integer);
@@ -1010,8 +1323,23 @@ begin
     AsmParseBodyTextRv32(startOff, len);
     Exit;
   end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    AsmParseBodyTextA64(startOff, len);
+    Exit;
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    AsmParseBodyTextArm32(startOff, len);
+    Exit;
+  end;
+  if TargetArch = TARGET_I386 then
+  begin
+    AsmParseBodyText386(startOff, len);
+    Exit;
+  end;
   if TargetArch <> TARGET_X86_64 then
-    Error('inline asm not yet supported for this target (x86-64 and riscv32 so far)');
+    Error('inline asm not yet supported for this target (xtensa is the one remaining; see feature-inline-asm-multi-arch)');
   startOff := AsmBytesCount;
   lblCount := 0;
   fixCount := 0;
