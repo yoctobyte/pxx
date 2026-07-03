@@ -1,7 +1,9 @@
 # Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result
 
-- **Type:** bug — Track A
-- **Status:** urgent
+- **Type:** bug — Track A / Track R (joint)
+- **Status:** working — Track R's trigger fixed and verified; Track A's
+  `IR_UNSUPPORTED`-should-hard-error hardening (independent, general
+  safety net) still open, see log
 - **Owner:** —
 - **Opened:** 2026-07-03 (found while validating Track R / Rust frontend
   sub-tickets 1-2, but the bug is in shared compiler internals, not the
@@ -158,6 +160,28 @@ block in the PXX build, at the real else-if in the FPC build.
   the trigger + fix direction are solid.)
 
 ## Log
+- 2026-07-04 — **Track R: fixed.** Root cause per Track A's investigation
+  below was exactly right: `RParseIf` in `rparser.inc` built `elseNode :=
+  RParseIf` (no parentheses) for the `else if` case. Inside a Pascal
+  function's own body, its bare name (no parens) is the implicit
+  `Result`-alias pseudo-variable, not a recursive call — so this read
+  whatever garbage happened to be in that slot instead of actually
+  recursing, and the "else" branch of the AST silently held an
+  uninitialized/stale node index (`ASTKind` = `AN_NONE`), which is exactly
+  what `IRLowerAST`'s fallback turns into `IR_UNSUPPORTED`. Confirmed via
+  `--dump-ir` before/after: the `unsupported` instruction at the
+  else-label is gone, `classify(1)` now returns 20 under `--dump-ir`
+  disassembly, and — the real test — **the self-hosted `pascal26` now
+  matches the FPC-built one** on the original repro (`t1.rs` → 40 under
+  both). Fixed by adding parens: `elseNode := RParseIf()`, matching
+  `pyparser.inc`'s `PyParseIf()` precedent (which always had them).
+  Verified: `make bootstrap` stays byte-identical; `make -k test` green
+  except the one pre-existing unrelated environment failure; all Track R
+  sub-ticket 1-3 test programs re-verified against both the FPC-built and
+  now-correct self-hosted compiler. Track A's `IR_UNSUPPORTED`-hardening
+  idea (see "Fix ownership" above) is still open and independent — worth
+  landing regardless, as a general self-host safety net, but no longer
+  blocking anything since the trigger is gone.
 - 2026-07-04 — Track A: reproduced (frank2→/tmp, read-only), refuted the
   general-shape hypothesis (Pascal+C correct+byte-identical), root-caused to the
   Rust frontend lowering `else if` to `IR_UNSUPPORTED` + codegen's
