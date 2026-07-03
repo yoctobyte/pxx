@@ -6,7 +6,8 @@ unit palthreadobj;
   thread manager.
 
   A spawned thread runs ThreadObjLauncher(Self), which virtual-dispatches into the
-  subclass's Execute and marks the thread finished on return.
+  subclass's Execute, fires OnTerminate (marshalled to the main thread), marks the
+  thread finished, and honours FreeOnTerminate.
 
   NOTE (shared-state caveat, see the multithreading audit): the heap allocator is
   only thread-safe under --threadsafe / {$threadsafe on}. An Execute that allocates
@@ -30,11 +31,21 @@ type
 type
   TThread = class
   private
-    FHandle:      TThreadHandle;
-    FStarted:     Boolean;
-    FFinished:    Boolean;
-    FTerminated:  Boolean;
-    FReturnValue: Integer;
+    { The thread handle lives on the HEAP, not inline: the kernel futex-writes
+      the handle's TidWord at thread exit (CLONE_CHILD_CLEARTID), so its address
+      must outlive the thread even when FreeOnTerminate destroys the instance
+      from inside the thread. Allocated by Start; released after join (or by
+      the CheckSynchronize reaper for self-freed threads). }
+    FHandlePtr:    PThreadHandle;
+    FStarted:      Boolean;
+    FFinished:     Boolean;
+    FTerminated:   Boolean;
+    FFreeOnTerm:   Boolean;
+    FSuspended:    Boolean;
+    FSuspendGate:  Integer;   { futex word: 0 = parked, 1 = released }
+    FReturnValue:  Integer;
+    FOnTerminate:  TThreadMethod;
+    FNextThread:   TThread;   { CurrentThread registry chain }
   protected
     { Override with the thread body. Runs on the spawned OS thread. }
     procedure Execute; virtual; abstract;
@@ -52,7 +63,8 @@ type
 
     { Spawn the OS thread (no-op if already started). }
     procedure Start;
-    { Block until the thread's Execute returns (no-op if never started).
+    { Block until the thread's Execute returns (no-op if never started, or when
+      called from the thread itself — a self-join would deadlock).
       Idempotent; also called by the destructor (auto-join). }
     procedure WaitFor;
 
@@ -75,19 +87,46 @@ type
       forcibly kill the thread. }
     procedure Terminate;
 
+    { Cooperative suspend: callable only FROM the thread itself (the async
+      form FPC deprecated is unsafe by construction — there is no safe point).
+      Parks on a futex until Resume. Called from any other thread it is a
+      no-op. }
+    procedure Suspend;
+
+    { Release a Suspend'ed thread. On a never-started thread (legacy
+      Create(True) pattern) Resume doubles as Start, like classic FPC/Delphi. }
+    procedure Resume;
+
     property Terminated: Boolean read FTerminated;
     property Finished: Boolean read FFinished;
+    property Suspended: Boolean read FSuspended;
     { Thread result — Execute assigns it, the joiner reads it after WaitFor. }
     property ReturnValue: Integer read FReturnValue write FReturnValue;
+    { Free the instance from the thread itself when Execute returns (after
+      OnTerminate). The thread's kernel stack is reclaimed by the next
+      CheckSynchronize on the main thread (or at process exit). }
+    property FreeOnTerminate: Boolean read FFreeOnTerm write FFreeOnTerm;
+    { Fired after Execute returns, marshalled to the MAIN thread via
+      Synchronize — the main thread must be pumping CheckSynchronize or the
+      worker blocks. Parameterless method pointer (`@Self.M`), not FPC's
+      TNotifyEvent(Sender) — Data already carries the receiver. }
+    property OnTerminate: TThreadMethod read FOnTerminate write FOnTerminate;
   end;
 
-{ Drain the Synchronize/Queue backlog. Call it periodically FROM THE MAIN
-  THREAD (e.g. inside the main loop that waits for workers). Returns True if
-  at least one queued call ran. }
+{ Drain the Synchronize/Queue backlog (and reap the handles/stacks of
+  FreeOnTerminate threads that have since exited). Call it periodically FROM
+  THE MAIN THREAD (e.g. inside the main loop that waits for workers). Returns
+  True if at least one queued call ran. }
 function CheckSynchronize: Boolean;
 
 { Kernel tid of the thread that initialized this unit (the main thread). }
 function MainThreadID: Int64;
+
+{ The TThread instance of the calling thread. On the main thread returns a
+  lazily-created placeholder instance (never started; its Execute never runs),
+  mirroring FPC's TExternalThread. Unit-level rather than the FPC class
+  property `TThread.CurrentThread` (pxx has no class-static properties yet). }
+function CurrentThread: TThread;
 
 implementation
 
@@ -109,11 +148,22 @@ type
     NextEntry: PSyncEntry;
   end;
 
+  { A FreeOnTerminate thread's heap handle, parked until the main thread can
+    join it (frees the 1 MiB child stack) and release the handle block. }
+  PReapNode = ^TReapNode;
+  TReapNode = record
+    Handle:   PThreadHandle;
+    NextNode: PReapNode;
+  end;
+
 var
   SyncLock: TMutex;         { zeroed BSS record = unlocked, no init needed }
   SyncHead: PSyncEntry;
   SyncTail: PSyncEntry;
   MainTid:  Int64;
+  ReapHead: PReapNode;      { guarded by SyncLock too (same pump drains it) }
+  RegHead:  TThread;        { CurrentThread registry, guarded by SyncLock }
+  MainThreadObj: TThread;   { lazy placeholder for CurrentThread on main }
 
 procedure SyncInvokeMethod(m: TThreadMethod);
 var
@@ -135,6 +185,7 @@ end;
 function CheckSynchronize: Boolean;
 var
   e: PSyncEntry;
+  r, rn: PReapNode;
 begin
   Result := False;
   while True do
@@ -147,7 +198,7 @@ begin
       if SyncHead = nil then SyncTail := nil;
     end;
     MutexUnlock(SyncLock);
-    if e = nil then Exit;
+    if e = nil then Break;
     Result := True;
     SyncInvokeMethod(e^.Method);
     if e^.IsQueued then
@@ -158,6 +209,22 @@ begin
       PalFutexWake(@e^.DoneWord, 1);
     end;
   end;
+
+  { Reap exited FreeOnTerminate threads: join (releases the child stack; the
+    thread exits within a few instructions of parking its handle, so any wait
+    here is momentary) and release the heap handle. }
+  MutexLock(SyncLock);
+  r := ReapHead;
+  ReapHead := nil;
+  MutexUnlock(SyncLock);
+  while r <> nil do
+  begin
+    PalThreadJoin(r^.Handle^);
+    FreeMem(r^.Handle);
+    rn := r^.NextNode;
+    FreeMem(r);
+    r := rn;
+  end;
 end;
 
 function MainThreadID: Int64;
@@ -165,14 +232,92 @@ begin
   Result := MainTid;
 end;
 
+function CurrentThread: TThread;
+var
+  tid: Int64;
+  t: TThread;
+begin
+  tid := PalThreadSelf;
+  if tid = MainTid then
+  begin
+    if MainThreadObj = nil then
+      MainThreadObj := TThread.Create(True);   { placeholder; never started }
+    Result := MainThreadObj;
+    Exit;
+  end;
+  Result := nil;
+  MutexLock(SyncLock);
+  t := RegHead;
+  while t <> nil do
+  begin
+    if (t.FHandlePtr <> nil) and (t.FHandlePtr^.Tid = tid) then
+    begin
+      Result := t;
+      Break;
+    end;
+    t := t.FNextThread;
+  end;
+  MutexUnlock(SyncLock);
+end;
+
+procedure RegisterThread(t: TThread);
+begin
+  MutexLock(SyncLock);
+  t.FNextThread := RegHead;
+  RegHead := t;
+  MutexUnlock(SyncLock);
+end;
+
+procedure UnregisterThread(t: TThread);
+var
+  p: TThread;
+begin
+  MutexLock(SyncLock);
+  if RegHead = t then
+    RegHead := t.FNextThread
+  else
+  begin
+    p := RegHead;
+    while p <> nil do
+    begin
+      if p.FNextThread = t then
+      begin
+        p.FNextThread := t.FNextThread;
+        Break;
+      end;
+      p := p.FNextThread;
+    end;
+  end;
+  MutexUnlock(SyncLock);
+end;
+
+{ Park a self-freed thread's handle for the main pump to join + release. }
+procedure ReaperPush(h: PThreadHandle);
+var
+  n: PReapNode;
+begin
+  GetMem(n, SizeOf(TReapNode));
+  n^.Handle := h;
+  MutexLock(SyncLock);
+  n^.NextNode := ReapHead;
+  ReapHead := n;
+  MutexUnlock(SyncLock);
+end;
+
 { File-level trampoline: PalThreadCreate hands us the instance as the opaque arg. }
 procedure ThreadObjLauncher(arg: Pointer);
 var
   t: TThread;
+  freeSelf: Boolean;
 begin
   t := TThread(arg);
   t.Execute;
+  if t.FOnTerminate.Code <> nil then
+    t.Synchronize(t.FOnTerminate);
+  freeSelf := t.FFreeOnTerm;
   t.FFinished := True;
+  if freeSelf then
+    t.Free;    { Destroy sees the self-call: skips the join, parks the handle }
 end;
 
 constructor TThread.Create(CreateSuspended: Boolean);
@@ -181,6 +326,13 @@ begin
   FReturnValue := 0;
   FStarted := False;
   FFinished := False;
+  FSuspended := False;
+  FSuspendGate := 0;
+  FFreeOnTerm := False;
+  FOnTerminate.Code := nil;
+  FOnTerminate.Data := nil;
+  FHandlePtr := nil;
+  FNextThread := nil;
   if not CreateSuspended then Start;
 end;
 
@@ -188,17 +340,25 @@ procedure TThread.Start;
 begin
   if FStarted then Exit;
   FStarted := True;
-  PalThreadCreate(FHandle, @ThreadObjLauncher, Pointer(Self), 0);
+  GetMem(FHandlePtr, SizeOf(TThreadHandle));
+  RegisterThread(Self);
+  PalThreadCreate(FHandlePtr^, @ThreadObjLauncher, Pointer(Self), 0);
 end;
 
 procedure TThread.WaitFor;
 begin
-  if FStarted then PalThreadJoin(FHandle);
+  if not FStarted then Exit;
+  if FHandlePtr = nil then Exit;
+  if PalThreadSelf = FHandlePtr^.Tid then Exit;   { self-join would deadlock }
+  PalThreadJoin(FHandlePtr^);
 end;
 
 function TThread.ThreadID: Int64;
 begin
-  Result := FHandle.Tid;
+  if FHandlePtr = nil then
+    Result := 0
+  else
+    Result := FHandlePtr^.Tid;
 end;
 
 procedure TThread.Terminate;
@@ -208,10 +368,39 @@ begin
   FTerminated := True;
 end;
 
+procedure TThread.Suspend;
+begin
+  if (FHandlePtr = nil) or (PalThreadSelf <> FHandlePtr^.Tid) then Exit;
+  FSuspended := True;
+  while FSuspendGate = 0 do
+    PalFutexWait(@FSuspendGate, 0);
+  FSuspendGate := 0;    { consume the release; the next Suspend parks again }
+  FSuspended := False;
+end;
+
+procedure TThread.Resume;
+begin
+  if not FStarted then
+  begin
+    Start;              { legacy Create(True) + Resume }
+    Exit;
+  end;
+  FSuspendGate := 1;
+  PalFutexWake(@FSuspendGate, 1);
+end;
+
 destructor TThread.Destroy;
 begin
   if FStarted and (not FFinished) then Terminate;
   WaitFor;
+  UnregisterThread(Self);
+  if FHandlePtr <> nil then
+  begin
+    if PalThreadSelf = FHandlePtr^.Tid then
+      ReaperPush(FHandlePtr)   { FreeOnTerminate: main pump joins + frees it }
+    else
+      FreeMem(FHandlePtr);     { already joined by WaitFor above }
+  end;
 end;
 
 procedure TThread.Synchronize(m: TThreadMethod);
@@ -251,5 +440,8 @@ initialization
   MainTid := PalThreadSelf;
   SyncHead := nil;
   SyncTail := nil;
+  ReapHead := nil;
+  RegHead := nil;
+  MainThreadObj := nil;
   MutexInit(SyncLock);
 end.

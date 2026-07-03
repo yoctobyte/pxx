@@ -276,6 +276,9 @@ test-threads: $(COMPILER)
 	# TThread Synchronize/Queue/CheckSynchronize main-thread marshalling + auto-join virtual destructor
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas /tmp/test_tthread_sync26
 	test "$$(/tmp/test_tthread_sync26)" = "$$(printf 'sync=200 expected=200\nonmain=200 expected=200\nqueue=200 expected=200\nautojoin OK\nTTHREAD SYNC OK')"
+	# M3 final slice: FreeOnTerminate + OnTerminate + CurrentThread + Suspend/Resume
+	./$(COMPILER) --threadsafe test/test_tthread_final.pas /tmp/test_tthread_final26
+	test "$$(/tmp/test_tthread_final26)" = "$$(printf 'main current OK\ncurrentthread=1 ontermmain=1\nfreeonterminate=1\nsuspend=2 suspended=FALSE\nlatestart=1\nTTHREAD FINAL OK')"
 	# statement-atomic threaded writeln: every concurrent output line is whole (--threadsafe I/O lock)
 	./$(COMPILER) --threadsafe test/test_thread_writeln_interleave.pas /tmp/test_thread_writeln_interleave26
 	/tmp/test_thread_writeln_interleave26 > /tmp/twi26.out

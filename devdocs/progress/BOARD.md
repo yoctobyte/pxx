@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -70,7 +70,6 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-pascal-tthread | A | feature | Native Pascal TThread class (M3) | — |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
@@ -127,7 +126,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (441)
+## done (442)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -505,6 +504,7 @@ _none_
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-pascal-tthread | A | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | feature | PCL: mouse-coordinate + keyboard input events | — |
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
@@ -633,7 +633,6 @@ _none_
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-pal-thread-primitives
 - [A] feature-parallel-processing
-- [A] feature-pascal-tthread
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode

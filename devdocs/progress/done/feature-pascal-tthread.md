@@ -1,7 +1,7 @@
 # Native Pascal TThread class (M3)
 
 - **Type:** feature (RTL / language surface) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Needs M1 + M2. Sibling of the
   spawn/parallel-for sugar [[feature-parallel-processing]].
@@ -82,3 +82,33 @@ Pure-RTL slice in palthreadobj (compiler binary unchanged, hash identical):
 
 Still remaining: FreeOnTerminate (self-free needs join-self guard),
 OnTerminate, CurrentThread, Suspend/Resume, classes re-export.
+
+## Update — M3 COMPLETE: FreeOnTerminate, OnTerminate, CurrentThread, Suspend/Resume (2026-07-03)
+
+Pure-RTL slice in palthreadobj (no compiler change):
+- **Heap handle refactor**: the kernel futex-writes TidWord at thread exit
+  (CLONE_CHILD_CLEARTID), so FHandle moved inline→heap (FHandlePtr, alloc'd
+  in Start) — otherwise FreeOnTerminate's self-free left a kernel
+  write-after-free into the dead instance.
+- **FreeOnTerminate**: launcher self-frees after Execute + OnTerminate;
+  Destroy detects the self-call (tid match), skips the self-join, parks the
+  heap handle on a reaper list; CheckSynchronize joins (frees the 1 MiB
+  child stack) + releases parked handles.
+- **OnTerminate**: parameterless TThreadMethod (not FPC's TNotifyEvent —
+  Data already carries the receiver), fired after Execute, marshalled to
+  the MAIN thread via Synchronize (main must pump, FPC contract).
+- **CurrentThread**: unit-level function (pxx has no class-static
+  properties) over a SyncLock-guarded registry (FNextThread chain,
+  registered in Start / unregistered in Destroy); on the main thread
+  returns a lazy placeholder instance (FPC TExternalThread analogue).
+- **Suspend/Resume**: cooperative self-park on a futex gate (the async
+  suspend FPC deprecated is unsafe by construction; other-thread Suspend =
+  no-op). Resume releases the gate; on a never-started thread Resume acts
+  as Start (legacy Create(True)+Resume).
+- test_tthread_final in make test-threads (CurrentThread identity on worker
+  + stable main placeholder, OnTerminate-on-main-tid, FreeOnTerminate with
+  reaper drain, Suspend/Resume phases, late-start); 20/20 repeat runs clean.
+
+Deliberately NOT done: classes re-export (kept isolated in palthreadobj to
+not destabilise the shared unit — unchanged from the prior decision);
+priority (no PAL surface for it).
