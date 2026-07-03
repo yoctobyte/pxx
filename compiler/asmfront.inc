@@ -346,6 +346,116 @@ const
   SEC_TEXT = 0;
   SEC_DATA = 1;
 
+{ .asm frontend, riscv32 leg (feature-asm-source-frontend multi-target
+  rollout). Unlike the x86-64 path below — which predates the insight that
+  the compiler's own per-target text engines are already label- and
+  relocation-aware — this leg feeds source lines straight through
+  asmtext_rv32.inc's AsmRv32BlockBegin/ProcessLine/BlockResolve (the same
+  API inline `asm...end` replays through), then lets the existing riscv32
+  ET_EXEC writer emit the image. Scope this increment: instructions +
+  labels + branches + `global <label>` entry override; a fall-through exit
+  epilogue (exit code = a0) mirrors the x86-64 frontend's contract.
+  `section`/`extern`/db and `-c`/`--shared` get clear errors. }
+procedure ParseAsmProgramRv32;
+var
+  i, n, lineNo, ci, k: Integer;
+  raw, line, labelPart: AnsiString;
+  noHoles: array[0..0] of Int64;
+  globalNames: array[0..MAX_ASM_GLOBALS-1] of AnsiString;
+  globalCount: Integer;
+  entrySet: Boolean;
+  mnem: AnsiString;
+begin
+  if EmitObjMode then
+    Error('asm frontend: -c object output is x86-64 only so far (riscv32 .asm emits ET_EXEC)');
+  if EmitSharedMode then
+    Error('asm frontend: --shared output is x86-64 only so far (riscv32 .asm emits ET_EXEC)');
+
+  noHoles[0] := 0;
+  globalCount := 0;
+  AsmRv32BlockBegin;
+
+  n := Length(Source);
+  i := 1;
+  lineNo := 0;
+  while i <= n do
+  begin
+    { slice one physical line }
+    raw := '';
+    while (i <= n) and (Source[i] <> #10) do
+    begin
+      if Source[i] <> #13 then raw := raw + Source[i];
+      Inc(i);
+    end;
+    if (i <= n) and (Source[i] = #10) then Inc(i);
+    Inc(lineNo);
+
+    { strip a ';' comment }
+    ci := Pos(';', raw);
+    if ci > 0 then raw := Copy(raw, 1, ci - 1);
+    line := AsmTrim(raw);
+    if line = '' then Continue;
+
+    { first word, for directive checks }
+    mnem := '';
+    k := 1;
+    while (k <= Length(line)) and not AsmIsSpace(line[k]) do
+    begin
+      mnem := mnem + AsmLower(Copy(line, k, 1));
+      Inc(k);
+    end;
+
+    if mnem = 'global' then
+    begin
+      if globalCount >= MAX_ASM_GLOBALS then
+        Error('asm:' + AsmIntToStr(lineNo) + ': too many global directives');
+      globalNames[globalCount] := AsmTrim(Copy(line, k, Length(line) - k + 1));
+      if globalNames[globalCount] = '' then
+        Error('asm:' + AsmIntToStr(lineNo) + ': global needs a label name');
+      Inc(globalCount);
+      Continue;
+    end;
+    if (mnem = 'section') or (mnem = 'extern') or (mnem = 'db') or
+       (mnem = 'dw') or (mnem = 'dd') or (mnem = 'dq') or (mnem = 'align') then
+      Error('asm:' + AsmIntToStr(lineNo) + ': "' + mnem + '" not supported on riscv32 .asm yet (labels/instructions/global only this increment)');
+
+    { a leading `name:` may prefix an instruction on the same line — the
+      engine's label-def check wants the label alone, so split it off }
+    ci := Pos(':', line);
+    if ci > 0 then
+    begin
+      labelPart := AsmTrim(Copy(line, 1, ci - 1));
+      if labelPart = '' then
+        Error('asm:' + AsmIntToStr(lineNo) + ': empty label');
+      AsmRv32ProcessLine(labelPart + ':', noHoles, 0);
+      line := AsmTrim(Copy(line, ci + 1, Length(line) - ci));
+      if line = '' then Continue;
+    end;
+
+    AsmRv32ProcessLine(line, noHoles, 0);
+  end;
+
+  { fall-through exit epilogue: exit code = whatever the program left in a0
+    (mirrors the x86-64 frontend's rdi contract). SYS_exit = 93 on riscv. }
+  AsmRv32ProcessLine('addi a7, zero, 93', noHoles, 0);
+  AsmRv32ProcessLine('ecall', noHoles, 0);
+
+  AsmRv32BlockResolve;
+
+  { first `global` naming a known code label overrides the ELF entry point }
+  entrySet := False;
+  for k := 0 to globalCount - 1 do
+  begin
+    if entrySet then Break;
+    for ci := 0 to AsmRvLblCount - 1 do
+      if (not entrySet) and (AsmRvLblName[ci] = globalNames[k]) then
+      begin
+        AsmEntryOff := AsmRvLblPos[ci];
+        entrySet := True;
+      end;
+  end;
+end;
+
 procedure ParseAsmProgram;
 var
   i, n, lineNo, opCount, k: Integer;
@@ -380,8 +490,13 @@ var
   globalCount: Integer;
   isDataLbl, entrySet: Boolean;
 begin
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    ParseAsmProgramRv32;
+    Exit;
+  end;
   if TargetArch <> TARGET_X86_64 then
-    Error('asm frontend: x86-64 only (matches lib/asmcore coverage)');
+    Error('asm frontend: x86-64 and riscv32 only so far (feature-asm-source-frontend)');
   n := Length(Source);
   i := 1;
   lineNo := 0;

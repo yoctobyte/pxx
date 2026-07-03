@@ -310,3 +310,25 @@ wiring, not new machinery.
     stayed explicitly out of scope for this session ("land x86-64 first
     end-to-end... then the rollout to the other five is comparatively
     cheap" per the umbrella ticket).
+- 2026-07-03 — **riscv32 leg landed** (Track A) — first target of the
+  multi-target rollout. Cheap by design: unlike the x86-64 path (which
+  predates the corrected understanding and drives lib/asmcore directly),
+  ParseAsmProgramRv32 (asmfront.inc) feeds source lines straight through
+  asmtext_rv32.inc's AsmRv32BlockBegin/ProcessLine/BlockResolve — the same
+  block API inline `asm...end` replays through since
+  [[feature-inline-asm-multi-arch]] — then the existing riscv32 ET_EXEC
+  writer emits the image (writeELF32 gained `+ AsmEntryOff` for the
+  `global <label>` entry override, inert 0 for every non-.asm compile).
+  Scope this increment: instructions + labels + branches + `global` entry
+  override + fall-through exit epilogue (exit code = a0, SYS_exit 93,
+  mirroring x86-64's rdi contract). `section`/`extern`/db and
+  `-c`/`--shared` give clear errors. test/test_asm_rv32_sum.asm (sum-loop
+  exits 55; a pre-start exit-7 block proves the entry override actually
+  redirects) in make test-riscv32. Also added
+  test/test_asm_ifdef_multiarch.pas — one source, per-target inline-asm
+  blocks behind {$ifdef CPUX86_64/CPURISCV32/CPUAARCH64} — wired into
+  make test + test-riscv32 + test-aarch64 (documents the target-selection
+  model: inline asm follows --target; portability = CPU-define guards).
+  Remaining rollout: i386/aarch64/arm32 (same pattern), xtensa (blocked on
+  the same engine gaps as [[feature-inline-asm-xtensa]]), and -c/--shared
+  beyond x86-64.

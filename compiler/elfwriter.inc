@@ -1660,7 +1660,9 @@ begin
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
     misaligned word access. Code+data lengths are byte-granular, so pad. }
   bssBase  := AlignTo(dataBase + DataLen, 8);
-  entry    := loadBase + codeOffset;
+  { AsmEntryOff: .asm frontend `global <label>` entry override — always 0
+    (inert) for every non-.asm compile, same contract as the x86-64 writers. }
+  entry    := loadBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - loadBase) + BSSSize;
 
