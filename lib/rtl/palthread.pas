@@ -64,21 +64,36 @@ const
   FUTEX_WAIT = 0;
   FUTEX_WAKE = 1;
 
+  PROT_NONE     = 0;        { guard page: no access }
   PROT_RW       = 3;        { PROT_READ or PROT_WRITE }
   MAP_ANON_PRIV = $22;      { MAP_PRIVATE or MAP_ANONYMOUS }
+  PAGE_SIZE     = 4096;
 
 {$ifdef CPUX86_64}
-  SYS_mmap   = 9;
-  SYS_munmap = 11;
-  SYS_futex  = 202;
-  SYS_gettid = 186;
+  SYS_mmap     = 9;
+  SYS_munmap   = 11;
+  SYS_mprotect = 10;
+  SYS_futex    = 202;
+  SYS_gettid   = 186;
 {$else}
-  { Non-x86-64 trips the __pxxclone compile-error before these matter; define
+{$ifdef CPUI386}
+  { i386 int 0x80 numbers. SYS_mmap is mmap2 (192): its last arg is an offset
+    in PAGES rather than bytes — we always pass 0, so the call shape is
+    identical to x86-64's mmap. }
+  SYS_mmap     = 192;
+  SYS_munmap   = 91;
+  SYS_mprotect = 125;
+  SYS_futex    = 240;
+  SYS_gettid   = 224;
+{$else}
+  { Other targets trip the __pxxclone compile-error before these matter; define
     placeholders so the unit still parses. }
-  SYS_mmap   = -1;
-  SYS_munmap = -1;
-  SYS_futex  = -1;
-  SYS_gettid = -1;
+  SYS_mmap     = -1;
+  SYS_munmap   = -1;
+  SYS_mprotect = -1;
+  SYS_futex    = -1;
+  SYS_gettid   = -1;
+{$endif}
 {$endif}
 
 function PalFutexWait(addr: Pointer; expected: Integer): Integer;
@@ -104,17 +119,22 @@ begin
   if stackSize <= 0 then stackSize := PAL_DEFAULT_STACK;
   h.Tid := 0;
   h.TidWord := 0;
-  h.StackSize := stackSize;
-  h.StackBase := __pxxrawsyscall(SYS_mmap, 0, stackSize, PROT_RW, MAP_ANON_PRIV, -1, 0);
+  { One extra page at the LOW end becomes a PROT_NONE guard: running the stack
+    past its bottom faults immediately instead of silently scribbling into
+    whatever mmap happens to sit below. StackSize records the full mapping so
+    Join's munmap releases the guard too. }
+  h.StackSize := stackSize + PAGE_SIZE;
+  h.StackBase := __pxxrawsyscall(SYS_mmap, 0, h.StackSize, PROT_RW, MAP_ANON_PRIV, -1, 0);
   if h.StackBase < 0 then
   begin
     h.StackBase := 0;
     Result := -1;
     Exit;
   end;
+  ignore := __pxxrawsyscall(SYS_mprotect, h.StackBase, PAGE_SIZE, PROT_NONE, 0, 0, 0);
   { Child stack grows down from the high end; must be 16-byte aligned (mmap is
     page-aligned and stackSize is a multiple of 16, so the top is too). }
-  h.Tid := __pxxclone(PXX_CLONE_THREAD, h.StackBase + stackSize,
+  h.Tid := __pxxclone(PXX_CLONE_THREAD, h.StackBase + h.StackSize,
                       entry, arg, @h.TidWord);
   if h.Tid <= 0 then
   begin

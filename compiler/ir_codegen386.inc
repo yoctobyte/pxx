@@ -2671,10 +2671,66 @@ begin
       end;
 
     IR_CLONE:
-      Error('target i386: __pxxclone not yet supported (threading is x86-64 first)');
+      begin
+        { __pxxclone(flags, childStack, entry, arg, ctidptr): evaluate the five
+          args left-to-right onto the stack (flags deepest — the stub's stack
+          contract), call the bare clone+trampoline stub, drop the args, then
+          widen the tid to the node's Int64 (cdq: a negative errno stays
+          negative). 64-bit args (StackBase+size arithmetic) truncate to their
+          low word here, which is exact on a 32-bit address space. }
+        EnsureCloneStub;
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);
+          EmitB($50);                                { push eax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        EmitB($E8); EmitI32(CloneStubAddr - (CodeLen + 4));  { call clone stub }
+        EmitB($81); EmitB($C4); EmitI32(nArgs * 4);  { add esp, nArgs*4 }
+        EmitB($99);                                  { cdq (eax -> edx:eax) }
+      end;
 
     IR_ATOMIC:
-      Error('target i386: __pxxatomic_* not yet supported (threading is x86-64 first)');
+      begin
+        { 32-bit atomic read-modify-write on addr^, mirroring the x86-64 shape
+          (same opcodes minus REX). Old value in eax, widened to edx:eax for
+          the node's Int64. The *64 variants need cmpxchg8b loops — rejected. }
+        if (IRIVal[node] = ATOMIC_XCHG64) or (IRIVal[node] = ATOMIC_CAS64) or
+           (IRIVal[node] = ATOMIC_ADD64) then
+          Error('target i386: __pxxatomic_*64 not supported (32-bit target)');
+        argNode := IRA[node];
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);
+          EmitB($50);                                { push eax }
+          argNode := IRB[argNode];
+        end;
+        case IRIVal[node] of
+          ATOMIC_CAS:
+            begin
+              { stack (top..bottom): newval, expected, addr }
+              EmitB($5A);                            { pop edx  (newval) }
+              EmitB($58);                            { pop eax  (expected) }
+              EmitB($59);                            { pop ecx  (addr) }
+              EmitB($F0); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [ecx], edx }
+            end;                                     { eax = old *addr }
+          ATOMIC_ADD:
+            begin
+              EmitB($58);                            { pop eax  (delta) }
+              EmitB($59);                            { pop ecx  (addr) }
+              EmitB($F0); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [ecx], eax }
+            end;                                     { eax = old *addr }
+          else { ATOMIC_XCHG }
+            begin
+              EmitB($58);                            { pop eax  (val) }
+              EmitB($59);                            { pop ecx  (addr) }
+              EmitB($87); EmitB($01);                { xchg [ecx], eax  (implicitly locked) }
+            end;                                     { eax = old *addr }
+        end;
+        EmitB($99);                                  { cdq (eax -> edx:eax) }
+      end;
 
     IR_FIELD:
       begin
@@ -3761,6 +3817,7 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
+      IR_ATOMIC, IR_CLONE, { value-producing: emitted by the consuming store, like x86-64 }
       IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else

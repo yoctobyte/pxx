@@ -1707,6 +1707,10 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_hello)" = "Hello, World!"
 	# net lib cross matrix: httpdemo builds on i386 (feature-net-lib-cross-target)
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/test_i386_httpdemo
+	# 32-bit atomic intrinsics on i386 (vs x86-64 golden)
+	./$(COMPILER) --target=i386 test/test_atomic_i386.pas /tmp/test_i386_atomic
+	./$(COMPILER) test/test_atomic_i386.pas /tmp/test_i386_atomic_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_atomic)" = "$$(/tmp/test_i386_atomic_x64)"
 	./$(COMPILER) --target=i386 test/test_i386_arith.pas /tmp/test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas /tmp/test_i386_arith_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_arith)" = "$$(/tmp/test_i386_arith_x64)"

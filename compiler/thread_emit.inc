@@ -66,7 +66,51 @@ begin
     { patch the jump-over to land here, past the stub. }
     Patch32(jmpOver, CodeLen - (jmpOver + 4));
   end;
-  { i386 lands next; other targets (esp) are out of scope for threading. The IR_CLONE
-    codegen guards those with a clean compile-error, so EnsureCloneStub is never
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386 leg. Stub contract: plain stack args (pushed left-to-right by the
+      IR_CLONE caller, so arg1 = flags is deepest), result in eax; ebx/esi/edi
+      preserved on the parent path (the backend keeps values in them). i386
+      clone(2) via int 0x80: eax=120, ebx=flags, ecx=child_stack,
+      edx=parent_tid, esi=tls(user_desc*), edi=child_tid — NOTE tls and ctid
+      are SWAPPED relative to x86-64's r10/r8 order. The child pops the staged
+      entry, leaving arg at [esp] = exactly the stack-arg slot a `call` turns
+      into the callee's [ebp+8]. }
+    EmitB($E9); jmpOver := CodeLen; EmitI32(0);
+    CloneStubAddr := CodeLen;
+    { after the 3 saves: [esp+16]=ctidptr [esp+20]=arg [esp+24]=entry
+      [esp+28]=childStack [esp+32]=flags (ret addr at [esp+12]) }
+    EmitB($53);                                       { push ebx }
+    EmitB($56);                                       { push esi }
+    EmitB($57);                                       { push edi }
+    EmitB($8B); EmitB($5C); EmitB($24); EmitB($20);   { mov ebx, [esp+32]  (flags) }
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($1C);   { mov ecx, [esp+28]  (childStack) }
+    EmitB($83); EmitB($E9); EmitB($08);               { sub ecx, 8         (stage area) }
+    EmitB($8B); EmitB($44); EmitB($24); EmitB($18);   { mov eax, [esp+24]  (entry) }
+    EmitB($89); EmitB($01);                           { mov [ecx], eax }
+    EmitB($8B); EmitB($44); EmitB($24); EmitB($14);   { mov eax, [esp+20]  (arg) }
+    EmitB($89); EmitB($41); EmitB($04);               { mov [ecx+4], eax }
+    EmitB($8B); EmitB($54); EmitB($24); EmitB($10);   { mov edx, [esp+16]  (parent_tid = ctidptr) }
+    EmitB($8B); EmitB($7C); EmitB($24); EmitB($10);   { mov edi, [esp+16]  (child_tid  = ctidptr) }
+    EmitB($31); EmitB($F6);                           { xor esi, esi       (tls = NULL) }
+    EmitB($B8); EmitB($78); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 120  (SYS_clone) }
+    EmitB($CD); EmitB($80);                           { int 0x80 }
+    EmitB($85); EmitB($C0);                           { test eax, eax }
+    EmitB($75); EmitB($0C);                           { jnz .parent  (skip 12 child bytes) }
+    { ---- child: esp = childStack-8, [esp]=entry [esp+4]=arg ---- }
+    EmitB($58);                                       { pop eax  (entry; arg stays at [esp]) }
+    EmitB($FF); EmitB($D0);                           { call eax (entry(arg), caller-cleans convention) }
+    EmitB($31); EmitB($DB);                           { xor ebx, ebx  (exit code 0) }
+    EmitB($B8); EmitB($01); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 1  (SYS_exit) }
+    EmitB($CD); EmitB($80);                           { int 0x80  (thread exits here) }
+    { ---- .parent: eax = child tid ---- }
+    EmitB($5F);                                       { pop edi }
+    EmitB($5E);                                       { pop esi }
+    EmitB($5B);                                       { pop ebx }
+    EmitB($C3);                                       { ret }
+    Patch32(jmpOver, CodeLen - (jmpOver + 4));
+  end;
+  { Other targets (esp/arm) are out of scope for threading. The IR_CLONE codegen
+    guards those with a clean compile-error, so EnsureCloneStub is never
     reached on them. }
 end;

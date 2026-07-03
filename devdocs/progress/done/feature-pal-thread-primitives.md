@@ -1,7 +1,7 @@
 # PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone)
 
 - **Type:** feature (RTL / PAL — runtime) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Unblocks M2/M3/M4.
 
@@ -108,3 +108,30 @@ REMAINING in M1:
 
 NEXT MILESTONE: M2 futex sync primitives ([[feature-sync-primitives-futex]]) now
 has its foundation (PalFutexWait/Wake live).
+
+## Update — M1 remainder closed (2026-07-03, Track A)
+
+- **Stack guard page**: DONE. PalThreadCreate mmaps stackSize+4096 and
+  mprotects the LOW page PROT_NONE; overflow now faults immediately instead
+  of scribbling into the adjacent mapping. StackSize records the full
+  mapping so Join's munmap releases the guard too. Verified: test_palthread
+  4/4 + full make test-threads green.
+- **i386 trampoline**: MECHANISM DONE + verified. __pxxclone int-0x80 stub
+  in thread_emit.inc (stack-arg contract, ebx/esi/edi preserved; LANDMINE:
+  i386 clone's tls/ctid registers are SWAPPED vs x86-64's r10/r8 order),
+  IR_CLONE + 32-bit IR_ATOMIC in ir_codegen386.inc (LANDMINE found: the 386
+  IR walker's `else IREmitNode386(i)` fallback double-executed value ops —
+  IR_ATOMIC/IR_CLONE added to the operands-skip list, mirroring x86-64's
+  whitelist), i386 syscall numbers in palthread.pas. A 4-thread × 100k
+  futex-mutex counter ran exactly (400000) under qemu-i386 with the
+  --threadsafe guard temporarily bypassed (bypass reverted). The i386
+  atomics regression (test_atomic_i386 vs x86-64 golden) is in
+  make test-i386. End-to-end i386 threading stays gated on the runtime
+  locks — split to [[feature-i386-threadsafe-locks]] (heap spinlock, ARC
+  lock-dec, I/O owner lock: genuinely bigger than this ticket's remainder).
+- **TLS**: deliberately NOT done. The original scope made it conditional
+  ("only if a consumer requires it") and no consumer exists — pxx has no
+  thread-local vars and the RTL is global-state. Revisit with a
+  thread-local-vars ticket; CLONE_SETTLS + arch_prctl is the noted shape.
+
+M1 closed; the i386 lock leg lives in its own ticket.
