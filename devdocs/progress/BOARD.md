@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -86,7 +86,6 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
-| perf-compiler-hotspots-algorithmic | A | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
@@ -126,7 +125,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (447)
+## done (448)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -569,6 +568,7 @@ _none_
 | lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
+| perf-compiler-hotspots-algorithmic | A | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | task-license-mpl2-rollout | A | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
@@ -654,7 +654,6 @@ _none_
 - [A] feature-zero-init-contract
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
-- [A] perf-compiler-hotspots-algorithmic
 - [B] task-remove-sysutils-move-fillchar-copies
 - [B] task-sqlite-libc-free-runtime-bringup
 - [B+C] wish-compile-gnu-pascal

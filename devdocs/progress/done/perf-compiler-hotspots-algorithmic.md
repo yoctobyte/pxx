@@ -2,7 +2,7 @@
 
 - **Type:** perf (compiler source — algorithms, NOT codegen)
 - **Track:** A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-03 (pin-time optimization campaign)
 - **Sibling:** [[feature-optimization-levels]] (codegen quality) — this ticket
   is the OTHER axis: make the compiler's own algorithms cheaper. Both shrink
@@ -94,3 +94,24 @@ LANDMINES hit (both cost a debugging round):
 Post-land profile (self-compile): PXXAlloc 14.7, IREmitMachineCode 14.4,
 IRVerify 14.1, PXXStrConcat 13.2, AppendChar 4.5, PXXStrFromLit 4.4 —
 items 2 (allocator) and 3 (string builders) are now the ticket's remainder.
+
+## Item 2 — MEASURED AND REJECTED (2026-07-03): size-binned free list
+
+Implemented exact-size bins (8..256, O(1) pop) — self-compile FLAT (5.99s vs
+5.92s), and PXXFree grew 0.4% -> 4.1% (the header-read + branch added to
+every free). Reverted. Post-mortem via instruction-offset profiling
+(--proc-map + objdump slices): PXXAlloc's ~15% is NOT the first-fit walk —
+the compiler workload frees rarely, so the general list stays short. The
+heat is (a) the reused-block ZERO loop and mostly (b) the sheer ALLOCATION
+COUNT from managed-string temp churn (PXXStrConcat 12.8% + StrFromLit 3.9%
++ AppendChar 4.1% are the same story). Both shrink under the -O arc
+(tighter loop codegen) and/or by allocating less, not by a smarter free
+list. Lesson repeated: profile the OFFSETS before believing a plausible
+theory about a hot function.
+
+## Closing status
+
+Item 1 (hash indexes) = the ticket's win: 10.4s -> 5.9s. Items 2-3
+(allocator, string builders) measured as codegen-/churn-bound — deliberately
+handed to [[feature-optimization-levels]] rather than algorithmic tweaks.
+Ticket closed; pin path is 18s via stabilize-fast.
