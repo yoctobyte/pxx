@@ -1,7 +1,7 @@
 # Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2)
 
 - **Type:** feature (RTL) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Needs M1 ([[feature-pal-thread-primitives]]).
 
@@ -67,3 +67,25 @@ variable, Once. TCriticalSection alias still pending (with M3).
   the once-initialiser ran exactly 1 time. In make test-threads.
 Sync surface now: TMutex, TEvent, TRTLCriticalSection, RunOnce. Still open:
 condition variable (TConditionVariable), 64-bit atomics if needed.
+
+## Update — M2 COMPLETE: TConditionVariable + 64-bit atomics (2026-07-03)
+
+- **64-bit atomics**: __pxxatomic_xchg64 / cas64 / add64 intrinsics
+  (ATOMIC_*64 IRIVal codes on the existing IR_ATOMIC — no new IR op).
+  x86-64 REX.W lock-prefixed rmw (lock cmpxchg/xadd, xchg), old value in
+  rax. Cross targets keep the clean unsupported-node error like the 32-bit
+  ops. test_atomic64: single-thread old-value/full-width semantics beyond
+  2^32 + 4 threads × 200k adds seeded just below 2^32 (a 32-bit op would
+  wrap) — zero lost updates.
+- **TConditionVariable**: TCondVar in palsync (futex sequence-counter
+  shape): CondWait snapshots Seq, drops the mutex, FUTEX_WAITs on the
+  snapshot (a racing signal bumps Seq → stale expected → no lost wakeup),
+  re-locks before return; CondSignal/CondBroadcast atomically bump + wake
+  one/all. Spurious wakeups by design — callers loop on the predicate.
+  test_condvar: 4-consumer bounded queue (cap 8, 80k items) with both
+  signal directions + periodic broadcast; exact count + sum; 20/20 repeat
+  runs clean.
+- Both in make test-threads. Self-host byte-identical.
+
+M2 fully closed: TMutex, TEvent, TRTLCriticalSection, RunOnce,
+TConditionVariable, 32+64-bit atomics.

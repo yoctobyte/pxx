@@ -1806,6 +1806,26 @@ begin
               EmitB($59);                 { pop rcx  (addr) }
               EmitB($F0); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [rcx], eax }
             end;                          { eax = old *addr }
+          ATOMIC_CAS64:
+            begin
+              { 64-bit CAS: same shape, REX.W-wide }
+              EmitB($5A);                 { pop rdx  (newval) }
+              EmitB($58);                 { pop rax  (expected) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($F0); EmitB($48); EmitB($0F); EmitB($B1); EmitB($11); { lock cmpxchg [rcx], rdx }
+            end;                          { rax = old *addr }
+          ATOMIC_ADD64:
+            begin
+              EmitB($58);                 { pop rax  (delta) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($F0); EmitB($48); EmitB($0F); EmitB($C1); EmitB($01); { lock xadd [rcx], rax }
+            end;                          { rax = old *addr }
+          ATOMIC_XCHG64:
+            begin
+              EmitB($58);                 { pop rax  (val) }
+              EmitB($59);                 { pop rcx  (addr) }
+              EmitB($48); EmitB($87); EmitB($01); { xchg [rcx], rax  (implicitly locked) }
+            end;                          { rax = old *addr }
           else { ATOMIC_XCHG }
             begin
               { stack: val, addr }

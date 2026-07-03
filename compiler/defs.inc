@@ -266,6 +266,9 @@ const
   ATOMIC_XCHG = 0;  { xchg [addr], val          -> old (xchg to mem is implicitly locked) }
   ATOMIC_CAS  = 1;  { lock cmpxchg [addr]; args (addr, expected, newval) -> old }
   ATOMIC_ADD  = 2;  { lock xadd [addr], delta   -> old }
+  ATOMIC_XCHG64 = 3;  { 64-bit variants of the above (full-width [addr] rmw) }
+  ATOMIC_CAS64  = 4;
+  ATOMIC_ADD64  = 5;
 
   AN_SLOTADDR      = 77; { address of a variable's own stack/BSS slot (lea),
                            bypassing the by-ref auto-deref an AN_ADDR on a var/

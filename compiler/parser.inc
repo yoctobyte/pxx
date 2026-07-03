@@ -4429,18 +4429,25 @@ begin
       end;
 
       if CaseEqual(name, '__pxxatomic_xchg') or CaseEqual(name, '__pxxatomic_cas')
-         or CaseEqual(name, '__pxxatomic_add') then
+         or CaseEqual(name, '__pxxatomic_add')
+         or CaseEqual(name, '__pxxatomic_xchg64') or CaseEqual(name, '__pxxatomic_cas64')
+         or CaseEqual(name, '__pxxatomic_add64') then
       begin
-        { 32-bit atomic read-modify-write on addr^, returning the OLD value:
+        { Atomic read-modify-write on addr^, returning the OLD value:
             __pxxatomic_xchg(addr, val)            *addr := val
             __pxxatomic_cas (addr, expected, newv)  if *addr=expected then *addr:=newv
             __pxxatomic_add (addr, delta)           *addr := *addr + delta
-          The op is baked at parse time; lowers to IR_ATOMIC. }
+          The plain names are 32-bit ops; the *64 variants are full-width
+          (Int64 counters / pointer-sized slots). The op is baked at parse
+          time; lowers to IR_ATOMIC. }
         node := AllocNode(AN_ATOMIC);
         ASTTk[node] := Ord(tyInt64);
         if CaseEqual(name, '__pxxatomic_xchg') then ASTIVal[node] := ATOMIC_XCHG
         else if CaseEqual(name, '__pxxatomic_cas') then ASTIVal[node] := ATOMIC_CAS
-        else ASTIVal[node] := ATOMIC_ADD;
+        else if CaseEqual(name, '__pxxatomic_add') then ASTIVal[node] := ATOMIC_ADD
+        else if CaseEqual(name, '__pxxatomic_xchg64') then ASTIVal[node] := ATOMIC_XCHG64
+        else if CaseEqual(name, '__pxxatomic_cas64') then ASTIVal[node] := ATOMIC_CAS64
+        else ASTIVal[node] := ATOMIC_ADD64;
         Next; { consume the intrinsic name }
         Expect(tkLParen, '(');
         lastArg := -1;
@@ -4458,7 +4465,7 @@ begin
           Inc(nArgs);
         until not Eat(tkComma);
         Expect(tkRParen, ')');
-        if ASTIVal[node] = ATOMIC_CAS then
+        if (ASTIVal[node] = ATOMIC_CAS) or (ASTIVal[node] = ATOMIC_CAS64) then
         begin
           if nArgs <> 3 then Error('__pxxatomic_cas: expects 3 arguments (addr, expected, newval)');
         end

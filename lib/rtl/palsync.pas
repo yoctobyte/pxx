@@ -76,6 +76,36 @@ type
 
 procedure RunOnce(var ctl: TOnceControl; proc: TOnceProc);
 
+type
+  PCondVar = ^TCondVar;
+  { Futex-backed condition variable (the classic sequence-counter shape): the
+    futex word is a signal generation counter. CondWait snapshots Seq, drops
+    the caller's mutex, sleeps while Seq is still the snapshot, and re-takes
+    the mutex before returning. Signal/Broadcast bump Seq (so a sleeper's
+    expected value goes stale — no lost wakeup even if the wake races the
+    wait) and wake one / all. Spurious wakeups are possible BY DESIGN — like
+    every condvar, callers loop on their predicate:
+        MutexLock(m);
+        while not ready do CondWait(cv, m);
+        ...
+        MutexUnlock(m);
+    Keep alive + address-stable like TMutex. }
+  TCondVar = record
+    Seq: Integer;     { signal generation counter (the futex word) }
+  end;
+  TConditionVariable = TCondVar;   { FPC-flavoured alias }
+
+{ Initialise (zeroed record is also valid). }
+procedure CondInit(var c: TCondVar);
+{ Atomically release m and sleep until a signal arrives; m is re-acquired
+  before returning. Call with m HELD; may wake spuriously (loop on the
+  predicate). }
+procedure CondWait(var c: TCondVar; var m: TMutex);
+{ Wake one waiter (no-op when none). Callable with or without m held. }
+procedure CondSignal(var c: TCondVar);
+{ Wake every current waiter. }
+procedure CondBroadcast(var c: TCondVar);
+
 implementation
 
 procedure MutexInit(var m: TMutex);
@@ -194,6 +224,38 @@ begin
     { someone else is running it — wait until they publish done (2) }
     while ctl <> 2 do
       PalFutexWait(@ctl, 1);
+end;
+
+procedure CondInit(var c: TCondVar);
+begin
+  c.Seq := 0;
+end;
+
+procedure CondWait(var c: TCondVar; var m: TMutex);
+var
+  seq0: Integer;
+begin
+  { Snapshot the generation BEFORE dropping the mutex: a signal that fires in
+    the unlock..wait window bumps Seq, so the FUTEX_WAIT below sees a stale
+    expected value and returns immediately — no lost wakeup. }
+  seq0 := c.Seq;
+  MutexUnlock(m);
+  PalFutexWait(@c.Seq, seq0);
+  MutexLock(m);
+end;
+
+procedure CondSignal(var c: TCondVar);
+var ignore: Int64;
+begin
+  ignore := __pxxatomic_add(@c.Seq, 1);
+  PalFutexWake(@c.Seq, 1);
+end;
+
+procedure CondBroadcast(var c: TCondVar);
+var ignore: Int64;
+begin
+  ignore := __pxxatomic_add(@c.Seq, 1);
+  PalFutexWake(@c.Seq, WAKE_ALL);
 end;
 
 end.

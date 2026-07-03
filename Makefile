@@ -271,6 +271,11 @@ test-threads: $(COMPILER)
 	grep -q "x86-64 only" /tmp/test_threadsafe_i386_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
+	# M2 final slice: 64-bit atomics + TConditionVariable
+	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/test_atomic64_26
+	test "$$(/tmp/test_atomic64_26 | tail -1)" = "ATOMIC64 OK"
+	./$(COMPILER) --threadsafe test/test_condvar.pas /tmp/test_condvar26
+	test "$$(/tmp/test_condvar26 | tail -1)" = "CONDVAR OK"
 	./$(COMPILER) --threadsafe test/test_tthread_terminate.pas /tmp/test_tthread_terminate26
 	test "$$(/tmp/test_tthread_terminate26)" = "$$(printf 'terminated=TRUE\nfinished=TRUE\nreturnvalue=42\nTERMINATE OK')"
 	# TThread Synchronize/Queue/CheckSynchronize main-thread marshalling + auto-join virtual destructor

@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
 
 ## unfinished (3)
 
@@ -24,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -68,14 +70,12 @@ _none_
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
-| feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -126,7 +126,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (442)
+## done (443)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -534,6 +534,7 @@ _none_
 | feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
 | feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-subrange-type-decl | A | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
+| feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
@@ -631,14 +632,12 @@ _none_
 - [A] feature-nilpy-idf-import
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
-- [A] feature-pal-thread-primitives
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
-- [A] feature-sync-primitives-futex
 - [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize
 - [B] feature-tls-provider-abstraction
