@@ -8,6 +8,11 @@
   [[feature-asm-textual-emit-mode]], [[feature-asm-source-frontend]]. Absorbs
   the goals of [[feature-inline-asm-depth]] and [[feature-inline-asm-multi-arch]]
   (both stay open as detailed scope/acceptance refs, not duplicated here).
+- **Stale-ref note (2026-07-03):** layer 2 ([[feature-asm-structured-ir-library]],
+  the ir_codegen→asmcore emitter migration) was REJECTED by user decision —
+  see that ticket's log and [[feedback_no_emitter_migration_asmcore]]. Layer 1
+  (asmcore) stays as the reused encoder library only; per-target emitter files
+  (asmtext_*/x64enc/rv32enc/xtensaenc) stay put, not migrated.
 
 ## Sequencing update (2026-06-30): head #3 fast-tracked, urgent
 

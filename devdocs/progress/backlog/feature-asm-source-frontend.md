@@ -6,6 +6,11 @@
 - **Relation:** part of [[feature-assembler-first-class-citizen]];
   consumes [[feature-asm-structured-ir-library]]; pairs with
   [[feature-asm-textual-emit-mode]] for round-trip validation.
+- **Stale-ref note (2026-07-03):** [[feature-asm-structured-ir-library]]
+  (the ir_codegen→asmcore emitter migration) was REJECTED by user decision —
+  see that ticket's log and [[feedback_no_emitter_migration_asmcore]]. Its
+  audit findings still stand as history/context; just don't treat it as a
+  live blocking dependency.
 - **Fast-tracked subset is urgent:** [[feature-asm-mvp-frontend]] cuts a
   minimal straight-line-only (no labels/externs/sections) version of this
   out and asks Track A to land it first — read that one before this if

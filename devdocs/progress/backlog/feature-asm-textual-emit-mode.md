@@ -13,6 +13,10 @@
   this mode is mostly "call the printer" — cheaper than the interim
   echo-from-`EmitAsmXxx` approach described below, which is the fallback if
   this mode is needed before the library migration lands.
+- **Stale-ref note (2026-07-03):** the [[feature-asm-structured-ir-library]]
+  emitter migration was REJECTED by user decision (see that ticket's log and
+  [[feedback_no_emitter_migration_asmcore]]) — plan on the echo-from-
+  `EmitAsmXxx` fallback as the real path, not "wait for the migration."
 
 ## Corrected understanding (read this first)
 
