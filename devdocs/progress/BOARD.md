@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 
 ## unfinished (3)
 
@@ -67,7 +69,7 @@ _none_
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-opt-store-reload-elimination | A | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -635,7 +637,7 @@ _none_
 - [B] feature-move-fillchar-intrinsics
 - [B] feature-networking
 - [A] feature-nilpy-idf-import
-- [A] feature-optimization-levels
+- [A] feature-opt-store-reload-elimination
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-parallel-processing
 - [B] feature-random-library
