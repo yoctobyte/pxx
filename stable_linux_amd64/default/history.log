@@ -153,3 +153,4 @@
 2026-07-02T15:46:46Z  v153  a557bca440c4c2db9be0e81a7a0329671639d0d604adbcdbe59ff462f5b1cb19  7a1c9f901a6b7984eba7baf9575e6d51b5cdf5bc  chore(stable): pin v152 (TThread Synchronize/Queue; binary identical to v151)
 2026-07-02T19:29:47Z  v154  8ae35a5e989e975655bbe206fc830ca37ceffbec176114bcfa8a33d14e2da9ee  4051545b93c4fb16011b413fd2f13ddf527b5223  feat(generators): allow yield inside case in stackless generators
 2026-07-02T22:48:26Z  v155  fe3e4b6c4d5c4851c309c0ea55f16f76e96d0a22c504c56cbce35acfd93c6454  596ac12b38db965a76120fc094b58a9c6721a761  fix(riscv32): chess perft byte-identical — hidden-temp nil-init, far branches, set-param ABI
+2026-07-03T05:36:09Z  v156  f3d124153d67ff5a892ba4e791443009cc0676d2bb7d79ecc87307a76bf53d64  c2e19f4d06f16ff64d023b7401b5d69a02178d10  fix(esp): keep bare images lean — no softfloat auto-pull, console helpers gated out
