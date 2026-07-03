@@ -5107,7 +5107,7 @@ begin
   PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }
-  SymCount := savedSC;
+  SymRollbackTo(savedSC);
   FrameSize := savedFS;
   CurProc := -1;
 end;

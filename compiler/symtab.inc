@@ -1631,14 +1631,66 @@ begin
     end;
 end;
 
+{ Same fold+FNV, masked to the (larger) symbol bucket count. }
+function SymNameFoldHash(const s: AnsiString): Integer;
+var i, b: Integer; h: LongWord;
+begin
+  h := LongWord($811C9DC5);
+  for i := 1 to Length(s) do
+  begin
+    b := Ord(s[i]);
+    if (b >= 65) and (b <= 90) then b := b + 32;
+    h := (h xor LongWord(b)) * LongWord($01000193);
+  end;
+  Result := Integer(h and LongWord(SYM_HASH_SIZE - 1));
+end;
+
+procedure SymHashReset;
+var i: Integer;
+begin
+  for i := 0 to SYM_HASH_SIZE - 1 do
+    SymHashHead[i] := -1;
+end;
+
+{ Push a just-registered slot onto its bucket, newest-first. MUST be called at
+  the moment the slot becomes visible (the Inc(SymCount) in the Alloc*
+  functions), NOT when the name is first assigned — the linear scans were
+  bounded by SymCount, so a lookup made while a registration is still filling
+  in its fields must not see the in-flight slot. }
+procedure SymHashInsert(idx: Integer);
+var b: Integer;
+begin
+  b := SymNameFoldHash(Syms[idx].Name);
+  SymHashPrev[idx] := SymHashHead[b];
+  SymHashHead[b] := idx;
+end;
+
+{ Truncate the symbol table to newCount, unlinking the removed range from the
+  hash. Descending order: the highest live idx is always its bucket's current
+  head, so each pop is O(1). Replaces bare `SymCount := savedSC` at scope
+  exits — a bare truncation would leave dead heads pointing at slots the next
+  scope re-registers under different names. }
+procedure SymRollbackTo(newCount: Integer);
+var i: Integer;
+begin
+  for i := SymCount - 1 downto newCount do
+  begin
+    SymHashHead[SymNameFoldHash(Syms[i].Name)] := SymHashPrev[i];
+  end;
+  SymCount := newCount;
+end;
+
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
   { Exact-case match first, innermost scope out (preserves shadowing). A global
     variable declared textually after the current routine is hidden (decl-order
-    gating, DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity. }
-  for i := SymCount-1 downto 0 do
+    gating, DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity.
+    Hash chain is NEWEST-first, so walking it is the linear downto order. }
+  i := SymHashHead[SymNameFoldHash(lo)];
+  while i >= 0 do
+  begin
     if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
@@ -1646,8 +1698,13 @@ begin
       Result := i;
       Exit;
     end;
-  { Case-insensitive fallback for case-insensitive symbols only. }
-  for i := SymCount-1 downto 0 do
+    i := SymHashPrev[i];
+  end;
+  { Case-insensitive fallback for case-insensitive symbols only (same folded
+    bucket holds every case variant). }
+  i := SymHashHead[SymNameFoldHash(lo)];
+  while i >= 0 do
+  begin
     if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
        IsBlockVisible(SymBlockId[i], CurBlockId)
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (SymDeclTok[i] > CurBodyHdrTok)) then
@@ -1656,6 +1713,8 @@ begin
       Result := i;
       Exit;
     end;
+    i := SymHashPrev[i];
+  end;
 
   if DebugTrace then writeln('FindSym: ', lo, ' -> -1');
   if DebugTrace and StrEqual(lo, 'ELF_HEADER_SIZE') then
@@ -1710,19 +1769,27 @@ end;
 function FindSymInUnit(const name: AnsiString; unitIdx: Integer): Integer;
 var i: Integer;
 begin
-  for i := SymCount - 1 downto 0 do
+  i := SymHashHead[SymNameFoldHash(name)];
+  while i >= 0 do
+  begin
     if (SymUnitIdx[i] = unitIdx) and StrEqual(Syms[i].Name, name) then
     begin
       Result := i;
       Exit;
     end;
-  for i := SymCount - 1 downto 0 do
+    i := SymHashPrev[i];
+  end;
+  i := SymHashHead[SymNameFoldHash(name)];
+  while i >= 0 do
+  begin
     if (SymUnitIdx[i] = unitIdx) and (not SymCaseSensitive[i]) and
        CaseEqual(Syms[i].Name, name) then
     begin
       Result := i;
       Exit;
     end;
+    i := SymHashPrev[i];
+  end;
   Result := -1;
 end;
 
@@ -1826,7 +1893,7 @@ begin
       Syms[SymCount].Offset := -FrameSize;
     end;
   end;
-  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
+  Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function ParamSize(idx: Integer): Integer;
@@ -1908,7 +1975,7 @@ begin
     align := TypeAlign(tk);
   FrameSize := AlignTo(FrameSize + sz, align);
   Syms[SymCount].Offset := -FrameSize;
-  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
+  Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
@@ -2003,7 +2070,7 @@ begin
     Syms[SymCount].Offset := -FrameSize;
   end;
   LastTypeElemDynDepth := 0;   { consumed }
-  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
+  Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integer): Integer;
@@ -2066,7 +2133,7 @@ begin
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
-  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
+  Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
 function AllocTemp: Integer;
@@ -2083,7 +2150,7 @@ begin
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
-  Result := SymCount; Inc(SymCount); StampDeclSeq(Result);
+  Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
 { ===== Variable load/store ===== }

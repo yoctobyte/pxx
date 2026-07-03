@@ -872,7 +872,7 @@ begin
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-  SymCount := savedSC;
+  SymRollbackTo(savedSC);
   FrameSize := savedFS;
   CurProc := -1;
 end;
@@ -1053,7 +1053,7 @@ begin
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
-  SymCount := savedSC; FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+  SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
 procedure PyParseClass;

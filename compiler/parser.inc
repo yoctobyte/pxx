@@ -14920,7 +14920,7 @@ begin
     WarnStackFrame(CurTok.Line, Procs[procIdx].Name, FrameSize, MaxStackFrameSize);
 
   { Restore scope }
-  SymCount  := savedSC;
+  SymRollbackTo(savedSC);
   FrameSize := savedFS;
   GotoLabelCount := savedGLC;
   GotoFixupCount := savedGFC;
@@ -15709,7 +15709,7 @@ begin
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
 
-  SymCount := savedSC; FrameSize := savedFS;
+  SymRollbackTo(savedSC); FrameSize := savedFS;
   GotoLabelCount := savedGLC; GotoFixupCount := savedGFC;
   CurProc := -1;
 

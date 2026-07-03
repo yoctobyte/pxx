@@ -538,6 +538,7 @@ begin
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   ProcHashReset;   { heads/tails to -1 (BSS zero is a valid proc idx) }
+  SymHashReset;
   CurrentUnitIdx := -1;
   CTypedefCount := 0;
   CTypedefCharLen := 0;

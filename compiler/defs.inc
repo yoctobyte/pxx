@@ -11,6 +11,7 @@ const
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
+  SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
@@ -931,6 +932,14 @@ var
   ProcHashHead : array[0..PROC_HASH_SIZE-1] of Integer;
   ProcHashTail : array[0..PROC_HASH_SIZE-1] of Integer;
   ProcHashNext : array[0..MAX_PROCS-1] of Integer;
+  { FindSym hash index: same folded-name bucketing, but chains are NEWEST-
+    FIRST (head = most recent) because FindSym scans innermost-scope-out —
+    walking head->older is exactly the linear `downto` order. Scope exits
+    truncate SymCount; SymRollbackTo pops the removed range off the chain
+    heads (descending idx = each is its bucket's current head), so chains
+    never hold dead indices. }
+  SymHashHead : array[0..SYM_HASH_SIZE-1] of Integer;
+  SymHashPrev : array[0..MAX_SYMS-1] of Integer;   { next-older same-bucket idx }
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcFlexColumn : array[0..MAX_PROCS-1] of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;

@@ -65,3 +65,32 @@ perf record ./x ...; perf report --stdio   # then join offsets against map.txt
 
 Self-compile wall time measurably down (target: 10.4s -> ~6s from this ticket alone, dominated by item 1); `make benchmark` numbers recorded in the log; full make test green;
 self-host byte-identical per landing.
+
+## Progress — item 1 LANDED (2026-07-03): FindProc + FindSym hash indexes
+
+Self-compile: **10.4s -> 5.9s** (pxx-built); FPC-built same source
+5.1s -> **2.4s**. The lookup family vanished from the profile entirely.
+
+- FindProc: FNV-1a buckets on the folded name, FIFO chains (= registration
+  order) so first-match/overload-order semantics hold; converted FindProc,
+  FindProcInUnit, HasNonOverloadProc, HasExactCaseSensitiveProc and all
+  MatchProcCall/-InUnit phase loops. Procs are append-only — no unlink.
+- FindSym: NEWEST-FIRST chains (walk = the linear `downto` innermost-scope
+  order); scope exits go through SymRollbackTo, which pops the removed range
+  off the bucket heads (descending idx = each is its bucket's current head,
+  O(1) per pop).
+
+LANDMINES hit (both cost a debugging round):
+1. **Insert at the visibility point, not at name-assignment.** The Alloc*
+   functions assign .Name ~80 lines before Inc(SymCount); the linear scans
+   were bounded by SymCount, so a lookup made mid-registration must not see
+   the in-flight slot. Insert now sits next to Inc(SymCount).
+2. **`SymCount  := savedSC` with TWO spaces** (parser.inc ParseSubroutine,
+   the main per-routine scope exit!) dodged every `SymCount :=` grep. A
+   truncation that bypasses SymRollbackTo leaves dead indices chained ->
+   chain cycles -> the self-compile spins in FindSym. Sweep rule: hunt
+   assignment sites with `\s*:=` regexes, never fixed spacing.
+
+Post-land profile (self-compile): PXXAlloc 14.7, IREmitMachineCode 14.4,
+IRVerify 14.1, PXXStrConcat 13.2, AppendChar 4.5, PXXStrFromLit 4.4 —
+items 2 (allocator) and 3 (string builders) are now the ticket's remainder.
