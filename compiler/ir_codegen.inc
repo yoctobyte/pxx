@@ -4791,9 +4791,35 @@ begin
   end;
 end;
 
+{ -O1 pass 4 (compare-into-branch fusion) eligibility: an IR_BINOP condition
+  feeding IR_JUMP_IF_FALSE can skip setcc/movzx/test and branch straight off
+  the compare flags — but ONLY when the comparison would take the plain
+  integer `cmp rax, rcx` path. Exclude float (either operand -> ucomisd path),
+  AnsiString/String (dedicated compare helpers), and Variant. What remains is
+  the integer/pointer/char/boolean/enum ordinal compare that lowers to a bare
+  cmp + setcc — exactly the flags an inverted jcc can consume. }
+function CmpFusible(node: Integer): Boolean;
+var opTk: Integer; lt, rt: TTypeKind;
+begin
+  CmpFusible := False;
+  opTk := IRC[node];
+  if not ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq)) or (opTk = Ord(tkLt)) or
+          (opTk = Ord(tkLe)) or (opTk = Ord(tkGt)) or (opTk = Ord(tkGe))) then Exit;
+  lt := IntToTypeKind(IRTk[IRA[node]]);
+  rt := IntToTypeKind(IRTk[IRB[node]]);
+  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (lt = tyAnsiString) or (lt = tyString) or
+     (rt = tyAnsiString) or (rt = tyString) then Exit;
+  if (lt = tyVariant) or (rt = tyVariant) then Exit;
+  CmpFusible := True;
+end;
+
 procedure IREmitMachineCode;
 var i, lblId, pos, targetOffset, f, procIdx: Integer;
     LabelFixupCount: Integer;
+    condNode, cLeft, cRight: Integer;
+    cOp: TTokenKind;
+    cmpUns, fused: Boolean;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
@@ -4888,21 +4914,89 @@ begin
       IR_JUMP_IF_FALSE:
         begin
           lblId := IRA[i];
-          IREmitNode(IRB[i]); { evaluate condition -> rax }
-          EmitAsmX64(['test rax, rax']);
-          if LabelPositions[lblId] <> -1 then
+          condNode := IRB[i];
+          fused := False;
+          if (OptLevel >= 1) and (TargetArch <> TARGET_I386) and
+             (IRKind[condNode] = IR_BINOP) and CmpFusible(condNode) then
           begin
-            EmitB($0F); EmitB($84); { jz 32-bit rel }
-            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
-          end
-          else
+            { -O1 compare-into-branch fusion (x86-64): evaluate the comparison's
+              operands into rax/rcx exactly as IR_BINOP would (reusing the -O1
+              leaf-const / leaf-sym direct-load forms), emit the bare `cmp`, then
+              jump to the label on the INVERTED condition (branch taken when the
+              comparison is FALSE). Drops the setcc/movzx/test the generic path
+              would emit before the jz. }
+            cLeft := IRA[condNode];
+            cRight := IRB[condNode];
+            if IRKind[cRight] = IR_CONST_INT then
+            begin
+              IREmitNode(cLeft);
+              if (IRIVal[cRight] >= -2147483648) and (IRIVal[cRight] <= 2147483647) then
+                begin EmitB($48); EmitB($C7); EmitB($C1); EmitI32(Integer(IRIVal[cRight])); end
+              else
+                begin EmitB($48); EmitB($B9); EmitI64(IRIVal[cRight]); end;
+            end
+            else if LeafSymRcxLoadable(cRight) then
+            begin
+              IREmitNode(cLeft);
+              EmitLoadVarRcx(IRA[cRight]);
+            end
+            else
+            begin
+              IREmitNode(cLeft); EmitB($50);                       { push rax }
+              IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
+            end;
+            EmitB($48); EmitB($3B); EmitB($C1);                    { cmp rax, rcx }
+            cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
+            cOp := IntToTokenKind(IRC[condNode]);
+            EmitB($0F);   { two-byte jcc, inverted (jump when comparison is FALSE) }
+            if cmpUns then
+              case cOp of
+                tkEq:  EmitB($85);   { == false -> jne }
+                tkNeq: EmitB($84);   { != false -> je  }
+                tkLt:  EmitB($83);   { <  false -> jae }
+                tkLe:  EmitB($87);   { <= false -> ja  }
+                tkGt:  EmitB($86);   { >  false -> jbe }
+                tkGe:  EmitB($82);   { >= false -> jb  }
+              end
+            else
+              case cOp of
+                tkEq:  EmitB($85);   { == false -> jne }
+                tkNeq: EmitB($84);   { != false -> je  }
+                tkLt:  EmitB($8D);   { <  false -> jge }
+                tkLe:  EmitB($8F);   { <= false -> jg  }
+                tkGt:  EmitB($8E);   { >  false -> jle }
+                tkGe:  EmitB($8C);   { >= false -> jl  }
+              end;
+            if LabelPositions[lblId] <> -1 then
+              EmitI32(LabelPositions[lblId] - (CodeLen + 4))
+            else
+            begin
+              if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+              LabelFixupPos[LabelFixupCount] := CodeLen;
+              LabelFixupTarget[LabelFixupCount] := lblId;
+              Inc(LabelFixupCount);
+              EmitI32(0);
+            end;
+            fused := True;
+          end;
+          if not fused then
           begin
-            EmitB($0F); EmitB($84);
-            if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
-            LabelFixupPos[LabelFixupCount] := CodeLen;
-            LabelFixupTarget[LabelFixupCount] := lblId;
-            Inc(LabelFixupCount);
-            EmitI32(0);
+            IREmitNode(condNode); { evaluate condition -> rax }
+            EmitAsmX64(['test rax, rax']);
+            if LabelPositions[lblId] <> -1 then
+            begin
+              EmitB($0F); EmitB($84); { jz 32-bit rel }
+              EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+            end
+            else
+            begin
+              EmitB($0F); EmitB($84);
+              if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+              LabelFixupPos[LabelFixupCount] := CodeLen;
+              LabelFixupTarget[LabelFixupCount] := lblId;
+              Inc(LabelFixupCount);
+              EmitI32(0);
+            end;
           end;
         end;
 

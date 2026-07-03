@@ -276,6 +276,32 @@ implementation wants the liveness scaffold flagged for
 rather than land a risky tracker (correctness-first). Did the safe queued
 peepholes (pass 3 above) instead; branch-over-branch next.
 
+## Progress — pass 4 LANDED (2026-07-03): compare-into-branch fusion
+
+- **Pass 4 (-O1): compare-into-branch fusion** (x86-64). An `IR_BINOP`
+  comparison feeding `IR_JUMP_IF_FALSE` previously emitted
+  `cmp; setcc al; movzx eax,al; test rax,rax; jz label` — the boolean was
+  materialised only to be immediately tested. Fused to `cmp; j!cc label`:
+  evaluate operands into rax/rcx (reusing the -O1 leaf-const / leaf-sym
+  direct-load forms), bare `cmp rax,rcx`, then jump on the INVERTED condition
+  (branch taken when the comparison is FALSE). ~8 bytes + a setcc/movzx/test
+  dropped per if/while/for-guard.
+- **Eligibility `CmpFusible`** (ir_codegen.inc, before IREmitMachineCode):
+  comparison op {=,<>,<,<=,>,>=} AND neither operand float / AnsiString /
+  String / Variant — i.e. exactly the integer/pointer/char/bool/enum ordinal
+  compares that lower to the plain `cmp rax,rcx` path. Float (ucomisd) and
+  string (dedicated helpers) comparisons fall through to the unchanged generic
+  setcc+test+jz path. Inverted jcc opcodes: signed jl/jge/jle/jg (8C/8D/8E/8F)
+  + je/jne (84/85), unsigned jb/jae/jbe/ja (82/83/86/87). Label rel32 uses the
+  same fixup machinery as the jz path (fixups reference CodeLen — no byte
+  rewriting). x86-64-only (the driver loop is; other arches Exit earlier).
+- **Gates**: `make test-opt` green (-O1 self-code 3.58MB -> 3.50MB, ~77KB).
+  `-O0` self-host fixedpoint byte-identical (sacred gate untouched). FULL
+  `make test` under an -O1-BUILT compiler (pass 1-4): EXIT=0.
+- **Measured**: -O1-built pass1-4 self-compiles 4.24s vs pass1-3 4.41s
+  (~4% faster); ~1.30x vs -O0-built (5.5s). -O1 compiler binary 3.61MB
+  (was 3.69MB pass1-3). Speed win in every conditional/loop guard.
+
 ## Pin-flip to -O1-built — DONE, v168 (2026-07-03, Rene OK'd)
 
 Pinned binary is now **-O1-built** (`make PXXFLAGS=-O1 stabilize` + `make pin`).
