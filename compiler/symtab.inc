@@ -3496,6 +3496,7 @@ begin
   ProcExternal[ProcCount]     := False;
   ProcCaseSensitive[ProcCount] := CaseSensitiveMode;
   ProcOverloadDirective[ProcCount] := False;
+  ProcFlexColumn[ProcCount]   := False;
   ProcLibrary[ProcCount]      := -1;
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;

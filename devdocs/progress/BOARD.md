@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (70)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ _none_
 | feature-esp-bare-exceptions | A | feature | ESP bare: try/except (raise currently terminates) | — |
 | feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
@@ -133,7 +132,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (435)
+## done (436)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -464,6 +463,7 @@ _none_
 | feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
+| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
 | feature-float-math-and-demo | B | feature | Float math library (Single+Double) + numerical float demo | — |
 | feature-float-str-val | A | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
@@ -620,7 +620,6 @@ _none_
 - [A] feature-esp-bare-exceptions
 - [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
-- [A] feature-flexcolumn-directive
 - [A] feature-float-exception-mask-control
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke

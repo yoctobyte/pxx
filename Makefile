@@ -1335,6 +1335,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_char_to_string26)" = "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
 	./$(COMPILER) test/test_comments.pas /tmp/test_comments26
 	test "$$(/tmp/test_comments26)" = "$$(printf '3\ndone')"
+	# flexcolumn directive: call args carry write-style :w:d modifiers
+	./$(COMPILER) test/test_flexcolumn.pas /tmp/test_flexcolumn26
+	test "$$(/tmp/test_flexcolumn26 | tail -1)" = "OK"
 	./$(COMPILER) test/test_case_insensitive.pas /tmp/test_case_insensitive26
 	test "$$(/tmp/test_case_insensitive26)" = "42"
 	./$(COMPILER) test/test_case_sensitive.pas /tmp/test_case_sensitive26

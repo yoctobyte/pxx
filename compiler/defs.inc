@@ -916,6 +916,7 @@ var
 
   Procs     : array[0..MAX_PROCS-1] of TProc;
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
+  ProcFlexColumn : array[0..MAX_PROCS-1] of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
   BlockParent: array[0..32767] of Integer;

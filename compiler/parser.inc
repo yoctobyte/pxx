@@ -3050,6 +3050,40 @@ begin
   Result := wCall;
 end;
 
+{ flexcolumn call tail. After a value argument to a routine declared with the
+  `flexcolumn` directive, an optional write-style `:width[:decimals]` may
+  follow. Each value argument expands to THREE actuals — value, width,
+  decimals — with defaults 0 and -1 when a modifier is absent (write's
+  defaults), so the callee declares (v; w, d) triples and arity/type checks
+  run on the expanded list. Width/decimals are full expressions, not just
+  literals. Appends the two extra AN_ARG nodes to the open argument list. }
+procedure ParseFlexColumnTail(var lastArg, nArgs: Integer);
+var wNode, dNode, aSeq: Integer;
+begin
+  if CurTok.Kind = tkColon then
+  begin
+    Next;
+    ParseExpr; wNode := CurASTNode;
+  end
+  else
+  begin
+    wNode := AllocNode(AN_INT_LIT); ASTIVal[wNode] := 0; ASTTk[wNode] := Ord(tyInt64);
+  end;
+  if CurTok.Kind = tkColon then
+  begin
+    Next;
+    ParseExpr; dNode := CurASTNode;
+  end
+  else
+  begin
+    dNode := AllocNode(AN_INT_LIT); ASTIVal[dNode] := -1; ASTTk[dNode] := Ord(tyInt64);
+  end;
+  aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := wNode;
+  ASTRight[lastArg] := aSeq; lastArg := aSeq; Inc(nArgs);
+  aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := dNode;
+  ASTRight[lastArg] := aSeq; lastArg := aSeq; Inc(nArgs);
+end;
+
 function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
@@ -5384,6 +5418,7 @@ begin
             ASTRight[lastArg] := argSeq;
           lastArg := argSeq;
           Inc(nArgs);
+          if ProcFlexColumn[procIdx] then ParseFlexColumnTail(lastArg, nArgs);
           if CurTok.Kind = tkComma then
             Next
           else if CurTok.Kind <> tkRParen then
@@ -9516,6 +9551,7 @@ begin
               ASTRight[lastArg] := argSeq;
             lastArg := argSeq;
             Inc(nArgs);
+            if ProcFlexColumn[procIdx] then ParseFlexColumnTail(lastArg, nArgs);
             if CurTok.Kind = tkComma then
               Next
             else if CurTok.Kind <> tkRParen then
@@ -13089,6 +13125,7 @@ begin
               CaseEqual(CurTok.SVal, 'generator') or CaseEqual(CurTok.SVal, 'async') or
               CaseEqual(CurTok.SVal, 'stackful') or CaseEqual(CurTok.SVal, 'stackless') or
               CaseEqual(CurTok.SVal, 'iram') or CaseEqual(CurTok.SVal, 'interrupt') or
+              CaseEqual(CurTok.SVal, 'flexcolumn') or
               CaseEqual(CurTok.SVal, 'external'))) or
             (CurTok.Kind = tkOverload) do
       begin
@@ -13159,7 +13196,7 @@ var
   cleanupJnePatch, cleanupJmpPatch: Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
+  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, declFlexColumn, isClassKeyword, isStaticMethod: Boolean;
   isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
@@ -13417,6 +13454,7 @@ begin
 
   Eat(tkSemicolon);
   declOverload := False;
+  declFlexColumn := False;
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
           (CurTok.SVal = 'register') or (CurTok.SVal = 'Register') or (CurTok.SVal = 'REGISTER') or
@@ -13427,10 +13465,12 @@ begin
           CaseEqual(CurTok.SVal, 'stackful') or
           CaseEqual(CurTok.SVal, 'stackless') or
           CaseEqual(CurTok.SVal, 'iram') or
-          CaseEqual(CurTok.SVal, 'interrupt'))) or
+          CaseEqual(CurTok.SVal, 'interrupt') or
+          CaseEqual(CurTok.SVal, 'flexcolumn'))) or
         (CurTok.Kind = tkOverload) do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'flexcolumn') then declFlexColumn := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'async') then isAsync := True;
@@ -13528,6 +13568,7 @@ begin
     end;
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
+    if declFlexColumn then ProcFlexColumn[procIdx] := True;
     ProcLibrary[procIdx] := InternStr(extLib);
     if extSym <> '' then ProcExtName[procIdx] := InternStr(extSym);
     Exit;
@@ -13695,6 +13736,7 @@ begin
       end
       else if declOverload then
         ProcOverloadDirective[procIdx] := True;
+      if declFlexColumn then ProcFlexColumn[procIdx] := True;
       ProcRetRecId[procIdx] := retRecId;
       ProcRetIsDynArray[procIdx] := retIsDynArr;
       ProcRetElemTk[procIdx] := retElemTk;
@@ -13721,6 +13763,7 @@ begin
   end
   else if declOverload then
     ProcOverloadDirective[procIdx] := True;
+  if declFlexColumn then ProcFlexColumn[procIdx] := True;
   ProcRetRecId[procIdx] := retRecId;
   ProcRetIsDynArray[procIdx] := retIsDynArr;
   ProcRetElemTk[procIdx] := retElemTk;
