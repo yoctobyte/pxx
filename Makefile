@@ -1338,6 +1338,13 @@ test-core: $(COMPILER)
 	# flexcolumn directive: call args carry write-style :w:d modifiers
 	./$(COMPILER) test/test_flexcolumn.pas /tmp/test_flexcolumn26
 	test "$$(/tmp/test_flexcolumn26 | tail -1)" = "OK"
+	# metaclass descendant enforcement: class-of assignment is descendant-checked
+	./$(COMPILER) test/test_metaclass_descendant.pas /tmp/test_metaclass_descendant26
+	test "$$(/tmp/test_metaclass_descendant26 | tail -1)" = "OK"
+	! ./$(COMPILER) test/test_metaclass_descendant_error.pas /tmp/test_metaclass_descendant_error26 > /tmp/test_metaclass_descendant_error.log 2>&1
+	grep -q "metaclass type mismatch: TOther is not TBase" /tmp/test_metaclass_descendant_error.log
+	! ./$(COMPILER) test/test_metaclass_narrowing_error.pas /tmp/test_metaclass_narrowing_error26 > /tmp/test_metaclass_narrowing_error.log 2>&1
+	grep -q "metaclass type mismatch: TBase is not TChild" /tmp/test_metaclass_narrowing_error.log
 	./$(COMPILER) test/test_case_insensitive.pas /tmp/test_case_insensitive26
 	test "$$(/tmp/test_case_insensitive26)" = "42"
 	./$(COMPILER) test/test_case_sensitive.pas /tmp/test_case_sensitive26

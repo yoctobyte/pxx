@@ -24,7 +24,7 @@ _none_
 
 _none_
 
-## backlog (69)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -64,7 +64,6 @@ _none_
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
-| feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-networking | B | feature | Networking runtime | — |
@@ -132,7 +131,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (436)
+## done (437)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -493,6 +492,7 @@ _none_
 | feature-managed-string-default | A | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-member-access-on-call-result | B | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-construct-dispatch | A | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
+| feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
@@ -627,7 +627,6 @@ _none_
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-xtensa
 - [A] feature-inline-routines
-- [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics
 - [A] feature-net-lib-cross-target
 - [B] feature-networking

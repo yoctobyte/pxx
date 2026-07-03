@@ -1,8 +1,8 @@
 # Metaclass alias descendant-constraint enforcement
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Track A
 - **Opened:** 2026-06-06 (from todo.md §4 / rainy-afternoon)
 
 ## Motivation
@@ -86,3 +86,16 @@ question) means either path is mostly wiring once the scope is settled.
   `AN_CLASSREF`, `IsSubclassOf`); found the "arbitrary pointer-compatible
   assignment" half of the title has no existing check to extend and needs a
   scope decision before implementing. Parked with the above notes.
+- 2026-07-03 — Implemented (Track A), resolving the parked scope question as
+  a middle path: enforce descendant compatibility for the two RHS shapes that
+  carry a statically known class — a bare class-name literal (`AN_CLASSREF`)
+  and another metaclass variable (compared via its declared alias base, so
+  compile-time narrowing `TChildClass := TBaseClass-var` is rejected too).
+  Arbitrary pointer expressions / casts / nil stay unchecked — no general
+  class-pointer assignment check was introduced (option 2 explicitly not
+  taken; it would change behavior of existing unchecked programs).
+  `CheckMetaclassAssign` (parser.inc), hooked at the plain-identifier
+  assignment statement. Regressions: test_metaclass_descendant.pas (valid
+  base/descendant/var/nil forms), test_metaclass_descendant_error.pas
+  (unrelated class rejected), test_metaclass_narrowing_error.pas (ancestor
+  metaclass var rejected); all in `make test`. Self-host byte-identical.

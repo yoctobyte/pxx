@@ -3050,6 +3050,42 @@ begin
   Result := wCall;
 end;
 
+{ Metaclass descendant enforcement. When the assignment target is a `class of
+  TBase` variable (a tyPointer sym whose element is tyClass with a user-class
+  rec id), the assigned value must be TBase or a descendant. Two RHS shapes
+  carry a statically known class: a bare class name (AN_CLASSREF, ASTIVal =
+  class id) and another metaclass variable (its own declared base id). Any
+  other pointer expression (nil, casts, untyped pointers) stays unchecked —
+  there is deliberately no general class-pointer assignment check today, this
+  gates only the metaclass form. }
+procedure CheckMetaclassAssign(lhsSym, rhsNode: Integer);
+var baseCi, rhsCi, rhsSym, i: Integer; lhsName, rhsName: AnsiString;
+begin
+  if (lhsSym < 0) or (rhsNode < 0) then Exit;
+  if (Syms[lhsSym].TypeKind <> tyPointer) or (Syms[lhsSym].PtrElemTk <> tyClass) or
+     (Syms[lhsSym].PtrElemRec < REC_UCLASS_BASE) then Exit;
+  baseCi := Syms[lhsSym].PtrElemRec - REC_UCLASS_BASE;
+  rhsCi := -1;
+  if ASTKind[rhsNode] = AN_CLASSREF then
+    rhsCi := ASTIVal[rhsNode]
+  else if (ASTKind[rhsNode] = AN_IDENT) and (ASTIVal[rhsNode] >= 0) then
+  begin
+    rhsSym := ASTIVal[rhsNode];
+    if (Syms[rhsSym].TypeKind = tyPointer) and (Syms[rhsSym].PtrElemTk = tyClass) and
+       (Syms[rhsSym].PtrElemRec >= REC_UCLASS_BASE) then
+      rhsCi := Syms[rhsSym].PtrElemRec - REC_UCLASS_BASE;
+  end;
+  if rhsCi < 0 then Exit;
+  if (rhsCi = baseCi) or IsSubclassOf(rhsCi, baseCi) then Exit;
+  lhsName := ''; rhsName := '';
+  for i := UClsNOff[baseCi] to UClsNOff[baseCi] + UClsNLen[baseCi] - 1 do
+    AppendChar(lhsName, TokChars[i]);
+  for i := UClsNOff[rhsCi] to UClsNOff[rhsCi] + UClsNLen[rhsCi] - 1 do
+    AppendChar(rhsName, TokChars[i]);
+  Error('metaclass type mismatch: ' + rhsName + ' is not ' + lhsName +
+        ' or a descendant');
+end;
+
 { flexcolumn call tail. After a value argument to a routine declared with the
   `flexcolumn` directive, an optional write-style `:width[:decimals]` may
   follow. Each value argument expands to THREE actuals — value, width,
@@ -9920,6 +9956,8 @@ begin
                     ASTTk[valNode] := Ord(Syms[idx].TypeKind);
                   end;
                 end;
+                if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) then
+                  CheckMetaclassAssign(idx, CurASTNode);
                 node := AllocNode(AN_ASSIGN);
                 ASTLeft[node] := valNode;
                 ASTRight[node] := CurASTNode;
