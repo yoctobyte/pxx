@@ -218,10 +218,15 @@ duplication). The real payoff is user code with hot tiny helpers (Sqr/Min/Max/
 bit-twiddles), where each site drops a full call sequence.
 
 ## Next slices (measure/scope before building)
-- **Slice 2**: multi-statement bodies — if-then-else Result, simple ordinal
-  locals (fresh caller locals + placeholder remap), single Exit → fall-through.
-  Reaches most of the 664 strict leaf@12 sites (v1 covers only the pure-expr
-  subset).
+- **Slice 2a**: ✅ DONE (2026-07-04). `if C then Result:=A else Result:=B`
+  one-liners retained as a synthesized `AN_TERNARY(C?A:B)` (`BuildInlineTernary`,
+  parser.inc) — reuses the value-return splice + slice-3 arg temps unchanged;
+  AN_TERNARY's short-circuit lowering yields the value. Covers Min/Max/Clamp-
+  style helpers. Gates green.
+- **Slice 2b** (remaining): multi-statement bodies with ordinal locals (fresh
+  caller locals + placeholder remap), single Exit → fall-through. Needs real
+  statement cloning (vs the expression/ternary shapes 1+2a reduce to). Reaches
+  the rest of the 664 strict leaf@12 sites.
 - **Slice 3**: ✅ DONE (2026-07-04). Non-pure args evaluated once into fresh temps
   (`IRInlineExpand`, ir.inc). Pure args (literal / plain scalar ident) still
   substitute directly; if ANY arg is impure, ALL args are temp'd left-to-right so

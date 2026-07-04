@@ -184,11 +184,11 @@ Measured: self-compile **1.34x faster** (6.53s→4.87s, hyperfine, identical
 output) and compiler code **12.2% smaller** (4.08MB→3.58MB) — from just 2
 params/body. Closes a real chunk of FPC's ~2x lead.
 
-**Pin policy note (needs user call):** pins are currently -O1-built. To realize
-the self-compile win at pin time (so B/C/D get the faster compiler), pins would
-move to -O2-built. -O2 output is byte-identical-transparent (an -O2-built
-compiler emits the same -O0 output), so it is a safe swap — but it is a policy
-change, not done unilaterally.
+**Pin policy — FLIPPED to -O2 (2026-07-04, user-approved).** Pins are now
+-O2-built (regcall + inline). -O2 output is byte-identical-transparent (an
+-O2-built compiler emits the same -O0 output as before), so B/C/D see identical
+compiled output and just get a faster compiler. Pinned via
+`make PXXFLAGS=-O2 stabilize && make pin`.
 
 Status: **phase 0 + phase 1 DONE.** Next candidates (optional, measure first):
 phase 2 (expand to rbx/r12/r13 after auditing helpers save them — reaches 78%
