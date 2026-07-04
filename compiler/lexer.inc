@@ -46,6 +46,22 @@ begin
           ' — move big buffers to the heap (GetMem) or a global');
 end;
 
+{ --auto-locals / {$IMPLICITVARS ON}: an assignment to an undeclared name just
+  created an implicit routine-local. Warn so the sloppy-mode inference is
+  visible (a typo'd name silently becomes a new variable otherwise). }
+procedure WarnImplicitVar(line: Integer; const name: AnsiString);
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26:', line, ': error: implicit variable ''', name,
+            ''' (warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26:', line, ': warning: implicit variable ''', name,
+          ''' created by --auto-locals (undeclared; type inferred from first assignment)');
+end;
+
 { ===== Lexer ===== }
 
 function Keyword(const s0: AnsiString): TTokenKind;
@@ -593,6 +609,7 @@ begin
   PackRecordsVal := 8;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
+  ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
   name := 'PXX';
   PasDefine(name);
   name := 'PXX_MANAGED_STRING';
@@ -1398,6 +1415,17 @@ begin
       if CaseEqual(name, 'on') then LaxDeclOrder := False
       else if CaseEqual(name, 'off') then LaxDeclOrder := True
       else Error('declorder requires on or off');
+    end
+    else if CaseEqual(command, 'implicitvars') then
+    begin
+      { {$IMPLICITVARS ON|OFF} — opt-in sloppy locals: assignment to an
+        undeclared name creates a routine-local tyAuto var (type inferred from
+        the RHS) instead of "undefined variable". Off by default; masks typos,
+        so never default. Same effect as --auto-locals. See
+        feature-implicit-locals-sloppy-switch. }
+      if CaseEqual(name, 'on') then ImplicitVars := True
+      else if CaseEqual(name, 'off') then ImplicitVars := False
+      else Error('implicitvars requires on or off');
     end
     else if CaseEqual(command, 'lazycasing') then
     begin

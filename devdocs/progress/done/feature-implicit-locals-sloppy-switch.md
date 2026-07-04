@@ -1,7 +1,7 @@
 # Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals`
 
 - **Type:** feature (language / parser) — Track A
-- **Status:** backlog
+- **Status:** DONE 2026-07-04
 - **Opened:** 2026-06-30
 - **Origin:** the original `--auto-locals` idea
   (feature-implicit-identifier-binding-strictness-switch, "the originally-imagined
@@ -66,3 +66,34 @@ inference the inline-`var` path uses, so the machinery exists.
   the error regardless. Self-host byte-identical (switch off in the self-build).
   Tests: off-errors, on-infers-and-warns, strict-overrides, read-before-assign
   still errors.
+
+## Log
+- 2026-07-04 — **DONE (Track A).** Opt-in switch landed exactly as specced.
+  - `ImplicitVars` global (`defs.inc`), default off; reset in `PasInitDefines`
+    (runs before CLI parse). `--auto-locals` (`compiler.pas`) and
+    `{$IMPLICITVARS ON|OFF}` (`lexer.inc`, next to `{$DECLORDER}`) both set it.
+  - **Assignment hook** (`parser.inc`, plain-lvalue path after
+    `idx := FindSym(name)`): when on + name undeclared + not unit-qualified +
+    not a routine + the *very next* token is `:=`, create a routine-local
+    `tyAuto` var (`AllocVar(name, tyAuto)`); the existing tyAuto-on-assignment
+    block infers its type from the RHS + allocates the frame slot. Tight gate →
+    `obj.f :=`, `a[i] :=`, a bare read, and calls all keep the normal path.
+  - **For-counter hook** (`parser.inc`, `for`-header else branch): an undeclared
+    counter is auto-created — counted `for i := a to b` → Integer, `for x in c`
+    → tyAuto (element type backfilled by the for-in variant), mirroring the
+    `for var i` inline form. Loops are the primary sloppy-mode use.
+  - `WarnImplicitVar` (`lexer.inc`, writeln-based like `WarnStackFrame`,
+    `-Werror`-aware): `implicit variable 'name'` on each creation, so a typo'd
+    name becoming a new var is visible.
+  - **Read of an undeclared name still errors** (only assignment/for-counter
+    creates one) — the ParseFactor rvalue path is untouched.
+  - Off by default → **self-host byte-identical** (build vs verify `cmp` clean,
+    `procs 1530→1531` from the new WarnImplicitVar routine only). `make test`
+    green. Regression `test/test_auto_locals.pas` (int / string(managed) /
+    counted-for / for-in-array, `total ok 4 / 4`) wired into `test-core` both
+    ways: passes with `--auto-locals`, and the same file WITHOUT the flag is
+    asserted to fail with `undefined variable`.
+  - **Not done (out of original scope):** a hard `--strict` family override that
+    forces the error even when requested — no `--strict` flag exists in the
+    compiler today; `{$IMPLICITVARS OFF}` / omitting the flag is the off path.
+    File a follow-up if a strict-mode veto is wanted.

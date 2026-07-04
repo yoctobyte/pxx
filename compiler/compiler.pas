@@ -369,6 +369,15 @@ begin
       StrictIR := True;
       Inc(i);
     end
+    else if option = '--auto-locals' then
+    begin
+      { Opt in to implicit (sloppy) locals: assignment to a previously-undeclared
+        name declares a routine-local tyAuto var (type inferred from the RHS)
+        instead of erroring. Off by default (masks typos). Equivalent to
+        {$IMPLICITVARS ON}. See feature-implicit-locals-sloppy-switch. }
+      ImplicitVars := True;
+      Inc(i);
+    end
     else if option = '--lax-decl-order' then
     begin
       { Opt out of declare-before-use gating for forward-visible global vars

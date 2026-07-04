@@ -30,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -66,7 +66,6 @@ _none_
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
-| feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | A | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -144,7 +143,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (451)
+## done (452)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -493,6 +492,7 @@ _none_
 | feature-i386-threadsafe-locks | A | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
 | feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
+| feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 | feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
@@ -650,7 +650,6 @@ _none_
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
-- [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-xtensa
 - [A] feature-inline-nonleaf-and-branch-locals
 - [A] feature-inline-routines

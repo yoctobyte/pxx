@@ -916,6 +916,7 @@ var
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
   EnableAutoVar : Boolean;
   EnableLazyVar : Boolean;
+  ImplicitVars  : Boolean;    { opt-in (--auto-locals / {$IMPLICITVARS ON}): assignment to a previously-undeclared name declares a routine-local tyAuto var (type inferred from RHS) instead of erroring "undefined variable". Off by default (masks typos); NEVER on in the self-build. See feature-implicit-locals-sloppy-switch. }
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
   CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }

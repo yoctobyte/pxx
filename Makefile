@@ -440,6 +440,11 @@ test-core: $(COMPILER)
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas /tmp/test_signal_handlers26
 	test "$$(/tmp/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
+	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
+	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
+	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
+	! ./$(COMPILER) test/test_auto_locals.pas /tmp/test_auto_locals_neg26 > /tmp/test_auto_locals_neg.log 2>&1
+	grep -q "undefined variable" /tmp/test_auto_locals_neg.log
 	# integer div/mod by zero = clean Runtime error 200 + exit 200 (not a raw SIGFPE core dump)
 	./$(COMPILER) test/test_div_zero_re200.pas /tmp/test_div_zero_re20026
 	test "$$(/tmp/test_div_zero_re20026 || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"

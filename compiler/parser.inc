@@ -8067,6 +8067,19 @@ begin
   else
   begin
     varIdx := FindSym(CurTok.SVal);
+    { --auto-locals / {$IMPLICITVARS ON}: an undeclared for-counter is created
+      as an implicit local (like the `for var i` inline form, but no keyword) —
+      counted form -> Integer, for-in -> tyAuto (element type backfilled by the
+      for-in variant). Loops are the primary sloppy-mode use. See
+      feature-implicit-locals-sloppy-switch. }
+    if (varIdx < 0) and ImplicitVars then
+    begin
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIn) then
+        varIdx := AllocVar(CurTok.SVal, tyAuto)
+      else
+        varIdx := AllocVar(CurTok.SVal, tyInteger);
+      WarnImplicitVar(CurTok.Line, CurTok.SVal);
+    end;
     if varIdx < 0 then
     begin
       ErrorIdent := CurTok.SVal;
@@ -10209,6 +10222,21 @@ begin
                 idx := FindSymInUnit(name, qUnit)
               else
                 idx := FindSym(name);
+              { --auto-locals / {$IMPLICITVARS ON}: a simple assignment to a
+                previously-undeclared bare name (`i := 0`) declares a routine-
+                local tyAuto var here; the tyAuto-on-assignment block below
+                infers its type from the RHS. Gated tight: opt-in only, name
+                not a symbol/routine/unit-qualified, and the very next token is
+                `:=` (a scalar target) — so `obj.f :=`, `a[i] :=`, a bare read,
+                or a call all keep the normal (erroring) path. A read of an
+                undeclared name still errors (only assignment creates one). See
+                feature-implicit-locals-sloppy-switch. }
+              if ImplicitVars and (idx < 0) and (qUnit < 0) and
+                 (Tokens[TokPos].Kind = tkAssign) and (FindProc(name) < 0) then
+              begin
+                idx := AllocVar(name, tyAuto);
+                WarnImplicitVar(CurTok.Line, name);
+              end;
               { Built-in `obj.Free;` on a class instance with no user `Free` method
                 (built-in TObject has none): desugar to nil-guarded Destroy/FreeMem.
                 Restricted to the plain `obj.Free;`/`obj.Free end` form so a user
