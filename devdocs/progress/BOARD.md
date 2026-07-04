@@ -45,7 +45,6 @@ _none_
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-classes-tlist-notify-hook | B | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
@@ -82,6 +81,7 @@ _none_
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
+| feature-rtl-optout-for-lcl | A+B | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-rust-borrowed-slice-type | R | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
 | feature-rust-derive-macros | R | feature | Rust frontend — derive-macro codegen | — |
 | feature-rust-drop-move-tracking | R | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
@@ -144,7 +144,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (457)
+## done (458)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -408,6 +408,7 @@ _none_
 | feature-c-varargs-design | C | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
+| feature-classes-tlist-notify-hook | B | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
@@ -636,7 +637,6 @@ _none_
 - [C] feature-c-runtime-library
 - [A] feature-callconv-register-args
 - [A] feature-cdecl-indirect-cross-targets
-- [B] feature-classes-tlist-notify-hook
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
 - [A] feature-default-params-on-methods
@@ -673,6 +673,7 @@ _none_
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
+- [A+B] feature-rtl-optout-for-lcl
 - [R] feature-rust-borrowed-slice-type
 - [R] feature-rust-derive-macros
 - [R] feature-rust-drop-move-tracking

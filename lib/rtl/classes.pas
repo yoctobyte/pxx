@@ -58,6 +58,11 @@ type
     function Memory: Pointer;
   end;
 
+  { FPC TList mutation-notification hook. A descendant (e.g. TObjectList)
+    overrides Notify to react to element add/remove — the mechanism that lets
+    an owning list free its objects on Delete/Clear. Base Notify does nothing. }
+  TListNotification = (lnAdded, lnExtracted, lnDeleted);
+
   { ---- TList: a growable list of untyped pointers ---- }
   TList = class
   private
@@ -65,6 +70,8 @@ type
     FCount: Integer;
     function GetItem(Index: Integer): Pointer;
     procedure SetItem(Index: Integer; Item: Pointer);
+  protected
+    procedure Notify(Ptr: Pointer; Action: TListNotification); virtual;
   public
     function Add(Item: Pointer): Integer;
     procedure Clear;
@@ -250,6 +257,11 @@ begin
   if (Index >= 0) and (Index < FCount) then FItems[Index] := Item;
 end;
 
+procedure TList.Notify(Ptr: Pointer; Action: TListNotification);
+begin
+  { base: no-op; descendants (e.g. an owning list) override to free/track }
+end;
+
 function TList.Add(Item: Pointer): Integer;
 begin
   if FCount >= Length(FItems) then
@@ -260,10 +272,13 @@ begin
   FItems[FCount] := Item;
   Result := FCount;
   FCount := FCount + 1;
+  Notify(Item, lnAdded);
 end;
 
 procedure TList.Clear;
+var i: Integer;
 begin
+  for i := 0 to FCount - 1 do Notify(FItems[i], lnDeleted);
   SetLength(FItems, 0);
   FCount := 0;
 end;
@@ -272,6 +287,7 @@ procedure TList.Delete(Index: Integer);
 var i: Integer;
 begin
   if (Index < 0) or (Index >= FCount) then Exit;
+  Notify(FItems[Index], lnDeleted);
   for i := Index to FCount - 2 do FItems[i] := FItems[i + 1];
   FCount := FCount - 1;
 end;
@@ -280,9 +296,16 @@ procedure TList.Insert(Index: Integer; Item: Pointer);
 var i: Integer;
 begin
   if (Index < 0) or (Index > FCount) then Exit;
-  Add(nil);                                  { grow by one }
+  { grow by one WITHOUT going through Add (which would fire Notify(nil, lnAdded)) }
+  if FCount >= Length(FItems) then
+  begin
+    if Length(FItems) = 0 then SetLength(FItems, 8)
+    else SetLength(FItems, Length(FItems) * 2);
+  end;
+  FCount := FCount + 1;
   for i := FCount - 1 downto Index + 1 do FItems[i] := FItems[i - 1];
   FItems[Index] := Item;
+  Notify(Item, lnAdded);
 end;
 
 function TList.IndexOf(Item: Pointer): Integer;

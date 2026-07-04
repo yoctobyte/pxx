@@ -1,7 +1,7 @@
 # `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap
 
 - **Type:** feature (library — RTL Classes parity, Track B)
-- **Status:** backlog
+- **Status:** DONE 2026-07-04
 - **Owner:** —
 - **Opened:** 2026-07-04 (next FPC-compat wall after the compiler-side
   [[bug-tobject-destroy-not-virtual-override]] fix; see
@@ -81,3 +81,23 @@ surface" effort (the probe's dominant library blocker: `custapp`/`eventlog` also
 want `TComponent` in `classes` rather than `classes_lite`). Keep those as
 separate tickets; this one is the concrete, self-contained `TList.Notify` piece
 that a real FPC unit (`contnrs`) hits first.
+
+## Resolution (2026-07-04)
+
+Added to `lib/rtl/classes.pas`: `TListNotification = (lnAdded, lnExtracted,
+lnDeleted)` and a protected `TList.Notify(Ptr; Action); virtual` (empty base
+body). Wired the mutators: `Add`/`Insert` → `Notify(Item, lnAdded)`,
+`Delete`/`Clear` → `Notify(item, lnDeleted)` (Clear per element). `Insert` was
+rewritten to grow the backing array directly instead of via `Add(nil)`, which
+would otherwise fire a spurious `Notify(nil, lnAdded)`.
+
+A descendant overriding `Notify` now observes add/remove — the mechanism an
+owning list uses to free its elements. Verified with `test/test_tlist_notify.pas`
+(a tracing subclass sees the exact `lnAdded`/`lnDeleted` sequence; an owning
+subclass frees each removed heap element exactly once) — 2/2, compiled by the
+**pinned stable** compiler, wired into `make lib-test`.
+
+`lnExtracted` is defined but unused (no `Extract` method yet). Note: this only
+adds the hook to `TList`; the `TObjectList`/`OwnsObjects` convenience class from
+FPC's `contnrs` is a separate follow-up if wanted — a user subclass gets the same
+behaviour today.

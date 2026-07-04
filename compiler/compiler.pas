@@ -617,6 +617,14 @@ begin
   EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
   AliasCount := 0;
   AddConst('StdErr', tyInteger, 2);
+  { Predefined System ordinal limits (FPC parity — System unit consts, always
+    available, no `uses`). This AddConst block is pxx's System-const surface (cf.
+    StdErr). 32-bit integer family; the 64-bit High/Low(Int64) go via the
+    High/Low intrinsics. Overriding these in user code is not a sane thing to do
+    (FPC allows it via unit scoping; pxx does not, which is fine). }
+  AddConst('MaxInt', tyInteger, 2147483647);
+  AddConst('MaxLongInt', tyInteger, 2147483647);
+  AddConst('MaxSmallInt', tyInteger, 32767);
 
   if isNilPy then
   begin

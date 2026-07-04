@@ -457,7 +457,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_var_before_method_impl26)" = "ctor=1 dtor=1"
 	# FPC-compat: hint directives (deprecated/platform/...) ignored, SizeOf in const/default-param position
 	./$(COMPILER) test/test_hint_sizeof.pas /tmp/test_hint_sizeof26
-	test "$$(/tmp/test_hint_sizeof26)" = "total ok 5 / 5"
+	test "$$(/tmp/test_hint_sizeof26)" = "total ok 8 / 8"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
@@ -3535,6 +3535,8 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas /tmp/lib_classes
 	test "$$(/tmp/lib_classes | grep -c '=ok')" = "21"
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl test/test_tlist_notify.pas /tmp/lib_tlist_notify
+	test "$$(/tmp/lib_tlist_notify)" = "total ok 2 / 2"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
 	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "32"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"

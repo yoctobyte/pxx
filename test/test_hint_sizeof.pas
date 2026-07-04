@@ -12,6 +12,7 @@ const
   KDep   = 5 deprecated;                      { hint on a const value }
   KPlat  = 7 platform;                        { another hint word }
   KSize  = sizeof(Int64);                      { SizeOf in a const }
+  KMax   = MaxInt div 1024 deprecated;         { predefined MaxInt + hint }
 
 type
   TOldAlias = Integer deprecated;              { hint on a type alias }
@@ -34,6 +35,9 @@ begin
   Inc(total); if KDep = 5 then Inc(pass);
   Inc(total); if KPlat = 7 then Inc(pass);
   Inc(total); if KSize = 8 then Inc(pass);
+  Inc(total); if KMax = 2097151 then Inc(pass);           { 2147483647 div 1024 }
+  Inc(total); if MaxInt = 2147483647 then Inc(pass);
+  Inc(total); if MaxSmallInt = 32767 then Inc(pass);
   Inc(total); if WithSize(1) = 9 then Inc(pass);          { 1 + sizeof(Pointer)=8 }
   Inc(total); if WithSize(1, 4) = 5 then Inc(pass);
 
