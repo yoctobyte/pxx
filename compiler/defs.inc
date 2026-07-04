@@ -858,6 +858,17 @@ var
   RcResidentSym     : array[0..1] of Integer; { Syms[] index of each resident param }
   RcResidentReg     : array[0..1] of Integer; { 14 or 15 }
   RcResidentSaveOff : array[0..1] of Integer; { rbp offset of the caller-reg save slot }
+  { --measure-inline: phase-0 opportunity probe for feature-inline-routines /
+    auto-inline. Per compiled body records size + leaf/early-exit/addr-taken-param
+    facts; per direct call target counts the call sites. Summary printed at end of
+    compile; no codegen change. }
+  MeasureInline          : Boolean;
+  ProcBodyIRNodes        : array[0..MAX_PROCS-1] of Integer; { IR node count of the body }
+  ProcBodyMakesCall      : array[0..MAX_PROCS-1] of Boolean; { body contains any call → non-leaf }
+  ProcBodyEarlyExit      : array[0..MAX_PROCS-1] of Boolean; { body has an explicit Exit (IR_TERMINATE) → multi-exit }
+  ProcBodyAddrTakenParam : array[0..MAX_PROCS-1] of Boolean; { a param's address is taken in the body }
+  ProcBodyCompiled       : array[0..MAX_PROCS-1] of Boolean; { CompileAST ran for this proc (has a real body) }
+  InlineCallSites        : array[0..MAX_PROCS-1] of Integer; { direct internal-call sites targeting this proc }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

@@ -72,3 +72,39 @@ the original design:
   decisions). The eligibility analysis (leaf/addr-taken/size) is the same
   scaffold [[feature-callconv-register-args]] needs — build it once.
 - Self-host gate unchanged: -O0 byte-identical; inlining only under -O1+.
+
+## Phase 0 MEASURED (2026-07-04) — opportunity sized
+
+`--measure-inline` flag added (flag-gated, no codegen change): per compiled body
+records IR-node count + leaf/early-exit/addr-taken-param facts; per direct
+internal call target counts the call sites (`InlineMeasureBody` /
+`InlineMeasureSummary` in ir_codegen.inc).
+
+Measured on the compiler self-compile (30438 total direct call sites), leaf-only,
+budget ≤12 IR nodes:
+
+| Eligibility variant | procs | call sites |
+|---|---|---|
+| strict (single-exit + no addr-taken param) | 19 | 664 |
+| relax early-exit | 19 | 664 |
+| relax addr-taken | 21 | 670 |
+| loose (leaf + size only) | 21 | 670 |
+
+By budget (strict): @6 nodes → 617 sites; @12 → 664; @20 → 757.
+
+Findings:
+- **Strict eligibility captures ~99% of the leaf opportunity** (664/670). The
+  single-exit and no-addr-taken-param restrictions cost almost nothing here —
+  tiny leaf helpers rarely early-Exit or take a param's address. So v1 can be
+  strict *and* safe with negligible loss.
+- **~664 sites = 2.2% of all direct calls** — bounded, but concentrated on hot
+  tiny helpers, each site saving a full call sequence (prologue/epilogue/arg
+  shuffle/call/ret ≈ 6–8 instr). Comparable in magnitude to the regcall win
+  ([[feature-callconv-register-args]] phase 1).
+- The other ~97% of calls target NON-leaf or larger procs → needs depth-budget
+  (non-leaf) inlining, a much larger effort. Deferred to a later slice.
+
+Decision: implement v1 = explicit `inline;` + strict leaf auto-inline (-O2),
+IR-splice at the call site. Both gated OptLevel>=2 (auto-inline could move to -O3
+if we want explicit `inline;` at -O2 and auto at -O3 — user flagged this as an
+option). Measure the actual self-compile delta after landing.

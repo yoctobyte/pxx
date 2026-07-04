@@ -5244,12 +5244,91 @@ begin
   end;
 end;
 
+{ Phase-0 opportunity probe for feature-inline-routines / auto-inline. Records the
+  current body's size + leaf/early-exit/addr-taken-param facts, and counts direct
+  internal call sites per target proc. Pure measurement. }
+procedure InlineMeasureBody;
+var k, pi, sy, tgt: Integer;
+begin
+  ProcBodyCompiled[CurProc] := True;
+  ProcBodyIRNodes[CurProc] := IRCount;
+  ProcBodyMakesCall[CurProc] := False;
+  ProcBodyEarlyExit[CurProc] := False;
+  ProcBodyAddrTakenParam[CurProc] := False;
+  for k := 0 to IRCount - 1 do
+  begin
+    if (IRKind[k] = IR_CALL) or (IRKind[k] = IR_VIRTUAL_CALL) or (IRKind[k] = IR_CALL_IND) then
+      ProcBodyMakesCall[CurProc] := True;
+    if (IRKind[k] = IR_TERMINATE) and (IRIVal[k] <> AN_HALT) then
+      ProcBodyEarlyExit[CurProc] := True;
+    { direct internal call site → tally against the target proc }
+    if (IRKind[k] = IR_CALL) and (IRA[k] >= 0) and (IRA[k] < MAX_PROCS) then
+    begin
+      tgt := IRA[k];
+      if not (ProcExternal[tgt] or ProcCdecl[tgt]) then
+        Inc(InlineCallSites[tgt]);
+    end;
+  end;
+  { addr-taken param: any IR_LEA/IR_SLOTADDR on one of this proc's param syms }
+  for pi := 0 to Procs[CurProc].ParamCount - 1 do
+  begin
+    sy := Procs[CurProc].Params[pi].SymIdx;
+    for k := 0 to IRCount - 1 do
+      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
+      begin
+        ProcBodyAddrTakenParam[CurProc] := True;
+        Break;
+      end;
+  end;
+end;
+
+{ Report the inline opportunity. `eligible@N` = leaf (makes no call), single-exit,
+  no addr-taken param, not external/cdecl/variadic/generator/stackless, body <= N
+  IR nodes. `sites@N` sums the direct call sites that target such procs — the
+  calls auto-inline would replace with a spliced body. Reported at 3 size budgets. }
+procedure InlineMeasureSummary;
+var p, totalSites: Integer;
+    eStrict, sStrict, eNoExit, sNoExit, eNoAddr, sNoAddr, eLoose, sLoose: Integer;
+    baseOk: Boolean;
+begin
+  totalSites := 0;
+  eStrict := 0; sStrict := 0; eNoExit := 0; sNoExit := 0;
+  eNoAddr := 0; sNoAddr := 0; eLoose := 0; sLoose := 0;
+  for p := 0 to ProcCount - 1 do
+  begin
+    totalSites := totalSites + InlineCallSites[p];
+    if not ProcBodyCompiled[p] then Continue;
+    if ProcBodyIRNodes[p] > 12 then Continue;         { fixed @12 budget for the breakdown }
+    if ProcBodyMakesCall[p] then Continue;            { leaf only (all variants) }
+    baseOk := (not ProcExternal[p]) and (not ProcCdecl[p]) and (not ProcVariadic[p]) and
+              (not ProcIsGenerator[p]) and (not ProcIsStackless[p]);
+    if not baseOk then Continue;
+    { strict: also single-exit AND no addr-taken param }
+    if (not ProcBodyEarlyExit[p]) and (not ProcBodyAddrTakenParam[p]) then
+      begin Inc(eStrict); sStrict := sStrict + InlineCallSites[p]; end;
+    { relax early-exit only (keep no-addr-taken) }
+    if (not ProcBodyAddrTakenParam[p]) then
+      begin Inc(eNoExit); sNoExit := sNoExit + InlineCallSites[p]; end;
+    { relax addr-taken only (keep single-exit) }
+    if (not ProcBodyEarlyExit[p]) then
+      begin Inc(eNoAddr); sNoAddr := sNoAddr + InlineCallSites[p]; end;
+    { loose: leaf + size + base only }
+    Inc(eLoose); sLoose := sLoose + InlineCallSites[p];
+  end;
+  writeln(StdErr, 'INLINE-MEASURE: procs=', ProcCount, ' total-direct-call-sites=', totalSites, ' (budget @12 IR nodes, leaf-only)');
+  writeln(StdErr, 'INLINE-MEASURE: strict(single-exit+no-addr) procs=', eStrict, ' sites=', sStrict);
+  writeln(StdErr, 'INLINE-MEASURE: relax-early-exit           procs=', eNoExit, ' sites=', sNoExit);
+  writeln(StdErr, 'INLINE-MEASURE: relax-addr-taken           procs=', eNoAddr, ' sites=', sNoAddr);
+  writeln(StdErr, 'INLINE-MEASURE: loose(leaf+size only)      procs=', eLoose, ' sites=', sLoose);
+end;
+
 procedure CompileAST(node: Integer);
 begin
   IRReset;
   IRLowerAST(node);
   IRVerify;
   if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
+  if MeasureInline and (CurProc >= 0) then InlineMeasureBody;
   RegcallAssignResidency;
   { -O1+ shared-IR optimization pipeline (see ir.inc / IROptimize). Gated here
     so -O0 emits the raw lowering byte-identically; runs after IRVerify (on

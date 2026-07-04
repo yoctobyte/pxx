@@ -112,6 +112,7 @@ begin
   RegcallCapped2 := 0;
   RegcallCapped5 := 0;
   RegcallEligibleUses := 0;
+  MeasureInline := False;
   OptLevel := 0;
   WarnedMissedFold := False;
   DumpCpp := False;
@@ -166,6 +167,11 @@ begin
     else if option = '--measure-regcall' then
     begin
       MeasureRegcall := True;
+      Inc(i);
+    end
+    else if option = '--measure-inline' then
+    begin
+      MeasureInline := True;
       Inc(i);
     end
     else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then
@@ -713,6 +719,7 @@ begin
             ' capture@5reg=', RegcallCapped5,
             ' eligible-param-loads+stores=', RegcallEligibleUses);
   end;
+  if MeasureInline then InlineMeasureSummary;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then
