@@ -29,12 +29,11 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-downcast-inherited-property-wrong-offset | A | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | doc-licensing-split-mpl-zlib | D | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
@@ -145,7 +144,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (463)
+## done (464)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -245,6 +244,7 @@ _none_
 | bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-downcast-inherited-property-wrong-offset | A | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | bug-dynarray-concat-silent-miscompile | A | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
@@ -632,7 +632,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A] bug-downcast-inherited-property-wrong-offset
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [D] doc-licensing-split-mpl-zlib

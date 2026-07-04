@@ -1,7 +1,7 @@
 # Downcast to an inherited PROPERTY reads the wrong offset (miscompile)
 
 - **Type:** bug (compiler — codegen / field offset, Track A)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-04 (found writing the TComponent test)
 
 ## Symptom
@@ -66,3 +66,7 @@ getter's field offset matches the direct field access.
 ## Acceptance
 
 Repro above prints 99/99/99; regression `.pas`; self-host byte-identical.
+
+## Resolution (2026-07-04)
+
+FIXED. The instrumentation plan was not needed — the garbage value (~4.2M, address-like) pointed at offset 0 = the VMT pointer, i.e. RecFieldOffset resolving a NON-FIELD name. Root cause: TT(c).Prop parses via ParseClassRecordSelectors (not the ~2200 member-access path statically read when filing); that function checked FindUProp only to keep property names out of method lookup, then built AN_FIELD with the property name itself -> RecFieldOffset miss -> offset 0. Sibling hole: the grouped-expression selector in ParseFactor ((expr).Prop). Both now do full property resolution: field-backed = AN_FIELD renamed to the accessor field (read+write through the cast); method-backed = getter/setter AN_CALL/AN_VIRTUAL_CALL with self [,index...] [,value] (cast path incl. writes + indexed; grouped path read-only). Regression test/test_cast_property.pas (15/15: cast read/write, inherited + own field, getter/setter methods, indexed, virtual getter dispatching on dynamic type, grouped + as-cast reads) in test-core. Self-host byte-identical, make test green. test_tcomponent's base-ref workaround can revert after next re-pin.
