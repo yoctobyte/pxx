@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -65,6 +65,7 @@ _none_
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
+| feature-hint-directives-deprecated-platform | A | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | A | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
@@ -92,6 +93,7 @@ _none_
 | feature-rust-rtl-macros-io | R | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
 | feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+| feature-sizeof-const-intrinsic-in-const-eval | A | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -653,6 +655,7 @@ _none_
 - [A] feature-float-exception-mask-control
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
+- [A] feature-hint-directives-deprecated-platform
 - [B] feature-ilja-tui
 - [A] feature-inline-asm-xtensa
 - [A] feature-inline-nonleaf-and-branch-locals
@@ -680,6 +683,7 @@ _none_
 - [R] feature-rust-rtl-macros-io
 - [A] feature-selfhost-guard-ir-unsupported
 - [A] feature-signal-handlers
+- [A] feature-sizeof-const-intrinsic-in-const-eval
 - [B] feature-synapse-compile-check
 - [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize

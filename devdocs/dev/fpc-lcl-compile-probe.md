@@ -79,25 +79,39 @@ Two of the three walls turn out to be **library**, not compiler, once you look:
    and grow to the full surface. Track B, `lib/rtl/classes*.pas` — no compiler
    change.
 
-3. **[COMPILER] Advanced generics.** Basic `generic … = class` works (in a unit;
-   `lib/rtl/collections.pas`). `fgl` walls (`:136 expected name`) on the harder
-   shape: a `private type` section with `PT = ^T`, function-pointer types over
-   `T`, and `{$ifndef OldSyntax}protected var{$else}…`. Partly covered by
-   [[bug-generic-class-methods-in-program]] (generic method bodies in a program);
-   `fgl` is a unit and hits a further nested-section gap. `lcltype:92` is a
-   separate cascade-sensitive desync (isolated features parse, so it's a
-   combination) — LCL-side, lower priority.
+3. **[COMPILER] `fgl` wall is NOT generics — it's two mundane dialect gaps.**
+   Bisected 2026-07-04: every generic construct `fgl` uses parses fine in pxx
+   (generic class, `<T>` fields, nested `type` incl. `PT = ^T` and fn-ptr-over-T,
+   `protected var`, override-in-generic, generic-from-non-generic base). The
+   `:136 expected name` was a parser **desync** from two earlier non-generic
+   constructs; patching a local `fgl.pp` past them advanced it to `:29`
+   (`uses types`, a unit dependency), with generics never the blocker. The two
+   real gaps (both Track A, both pervasive in FPC RTL, both ticketed):
+   - **hint directives** `deprecated`/`platform`/`experimental` on const/type/proc
+     → `unexpected token` ([[feature-hint-directives-deprecated-platform]]).
+     `fgl`'s `MaxGListSize = MaxInt div 1024 deprecated;` desyncs here.
+   - **`SizeOf(...)` as a const/default-param value** → `not a constant`
+     ([[feature-sizeof-const-intrinsic-in-const-eval]]). `fgl`'s
+     `Create(AItemSize: Integer = sizeof(Pointer))`.
+
+   A genuine generics gap does exist but is narrower — generic method *bodies in
+   a program* ([[bug-generic-class-methods-in-program]]); generic bodies in a
+   *unit* (the normal case, incl. `fgl`) work. `lcltype:92` is a separate
+   cascade-sensitive desync — LCL-side, lower priority.
 
 ## Takeaway (the progress signal)
 
 pxx is **not** blocked on core Pascal syntax for real FPC code — with
 `--mimic-fpc`, version gating works and pure units (`rtlconsts`) compile clean.
 For **FPC itself** (the interesting target, vs LCL), the compiler showstoppers
-are narrow:
+are narrow, and **generics is NOT among them for `fgl`** (bisected — see #3):
 
-- **virtual `TObject.Destroy`/`Create` override** (blocker #1) — the big one,
-  hit by nearly every stateful class; and
-- **advanced generics** (blocker #3).
+- **virtual `TObject.Destroy`/`Create` override** (blocker #1) — FIXED
+  2026-07-04; and
+- two mundane dialect gaps behind `fgl`'s apparent "generics" wall: **hint
+  directives** and **`SizeOf` in const eval** (blocker #3, both ticketed). The
+  only genuine generics gap is method bodies in a *program*
+  ([[bug-generic-class-methods-in-program]]), not units.
 
 Everything else observed was **library**: `TComponent` is already implemented,
 just in `classes_lite` instead of `classes`, and at a reduced surface. LCL is a
