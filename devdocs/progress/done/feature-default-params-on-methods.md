@@ -1,7 +1,7 @@
 # Default parameter values on class/interface methods (works on free routines)
 
 - **Type:** feature (parser — method declarations, Track A)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-07-04 (bisecting the fgl wall; see [[fpc-lcl-compile-probe]])
 
@@ -56,3 +56,7 @@ no default)` path at ~parser.inc:5613). Depends on / pairs with
   sizeof(Pointer))` compile; a call omitting the arg uses the default; a call
   supplying it overrides.
 - Self-host byte-identical; `make test` green; regression `.pas`.
+
+## Resolution (2026-07-04)
+
+DONE (commit 54b20c0e). Mirrored ParseSubroutine default clause into the class-method and interface-method param loops; defaults stored at class-decl registration (Self-shifted). All nine method-call arg-parse loops accept a shorter call and fill trailing defaults (FillDefaultArgs helper, mirroring the ctor arity fill); body impls that repeat params without defaults no longer clear them. Covers ctor sizeof(Pointer) default, virtual-through-base, class-static, interface dispatch, paren-less calls. Regression test/test_default_params_methods.pas (12/12) in test-core. Self-host byte-identical, make test green.

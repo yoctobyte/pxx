@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (79)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -51,7 +51,6 @@ _none_
 | feature-class-methods-in-generic-class | A | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
-| feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
@@ -148,7 +147,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (460)
+## done (461)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -440,6 +439,7 @@ _none_
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-parameters | A | feature | feature: default parameter values | — |
+| feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
 | feature-demo-2048 | B | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
 | feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
@@ -649,7 +649,6 @@ _none_
 - [A] feature-class-methods-in-generic-class
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
-- [A] feature-default-params-on-methods
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-dns-resolver-library
