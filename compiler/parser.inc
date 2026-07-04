@@ -3236,8 +3236,9 @@ end;
   suffix and the method-call sites so `f(a).x`, `Self.M(a).x`, `obj.M(a).x` all
   resolve their trailing members. }
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
-var sub, prevTok: Integer; fieldName: AnsiString; tk: TTypeKind;
+var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
+    pri, i, w, margIdx: Integer; isAssign: Boolean;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   while CurTok.Kind in [tkDot, tkLBrack] do
@@ -3257,8 +3258,151 @@ begin
         (a hard cast doesn't change the dynamic type). }
       ci := -1;
       if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
+
+      { Property on the value: TT(c).Prop — resolve to the backing field
+        (rename the AN_FIELD to the accessor field) or the getter/setter call,
+        mirroring the plain member-access property path (~2200). Previously the
+        property name fell through to the field builder unresolved, so
+        RecFieldOffset found nothing and read offset 0 — the VMT pointer
+        (bug-downcast-inherited-property-wrong-offset). }
+      pri := -1;
+      if ci >= 0 then pri := FindUProp(ci, fieldName);
+      if pri >= 0 then
+      begin
+        isAssign := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign);
+        { Indexed property write: `:=` follows the subscript — peek past the
+          bracket group (CurTok = name, TokPos = `[`). }
+        if UPropIsIndexed[pri] and (not isAssign) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLBrack) then
+        begin
+          i := TokPos; w := 0;
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        end;
+        if isAssign then
+        begin
+          if UPropWriteFLen[pri] > 0 then
+          begin
+            { field-backed write: rename to the backing field; the caller
+              consumes the `:=` and builds the assignment }
+            sub := AllocNode(AN_FIELD);
+            ASTLeft[sub] := node;
+            ASTSOffset[sub] := UPropWriteFOff[pri];
+            ASTSLen[sub] := UPropWriteFLen[pri];
+            accName := '';
+            for i := 0 to UPropWriteFLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropWriteFOff[pri] + i]);
+            tk := RecFieldType(recId, accName);
+            recId := RecFieldRecId(recId, accName);
+            ASTTk[sub] := Ord(tk);
+            Next; { consume property name }
+            node := sub;
+            Continue;
+          end
+          else if UPropWriteMLen[pri] > 0 then
+          begin
+            accName := '';
+            for i := 0 to UPropWriteMLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropWriteMOff[pri] + i]);
+            mmi := FindUMeth(ci, accName);
+            if mmi < 0 then Error('setter method not found: ' + accName);
+            mpi := UMthProc_[mmi];
+            Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA);
+            Expect(tkAssign, ':=');
+            ParseExpr;
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              callN := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[callN] := UMthVirSlot[mmi];
+            end
+            else
+              callN := AllocNode(AN_CALL);
+            ASTIVal[callN] := mpi;
+            ASTTk[callN] := Ord(Procs[mpi].RetType);
+            selfArg := AllocNode(AN_ARG);
+            ASTLeft[selfArg] := node;
+            ASTLeft[callN] := selfArg;
+            aSeq := AllocNode(AN_ARG);
+            ASTLeft[aSeq] := CurASTNode;   { value }
+            { Setter args: self [, index...], value }
+            if margIdx >= 0 then
+            begin
+              ASTRight[selfArg] := margIdx;
+              ASTRight[lastA] := aSeq;
+            end
+            else
+              ASTRight[selfArg] := aSeq;
+            outTk := Procs[mpi].RetType;
+            Result := callN;   { a complete call statement; caller uses it as-is }
+            Exit;
+          end
+          else
+            Error('property is read-only');
+        end
+        else
+        begin
+          if UPropReadFLen[pri] > 0 then
+          begin
+            sub := AllocNode(AN_FIELD);
+            ASTLeft[sub] := node;
+            ASTSOffset[sub] := UPropReadFOff[pri];
+            ASTSLen[sub] := UPropReadFLen[pri];
+            accName := '';
+            for i := 0 to UPropReadFLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropReadFOff[pri] + i]);
+            tk := RecFieldType(recId, accName);
+            recId := RecFieldRecId(recId, accName);
+            ASTTk[sub] := Ord(tk);
+            Next; { consume property name }
+            node := sub;
+            Continue;
+          end
+          else if UPropReadMLen[pri] > 0 then
+          begin
+            accName := '';
+            for i := 0 to UPropReadMLen[pri] - 1 do
+              AppendChar(accName, TokChars[UPropReadMOff[pri] + i]);
+            mmi := FindUMeth(ci, accName);
+            if mmi < 0 then Error('getter method not found: ' + accName);
+            mpi := UMthProc_[mmi];
+            Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA);
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              callN := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[callN] := UMthVirSlot[mmi];
+            end
+            else
+              callN := AllocNode(AN_CALL);
+            ASTIVal[callN] := mpi;
+            ASTTk[callN] := Ord(Procs[mpi].RetType);
+            selfArg := AllocNode(AN_ARG);
+            ASTLeft[selfArg] := node;
+            ASTLeft[callN] := selfArg;
+            { Getter args: self [, index...] }
+            if margIdx >= 0 then ASTRight[selfArg] := margIdx;
+            tk := Procs[mpi].RetType;
+            if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
+            else recId := REC_NONE;
+            node := callN;
+            Continue;
+          end
+          else
+            Error('property is write-only');
+        end;
+      end;
+
       mmi := -1;
-      if (ci >= 0) and (FindUProp(ci, fieldName) < 0) then mmi := FindUMeth(ci, fieldName);
+      if ci >= 0 then mmi := FindUMeth(ci, fieldName);
       if mmi >= 0 then
       begin
         mpi := UMthProc_[mmi];
@@ -3769,7 +3913,7 @@ begin
 end;
 
 procedure ParseFactor;
-var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
@@ -4110,13 +4254,65 @@ begin
           end
           else
           begin
-            fieldNode := AllocNode(AN_FIELD);
-            ASTLeft[fieldNode] := node;
-            ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
-            ASTSLen[fieldNode] := Tokens[prevTok].SLen;
-            ASTTk[fieldNode] := Ord(RecFieldType(baseRec, fieldName));
-            Next;
-            node := fieldNode;
+            { Property on a grouped/cast value `(expr).Prop` — resolve to the
+              backing field or getter call like ParseClassRecordSelectors (read
+              side only: a grouped value is not an lvalue). Falling through to
+              the raw field builder read offset 0 — the VMT pointer
+              (bug-downcast-inherited-property-wrong-offset's sibling). }
+            pri := -1;
+            if mci >= 0 then pri := FindUProp(mci, fieldName);
+            if (pri >= 0) and (UPropReadFLen[pri] > 0) then
+            begin
+              fieldNode := AllocNode(AN_FIELD);
+              ASTLeft[fieldNode] := node;
+              ASTSOffset[fieldNode] := UPropReadFOff[pri];
+              ASTSLen[fieldNode] := UPropReadFLen[pri];
+              grpAcc := '';
+              for i := 0 to UPropReadFLen[pri] - 1 do
+                AppendChar(grpAcc, TokChars[UPropReadFOff[pri] + i]);
+              ASTTk[fieldNode] := Ord(RecFieldType(baseRec, grpAcc));
+              Next;
+              node := fieldNode;
+            end
+            else if (pri >= 0) and (UPropReadMLen[pri] > 0) then
+            begin
+              grpAcc := '';
+              for i := 0 to UPropReadMLen[pri] - 1 do
+                AppendChar(grpAcc, TokChars[UPropReadMOff[pri] + i]);
+              mmi := FindUMeth(mci, grpAcc);
+              if mmi < 0 then Error('getter method not found: ' + grpAcc);
+              mpi := UMthProc_[mmi];
+              Next; { consume property name }
+              margIdx := -1;
+              if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
+              if UMthVirSlot[mmi] >= 0 then
+              begin
+                mcallNode := AllocNode(AN_VIRTUAL_CALL);
+                ASTRight[mcallNode] := UMthVirSlot[mmi];
+              end
+              else
+                mcallNode := AllocNode(AN_CALL);
+              ASTIVal[mcallNode] := mpi;
+              ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+              margSeq := AllocNode(AN_ARG);
+              ASTLeft[margSeq] := node;
+              ASTLeft[mcallNode] := margSeq;
+              { Getter args: self [, index...] }
+              if margIdx >= 0 then ASTRight[margSeq] := margIdx;
+              node := mcallNode;
+            end
+            else if pri >= 0 then
+              Error('property is write-only')
+            else
+            begin
+              fieldNode := AllocNode(AN_FIELD);
+              ASTLeft[fieldNode] := node;
+              ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+              ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+              ASTTk[fieldNode] := Ord(RecFieldType(baseRec, fieldName));
+              Next;
+              node := fieldNode;
+            end;
           end;
         end;
       end;
