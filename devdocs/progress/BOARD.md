@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (73)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -90,6 +90,7 @@ _none_
 | feature-rust-rtl-concurrency | B | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
 | feature-rust-rtl-core-types | B | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
 | feature-rust-rtl-macros-io | B | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
@@ -671,6 +672,7 @@ _none_
 - [B] feature-rust-rtl-concurrency
 - [B] feature-rust-rtl-core-types
 - [B] feature-rust-rtl-macros-io
+- [A] feature-selfhost-guard-ir-unsupported
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
 - [B] feature-syscall-pthread-shim
