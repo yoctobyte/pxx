@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -3011,13 +3011,26 @@ qemu-env-check: $(COMPILER)
 
 
 # ---------------------------------------------------------------------------
-# test-smoke: the ITERATION gate (chore-fast-pin-tiered-tests). A curated
-# subset of historically regression-prone surfaces + the full self-host
-# byte-identity chain, in well under a minute. NOT a replacement for `test`:
-# milestone pins, pushes of batched work, releases and anything touching
-# codegen/ABI/ELF still run the full suite (stabilize, not stabilize-fast).
-# New features append a case here AND to their full-suite test.
-test-smoke: $(COMPILER)
+# The TEST LADDER (chore-fast-pin-tiered-tests) — run the cheapest tier that
+# covers what you touched; do NOT run the full suite every iteration:
+#
+#   make test-quick   (~3s)  inner loop. Curated regression-prone programs
+#                            against the CURRENT binary — no self-host, no
+#                            rebuild. Run after almost every edit.
+#   make test-smoke  (~25s)  before a commit. = test-quick + the full 3-stage
+#                            self-host byte-identity chain (catches self-host
+#                            miscompiles a runtime pass can't). The iteration
+#                            gate for compiler changes.
+#   make test        (2m+)   before a pin / push of batched work. Full core +
+#                            threads + asm + debug-g suite.
+#   make stabilize / cross   releases, ABI/ELF/backend changes, all targets.
+#
+# New features append a case to test-quick (if runtime-observable) AND to their
+# full-suite test.
+# ---------------------------------------------------------------------------
+
+# test-quick: fastest inner-loop gate — curated programs, current binary only.
+test-quick: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_torture.pas /tmp/smoke_dyntorture26
 	test "$$(/tmp/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas /tmp/smoke_dynid26
@@ -3040,6 +3053,12 @@ test-smoke: $(COMPILER)
 	test "$$(/tmp/smoke_mutex26 | tail -1)" = "MUTEX OK"
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas /tmp/smoke_tthread26
 	test "$$(/tmp/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
+
+# test-smoke: the pre-commit iteration gate = test-quick + the full self-host
+# byte-identity chain (the artifacts stabilize-core pins). Catches self-host
+# miscompiles that a runtime-only pass cannot (see
+# bug-selfhost-multifn-ifelse-miscompile).
+test-smoke: test-quick
 	# self-host byte-identity chain (the artifacts stabilize-core pins)
 	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next
