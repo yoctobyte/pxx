@@ -45,7 +45,7 @@ the historic 1:1 lowering unchanged.**
 | `-O0` | No optimization beyond the pre-existing local const-fold. 1:1 source↔asm, debuggable. The self-host gate runs here and is **sacred**. |
 | `-O1` | Cheap, safe, deterministic, no code-size blow-up. Emitter peepholes + shared-IR DCE/redundant-jump. |
 | `-O2` | Fuller speed; size may grow. **Register calling convention (r14/r15) + inline expansion landed (§4).** Pins are -O2-built. |
-| `-O3` | Aggressive, benchmark-gated. **Currently aliases -O2** (reserved for nested/non-leaf inline + cost model). |
+| `-O3` | Aggressive, opt-in. **Inline slice 2b (straight-line multi-statement bodies) landed here** — gated -O3 so the -O2 pin stays untouched until 2b is proven. Reserved also for nested/non-leaf inline + cost model. |
 
 ### Level-assignment policy (the O1 / O2 line)
 
@@ -254,11 +254,25 @@ Pascal evaluation order holds. Auto-inline: keys on eligibility, not the `inline
 keyword (also captured). `--measure-inline` (phase 0) sized it: 664 leaf@12
 call sites (2.2%), on hot tiny helpers. Validated byte-identical `-O0` vs `-O2`
 across **505 programs** and on all four cross targets (i386/aarch64/arm32/
-riscv32). **Nested (non-leaf) inline is deferred to `-O3`** (user decision).
+riscv32).
 
-Both are proven by the same four gates plus `-O2` self-fixedpoint. `-O3` still
-aliases `-O2`. **Pins are now `-O2`-built** (transparent: an -O2 compiler emits
-the same `-O0` output, so downstream sees identical bytes, just a faster compiler).
+**Slice 2b (straight-line multi-statement bodies, `-O3`).** A leaf function whose
+body is a straight-line statement sequence with scalar ordinal locals and a
+single Result (`t := a+b; Result := t*t`) is retained as the whole `AN_SEQ` chain
+(param/local/Result idents → `AN_INLINE_PARAM`/`AN_INLINE_LOCAL`/`AN_INLINE_RESULT`
+placeholders) and spliced by allocating a fresh caller local per callee local + a
+Result temp, cloning + lowering the statements, then yielding a load of the Result
+temp (the same emit-inline-then-load pattern `AN_TERNARY` uses). Straight-line
+only, all locals scalar, Result never read, a read-before-write guard, slice-3 arg
+temps. **Gated `-O3`** so the `-O2` pin is untouched (an -O2 build emits
+byte-identical output to the pinned binary). Validated O0==O3 across 500 programs
++ all four cross targets; -O3 self-fixedpoint. **Nested (non-leaf) inline stays
+deferred** (a later -O3+ slice).
+
+All proven by the same four gates plus per-tier self-fixedpoint (`-O2` and now
+`-O3`). **Pins are `-O2`-built** (transparent: an -O2 compiler emits the same
+`-O0` output, so downstream sees identical bytes, just a faster compiler); `-O3`
+is opt-in on top.
 
 ---
 
@@ -275,7 +289,8 @@ the same `-O0` output, so downstream sees identical bytes, just a faster compile
 | inc/dec, rel8 short branches | emitter (§3b) | queued | x86-64, size |
 | **Store-reload elimination** | IR, needs liveness | **blocked** | `feature-opt-store-reload-elimination` — no rax-write choke point for airtight invalidation; wants the liveness scaffold |
 | **Register calling convention (r14/r15)** | ABI (x86-64) | **LANDED (-O2, §4)** | `feature-callconv-register-args` phase 1. Phase 2 (rbx/r12/r13) + phase 3 (caller-side) queued; diminishing per measurement. |
-| **Inline expansion (pure-expr + ternary leaf)** | AST/IR (all targets) | **LANDED (-O2, §4)** | `feature-inline-routines` v1/2a/3. Slice 2b (multi-stmt bodies) queued; nested/non-leaf = -O3. |
+| **Inline expansion (pure-expr + ternary leaf)** | AST/IR (all targets) | **LANDED (-O2, §4)** | `feature-inline-routines` v1/2a/3. |
+| **Inline slice 2b (straight-line multi-stmt bodies)** | AST/IR (all targets) | **LANDED (-O3, §4)** | opt-in until proven; nested/non-leaf still deferred. |
 
 Store-reload elimination remains the notable blocked item — it wants the same
 register-liveness scaffold, and phase-2 regcall would build toward it.
@@ -288,8 +303,9 @@ Per-pass rhythm (never skip a step; slow steps run as separate visible
 commands):
 
 1. **Implement**, gated `OptLevel >= tier`.
-2. **`make test-opt`** — differential corpus (each program compiled -O0 and -O1,
-   runtime output `cmp`'d) + the `-O1` self-compile fixedpoint.
+2. **`make test-opt`** — differential corpus (each program compiled -O0/-O1/-O2/
+   -O3, runtime output `cmp`'d against -O0) + the -O1/-O2/-O3 self-compile
+   fixedpoints.
 3. **`-O0` self-host fixedpoint** — `pxx` compiles the compiler, that result
    compiles the compiler, `cmp` byte-identical. The sacred gate.
 4. **Full `make test` under an -O1-BUILT compiler** — swap in a compiler that
@@ -298,11 +314,12 @@ commands):
 5. **`hyperfine`** the self-compile (warmup ≥2, runs ≥5); record the delta in
    the ticket log.
 6. **Commit** small, one pass per commit.
-7. **Stabilize + pin.** Pins are now **-O1-built** (proven transparent: an
-   -O1-built compiler emits byte-identical -O0 output, so tracks B/C/D see no
-   change, just a faster/smaller compiler). `make PXXFLAGS=-O1 stabilize`
-   rebuilds the compiler at -O1, runs the full suite at -O1, records the -O1
-   binary; `make pin` blesses it.
+7. **Stabilize + pin.** Pins are now **-O2-built** (proven transparent: an
+   -O2-built compiler emits byte-identical -O0 output, so tracks B/C/D see no
+   change, just a faster compiler). `make PXXFLAGS=-O2 stabilize` rebuilds the
+   compiler at -O2, runs the full suite at -O2, records the -O2 binary; `make
+   pin` blesses it. (`-O3` is opt-in, not pinned — slice 2b lives there until
+   proven.)
 
 **Benchmark harness:** `make benchmark-opt-levels` builds the compiler at each
 `-O` tier, asserts every tier emits identical (correct) output, reports each
