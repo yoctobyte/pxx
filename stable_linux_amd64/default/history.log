@@ -171,3 +171,4 @@
 2026-07-03T18:48:37Z  v171  4badda751724fcea497814c6b4cf221ae0526c4a15235edcd4ef155d3d121296  d5805830fe893410565fa6c95dddbba7655e519e  chore(board): move feature-opt-imm-fold-binop working -> done
 2026-07-04T11:56:50Z  v172  c2a9e2f34d4e6ca2185489b4d3a912360850e3632234f4d51add1e916f5d2c0e  96cb3dbe77e302cf79695b0049061258e907260c  docs(ticket): inline slice 2a done; regcall pin policy flipped to -O2
 2026-07-04T13:39:58Z  v173  74f3acc89149d76ce033304e0d977facfb75f75840c7e33a76694b675563c9de  3bce76211b6e64474fbe642a990ceb3a7c392c99  feat(opt): promote inline slice 2b to -O2
+2026-07-04T18:56:06Z  v174  b93d9a062df4d75deeb67c4d649ef54eaf444c7d2423595f49668b08bc1a46e2  776e498efbcab8018ccf113eea08b63d71cb6934  feat(rtl): types unit + TPersistent/TComponent (FPC Classes surface)
