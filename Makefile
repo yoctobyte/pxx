@@ -458,6 +458,9 @@ test-core: $(COMPILER)
 	# FPC-compat: hint directives (deprecated/platform/...) ignored, SizeOf in const/default-param position
 	./$(COMPILER) test/test_hint_sizeof.pas /tmp/test_hint_sizeof26
 	test "$$(/tmp/test_hint_sizeof26)" = "total ok 8 / 8"
+	# FPC-compat: default parameter values on class/interface methods + constructors (fgl's TFPSList.Create shape)
+	./$(COMPILER) test/test_default_params_methods.pas /tmp/test_default_params_methods26
+	test "$$(/tmp/test_default_params_methods26 | tail -1)" = "total ok 12 / 12"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

@@ -1424,6 +1424,40 @@ begin
   Expect(tkRBrack, ']');
 end;
 
+{ Append AN_INT_LIT default-value args for method params fromIdx..ParamCount-1
+  (a call that omitted trailing defaulted args — mirrors the ctor fill at the
+  TFoo.Create arity check). Errors if a remaining param has no default. The
+  caller links head into the call node when lastArg starts at -1. }
+procedure FillDefaultArgs(mpi, fromIdx, callNode: Integer; var lastArg: Integer);
+var exprNode, argSeq, k: Integer;
+begin
+  k := fromIdx;
+  while k <= Procs[mpi].ParamCount - 1 do
+  begin
+    if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k]) then
+      Error('not enough arguments to ' + Procs[mpi].Name +
+            ' (parameter ' + Procs[mpi].Params[k].Name + ' has no default)');
+    exprNode := AllocNode(AN_INT_LIT);
+    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+    ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := exprNode;
+    if lastArg = -1 then ASTLeft[callNode] := argSeq
+    else ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+    Inc(k);
+  end;
+end;
+
+{ True when the arg list may stop here: next token is `)` and every remaining
+  param (nextIdx..) carries a declared default. }
+function CanFillDefaultsFrom(mpi, nextIdx: Integer): Boolean;
+begin
+  Result := (CurTok.Kind = tkRParen) and (nextIdx <= Procs[mpi].ParamCount - 1) and
+            (nextIdx < MAX_PROC_PARAMS) and
+            ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -1696,7 +1730,12 @@ begin
               else
                 ASTRight[mlastArg] := margSeq;
               mlastArg := margSeq;
-              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+              begin
+                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount-1;
+              end
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -2298,7 +2337,12 @@ begin
               if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
               else ASTRight[mlastArg] := margSeq;
               mlastArg := margSeq;
-              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+              begin
+                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount-1;
+              end
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -2334,7 +2378,12 @@ begin
               else
                 ASTRight[mlastArg] := margSeq;
               mlastArg := margSeq;
-              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+              begin
+                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount-1;
+              end
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -2381,7 +2430,12 @@ begin
               end;
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
               ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
-              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+              begin
+                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount-1;
+              end
+              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -2507,7 +2561,12 @@ begin
       if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
       else ASTRight[mlastArg] := margSeq;
       mlastArg := margSeq;
-      if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+      if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+      begin
+        FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+        mai := Procs[mpi].ParamCount-1;
+      end
+      else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
       Inc(mai);
     end;
     Expect(tkRParen, ')');
@@ -3213,7 +3272,12 @@ begin
             end;
             aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
             ASTRight[lastA] := aSeq; lastA := aSeq;
-            if mai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
+            if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+            begin
+              FillDefaultArgs(mpi, mai+1, callN, lastA);
+              mai := Procs[mpi].ParamCount-1;
+            end
+            else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
             Inc(mai);
           end;
           Expect(tkRParen, ')');
@@ -3959,7 +4023,12 @@ begin
                 if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
                 else ASTRight[mlastArg] := margSeq;
                 mlastArg := margSeq;
-                if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+                begin
+                  FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                  mai := Procs[mpi].ParamCount-1;
+                end
+                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
                 Inc(mai);
               end;
               Expect(tkRParen, ')');
@@ -4002,7 +4071,12 @@ begin
                 else begin ParseExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
                 ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
-                if mai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
+                if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
+                begin
+                  FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
+                  mai := Procs[mpi].ParamCount-1;
+                end
+                else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
                 Inc(mai);
               end;
               Expect(tkRParen, ')');
@@ -5689,7 +5763,12 @@ begin
                 else
                   ASTRight[mlastArg] := argSeq;
                 mlastArg := argSeq;
-                if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                if (i < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, i+1) then
+                begin
+                  FillDefaultArgs(mpi, i+1, mcallNode, mlastArg);
+                  i := Procs[mpi].ParamCount-1;
+                end
+                else if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
                 Inc(i);
               end;
               Expect(tkRParen, ')');
@@ -11827,6 +11906,10 @@ var
   nFldNames, fni: Integer;
   mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPUntyped: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDefault: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDefaultVal: array[0..MAX_PROC_PARAMS-1] of Int64;
+  mHasDefault: Boolean;
+  mDefaultVal: Int64;
 begin
   Next;
   stopTypes := False;
@@ -11963,6 +12046,10 @@ begin
               mIsArr := False;
               if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
               else mTk := ParseTypeKind;
+              { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
+              mHasDefault := False; mDefaultVal := 0;
+              if CurTok.Kind = tkEq then
+              begin Next; mDefaultVal := ConstEval; mHasDefault := True; end;
               { `const` record/variant param = by-ref, matching ParseSubroutine
                 (sibling of the class-method fix; interface methods dispatch
                 indirectly, so the mismatch would corrupt the arg silently).
@@ -11970,7 +12057,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -11979,15 +12066,22 @@ begin
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
           mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
           Procs[mpi].BodyAddr := -1;
           for i := 0 to mNParams-1 do
-          begin Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i]; end;
+          begin
+            Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
+            if (i < MAX_PROC_PARAMS) and mPDefault[i] then
+            begin
+              ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
+              ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
+            end;
+          end;
           AddUMeth(ci, mnOff, mnLen, mpi);
           { slot = method position within this interface (IMT index) }
           UMthVirSlot[UMthCount-1] := UClsMCount[ci] - 1;
@@ -12198,6 +12292,8 @@ begin
                 end;
                 mIsArr := False;
                 mIsUntyped := False;
+                mHasDefault := False;
+                mDefaultVal := 0;
                 if CurTok.Kind <> tkColon then
                 begin
                   { Untyped method param (`var B` / `const B`, no type) — mirror the
@@ -12219,6 +12315,15 @@ begin
                   end
                   else
                     mTk := ParseTypeKind;
+                  { Default value: `n: Integer = 5` — mirror ParseSubroutine
+                    (~13915). Constant-folded; a call omitting the trailing arg
+                    supplies it (ctor fill at ~5609, general fill in ir.inc). }
+                  if CurTok.Kind = tkEq then
+                  begin
+                    Next;
+                    mDefaultVal := ConstEval;
+                    mHasDefault := True;
+                  end;
                 end;
                 { A `const` record/variant param is passed by reference — must
                   match ParseSubroutine's rule, or a call lowered BEFORE the
@@ -12235,6 +12340,8 @@ begin
                   mPArr[i] := mIsArr;
                   mPByRef[i] := mIsByRef;
                   mPUntyped[i] := mIsUntyped;
+                  mPDefault[i] := mHasDefault;
+                  mPDefaultVal[i] := mDefaultVal;
                 end;
                 if not Eat(tkSemicolon) then mDoneArgs := True;
               end;
@@ -12257,12 +12364,16 @@ begin
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
                 mPUntyped[i] := mPUntyped[i-1];
+                mPDefault[i] := mPDefault[i-1];
+                mPDefaultVal[i] := mPDefaultVal[i-1];
               end;
               mPNames[0] := 'Self';
               mPTypes[0] := tyClass;
               mPArr[0]   := False;
               mPByRef[0] := False;
               mPUntyped[0] := False;
+              mPDefault[0] := False;
+              mPDefaultVal[0] := 0;
               mNParams := mNParams + 1;
             end;
 
@@ -12278,6 +12389,11 @@ begin
               for i := 0 to mNParams-1 do
               begin
                 if (i < MAX_PROC_PARAMS) then ProcParamUntyped[mpi * MAX_PROC_PARAMS + i] := mPUntyped[i];
+                if (i < MAX_PROC_PARAMS) and mPDefault[i] then
+                begin
+                  ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
+                  ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
+                end;
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
@@ -14420,8 +14536,11 @@ begin
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+    { Write-only-true: a method/forward body that repeats params WITHOUT the
+      defaults (FPC style — defaults live in the class/interface decl) must not
+      clear the decl's ProcParamHasDefault. RegisterProc initializes False. }
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array
