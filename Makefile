@@ -446,6 +446,12 @@ test-core: $(COMPILER)
 	/tmp/test_rust_else_if26; test "$$?" = "20"
 	./$(COMPILER) --strict-ir test/test_rust_else_if.rs /tmp/test_rust_else_if_si26
 	/tmp/test_rust_else_if_si26; test "$$?" = "20"
+	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
+	./$(COMPILER) test/test_tobject_destroy_override.pas /tmp/test_tobject_destroy_override26
+	test "$$(/tmp/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"
+	# override of a non-existent, non-Destroy/Create method still errors (guard)
+	! ./$(COMPILER) test/test_override_bogus_rejected.pas /tmp/test_override_bogus26 > /tmp/test_override_bogus.log 2>&1
+	grep -q "no virtual method found in parent chain" /tmp/test_override_bogus.log
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

@@ -1,8 +1,8 @@
 # Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom
 
 - **Type:** bug (compiler object model — Track A)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** DONE 2026-07-04
+- **Owner:** Track A
 - **Opened:** 2026-07-04 (found in the FPC/LCL compile probe,
   [[fpc-lcl-compile-probe]])
 - **Relation:** sibling of the done [[bug-explicit-tobject-base]] (that made
@@ -82,3 +82,48 @@ the existing non-`override` destructor path or self-host byte-identity.
   virtually (covers `TComponent.Create(AOwner)` descendants).
 - Regression test (`.pas`) that fails on today's master and passes after.
 - Self-host byte-identical; `make test` green.
+
+## Resolution (2026-07-04) — Direction B, small + faithful
+
+The existing virtual-method / VMT / `inherited` / `Free`-desugar machinery was
+already complete — verified that a base class explicitly declaring
+`destructor Destroy; virtual;` gives full polymorphic destroy-through-base-ref +
+`inherited` chaining today. The ONLY gap was that pxx's implicit root provides no
+virtual `Destroy`/`Create` slot for a root-derived class to bind `override` to.
+Two small parser edits materialise that root virtual on first override:
+
+1. **Override handler** (`parser.inc`, the `isOverride` branch): when
+   `FindParentVirtualSlot` returns <0 **and** the method is `Destroy`/`Create`,
+   allocate a fresh virtual slot exactly as `virtual` would (instead of erroring).
+   So `destructor Destroy; override;` compiles and becomes virtual; `Free`'s
+   desugar already dispatches `Destroy` virtually; a descendant's own
+   `Destroy; override;` finds THIS slot and chains. Any other `override` with no
+   parent slot still hard-errors (guarded by test_override_bogus_rejected).
+2. **`inherited` handler** (`ParseInheritedCallAST`): `inherited Destroy` /
+   `inherited Create` with no ancestor implementation (incl. a direct-root class,
+   `parentCi < 0`) emits a no-op (`GenMakeSeq(-1,-1)`) — FPC's `TObject.Destroy`/
+   `Create` are empty — instead of `inherited call has no parent class`. Trailing
+   `(args)` (e.g. `inherited Create(AOwner)`) are consumed and discarded.
+
+**Verified:** bare-class `destructor Destroy; override;` + `inherited Destroy`
+runs; `constructor Create; override;` + `inherited Create` runs; explicit
+`class(TObject)` 2-level chain does polymorphic destroy through a base ref
+(`a: TAnimal := TDog.Create; a.Free` → TDog.Destroy → TAnimal.Destroy → root
+no-op). Negative (`override` of a bogus method) still errors. Self-host
+byte-identical (pxx's own code doesn't use root `override` destructors, so the
+self-build is unaffected). `make test` green; regression
+`test/test_tobject_destroy_override.pas` (+ negative
+`test_override_bogus_rejected.pas`) wired into test-core.
+
+**FPC-compat impact:** re-probing `contnrs` advanced from the `Destroy` override
+wall (`:46`) to `:79` (`TList.Notify`) — i.e. the compiler blocker is gone; the
+next wall is the separate **library** gap (pxx's `classes.TList` lacks a virtual
+`Notify`), which is Track B, not this ticket.
+
+**Not covered (deliberate):** pxx still does NOT put a virtual `Destroy` at a
+fixed slot on *every* class the way FPC's real `TObject` does — a class that
+never declares `Destroy` has no virtual slot, so `baseRef.Destroy`/`Free` on it
+just frees memory (unchanged pxx behaviour). Only classes that (or whose
+ancestors) declare `Destroy; override` get the virtual. That covers the FPC
+idiom; a full always-slot-0 `TObject.Destroy` is a larger object-model change if
+ever needed.

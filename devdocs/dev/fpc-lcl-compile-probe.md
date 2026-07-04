@@ -56,15 +56,14 @@ Pascal."
 
 Two of the three walls turn out to be **library**, not compiler, once you look:
 
-1. **[COMPILER] Built-in `TObject` has no virtual `Destroy`/`Create` to
-   `override`.** FPC's `TObject.Destroy` is virtual, so `destructor Destroy;
-   override;` is in nearly every FPC class. pxx's implicit root is method-less
-   (`TObject` is a nameable base but carries no method table), so the override
-   fails: `cannot override: no virtual method found in parent chain: Destroy`.
-   `contnrs`/`inifiles` wall here. This is the **real FPC-compat compiler
-   showstopper** — ticketed as [[bug-tobject-destroy-not-virtual-override]].
-   (Non-`override` `destructor Destroy;`, `TFoo.Create`, and `f.Free` all work —
-   only the root-provided virtual slot is missing.)
+1. **[COMPILER] ~~Built-in `TObject` has no virtual `Destroy`/`Create` to
+   `override`.~~ FIXED 2026-07-04** ([[bug-tobject-destroy-not-virtual-override]]).
+   `destructor Destroy; override;` / `constructor Create; override;` now compile
+   on a root-derived class and dispatch/chain correctly; `inherited Destroy`/
+   `Create` at the root boundary is a no-op. Re-probing `contnrs` advanced from
+   this wall (`:46`) to `:79` — a **library** gap (pxx's `classes.TList` lacks a
+   virtual `Notify`), Track B. So the FPC-compat *compiler* showstopper here is
+   resolved; what remains at this layer is library surface.
 
 2. **[LIBRARY] `TComponent` is in the wrong unit + a reduced surface — pxx
    already HAS it.** `TComponent` (with owner/child ownership) lives in

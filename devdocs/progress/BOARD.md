@@ -29,12 +29,11 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-tobject-destroy-not-virtual-override | A | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -143,7 +142,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (453)
+## done (454)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -353,6 +352,7 @@ _none_
 | bug-sysutils-unit-hard-skipped | A | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-textfile-primitives-not-ambient-in-units | A | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-tobject-destroy-not-virtual-override | A | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
 | bug-tthread-execute-writeln-crash | A | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-unit-qualified-constant-not-resolved | A | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
@@ -620,7 +620,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [C] bug-c-printf-without-stdio-include-varargs
-- [A] bug-tobject-destroy-not-virtual-override
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [A] feature-asm-source-frontend

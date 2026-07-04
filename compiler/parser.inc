@@ -3070,7 +3070,6 @@ begin
     Error('inherited call outside method');
   ci := CurSelfClass - REC_UCLASS_BASE;
   parentCi := UClsParent[ci];
-  if parentCi < 0 then Error('inherited call has no parent class');
 
   Next; { consume inherited }
   if CurTok.Kind = tkIdent then
@@ -3081,6 +3080,30 @@ begin
   else
     name := LastDotName(Procs[CurProc].Name);
 
+  { inherited Destroy / inherited Create with no ancestor implementation is the
+    implicit-root call — FPC's TObject.Destroy/Create are empty — so emit a
+    no-op instead of erroring. This makes the universal
+    `destructor Destroy; override; ... inherited Destroy;` idiom (and a root
+    ctor's `inherited Create`) compile on a direct-root class. Any trailing
+    (args) are parsed and discarded (the root method ignores them). See
+    bug-tobject-destroy-not-virtual-override. }
+  if (FindUMeth(parentCi, name) < 0) and
+     (CaseEqual(name, 'Destroy') or CaseEqual(name, 'Create')) then
+  begin
+    if CurTok.Kind = tkLParen then
+    begin
+      argNo := 0;
+      repeat
+        if CurTok.Kind = tkLParen then Inc(argNo)
+        else if CurTok.Kind = tkRParen then Dec(argNo);
+        Next;
+      until (argNo = 0) or (CurTok.Kind = tkEOF);
+    end;
+    Result := GenMakeSeq(-1, -1);
+    Exit;
+  end;
+
+  if parentCi < 0 then Error('inherited call has no parent class');
   mmi := FindUMeth(parentCi, name);
   if mmi < 0 then Error('inherited method not found: ' + name);
   mpi := UMthProc_[mmi];
@@ -12241,8 +12264,27 @@ begin
             else if isOverride then
             begin
               slot := FindParentVirtualSlot(parentCi, mname);
-              if slot < 0 then Error('cannot override: no virtual method found in parent chain: ' + mname);
-              UMthVirSlot[mmi] := slot;
+              if (slot < 0) and (CaseEqual(mname, 'Destroy') or CaseEqual(mname, 'Create')) then
+              begin
+                { FPC's TObject.Destroy (and TComponent-style virtual Create) are
+                  virtual, but pxx's implicit root carries no method table, so
+                  `override` finds no parent slot. Materialise the root virtual on
+                  first override: allocate a fresh slot exactly as `virtual` would,
+                  so `destructor Destroy; override;` compiles and dispatches
+                  (Free's desugar already calls Destroy virtually). A descendant's
+                  own `Destroy; override;` then finds THIS slot via
+                  FindParentVirtualSlot and chains correctly. inherited Destroy /
+                  Create at the root boundary is a no-op (ParseInheritedCallAST).
+                  See bug-tobject-destroy-not-virtual-override. }
+                slot := UClsVirtCount[ci];
+                UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+                UMthVirSlot[mmi] := slot;
+              end
+              else
+              begin
+                if slot < 0 then Error('cannot override: no virtual method found in parent chain: ' + mname);
+                UMthVirSlot[mmi] := slot;
+              end;
             end;
           end
           else if CurTok.Kind = tkProperty then
