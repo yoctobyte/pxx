@@ -29,12 +29,13 @@ _none_
 
 _none_
 
-## backlog (76)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
+| decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | doc-licensing-split-mpl-zlib | D | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
@@ -633,6 +634,7 @@ _none_
 
 - [C] bug-c-printf-without-stdio-include-varargs
 - [A] chore-sqlite-static-capacity-bumps
+- [A] decide-constructor-exception-cleanup-semantics
 - [A] decide-int-div-zero-behavior-unification
 - [D] doc-licensing-split-mpl-zlib
 - [A] feature-asm-source-frontend
