@@ -452,6 +452,9 @@ test-core: $(COMPILER)
 	# override of a non-existent, non-Destroy/Create method still errors (guard)
 	! ./$(COMPILER) test/test_override_bogus_rejected.pas /tmp/test_override_bogus26 > /tmp/test_override_bogus.log 2>&1
 	grep -q "no virtual method found in parent chain" /tmp/test_override_bogus.log
+	# a var section before a constructor/destructor method impl must not eat the ctor/dtor token as a var name
+	./$(COMPILER) test/test_var_before_method_impl.pas /tmp/test_var_before_method_impl26
+	test "$$(/tmp/test_var_before_method_impl26)" = "ctor=1 dtor=1"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

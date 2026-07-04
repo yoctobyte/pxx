@@ -142,7 +142,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (454)
+## done (455)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -362,6 +362,7 @@ _none_
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
 | bug-var-array-of-ansistring-param-loses-writes | A | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
 | bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
+| bug-var-section-eats-constructor-destructor | A | bug | `var` section before a constructor/destructor impl fails — ctor/dtor eaten as a var name | — |
 | bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
 | bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |

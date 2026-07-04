@@ -10705,13 +10705,26 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     initDepth, scOff, scLen: Integer;
 begin
   Next;
-  { Stop at section keywords: these are plain identifiers in this dialect, so
-    an interface-level `var` block would otherwise consume `implementation`
-    (or initialization/finalization) as a variable name. }
+  { Stop at section / declaration-introducer keywords: these are plain
+    identifiers in this dialect, so a `var` block would otherwise consume the
+    next one as a variable name. Besides the section words (implementation/
+    initialization/finalization), this includes the decl-introducers that may
+    follow a var section — `constructor`/`destructor` (method-impl bodies),
+    `generic`/`specialize`/`operator`, and `label` — matching the top-level
+    decl loop's soft-ident set. Without this, `var g: Integer; destructor
+    TFoo.Destroy;` mis-reads `destructor` as a var name (real tokens like
+    tkProcedure/tkFunction/tkBegin already stop the loop; the soft ones did
+    not). See bug-var-section-eats-constructor-destructor. }
   while (CurTok.Kind = tkIdent) and
         not CaseEqual(CurTok.SVal, 'implementation') and
         not CaseEqual(CurTok.SVal, 'initialization') and
-        not CaseEqual(CurTok.SVal, 'finalization') do
+        not CaseEqual(CurTok.SVal, 'finalization') and
+        not CaseEqual(CurTok.SVal, 'constructor') and
+        not CaseEqual(CurTok.SVal, 'destructor') and
+        not CaseEqual(CurTok.SVal, 'generic') and
+        not CaseEqual(CurTok.SVal, 'specialize') and
+        not CaseEqual(CurTok.SVal, 'operator') and
+        not CaseEqual(CurTok.SVal, 'label') do
   begin
     n := 0;
     repeat
