@@ -1,7 +1,15 @@
 # Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
 
-- **Type:** feature
-- **Status:** backlog
+- **Type:** feature — umbrella
+- **Status:** backlog — **-O1 arc DELIVERED + pinned (v171); higher tiers pending.**
+  Moved out of working/ 2026-07-04 (no longer actively worked; not half-applied
+  — every landed pass is clean + self-host byte-identical). -O1: passes 1-4
+  (operand direct-load, compare-into-branch fusion), imm-fold, shared-IR
+  pass framework + DCE/redundant-jump, pin flipped to -O1-built. Rejected
+  (measured 0-fire): const-fold, algebraic identities, if-false DCE, strength
+  reduction — all tripwired. Remaining tiers are separate tickets:
+  [[feature-callconv-register-args]] (-O2 regcall, the big self-compile win),
+  [[feature-inline-routines]]. Full method: `devdocs/dev/optimization-architecture.md`.
 - **Owner:** —
 - **Opened:** 2026-06-20 (design discussion — optimization strategy)
 - **Priority:** ~~last~~ **GREENLIT 2026-07-03** (user decision): pin-time is

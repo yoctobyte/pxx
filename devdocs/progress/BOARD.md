@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-selfhost-multifn-ifelse-miscompile | A | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
-| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-rust-frontend-skeleton | A | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | B | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | A | feature | Rust frontend — generics with trait bounds | — |
@@ -31,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (74)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -75,6 +74,7 @@ _none_
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-opt-store-reload-elimination | A | feature | Store-reload (redundant load) elimination — -O1 pass | — |
+| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-r-frontend-parked | A | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
@@ -657,6 +657,7 @@ _none_
 - [B] feature-networking
 - [A] feature-nilpy-idf-import
 - [A] feature-opt-store-reload-elimination
+- [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-parallel-processing
 - [A] feature-r-frontend-parked
