@@ -31,11 +31,11 @@ FindComponent, owner-frees-children destructor counting, RemoveComponent detach)
 
 ## Pin-compatibility note
 
-`TComponent.Destroy` is declared `virtual` (introduces the slot) rather than
-`override`ing `TObject.Destroy`, and omits `inherited Destroy` — because
-lib is built by `$(PXX_STABLE)` (v173), which predates this session's
-implicit-`TObject.Destroy`-override support. Once the compiler is re-pinned past
-that, `TComponent.Destroy` can become idiomatic `override` + `inherited`.
+Initially `TComponent.Destroy` was `virtual`-introduce (no `inherited`) to build
+on the v173 pin. After re-pinning to **v174** (which has this session's
+implicit-`TObject.Destroy` override + `inherited Destroy` no-op), it was made
+idiomatic: `destructor Destroy; override;` + `inherited Destroy`. Verified 9/9 on
+the v174 pin.
 
 ## Landmines hit (filed)
 

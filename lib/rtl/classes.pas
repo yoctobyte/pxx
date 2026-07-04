@@ -50,11 +50,7 @@ type
     procedure Notification(AComponent: TComponent; Operation: TOperation); virtual;
   public
     constructor Create(AOwner: TComponent); virtual;
-    { introduces the virtual Destroy (rather than `override`ing TObject.Destroy)
-      so classes.pas compiles on the pinned stable compiler too — pxx's implicit
-      TObject grew a virtual Destroy only recently and this unit is built by
-      $(PXX_STABLE). Subclasses still `override` this. }
-    destructor Destroy; virtual;
+    destructor Destroy; override;
     procedure InsertComponent(AComponent: TComponent);
     procedure RemoveComponent(AComponent: TComponent);
     function FindComponent(const AName: string): TComponent;
@@ -410,8 +406,7 @@ begin
     c.Free;
   end;
   if FOwner <> nil then FOwner.RemoveComponent(Self);
-  { no `inherited Destroy` — TObject.Destroy is an empty no-op in pxx, and calling
-    it from a direct-root class needs a newer compiler than the pin. }
+  inherited Destroy;
 end;
 
 function TComponent.GetComponent(Index: Integer): TComponent;
