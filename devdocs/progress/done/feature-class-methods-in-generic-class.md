@@ -1,7 +1,7 @@
 # `class function` / `class procedure` members inside a generic class
 
 - **Type:** feature (parser — generics, Track A)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-04 (bisecting the fgl wall; see [[fpc-lcl-compile-probe]])
 
 ## Problem
@@ -34,3 +34,7 @@ does (`isClassMethod`). Mirror that handling into the generic member loop.
 - `class function`/`class procedure` (plain, `virtual`, `override`) inside a
   `generic … = class` compiles and specializes.
 - Self-host byte-identical; `make test` green; regression `.pas`.
+
+## Resolution (2026-07-04)
+
+DONE. Root cause was NOT the class-body member parser (it already handled isClassMethod) — ParseGenericTemplate's depth scan counted the `class` member prefix as a nested body opener and swallowed the unit into the template buffer. Fixed by peeking the following token (function/procedure/var/property/of + soft ctor/dtor/operator = prefix). Second half: BufferGenericMethod now starts the captured range at the `class` token for class-method impls. Regression test/test_generic_class_methods.pas (5/5, incl. virtual/override on generic + class procedure) in test-core. Self-host byte-identical, make test green.
