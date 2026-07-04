@@ -222,8 +222,11 @@ bit-twiddles), where each site drops a full call sequence.
   locals (fresh caller locals + placeholder remap), single Exit → fall-through.
   Reaches most of the 664 strict leaf@12 sites (v1 covers only the pure-expr
   subset).
-- **Slice 3**: non-side-effect-free args via arg temps (evaluate once). Needed for
-  `Sqr(a+b)`-style sites.
+- **Slice 3**: ✅ DONE (2026-07-04). Non-pure args evaluated once into fresh temps
+  (`IRInlineExpand`, ir.inc). Pure args (literal / plain scalar ident) still
+  substitute directly; if ANY arg is impure, ALL args are temp'd left-to-right so
+  Pascal eval order holds (Add(g, Bump)=110, Add(Bump, g)=210 verified). Any arg
+  expression can now inline, callee eligibility unchanged. Gates green.
 - **Slice 4**: non-leaf inlining under a depth budget — the ~97% of calls v1/2
   can't touch; the real lever toward FPC parity. Much larger.
 - Methods / cross-unit.
