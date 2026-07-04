@@ -1982,35 +1982,74 @@ begin
   IRCloneInlineBody := r;
 end;
 
+{ Is an argument AST side-effect-free AND re-readable (so it can be substituted
+  directly, even at several placeholder sites)? Literals and plain scalar idents
+  qualify; the inline body is a pure expression that never writes caller state, so
+  re-reading such an arg is idempotent. }
+function InlineArgIsPure(argAST: Integer): Boolean;
+var sidx: Integer;
+begin
+  InlineArgIsPure := False;
+  if argAST < 0 then Exit;
+  if ASTKind[argAST] = AN_INT_LIT then begin InlineArgIsPure := True; Exit; end;
+  if ASTKind[argAST] = AN_IDENT then
+  begin
+    sidx := ASTIVal[argAST];
+    if (sidx < 0) or (sidx >= SymCount) then Exit;
+    if Syms[sidx].IsArray then Exit;
+    InlineArgIsPure := True;
+  end;
+end;
+
 { Try to expand a direct call to an inline-eligible proc. Returns the IR value
-  node of the spliced expression, or -1 if it cannot inline (arg not side-effect-
-  free, arg count mismatch) — the caller then lowers a normal call. v1 requires
-  every argument to be a literal or a plain scalar ident so direct substitution
-  preserves evaluation order and side effects (no temps). }
+  node of the spliced expression, or -1 if it cannot inline (arg count mismatch)
+  — the caller then lowers a normal call. Pure args (literal / plain scalar ident)
+  are substituted directly; any other arg expression is evaluated ONCE into a
+  fresh scalar temp (left-to-right, before the body) and the placeholder bound to
+  that temp — so evaluation order and side effects are preserved without
+  re-evaluating a multiply-used param. }
 function IRInlineExpand(callNode, cpi: Integer): Integer;
-var item, argAST, n, sidx, clonedRoot: Integer;
+var item, n, clonedRoot, tsym, identNode, aval: Integer;
+    rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
+    ptk: TTypeKind; anyImpure: Boolean;
 begin
   IRInlineExpand := -1;
+  { Pass 1: collect args + validate count (no IR emitted yet). }
   n := 0;
   item := ASTLeft[callNode];
+  anyImpure := False;
   while item <> -1 do
   begin
     if ASTKind[item] <> AN_ARG then Exit;
-    argAST := ASTLeft[item];
-    if (argAST < 0) or (n >= MAX_PROC_PARAMS) then Exit;
-    if not ((ASTKind[argAST] = AN_INT_LIT) or (ASTKind[argAST] = AN_IDENT)) then Exit;
-    if ASTKind[argAST] = AN_IDENT then
-    begin
-      sidx := ASTIVal[argAST];
-      if (sidx < 0) or (sidx >= SymCount) then Exit;
-      if Syms[sidx].IsArray then Exit;
-    end;
-    InlineArgAST[n] := argAST;
+    if (ASTLeft[item] < 0) or (n >= MAX_PROC_PARAMS) then Exit;
+    rawArg[n] := ASTLeft[item];
+    if not InlineArgIsPure(rawArg[n]) then anyImpure := True;
     Inc(n);
     item := ASTRight[item];
   end;
   if n <> InlineParamCnt[cpi] then Exit;
+  { Pass 2: bind each param. If EVERY arg is pure (side-effect-free, re-readable),
+    substitute directly. If ANY arg has a side effect, capture EVERY arg into a
+    fresh temp in left-to-right order first — otherwise a pure arg substituted
+    into a body position would be read AFTER a later arg's side effect, breaking
+    Pascal's left-to-right evaluation (e.g. Add(x, SetX(99))). }
   Inc(InliningActive);
+  for n := 0 to InlineParamCnt[cpi] - 1 do
+  begin
+    if (not anyImpure) and InlineArgIsPure(rawArg[n]) then
+      InlineArgAST[n] := rawArg[n]
+    else
+    begin
+      ptk := Procs[cpi].Params[n].TypeKind;
+      tsym := AllocVar('', ptk);
+      aval := IRLowerAST(rawArg[n]);
+      IRAppend(IR_STORE_SYM, tsym, aval, -1, 0, Ord(ptk));
+      identNode := AllocNode(AN_IDENT);
+      ASTIVal[identNode] := tsym;
+      ASTTk[identNode]   := Ord(ptk);
+      InlineArgAST[n]    := identNode;
+    end;
+  end;
   clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
   IRInlineExpand := IRLowerAST(clonedRoot);
   Dec(InliningActive);

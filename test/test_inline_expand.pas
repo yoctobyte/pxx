@@ -26,9 +26,22 @@ begin
   Clamp := r;
 end;
 
-var i, acc: Integer;
+var i, acc, g: Integer;
+
+function Bump: Integer;
+begin g := g + 100; Bump := g; end;
+
 begin
   writeln(Sqr(9));                 { 81 }
+  { slice 3: non-side-effect-free args → evaluated once into a temp }
+  g := 5;
+  writeln(Sqr(g + 1));             { (5+1)^2 = 36 }
+  writeln(Blend(g * 2, g - 1, 4)); { 10*4 + 4*6 = 40+24 = 64 }
+  { eval-order: temp-all-when-impure preserves left-to-right }
+  g := 5;
+  writeln(Blend(g, Bump, 0));      { a=5, b=Bump(105), w=0 -> 5*0 + 105*10 = 1050 }
+  g := 5;
+  writeln(Blend(Bump, g, 10));     { a=Bump(105), b=g(now 105), w=10 -> 105*10 + 105*0 = 1050 }
   writeln(Sqr(3) + Sqr(4));        { 25 }
   writeln(Sqr(Sqr(2)));            { outer=call, inner=inline; 16 }
   writeln(Half(15));               { 7 }
