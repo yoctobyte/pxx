@@ -1745,6 +1745,11 @@ progress-check:
 test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/hello.pas /tmp/test_i386_hello
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_hello)" = "Hello, World!"
+	# inline expansion is target-independent (AST/IR level): -O2 output must match
+	# -O0 on every cross target (feature-inline-routines).
+	./$(COMPILER) --target=i386 test/test_inline_expand.pas /tmp/test_i386_inl_o0
+	./$(COMPILER) --target=i386 -O2 test/test_inline_expand.pas /tmp/test_i386_inl_o2
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_inl_o0)" = "$$(tools/run_target.sh i386 /tmp/test_i386_inl_o2)"
 	# net lib cross matrix: httpdemo builds on i386 (feature-net-lib-cross-target)
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/test_i386_httpdemo
 	# 32-bit atomic intrinsics on i386 (vs x86-64 golden)
@@ -2061,6 +2066,10 @@ test-i386: $(COMPILER)
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_hello)" = "Hello, World!"
+	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
+	./$(COMPILER) --target=aarch64 test/test_inline_expand.pas /tmp/test_aarch64_inl_o0
+	./$(COMPILER) --target=aarch64 -O2 test/test_inline_expand.pas /tmp/test_aarch64_inl_o2
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_inl_o0)" = "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_inl_o2)"
 	./$(COMPILER) --target=aarch64 test/test_record_temp_byval_arg.pas /tmp/test_aarch64_rectemp
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rectemp)" = "$$(printf '18\n46')"
 	./$(COMPILER) --target=aarch64 test/test_ctor_string_literal_arg.pas /tmp/test_aarch64_ctorstrlit
@@ -2364,6 +2373,10 @@ test-riscv32: $(COMPILER)
 	tools/run_target.sh riscv32 /tmp/test_riscv32_cudiv; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/hello.pas /tmp/test_riscv32_hello
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_hello)" = "Hello, World!"
+	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
+	./$(COMPILER) --target=riscv32 test/test_inline_expand.pas /tmp/test_riscv32_inl_o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_inline_expand.pas /tmp/test_riscv32_inl_o2
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_inl_o0)" = "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_inl_o2)"
 	./$(COMPILER) --target=riscv32 test/test_stackless_gen.pas /tmp/test_riscv32_slg
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_riscv32_slg_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_slg)" = "$$(/tmp/test_riscv32_slg_x64)"
@@ -2402,6 +2415,10 @@ test-riscv32: $(COMPILER)
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_hello)" = "Hello, World!"
+	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
+	./$(COMPILER) --target=arm32 test/test_inline_expand.pas /tmp/test_arm32_inl_o0
+	./$(COMPILER) --target=arm32 -O2 test/test_inline_expand.pas /tmp/test_arm32_inl_o2
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_inl_o0)" = "$$(tools/run_target.sh arm32 /tmp/test_arm32_inl_o2)"
 	./$(COMPILER) --target=arm32 test/test_record_temp_byval_arg.pas /tmp/test_arm32_rectemp
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rectemp)" = "$$(printf '18\n46')"
 	./$(COMPILER) --target=arm32 test/test_ctor_string_literal_arg.pas /tmp/test_arm32_ctorstrlit
