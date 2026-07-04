@@ -29,13 +29,12 @@ _none_
 
 _none_
 
-## backlog (78)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-downcast-inherited-property-wrong-offset | A | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
-| bug-forward-class-decl-with-later-base-loses-fields | A | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | doc-licensing-split-mpl-zlib | D | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
@@ -146,7 +145,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (462)
+## done (463)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -261,6 +260,7 @@ _none_
 | bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
 | bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
+| bug-forward-class-decl-with-later-base-loses-fields | A | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
@@ -633,7 +633,6 @@ _none_
 
 - [C] bug-c-printf-without-stdio-include-varargs
 - [A] bug-downcast-inherited-property-wrong-offset
-- [A] bug-forward-class-decl-with-later-base-loses-fields
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
 - [D] doc-licensing-split-mpl-zlib

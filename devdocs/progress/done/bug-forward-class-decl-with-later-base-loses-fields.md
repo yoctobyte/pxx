@@ -1,7 +1,7 @@
 # Forward class decl + full decl that adds a base loses the class's fields
 
 - **Type:** bug (compiler — parser / class registration, Track A)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-04 (found writing TComponent — the `TComponent = class;` +
   `TComponent = class(TPersistent)` pattern)
 
@@ -48,3 +48,7 @@ a base is introduced.
 ## Acceptance
 
 Repro compiles + runs (FVal=7); regression `.pas`; self-host byte-identical.
+
+## Resolution (2026-07-04)
+
+FIXED. Root cause exactly as filed: the full decl called AddUClass again, minting a shadowed duplicate — FindUClass returns the FIRST match, so lookups (incl. the class-of alias) stayed on the empty rootless stub while base+fields went to the invisible second entry. Fix: new UClsForward flag (defs.inc, cleared in AddUClass); bare `class;` without heritage marks the stub; the full decl reuses that entry, re-anchoring UClsFBase/MBase/PBase to the current tails (stub counts are 0) and resetting VirtCount before applying the parent. `class(TBase);` remains the FPC empty-body shorthand. Regression test/test_forward_class_base.pas (6/6: fields, inherited field, is-base, metaclass alias, mutual refs, virtual override through a forward) in test-core. Self-host byte-identical, make test green. lib/rtl/classes.pas workaround (forward dropped, class-of moved after) can revert to the idiom after the next re-pin.
