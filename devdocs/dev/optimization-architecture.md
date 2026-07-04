@@ -327,11 +327,21 @@ commands):
 tier binary's size, and hyperfines each tier self-compiling. `-O3` still tracks
 `-O2` (aliases it until a nested-inline / higher-tier pass lands).
 
-**Cumulative result so far:** the `-O1`-built x86-64 compiler self-compiles
-~1.30× faster than `-O0`-built and is ~11% smaller; `-O2` (regcall + inline, §4)
-adds the register-residency win on top (≈1.34× vs `-O0` measured for regcall
-alone). Numbers per pass live in the ticket logs. `-O0` output is byte-identical
-across all tiers (the sacred gate).
+**Cumulative result (2026-07-04, pin v173, self-compiling `compiler.pas`,
+hyperfine, identical output):**
+
+| compiler binary | self-compile | vs -O0 | vs FPC |
+|---|---|---|---|
+| FPC-built | 2.82 s | 2.37× faster | 1.00× |
+| -O0-built | 6.69 s | 1.00× | 2.37× slower |
+| **-O2-built** (regcall + inline v1/2a/2b/3) | **5.00 s** | **1.34× faster** | **1.77× slower** |
+
+The FPC gap narrowed across the arc: -O0 = 2.37× → -O1 peepholes → regcall +
+inline v1 = 1.88× → + slices 2a/3/2b = **1.77×**. The residual is mostly
+whole-body register allocation (all params/locals in regs, not just 2), caller-
+side arg passing without push/pop (regcall phase 3), and non-leaf inlining
+(slice 4) — the remaining tickets. `-O0` output stays byte-identical across all
+tiers (the sacred gate); pins are -O2-built and transparent.
 
 ---
 
