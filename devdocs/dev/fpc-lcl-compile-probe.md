@@ -52,42 +52,62 @@ plain procedural-type aliases, virtual/override, resourcestrings. So pxx's core
 Pascal dialect is solid; the unit-level failures are NOT "pxx can't parse
 Pascal."
 
-## The real blockers (ranked)
+## The real blockers (ranked) — split by compiler vs library
 
-1. **RTL API-surface mismatch — the dominant blocker, and `--mimic-fpc` does
-   NOT fix it.** pxx's own `classes` is not FPC's: no `TComponent`, and
-   `TObject.Destroy` has a different virtual shape. Any FCL/LCL unit built on
-   `TComponent`/`TObject` fails at its class header (`custapp`, `eventlog`,
-   `contnrs`, `inifiles`, and everything above them). `--mimic-fpc` only sets
-   defines — it does not swap FPC's RTL in, and pxx's own `classes` shadows it
-   anyway. Two routes: (a) grow pxx's `classes`/`sysutils` toward FPC's API
-   (`TComponent`, streaming/`TPersistent`, the exact virtual `Destroy`), or
-   (b) let pxx consume FPC's own RTL units (hard — they lean on compiler
-   intrinsics pxx lacks). Route (a) is the tractable, highest-leverage step
-   toward real-world FPC-source compatibility.
+Two of the three walls turn out to be **library**, not compiler, once you look:
 
-2. **Deep, cascade-sensitive parse gaps in complex units.** `fgl`'s
-   `generic TFPGList<T> = class(TFPSList)` with `private type` (nested
-   `TCompareFunc`/`PT = ^T`) + `{$ifndef OldSyntax}protected var{$else}…` and
-   `lcltype` ~92 both give `expected name`, but the isolated features all parse —
-   so these are specific *combinations* (nested type/var sections inside a
-   generic class; something ~lcltype:92) that desync the parser. Each needs its
-   own investigation; they are narrower than #1.
+1. **[COMPILER] Built-in `TObject` has no virtual `Destroy`/`Create` to
+   `override`.** FPC's `TObject.Destroy` is virtual, so `destructor Destroy;
+   override;` is in nearly every FPC class. pxx's implicit root is method-less
+   (`TObject` is a nameable base but carries no method table), so the override
+   fails: `cannot override: no virtual method found in parent chain: Destroy`.
+   `contnrs`/`inifiles` wall here. This is the **real FPC-compat compiler
+   showstopper** — ticketed as [[bug-tobject-destroy-not-virtual-override]].
+   (Non-`override` `destructor Destroy;`, `TFoo.Create`, and `f.Free` all work —
+   only the root-provided virtual slot is missing.)
+
+2. **[LIBRARY] `TComponent` is in the wrong unit + a reduced surface — pxx
+   already HAS it.** `TComponent` (with owner/child ownership) lives in
+   `lib/rtl/classes_lite.pas`, and `TControl(TComponent)` in
+   `lib/pcl/controls.pas` — so pxx is *not* missing the component model. But
+   FPC's `uses Classes` resolves to pxx's `lib/rtl/classes.pas`, which
+   deliberately excludes it ("the streaming runtime (TComponent, TReader) is in
+   classes_lite"). So `custapp`/`eventlog` get `base type not found: TComponent`
+   purely because it is not in the unit FPC expects. Also, `classes_lite`'s
+   `TComponent` is a trimmed API (has `Owner`/`Name`/`AddChild`; lacks FPC's
+   `Components[]`/`ComponentCount`/`InsertComponent`/`Tag`/`Notification`). Fix =
+   **library**: put `TComponent`/`TPersistent` in `classes` (where FPC has them)
+   and grow to the full surface. Track B, `lib/rtl/classes*.pas` — no compiler
+   change.
+
+3. **[COMPILER] Advanced generics.** Basic `generic … = class` works (in a unit;
+   `lib/rtl/collections.pas`). `fgl` walls (`:136 expected name`) on the harder
+   shape: a `private type` section with `PT = ^T`, function-pointer types over
+   `T`, and `{$ifndef OldSyntax}protected var{$else}…`. Partly covered by
+   [[bug-generic-class-methods-in-program]] (generic method bodies in a program);
+   `fgl` is a unit and hits a further nested-section gap. `lcltype:92` is a
+   separate cascade-sensitive desync (isolated features parse, so it's a
+   combination) — LCL-side, lower priority.
 
 ## Takeaway (the progress signal)
 
-pxx is **not** blocked on core Pascal syntax for real FPC code. With
-`--mimic-fpc` the preprocessor/version gating works and pure units
-(`rtlconsts`) compile clean. The wall is the **RTL surface**: pxx reimplements
-`classes` with a smaller API than FPC's (no `TComponent`, different `Destroy`),
-so FCL/LCL units fail at their class headers. LCL is doubly a special case — pxx
-ships its **own** LCL-like stack (`controls`/`graphics`/`forms`/`gtk3`), so
-"compile Lazarus's LCL" conflicts with pxx's reimplementation rather than
-extending it.
+pxx is **not** blocked on core Pascal syntax for real FPC code — with
+`--mimic-fpc`, version gating works and pure units (`rtlconsts`) compile clean.
+For **FPC itself** (the interesting target, vs LCL), the compiler showstoppers
+are narrow:
 
-The single highest-leverage move toward compiling real FPC code is growing
-pxx's `classes` toward the `TComponent`/`TPersistent`/virtual-`Destroy` surface.
-Secondary: chase the cascade-sensitive parse desyncs in `fgl`/`lcltype`.
+- **virtual `TObject.Destroy`/`Create` override** (blocker #1) — the big one,
+  hit by nearly every stateful class; and
+- **advanced generics** (blocker #3).
+
+Everything else observed was **library**: `TComponent` is already implemented,
+just in `classes_lite` instead of `classes`, and at a reduced surface. LCL is a
+special case regardless — pxx ships its own `controls`/`graphics`/`forms`/`gtk3`
+stack, so "compile Lazarus's LCL" conflicts with pxx's reimplementation rather
+than extending it; **compiling FPC's own RTL/FCL is the meaningful target.**
+
+Highest-leverage move: fix virtual `TObject.Destroy` override (#1). Then advanced
+generics (#3). The `TComponent`-in-`classes` move is independent library work.
 
 ## Reproduce
 
