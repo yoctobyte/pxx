@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (76)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ _none_
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
+| feature-class-methods-in-generic-class | A | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
@@ -637,6 +638,7 @@ _none_
 - [C] feature-c-runtime-library
 - [A] feature-callconv-register-args
 - [A] feature-cdecl-indirect-cross-targets
+- [A] feature-class-methods-in-generic-class
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
 - [A] feature-default-params-on-methods
