@@ -479,6 +479,11 @@ test-core: $(COMPILER)
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas /tmp/test_fpc_compat_batch226
 	test "$$(/tmp/test_fpc_compat_batch226 | tail -1)" = "total ok 12 / 12"
+	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp (skipped when fpcsrc absent)
+	@if [ -d /usr/share/fpcsrc/3.2.2/rtl/objpas ]; then \
+	  ./$(COMPILER) --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/rtl/objpas test/test_fgl_use.pas /tmp/test_fgl_use26 >/dev/null && \
+	  test "$$(/tmp/test_fgl_use26 | tail -1)" = "map count=3 m[5]=50 m[2]=20" && echo "fgl(real FPC source): OK"; \
+	else echo "fgl(real FPC source): SKIP (no fpcsrc)"; fi
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

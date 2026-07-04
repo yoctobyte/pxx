@@ -579,7 +579,13 @@ begin
   begin
     Next;                 { consume 'System' (CurTok -> '.') }
     Expect(tkDot, '.');   { consume '.'      (CurTok -> member) }
-    name := CurTok.SVal;  { Result stays -1 = treat as unqualified }
+    name := CurTok.SVal;
+    Result := -2;         { SYSTEM marker: like unqualified (-1) everywhere,
+                            but the builtin soft-aliases must WIN over a
+                            same-named method of the enclosing class —
+                            TFPSList.Delete's System.Move(...) names the
+                            builtin precisely because the class has its own
+                            Move(CurIndex, NewIndex). }
     Exit;
   end;
 
@@ -10065,7 +10071,7 @@ begin
           CaseEqual(name, 'FillByte') or CaseEqual(name, 'FillDWord')) and
          (Tokens[TokPos].Kind = tkLParen) and
          (FindProc(name) < 0) and (FindSym(name) < 0) and
-         ((CurSelfClass < REC_UCLASS_BASE) or
+         ((qUnit = -2) or (CurSelfClass < REC_UCLASS_BASE) or
           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
          (FindProc('__pxxMove') >= 0) then
       begin
