@@ -184,5 +184,48 @@ ir.inc AN_CALL splice + AN_IDENT placeholder handling). The eligibility scaffold
 (off-by-one on child indices) — validate with the -O2 self-fixedpoint before
 committing, exactly as regcall phase 1 did.
 
-Status: **phase 0 measured + full v1 implementation plan ready.** Resume at
-step 1 (directive capture) → step 5 (pure-expression slice) → gate → slice 2.
+## v1 SHIPPED (2026-07-04) — pure-expression leaf auto-inline (-O2)
+
+Landed exactly per the plan above. A leaf function whose body is a single
+`Result := E` over scalar-by-value params (E = int/ordinal literals +
+param/global/const idents + arithmetic/logical operators) is retained in the
+reserved AST region `[INLINE_AST_BASE..MAX_AST)` with param idents → AN_INLINE_PARAM
+placeholders (`TryRetainInlineBody`, parser.inc), and spliced at a direct call
+site whose args are all side-effect-free (`IRInlineExpand`/`IRCloneInlineBody`,
+ir.inc) — the retained E is cloned into the live pool with placeholders bound to
+the arg ASTs, lowered, and its value replaces the call.
+
+- **Auto-inline**: keys on eligibility, not the `inline;` keyword (also captured
+  now). All eligible pure-expr leaves inline at -O2. Both explicit and auto at
+  -O2 (not the -O1/-O2 split the plan floated — simpler, and -O0/-O1 stay
+  byte-identical either way).
+- **Args**: v1 requires side-effect-free args (literal / plain scalar ident) →
+  direct substitution, no temps, eval order trivially preserved. A complex arg
+  (`Sqr(a+b)`) declines → normal call. Nested `Sqr(Sqr(x))` → outer normal call,
+  inner inlines.
+- Ineligible (locals, control flow, managed/float, non-leaf, method, >6 params,
+  non-scalar) degrades to a call. Recursion/nesting guarded (`InliningActive`).
+- New AST kind `AN_INLINE_PARAM=78`; `AllocNode` guard moved to `INLINE_AST_BASE`.
+
+Gates: -O0 self-host byte-identical; -O2 self-fixedpoint byte-identical (auto-
+inline active on the compiler's own source); make test green; test-opt green with
+`test/test_inline_expand.pas` in the -O2 differential corpus (O0==O2 across
+arithmetic/boolean/multi-param/nested/loop/const-arg/ineligible cases).
+
+Impact: on the compiler's OWN self-compile the win is marginal (it has few
+pure-expr one-liners; a handful of sites fire, code +~20KB from call-site
+duplication). The real payoff is user code with hot tiny helpers (Sqr/Min/Max/
+bit-twiddles), where each site drops a full call sequence.
+
+## Next slices (measure/scope before building)
+- **Slice 2**: multi-statement bodies — if-then-else Result, simple ordinal
+  locals (fresh caller locals + placeholder remap), single Exit → fall-through.
+  Reaches most of the 664 strict leaf@12 sites (v1 covers only the pure-expr
+  subset).
+- **Slice 3**: non-side-effect-free args via arg temps (evaluate once). Needed for
+  `Sqr(a+b)`-style sites.
+- **Slice 4**: non-leaf inlining under a depth budget — the ~97% of calls v1/2
+  can't touch; the real lever toward FPC parity. Much larger.
+- Methods / cross-unit.
+
+Status: **phase 0 measured + v1 SHIPPED.** Slices 2-4 backlog.
