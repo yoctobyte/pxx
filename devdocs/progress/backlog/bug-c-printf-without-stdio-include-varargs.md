@@ -15,6 +15,30 @@ Without `#include <stdio.h>`:
 
 With `#include <stdio.h>` everything formats correctly (crtl auto-pull).
 
+## UPDATE 2026-07-04 — mechanism moved since v152; planned fix is now dead code
+
+Attempted the decided fix (delete `ParseCPrintfAST` stub + error on
+`FindProc('printf') < 0`) and found it's a **no-op today**: the stub path is
+DEAD. `FindProc('printf')` is now **>= 0 even with no include and no
+prototype** — printf auto-resolves via a *different* path than the
+`ParseCPrintfAST` (`FindProc<0`) stub this ticket targeted (some implicit
+declaration / default proc introduced by C-frontend work since v152). Deleting
+the stub + erroring on `FindProc<0` changes nothing observable — the branch is
+never taken.
+
+Current live behavior (re-verified on master 2026-07-04):
+- bare / no-prototype `printf("hello\n")` → prints `hello` (string prints,
+  varargs DROPPED); `printf("x=%d\n", x)` → prints `x=%d` (literal, vararg
+  ignored). So a literal-only write still happens, but NOT via `ParseCPrintfAST`.
+- explicit prototype `int printf(const char*,...);` no include → **no output**,
+  silent swallow (unchanged from the ticket).
+
+So the real fix must first locate WHERE printf now auto-resolves (the implicit
+proc / default binding that produces the literal-only, vararg-dropping write and
+the silent-swallow extern), then reject/redirect THAT — not the long-dead
+`ParseCPrintfAST` stub. This is deeper than the original plan; re-scope before
+picking up. Not low-hanging.
+
 ## Repro
 
     int printf(const char *fmt, ...);
