@@ -1,7 +1,8 @@
 # `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval
 
 - **Type:** feature (parser — const evaluation, Track A)
-- **Status:** backlog
+- **Status:** DONE 2026-07-04 (free-function/const path; method-param path is
+  the separate [[feature-default-params-on-methods]])
 - **Owner:** —
 - **Opened:** 2026-07-04 (isolating the `fgl` "generics" wall; see
   [[fpc-lcl-compile-probe]])
@@ -57,3 +58,19 @@ const-intrinsics (`Ord`/`Low`/`High`) in the same pass since they share the gap.
 - `fgl.pp` advances past this wall (next: `uses types` unit dependency).
 - Self-host byte-identical; `make test` green; regression `.pas` with a
   sizeof-default param.
+
+## Resolution (2026-07-04)
+
+`ConstEvalFactor` (parser.inc ~6430) now has a `sizeof` case: `SizeOf(TypeName)`
+resolves via `ParseTypeKind` → `TypeSize`/`RecSize` (covers
+`sizeof(Pointer)`/`sizeof(Integer)`/`sizeof(TRec)` etc.). So `= sizeof(...)` works
+in a const and in a **free-function** default-parameter value; verified against
+`test/test_hint_sizeof.pas`. Self-host byte-identical.
+
+Not folded here (rare in a const context; the AST path in `ParseFactor` handles
+them at runtime): `sizeof(variable)` / `sizeof(arr[i])`.
+
+**Note:** `sizeof` in a **method/constructor** default param still fails —
+because method param lists don't accept ANY default value (not sizeof-specific).
+That is the separate [[feature-default-params-on-methods]], which is what `fgl`'s
+`TFPSList.Create(AItemSize: Integer = sizeof(Pointer))` actually needs.

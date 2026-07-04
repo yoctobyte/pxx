@@ -455,6 +455,9 @@ test-core: $(COMPILER)
 	# a var section before a constructor/destructor method impl must not eat the ctor/dtor token as a var name
 	./$(COMPILER) test/test_var_before_method_impl.pas /tmp/test_var_before_method_impl26
 	test "$$(/tmp/test_var_before_method_impl26)" = "ctor=1 dtor=1"
+	# FPC-compat: hint directives (deprecated/platform/...) ignored, SizeOf in const/default-param position
+	./$(COMPILER) test/test_hint_sizeof.pas /tmp/test_hint_sizeof26
+	test "$$(/tmp/test_hint_sizeof26)" = "total ok 5 / 5"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

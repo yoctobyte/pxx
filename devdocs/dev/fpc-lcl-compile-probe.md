@@ -99,6 +99,19 @@ Two of the three walls turn out to be **library**, not compiler, once you look:
    *unit* (the normal case, incl. `fgl`) work. `lcltype:92` is a separate
    cascade-sensitive desync — LCL-side, lower priority.
 
+   **`fgl` is a deeper stack of small non-generic gaps, not two** (fuller bisect
+   2026-07-04). Fixed so far: hint directives + `SizeOf` in const eval (both
+   DONE). Still needed by `fgl`: **default parameter values on methods**
+   ([[feature-default-params-on-methods]] — method param lists accept NO default,
+   not just sizeof; `TFPSList.Create(AItemSize: Integer = sizeof(Pointer))`),
+   and **overridable `MaxInt`/`MaxLongInt`** (`MaxGListSize = MaxInt div 1024`).
+   LESSON on `MaxInt`: adding it as a hard compiler `AddConst` **broke** an
+   existing test (`test_generic_func` does `specialize Max<Integer> as MaxInt` —
+   the const shadowed the user identifier → miscompile → segfault). FPC's
+   `MaxInt` is an *overridable* System-unit const; it must live in `lib/rtl`
+   (Track B) or a soft-predefined mechanism a user decl can shadow, NOT a
+   builtin `AddConst`. Reverted; not yet re-homed.
+
 ## Takeaway (the progress signal)
 
 pxx is **not** blocked on core Pascal syntax for real FPC code — with

@@ -1,7 +1,7 @@
 # Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc
 
 - **Type:** feature (parser — FPC-compat dialect, Track A)
-- **Status:** backlog
+- **Status:** DONE 2026-07-04
 - **Owner:** —
 - **Opened:** 2026-07-04 (isolating the `fgl` "generics" wall — it was NOT
   generics; see [[fpc-lcl-compile-probe]])
@@ -58,3 +58,16 @@ accepting the syntax is what unblocks compiling FPC source.
   `uses types` dependency).
 - Self-host byte-identical; `make test` green; a regression `.pas` exercising a
   hint directive on const/type/proc.
+
+## Resolution (2026-07-04)
+
+Added `SkipHintDirectives` (parser.inc, before ParseConstSection) — consumes a
+run of `deprecated ['msg'] | platform | experimental | unimplemented | library`
+(soft identifiers; `deprecated` takes an optional message string), parse-and-
+ignore. Wired at: const value end (`ParseConstSection`), type-alias end
+(`ParseTypeSection`), and both routine-modifier loops (the real `ParseSubroutine`
+modifier list + the pre-scan skip loop) where the hint words were folded into the
+existing `inline`/`cdecl`/… set. Verified across const/type/proc, `deprecated
+'msg'`, interleaving (`inline; deprecated;`), and that `deprecated` is still
+usable as an ordinary variable name (soft ident preserved). Self-host
+byte-identical; `make test` green; regression `test/test_hint_sizeof.pas`.

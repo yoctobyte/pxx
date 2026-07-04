@@ -6394,7 +6394,7 @@ function ConstEvalFactor: Int64;
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
-    cName: AnsiString; cQUnit: Integer; hasConstCast: Boolean;
+    cName: AnsiString; cQUnit: Integer; hasConstCast: Boolean; sofTk: TTypeKind;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -6427,6 +6427,21 @@ begin
     { single-char literal 'x' used as an ordinal constant (Char typed-const
       element, `Ord('A')`-free contexts) -> its character code. }
     begin r := Ord(CurTok.SVal[1]); Next; end
+  else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'sizeof') then
+  begin
+    { SizeOf(TypeName) as a compile-time constant — needed for default-parameter
+      values (`= sizeof(Pointer)`) and const expressions; FPC folds it. Minimal
+      scope: a type name/keyword resolved via ParseTypeKind -> its byte size
+      (covers sizeof(Pointer)/sizeof(Integer)/sizeof(TRec)). A sizeof(variable)
+      or sizeof(arr[i]) form is not folded here (rare in a const context; the
+      full expression path in ParseFactor handles those). See
+      feature-sizeof-const-intrinsic-in-const-eval. }
+    Next; Expect(tkLParen, '(');
+    sofTk := ParseTypeKind;
+    if sofTk = tyRecord then r := RecSize(LastTypeRecId)
+    else r := TypeSize(sofTk);
+    Expect(tkRParen, ')');
+  end
   else if CurTok.Kind = tkIdent then
   begin
     { A `Unit.Const` qualifier (e.g. `termio.FIONREAD`) — ConsumeUnitQualifier
@@ -11081,6 +11096,31 @@ begin
   Result := idx;
 end;
 
+{ FPC hint directives — `deprecated ['msg']`, `platform`, `experimental`,
+  `unimplemented`, `library` — may trail a const value, a type declaration, or a
+  routine header. They only drive an optional compiler warning, so pxx parses and
+  ignores them (no code effect). Soft identifiers in this dialect, so consume a
+  run of them here rather than choke. `deprecated` takes an optional string
+  message. See feature-hint-directives-deprecated-platform. }
+procedure SkipHintDirectives;
+begin
+  while (CurTok.Kind = tkIdent) and
+        (CaseEqual(CurTok.SVal, 'deprecated') or
+         CaseEqual(CurTok.SVal, 'platform') or
+         CaseEqual(CurTok.SVal, 'experimental') or
+         CaseEqual(CurTok.SVal, 'unimplemented') or
+         CaseEqual(CurTok.SVal, 'library')) do
+  begin
+    if CaseEqual(CurTok.SVal, 'deprecated') then
+    begin
+      Next;
+      if CurTok.Kind = tkString then Next;   { optional 'use X instead' message }
+    end
+    else
+      Next;
+  end;
+end;
+
 procedure ParseConstSection;
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
@@ -11453,6 +11493,7 @@ begin
         AddConst(name, tyInteger, v);
       end;
     end;
+    SkipHintDirectives;   { const K = v deprecated; }
     Eat(tkSemicolon);
   end;
 end;
@@ -12888,6 +12929,7 @@ begin
         fTk := ParseTypeKind;
         RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId);
       end;
+      SkipHintDirectives;   { type T = BaseType deprecated; }
       Eat(tkSemicolon);
     end;
   end;
@@ -13614,6 +13656,9 @@ begin
               CaseEqual(CurTok.SVal, 'stackful') or CaseEqual(CurTok.SVal, 'stackless') or
               CaseEqual(CurTok.SVal, 'iram') or CaseEqual(CurTok.SVal, 'interrupt') or
               CaseEqual(CurTok.SVal, 'flexcolumn') or
+              CaseEqual(CurTok.SVal, 'deprecated') or CaseEqual(CurTok.SVal, 'platform') or
+              CaseEqual(CurTok.SVal, 'experimental') or CaseEqual(CurTok.SVal, 'unimplemented') or
+              CaseEqual(CurTok.SVal, 'library') or
               CaseEqual(CurTok.SVal, 'external'))) or
             (CurTok.Kind = tkOverload) do
       begin
@@ -13622,6 +13667,9 @@ begin
           { external clause has no body; consume to its terminating ';' }
           while (CurTok.Kind <> tkEOF) and (CurTok.Kind <> tkSemicolon) do Next;
         end
+        else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'deprecated') and
+                (Tokens[TokPos].Kind = tkString) then
+        begin Next; Next; end   { consume 'deprecated' and its message string }
         else
           Next;
         Eat(tkSemicolon);
@@ -13956,7 +14004,12 @@ begin
           CaseEqual(CurTok.SVal, 'stackless') or
           CaseEqual(CurTok.SVal, 'iram') or
           CaseEqual(CurTok.SVal, 'interrupt') or
-          CaseEqual(CurTok.SVal, 'flexcolumn'))) or
+          CaseEqual(CurTok.SVal, 'flexcolumn') or
+          CaseEqual(CurTok.SVal, 'deprecated') or
+          CaseEqual(CurTok.SVal, 'platform') or
+          CaseEqual(CurTok.SVal, 'experimental') or
+          CaseEqual(CurTok.SVal, 'unimplemented') or
+          CaseEqual(CurTok.SVal, 'library'))) or
         (CurTok.Kind = tkOverload) do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
@@ -13972,7 +14025,12 @@ begin
       isInterrupt := True;
       isIram := True;   { interrupt handlers must also be IRAM-resident }
     end;
-    { `stackful` is the implemented default strategy; accept it as a no-op modifier. }
+    { Hint directives (deprecated ['msg']/platform/experimental/…) are
+      parse-and-ignore, like a routine modifier. `deprecated` takes an optional
+      message string. `stackful` is the default strategy: accept as a no-op. }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'deprecated') and
+       (Tokens[TokPos].Kind = tkString) then
+      Next;   { consume 'deprecated'; the message string is eaten by the Next below }
     Next;
     Eat(tkSemicolon);
   end;

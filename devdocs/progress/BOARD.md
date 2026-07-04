@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (76)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ _none_
 | feature-classes-tlist-notify-hook | B | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
+| feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
@@ -65,7 +66,6 @@ _none_
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
-| feature-hint-directives-deprecated-platform | A | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | A | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
@@ -93,7 +93,6 @@ _none_
 | feature-rust-rtl-macros-io | R | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
 | feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
-| feature-sizeof-const-intrinsic-in-const-eval | A | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
 | feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -145,7 +144,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (455)
+## done (457)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -492,6 +491,7 @@ _none_
 | feature-generators-yield | A | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-hashing-library | B | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-high-low-of-type | A | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
+| feature-hint-directives-deprecated-platform | A | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
 | feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
 | feature-i386-threadsafe-locks | A | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
@@ -558,6 +558,7 @@ _none_
 | feature-setlength-var-array-param-abi | A | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
+| feature-sizeof-const-intrinsic-in-const-eval | A | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
 | feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
 | feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
@@ -638,6 +639,7 @@ _none_
 - [B] feature-classes-tlist-notify-hook
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
+- [A] feature-default-params-on-methods
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-dns-resolver-library
@@ -655,7 +657,6 @@ _none_
 - [A] feature-float-exception-mask-control
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
-- [A] feature-hint-directives-deprecated-platform
 - [B] feature-ilja-tui
 - [A] feature-inline-asm-xtensa
 - [A] feature-inline-nonleaf-and-branch-locals
@@ -683,7 +684,6 @@ _none_
 - [R] feature-rust-rtl-macros-io
 - [A] feature-selfhost-guard-ir-unsupported
 - [A] feature-signal-handlers
-- [A] feature-sizeof-const-intrinsic-in-const-eval
 - [B] feature-synapse-compile-check
 - [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize
