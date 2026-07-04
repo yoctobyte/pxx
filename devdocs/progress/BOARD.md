@@ -12,10 +12,10 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-rust-frontend-skeleton | A | feature | Rust frontend — lexer/parser skeleton + entry point | — |
-| feature-rust-frontend | B | feature | Rust frontend — umbrella | — |
-| feature-rust-generics-trait-bounds | A | feature | Rust frontend — generics with trait bounds | — |
-| feature-rust-match-enum-payload | A | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
+| feature-rust-frontend-skeleton | R | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-frontend | R | feature | Rust frontend — umbrella | — |
+| feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
+| feature-rust-match-enum-payload | R | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
 ## unfinished (3)
 
@@ -80,15 +80,15 @@ _none_
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
-| feature-rust-borrowed-slice-type | A | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
-| feature-rust-derive-macros | A | feature | Rust frontend — derive-macro codegen | — |
-| feature-rust-drop-move-tracking | A | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
-| feature-rust-dyn-trait-dispatch | A | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-macro-rules | A | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
-| feature-rust-misc-semantics | A | feature | Rust frontend — integer overflow mode + format-string parser | — |
-| feature-rust-rtl-concurrency | B | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
-| feature-rust-rtl-core-types | B | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
-| feature-rust-rtl-macros-io | B | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-rust-borrowed-slice-type | R | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
+| feature-rust-derive-macros | R | feature | Rust frontend — derive-macro codegen | — |
+| feature-rust-drop-move-tracking | R | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
+| feature-rust-dyn-trait-dispatch | R | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
+| feature-rust-macro-rules | R | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
+| feature-rust-misc-semantics | R | feature | Rust frontend — integer overflow mode + format-string parser | — |
+| feature-rust-rtl-concurrency | R | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
+| feature-rust-rtl-core-types | R | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
+| feature-rust-rtl-macros-io | R | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
 | feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
@@ -330,7 +330,7 @@ _none_
 | bug-riscv32-chess-perft-runtime-corruption | A | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
 | bug-riscv32-hosted-writeln-hello-hangs | A | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
-| bug-selfhost-multifn-ifelse-miscompile | A | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
+| bug-selfhost-multifn-ifelse-miscompile | R | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
@@ -665,15 +665,15 @@ _none_
 - [B] feature-random-library
 - [B] feature-real-dynlib-loader
 - [A] feature-require-forward-strict-mode
-- [A] feature-rust-borrowed-slice-type
-- [A] feature-rust-derive-macros
-- [A] feature-rust-drop-move-tracking
-- [A] feature-rust-dyn-trait-dispatch
-- [A] feature-rust-macro-rules
-- [A] feature-rust-misc-semantics
-- [B] feature-rust-rtl-concurrency
-- [B] feature-rust-rtl-core-types
-- [B] feature-rust-rtl-macros-io
+- [R] feature-rust-borrowed-slice-type
+- [R] feature-rust-derive-macros
+- [R] feature-rust-drop-move-tracking
+- [R] feature-rust-dyn-trait-dispatch
+- [R] feature-rust-macro-rules
+- [R] feature-rust-misc-semantics
+- [R] feature-rust-rtl-concurrency
+- [R] feature-rust-rtl-core-types
+- [R] feature-rust-rtl-macros-io
 - [A] feature-selfhost-guard-ir-unsupported
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check

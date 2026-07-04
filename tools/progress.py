@@ -58,7 +58,7 @@ def strip_quotes(value: str) -> str:
 def normalize_track(value: str) -> str:
     t = value.upper()
     t = t.replace("TRACK", "")
-    t = re.sub(r"[^ABCD+/]", "", t)
+    t = re.sub(r"[^ABCDR+/]", "", t)
     t = t.replace("A/B", "A+B").replace("B/A", "A+B")
     return t
 
@@ -158,6 +158,28 @@ class Ticket:
 
     @property
     def track(self) -> str:
+        # Track R = the Rust frontend. Its tickets declare "Track A (working
+        # name: Track R, Rust frontend)" on the Type/Track line so they still
+        # obey Track A's file-ownership rules, but the user wants them surfaced
+        # as their own track on the board. Detect "Track R" ONLY in the Type /
+        # Track declaration lines (never the body) — a real Track A ticket that
+        # merely mentions "Track R coordination" in prose must stay A.
+        decl = (
+            first_bullet_value(self.text, "Type")
+            + " "
+            + first_bullet_value(self.text, "Track")
+        )
+        if re.search(r"\bTrack[ -]?R\b", decl, re.I):
+            return "R"
+        # The whole Rust-frontend effort surfaces as Track R on the board, even
+        # though individual sub-tickets carry a Track A (compiler internals) or
+        # Track B (rust RTL shims) file-ownership tag for collision-avoidance —
+        # that ownership rule still governs WHO edits WHICH files; this only
+        # groups the Rust work into one visible lane. `feature-r-frontend-*` is
+        # the separate R *language* frontend, not Rust — left to its own track.
+        if self.slug.startswith("feature-rust-"):
+            return "R"
+
         t = self.fm.get("track", "")
         if not t:
             line = first_bullet_value(self.text, "Track")
@@ -683,13 +705,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [ready|leverage|board|board-md|check|all] [--track A|B]\n"
+        usage="%(prog)s [ready|leverage|board|board-md|check|all] [--track A|B|C|D|R]\n"
         "       %(prog)s claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["ready", "leverage", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "R"], default="")
         sp.add_argument("--strict", action="store_true")
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
