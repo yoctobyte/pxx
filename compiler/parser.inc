@@ -533,7 +533,8 @@ procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pypa
 function IsMemberNameTok: Boolean;
 begin
   IsMemberNameTok := (CurTok.Kind = tkIdent) or (CurTok.Kind = tkRead) or
-    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln);
+    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln) or
+    (CurTok.Kind = tkArgCount) or (CurTok.Kind = tkArgStr);   { ParamCount/ParamStr as member names (FPC custapp) }
 end;
 
 { Predefined routines are not reserved words. In declaration-name position they
@@ -13307,8 +13308,8 @@ begin
           else if CurTok.Kind = tkProperty then
           begin
             Next;
-            if CurTok.Kind <> tkIdent then Error('expected property name');
-            propName := CurTok.SVal;
+            if not IsMemberNameTok then Error('expected property name');
+            propName := GetTokenStr(TokPos - 1);   { keyword-token names (ParamCount) carry no SVal }
             pnOff := Tokens[TokPos-1].SOffset;
             pnLen := Tokens[TokPos-1].SLen;
             Next;

@@ -19,6 +19,10 @@ type
   TReplaceFlag  = (rfReplaceAll, rfIgnoreCase);
   TReplaceFlags = set of TReplaceFlag;
 
+  { FPC SysUtils event-log severity (eventlog.pp et al). }
+  TEventType  = (etCustom, etInfo, etWarning, etError, etDebug);
+  TEventTypes = set of TEventType;
+
   PInt64Rec  = ^Int64;
   PDoubleRec = ^Double;
 
