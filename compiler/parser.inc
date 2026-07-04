@@ -2608,6 +2608,17 @@ begin
             if margIdx >= 0 then ASTRight[mselfArg] := margIdx;
 
             node := mcallNode;
+            { trailing ^ on the getter result — T(FList.Items[i]^) in fgl's
+              enumerator: deref the returned (untyped) pointer; read as Int64,
+              an outer ordinal cast narrows }
+            while CurTok.Kind = tkCaret do
+            begin
+              Next;
+              mselfArg := AllocNode(AN_DEREF);
+              ASTLeft[mselfArg] := node;
+              ASTTk[mselfArg] := Ord(tyInt64);
+              node := mselfArg;
+            end;
             Result := node; Exit;
           end
           else
@@ -3549,6 +3560,16 @@ begin
   end;
   if argNo <> Procs[mpi].ParamCount then
     Error('inherited call argument count mismatch');
+  { trailing ^ — T(inherited GetLast^) in fgl: deref the returned (untyped)
+    pointer, read as Int64; an outer ordinal cast narrows }
+  while CurTok.Kind = tkCaret do
+  begin
+    Next;
+    argSeq := AllocNode(AN_DEREF);
+    ASTLeft[argSeq] := node;
+    ASTTk[argSeq] := Ord(tyInt64);
+    node := argSeq;
+  end;
   Result := node;
 end;
 
@@ -4322,11 +4343,33 @@ begin
     end;
     tkDefault:
     begin
-      node := AllocNode(AN_DEFAULT);
-      ASTTk[node] := Ord(tyUnknown);
-      CurASTNode := node;
-      LastExprTk := tyUnknown;
-      Next;
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Default(T): zero value of the type — ordinals/pointers/chars in v1
+          (records/strings later). `default` lexes as its own token. }
+        Next; Expect(tkLParen, '(');
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := 0;
+        ASTTk[node] := Ord(tyInt64);
+        i := 1;
+        while (i > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkLParen then Inc(i)
+          else if CurTok.Kind = tkRParen then Dec(i);
+          if i > 0 then Next;
+        end;
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        LastExprTk := tyInt64;
+      end
+      else
+      begin
+        node := AllocNode(AN_DEFAULT);
+        ASTTk[node] := Ord(tyUnknown);
+        CurASTNode := node;
+        LastExprTk := tyUnknown;
+        Next;
+      end;
     end;
     tkAt:
     begin
@@ -5795,6 +5838,33 @@ begin
       begin
         name := '__pxxCompareByte';
         procIdx := FindProc(name);
+      end;
+
+      { IsManagedType(T): compile-time intrinsic — True when T is a
+        refcounted/managed type. v1: string kinds and dynamic-array type
+        names; everything else False. Name-based (the argument is a type). }
+      if CaseEqual(name, 'IsManagedType') and (procIdx < 0) and (idx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        node := AllocNode(AN_BOOL_LIT);
+        ASTIVal[node] := 0;
+        if (CurTok.Kind = tkString_T) or
+           ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'ansistring') or
+             (FindArrayType(CurTok.SVal) >= 0))) then
+          ASTIVal[node] := 1;
+        ASTTk[node] := Ord(tyBoolean);
+        i := 1;
+        while (i > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkLParen then Inc(i)
+          else if CurTok.Kind = tkRParen then Dec(i);
+          if i > 0 then Next;
+        end;
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        LastExprTk := tyBoolean;
+        Exit;
       end;
 
       { Assigned(p): System intrinsic -> p <> nil (pointer/class/proc-var).
@@ -9724,6 +9794,32 @@ var
 begin
   node := -1;
   case CurTok.Kind of
+    tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:
+    begin
+      { Cast-as-lvalue store: `Integer(expr^) := v` (fgl's
+        `T(inherited Insert(Index)^) := Item` after substitution). The inner
+        expression's trailing ^ yields an AN_DEREF; retag it to the cast's
+        width so the store truncates like the cast. }
+      castTk := tyInteger;
+      if CurTok.Kind = tkLongWord_T then castTk := tyUInt32
+      else if CurTok.Kind = tkChar_T then castTk := tyChar
+      else if CurTok.Kind = tkBoolean_T then castTk := tyBoolean
+      else if CaseEqual(CurTok.SVal, 'byte') then castTk := tyUInt8
+      else if CaseEqual(CurTok.SVal, 'longint') or CaseEqual(CurTok.SVal, 'integer') then castTk := tyInteger
+      else if CaseEqual(CurTok.SVal, 'int64') then castTk := tyInt64;
+      Next; Expect(tkLParen, '(');
+      ParseExpr;
+      valNode := CurASTNode;
+      Expect(tkRParen, ')');
+      if ASTKind[valNode] <> AN_DEREF then
+        Error('cast-as-lvalue statement requires a pointer deref inside the cast');
+      ASTTk[valNode] := Ord(castTk);
+      Expect(tkAssign, ':=');
+      ParseExpr;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := valNode;
+      ASTRight[node] := CurASTNode;
+    end;
     tkVar:
     begin
       if not EnableLazyVar then Error('Lazy Variable Declarations are disabled; use --lazy-var to enable');
@@ -9936,6 +10032,29 @@ begin
     begin
       name := CurTok.SVal;
       qUnit := ConsumeUnitQualifier(name);
+      { Finalize(x[, n]) — releases a managed value in FPC. pxx manages
+        AnsiStrings by scope/assignment (ARC), so v1 parses-and-discards the
+        call (no-op). NOTE: a Finalize-reliant container leaks managed
+        elements until this maps onto the ARC release helpers. }
+      if (qUnit < 0) and CaseEqual(name, 'Finalize') and
+         (Tokens[TokPos].Kind = tkLParen) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) and
+         ((CurSelfClass < REC_UCLASS_BASE) or
+          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) then
+      begin
+        Next; Expect(tkLParen, '(');
+        i := 1;
+        while (i > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkLParen then Inc(i)
+          else if CurTok.Kind = tkRParen then Dec(i);
+          if i > 0 then Next;
+        end;
+        Expect(tkRParen, ')');
+        Result := GenMakeSeq(-1, -1);
+        Exit;
+      end;
+
       { Bare Move(...) / FillChar(...): soft-alias to the hidden builtin
         helpers (__pxxMove/__pxxFillChar) so the System primitives resolve
         with no `uses` (FPC parity) WITHOUT a real proc named Move/FillChar
@@ -12888,7 +13007,9 @@ begin
             names; first registration wins on lookup. }
           if CurTok.Kind = tkType then
           begin
+            Inc(TypeSectionDepth);
             ParseTypeSection;
+            Dec(TypeSectionDepth);
             continue;
           end;
 
@@ -13773,7 +13894,9 @@ begin
     points past it); un-read it so the streamed methods are inserted before it,
     then reload CurTok from the first streamed token (or the terminator again if
     nothing was streamed). }
-  if PendingSpecCount > 0 then
+  { NOT from a nested class-local type section: flushing there would splice
+    the pending method impls into the middle of the enclosing class body. }
+  if (PendingSpecCount > 0) and (TypeSectionDepth = 0) then
   begin
     Dec(TokPos);
     FlushPendingClassSpecializations;

@@ -761,6 +761,7 @@ var
   SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubKinds  : array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   SpecSubCount  : Integer;
+  TypeSectionDepth : Integer; { >0 while inside a nested class-local type section — defers the pending-specialization flush to the OUTERMOST section end }
   { Per-template type parameters + per-specialization concrete args, parallel
     to Templates[]/Specializations[] (flat ti*MAX_TEMPLATE_PARAMS+k layout). }
   TemplateParamNames : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of AnsiString;

@@ -601,9 +601,34 @@ begin
 end;
 
 procedure AddUMeth(ci, noff, nlen, procIdx: Integer);
-var mi: Integer;
+var mi, k, src, dst: Integer;
 begin
   if UMthCount >= MAX_UMETH then Error('too many class/record methods (MAX_UMETH)');
+  { The method window [UClsMBase[ci] .. +UClsMCount[ci]) must stay contiguous
+    (FindUMeth walks it as a range). A NESTED specialization inside a class
+    body (fgl's `TFPGListEnumeratorSpec = specialize ...` class-local type)
+    registers ITS methods between two of ours — relocate ours to the tail and
+    re-base, mirroring AddUField's window relocation. }
+  if (UClsMCount[ci] > 0) and (UClsMBase[ci] + UClsMCount[ci] < UMthCount) then
+  begin
+    if UMthCount + UClsMCount[ci] >= MAX_UMETH then
+      Error('too many class/record methods (MAX_UMETH)');
+    dst := UMthCount;
+    for k := 0 to UClsMCount[ci] - 1 do
+    begin
+      src := UClsMBase[ci] + k;
+      UMthNOff[dst+k] := UMthNOff[src];
+      UMthNLen[dst+k] := UMthNLen[src];
+      UMthProc_[dst+k] := UMthProc_[src];
+      UMthVirSlot[dst+k] := UMthVirSlot[src];
+      UMthIsStatic[dst+k] := UMthIsStatic[src];
+      UMthIsCtor[dst+k] := UMthIsCtor[src];
+      UMthPub[dst+k] := UMthPub[src];
+    end;
+    UClsMBase[ci] := dst;
+    UMthCount := UMthCount + UClsMCount[ci];
+    if UMthCount >= MAX_UMETH then Error('too many class/record methods (MAX_UMETH)');
+  end;
   mi := UMthCount;
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;
