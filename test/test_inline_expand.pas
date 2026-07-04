@@ -16,7 +16,13 @@ begin IsEven := (x and 1) = 0; end;
 function Blend(a: Integer; b: Integer; w: Integer): Integer; inline;
 begin Blend := a * w + b * (10 - w); end;
 
-{ ineligible: has a local + control flow → must degrade to a normal call, still correct }
+{ slice 2a: if-then-else Result one-liner, inlined as a ternary }
+function Min(a: Integer; b: Integer): Integer; inline;
+begin if a < b then Min := a else Min := b; end;
+function Max(a: Integer; b: Integer): Integer; inline;
+begin if a > b then Max := a else Max := b; end;
+
+{ ineligible: has a local + multiple if-statements → must degrade to a normal call }
 function Clamp(v: Integer; lo: Integer; hi: Integer): Integer;
 var r: Integer;
 begin
@@ -42,6 +48,12 @@ begin
   writeln(Blend(g, Bump, 0));      { a=5, b=Bump(105), w=0 -> 5*0 + 105*10 = 1050 }
   g := 5;
   writeln(Blend(Bump, g, 10));     { a=Bump(105), b=g(now 105), w=10 -> 105*10 + 105*0 = 1050 }
+  { slice 2a ternary inline }
+  writeln(Min(3, 8));              { 3 }
+  writeln(Max(3, 8));              { 8 }
+  writeln(Max(Min(5, 2), 9));      { 9 }
+  g := 5;
+  writeln(Min(g, Bump));           { 5 (g read before Bump) }
   writeln(Sqr(3) + Sqr(4));        { 25 }
   writeln(Sqr(Sqr(2)));            { outer=call, inner=inline; 16 }
   writeln(Half(15));               { 7 }

@@ -167,10 +167,31 @@ begin
   CloneToInlineRegion := r;
 end;
 
-{ If bodyNode is an inline-eligible pure-expression function body, retain E.
-  Called at the definition, after the body AST is parsed. OptLevel>=2 only. }
+{ Build a retained AN_TERNARY(cond ? thenE : elseE) in the inline region from
+  three source expressions, rewriting param idents to placeholders. -1 on
+  overflow. Used to inline an `if c then Result:=A else Result:=B` one-liner as a
+  value-bearing conditional (slice 2a). }
+function BuildInlineTernary(cond, thenE, elseE, procIdx, retTk: Integer): Integer;
+var t, pair, cc, aa, bb: Integer;
+begin
+  BuildInlineTernary := -1;
+  cc := CloneToInlineRegion(cond, procIdx);   if cc < 0 then Exit;
+  aa := CloneToInlineRegion(thenE, procIdx);  if aa < 0 then Exit;
+  bb := CloneToInlineRegion(elseE, procIdx);  if bb < 0 then Exit;
+  pair := AllocInlineNode(AN_PAIR);           if pair < 0 then Exit;
+  ASTLeft[pair] := aa; ASTRight[pair] := bb;
+  t := AllocInlineNode(AN_TERNARY);           if t < 0 then Exit;
+  ASTLeft[t] := cc; ASTRight[t] := pair; ASTTk[t] := retTk;
+  BuildInlineTernary := t;
+end;
+
+{ If bodyNode is an inline-eligible function body, retain it. Handles two shapes:
+  a pure-expression `Result := E`, and an `if c then Result:=A else Result:=B`
+  one-liner (retained as an AN_TERNARY). Called at the definition, after the body
+  AST is parsed. OptLevel>=2 only. }
 procedure TryRetainInlineBody(procIdx, bodyNode: Integer);
 var seqNode, stmt, lhs, rhs, i, startNext, retSym: Integer;
+    pair, thenA, elseA, condN, aE, bE: Integer;
 begin
   if OptLevel < 2 then Exit;
   if procIdx < 0 then Exit;
@@ -196,22 +217,49 @@ begin
   seqNode := bodyNode;
   stmt := ASTLeft[seqNode];
   if stmt < 0 then Exit;
-  if ASTKind[stmt] <> AN_ASSIGN then Exit;
-  lhs := ASTLeft[stmt];
-  rhs := ASTRight[stmt];
-  { lhs must be the Result symbol. }
-  if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
-  { rhs must be a simple whitelist expression not referencing Result. }
-  if not InlineExprSimple(rhs, procIdx) then Exit;
-  { (E cannot reference Result: it is a skLocal, which InlineExprSimple rejects.) }
-  { Retain E in the inline region. Size cap via the region allocator. }
-  startNext := InlineASTNext;
-  if InlineASTNext + 48 >= MAX_AST then Exit;    { budget guard }
-  i := CloneToInlineRegion(rhs, procIdx);
-  if i < 0 then begin InlineASTNext := startNext; Exit; end;
-  if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
-  InlineBodyRoot[procIdx] := i;
-  InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
+
+  if ASTKind[stmt] = AN_ASSIGN then
+  begin
+    { Shape 1: `Result := E`. }
+    lhs := ASTLeft[stmt];
+    rhs := ASTRight[stmt];
+    if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
+    if not InlineExprSimple(rhs, procIdx) then Exit;
+    { (E cannot reference Result: it is a skLocal, which InlineExprSimple rejects.) }
+    startNext := InlineASTNext;
+    if InlineASTNext + 48 >= MAX_AST then Exit;    { budget guard }
+    i := CloneToInlineRegion(rhs, procIdx);
+    if i < 0 then begin InlineASTNext := startNext; Exit; end;
+    if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
+    InlineBodyRoot[procIdx] := i;
+    InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
+  end
+  else if ASTKind[stmt] = AN_IF then
+  begin
+    { Shape 2 (slice 2a): `if C then Result:=A else Result:=B` -> AN_TERNARY(C?A:B).
+      Both arms must assign Result; C/A/B all pure whitelist expressions. }
+    condN := ASTLeft[stmt];
+    pair := ASTRight[stmt];
+    if (pair < 0) or (ASTKind[pair] <> AN_PAIR) then Exit;
+    thenA := ASTLeft[pair];
+    elseA := ASTRight[pair];
+    if (thenA < 0) or (elseA < 0) then Exit;         { both arms present (has else) }
+    if (ASTKind[thenA] <> AN_ASSIGN) or (ASTKind[elseA] <> AN_ASSIGN) then Exit;
+    if (ASTKind[ASTLeft[thenA]] <> AN_IDENT) or (ASTIVal[ASTLeft[thenA]] <> retSym) then Exit;
+    if (ASTKind[ASTLeft[elseA]] <> AN_IDENT) or (ASTIVal[ASTLeft[elseA]] <> retSym) then Exit;
+    aE := ASTRight[thenA];
+    bE := ASTRight[elseA];
+    if not InlineExprSimple(condN, procIdx) then Exit;
+    if not InlineExprSimple(aE, procIdx) then Exit;
+    if not InlineExprSimple(bE, procIdx) then Exit;
+    startNext := InlineASTNext;
+    if InlineASTNext + 96 >= MAX_AST then Exit;
+    i := BuildInlineTernary(condN, aE, bE, procIdx, Ord(Syms[retSym].TypeKind));
+    if i < 0 then begin InlineASTNext := startNext; Exit; end;
+    if InlineASTNext - startNext > 96 then begin InlineASTNext := startNext; Exit; end;
+    InlineBodyRoot[procIdx] := i;
+    InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
+  end;
 end;
 
 { DWARF -g (Tier 3): snapshot one symbol into the DbgVar side table. Symbol
