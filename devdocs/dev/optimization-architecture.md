@@ -43,9 +43,9 @@ the historic 1:1 lowering unchanged.**
 | Level | Contract |
 |-------|----------|
 | `-O0` | No optimization beyond the pre-existing local const-fold. 1:1 source↔asm, debuggable. The self-host gate runs here and is **sacred**. |
-| `-O1` | Cheap, safe, deterministic, no code-size blow-up. Everything landed so far is `-O1`. |
-| `-O2` | Fuller speed; size may grow. **Currently aliases -O1** (no -O2-only pass exists yet). Reserved for register calling convention + inlining. |
-| `-O3` | Aggressive, benchmark-gated. Currently aliases -O1. |
+| `-O1` | Cheap, safe, deterministic, no code-size blow-up. Emitter peepholes + shared-IR DCE/redundant-jump. |
+| `-O2` | Fuller speed; size may grow. **Register calling convention (r14/r15) + inline expansion landed (§4).** Pins are -O2-built. |
+| `-O3` | Aggressive, benchmark-gated. **Currently aliases -O2** (reserved for nested/non-leaf inline + cost model). |
 
 ### Level-assignment policy (the O1 / O2 line)
 
@@ -218,6 +218,48 @@ Demonstrated all-target: a program with dead-after-`continue` code compiled for
 **i386** shrinks at `-O1` vs `-O0` (DCE fired on the cross backend via the
 shared IR), with identical runtime output.
 
+### The `-O2` tier (landed 2026-07-04)
+
+`-O2` is no longer an alias of `-O1`. Two features landed, both gated
+`OptLevel >= 2` so `-O0`/`-O1` stay byte-identical:
+
+**Register calling convention — r14/r15 param residency** (x86-64 only;
+`feature-callconv-register-args`). Up to 2 eligible scalar-by-value params per
+body are parked in the callee-saved registers r14/r15 for the whole routine, so
+reads become `mov rax/rcx, r14/r15` instead of a per-use frame reload. The frame
+slot stays authoritative (the early prologue spill writes it; every store
+dual-writes it via `RegcallRefreshResident`), so the register is a *read cache* —
+any non-`EmitLoadVar` reader and the excluded addr-taken cases stay correct, and
+callee-saved regs survive calls by ABI so there is no cross-call spill.
+Eligibility (`RegcallAssignResidency`, `ir_codegen.inc`): scalar int/ptr, not
+`IsRef`/`IsArray`, address never taken in-body (no `IR_LEA`/`IR_SLOTADDR` on the
+SymIdx), no inline asm, not a generator/stackless routine. Caller r14/r15 saved
+to a reserved frame slot at body entry, restored in every `EmitProcEpilog` path.
+`--measure-regcall` (phase 0) sized it: 79% of params eligible, 61% captured by
+2 registers. Measured **1.34× self-compile, code −12%** — same emitted output.
+
+**Inline routine expansion** (all targets — AST/IR level, NOT target-gated;
+`feature-inline-routines`). A leaf function whose body is a single `Result := E`
+pure expression, or an `if C then Result:=A else Result:=B` one-liner (retained
+as an `AN_TERNARY`), over scalar-by-value params is spliced in place of a direct
+call. The single-pass obstacle (callee body torn down after its `CompileAST`) is
+solved by *retaining* the eligible body in a reserved top slice of the AST pool
+`[INLINE_AST_BASE..MAX_AST)` — never touched by the per-proc reset — with param
+idents rewritten to `AN_INLINE_PARAM(i)` placeholders (`TryRetainInlineBody`,
+`parser.inc`). At the `AN_CALL` site (`IRInlineExpand`, `ir.inc`) the retained
+body is cloned into the live pool with placeholders bound to the args and lowered
+normally. Pure args (literal / plain scalar ident) substitute directly; if any
+arg has a side effect, ALL args are captured left-to-right into temps first, so
+Pascal evaluation order holds. Auto-inline: keys on eligibility, not the `inline;`
+keyword (also captured). `--measure-inline` (phase 0) sized it: 664 leaf@12
+call sites (2.2%), on hot tiny helpers. Validated byte-identical `-O0` vs `-O2`
+across **505 programs** and on all four cross targets (i386/aarch64/arm32/
+riscv32). **Nested (non-leaf) inline is deferred to `-O3`** (user decision).
+
+Both are proven by the same four gates plus `-O2` self-fixedpoint. `-O3` still
+aliases `-O2`. **Pins are now `-O2`-built** (transparent: an -O2 compiler emits
+the same `-O0` output, so downstream sees identical bytes, just a faster compiler).
+
 ---
 
 ## 5. What is queued, and why it is where it is
@@ -232,12 +274,11 @@ shared IR), with identical runtime output.
 | imm-fold into BINOP (`add rax,imm32`) | emitter (§3b) | queued | x86-64, cheap |
 | inc/dec, rel8 short branches | emitter (§3b) | queued | x86-64, size |
 | **Store-reload elimination** | IR, needs liveness | **blocked** | `feature-opt-store-reload-elimination` — no rax-write choke point for airtight invalidation; wants the liveness scaffold |
-| **Register calling convention** | ABI flag-day (§3b-wide) | **not started** | `feature-callconv-register-args` (-O2). The single biggest self-compile win — FPC's ~2× lead is mostly this. Own arc. |
+| **Register calling convention (r14/r15)** | ABI (x86-64) | **LANDED (-O2, §4)** | `feature-callconv-register-args` phase 1. Phase 2 (rbx/r12/r13) + phase 3 (caller-side) queued; diminishing per measurement. |
+| **Inline expansion (pure-expr + ternary leaf)** | AST/IR (all targets) | **LANDED (-O2, §4)** | `feature-inline-routines` v1/2a/3. Slice 2b (multi-stmt bodies) queued; nested/non-leaf = -O3. |
 
-The **register calling convention** is the real prize for developer iteration
-and is deliberately deferred until the IR-pass framework (this doc's §3a) and a
-register-liveness scaffold exist, so it plugs in cleanly rather than as a
-one-off.
+Store-reload elimination remains the notable blocked item — it wants the same
+register-liveness scaffold, and phase-2 regcall would build toward it.
 
 ---
 
@@ -265,12 +306,14 @@ commands):
 
 **Benchmark harness:** `make benchmark-opt-levels` builds the compiler at each
 `-O` tier, asserts every tier emits identical (correct) output, reports each
-tier binary's size, and hyperfines each tier self-compiling. `-O2`/`-O3` rows
-currently track `-O1` (they alias it until a higher-tier pass lands).
+tier binary's size, and hyperfines each tier self-compiling. `-O3` still tracks
+`-O2` (aliases it until a nested-inline / higher-tier pass lands).
 
 **Cumulative result so far:** the `-O1`-built x86-64 compiler self-compiles
-~1.30× faster than `-O0`-built (≈4.2s vs 5.5s) and is ~11% smaller
-(≈3.6MB vs 4.06MB). Numbers per pass live in the ticket log.
+~1.30× faster than `-O0`-built and is ~11% smaller; `-O2` (regcall + inline, §4)
+adds the register-residency win on top (≈1.34× vs `-O0` measured for regcall
+alone). Numbers per pass live in the ticket logs. `-O0` output is byte-identical
+across all tiers (the sacred gate).
 
 ---
 
@@ -278,17 +321,18 @@ currently track `-O1` (they alias it until a higher-tier pass lands).
 
 | File | What it holds |
 |------|---------------|
-| `compiler/compiler.pas` | `-O` flag parse → `OptLevel` |
-| `compiler/defs.inc` | `OptLevel` global; IR opcode constants |
-| `compiler/ir.inc` | shared IR build; **`IROptimize` pipeline + IR passes (§3a)** |
-| `compiler/ir_codegen.inc` | x86-64 backend; `CompileAST` (pipeline call site); emitter passes 1/2/4; `CmpFusible` |
+| `compiler/compiler.pas` | `-O` flag parse → `OptLevel`; `--measure-regcall`/`--measure-inline` probes |
+| `compiler/defs.inc` | `OptLevel` global; IR opcode + `AN_*` constants; `AN_INLINE_PARAM`, `INLINE_AST_BASE`, `RcResident*`, `Inline*` globals |
+| `compiler/ir.inc` | shared IR build; **`IROptimize` pipeline + IR passes (§3a)**; **inline splice `IRInlineExpand`/`IRCloneInlineBody` (§4)** |
+| `compiler/ir_codegen.inc` | x86-64 backend; `CompileAST` (pipeline call site); emitter passes 1/2/4; `CmpFusible`; **`RegcallAssignResidency` (§4)** |
+| `compiler/parser.inc` | **inline retention `TryRetainInlineBody`/`CloneToInlineRegion`/`BuildInlineTernary` (§4)**; `inline;` directive capture |
 | `compiler/emit.inc` | low-level x86-64 emit; `MovRaxImm` (pass 3) |
-| `compiler/symtab.inc` | `EmitLoadVar`/`EmitLoadVarRcx` + `LeafSymRcxLoadable` (pass 2) |
-| `compiler/ir_codegen386/arm32/aarch64/riscv32/xtensa.inc` | cross backends — read the shared (optimized) IR; **no emitter peepholes** |
-| `Makefile` | `test-opt`, `stabilize`/`pin`, `benchmark-opt-levels` |
+| `compiler/symtab.inc` | `EmitLoadVar`/`EmitLoadVarRcx` + `LeafSymRcxLoadable` (pass 2); **`ResidentRegOf`/`RegcallRefreshResident` + resident hooks + epilogue restore (§4)** |
+| `compiler/ir_codegen386/arm32/aarch64/riscv32/xtensa.inc` | cross backends — read the shared (optimized) IR incl. inlined bodies; **no emitter peepholes, no regcall (x86-64 only)** |
+| `Makefile` | `test-opt` (-O1/-O2 differential corpus + fixedpoints); cross-target inline gates; `stabilize`/`pin` (now -O2); `benchmark-opt-levels` |
 
 **Tickets:** `feature-optimization-levels` (umbrella + log),
-`feature-callconv-register-args` (-O2 regcall),
+`feature-callconv-register-args` (-O2 regcall — phase 0/1 done),
 `feature-opt-store-reload-elimination` (blocked),
-`feature-inline-routines` (-O1/-O2 inlining),
+`feature-inline-routines` (-O2 inlining — v1/2a/3 done, 2b/nested queued),
 `feature-const-eval-typecast-int64` (a fold gap).
