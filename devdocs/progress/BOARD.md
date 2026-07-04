@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-selfhost-multifn-ifelse-miscompile | A | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | feature-rust-frontend-skeleton | A | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | B | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | A | feature | Rust frontend — generics with trait bounds | — |
@@ -143,7 +142,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (452)
+## done (453)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -331,6 +330,7 @@ _none_
 | bug-riscv32-chess-perft-runtime-corruption | A | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
 | bug-riscv32-hosted-writeln-hello-hangs | A | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-selfhost-multifn-ifelse-miscompile | A | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |

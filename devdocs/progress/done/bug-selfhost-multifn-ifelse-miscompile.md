@@ -1,10 +1,10 @@
 # Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result
 
 - **Type:** bug — Track A / Track R (joint)
-- **Status:** working — Track R's trigger fixed and verified; Track A's
-  `IR_UNSUPPORTED`-should-hard-error hardening (independent, general
-  safety net) still open, see log
-- **Owner:** —
+- **Status:** DONE 2026-07-04 — Track R trigger fixed (rparser.inc:609
+  `RParseIf()`, on master) + Track A hardening delivered (`--strict-ir` guard)
+  + regression gate in `make test` (`test/test_rust_else_if.rs`)
+- **Owner:** Track A (finished the ownerless Track A half)
 - **Opened:** 2026-07-03 (found while validating Track R / Rust frontend
   sub-tickets 1-2, but the bug is in shared compiler internals, not the
   Rust frontend, and is not Rust-specific in principle — see below)
@@ -194,3 +194,31 @@ block in the PXX build, at the real else-if in the FPC build.
   territory with other Track A work concurrently landing on `master`, and
   root-causing further needs disassembly-level self-host debugging beyond
   what was practical while also carrying Track R's own sub-tickets.
+
+## CLOSED — 2026-07-04 (Track A finished the ownerless half)
+
+Both halves are now on `master` and verified together:
+
+1. **Track R trigger (already merged):** `rparser.inc:609` reads
+   `elseNode := RParseIf()` — parens present, with the own-name-Result-pseudo-var
+   landmine documented inline. Confirmed on master, not just frank2.
+2. **Track A hardening (landed 2026-07-04, commit 77e2fbd7):** the opt-in
+   `--strict-ir` guard — `IRVerify` hard-errors on any `IR_UNSUPPORTED` node
+   (referenced OR dead), turning "frontend gap → silent nondeterministic
+   self-host miscompile" into an immediate compile error naming the AST kind.
+   This is the general safety net that would have caught the dead node the
+   instant rparser emitted it. Default OFF (Track R rust frontend still in dev);
+   flip-to-default tracked in [[feature-selfhost-guard-ir-unsupported]].
+
+**Regression gate (the acceptance item):** `test/test_rust_else_if.rs` — the
+exact ticket repro (3 fns, one if/else-if/else-return chain, a call) — wired
+into `make test` (`test-core`), asserted to **exit 20** both plain and under
+`--strict-ir` (the latter also proves rparser no longer emits `IR_UNSUPPORTED`
+here). This is the repo's **first rust-frontend gate in `make test`** — master
+carried the rust frontend with zero make-test coverage until now. Verified on
+the self-hosted `pascal26`: exit 20 (was 1/2 wrong before the rparser fix).
+
+The ticket's "is this Rust-specific?" thread resolved to YES (Track A's
+2026-07-04 investigation: the identical shape in Pascal and C compiled correctly
+and byte-identically) — so a `.pas`/`.c` regression can't reproduce it; the `.rs`
+gate is the right and only faithful regression.

@@ -440,6 +440,12 @@ test-core: $(COMPILER)
 	# signal runtime: SetSignalHandler hooks fire + program survives; nil-revert dies killed-by-SIGTERM (143)
 	./$(COMPILER) test/test_signal_handlers.pas /tmp/test_signal_handlers26
 	test "$$(/tmp/test_signal_handlers26; echo "exit=$$?")" = "$$(printf 'usr1=2 int=1 term=1\nreverted\nexit=143')"
+	# rust frontend else-if self-host miscompile regression (bug-selfhost-multifn-ifelse-miscompile):
+	# 3-fn program, one if/else-if/else-return chain + call; classify(1)=20 -> exit 20. Also under --strict-ir (0 IR_UNSUPPORTED).
+	./$(COMPILER) test/test_rust_else_if.rs /tmp/test_rust_else_if26
+	/tmp/test_rust_else_if26; test "$$?" = "20"
+	./$(COMPILER) --strict-ir test/test_rust_else_if.rs /tmp/test_rust_else_if_si26
+	/tmp/test_rust_else_if_si26; test "$$?" = "20"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
