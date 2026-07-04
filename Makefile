@@ -3032,8 +3032,11 @@ test-opt: $(COMPILER)
 	         test_metaclass_construct test_const_record_method_prebody; do \
 	  ./$(COMPILER) test/$$t.pas /tmp/opt0_$$t >/dev/null && \
 	  ./$(COMPILER) -O1 test/$$t.pas /tmp/opt1_$$t >/dev/null && \
+	  ./$(COMPILER) -O2 test/$$t.pas /tmp/opt2_$$t >/dev/null && \
 	  /tmp/opt0_$$t > /tmp/opt0_$$t.out && /tmp/opt1_$$t > /tmp/opt1_$$t.out && \
-	  cmp -s /tmp/opt0_$$t.out /tmp/opt1_$$t.out || { echo "OPT DIFF: $$t"; exit 1; }; \
+	  /tmp/opt2_$$t > /tmp/opt2_$$t.out && \
+	  cmp -s /tmp/opt0_$$t.out /tmp/opt1_$$t.out || { echo "OPT DIFF O1: $$t"; exit 1; }; \
+	  cmp -s /tmp/opt0_$$t.out /tmp/opt2_$$t.out || { echo "OPT DIFF O2: $$t"; exit 1; }; \
 	done
 	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/opt0_atomic64 >/dev/null
 	./$(COMPILER) -O1 --threadsafe test/test_atomic64.pas /tmp/opt1_atomic64 >/dev/null
@@ -3045,7 +3048,14 @@ test-opt: $(COMPILER)
 	/tmp/pascal26-o1a -O1 $(COMPILER_SRC) /tmp/pascal26-o1b
 	/tmp/pascal26-o1b -O1 $(COMPILER_SRC) /tmp/pascal26-o1c
 	cmp /tmp/pascal26-o1b /tmp/pascal26-o1c
-	@echo "test-opt OK (differential corpus + -O1 fixedpoint)"
+	# -O2 self-compile fixedpoint (register calling convention, feature-callconv-
+	# register-args): an -O2-built compiler rebuilding itself at -O2 reaches
+	# byte-identity too. Gates the r14/r15 param-residency codegen.
+	./$(COMPILER) -O2 $(COMPILER_SRC) /tmp/pascal26-o2a
+	/tmp/pascal26-o2a -O2 $(COMPILER_SRC) /tmp/pascal26-o2b
+	/tmp/pascal26-o2b -O2 $(COMPILER_SRC) /tmp/pascal26-o2c
+	cmp /tmp/pascal26-o2b /tmp/pascal26-o2c
+	@echo "test-opt OK (differential corpus + -O1/-O2 fixedpoint)"
 
 # stabilize-fast: everyday iteration pin — test-smoke instead of the full
 # suite, and the already-proven fixedpoint binary is recorded directly (the

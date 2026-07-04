@@ -844,6 +844,20 @@ var
   RegcallCapped2         : Integer;  { sum over bodies of min(eligible-in-body, 2) — phase-1 (r14/r15) capture }
   RegcallCapped5         : Integer;  { sum over bodies of min(eligible-in-body, 5) — phase-2 (rbx/r12/r13 too) capture }
   RegcallEligibleUses    : Integer;  { IR_LOAD_SYM+IR_STORE_SYM refs to eligible params — reload/spill traffic removable }
+  { Phase-1 register calling convention (feature-callconv-register-args), -O2,
+    x86-64 only. Up to 2 eligible scalar-by-value params of the current proc are
+    kept resident in callee-saved r14/r15 for the whole body: reads become
+    `mov rax/rcx, r14/r15` instead of a frame reload. The frame slot is still the
+    authoritative copy (the early prologue spill writes it, and every store
+    dual-writes it), so any non-EmitLoadVar reader — and the excluded addr-taken
+    cases — stay correct; residency is a read cache. r14/r15 are callee-saved, so
+    the caller's values are saved to a reserved frame slot at body entry and
+    restored in the epilogue. These globals hold the CURRENT proc's residency
+    (procs compile sequentially; nested procs flush after the enclosing one). }
+  RcResidentCount   : Integer;               { 0..2 params resident in the current body }
+  RcResidentSym     : array[0..1] of Integer; { Syms[] index of each resident param }
+  RcResidentReg     : array[0..1] of Integer; { 14 or 15 }
+  RcResidentSaveOff : array[0..1] of Integer; { rbp offset of the caller-reg save slot }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

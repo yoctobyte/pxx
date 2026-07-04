@@ -5189,12 +5189,68 @@ begin
   if eligibleHere > 5 then Inc(RegcallCapped5, 5) else Inc(RegcallCapped5, eligibleHere);
 end;
 
+{ Phase-1 register calling convention (feature-callconv-register-args), -O2 x86-64:
+  assign up to 2 eligible scalar-by-value params of CurProc to callee-saved
+  r14/r15 and emit the body-entry residency setup (save caller reg -> reserved
+  frame slot; load the param value from its frame slot with canonical extension
+  into the register). Eligibility = scalar int/ptr, not IsRef/IsArray, address
+  never taken in the body (no IR_LEA/IR_SLOTADDR on its SymIdx), and no inline asm
+  in the body (asm could clobber r14/r15). The frame slot stays authoritative
+  (early prologue spill wrote it; stores dual-write it), so this is a pure read
+  cache. Runs after IRVerify (IR complete) and before IROptimize, so it lands at
+  the body's start; -O0/-O1 and non-x86-64 leave RcResidentCount at 0. }
+procedure RegcallAssignResidency;
+var pi, k, sy, nextReg, saveOff: Integer;
+    addrTaken: Boolean;
+begin
+  RcResidentCount := 0;
+  if OptLevel < 2 then Exit;
+  if CurProc < 0 then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  { Generators/stackless routines load params from the coroutine instance, not the
+    plain register-spill frame model — skip residency for them. }
+  if CurProcIsGenerator or CurProcIsStackless then Exit;
+  { Inline asm in the body could use r14/r15 as scratch — bail out for the whole proc. }
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  nextReg := 14;
+  for pi := 0 to Procs[CurProc].ParamCount - 1 do
+  begin
+    if RcResidentCount >= 2 then Break;
+    sy := Procs[CurProc].Params[pi].SymIdx;
+    if Procs[CurProc].Params[pi].IsRef then Continue;
+    if Procs[CurProc].Params[pi].IsArray then Continue;
+    if not RegcallScalarType(Procs[CurProc].Params[pi].TypeKind) then Continue;
+    addrTaken := False;
+    for k := 0 to IRCount - 1 do
+      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
+      begin addrTaken := True; Break; end;
+    if addrTaken then Continue;
+    { Reserve a frame slot for the caller's r14/r15 and save it. }
+    FrameSize := AlignTo(FrameSize + 8, 8);
+    saveOff := -FrameSize;
+    if nextReg = 14 then begin EmitB($4C); EmitB($89); EmitB($B5); EmitI32(saveOff); end  { mov [rbp+off], r14 }
+    else begin EmitB($4C); EmitB($89); EmitB($BD); EmitI32(saveOff); end;                  { mov [rbp+off], r15 }
+    { Load the param value (frame -> rax, canonical extension) BEFORE listing it
+      resident, so EmitLoadVar reads the frame slot rather than the register. }
+    EmitLoadVar(sy);
+    if nextReg = 14 then begin EmitB($49); EmitB($89); EmitB($C6); end   { mov r14, rax }
+    else begin EmitB($49); EmitB($89); EmitB($C7); end;                  { mov r15, rax }
+    RcResidentSym[RcResidentCount] := sy;
+    RcResidentReg[RcResidentCount] := nextReg;
+    RcResidentSaveOff[RcResidentCount] := saveOff;
+    Inc(RcResidentCount);
+    nextReg := 15;
+  end;
+end;
+
 procedure CompileAST(node: Integer);
 begin
   IRReset;
   IRLowerAST(node);
   IRVerify;
   if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
+  RegcallAssignResidency;
   { -O1+ shared-IR optimization pipeline (see ir.inc / IROptimize). Gated here
     so -O0 emits the raw lowering byte-identically; runs after IRVerify (on
     validated IR) and before IRDump so `--dump-ir` shows the optimized form. }

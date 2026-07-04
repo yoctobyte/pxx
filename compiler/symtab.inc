@@ -2155,9 +2155,35 @@ end;
 
 { ===== Variable load/store ===== }
 
-procedure EmitLoadVar(idx: Integer);
-var tk: TTypeKind; sz: Integer; sgn: Boolean;
+{ Register calling convention (feature-callconv-register-args, -O2 x86-64): if
+  idx is a param currently resident in r14/r15, return that register number (14
+  or 15), else 0. O(RcResidentCount<=2). Non-x86-64 and -O0/-O1 keep the count at
+  0, so this always returns 0 there and the residency emit paths never fire. }
+function ResidentRegOf(idx: Integer): Integer;
+var k: Integer;
 begin
+  ResidentRegOf := 0;
+  for k := 0 to RcResidentCount - 1 do
+    if RcResidentSym[k] = idx then
+    begin
+      ResidentRegOf := RcResidentReg[k];
+      Exit;
+    end;
+end;
+
+procedure EmitLoadVar(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
+begin
+  { Resident param read: mov rax, r14/r15 (the frame slot is authoritative but the
+    register is a same-value cache — a correctly size/sign-extended value was
+    loaded into it at body entry, and every store re-extends it). }
+  rreg := ResidentRegOf(idx);
+  if rreg <> 0 then
+  begin
+    if rreg = 14 then begin EmitB($4C); EmitB($89); EmitB($F0); end   { mov rax, r14 }
+    else begin EmitB($4C); EmitB($89); EmitB($F8); end;               { mov rax, r15 }
+    Exit;
+  end;
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
@@ -2344,8 +2370,16 @@ begin
 end;
 
 procedure EmitLoadVarRcx(idx: Integer);
-var tk: TTypeKind; sz: Integer; sgn: Boolean;
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
+  { Resident param direct-load into rcx: mov rcx, r14/r15. }
+  rreg := ResidentRegOf(idx);
+  if rreg <> 0 then
+  begin
+    if rreg = 14 then begin EmitB($4C); EmitB($89); EmitB($F1); end   { mov rcx, r14 }
+    else begin EmitB($4C); EmitB($89); EmitB($F9); end;               { mov rcx, r15 }
+    Exit;
+  end;
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
@@ -2403,6 +2437,23 @@ begin
           begin EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
       end;
   end;
+end;
+
+{ Reload a resident param's frame slot into its r14/r15 cache with the canonical
+  size/sign extension (by temporarily de-listing it so EmitLoadVar reads memory).
+  Called after a store to keep the register byte-equal to a fresh load. }
+procedure RegcallRefreshResident(idx: Integer);
+var k, rreg, saved: Integer;
+begin
+  rreg := 0; saved := -1;
+  for k := 0 to RcResidentCount - 1 do
+    if RcResidentSym[k] = idx then begin rreg := RcResidentReg[k]; saved := k; Break; end;
+  if rreg = 0 then Exit;
+  RcResidentSym[saved] := -1;      { de-list: force a frame load }
+  EmitLoadVar(idx);                { rax = re-extended value from the frame slot }
+  RcResidentSym[saved] := idx;     { re-list }
+  if rreg = 14 then begin EmitB($49); EmitB($89); EmitB($C6); end   { mov r14, rax }
+  else begin EmitB($49); EmitB($89); EmitB($C7); end;               { mov r15, rax }
 end;
 
 procedure EmitStoreVar(idx: Integer);
@@ -2507,6 +2558,13 @@ begin
       end;
     skConst: Error('cannot assign to constant');
   end;
+  { Resident param dual-write (feature-callconv-register-args): the frame slot
+    was just written above; refresh the r14/r15 cache so it stays byte-equal to a
+    fresh load. Reload through EmitLoadVar (with this sym temporarily de-listed so
+    it reads the frame, not the stale register) to reuse the exact size/sign
+    extension every other load applies, then copy into the resident register. }
+  if ResidentRegOf(idx) <> 0 then
+    RegcallRefreshResident(idx);
 end;
 
 procedure EmitCmpRaxVar(idx: Integer);
@@ -5018,6 +5076,15 @@ begin
         begin EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); end; { movq rax, xmm0 }
     end;
   end;
+  { Register calling convention (feature-callconv-register-args): restore the
+    caller's r14/r15 (callee-saved) from their reserved frame slots before the
+    frame teardown. Reached by every return (early Exit and fall-through both go
+    through EmitProcEpilog). rbp is still valid here; rax (the result) untouched. }
+  for i := 0 to RcResidentCount - 1 do
+    if RcResidentReg[i] = 14 then
+      begin EmitB($4C); EmitB($8B); EmitB($B5); EmitI32(RcResidentSaveOff[i]); end  { mov r14, [rbp+off] }
+    else
+      begin EmitB($4C); EmitB($8B); EmitB($BD); EmitI32(RcResidentSaveOff[i]); end; { mov r15, [rbp+off] }
   EmitB($C9); EmitB($C3);
 end;
 
