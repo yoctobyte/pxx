@@ -858,8 +858,9 @@ end;
 
 procedure ParseGenericTemplate;
 var
-  templateName, paramName: AnsiString;
+  templateName, paramName, nextStr: AnsiString;
   depth, startTok, cur, finalCur: Integer;
+  isOpener: Boolean;
 begin
   Next; { consume 'generic' }
   if CurTok.Kind <> tkIdent then Error('expected generic class name');
@@ -878,7 +879,28 @@ begin
   cur := TokPos;
   while (cur < TokCount) and (depth > 0) do
   begin
-    if Tokens[cur].Kind in [tkClass, tkRecord] then
+    if Tokens[cur].Kind = tkClass then
+    begin
+      { `class function/procedure/var/property/of` (and soft
+        constructor/destructor/operator) is a member prefix, not a nested
+        class body — counting it as an opener swallowed the rest of the
+        unit into the template. }
+      isOpener := True;
+      if cur + 1 < TokCount then
+      begin
+        if Tokens[cur+1].Kind in [tkFunction, tkProcedure, tkVar, tkProperty, tkOf] then
+          isOpener := False
+        else if Tokens[cur+1].Kind = tkIdent then
+        begin
+          nextStr := GetTokenStr(cur+1);
+          if CaseEqual(nextStr, 'constructor') or CaseEqual(nextStr, 'destructor') or
+             CaseEqual(nextStr, 'operator') then
+            isOpener := False;
+        end;
+      end;
+      if isOpener then Inc(depth);
+    end
+    else if Tokens[cur].Kind = tkRecord then
       Inc(depth)
     else if Tokens[cur].Kind = tkEnd then
       Dec(depth);
@@ -13902,8 +13924,12 @@ begin
     begin
       { Start the captured range at the 'procedure'/'function' keyword (one
         token before the template name) so the specialized stream is a complete
-        standalone subroutine the top-level loop can parse. }
-      BufferGenericMethod(depth, TokPos - 3);
+        standalone subroutine the top-level loop can parse. A `class` method
+        impl starts one token earlier so the prefix survives into the stream. }
+      if isClassKeyword then
+        BufferGenericMethod(depth, TokPos - 4)
+      else
+        BufferGenericMethod(depth, TokPos - 3);
       GenericMethodBuffered := True;
       Exit;
     end;
