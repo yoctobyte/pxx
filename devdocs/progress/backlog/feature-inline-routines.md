@@ -223,10 +223,18 @@ bit-twiddles), where each site drops a full call sequence.
   parser.inc) — reuses the value-return splice + slice-3 arg temps unchanged;
   AN_TERNARY's short-circuit lowering yields the value. Covers Min/Max/Clamp-
   style helpers. Gates green.
-- **Slice 2b** (remaining): multi-statement bodies with ordinal locals (fresh
-  caller locals + placeholder remap), single Exit → fall-through. Needs real
-  statement cloning (vs the expression/ternary shapes 1+2a reduce to). Reaches
-  the rest of the 664 strict leaf@12 sites.
+- **Slice 2b**: ✅ DONE (2026-07-04) — **gated -O3** (opt-in until proven, keeps
+  the pinned -O2 untouched; -O2 output verified byte-identical to the pin).
+  Straight-line multi-statement bodies with scalar ordinal locals + single Result
+  (`t:=a+b; Result:=t*t`). Retains the whole AN_SEQ chain with param/local/Result
+  → `AN_INLINE_PARAM`/`AN_INLINE_LOCAL`/`AN_INLINE_RESULT` placeholders
+  (`TryRetainInlineStmtBody`); at the call site allocs fresh caller locals + a
+  Result temp, clones + lowers the statements, returns a load of the Result temp.
+  Safety: straight-line only (no branches yet), all locals scalar, Result never
+  read, read-before-write guard, slice-3 arg temps. Validated O0==O3 across 500
+  programs + all 4 cross targets; -O3 self-fixedpoint; test-opt/-cross gated.
+  **Remaining for a future slice 2c:** if-then-else *with* locals (needs the
+  branch-aware assigned-before-read analysis); early `Exit` → merge label.
 - **Slice 3**: ✅ DONE (2026-07-04). Non-pure args evaluated once into fresh temps
   (`IRInlineExpand`, ir.inc). Pure args (literal / plain scalar ident) still
   substitute directly; if ANY arg is impure, ALL args are temp'd left-to-right so
