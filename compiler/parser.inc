@@ -244,7 +244,7 @@ end;
 procedure TryRetainInlineStmtBody(procIdx, bodyNode, retSym: Integer);
 var i, j, seqN, stmtN, lhsN, rhsN, startNext, cloned, resultWrites, lidx: Integer;
 begin
-  if OptLevel < 3 then Exit;                 { -O3 only; -O2 pin untouched }
+  if OptLevel < 2 then Exit;                 { -O2 (promoted from -O3 once proven) }
   { Enumerate scalar callee locals (excluding Result) → the Ret* placeholder map. }
   RetLocalCnt := 0;
   for i := Procs[procIdx].ScopeBase to SymCount - 1 do

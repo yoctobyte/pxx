@@ -45,7 +45,7 @@ the historic 1:1 lowering unchanged.**
 | `-O0` | No optimization beyond the pre-existing local const-fold. 1:1 source↔asm, debuggable. The self-host gate runs here and is **sacred**. |
 | `-O1` | Cheap, safe, deterministic, no code-size blow-up. Emitter peepholes + shared-IR DCE/redundant-jump. |
 | `-O2` | Fuller speed; size may grow. **Register calling convention (r14/r15) + inline expansion landed (§4).** Pins are -O2-built. |
-| `-O3` | Aggressive, opt-in. **Inline slice 2b (straight-line multi-statement bodies) landed here** — gated -O3 so the -O2 pin stays untouched until 2b is proven. Reserved also for nested/non-leaf inline + cost model. |
+| `-O3` | Aggressive, opt-in. **Currently aliases -O2** (inline slice 2b landed here first, then promoted to -O2 once proven). Reserved for nested/non-leaf inline + cost model. |
 
 ### Level-assignment policy (the O1 / O2 line)
 
@@ -256,7 +256,7 @@ call sites (2.2%), on hot tiny helpers. Validated byte-identical `-O0` vs `-O2`
 across **505 programs** and on all four cross targets (i386/aarch64/arm32/
 riscv32).
 
-**Slice 2b (straight-line multi-statement bodies, `-O3`).** A leaf function whose
+**Slice 2b (straight-line multi-statement bodies, `-O2`).** A leaf function whose
 body is a straight-line statement sequence with scalar ordinal locals and a
 single Result (`t := a+b; Result := t*t`) is retained as the whole `AN_SEQ` chain
 (param/local/Result idents → `AN_INLINE_PARAM`/`AN_INLINE_LOCAL`/`AN_INLINE_RESULT`
@@ -264,15 +264,16 @@ placeholders) and spliced by allocating a fresh caller local per callee local + 
 Result temp, cloning + lowering the statements, then yielding a load of the Result
 temp (the same emit-inline-then-load pattern `AN_TERNARY` uses). Straight-line
 only, all locals scalar, Result never read, a read-before-write guard, slice-3 arg
-temps. **Gated `-O3`** so the `-O2` pin is untouched (an -O2 build emits
-byte-identical output to the pinned binary). Validated O0==O3 across 500 programs
-+ all four cross targets; -O3 self-fixedpoint. **Nested (non-leaf) inline stays
-deferred** (a later -O3+ slice).
+temps. Landed behind `-O3` first, then **promoted to `-O2` once proven** (500-
+program O0-vs differential + all four cross targets + -O2 self-fixedpoint, all
+byte-clean). Still transparent downstream: B/C/D compile at `-O0` where inline
+never fires. **Nested (non-leaf) inline + branch-with-locals stay deferred** (see
+`feature-inline-nonleaf-and-branch-locals`).
 
-All proven by the same four gates plus per-tier self-fixedpoint (`-O2` and now
-`-O3`). **Pins are `-O2`-built** (transparent: an -O2 compiler emits the same
-`-O0` output, so downstream sees identical bytes, just a faster compiler); `-O3`
-is opt-in on top.
+All proven by the same four gates plus the `-O2` self-fixedpoint. **Pins are
+`-O2`-built** (transparent: an -O2 compiler emits the same `-O0` output, so
+downstream sees identical bytes, just a faster compiler). `-O3` currently aliases
+`-O2` (no -O3-only pass yet).
 
 ---
 
@@ -290,7 +291,7 @@ is opt-in on top.
 | **Store-reload elimination** | IR, needs liveness | **blocked** | `feature-opt-store-reload-elimination` — no rax-write choke point for airtight invalidation; wants the liveness scaffold |
 | **Register calling convention (r14/r15)** | ABI (x86-64) | **LANDED (-O2, §4)** | `feature-callconv-register-args` phase 1. Phase 2 (rbx/r12/r13) + phase 3 (caller-side) queued; diminishing per measurement. |
 | **Inline expansion (pure-expr + ternary leaf)** | AST/IR (all targets) | **LANDED (-O2, §4)** | `feature-inline-routines` v1/2a/3. |
-| **Inline slice 2b (straight-line multi-stmt bodies)** | AST/IR (all targets) | **LANDED (-O3, §4)** | opt-in until proven; nested/non-leaf still deferred. |
+| **Inline slice 2b (straight-line multi-stmt bodies)** | AST/IR (all targets) | **LANDED (-O2, §4)** | landed -O3, promoted to -O2 once proven; nested/non-leaf + branch-with-locals deferred (`feature-inline-nonleaf-and-branch-locals`). |
 
 Store-reload elimination remains the notable blocked item — it wants the same
 register-liveness scaffold, and phase-2 regcall would build toward it.

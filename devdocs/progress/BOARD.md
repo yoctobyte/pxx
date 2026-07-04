@@ -30,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (74)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -68,6 +68,7 @@ _none_
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
 | feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
 | feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
+| feature-inline-nonleaf-and-branch-locals | A | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-js-frontend-parked | A | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
@@ -651,6 +652,7 @@ _none_
 - [B] feature-ilja-tui
 - [A] feature-implicit-locals-sloppy-switch
 - [A] feature-inline-asm-xtensa
+- [A] feature-inline-nonleaf-and-branch-locals
 - [A] feature-inline-routines
 - [A] feature-js-frontend-parked
 - [B] feature-move-fillchar-intrinsics
