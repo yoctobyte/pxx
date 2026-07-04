@@ -478,7 +478,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas /tmp/test_fpc_compat_batch226
-	test "$$(/tmp/test_fpc_compat_batch226 | tail -1)" = "total ok 12 / 12"
+	test "$$(/tmp/test_fpc_compat_batch226 | tail -1)" = "total ok 13 / 13"
 	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp (skipped when fpcsrc absent)
 	@if [ -d /usr/share/fpcsrc/3.2.2/rtl/objpas ]; then \
 	  ./$(COMPILER) --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/rtl/objpas test/test_fgl_use.pas /tmp/test_fgl_use26 >/dev/null && \

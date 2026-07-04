@@ -26,6 +26,7 @@ type
     procedure Deref(p: Pointer); overload;          { fgl's overload pair shape }
     procedure Deref(a, b: Integer); overload;
     function UseCallback(c: TCmp): Integer;
+    function NilDef(p: Pointer = nil): Boolean;
     function UseField: Integer;
     procedure GrowViaProp;
     procedure HookSelf;
@@ -80,6 +81,11 @@ begin
     UseCallback := -1;
 end;
 
+function TL.NilDef(p: Pointer): Boolean;
+begin
+  NilDef := p = nil;
+end;
+
 function TL.UseField: Integer;
 begin
   { indirect call through a method-pointer FIELD, unqualified }
@@ -132,6 +138,7 @@ begin
   Check('methodptr-param-arg-and-call', l.UseCallback(@l.Cmp7) = 7);
   l.HookSelf;
   Check('bare-at-method-and-field-call', l.UseField = 7);
+  Check('nil-default-param', l.NilDef and not l.NilDef(@k));
 
   l.FBuf := nil;
   GetMem(l.FBuf, 8);

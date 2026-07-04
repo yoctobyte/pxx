@@ -7187,6 +7187,7 @@ begin
   if CurTok.Kind = tkMinus then begin Next; Result := -ConstEvalFactor(); Exit; end;
   if CurTok.Kind = tkPlus  then begin Next; Result :=  ConstEvalFactor(); Exit; end;
   if CurTok.Kind = tkNot   then begin Next; Result := not ConstEvalFactor(); Exit; end;
+  if CurTok.Kind = tkNil   then begin Next; Result := 0; Exit; end;   { `= nil` default params (FPC RTL) }
   hasConstCast := False;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
