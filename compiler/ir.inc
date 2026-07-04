@@ -1972,6 +1972,22 @@ begin
     IRCloneInlineBody := CloneAST(InlineArgAST[ASTIVal[node]]);
     Exit;
   end;
+  if ASTKind[node] = AN_INLINE_LOCAL then
+  begin
+    r := AllocNode(AN_IDENT);
+    ASTIVal[r] := InlineLocalSym[ASTIVal[node]];
+    ASTTk[r]   := ASTTk[node];
+    IRCloneInlineBody := r;
+    Exit;
+  end;
+  if ASTKind[node] = AN_INLINE_RESULT then
+  begin
+    r := AllocNode(AN_IDENT);
+    ASTIVal[r] := InlineResultSym;
+    ASTTk[r]   := ASTTk[node];
+    IRCloneInlineBody := r;
+    Exit;
+  end;
   r := AllocNode(ASTKind[node]);
   ASTIVal[r]    := ASTIVal[node];
   ASTSOffset[r] := ASTSOffset[node];
@@ -2050,8 +2066,23 @@ begin
       InlineArgAST[n]    := identNode;
     end;
   end;
-  clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
-  IRInlineExpand := IRLowerAST(clonedRoot);
+  if InlineBodyIsStmt[cpi] then
+  begin
+    { Slice 2b: alloc a caller Result temp + a fresh caller local per callee local,
+      clone the statement chain (placeholders → these syms), lower it (emits the
+      statements), then yield a load of the Result temp as the call's value. }
+    InlineResultSym := AllocVar('', Procs[cpi].RetType);
+    for n := 0 to InlineLocalCnt[cpi] - 1 do
+      InlineLocalSym[n] := AllocVar('', IntToTypeKind(InlineLocalTk[cpi*MAX_INLINE_LOCALS + n]));
+    clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
+    IRLowerAST(clonedRoot);
+    IRInlineExpand := IRAppend(IR_LOAD_SYM, InlineResultSym, -1, -1, 0, Ord(Procs[cpi].RetType));
+  end
+  else
+  begin
+    clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
+    IRInlineExpand := IRLowerAST(clonedRoot);
+  end;
   Dec(InliningActive);
 end;
 

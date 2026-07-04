@@ -86,8 +86,11 @@ end;
 
 { Is E built only from inline-safe nodes (literals, params, scalar globals/consts,
   arithmetic/logical operators)? Rejects calls, indexing, fields, managed/float,
-  and any ident that is neither a param nor a scalar global/const. }
-function InlineExprSimple(node, procIdx: Integer): Boolean;
+  and any ident that is not allowed. `allowLocals` additionally permits a scalar
+  callee local (slice 2b). `retSym` (>=0) is the Result symbol whose READ is
+  forbidden (Result may only be an assignment target, never read — avoids the
+  uninitialised-Result hazard). }
+function InlineExprSimple(node, procIdx: Integer; allowLocals: Boolean; retSym: Integer): Boolean;
 var idx: Integer;
 begin
   InlineExprSimple := False;
@@ -99,16 +102,19 @@ begin
       begin
         idx := ASTIVal[node];
         if (idx < 0) or (idx >= SymCount) then Exit;
+        if idx = retSym then Exit;                     { Result-read not allowed }
         if Syms[idx].IsArray then Exit;
         if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
         if InlineParamIndexOf(procIdx, idx) >= 0 then
           InlineExprSimple := True
         else if (Syms[idx].Kind = skGlobal) or (Syms[idx].Kind = skConst) then
+          InlineExprSimple := True
+        else if allowLocals and (Syms[idx].Kind = skLocal) then
           InlineExprSimple := True;
       end;
     AN_BINOP, AN_NEG, AN_NOT:
-      InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx) and
-                          InlineExprSimple(ASTRight[node], procIdx);
+      InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx, allowLocals, retSym) and
+                          InlineExprSimple(ASTRight[node], procIdx, allowLocals, retSym);
   end;
 end;
 
@@ -131,8 +137,16 @@ end;
 
 { Deep-copy E into the reserved region, rewriting each param ident into an
   AN_INLINE_PARAM placeholder (IVal = param index). -1 on overflow (caller bails). }
+function RetLocalIndexOf(sym: Integer): Integer;
+var j: Integer;
+begin
+  RetLocalIndexOf := -1;
+  for j := 0 to RetLocalCnt - 1 do
+    if RetLocalSym[j] = sym then begin RetLocalIndexOf := j; Exit; end;
+end;
+
 function CloneToInlineRegion(node, procIdx: Integer): Integer;
-var r, pidx: Integer;
+var r, pidx, lidx: Integer;
 begin
   if node < 0 then begin CloneToInlineRegion := -1; Exit; end;
   if ASTKind[node] = AN_IDENT then
@@ -143,6 +157,25 @@ begin
       r := AllocInlineNode(AN_INLINE_PARAM);
       if r < 0 then begin CloneToInlineRegion := -1; Exit; end;
       ASTIVal[r] := pidx;
+      ASTTk[r]   := ASTTk[node];
+      CloneToInlineRegion := r;
+      Exit;
+    end;
+    { slice 2b: Result and local placeholders (Ret* context set by the caller). }
+    if (RetResSym >= 0) and (ASTIVal[node] = RetResSym) then
+    begin
+      r := AllocInlineNode(AN_INLINE_RESULT);
+      if r < 0 then begin CloneToInlineRegion := -1; Exit; end;
+      ASTTk[r] := ASTTk[node];
+      CloneToInlineRegion := r;
+      Exit;
+    end;
+    lidx := RetLocalIndexOf(ASTIVal[node]);
+    if lidx >= 0 then
+    begin
+      r := AllocInlineNode(AN_INLINE_LOCAL);
+      if r < 0 then begin CloneToInlineRegion := -1; Exit; end;
+      ASTIVal[r] := lidx;
       ASTTk[r]   := ASTTk[node];
       CloneToInlineRegion := r;
       Exit;
@@ -185,10 +218,89 @@ begin
   BuildInlineTernary := t;
 end;
 
-{ If bodyNode is an inline-eligible function body, retain it. Handles two shapes:
-  a pure-expression `Result := E`, and an `if c then Result:=A else Result:=B`
-  one-liner (retained as an AN_TERNARY). Called at the definition, after the body
-  AST is parsed. OptLevel>=2 only. }
+{ Walk a shape-3 RHS expression; every callee-local read (RetLocal map) must
+  already be marked written in InlineWrittenLocal (read-before-write guard). }
+function InlineStmtRhsLocalsWritten(node: Integer): Boolean;
+var lidx: Integer;
+begin
+  InlineStmtRhsLocalsWritten := False;
+  if node < 0 then begin InlineStmtRhsLocalsWritten := True; Exit; end;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    lidx := RetLocalIndexOf(ASTIVal[node]);
+    if (lidx >= 0) and (not InlineWrittenLocal[lidx]) then Exit;
+    InlineStmtRhsLocalsWritten := True;
+    Exit;
+  end;
+  InlineStmtRhsLocalsWritten := InlineStmtRhsLocalsWritten(ASTLeft[node]) and
+                                InlineStmtRhsLocalsWritten(ASTRight[node]);
+end;
+
+{ Slice 2b (-O3): retain a STRAIGHT-LINE multi-statement body — an AN_SEQ chain
+  where every statement is `local := E` or `Result := E`, E over params / scalar
+  globals-consts / already-written locals, no branches, no Result read, Result
+  written at least once. All locals scalar ordinal. Retains the whole chain with
+  param/local/Result idents rewritten to placeholders. }
+procedure TryRetainInlineStmtBody(procIdx, bodyNode, retSym: Integer);
+var i, j, seqN, stmtN, lhsN, rhsN, startNext, cloned, resultWrites, lidx: Integer;
+begin
+  if OptLevel < 3 then Exit;                 { -O3 only; -O2 pin untouched }
+  { Enumerate scalar callee locals (excluding Result) → the Ret* placeholder map. }
+  RetLocalCnt := 0;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+  begin
+    if Syms[i].Kind <> skLocal then Continue;
+    if i = retSym then Continue;
+    if Syms[i].IsArray then Exit;
+    if not InlineScalarTk(Syms[i].TypeKind) then Exit;
+    if RetLocalCnt >= MAX_INLINE_LOCALS then Exit;
+    RetLocalSym[RetLocalCnt] := i;
+    Inc(RetLocalCnt);
+  end;
+  RetResSym := retSym;
+  { Validate the chain. }
+  for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := False;
+  resultWrites := 0;
+  seqN := bodyNode;
+  while seqN <> -1 do
+  begin
+    if ASTKind[seqN] <> AN_SEQ then Exit;
+    stmtN := ASTLeft[seqN];
+    if (stmtN < 0) or (ASTKind[stmtN] <> AN_ASSIGN) then Exit;
+    lhsN := ASTLeft[stmtN];
+    rhsN := ASTRight[stmtN];
+    if (lhsN < 0) or (ASTKind[lhsN] <> AN_IDENT) then Exit;
+    if not InlineExprSimple(rhsN, procIdx, True, retSym) then Exit;
+    if not InlineStmtRhsLocalsWritten(rhsN) then Exit;
+    if ASTIVal[lhsN] = retSym then
+      Inc(resultWrites)
+    else
+    begin
+      lidx := RetLocalIndexOf(ASTIVal[lhsN]);
+      if lidx < 0 then Exit;                 { LHS is neither Result nor a tracked local }
+      InlineWrittenLocal[lidx] := True;
+    end;
+    seqN := ASTRight[seqN];
+  end;
+  if resultWrites < 1 then Exit;
+  { Retain the whole chain. }
+  startNext := InlineASTNext;
+  if InlineASTNext + 256 >= MAX_AST then Exit;
+  cloned := CloneToInlineRegion(bodyNode, procIdx);
+  if cloned < 0 then begin InlineASTNext := startNext; Exit; end;
+  if InlineASTNext - startNext > 256 then begin InlineASTNext := startNext; Exit; end;
+  InlineBodyRoot[procIdx]   := cloned;
+  InlineBodyIsStmt[procIdx] := True;
+  InlineParamCnt[procIdx]   := Procs[procIdx].ParamCount;
+  InlineLocalCnt[procIdx]   := RetLocalCnt;
+  for j := 0 to RetLocalCnt - 1 do
+    InlineLocalTk[procIdx*MAX_INLINE_LOCALS + j] := Ord(Syms[RetLocalSym[j]].TypeKind);
+end;
+
+{ If bodyNode is an inline-eligible function body, retain it. Handles: pure-
+  expression `Result := E`, `if c then Result:=A else Result:=B` (AN_TERNARY),
+  and (slice 2b, -O3) a straight-line multi-statement body. Called at the
+  definition, after the body AST is parsed. OptLevel>=2 only. }
 procedure TryRetainInlineBody(procIdx, bodyNode: Integer);
 var seqNode, stmt, lhs, rhs, i, startNext, retSym: Integer;
     pair, thenA, elseA, condN, aE, bE: Integer;
@@ -209,23 +321,25 @@ begin
     if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then Exit;
     if not InlineScalarTk(Procs[procIdx].Params[i].TypeKind) then Exit;
   end;
-  { Body shape: ParseBlockAST returns an AN_SEQ chain; a pure-expression body is a
-    single AN_SEQ node (Right=-1) whose statement is AN_ASSIGN(Result, E). }
+  { Body shape: ParseBlockAST returns an AN_SEQ chain. Shapes 1 & 2a are a single
+    statement (Right=-1); shape 3 (slice 2b, -O3) is a straight-line multi-
+    statement chain. The Ret* context defaults to neutral so shapes 1/2a never
+    emit local/Result placeholders. }
   if bodyNode < 0 then Exit;
   if ASTKind[bodyNode] <> AN_SEQ then Exit;
-  if ASTRight[bodyNode] <> -1 then Exit;        { exactly one statement }
+  RetLocalCnt := 0;
+  RetResSym := -1;
   seqNode := bodyNode;
   stmt := ASTLeft[seqNode];
   if stmt < 0 then Exit;
 
-  if ASTKind[stmt] = AN_ASSIGN then
+  if (ASTRight[seqNode] = -1) and (ASTKind[stmt] = AN_ASSIGN) then
   begin
     { Shape 1: `Result := E`. }
     lhs := ASTLeft[stmt];
     rhs := ASTRight[stmt];
     if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
-    if not InlineExprSimple(rhs, procIdx) then Exit;
-    { (E cannot reference Result: it is a skLocal, which InlineExprSimple rejects.) }
+    if not InlineExprSimple(rhs, procIdx, False, retSym) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 48 >= MAX_AST then Exit;    { budget guard }
     i := CloneToInlineRegion(rhs, procIdx);
@@ -234,10 +348,9 @@ begin
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
   end
-  else if ASTKind[stmt] = AN_IF then
+  else if (ASTRight[seqNode] = -1) and (ASTKind[stmt] = AN_IF) then
   begin
-    { Shape 2 (slice 2a): `if C then Result:=A else Result:=B` -> AN_TERNARY(C?A:B).
-      Both arms must assign Result; C/A/B all pure whitelist expressions. }
+    { Shape 2a: `if C then Result:=A else Result:=B` -> AN_TERNARY(C?A:B). }
     condN := ASTLeft[stmt];
     pair := ASTRight[stmt];
     if (pair < 0) or (ASTKind[pair] <> AN_PAIR) then Exit;
@@ -249,9 +362,9 @@ begin
     if (ASTKind[ASTLeft[elseA]] <> AN_IDENT) or (ASTIVal[ASTLeft[elseA]] <> retSym) then Exit;
     aE := ASTRight[thenA];
     bE := ASTRight[elseA];
-    if not InlineExprSimple(condN, procIdx) then Exit;
-    if not InlineExprSimple(aE, procIdx) then Exit;
-    if not InlineExprSimple(bE, procIdx) then Exit;
+    if not InlineExprSimple(condN, procIdx, False, retSym) then Exit;
+    if not InlineExprSimple(aE, procIdx, False, retSym) then Exit;
+    if not InlineExprSimple(bE, procIdx, False, retSym) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 96 >= MAX_AST then Exit;
     i := BuildInlineTernary(condN, aE, bE, procIdx, Ord(Syms[retSym].TypeKind));
@@ -259,7 +372,9 @@ begin
     if InlineASTNext - startNext > 96 then begin InlineASTNext := startNext; Exit; end;
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
-  end;
+  end
+  else
+    TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
 end;
 
 { DWARF -g (Tier 3): snapshot one symbol into the DbgVar side table. Symbol

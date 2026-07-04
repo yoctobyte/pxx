@@ -13,6 +13,7 @@ const
   PROC_HASH_SIZE = 16384;  { FindProc hash buckets; power of two (mask below) }
   SYM_HASH_SIZE  = 65536;  { FindSym hash buckets; power of two }
   MAX_PROC_PARAMS = 32;
+  MAX_INLINE_LOCALS = 8;   { max callee locals in a slice-2b (-O3) inline body }
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
@@ -278,7 +279,9 @@ const
   ATOMIC_ADD64  = 5;
 
   AN_SLOTADDR      = 77;
-  AN_INLINE_PARAM  = 78;  { placeholder inside a RETAINED inline body: IVal = param index. Only exists in the reserved inline AST region; substituted to an AN_IDENT of the caller's arg temp when the body is cloned into a call site. Never reaches IRLowerAST directly. } { address of a variable's own stack/BSS slot (lea),
+  AN_INLINE_PARAM  = 78;  { placeholder inside a RETAINED inline body: IVal = param index. Only exists in the reserved inline AST region; substituted to an AN_IDENT of the caller's arg temp when the body is cloned into a call site. Never reaches IRLowerAST directly. }
+  AN_INLINE_LOCAL  = 79;  { placeholder for a callee LOCAL: IVal = local index (slice 2b, -O3). Substituted to an AN_IDENT of a fresh caller local. }
+  AN_INLINE_RESULT = 80;  { placeholder for the callee Result (slice 2b, -O3). Substituted to an AN_IDENT of the caller Result temp. } { address of a variable's own stack/BSS slot (lea),
                            bypassing the by-ref auto-deref an AN_ADDR on a var/
                            const param gets in IRLowerAddress. ASTIVal = Syms[]
                            idx; yields tyPointer. Lowers to IR_SLOTADDR. Used by
@@ -886,6 +889,22 @@ var
   InlineASTNext    : Integer;   { next free slot in the reserved inline AST region }
   InliningActive   : Integer;   { >0 while splicing an inline body (recursion/nesting guard) }
   InlineArgAST     : array[0..MAX_PROC_PARAMS-1] of Integer; { arg AST per param index during a splice }
+  { Slice 2b (-O3): straight-line multi-statement bodies with scalar ordinal
+    locals + a single Result. The retained body is the whole AN_SEQ chain, with
+    param/local/Result idents rewritten to placeholders. }
+  InlineBodyIsStmt : array[0..MAX_PROCS-1] of Boolean; { retained body is a statement seq (needs locals + result temp), not a value expr }
+  InlineLocalCnt   : array[0..MAX_PROCS-1] of Integer; { number of callee locals in the retained body }
+  InlineLocalTk    : array[0..MAX_PROCS*MAX_INLINE_LOCALS-1] of Integer; { TypeKind ord per (proc, local index) }
+  { Retention context (set while cloning a body into the region): map from a callee
+    local/Result sym to its placeholder index. }
+  RetLocalCnt      : Integer;
+  RetLocalSym      : array[0..MAX_INLINE_LOCALS-1] of Integer;
+  RetResSym        : Integer;
+  { Splice context (set while cloning a stmt body back into the live pool): the
+    fresh caller syms each placeholder maps to. }
+  InlineLocalSym   : array[0..MAX_INLINE_LOCALS-1] of Integer;
+  InlineResultSym  : Integer;
+  InlineWrittenLocal : array[0..MAX_INLINE_LOCALS-1] of Boolean; { read-before-write guard during shape-3 validation }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;
