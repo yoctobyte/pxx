@@ -1959,6 +1959,63 @@ begin
   end;
 end;
 
+{ Inline expansion (feature-inline-routines): clone a retained inline body from
+  the reserved AST region into the LIVE pool, replacing each AN_INLINE_PARAM(i)
+  placeholder with a fresh clone of the call's i-th argument AST (in InlineArgAST).
+  The result is a normal live-pool subtree ready for IRLowerAST. }
+function IRCloneInlineBody(node: Integer): Integer;
+var r: Integer;
+begin
+  if node < 0 then begin IRCloneInlineBody := -1; Exit; end;
+  if ASTKind[node] = AN_INLINE_PARAM then
+  begin
+    IRCloneInlineBody := CloneAST(InlineArgAST[ASTIVal[node]]);
+    Exit;
+  end;
+  r := AllocNode(ASTKind[node]);
+  ASTIVal[r]    := ASTIVal[node];
+  ASTSOffset[r] := ASTSOffset[node];
+  ASTSLen[r]    := ASTSLen[node];
+  ASTTk[r]      := ASTTk[node];
+  ASTLeft[r]    := IRCloneInlineBody(ASTLeft[node]);
+  ASTRight[r]   := IRCloneInlineBody(ASTRight[node]);
+  IRCloneInlineBody := r;
+end;
+
+{ Try to expand a direct call to an inline-eligible proc. Returns the IR value
+  node of the spliced expression, or -1 if it cannot inline (arg not side-effect-
+  free, arg count mismatch) — the caller then lowers a normal call. v1 requires
+  every argument to be a literal or a plain scalar ident so direct substitution
+  preserves evaluation order and side effects (no temps). }
+function IRInlineExpand(callNode, cpi: Integer): Integer;
+var item, argAST, n, sidx, clonedRoot: Integer;
+begin
+  IRInlineExpand := -1;
+  n := 0;
+  item := ASTLeft[callNode];
+  while item <> -1 do
+  begin
+    if ASTKind[item] <> AN_ARG then Exit;
+    argAST := ASTLeft[item];
+    if (argAST < 0) or (n >= MAX_PROC_PARAMS) then Exit;
+    if not ((ASTKind[argAST] = AN_INT_LIT) or (ASTKind[argAST] = AN_IDENT)) then Exit;
+    if ASTKind[argAST] = AN_IDENT then
+    begin
+      sidx := ASTIVal[argAST];
+      if (sidx < 0) or (sidx >= SymCount) then Exit;
+      if Syms[sidx].IsArray then Exit;
+    end;
+    InlineArgAST[n] := argAST;
+    Inc(n);
+    item := ASTRight[item];
+  end;
+  if n <> InlineParamCnt[cpi] then Exit;
+  Inc(InliningActive);
+  clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
+  IRInlineExpand := IRLowerAST(clonedRoot);
+  Dec(InliningActive);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -3842,6 +3899,16 @@ begin
       last := -1;
       cpi := ASTIVal[node];
       item := ASTLeft[node];
+      { Inline expansion (feature-inline-routines, -O2): splice a retained inline
+        body in place of the call when the target is inline-eligible and all args
+        are side-effect-free. Falls through to a normal call if IRInlineExpand
+        declines (-1). Guarded InliningActive=0 so a spliced body never re-inlines. }
+      if (OptLevel >= 2) and (cpi >= 0) and (cpi < MAX_PROCS) and
+         (InlineBodyRoot[cpi] >= 0) and (InliningActive = 0) then
+      begin
+        outNode := IRInlineExpand(node, cpi);
+        if outNode >= 0 then begin Result := outNode; Exit; end;
+      end;
       if cpi = -102 then
       begin
         { SetLength. Nested dynamic arrays (root depth >= 2) take a

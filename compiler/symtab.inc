@@ -3811,6 +3811,9 @@ begin
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
+  ProcInline[ProcCount]        := False;
+  InlineBodyRoot[ProcCount]    := -1;
+  InlineParamCnt[ProcCount]    := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin
     ProcParamPtrDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;

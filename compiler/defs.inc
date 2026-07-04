@@ -38,6 +38,11 @@ const
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
   MAX_AST     = 524288;
+  { Top slice of the AST pool reserved for retained inline-routine bodies
+    (feature-inline-routines). Per-proc AST allocation (AllocNode) uses
+    [0..INLINE_AST_BASE); retained inline bodies live in
+    [INLINE_AST_BASE..MAX_AST) and are NOT cleared by the per-proc reset. }
+  INLINE_AST_BASE = 516096;   { MAX_AST - 8192 }
   MAX_IR      = 131072;
   MAX_STACK_FRAME_SIZE = 1048576; { default --max-stack-frame threshold: warn when a
                                     routine's stack frame exceeds 1 MB. Locals live on
@@ -272,7 +277,8 @@ const
   ATOMIC_CAS64  = 4;
   ATOMIC_ADD64  = 5;
 
-  AN_SLOTADDR      = 77; { address of a variable's own stack/BSS slot (lea),
+  AN_SLOTADDR      = 77;
+  AN_INLINE_PARAM  = 78;  { placeholder inside a RETAINED inline body: IVal = param index. Only exists in the reserved inline AST region; substituted to an AN_IDENT of the caller's arg temp when the body is cloned into a call site. Never reaches IRLowerAST directly. } { address of a variable's own stack/BSS slot (lea),
                            bypassing the by-ref auto-deref an AN_ADDR on a var/
                            const param gets in IRLowerAddress. ASTIVal = Syms[]
                            idx; yields tyPointer. Lowers to IR_SLOTADDR. Used by
@@ -869,6 +875,17 @@ var
   ProcBodyAddrTakenParam : array[0..MAX_PROCS-1] of Boolean; { a param's address is taken in the body }
   ProcBodyCompiled       : array[0..MAX_PROCS-1] of Boolean; { CompileAST ran for this proc (has a real body) }
   InlineCallSites        : array[0..MAX_PROCS-1] of Integer; { direct internal-call sites targeting this proc }
+  { Inline routine expansion (feature-inline-routines), -O2. A proc marked
+    `inline;` (or auto-selected) whose body is a single `Result := E` pure
+    expression over scalar-by-value params has E retained in the reserved AST
+    region; at a direct call site the body is cloned in with params substituted by
+    fresh arg temps and lowered in place of the call. }
+  ProcInline       : array[0..MAX_PROCS-1] of Boolean; { `inline;` directive seen }
+  InlineBodyRoot   : array[0..MAX_PROCS-1] of Integer; { retained E root in [INLINE_AST_BASE..), or -1 if not inlinable }
+  InlineParamCnt   : array[0..MAX_PROCS-1] of Integer; { param count of the retained body }
+  InlineASTNext    : Integer;   { next free slot in the reserved inline AST region }
+  InliningActive   : Integer;   { >0 while splicing an inline body (recursion/nesting guard) }
+  InlineArgAST     : array[0..MAX_PROC_PARAMS-1] of Integer; { arg AST per param index during a splice }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

@@ -113,6 +113,8 @@ begin
   RegcallCapped5 := 0;
   RegcallEligibleUses := 0;
   MeasureInline := False;
+  InlineASTNext := INLINE_AST_BASE;
+  InliningActive := 0;
   OptLevel := 0;
   WarnedMissedFold := False;
   DumpCpp := False;

@@ -18,7 +18,7 @@ procedure EmitIoLockStubs386; forward;
 
 function AllocNode(kind: Integer): Integer;
 begin
-  if ASTNodeCount >= MAX_AST then Error('AST node overflow');
+  if ASTNodeCount >= INLINE_AST_BASE then Error('AST node overflow');
   ASTKind[ASTNodeCount]    := kind;
   ASTIVal[ASTNodeCount]    := 0;
   ASTSOffset[ASTNodeCount] := 0;
@@ -55,6 +55,163 @@ begin
   ASTLine[Result]     := ASTLine[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
+end;
+
+{ ===== Inline routine expansion (feature-inline-routines) =====
+  v1: a leaf function whose body is a single `Result := E` over scalar-by-value
+  params, E a whitelist of int/ordinal literals + param/global/const idents +
+  arithmetic/logical operators. E is retained in the reserved AST region with
+  param idents rewritten to AN_INLINE_PARAM placeholders; a direct call site
+  clones it back with the placeholders bound to fresh arg temps (ir.inc). All
+  gated OptLevel>=2, so -O0/-O1 stay byte-identical. }
+
+{ Scalar int/ptr/ordinal test (parser-local; RegcallScalarType lives in the later
+  ir_codegen.inc). Matches the residency notion of a register-sized scalar. }
+function InlineScalarTk(tk: TTypeKind): Boolean;
+begin
+  InlineScalarTk :=
+    (tk = tyInteger) or (tk = tyBoolean) or (tk = tyChar) or
+    ((tk >= tyInt8) and (tk <= tyNativeUInt)) or (tk = tyPointer);
+end;
+
+{ Param index of symIdx within procIdx's params, or -1. }
+function InlineParamIndexOf(procIdx, symIdx: Integer): Integer;
+var i: Integer;
+begin
+  InlineParamIndexOf := -1;
+  for i := 0 to Procs[procIdx].ParamCount - 1 do
+    if Procs[procIdx].Params[i].SymIdx = symIdx then
+    begin InlineParamIndexOf := i; Exit; end;
+end;
+
+{ Is E built only from inline-safe nodes (literals, params, scalar globals/consts,
+  arithmetic/logical operators)? Rejects calls, indexing, fields, managed/float,
+  and any ident that is neither a param nor a scalar global/const. }
+function InlineExprSimple(node, procIdx: Integer): Boolean;
+var idx: Integer;
+begin
+  InlineExprSimple := False;
+  if node < 0 then begin InlineExprSimple := True; Exit; end;  { absent child = ok }
+  case ASTKind[node] of
+    AN_INT_LIT:
+      InlineExprSimple := True;
+    AN_IDENT:
+      begin
+        idx := ASTIVal[node];
+        if (idx < 0) or (idx >= SymCount) then Exit;
+        if Syms[idx].IsArray then Exit;
+        if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
+        if InlineParamIndexOf(procIdx, idx) >= 0 then
+          InlineExprSimple := True
+        else if (Syms[idx].Kind = skGlobal) or (Syms[idx].Kind = skConst) then
+          InlineExprSimple := True;
+      end;
+    AN_BINOP, AN_NEG, AN_NOT:
+      InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx) and
+                          InlineExprSimple(ASTRight[node], procIdx);
+  end;
+end;
+
+{ Alloc a node in the reserved inline AST region; -1 on overflow. }
+function AllocInlineNode(kind: Integer): Integer;
+begin
+  if InlineASTNext >= MAX_AST then begin AllocInlineNode := -1; Exit; end;
+  ASTKind[InlineASTNext]     := kind;
+  ASTIVal[InlineASTNext]     := 0;
+  ASTSOffset[InlineASTNext]  := 0;
+  ASTSLen[InlineASTNext]     := 0;
+  ASTLeft[InlineASTNext]     := -1;
+  ASTRight[InlineASTNext]    := -1;
+  ASTTk[InlineASTNext]       := 0;
+  ASTLiftedVar[InlineASTNext] := -1;
+  ASTLine[InlineASTNext]     := 0;
+  AllocInlineNode := InlineASTNext;
+  Inc(InlineASTNext);
+end;
+
+{ Deep-copy E into the reserved region, rewriting each param ident into an
+  AN_INLINE_PARAM placeholder (IVal = param index). -1 on overflow (caller bails). }
+function CloneToInlineRegion(node, procIdx: Integer): Integer;
+var r, pidx: Integer;
+begin
+  if node < 0 then begin CloneToInlineRegion := -1; Exit; end;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    pidx := InlineParamIndexOf(procIdx, ASTIVal[node]);
+    if pidx >= 0 then
+    begin
+      r := AllocInlineNode(AN_INLINE_PARAM);
+      if r < 0 then begin CloneToInlineRegion := -1; Exit; end;
+      ASTIVal[r] := pidx;
+      ASTTk[r]   := ASTTk[node];
+      CloneToInlineRegion := r;
+      Exit;
+    end;
+  end;
+  r := AllocInlineNode(ASTKind[node]);
+  if r < 0 then begin CloneToInlineRegion := -1; Exit; end;
+  ASTIVal[r]    := ASTIVal[node];
+  ASTSOffset[r] := ASTSOffset[node];
+  ASTSLen[r]    := ASTSLen[node];
+  ASTTk[r]      := ASTTk[node];
+  if ASTLeft[node] >= 0 then
+  begin
+    ASTLeft[r] := CloneToInlineRegion(ASTLeft[node], procIdx);
+    if ASTLeft[r] < 0 then begin CloneToInlineRegion := -1; Exit; end;
+  end;
+  if ASTRight[node] >= 0 then
+  begin
+    ASTRight[r] := CloneToInlineRegion(ASTRight[node], procIdx);
+    if ASTRight[r] < 0 then begin CloneToInlineRegion := -1; Exit; end;
+  end;
+  CloneToInlineRegion := r;
+end;
+
+{ If bodyNode is an inline-eligible pure-expression function body, retain E.
+  Called at the definition, after the body AST is parsed. OptLevel>=2 only. }
+procedure TryRetainInlineBody(procIdx, bodyNode: Integer);
+var seqNode, stmt, lhs, rhs, i, startNext, retSym: Integer;
+begin
+  if OptLevel < 2 then Exit;
+  if procIdx < 0 then Exit;
+  if not Procs[procIdx].IsFunc then Exit;
+  if ProcExternal[procIdx] or ProcCdecl[procIdx] or ProcVariadic[procIdx] then Exit;
+  if ProcIsGenerator[procIdx] or ProcIsStackless[procIdx] then Exit;
+  if Procs[procIdx].ParamCount > 6 then Exit;
+  { Result must be a scalar. }
+  retSym := Procs[procIdx].RetSymIdx;
+  if retSym < 0 then Exit;
+  if not InlineScalarTk(Syms[retSym].TypeKind) then Exit;
+  { Every param scalar, by value. }
+  for i := 0 to Procs[procIdx].ParamCount - 1 do
+  begin
+    if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then Exit;
+    if not InlineScalarTk(Procs[procIdx].Params[i].TypeKind) then Exit;
+  end;
+  { Body shape: ParseBlockAST returns an AN_SEQ chain; a pure-expression body is a
+    single AN_SEQ node (Right=-1) whose statement is AN_ASSIGN(Result, E). }
+  if bodyNode < 0 then Exit;
+  if ASTKind[bodyNode] <> AN_SEQ then Exit;
+  if ASTRight[bodyNode] <> -1 then Exit;        { exactly one statement }
+  seqNode := bodyNode;
+  stmt := ASTLeft[seqNode];
+  if stmt < 0 then Exit;
+  if ASTKind[stmt] <> AN_ASSIGN then Exit;
+  lhs := ASTLeft[stmt];
+  rhs := ASTRight[stmt];
+  { lhs must be the Result symbol. }
+  if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
+  { rhs must be a simple whitelist expression not referencing Result. }
+  if not InlineExprSimple(rhs, procIdx) then Exit;
+  { (E cannot reference Result: it is a skLocal, which InlineExprSimple rejects.) }
+  { Retain E in the inline region. Size cap via the region allocator. }
+  startNext := InlineASTNext;
+  if InlineASTNext + 48 >= MAX_AST then Exit;    { budget guard }
+  i := CloneToInlineRegion(rhs, procIdx);
+  if i < 0 then begin InlineASTNext := startNext; Exit; end;
+  if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
+  InlineBodyRoot[procIdx] := i;
+  InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
 end;
 
 { DWARF -g (Tier 3): snapshot one symbol into the DbgVar side table. Symbol
@@ -13281,7 +13438,7 @@ var
   cleanupJnePatch, cleanupJmpPatch: Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, declFlexColumn, isClassKeyword, isStaticMethod: Boolean;
+  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
   isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
@@ -13296,6 +13453,7 @@ var
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
+  inlineBodyNode: Integer;   { retained body root for inline expansion }
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
   methName: AnsiString;
   extLib: AnsiString;
@@ -13540,6 +13698,7 @@ begin
   Eat(tkSemicolon);
   declOverload := False;
   declFlexColumn := False;
+  declInline := False;
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
           (CurTok.SVal = 'register') or (CurTok.SVal = 'Register') or (CurTok.SVal = 'REGISTER') or
@@ -13560,6 +13719,7 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'async') then isAsync := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then isStackless := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'inline') then declInline := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then isIram := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interrupt') then
     begin
@@ -13903,6 +14063,7 @@ begin
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
   CurProc := procIdx;
+  if declInline then ProcInline[procIdx] := True;
   { Decl-order gating: this body may only see globals declared before its header
     token (TokPos is now in this routine's header). FindSym hides later globals. }
   savedVisVarSeq := CurBodyHdrTok;
@@ -14852,7 +15013,15 @@ begin
   else
   begin
     Expect(tkBegin, 'begin');
-    ParseBlock;
+    { Split ParseBlock so the body AST can be retained for inline expansion
+      (feature-inline-routines) before CompileAST emits + the pool resets. Only a
+      non-method plain routine is a candidate; TryRetainInlineBody re-checks all
+      eligibility and no-ops unless OptLevel>=2. Behaviour is otherwise identical
+      to ParseBlock, so -O0/-O1 stay byte-identical. }
+    inlineBodyNode := ParseBlockAST;
+    if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
+    CompileAST(inlineBodyNode);
+    ASTNodeCount := 0;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
   end;

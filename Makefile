@@ -3029,7 +3029,8 @@ test-opt: $(COMPILER)
 	for t in test_dynarray_torture test_dynarray_insert_delete \
 	         test_frozen_string_reentrant test_ansistring bootstrap_features \
 	         records procs test_cross_exception test_math_unit \
-	         test_metaclass_construct test_const_record_method_prebody; do \
+	         test_metaclass_construct test_const_record_method_prebody \
+	         test_inline_expand; do \
 	  ./$(COMPILER) test/$$t.pas /tmp/opt0_$$t >/dev/null && \
 	  ./$(COMPILER) -O1 test/$$t.pas /tmp/opt1_$$t >/dev/null && \
 	  ./$(COMPILER) -O2 test/$$t.pas /tmp/opt2_$$t >/dev/null && \
