@@ -11907,6 +11907,7 @@ var
   parentIntfCi, ancCur, ij, implOrig: Integer; alreadyImpl: Boolean;
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
+  hadParens: Boolean;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -12130,6 +12131,7 @@ begin
         Next;
         parentCi := -1;
         implCnt := 0;
+        hadParens := CurTok.Kind = tkLParen;
         if Eat(tkLParen) then
         begin
           { (ParentClass) and/or (Iface1, Iface2, ...): an interface name in the
@@ -12185,8 +12187,27 @@ begin
           end;
         end;
 
-        ci := AddUClass(tnOff, tnLen);
+        { A forward stub `TFoo = class;` already minted an entry that `class of`
+          aliases and field types point at — the full decl must fill THAT entry.
+          Registering a second one shadows it (FindUClass returns the first
+          match), so the base + fields land on an entry no reference sees. }
+        ci := FindUClass(tname);
+        if (ci >= 0) and UClsForward[ci] then
+        begin
+          { counts are 0 on a stub; re-anchor the member windows to the current
+            tails (other classes may have registered members in between). }
+          UClsFBase[ci] := UFldCount;
+          UClsMBase[ci] := UMthCount;
+          UClsPBase[ci] := UPropCount;
+          UClsVirtCount[ci] := 0;
+          UClsForward[ci] := False;
+        end
+        else
+          ci := AddUClass(tnOff, tnLen);
         UClsParent[ci] := parentCi;
+        { bare `class;` with no heritage = a forward declaration (FPC).
+          `class(TBase);` stays the empty-body shorthand. }
+        UClsForward[ci] := (not hadParens) and (CurTok.Kind = tkSemicolon);
 
         curFieldOff := 0;
         classAlign := 1;

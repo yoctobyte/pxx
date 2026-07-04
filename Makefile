@@ -464,6 +464,9 @@ test-core: $(COMPILER)
 	# FPC-compat: class function/procedure members in a generic class (fgl's ItemIsManaged shape)
 	./$(COMPILER) test/test_generic_class_methods.pas /tmp/test_generic_class_methods26
 	test "$$(/tmp/test_generic_class_methods26 | tail -1)" = "total ok 5 / 5"
+	# forward class decl + full decl adding a base keeps fields on the stub's entry (metaclass-before-decl idiom)
+	./$(COMPILER) test/test_forward_class_base.pas /tmp/test_forward_class_base26
+	test "$$(/tmp/test_forward_class_base26 | tail -1)" = "total ok 6 / 6"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

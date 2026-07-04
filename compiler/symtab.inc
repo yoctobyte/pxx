@@ -496,6 +496,7 @@ begin
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
+  UClsForward[UClsCount] := False;
   UClsCount := UClsCount + 1;
 end;
 
