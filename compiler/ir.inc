@@ -1269,6 +1269,29 @@ begin
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyString));
     Exit;
   end;
+  { `@obj.Method` given directly to a method-pointer parameter (`of object`
+    record): materialise the 16-byte {Code, Data} pair into a hidden temp and
+    pass its address — the record-param ABI. Mirrors the AN_ASSIGN methodref
+    store; without this the raw AN_METHODREF is not a linear-lowerable node. }
+  if (ASTKind[argAST] = AN_METHODREF) and (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
+  begin
+    savedLastTypeRecId := LastTypeRecId;
+    LastTypeRecId := EnsureMethodPtrRec;
+    tmpSym := AllocVar('', tyRecord);
+    LastTypeRecId := savedLastTypeRecId;
+    tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    value := IRAppend(IR_PROCADDR, Integer(ASTIVal[argAST]), -1, -1, 0, Ord(tyPointer));
+    IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));   { Code @0 }
+    srcAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    value := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
+    srcAddr := IRAppend(IR_BINOP, srcAddr, value, Ord(tkPlus), 0, Ord(tyPointer));
+    value := IRLowerAST(ASTLeft[argAST]);                            { Data = Self }
+    IRAppend(IR_STORE_MEM, srcAddr, value, -1, 0, Ord(tyPointer));
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    Exit;
+  end;
   { Implicit class -> interface coercion: a class argument given to an interface
     parameter is wrapped in the same fat-pointer build as an explicit `obj as
     IFoo`, then marshalled by the ordinary record-param ABI (re-entry below). }
@@ -1564,6 +1587,31 @@ begin
       if RecSize(argRecId) > 8 then
         needTemp := True;
     end;
+  end;
+
+  { A scalar non-lvalue (typically `nil`) given to a by-ref RECORD param —
+    e.g. nil to a method-pointer param (fgl's SetOnKeyPtrCompare(nil)).
+    Materialise a zeroed temp of the param's record type and store the scalar
+    into its first pointer slot; the callee compares that slot (Proc <> nil). }
+  if isRefArg and (not needTemp) and (argTk <> tyRecord) and
+     (not IsASTLValue(argAST)) and (cpi >= 0) and (pathIdx >= 0) and
+     (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) then
+  begin
+    savedLastTypeRecId := LastTypeRecId;
+    LastTypeRecId := ProcParamRecId[cpi * MAX_PROC_PARAMS + pathIdx];
+    if LastTypeRecId = REC_NONE then LastTypeRecId := EnsureMethodPtrRec;
+    argRecId := LastTypeRecId;
+    tmpSym := AllocVar('', tyRecord);
+    LastTypeRecId := savedLastTypeRecId;
+    IRAppend(IR_DEFAULT_MEM,
+      IRAppend(IR_SLOTADDR, tmpSym, -1, -1, 0, Ord(tyPointer)),
+      -1, REC_NONE, RecSize(argRecId), Ord(tyRecord));
+    tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    value := IRLowerAST(argAST);
+    IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+    Exit;
   end;
 
   if needTemp then

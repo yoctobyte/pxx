@@ -1776,6 +1776,7 @@ var
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
   UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
   UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
+  UMthIsCtor   : array[0..MAX_UMETH-1] of Boolean; { declared `constructor` — TClass.AnyCtor(args) builds a metaclass-new, not a method call }
   UMthPub    : array[0..MAX_UMETH-1] of Integer;  { 1 = published, 0 = other }
   UMthCount  : Integer;
 

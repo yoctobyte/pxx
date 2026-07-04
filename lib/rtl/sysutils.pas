@@ -30,6 +30,7 @@ type
     FMessage: string;
     FHelpContext: Integer;
     constructor Create(const msg: string);
+    constructor CreateFmt(const msg: string; const args: array of const);
     property HelpContext: Integer read FHelpContext write FHelpContext;
     property Message: string read FMessage write FMessage;
   end;
@@ -80,6 +81,9 @@ function Pos(const substr, s: AnsiString): Integer;
   StrLCopy copies at most MaxLen chars from Source up to its #0, always #0-
   terminates Dest, and returns Dest. StrLComp compares at most MaxLen chars,
   returning <0 / 0 / >0 like FPC (stops at the first #0 or difference). }
+{ True when the Len bytes at P1 and P2 are identical (FPC SysUtils.CompareMem). }
+function CompareMem(P1, P2: Pointer; Len: Int64): Boolean;
+
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
 
@@ -171,6 +175,12 @@ begin
   FHelpContext := 0;
 end;
 
+
+constructor Exception.CreateFmt(const msg: string; const args: array of const);
+begin
+  FMessage := Format(msg, args);
+  FHelpContext := 0;
+end;
 function IntToStr(value: Int64): AnsiString;
 var s: AnsiString; neg: Boolean; d: Int64;
 begin
@@ -285,7 +295,6 @@ begin
   else
     Result := c;
 end;
-
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 var i: Cardinal;
 begin
@@ -1137,6 +1146,21 @@ begin
   totalMSec := totalMSec mod 60000;
   Sec := totalMSec div 1000;
   MSec := totalMSec mod 1000;
+end;
+
+
+function CompareMem(P1, P2: Pointer; Len: Int64): Boolean;
+var a, b: PChar; i: Int64;
+begin
+  a := PChar(P1);
+  b := PChar(P2);
+  CompareMem := True;
+  for i := 0 to Len - 1 do
+    if a[i] <> b[i] then
+    begin
+      CompareMem := False;
+      Exit;
+    end;
 end;
 
 end.

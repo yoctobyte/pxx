@@ -608,6 +608,7 @@ begin
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;
   UMthIsStatic[mi] := False;
+  UMthIsCtor[mi] := False;
   UMthPub[mi] := 0;
   UMthCount := UMthCount + 1;
   UClsMCount[ci] := UClsMCount[ci] + 1;
@@ -3516,6 +3517,54 @@ begin
     Exit;
   end;
   Result := False;
+end;
+
+function FindUMethArity(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
+{ Overload-aware method lookup: first name match (walking the parent chain)
+  whose proc accepts the call's EXPLICIT arg count (self added per entry;
+  exact arity or trailing defaults cover the rest). Falls back to the plain
+  first-name-match so single-method behavior and error paths are unchanged. }
+var i, base, cnt, curr, want: Integer; lo, name2: AnsiString;
+begin
+  name2 := name;
+  lo := ULower(name2);
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then
+      begin
+        want := nExplicitArgs;
+        if not UMthIsStatic[base + i] then want := want + 1;
+        if ProcArityMatches(UMthProc_[base + i], want) then
+        begin Result := base + i; Exit; end;
+      end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+  Result := FindUMeth(ci, name);
+end;
+
+function FindUMethByProc(ci, procIdx: Integer): Integer;
+{ The UMeth entry bound to a specific proc — an overloaded method's impl must
+  update ITS OWN entry (slot/proc mapping), not the first name match. }
+var i, base, cnt, curr: Integer;
+begin
+  Result := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    for i := 0 to cnt - 1 do
+      if UMthProc_[base + i] = procIdx then begin Result := base + i; Exit; end;
+    curr := UClsParent[curr];
+  end;
 end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;

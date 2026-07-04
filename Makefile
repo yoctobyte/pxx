@@ -476,6 +476,9 @@ test-core: $(COMPILER)
 	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
 	./$(COMPILER) test/test_fpc_compat_batch.pas /tmp/test_fpc_compat_batch26
 	test "$$(/tmp/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"
+	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
+	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas /tmp/test_fpc_compat_batch226
+	test "$$(/tmp/test_fpc_compat_batch226 | tail -1)" = "total ok 12 / 12"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

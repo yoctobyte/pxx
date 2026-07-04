@@ -1555,6 +1555,38 @@ begin
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + nextIdx];
 end;
 
+{ Count the arguments of the call whose NAME is CurTok (Tokens[TokPos] = '('
+  when parenthesized): top-level commas + 1; 0 for `()` or no parens. Used to
+  pick among method OVERLOADS before the signature-driven arg loop parses. }
+function CountCallArgsAhead: Integer;
+var i, d: Integer;
+begin
+  Result := 0;
+  { CurTok = the call NAME (paren at TokPos), or already ON the '(' (inherited
+    path, name consumed) — scan from whichever position holds the '('  }
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    i := TokPos
+  else if CurTok.Kind = tkLParen then
+    i := TokPos - 1
+  else
+    Exit;
+  if (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkRParen) then Exit;
+  Result := 1;
+  d := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack] then Inc(d)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack] then
+    begin
+      Dec(d);
+      if d = 0 then Exit;
+    end
+    else if (Tokens[i].Kind = tkSemicolon) or (Tokens[i].Kind = tkEOF) then Exit
+    else if (Tokens[i].Kind = tkComma) and (d = 1) then Inc(Result);
+    Inc(i);
+  end;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -1578,6 +1610,45 @@ begin
 
   fieldName := GetTokenStr(prevTok);
   withResolved := False;
+
+  { Indirect call through a proc-var / METHOD-POINTER ident: v(args). A
+    method-pointer var is tyRecord, so ParseFactor routes it here (not its
+    own proc-var branch) and it used to fall into the field path and die on
+    the '('. Mirrors ParseProcVarCallAST minus the name consume. }
+  if (idx >= 0) and (SymProcSig[idx] >= 0) and (CurTok.Kind = tkLParen) then
+  begin
+    isMethodPtr := Syms[idx].TypeKind = tyRecord;
+    fldSigPi := SymProcSig[idx];
+    node := AllocNode(AN_IDENT);
+    ASTIVal[node] := idx;
+    if isMethodPtr then ASTTk[node] := Ord(tyRecord)
+    else ASTTk[node] := Ord(tyPointer);
+    Next; { consume '(' }
+    argsHead2 := -1; lastArg2 := -1; i := 0;
+    while CurTok.Kind <> tkRParen do
+    begin
+      ParseExpr;
+      argSeq2 := AllocNode(AN_ARG);
+      ASTLeft[argSeq2] := CurASTNode;
+      if argsHead2 = -1 then argsHead2 := argSeq2
+      else ASTRight[lastArg2] := argSeq2;
+      lastArg2 := argSeq2;
+      Inc(i);
+      if CurTok.Kind = tkComma then Next
+      else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+    end;
+    Expect(tkRParen, ')');
+    if i <> Procs[fldSigPi].ParamCount then
+      Error('procedural call: wrong number of arguments');
+    callIndNode := AllocNode(AN_CALL_IND);
+    ASTLeft[callIndNode]  := argsHead2;
+    ASTRight[callIndNode] := node;
+    ASTIVal[callIndNode]  := fldSigPi;
+    ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
+    if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+    Result := callIndNode;
+    Exit;
+  end;
 
   if WithStackDepth > 0 then
   begin
@@ -1650,6 +1721,40 @@ begin
       ASTTk[fieldNode] := Ord(tk);
 
       node := fieldNode;
+
+      { Indirect call through a procedural-type FIELD, unqualified inside a
+        method: FOnKeyPtrCompare(a, b) == Self.FOnKeyPtrCompare(a, b)
+        (fgl's compare-callback fields). Mirrors the qualified rec.field(args)
+        path below. }
+      if (CurTok.Kind = tkLParen) and (not UFldIsArray[fldIdx]) and
+         ((tk = tyPointer) or (tk = tyRecord)) and (UFldProcSig[fldIdx] >= 0) then
+      begin
+        fldSigPi := UFldProcSig[fldIdx];
+        isMethodPtr := (tk = tyRecord);
+        Expect(tkLParen, '(');
+        argsHead2 := -1; lastArg2 := -1;
+        while CurTok.Kind <> tkRParen do
+        begin
+          ParseExpr;
+          argSeq2 := AllocNode(AN_ARG);
+          ASTLeft[argSeq2] := CurASTNode;
+          if argsHead2 = -1 then argsHead2 := argSeq2
+          else ASTRight[lastArg2] := argSeq2;
+          lastArg2 := argSeq2;
+          if CurTok.Kind = tkComma then Next
+          else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+        end;
+        Expect(tkRParen, ')');
+        callIndNode := AllocNode(AN_CALL_IND);
+        ASTLeft[callIndNode]  := argsHead2;
+        ASTRight[callIndNode] := fieldNode;
+        ASTIVal[callIndNode]  := fldSigPi;
+        ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
+        if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+        node := callIndNode;
+        tk := Procs[fldSigPi].RetType;
+        recName := ProcRetRecId[fldSigPi];
+      end;
     end
     else if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0)
             and (Procs[CurProc].ParamCount > 0)
@@ -1751,7 +1856,35 @@ begin
           node := fieldNode;
         end
         else if UPropWriteMLen[pri] > 0 then
-          Error('unqualified write of a setter-method property is not supported inside a method; use Self.' + fieldName + ' := ... (bug-unqualified-property-in-method)')
+        begin
+          { unqualified setter-method write: Capacity := v -> Self.SetCapacity(v)
+            (same complete-call-statement shape as the indexed branch above) }
+          methName := '';
+          for i := 0 to UPropWriteMLen[pri] - 1 do
+            AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+          mmi := FindUMeth(selfClassCi, methName);
+          if mmi < 0 then Error('setter method not found: ' + methName);
+          mpi := UMthProc_[mmi];
+          Expect(tkAssign, ':=');
+          ParseExpr;
+          if UMthVirSlot[mmi] >= 0 then
+          begin
+            mcallNode := AllocNode(AN_VIRTUAL_CALL);
+            ASTRight[mcallNode] := UMthVirSlot[mmi];
+          end
+          else
+            mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mselfArg := AllocNode(AN_ARG);
+          ASTLeft[mselfArg] := selfNode;
+          ASTLeft[mcallNode] := mselfArg;
+          margSeq := AllocNode(AN_ARG);
+          ASTLeft[margSeq] := CurASTNode;   { value }
+          ASTRight[mselfArg] := margSeq;
+          Result := mcallNode;
+          Exit;
+        end
         else
           Error('property is read-only: ' + fieldName);
       end
@@ -1859,6 +1992,22 @@ begin
           end;
           mpi := UMthProc_[mmi];
 
+          if UMthIsCtor[mmi] then
+          begin
+            { TClass.AnyCtor(args) as an expression (raise EListError.CreateFmt
+              ... shape) — construct via the metaclass path: static classref,
+              virtual-or-direct ctor dispatch, defaults filled. The
+              'create'-named fast path elsewhere covers only that name. }
+            node := AllocNode(AN_CLASSREF);
+            ASTIVal[node] := ci;
+            ASTTk[node] := Ord(tyPointer);
+            node := BuildMetaclassNew(node, ci, mmi);
+            tk := tyClass;
+            recName := REC_UCLASS_BASE + ci;
+            Result := node;
+            Exit;
+          end;
+
           if not UMthIsStatic[mmi] then
             Error('cannot call non-static method on class type directly');
 
@@ -1875,9 +2024,17 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                if CurTok.Kind <> tkIdent then
+                begin
+                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                    param, [..] literals, casts): parse as an expression }
+                  ParseExpr; mexprNode := CurASTNode;
+                end
+                else
+                begin
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end;
               end
               else
               begin
@@ -2463,7 +2620,8 @@ begin
       if recName >= REC_UCLASS_BASE then
       begin
         mci := recName - REC_UCLASS_BASE;
-        mmi := FindUMeth(mci, fieldName);
+        { overload-aware: pick the entry matching the call's arg count }
+        mmi := FindUMethArity(mci, fieldName, CountCallArgsAhead);
       end;
       if mmi >= 0 then
       begin
@@ -2487,9 +2645,17 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                if CurTok.Kind <> tkIdent then
+                begin
+                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                    param, [..] literals, casts): parse as an expression }
+                  ParseExpr; mexprNode := CurASTNode;
+                end
+                else
+                begin
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end;
               end
               else begin ParseExpr; mexprNode := CurASTNode; end;
               margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
@@ -2523,9 +2689,17 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                if CurTok.Kind <> tkIdent then
+                begin
+                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                    param, [..] literals, casts): parse as an expression }
+                  ParseExpr; mexprNode := CurASTNode;
+                end
+                else
+                begin
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end;
               end
               else
               begin
@@ -2579,9 +2753,17 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                if CurTok.Kind <> tkIdent then
+                begin
+                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                    param, [..] literals, casts): parse as an expression }
+                  ParseExpr; mexprNode := CurASTNode;
+                end
+                else
+                begin
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end;
               end
               else
               begin
@@ -2708,9 +2890,16 @@ begin
     begin
       if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
       begin
-        if CurTok.Kind <> tkIdent then Error('expected variable');
-        margIdx := FindSym(CurTok.SVal); Next;
-        mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+        if (CurTok.Kind = tkLBrack) and Procs[mpi].Params[mai].IsArray then
+          { `[e0, e1, ...]` open-array/array-of-const literal argument
+            (Exception.CreateFmt(Msg, [Data]) shape) }
+          mexprNode := ParseVarRecLiteralAST
+        else
+        begin
+          if CurTok.Kind <> tkIdent then Error('expected variable');
+          margIdx := FindSym(CurTok.SVal); Next;
+          mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+        end;
       end
       else
       begin
@@ -3322,7 +3511,9 @@ begin
   end;
 
   if parentCi < 0 then Error('inherited call has no parent class');
-  mmi := FindUMeth(parentCi, name);
+  { overload-aware: `inherited Insert(i)` must pick the parent overload
+    matching THIS call's arg count (CurTok = '(' or the follower) }
+  mmi := FindUMethArity(parentCi, name, CountCallArgsAhead);
   if mmi < 0 then Error('inherited method not found: ' + name);
   mpi := UMthProc_[mmi];
 
@@ -3539,7 +3730,7 @@ begin
       end;
 
       mmi := -1;
-      if ci >= 0 then mmi := FindUMeth(ci, fieldName);
+      if ci >= 0 then mmi := FindUMethArity(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then
       begin
         mpi := UMthProc_[mmi];
@@ -3565,9 +3756,17 @@ begin
           begin
             if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
-              if CurTok.Kind <> tkIdent then Error('expected variable');
-              aIdx := FindSym(CurTok.SVal); Next;
-              aNode := ParseLValueAST(aIdx, TokPos - 2);
+              if CurTok.Kind <> tkIdent then
+              begin
+                { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                  param, [..] literals, casts): parse as an expression }
+                ParseExpr; aNode := CurASTNode;
+              end
+              else
+              begin
+                aIdx := FindSym(CurTok.SVal); Next;
+                aNode := ParseLValueAST(aIdx, TokPos - 2);
+              end;
             end
             else
             begin
@@ -4165,6 +4364,27 @@ begin
         CurASTNode := node;
         LastExprTk := tyPointer;
       end
+      { @Method bare inside a method body: implicit Self — @BinaryCompareKey
+        == @Self.BinaryCompareKey (an AN_METHODREF: Code+Data). Checked before
+        the plain @proc case so a method wins over a same-named free routine
+        (innermost scope), matching the other implicit-Self dispatches. }
+      else if (idx < 0) and (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
+              (Procs[CurProc].ParamCount > 0) and
+              (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) and
+              ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
+      begin
+        mmi := FindUMeth(CurSelfClass - REC_UCLASS_BASE, name);
+        valNode := AllocNode(AN_IDENT);
+        ASTIVal[valNode] := Procs[CurProc].Params[0].SymIdx;   { Self }
+        ASTTk[valNode] := Ord(tyClass);
+        node := AllocNode(AN_METHODREF);
+        ASTIVal[node] := UMthProc_[mmi];
+        ASTLeft[node] := valNode;
+        ASTTk[node] := Ord(tyPointer);
+        Next;            { consume method name }
+        CurASTNode := node;
+        LastExprTk := tyPointer;
+      end
       { @proc: not a variable but a known routine → absolute code address }
       else if (idx < 0) and (FindProc(name) >= 0) then
       begin
@@ -4295,7 +4515,8 @@ begin
           if baseRec >= REC_UCLASS_BASE then
           begin
             mci := baseRec - REC_UCLASS_BASE;
-            if FindUProp(mci, fieldName) < 0 then mmi := FindUMeth(mci, fieldName);
+            if FindUProp(mci, fieldName) < 0 then
+              mmi := FindUMethArity(mci, fieldName, CountCallArgsAhead);
           end;
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
           begin
@@ -4317,9 +4538,17 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then Error('expected variable');
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  if CurTok.Kind <> tkIdent then
+                  begin
+                    { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                      param, [..] literals, casts): parse as an expression }
+                    ParseExpr; mexprNode := CurASTNode;
+                  end
+                  else
+                  begin
+                    margIdx := FindSym(CurTok.SVal); Next;
+                    mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  end;
                 end
                 else begin ParseExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
@@ -4367,9 +4596,17 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then Error('expected variable');
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  if CurTok.Kind <> tkIdent then
+                  begin
+                    { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                      param, [..] literals, casts): parse as an expression }
+                    ParseExpr; mexprNode := CurASTNode;
+                  end
+                  else
+                  begin
+                    margIdx := FindSym(CurTok.SVal); Next;
+                    mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                  end;
                 end
                 else begin ParseExpr; mexprNode := CurASTNode; end;
                 margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
@@ -4880,7 +5117,7 @@ begin
             prevTok := TypeSize(tyUInt16)
           else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
             prevTok := TypeSize(tyInt32)
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') then
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') or CaseEqual(name, 'dword') then
             prevTok := TypeSize(tyUInt32)
           else if CaseEqual(name, 'int64') then
             prevTok := TypeSize(tyInt64)
@@ -5546,6 +5783,20 @@ begin
         Exit;
       end;
 
+      { CompareByte/CompareChar(b1, b2, len): System memcmp primitives ->
+        the __pxxCompareByte builtin (byte-wise; Char is a byte here). Soft
+        alias like the statement-side Move/FillChar: rename + re-resolve so
+        the normal call machinery (untyped const params) does the rest. }
+      if (CaseEqual(name, 'CompareByte') or CaseEqual(name, 'CompareChar')) and
+         (procIdx < 0) and (idx < 0) and (Tokens[TokPos].Kind = tkLParen) and
+         (FindProc('__pxxCompareByte') >= 0) and
+         ((CurSelfClass < REC_UCLASS_BASE) or
+          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) then
+      begin
+        name := '__pxxCompareByte';
+        procIdx := FindProc(name);
+      end;
+
       { Assigned(p): System intrinsic -> p <> nil (pointer/class/proc-var).
         Same eval-once inline shape as Succ/Pred/Odd; a user symbol shadows. }
       if CaseEqual(name, 'Assigned') and (procIdx < 0) and (idx < 0) and
@@ -5942,10 +6193,10 @@ begin
             Exit;
           end;
           if CaseEqual(name, 'pointer') then castTk := tyPointer
-          else if CaseEqual(name, 'int64') then castTk := tyInt64
-          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') then castTk := tyUInt64
+          else if CaseEqual(name, 'int64') or CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then castTk := tyInt64
+          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') or CaseEqual(name, 'nativeuint') or CaseEqual(name, 'ptruint') then castTk := tyUInt64
           else if CaseEqual(name, 'integer') or CaseEqual(name, 'longint') then castTk := tyInteger
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') then castTk := tyUInt32
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') or CaseEqual(name, 'dword') then castTk := tyUInt32
           else if CaseEqual(name, 'smallint') then castTk := tyInt16
           else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then castTk := tyUInt16
           else if CaseEqual(name, 'shortint') then castTk := tyInt8
@@ -6119,9 +6370,17 @@ begin
               begin
                 if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then Error('expected variable');
-                  argIdx := FindSym(CurTok.SVal); Next;
-                  exprNode := ParseLValueAST(argIdx, TokPos - 2);
+                  if CurTok.Kind <> tkIdent then
+                  begin
+                    { non-ident by-ref/array arg (@obj.Method to a method-pointer
+                      param, [..] literals, casts): parse as an expression }
+                    ParseExpr; exprNode := CurASTNode;
+                  end
+                  else
+                  begin
+                    argIdx := FindSym(CurTok.SVal); Next;
+                    exprNode := ParseLValueAST(argIdx, TokPos - 2);
+                  end;
                 end
                 else
                 begin
@@ -6477,7 +6736,7 @@ begin
         if (idx < 0) and (procIdx < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
         begin
           ci := CurSelfClass - REC_UCLASS_BASE;
-          mmi := FindUMeth(ci, name);
+          mmi := FindUMethArity(ci, name, CountCallArgsAhead);
           if mmi >= 0 then
           begin
             mpi := UMthProc_[mmi];
@@ -9579,6 +9838,13 @@ begin
       begin
         ParseExpr;
         valNode := CurASTNode;
+        { FPC `raise E at addr[, frame]`: the at-clause only overrides the
+          REPORTED address/frame. pxx's unwinder derives both itself — skip
+          the clause tokens (they may use FPC-only get_caller_addr/get_frame
+          intrinsics, so don't semantically parse them). }
+        if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'at') then
+          while not (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkExcept, tkUntil, tkEOF]) do
+            Next;
       end;
       node := AllocNode(AN_RAISE);
       ASTLeft[node] := valNode;
@@ -9676,14 +9942,19 @@ begin
         that would shadow a user proc, an in-scope symbol, or a method of the
         enclosing class (implicit-Self `Move(d)` inside a class with its own
         Move must stay a method call — the adventure-demo regression). }
-      if (qUnit < 0) and (CaseEqual(name, 'Move') or CaseEqual(name, 'FillChar')) and
+      if (qUnit < 0) and (CaseEqual(name, 'Move') or CaseEqual(name, 'FillChar') or
+          CaseEqual(name, 'FillByte') or CaseEqual(name, 'FillDWord')) and
          (Tokens[TokPos].Kind = tkLParen) and
          (FindProc(name) < 0) and (FindSym(name) < 0) and
          ((CurSelfClass < REC_UCLASS_BASE) or
           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
          (FindProc('__pxxMove') >= 0) then
       begin
+        { FillByte(x, n, b) = FillChar with an ordinal value; FillDWord fills
+          n 4-byte words. Both route to the byte filler (FillDWord's count is
+          scaled by the wrapper in builtin). }
         if CaseEqual(name, 'Move') then name := '__pxxMove'
+        else if CaseEqual(name, 'FillDWord') then name := '__pxxFillDWord'
         else name := '__pxxFillChar';
       end;
       { Label definition: 'labelname:' as a statement }
@@ -10210,8 +10481,16 @@ begin
         ParseExpr;                                      { new size -> CurASTNode }
         Expect(tkRParen, ')');
 
-        exprNode := AllocNode(AN_IDENT);                { old pointer value }
-        ASTIVal[exprNode] := idx; ASTTk[exprNode] := Ord(tyPointer);
+        if idx >= 0 then
+        begin
+          exprNode := AllocNode(AN_IDENT);              { old pointer value }
+          ASTIVal[exprNode] := idx; ASTTk[exprNode] := Ord(tyPointer);
+        end
+        else
+          { field/complex lvalue (ReallocMem(FList, ...) in a method): reuse the
+            resolved lvalue node as the read — AN_IDENT(-1) was a load_sym(-1)
+            IR verify error. Double-lowering the node is pure address math. }
+          exprNode := valNode;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := CurASTNode;        { new size }
@@ -10511,7 +10790,7 @@ begin
           if (CurSelfClass >= REC_UCLASS_BASE) and (si < 0) then
           begin
             smci := CurSelfClass - REC_UCLASS_BASE;
-            smmii := FindUMeth(smci, name);
+            smmii := FindUMethArity(smci, name, CountCallArgsAhead);
             if smmii >= 0 then
             begin
               smpii := UMthProc_[smmii];
@@ -11055,7 +11334,7 @@ begin
       else if CaseEqual(lo, 'smallint') then Result := tyInt16
       else if CaseEqual(lo, 'word') or CaseEqual(lo, 'uint16') then Result := tyUInt16
       else if CaseEqual(lo, 'longint') then Result := tyInt32
-      else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') or CaseEqual(lo, 'uint32') then Result := tyUInt32
+      else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') or CaseEqual(lo, 'uint32') or CaseEqual(lo, 'dword') then Result := tyUInt32
       else if CaseEqual(lo, 'int64') then Result := tyInt64
       else if CaseEqual(lo, 'qword') or CaseEqual(lo, 'uint64') then Result := tyUInt64
       else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
@@ -12284,7 +12563,13 @@ var
 begin
   Next;
   stopTypes := False;
-  while (CurTok.Kind = tkIdent) and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and (not CaseEqual(CurTok.SVal, 'implementation')) and (not CaseEqual(CurTok.SVal, 'initialization')) and (not CaseEqual(CurTok.SVal, 'finalization')) and not stopTypes do
+  { A plain entry must look like `Name = ...` — an ident NOT followed by `=`
+    (e.g. `protected` resuming members after a NESTED class-body type section)
+    ends the section instead of desyncing on Expect('='). generic/operator
+    keep their keyword forms. }
+  while (CurTok.Kind = tkIdent) and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and (not CaseEqual(CurTok.SVal, 'implementation')) and (not CaseEqual(CurTok.SVal, 'initialization')) and (not CaseEqual(CurTok.SVal, 'finalization')) and not stopTypes and
+        (CaseEqual(CurTok.SVal, 'generic') or CaseEqual(CurTok.SVal, 'specialize') or CaseEqual(CurTok.SVal, 'operator') or
+         ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkEq))) do
   begin
     if CaseEqual(CurTok.SVal, 'generic') then
     begin
@@ -12594,6 +12879,19 @@ begin
             continue;
           end;
 
+          { Nested `type` section inside a class body (fgl's private types:
+            TCompareFunc = function(...), PT = ^T, ...). Parsed as GLOBAL type
+            aliases — pxx does not scope class-local types (access control is
+            unenforced project-wide). ParseTypeSection now stops at the first
+            ident not followed by `=`, i.e. the next member/visibility word.
+            NOTE: two specializations of one generic re-register the same
+            names; first registration wins on lookup. }
+          if CurTok.Kind = tkType then
+          begin
+            ParseTypeSection;
+            continue;
+          end;
+
           { class var x[, y]: T; — one shared GLOBAL slot per class (not per
             instance), addressed as TClass.x or obj.x. Registered in the ClassVar
             table; storage is an anonymous global var (CurProc < 0 here). }
@@ -12701,7 +12999,18 @@ begin
                   begin
                     Next;
                     Expect(tkOf, 'of');
-                    mTk := ParseTypeKind;
+                    if CurTok.Kind = tkConst then
+                    begin
+                      { `array of const` method param (Exception.CreateFmt):
+                        TVarRec open array, same as the free-routine case. }
+                      if TVarRecId = REC_NONE then
+                        Error('array of const requires the builtinheap unit (use an array/heap feature)');
+                      Next;
+                      mTk := tyRecord;
+                      LastTypeRecId := TVarRecId;
+                    end
+                    else
+                      mTk := ParseTypeKind;
                     mIsArr := True;
                   end
                   else
@@ -12832,6 +13141,7 @@ begin
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
+            UMthIsCtor[mmi] := isConstructor;
             UMthPub[mmi] := curPublished;
 
             if isVirtual then
@@ -14656,7 +14966,8 @@ begin
   isStaticMethod := False;
   if methOwnerCi >= 0 then
   begin
-    mmi := FindUMeth(methOwnerCi, methName);
+    { overloads: match by the impl's explicit param count, not first-name }
+    mmi := FindUMethArity(methOwnerCi, methName, nparams);
     if mmi >= 0 then
       if UMthIsStatic[mmi] then
         isStaticMethod := True;
@@ -14906,7 +15217,10 @@ begin
   { Set method context before allocating params }
   if methOwnerCi >= 0 then
   begin
-    mmi := FindUMeth(methOwnerCi, methName);
+    { overloads: bind THIS signature's entry (the decl registered one proc per
+      signature), falling back to the name match for a not-yet-declared method }
+    mmi := FindUMethByProc(methOwnerCi, procIdx);
+    if mmi < 0 then mmi := FindUMeth(methOwnerCi, methName);
     if mmi >= 0 then
     begin
       UMthProc_[mmi] := procIdx;
@@ -15005,7 +15319,11 @@ begin
       Syms[idx].PtrElemTk := ptypesPtrElemTk[i];
       Syms[idx].PtrElemRec := ptypesPtrElemRec[i];
       SymProcSig[idx] := ptypesProcSig[i];
-    end;
+    end
+    else if (ptypes[i] = tyRecord) and (ptypesProcSig[i] >= 0) then
+      { method-pointer param ({Code,Data} record, `of object` type): callable —
+        Compare(a, b) inside the body must see the signature (fgl QuickSort) }
+      SymProcSig[idx] := ptypesProcSig[i];
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
   if (methOwnerCi >= 0) and not isStaticMethod then
@@ -17399,7 +17717,9 @@ begin
       site. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar')) and
+       (CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
+        CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
+        CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
