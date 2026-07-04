@@ -151,5 +151,46 @@ Measured on the compiler self-compile (`--measure-regcall compiler/compiler.pas`
   reload memory ops. Phase 2 (5 regs) reaches 78% — diminishing return, so land
   phase 1 first and re-benchmark before expanding.
 
-Status: **phase 0 DONE (measured; instrumentation committed).** Resume at phase 1
-(r14/r15 residency behind -O2).
+## Phase 1 DONE (2026-07-04) — r14/r15 residency behind -O2, x86-64
+
+Implemented as a self-contained codegen change (NO parser reorder). Key
+realization: the early prologue spill already writes each param's frame slot, so
+a *deferred* `mov r14,[rbp+off]`-style reload — emitted in CompileAST after the
+body IR is lowered (residency known), before IREmitMachineCode — reads a correct
+value regardless of arg-register liveness. And nested routines *reject* capturing
+enclosing params (parser.inc ~12525), so a param frame slot is never touched by a
+nested routine → no capture hazard.
+
+Design: frame slot stays authoritative (early spill + store dual-write via
+`RegcallRefreshResident`, which reloads through EmitLoadVar to reuse the canonical
+size/sign extension). The register is a pure read cache → any non-EmitLoadVar
+reader and the excluded addr-taken cases stay correct; callee-saved regs survive
+calls by ABI so there is no cross-call spill. r14/r15 caller values saved to a
+reserved frame slot at body entry (FrameSize bump), restored in EmitProcEpilog
+(every return path, early Exit included).
+
+Files: `RegcallAssignResidency` + CompileAST hook (ir_codegen.inc);
+`ResidentRegOf`/`RegcallRefreshResident` + EmitLoadVar/EmitLoadVarRcx/EmitStoreVar
+resident hooks + epilogue restore (symtab.inc); `RcResident*` globals (defs.inc);
+`--measure-regcall` (phase 0). Gated OptLevel>=2 + x86-64; excludes
+generator/stackless routines and bodies with inline asm.
+
+Gates: -O0 self-host byte-identical (unchanged); -O2 self-compile fixedpoint
+byte-identical; -O2 differential corpus green; make test green + green under an
+-O2-built compiler. `make test-opt` extended to gate -O2 differential + -O2
+self-fixedpoint permanently.
+
+Measured: self-compile **1.34x faster** (6.53s→4.87s, hyperfine, identical
+output) and compiler code **12.2% smaller** (4.08MB→3.58MB) — from just 2
+params/body. Closes a real chunk of FPC's ~2x lead.
+
+**Pin policy note (needs user call):** pins are currently -O1-built. To realize
+the self-compile win at pin time (so B/C/D get the faster compiler), pins would
+move to -O2-built. -O2 output is byte-identical-transparent (an -O2-built
+compiler emits the same -O0 output), so it is a safe swap — but it is a policy
+change, not done unilaterally.
+
+Status: **phase 0 + phase 1 DONE.** Next candidates (optional, measure first):
+phase 2 (expand to rbx/r12/r13 after auditing helpers save them — reaches 78%
+capture vs phase 1's 61%; diminishing return, re-benchmark first); phase 3
+(caller-side direct-eval into arg regs); phase 4 (cross targets).
