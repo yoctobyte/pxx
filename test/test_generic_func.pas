@@ -23,15 +23,15 @@ begin
   tmp := A; A := B; B := tmp;
 end;
 
-specialize Max<Integer> as MaxInt;
+specialize Max<Integer> as MaxIntF;
 specialize Min<Integer> as MinInt;
 specialize Clamp<Integer> as ClampInt;
 specialize Swap<Integer> as SwapInt;
 
 var x, y: Integer;
 begin
-  writeln(MaxInt(3, 7));
-  writeln(MaxInt(10, 4));
+  writeln(MaxIntF(3, 7));
+  writeln(MaxIntF(10, 4));
   writeln(MinInt(3, 7));
   writeln(MinInt(10, 4));
   writeln(ClampInt(5, 1, 10));
