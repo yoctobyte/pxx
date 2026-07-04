@@ -29,13 +29,16 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (80)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-downcast-inherited-property-wrong-offset | A | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
+| bug-forward-class-decl-with-later-base-loses-fields | A | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| doc-licensing-split-mpl-zlib | D | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
@@ -145,7 +148,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (458)
+## done (460)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -575,6 +578,7 @@ _none_
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |
 | feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-tcomponent-tpersistent | B | feature | TComponent / TPersistent (FPC Classes owner-child surface) | — |
 | feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
 | feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
@@ -583,6 +587,7 @@ _none_
 | feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
 | feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
+| feature-types-unit | B | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | feature | Untyped `var` / `const` / `out` parameters | — |
 | feature-uses-alias-as | ACA | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
@@ -627,8 +632,11 @@ _none_
 ## Ready (no unmet blocker)
 
 - [C] bug-c-printf-without-stdio-include-varargs
+- [A] bug-downcast-inherited-property-wrong-offset
+- [A] bug-forward-class-decl-with-later-base-loses-fields
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-int-div-zero-behavior-unification
+- [D] doc-licensing-split-mpl-zlib
 - [A] feature-asm-source-frontend
 - [A] feature-asm-textual-emit-mode
 - [A] feature-assembler-first-class-citizen

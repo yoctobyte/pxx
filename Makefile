@@ -3537,6 +3537,10 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/test_tlist_notify.pas /tmp/lib_tlist_notify
 	test "$$(/tmp/lib_tlist_notify)" = "total ok 2 / 2"
+	$(PXX_STABLE) -Fulib/rtl test/test_tcomponent.pas /tmp/lib_tcomponent
+	test "$$(/tmp/lib_tcomponent)" = "total ok 9 / 9"
+	$(PXX_STABLE) -Fulib/rtl test/lib_types.pas /tmp/lib_types
+	test "$$(/tmp/lib_types)" = "3 4 10 20 0 1"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
 	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "32"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"

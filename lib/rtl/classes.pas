@@ -22,6 +22,54 @@ interface
 uses sysutils;   { CompareStr for Sort }
 
 type
+  { ---- TPersistent: assignable base (FPC Classes surface) ---- }
+  TPersistent = class(TObject)
+  protected
+    procedure AssignTo(Dest: TPersistent); virtual;
+  public
+    procedure Assign(Source: TPersistent); virtual;
+    function GetNamePath: string; virtual;
+  end;
+
+  { ---- TComponent: owner/child component model (FPC Classes surface) ----
+    A component owns the components created with it as AOwner; freeing the owner
+    frees them. This is the base FCL/LCL units build on. Streaming (TReader) is
+    the separate classes_lite.TComponent for pxx's own PCL widget stack; this is
+    the FPC-facing `uses Classes` surface. }
+  TOperation = (opInsert, opRemove);
+
+  TComponent = class(TPersistent)
+  private
+    FOwner: TComponent;
+    FComponents: array of TComponent;
+    FComponentCount: Integer;
+    FName: string;
+    FTag: NativeInt;
+    function GetComponent(Index: Integer): TComponent;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); virtual;
+  public
+    constructor Create(AOwner: TComponent); virtual;
+    { introduces the virtual Destroy (rather than `override`ing TObject.Destroy)
+      so classes.pas compiles on the pinned stable compiler too — pxx's implicit
+      TObject grew a virtual Destroy only recently and this unit is built by
+      $(PXX_STABLE). Subclasses still `override` this. }
+    destructor Destroy; virtual;
+    procedure InsertComponent(AComponent: TComponent);
+    procedure RemoveComponent(AComponent: TComponent);
+    function FindComponent(const AName: string): TComponent;
+    property Owner: TComponent read FOwner;
+    property Components[Index: Integer]: TComponent read GetComponent;
+    property ComponentCount: Integer read FComponentCount;
+    property Name: string read FName write FName;
+    property Tag: NativeInt read FTag write FTag;
+  end;
+
+  { metaclass — declared after the full class (a forward `TComponent = class;`
+    before an inherited full decl currently breaks field registration; see
+    bug-forward-class-decl-with-later-base-loses-fields) }
+  TComponentClass = class of TComponent;
+
   { ---- TStream: abstract byte stream + TMemoryStream concrete ---- }
   TSeekOrigin = (soBeginning, soCurrent, soEnd);
 
@@ -320,6 +368,104 @@ function TList.Remove(Item: Pointer): Integer;
 begin
   Result := IndexOf(Item);
   if Result >= 0 then Self.Delete(Result);   { Self. — Delete is also a builtin }
+end;
+
+{ ============================ TPersistent ============================ }
+
+procedure TPersistent.AssignTo(Dest: TPersistent);
+begin
+  { base: nothing — a subclass overrides Assign or AssignTo }
+end;
+
+procedure TPersistent.Assign(Source: TPersistent);
+begin
+  if Source <> nil then Source.AssignTo(Self);
+end;
+
+function TPersistent.GetNamePath: string;
+begin
+  Result := '';
+end;
+
+{ ============================ TComponent ============================ }
+
+constructor TComponent.Create(AOwner: TComponent);
+begin
+  FOwner := nil;
+  FComponentCount := 0;
+  FName := '';
+  FTag := 0;
+  if AOwner <> nil then AOwner.InsertComponent(Self);
+end;
+
+destructor TComponent.Destroy;
+var c: TComponent;
+begin
+  { free the components we own; each child's Destroy calls Owner.RemoveComponent,
+    draining FComponents from the tail. (Temp `c` because `arr[i].Free` does not
+    parse — a known pxx gap.) }
+  while FComponentCount > 0 do
+  begin
+    c := FComponents[FComponentCount - 1];
+    c.Free;
+  end;
+  if FOwner <> nil then FOwner.RemoveComponent(Self);
+  { no `inherited Destroy` — TObject.Destroy is an empty no-op in pxx, and calling
+    it from a direct-root class needs a newer compiler than the pin. }
+end;
+
+function TComponent.GetComponent(Index: Integer): TComponent;
+begin
+  if (Index < 0) or (Index >= FComponentCount) then
+    Result := nil
+  else
+    Result := FComponents[Index];
+end;
+
+procedure TComponent.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  { base: no-op; a subclass reacts to owned-component insert/remove }
+end;
+
+procedure TComponent.InsertComponent(AComponent: TComponent);
+begin
+  if AComponent = nil then Exit;
+  AComponent.FOwner := Self;
+  if FComponentCount >= Length(FComponents) then
+  begin
+    if Length(FComponents) = 0 then SetLength(FComponents, 8)
+    else SetLength(FComponents, Length(FComponents) * 2);
+  end;
+  FComponents[FComponentCount] := AComponent;
+  FComponentCount := FComponentCount + 1;
+  Notification(AComponent, opInsert);
+end;
+
+procedure TComponent.RemoveComponent(AComponent: TComponent);
+var i, j: Integer;
+begin
+  for i := 0 to FComponentCount - 1 do
+    if FComponents[i] = AComponent then
+    begin
+      Notification(AComponent, opRemove);
+      for j := i to FComponentCount - 2 do FComponents[j] := FComponents[j + 1];
+      FComponentCount := FComponentCount - 1;
+      AComponent.FOwner := nil;
+      Exit;
+    end;
+end;
+
+function TComponent.FindComponent(const AName: string): TComponent;
+var i: Integer;
+begin
+  Result := nil;
+  if AName = '' then Exit;
+  for i := 0 to FComponentCount - 1 do
+    if SameText(FComponents[i].FName, AName) then
+    begin
+      Result := FComponents[i];
+      Exit;
+    end;
 end;
 
 { ============================ TStrings ============================ }
