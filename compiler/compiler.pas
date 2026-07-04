@@ -360,6 +360,15 @@ begin
       NoDivCheck := True;
       Inc(i);
     end
+    else if option = '--strict-ir' then
+    begin
+      { Opt in to the self-host safety guard: IRVerify hard-errors on any
+        IR_UNSUPPORTED node (a frontend failed to lower an AST node). Default
+        off — an in-development frontend may still emit it. See
+        feature-selfhost-guard-ir-unsupported. }
+      StrictIR := True;
+      Inc(i);
+    end
     else if option = '--lax-decl-order' then
     begin
       { Opt out of declare-before-use gating for forward-visible global vars

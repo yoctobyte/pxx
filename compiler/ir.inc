@@ -138,6 +138,19 @@ begin
     Error('invalid optional IR node reference in ' + context);
 end;
 
+{ Local decimal int->string (AsmIntToStr lives in asmfront.inc, included after
+  ir.inc, so not visible here). Only used by the --strict-ir diagnostic. }
+function IRVerifyIntStr(v: Integer): AnsiString;
+var neg: Boolean; u: Integer; r: AnsiString;
+begin
+  if v = 0 then begin Result := '0'; Exit; end;
+  neg := v < 0; u := v; if neg then u := -u;
+  r := '';
+  while u > 0 do begin r := Chr(Ord('0') + (u mod 10)) + r; u := u div 10; end;
+  if neg then r := '-' + r;
+  Result := r;
+end;
+
 procedure IRVerify;
 var i, lblId, op: Integer;
     seenLabel: array[0..MAX_IR-1] of Boolean;
@@ -400,7 +413,17 @@ begin
           Error('invalid IMT index in imtaddr');
 
       IR_UNSUPPORTED:
-        begin end;
+        { A frontend could not lower this AST node (ir.inc IRLowerAST /
+          IRLowerAddress else-fallbacks). Under --strict-ir, fail loud: an
+          IR_UNSUPPORTED node — even an unreferenced/dead one — means the
+          program is already broken and reaching codegen with it produces a
+          nondeterministic self-host miscompile (bug-selfhost-multifn-ifelse-
+          miscompile). Default off so an in-development frontend is not broken.
+          IRA[i] holds the offending AST kind (ASTKind, see the IRAppend calls
+          at ~965 / ~5107). }
+        if StrictIR then
+          Error('IR_UNSUPPORTED: frontend could not lower AST node (kind ' +
+                IRVerifyIntStr(IRA[i]) + ') — a frontend gap, would miscompile');
 
       IR_VAR_STORE:
       begin
