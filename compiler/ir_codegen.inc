@@ -5138,11 +5138,63 @@ begin
   end;
 end;
 
+{ Phase-0 opportunity probe for feature-callconv-register-args. Runs over the
+  freshly-lowered IR of one body (CurProc) and tallies register-residency
+  eligibility. Pure measurement — no codegen effect. A param is eligible when it
+  is a scalar int/ptr, passed by value (not IsRef), not an array/aggregate, and
+  its address is never taken in this body (no IR_LEA / IR_SLOTADDR references its
+  SymIdx). Address-taken scalar rejects are counted separately so we know how
+  many the later addr-taken pass would need to keep in-frame. }
+function RegcallScalarType(tk: TTypeKind): Boolean;
+begin
+  RegcallScalarType :=
+    (tk = tyInteger) or (tk = tyBoolean) or (tk = tyChar) or (tk = tyClass) or
+    ((tk >= tyInt8) and (tk <= tyNativeUInt)) or (tk = tyPointer);
+end;
+
+procedure RegcallMeasureBody;
+var pi, k, sy, eligibleHere: Integer;
+    addrTaken: Boolean;
+begin
+  if Procs[CurProc].ParamCount <= 0 then Exit;
+  Inc(RegcallProcsWithParams);
+  eligibleHere := 0;
+  for pi := 0 to Procs[CurProc].ParamCount - 1 do
+  begin
+    Inc(RegcallTotalParams);
+    sy := Procs[CurProc].Params[pi].SymIdx;
+    if Procs[CurProc].Params[pi].IsRef then Continue;
+    if Procs[CurProc].Params[pi].IsArray then Continue;
+    if not RegcallScalarType(Procs[CurProc].Params[pi].TypeKind) then Continue;
+    addrTaken := False;
+    for k := 0 to IRCount - 1 do
+      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
+      begin
+        addrTaken := True;
+        Break;
+      end;
+    if addrTaken then
+      Inc(RegcallAddrTaken)
+    else
+    begin
+      Inc(RegcallEligibleParams);
+      Inc(eligibleHere);
+      { reload/spill traffic this param would no longer touch memory for }
+      for k := 0 to IRCount - 1 do
+        if ((IRKind[k] = IR_LOAD_SYM) or (IRKind[k] = IR_STORE_SYM)) and (IRA[k] = sy) then
+          Inc(RegcallEligibleUses);
+    end;
+  end;
+  if eligibleHere > 2 then Inc(RegcallCapped2, 2) else Inc(RegcallCapped2, eligibleHere);
+  if eligibleHere > 5 then Inc(RegcallCapped5, 5) else Inc(RegcallCapped5, eligibleHere);
+end;
+
 procedure CompileAST(node: Integer);
 begin
   IRReset;
   IRLowerAST(node);
   IRVerify;
+  if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
   { -O1+ shared-IR optimization pipeline (see ir.inc / IROptimize). Gated here
     so -O0 emits the raw lowering byte-identically; runs after IRVerify (on
     validated IR) and before IRDump so `--dump-ir` shows the optimized form. }

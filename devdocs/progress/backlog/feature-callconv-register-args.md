@@ -121,5 +121,35 @@ clobbers a resident reg without saving = silent param corruption. So phase 1
 must land minimally (r14/r15 only), full `make test` under a -O2-built compiler,
 -O2 self-host fixedpoint, before expanding. -O0 byte-identity stays the anchor.
 
-Status: **design + register audit + phasing done (this session); implementation
-not started.** Resume at phase 0 (fix the opportunity measurement), then phase 1.
+## Phase 0 MEASURED (2026-07-04) — opportunity confirmed large
+
+`--measure-regcall` flag added (compiler.pas + `RegcallMeasureBody` in
+ir_codegen.inc, called from CompileAST after IRLowerAST; flag-gated, zero
+codegen effect). Eligibility = scalar int/ptr (`RegcallScalarType`: tyInteger,
+tyBoolean, tyChar, tyClass, tyInt8..tyNativeUInt, tyPointer), not IsRef, not
+IsArray, and no IR_LEA/IR_SLOTADDR in-body references its SymIdx.
+
+Measured on the compiler self-compile (`--measure-regcall compiler/compiler.pas`):
+
+| Metric | Value | % of params |
+|---|---|---|
+| bodies with params | 1262 | — |
+| total params | 2625 | — |
+| eligible | 2084 | **79%** |
+| capture @ 2 regs (r14/r15, phase 1) | 1595 | **61%** |
+| capture @ 5 regs (+rbx/r12/r13, phase 2) | 2053 | **78%** |
+| eligible param loads+stores (reload traffic removed) | 7234 | — |
+| addr-taken rejects | 0 | — |
+
+- The prior false-zero was a probe-placement bug; this probe verified correct on
+  a crafted `Bump(var x)` case (detects the 1 addr-taken param, keeps the
+  by-value sibling eligible).
+- **0 addr-taken is real**: the compiler source never passes a scalar value param
+  by-address — so phase 1 can skip the addr-taken keep-in-frame path for the
+  self-host workload (still implement it for correctness on arbitrary input).
+- Phase 1 (2 regs) alone captures 61% of ALL params and removes most of the 7234
+  reload memory ops. Phase 2 (5 regs) reaches 78% — diminishing return, so land
+  phase 1 first and re-benchmark before expanding.
+
+Status: **phase 0 DONE (measured; instrumentation committed).** Resume at phase 1
+(r14/r15 residency behind -O2).

@@ -104,6 +104,14 @@ begin
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
   DumpProcMap := False;
+  MeasureRegcall := False;
+  RegcallProcsWithParams := 0;
+  RegcallTotalParams := 0;
+  RegcallEligibleParams := 0;
+  RegcallAddrTaken := 0;
+  RegcallCapped2 := 0;
+  RegcallCapped5 := 0;
+  RegcallEligibleUses := 0;
   OptLevel := 0;
   WarnedMissedFold := False;
   DumpCpp := False;
@@ -153,6 +161,11 @@ begin
     else if option = '--proc-map' then
     begin
       DumpProcMap := True;
+      Inc(i);
+    end
+    else if option = '--measure-regcall' then
+    begin
+      MeasureRegcall := True;
       Inc(i);
     end
     else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then
@@ -690,6 +703,16 @@ begin
     for i := 0 to ProcCount - 1 do
       if Procs[i].BodyAddr >= 0 then
         writeln(StdErr, 'PROC ', IntToHexStr(LOAD_ADDR + CODE_OFFSET + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
+  if MeasureRegcall then
+  begin
+    writeln(StdErr, 'REGCALL-MEASURE: bodies-with-params=', RegcallProcsWithParams,
+            ' total-params=', RegcallTotalParams,
+            ' eligible=', RegcallEligibleParams,
+            ' addr-taken-rejects=', RegcallAddrTaken);
+    writeln(StdErr, 'REGCALL-MEASURE: capture@2reg=', RegcallCapped2,
+            ' capture@5reg=', RegcallCapped5,
+            ' eligible-param-loads+stores=', RegcallEligibleUses);
+  end;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then

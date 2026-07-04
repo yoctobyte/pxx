@@ -832,6 +832,18 @@ var
   DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
   OptLevel : Integer;     { -O0..-O3: optimization level. 0 (default) = the historic 1:1 emission — the self-host byte-identity gate runs at -O0 and is NEVER affected by opt passes; each pass gates on OptLevel >= its tier. }
   WarnedMissedFold : Boolean;  { one-shot latch for IROptWarnMissedFold: a foldable const-const / identity IR_BINOP reached codegen (const-fold was measured 0-fire and not shipped; this tripwire flags a future pass that starts producing them). }
+  { --measure-regcall: phase-0 opportunity probe for feature-callconv-register-args.
+    Per compiled body, tally params and how many are register-residency-eligible
+    (scalar int/ptr, not by-ref/array/float/aggregate, address never taken in the
+    body's IR). Summary printed at end of compile; no codegen change. }
+  MeasureRegcall : Boolean;
+  RegcallProcsWithParams : Integer;  { bodies that have >=1 param }
+  RegcallTotalParams     : Integer;  { total declared params across all bodies }
+  RegcallEligibleParams  : Integer;  { params that pass the residency eligibility test }
+  RegcallAddrTaken       : Integer;  { scalar-typed params rejected only because their address is taken in-body }
+  RegcallCapped2         : Integer;  { sum over bodies of min(eligible-in-body, 2) — phase-1 (r14/r15) capture }
+  RegcallCapped5         : Integer;  { sum over bodies of min(eligible-in-body, 5) — phase-2 (rbx/r12/r13 too) capture }
+  RegcallEligibleUses    : Integer;  { IR_LOAD_SYM+IR_STORE_SYM refs to eligible params — reload/spill traffic removable }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;
