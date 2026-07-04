@@ -524,6 +524,9 @@ test-core: $(COMPILER)
 	/tmp/cstruct_b326; test "$$?" = "62"
 	./$(COMPILER) test/ccast_b4.c /tmp/ccast_b426
 	/tmp/ccast_b426; test "$$?" = "102"
+	# cast expression as a call argument (vararg + plain) — bug-c-cast-as-call-arg-parse-error
+	./$(COMPILER) test/ccast_call_arg.c /tmp/ccast_call_arg26
+	test "$$(/tmp/ccast_call_arg26)" = "v=20 s=22"
 	./$(COMPILER) test/cloop_b5.c /tmp/cloop_b526
 	/tmp/cloop_b526; test "$$?" = "28"
 	./$(COMPILER) test/cfnptr_b6.c /tmp/cfnptr_b626
