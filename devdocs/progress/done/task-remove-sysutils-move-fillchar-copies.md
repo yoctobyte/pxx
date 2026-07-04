@@ -1,7 +1,10 @@
 # Remove the sysutils Move/FillChar copies (now shadowed by builtin)
 
 - **Type:** task (library cleanup) — **Track B** (lib/** ownership)
-- **Status:** backlog
+- **Status:** DONE 2026-07-04 — removed both decls (interface) + both bodies
+  (impl) from lib/rtl/sysutils.pas; builtin Move/FillChar (in pin v171, well
+  past v145) resolves every call. `make lib-test` green (sysutils test incl.)
+  + 19 demos OK against pinned v171. No behavior change (byte-identical impl).
 - **Opened:** 2026-07-02 by Track A while landing the builtin-home half of
   [[feature-move-fillchar-intrinsics]] (v145).
 

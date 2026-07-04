@@ -30,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (75)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -105,7 +105,6 @@ _none_
 | feature-zig-frontend | B | feature | Zig frontend — umbrella | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
-| task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
@@ -144,7 +143,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (450)
+## done (451)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -591,6 +590,7 @@ _none_
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | perf-compiler-hotspots-algorithmic | A | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | task-license-mpl2-rollout | A | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
+| task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
@@ -688,7 +688,6 @@ _none_
 - [B] feature-zig-frontend
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
-- [B] task-remove-sysutils-move-fillchar-copies
 - [B] task-sqlite-libc-free-runtime-bringup
 - [B+C] wish-compile-gnu-pascal
 

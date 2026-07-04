@@ -87,14 +87,10 @@ function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
   Backed by the nanosleep syscall. }
 procedure Sleep(Milliseconds: Cardinal);
 
-{ INTERIM HOME (see feature-move-fillchar-intrinsics). In FPC, Move/FillChar are
-  System primitives — bare, no `uses`. Until the compiler provides them (as
-  builtins, then optimized intrinsics) they live here in SysUtils: every real
-  consumer, and all Synapse units, `uses SysUtils`, so the bare name resolves.
-  Remove from here once the compiler builtin lands. Move is overlap-safe
-  (memmove semantics); FillChar fills bytes. }
-procedure Move(const Source; var Dest; Count: Integer);
-procedure FillChar(var X; Count: Integer; Value: Byte);
+{ Move/FillChar are now compiler builtins (compiler/builtin/builtin.pas,
+  auto-pulled, FPC System parity) — registered first, so FindProc resolves every
+  call to them. The former interim SysUtils copies were removed
+  (task-remove-sysutils-move-fillchar-copies). }
 
 { Left-pad/Right-pad s to len chars with ch (default space). }
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
@@ -345,26 +341,7 @@ begin
   res := __pxxrawsyscall(n, Int64(@req), 0, 0, 0, 0, 0);
 end;
 
-procedure Move(const Source; var Dest; Count: Integer);
-var s, d: PByte; i: Integer;
-begin
-  if Count <= 0 then Exit;
-  s := PByte(@Source);
-  d := PByte(@Dest);
-  { Overlap-safe: when Dest is above Source and the ranges overlap, copy
-    backward so we don't clobber not-yet-copied bytes (memmove, not memcpy). }
-  if (Int64(d) > Int64(s)) and (Int64(d) < Int64(s) + Count) then
-    for i := Count - 1 downto 0 do d[i] := s[i]
-  else
-    for i := 0 to Count - 1 do d[i] := s[i];
-end;
-
-procedure FillChar(var X; Count: Integer; Value: Byte);
-var d: PByte; i: Integer;
-begin
-  d := PByte(@X);
-  for i := 0 to Count - 1 do d[i] := Value;
-end;
+{ Move/FillChar bodies removed — now compiler builtins (see interface note). }
 
 function UpperCase(const s: AnsiString): AnsiString;
 var i: Integer; c: Char;
