@@ -685,11 +685,12 @@ type
 
 const
   MAX_TEMPLATES = 16;
-  MAX_TEMPLATE_TOKENS = 8192;
+  MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
+  MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
   MAX_NESTED_TOKENS = 8192;
   MAX_LIFTS = 512;
   MAX_LIFT_CAPS = 2048;
-  MAX_GENERIC_METHODS = 64;
+  MAX_GENERIC_METHODS = 512;    { FPC fgl has ~211 generic method bodies }
   MAX_PENDING_SPECS = 32;
   MAX_SPECIALIZATIONS = 32;
   MAX_GENERIC_FUNCS = 16;
@@ -699,16 +700,16 @@ const
 type
   TTemplate = record
     Name     : AnsiString;
-    Param    : AnsiString;
     TokStart : Integer;
     TokCount : Integer;
+    { type parameters live in the parallel TemplateParamNames/TemplateNParams
+      globals (managed-string arrays inside record-array elements misbehave) }
   end;
 
   TSpecialization = record
     Name         : AnsiString;  { e.g. TIntStack }
     TemplateName : AnsiString;  { e.g. TStack }
-    ConcreteType : TTokenKind;  { e.g. tkInteger_T }
-    ConcreteName : AnsiString;  { e.g. 'Integer' or 'TMyClass' }
+    { concrete args live in SpecConcreteNames/Kinds/SpecNParams globals }
   end;
 
   TGenericFunc = record
@@ -753,6 +754,20 @@ var
   SpecializationCount: Integer;
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   SpecializeTemplateName: AnsiString;
+  { Active substitution set for SpecializeStream (param name -> concrete token),
+    filled by each caller right before streaming. Multi-param generics
+    substitute all entries in one pass. }
+  SpecSubNames  : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  SpecSubKinds  : array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+  SpecSubCount  : Integer;
+  { Per-template type parameters + per-specialization concrete args, parallel
+    to Templates[]/Specializations[] (flat ti*MAX_TEMPLATE_PARAMS+k layout). }
+  TemplateParamNames : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  TemplateNParams    : array[0..MAX_TEMPLATES-1] of Integer;
+  SpecConcreteNames  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  SpecConcreteKinds  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+  SpecNParams        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
   { Nested routines (Approach B / lambda-lifting): a nested procedure/function is

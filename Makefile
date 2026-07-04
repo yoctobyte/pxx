@@ -470,6 +470,12 @@ test-core: $(COMPILER)
 	# property through a class typecast (TButton(Sender).Caption shape) — was a silent offset-0 (VMT ptr) read
 	./$(COMPILER) test/test_cast_property.pas /tmp/test_cast_property26
 	test "$$(/tmp/test_cast_property26 | tail -1)" = "total ok 15 / 15"
+	# multi-param generics <TKey, TData> + constrained type params (fgl TFPGMap/TFPGObjectList shapes)
+	./$(COMPILER) test/test_generic_multiparam.pas /tmp/test_generic_multiparam26
+	test "$$(/tmp/test_generic_multiparam26 | tail -1)" = "total ok 4 / 4"
+	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
+	./$(COMPILER) test/test_fpc_compat_batch.pas /tmp/test_fpc_compat_batch26
+	test "$$(/tmp/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas /tmp/test_auto_locals26
 	test "$$(/tmp/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"

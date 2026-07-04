@@ -570,6 +570,19 @@ begin
   if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
           (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
 
+  { `System.X` — pxx has no separate System unit (System IS the builtin layer).
+    Strip the qualifier so FPC's `System.Move(...)` / `System.FreeMem` resolve
+    exactly like the bare name. Only when nothing real is named System (a
+    loaded unit wins below; a local/record var named System wins here). }
+  if CaseEqual(name, 'System') and (FindUnitOrAlias(name) < 0) and
+     (FindSym(name) < 0) then
+  begin
+    Next;                 { consume 'System' (CurTok -> '.') }
+    Expect(tkDot, '.');   { consume '.'      (CurTok -> member) }
+    name := CurTok.SVal;  { Result stays -1 = treat as unqualified }
+    Exit;
+  end;
+
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }
@@ -782,9 +795,12 @@ begin
   end;
 end;
 
-procedure SpecializeStream(tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
+procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
+{ Substitutions come from the SpecSub* globals (param name -> concrete
+  name/kind), set by the caller — multi-param generics replace every type
+  parameter in one pass. }
 var
-  i, j: Integer;
+  i, j, k: Integer;
   subCount: Integer;
   s: AnsiString;
 begin
@@ -813,19 +829,22 @@ begin
           Inc(j);
         end;
       end
-      else if CaseEqual(s, paramName) then
-      begin
-        SpecializeTokens[subCount].Kind := concreteType;
-        SpecializeTokens[subCount].SOffset := TokCharLen;
-        SpecializeTokens[subCount].SLen := Length(concreteName);
-        j := 1;
-        while j <= Length(concreteName) do
-        begin
-          TokChars[TokCharLen] := concreteName[j];
-          Inc(TokCharLen);
-          Inc(j);
-        end;
-      end;
+      else
+        for k := 0 to SpecSubCount - 1 do
+          if CaseEqual(s, SpecSubNames[k]) then
+          begin
+            SpecializeTokens[subCount].Kind := SpecSubKinds[k];
+            SpecializeTokens[subCount].SOffset := TokCharLen;
+            SpecializeTokens[subCount].SLen := Length(SpecSubValues[k]);
+            j := 1;
+            while j <= Length(SpecSubValues[k]) do
+            begin
+              TokChars[TokCharLen] := SpecSubValues[k][j];
+              Inc(TokCharLen);
+              Inc(j);
+            end;
+            Break;
+          end;
     end;
 
     Inc(subCount);
@@ -858,17 +877,36 @@ end;
 
 procedure ParseGenericTemplate;
 var
-  templateName, paramName, nextStr: AnsiString;
-  depth, startTok, cur, finalCur: Integer;
-  isOpener: Boolean;
+  templateName, nextStr: AnsiString;
+  depth, startTok, cur, finalCur, np, gi: Integer;
+  pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  isOpener, doneParams: Boolean;
 begin
   Next; { consume 'generic' }
   if CurTok.Kind <> tkIdent then Error('expected generic class name');
   templateName := CurTok.SVal; Next;
 
+  { <T> / <TKey, TData> / <T: TObject> / <TKey; TData: TObject> — groups of
+    comma-separated names, each group with an optional `: constraint` (the
+    constraint list runs to the next `;` or `>`), groups separated by `;`.
+    Constraints are parse-and-ignore: pxx generics are token-substitution, so
+    the constraint has no checked meaning here (FPC enforces it at compile of
+    the generic itself, which substitution defers to the specialization). }
   Expect(tkLt, '<');
-  if CurTok.Kind <> tkIdent then Error('expected generic parameter name');
-  paramName := CurTok.SVal; Next;
+  np := 0;
+  doneParams := False;
+  repeat
+    repeat
+      if CurTok.Kind <> tkIdent then Error('expected generic parameter name');
+      if np >= MAX_TEMPLATE_PARAMS then Error('too many generic parameters (MAX_TEMPLATE_PARAMS)');
+      pnames[np] := CurTok.SVal; Inc(np); Next;
+    until not Eat(tkComma);
+    if Eat(tkColon) then
+      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkGt) and
+            (CurTok.Kind <> tkEOF) do
+        Next;   { skip the constraint list }
+    if not Eat(tkSemicolon) then doneParams := True;
+  until doneParams;
   Expect(tkGt, '>');
   Expect(tkEq, '=');
 
@@ -914,7 +952,9 @@ begin
 
   if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
   Templates[TemplateCount].Name := templateName;
-  Templates[TemplateCount].Param := paramName;
+  for gi := 0 to np - 1 do
+    TemplateParamNames[TemplateCount * MAX_TEMPLATE_PARAMS + gi] := pnames[gi];
+  TemplateNParams[TemplateCount] := np;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
   Templates[TemplateCount].TokCount := 0;
 
@@ -933,26 +973,49 @@ begin
 
   Inc(TemplateCount);
 
+  if DebugTrace then
+    writeln('TEMPLATE ', templateName, ' startTok=', startTok, ' endTok=', finalCur,
+            ' endLine=', Tokens[finalCur-1].Line);
+
   TokPos := finalCur;
   Next;
 end;
 
+{ Load the SpecSub* substitution set from a (template, specialization) pair. }
+procedure SetSpecSubs(ti, si: Integer);
+var k: Integer;
+begin
+  SpecSubCount := TemplateNParams[ti];
+  for k := 0 to SpecSubCount - 1 do
+  begin
+    SpecSubNames[k]  := TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k];
+    SpecSubValues[k] := SpecConcreteNames[si * MAX_TEMPLATE_PARAMS + k];
+    SpecSubKinds[k]  := SpecConcreteKinds[si * MAX_TEMPLATE_PARAMS + k];
+  end;
+end;
+
 procedure ParseSpecialization(const specName: AnsiString);
 var
-  templateName, concreteName: AnsiString;
-  concreteType: TTokenKind;
-  ti, i: Integer;
+  templateName: AnsiString;
+  cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
+  cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
+  nc, ti, i: Integer;
 begin
   Next; { consume 'specialize' }
   if CurTok.Kind <> tkIdent then Error('expected generic template name');
   templateName := CurTok.SVal; Next;
 
   Expect(tkLt, '<');
-  if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
-    Error('expected concrete type name');
-  concreteName := CurTok.SVal;
-  concreteType := CurTok.Kind;
-  Next;
+  nc := 0;
+  repeat
+    if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
+      Error('expected concrete type name');
+    if nc >= MAX_TEMPLATE_PARAMS then Error('too many specialization arguments (MAX_TEMPLATE_PARAMS)');
+    cNames[nc] := CurTok.SVal;
+    cKinds[nc] := CurTok.Kind;
+    Inc(nc);
+    Next;
+  until not Eat(tkComma);
   Expect(tkGt, '>');
   { Leave CurTok on the trailing ';' (do NOT Eat) so SpecializeStream inserts
     the class-body tokens right after it; the final Next then lands CurTok on
@@ -964,12 +1027,18 @@ begin
     if CaseEqual(Templates[i].Name, templateName) then
       ti := i;
   if ti < 0 then Error('generic template ' + templateName + ' not found');
+  if nc <> TemplateNParams[ti] then
+    Error('specialize ' + templateName + ': wrong number of type arguments');
 
   if SpecializationCount >= MAX_SPECIALIZATIONS then Error('too many specializations');
   Specializations[SpecializationCount].Name := specName;
   Specializations[SpecializationCount].TemplateName := templateName;
-  Specializations[SpecializationCount].ConcreteType := concreteType;
-  Specializations[SpecializationCount].ConcreteName := concreteName;
+  for i := 0 to nc - 1 do
+  begin
+    SpecConcreteKinds[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := cKinds[i];
+    SpecConcreteNames[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := cNames[i];
+  end;
+  SpecNParams[SpecializationCount] := nc;
   Inc(SpecializationCount);
 
   { Stream the concrete class body inline so the fall-through binds the alias
@@ -988,7 +1057,8 @@ begin
   end;
 
   SpecializeTemplateName := Templates[ti].Name;
-  SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
+  SetSpecSubs(ti, SpecializationCount - 1);
+  SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName);
   Next;
 end;
 
@@ -1005,11 +1075,11 @@ begin
     ti := PendingSpecTi[p];
     si := PendingSpecIdx[p];
     SpecializeTemplateName := Templates[ti].Name;
+    SetSpecSubs(ti, si);
     for gm := 0 to GenericMethodCount - 1 do
       if GenericMethods[gm].TemplateIdx = ti then
         SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
-          Specializations[si].Name, Templates[ti].Param,
-          Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+          Specializations[si].Name);
   end;
   PendingSpecCount := 0;
 end;
@@ -1075,7 +1145,8 @@ begin
     if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
     begin
       SpecializeTemplateName := Templates[ti].Name;
-      SpecializeStream(mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+      SetSpecSubs(ti, si);
+      SpecializeStream(mStart, mCount, Specializations[si].Name);
     end;
   end;
 
@@ -1220,8 +1291,12 @@ begin
   if gfi < 0 then Error('generic function ' + templateName + ' not found');
 
   SpecializeTemplateName := GenericFuncs[gfi].Name;
-  SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
-    specName, GenericFuncs[gfi].Param, concreteName, concreteKind);
+  { generic FUNCTIONS stay single-parameter — load the substitution set directly }
+  SpecSubCount := 1;
+  SpecSubNames[0]  := GenericFuncs[gfi].Param;
+  SpecSubValues[0] := concreteName;
+  SpecSubKinds[0]  := concreteKind;
+  SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount, specName);
   Next;
   ParseSubroutine;
 end;
@@ -1578,15 +1653,15 @@ begin
     end
     else if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0)
             and (Procs[CurProc].ParamCount > 0)
-            and (FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName) >= 0)
-            and (not UPropIsIndexed[FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName)]) then
+            and (FindUProp(CurSelfClass - REC_UCLASS_BASE, fieldName) >= 0) then
     begin
       { Bare (unqualified) property access inside a method -> implicit Self.<prop>.
         Field-backed read/write rewrites to the backing field (like the bare-field
         path above) using the correct accessor for the context. Method-backed READ
-        builds the getter call; method-backed WRITE (a setter call needing the RHS)
-        is not built here — that path stays Self.<prop> := .... Indexed/default
-        properties also keep needing Self.<prop>. See bug-unqualified-property-in-method. }
+        builds the getter call; an INDEXED property builds the getter/setter call
+        with the [index] args (fgl's InternalItems[i] / [i] := v). A non-indexed
+        method-backed WRITE stays Self.<prop> := ... (needs the RHS earlier than
+        this path sees it). See bug-unqualified-property-in-method. }
       selfClassCi := CurSelfClass - REC_UCLASS_BASE;
       pri := FindUProp(selfClassCi, fieldName);
       isAssign := (CurTok.Kind = tkAssign);
@@ -1594,7 +1669,69 @@ begin
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
       ASTTk[selfNode] := Ord(tyClass);
-      if isAssign then
+      if UPropIsIndexed[pri] then
+      begin
+        if CurTok.Kind <> tkLBrack then
+          Error('indexed property requires an index: ' + fieldName);
+        { write iff `:=` follows the bracket group (CurTok = '[', at TokPos-1) }
+        isAssign := False;
+        i := TokPos - 1; w := 0;
+        while i < TokCount do
+        begin
+          if Tokens[i].Kind = tkLBrack then Inc(w)
+          else if Tokens[i].Kind = tkRBrack then
+          begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+          Inc(i);
+        end;
+        if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        ParsePropIndexArgs(margIdx, mlastArg);
+        methName := '';
+        if isAssign then
+        begin
+          if UPropWriteMLen[pri] = 0 then Error('indexed property has no setter: ' + fieldName);
+          for i := 0 to UPropWriteMLen[pri] - 1 do
+            AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+        end
+        else
+        begin
+          if UPropReadMLen[pri] = 0 then Error('indexed property has no getter method: ' + fieldName);
+          for i := 0 to UPropReadMLen[pri] - 1 do
+            AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+        end;
+        mmi := FindUMeth(selfClassCi, methName);
+        if mmi < 0 then Error('property accessor method not found: ' + methName);
+        mpi := UMthProc_[mmi];
+        if UMthVirSlot[mmi] >= 0 then
+        begin
+          mcallNode := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[mcallNode] := UMthVirSlot[mmi];
+        end
+        else
+          mcallNode := AllocNode(AN_CALL);
+        ASTIVal[mcallNode] := mpi;
+        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+        mselfArg := AllocNode(AN_ARG);
+        ASTLeft[mselfArg] := selfNode;
+        ASTLeft[mcallNode] := mselfArg;
+        ASTRight[mselfArg] := margIdx;   { self, index... }
+        if isAssign then
+        begin
+          Expect(tkAssign, ':=');
+          ParseExpr;
+          margSeq := AllocNode(AN_ARG);
+          ASTLeft[margSeq] := CurASTNode;  { self, index..., value }
+          ASTRight[mlastArg] := margSeq;
+          Result := mcallNode;   { complete setter statement; the statement
+                                   caller accepts a returned call node as-is }
+          Exit;
+        end;
+        tk := Procs[mpi].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recName := ProcRetRecId[mpi]
+        else recName := REC_NONE;
+        node := mcallNode;
+        { falls through to the trailing-selector loop (e.g. InternalItems[i]^) }
+      end
+      else if isAssign then
       begin
         { assignment target: use the WRITE accessor }
         if UPropWriteFLen[pri] > 0 then
@@ -5405,6 +5542,21 @@ begin
         left := AllocNode(AN_INT_LIT); ASTIVal[left] := 1; ASTTk[left] := Ord(tyInteger);
         CurASTNode := AllocNode(AN_BINOP); ASTIVal[CurASTNode] := Ord(tkEq);
         ASTLeft[CurASTNode] := op; ASTRight[CurASTNode] := left; ASTTk[CurASTNode] := Ord(tyBoolean);
+        LastExprTk := tyBoolean;
+        Exit;
+      end;
+
+      { Assigned(p): System intrinsic -> p <> nil (pointer/class/proc-var).
+        Same eval-once inline shape as Succ/Pred/Odd; a user symbol shadows. }
+      if CaseEqual(name, 'Assigned') and (procIdx < 0) and (idx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        left := AllocNode(AN_INT_LIT); ASTIVal[left] := 0; ASTTk[left] := Ord(tyPointer);
+        CurASTNode := AllocNode(AN_BINOP); ASTIVal[CurASTNode] := Ord(tkNeq);
+        ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := left; ASTTk[CurASTNode] := Ord(tyBoolean);
         LastExprTk := tyBoolean;
         Exit;
       end;
@@ -12646,15 +12798,33 @@ begin
             while (CurTok.Kind = tkIdent) and
                   (CaseEqual(CurTok.SVal, 'virtual') or
                    CaseEqual(CurTok.SVal, 'override') or
-                   CaseEqual(CurTok.SVal, 'abstract')) do
+                   CaseEqual(CurTok.SVal, 'abstract') or
+                   CaseEqual(CurTok.SVal, 'dynamic') or
+                   CaseEqual(CurTok.SVal, 'inline') or
+                   CaseEqual(CurTok.SVal, 'overload') or
+                   CaseEqual(CurTok.SVal, 'static') or
+                   CaseEqual(CurTok.SVal, 'reintroduce') or
+                   CaseEqual(CurTok.SVal, 'deprecated') or
+                   CaseEqual(CurTok.SVal, 'platform') or
+                   CaseEqual(CurTok.SVal, 'experimental')) do
             begin
-              if CaseEqual(CurTok.SVal, 'virtual') then isVirtual := True;
+              { virtual/override/abstract drive dispatch; dynamic = virtual
+                (FPC: same semantics, different table — pxx has one VMT).
+                inline/overload/static/reintroduce + hint directives are
+                parse-and-ignore: overload resolution is signature-keyed
+                anyway, `class` already makes a method static, and
+                reintroduce only silences an FPC hint. `deprecated` may
+                carry a message string literal. }
+              if CaseEqual(CurTok.SVal, 'virtual') or CaseEqual(CurTok.SVal, 'dynamic') then isVirtual := True;
               if CaseEqual(CurTok.SVal, 'override') then isOverride := True;
               if CaseEqual(CurTok.SVal, 'abstract') then
               begin
                 isVirtual := True;   { abstract implies virtual }
                 isAbstract := True;
               end;
+              if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+                 (Tokens[TokPos].Kind = tkString) then
+                Next; { skip the message literal (consumed by the Next below) }
               Next;
               Eat(tkSemicolon);
             end;
@@ -16066,6 +16236,36 @@ begin
     end;
   end;
 
+  { --mimic-fpc: pxx's own RTL SHADOWS every search root (the unit's own dir,
+    -Fu, ...) for units pxx ships. The mode exists to compile external FPC
+    source against pxx's RTL surface, and an FPC tree carries its own
+    types/sysutils/classes right next to the unit being compiled — parsing
+    those walls immediately (e.g. types.pp:136, advanced-record class
+    operators). Units pxx does not ship (fgl, rtlconsts, ...) fall through
+    unchanged. Non-mimic order is untouched (-Fu before RTL = the PAL supply
+    mechanism); mimic is never set during self-build. }
+  if MimicFpc and (not isPath) and (Length(UnitContent) = 0) then
+  begin
+    if ExeDir = '' then
+      rtldir := 'lib/rtl/'
+    else
+      ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
+    ConcatThree(rtldir, lo, '.pas', path);
+    LoadFileCI(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(rtldir, lo, '.pp', path);
+      LoadFileCI(path, UnitContent);
+    end;
+    { CWD-relative fallback, mirroring the tail block (self-host tests run a
+      /tmp compiler copy with CWD at the repo root) }
+    if (Length(UnitContent) = 0) and (ExeDir <> '') then
+    begin
+      ConcatThree('lib/rtl/', lo, '.pas', path);
+      LoadFileCI(path, UnitContent);
+    end;
+  end;
+
   { The including UNIT's own directory first, Pascal-only (.pas/.pp). A unit's
     sibling `uses` should bind to the Pascal unit next to it, never to an
     unrelated C header of the same base name reachable via a -I include root —
@@ -16599,6 +16799,12 @@ begin
       tkClass,
       tkProcedure,
       tkFunction: ParseSubroutine;
+      tkIdent:
+        { `resourcestring` sections (FPC rtlconsts et al) register as plain
+          string constants — pxx has no resource tables; the format-arg
+          machinery lives in whoever consumes the string. }
+        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection
+        else Next;
       else
         Next;
     end;
@@ -16686,6 +16892,8 @@ begin
             ParseInitializationSection(uname);
             PreScanPass := True;
           end
+          else if CaseEqual(CurTok.SVal, 'resourcestring') then
+            ParseConstSection           { registers as plain string constants }
           else
             Next;                       { 'finalization' + its body are skipped }
         else
@@ -17408,6 +17616,8 @@ begin
             Inc(DeclItemCount);
           end;
         end
+        else if CaseEqual(CurTok.SVal, 'resourcestring') then
+          ParseConstSection             { registers as plain string constants }
         else if CaseEqual(CurTok.SVal, 'label') then
         begin
           Next;
