@@ -108,3 +108,81 @@ Decision: implement v1 = explicit `inline;` + strict leaf auto-inline (-O2),
 IR-splice at the call site. Both gated OptLevel>=2 (auto-inline could move to -O3
 if we want explicit `inline;` at -O2 and auto at -O3 — user flagged this as an
 option). Measure the actual self-compile delta after landing.
+
+## Implementation plan (worked out 2026-07-04) — the single-pass obstacle + the fix
+
+**The obstacle.** PXX is single-pass: each proc's body AST is lowered to machine
+code in its own CompileAST, then `ASTNodeCount := 0` (parser.inc ~14826/10044)
+frees the AST pool, and the IR is IRReset per body. So at a call site the callee's
+body AST/IR **no longer exists**. IR-level splicing (as the original "Approach"
+section imagined) is therefore impossible without retaining the callee body.
+
+**The fix — retain eligible inline bodies, copy-in + re-lower at the call site.**
+
+1. **Directive capture.** `inline` is currently a silent no-op modifier
+   (parser.inc ~13544-13570, just `Next; Eat(semicolon)`). Add `ProcInline:
+   array[0..MAX_PROCS-1] of Boolean` (defs.inc) and set it there. Auto-inline
+   (-O2) additionally treats any proc passing the eligibility test as inline even
+   without the directive.
+
+2. **Retain the body in a dedicated pool.** New `InlAST*` arrays (parallel to
+   ASTKind/ASTLeft/ASTRight/ASTIVal/ASTTk, a few thousand entries — inline bodies
+   are tiny). At the END of parsing an eligible inline proc's body AST (before the
+   per-proc reset), **deep-copy its body subtree into InlAST**, remapping child
+   indices to InlAST positions. Crucially, rewrite every AN_IDENT that references
+   **param i** into a placeholder carrying the param *index* (params syms are torn
+   down, so index-not-sym), and every reference to the Result sym into a Result
+   placeholder. Record `InlineBodyRoot[procIdx]`, `InlineParamCount[procIdx]`,
+   and per-param TypeKind. Bail (leave ProcInline effectively off) if the body
+   uses anything outside the eligibility envelope.
+
+3. **Eligibility (v1 = STRICT, measured to lose only ~1%):** leaf (no call in
+   body), single-exit (no AN_EXIT), no addr-taken param, params + Result scalar
+   int/ptr by-value, no managed/float/record/set/array params or locals, body
+   `<= 12` cloned AST nodes, not recursive (proc never inlines itself — guard a
+   self-reference), not virtual/external/cdecl/variadic/generator/stackless/
+   method. (Direct IR_CALL targets are already non-virtual, so call sites only
+   ever hit non-virtual procs.)
+
+4. **Splice at the call site.** In IRLowerAST `AN_CALL` (ir.inc ~3839), FIRST
+   thing: if OptLevel>=2 and ProcInline[cpi] and InlineBodyRoot[cpi]>=0 and not
+   currently inlining cpi (recursion/nesting guard):
+   - For each arg, alloc a fresh caller local temp of the param's type, lower the
+     arg into it via the normal path (evaluate once, left-to-right, side effects
+     preserved), OR — for a side-effect-free arg (AN_INT_LIT / plain AN_IDENT) —
+     bind directly to skip the temp.
+   - **Copy the retained InlAST body into the live AST pool** (append at
+     ASTNodeCount), remapping InlAST child indices to the new live indices, and
+     replacing each param-index placeholder with an AN_IDENT of that param's arg
+     temp, and the Result placeholder with a fresh caller Result temp.
+   - Lower the copied-in expression normally; the call's IR value = the Result
+     temp (for a pure-expression body, = the lowered expression directly).
+   - A small `InlineDepth` counter / `InlineActiveProc` stack guards nested and
+     self inlining (cap depth 1 in v1; a call *inside* an inline body just emits
+     a normal call since eligible bodies are leaf anyway).
+
+5. **v1 body shape = pure expression** (`begin Result := E end`, no locals, no
+   control flow): the copy-in reduces to cloning E with param placeholders →
+   arg-temp idents; the call value is the lowered E. This is the smallest
+   complete slice and covers Sqr/Lo/Hi/bit-twiddle one-liners. Slice 2 adds
+   if-then-else Result bodies and simple ordinal locals (fresh caller locals per
+   callee local, same placeholder→remap trick, Exit→already-single so
+   fall-through). Measured: pure-expr is a subset of the 664 strict sites; slice 2
+   reaches most of them.
+
+6. **Gates.** Everything gated OptLevel>=2 → -O0/-O1 byte-identical untouched.
+   New gate in test-opt: an -O2 differential test with an `inline;` helper whose
+   arg has a side effect (called twice in one expression) must match -O0 output;
+   -O2 self-fixedpoint stays byte-identical; make test green. Add an oracle test
+   (arg side-effect order, nested inline in one expression, an ineligible case
+   that degrades to a call with a `--warn-inline` note).
+
+**Effort:** ~150-200 lines, self-contained (defs.inc arrays + parser retain hook +
+ir.inc AN_CALL splice + AN_IDENT placeholder handling). The eligibility scaffold
+(leaf/addr-taken/size) already exists from `--measure-inline`
+([[feature-callconv-register-args]] shares it). Risk is the AST copy-in remap
+(off-by-one on child indices) — validate with the -O2 self-fixedpoint before
+committing, exactly as regcall phase 1 did.
+
+Status: **phase 0 measured + full v1 implementation plan ready.** Resume at
+step 1 (directive capture) → step 5 (pure-expression slice) → gate → slice 2.
