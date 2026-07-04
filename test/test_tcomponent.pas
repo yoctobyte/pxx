@@ -51,9 +51,10 @@ begin
   { indexed access + downcast to a FIELD (Val) is fine }
   Inc(total); if TThing(root.Components[0]).Val = 10 then Inc(pass);
 
-  { case-insensitive FindComponent; read inherited Tag via the base ref }
+  { case-insensitive FindComponent; inherited Tag readable through the downcast
+    too (was the bug-downcast-inherited-property-wrong-offset workaround site) }
   found := root.FindComponent('beta');
-  Inc(total); if (found = b) and (found.Tag = 2) then Inc(pass);
+  Inc(total); if (found = b) and (found.Tag = 2) and (TThing(found).Tag = 2) then Inc(pass);
   Inc(total); if root.FindComponent('nope') = nil then Inc(pass);
 
   { freeing the owner frees the owned components }

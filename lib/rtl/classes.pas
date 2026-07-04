@@ -38,6 +38,9 @@ type
     the FPC-facing `uses Classes` surface. }
   TOperation = (opInsert, opRemove);
 
+  TComponent = class;
+  TComponentClass = class of TComponent;
+
   TComponent = class(TPersistent)
   private
     FOwner: TComponent;
@@ -60,11 +63,6 @@ type
     property Name: string read FName write FName;
     property Tag: NativeInt read FTag write FTag;
   end;
-
-  { metaclass — declared after the full class (a forward `TComponent = class;`
-    before an inherited full decl currently breaks field registration; see
-    bug-forward-class-decl-with-later-base-loses-fields) }
-  TComponentClass = class of TComponent;
 
   { ---- TStream: abstract byte stream + TMemoryStream concrete ---- }
   TSeekOrigin = (soBeginning, soCurrent, soEnd);
