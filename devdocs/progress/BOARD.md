@@ -10,10 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | bug-basic-goto-gosub-halts-program | A | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-ir-fuzzer | A | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
