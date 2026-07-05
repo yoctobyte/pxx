@@ -25,25 +25,62 @@ Determinism is not why Erlang is worth scoping.
 **The real reason:** Zig and Erlang are hard in genuinely different domains.
 Zig's cost is concentrated in one place (a comptime interpreter/CTFE engine)
 that is pervasive but at least *conceptually contained*. Erlang's cost is
-spread across the *runtime*: a preemptive, fair, reduction-counted scheduler
-for potentially millions of lightweight processes, **per-process isolated
-heaps with independent garbage collection** (PXX today only has string
-refcounting, not a tracing/generational GC — Erlang needs the latter, per
-process), and copying message-passing between those isolated heaps. That is
-not "syntax sugar and hashing" — the syntax (pattern matching, immutability,
-tuples/atoms/maps) is the easy part, same as Zig's type theory was the easy
-part of Zig. **The hard part — a real preemptive scheduler + per-process GC —
-is arguably a bigger, more novel runtime-engineering lift than Zig's comptime
-interpreter, not a smaller one.** It's a different kind of hard, not an easier
-one. Worth scoping specifically *because* it's a different domain (proves out
-runtime/scheduler architecture this project doesn't have yet, useful beyond
-Erlang), not because it's a shortcut.
+spread across the *runtime* — but the memory-management part of that cost is
+**smaller than first estimated** (see "GC gap sizing, corrected" below); the
+scheduler is where the real open work is. Not "syntax sugar and hashing" either
+way — the syntax (pattern matching, immutability, tuples/atoms/maps) is the
+easy part, same as Zig's type theory was the easy part of Zig — but the
+remaining hard part is now sized as *one* genuinely novel piece (the
+scheduler), not two.
 
 **This ticket is scoping only** — same posture as the original Rust/Zig
 umbrellas before any code: map Erlang's constructs onto existing/needed IR,
-identify what's free vs. what needs new shared machinery (especially: how far
-is PXX today from *any* form of tracing GC, since Erlang's process-isolated
-heaps need one), before committing to a build.
+identify what's free vs. what needs new shared machinery, before committing to
+a build.
+
+## GC gap sizing, corrected (2026-07-05)
+
+Original cut of this ticket claimed per-process GC was "plausibly the single
+largest item in this whole ticket, bigger than the scheduler itself," reasoning
+by analogy to BEAM's own implementation (per-process generational **copying**
+GC). That analogy doesn't transfer cleanly and overstated the gap:
+
+- **Erlang term data is immutable — no in-place mutation exists in the
+  language.** A cell can never be made to point back at something built after
+  it, so ordinary Erlang terms (tuples, lists, maps, records) are **acyclic by
+  construction**. Reference counting's one structural weakness is cycles;
+  Erlang's own semantics rule cycles out for term data. (Caveat: closures/`fun`
+  capturing mutable process state and ETS tables are separate mechanisms with
+  their own lifetime rules — scope those explicitly when this ticket is
+  picked up, don't assume the acyclic argument covers them.)
+- **PXX already has a proven refcounting mechanism to extend, not invent.**
+  Managed strings AND dynamic arrays both already use compiler-emitted
+  retain/release codegen (`PXXDynArrayRelease` and friends, `compiler/
+  ir_codegen.inc`) — this is a working, tested pattern, not a green-field
+  design. Extending it to new managed-term types (tuples/lists/maps) is
+  plausible reuse of existing machinery, the same way the C frontend reused
+  the existing IR/backend rather than inventing a new one.
+- **Revised sizing: refcounting (extend existing infra) is the leading
+  candidate for Erlang term memory management, not a new tracing/copying
+  collector.** This does NOT require the precise stack-map/safepoint
+  infrastructure that `feature-handle-compacting-heap.md` explicitly rejected
+  as dangerous — refcounting reclaims at the point a count hits zero, no
+  stop-the-world root-scan needed.
+- What's still genuinely open, and should be sized when this is picked up: the
+  cost of per-word refcount inc/dec on immutable data that's copied (not
+  mutated) far more often than strings are in typical Pascal code — Erlang
+  workloads share/pass terms constantly, so refcount traffic volume needs
+  measuring, not assuming free. Also open: whether "shared-nothing, copy on
+  send" message passing still makes sense under refcounting (it can — copying
+  is about isolation/safety across processes, not a GC-technique dependency)
+  or whether refcounted terms could be shared read-only across processes
+  instead (a real design choice, not resolved here).
+
+**Net effect on where the hard part sits:** moved from "two roughly-equal
+unknowns (scheduler + GC)" to "one clearer unknown (the scheduler), one
+probably-tractable-via-reuse item (memory management)." This makes Erlang
+*more* realistic than the original sizing suggested, not less — flag this
+explicitly so it isn't rediscovered the hard way later.
 
 ## Known hard parts, unscoped (fill in when picked up)
 
@@ -61,14 +98,15 @@ heaps need one), before committing to a build.
   (`coroutine_emit.inc`), but BEAM's preemptive (reduction-counted) scheduling
   is a different model than cooperative coroutines — gap needs honest sizing,
   not assumed-free.
-- **Per-process isolated heap + garbage collection** — the part most likely to
-  be underestimated. BEAM processes each get their own heap, collected
-  independently (no stop-the-world pause across the whole system), with
-  messages *copied* between heaps on send (shared-nothing). PXX's memory model
-  today is refcounted managed strings, not a tracing/generational collector —
-  there is no existing GC to extend here, this is new from scratch. Size this
-  gap explicitly before estimating anything else; it is plausibly the single
-  largest item in this whole ticket, bigger than the scheduler itself.
+- **Per-process memory management** — smaller gap than first estimated; see
+  "GC gap sizing, corrected" above. Erlang term data is immutable and therefore
+  acyclic by construction, so refcounting — already built and proven for PXX's
+  managed strings/dynarrays — is the leading candidate, not a new tracing/
+  generational collector. Still open: refcount-traffic cost under Erlang's
+  copy-heavy workloads, and whether "isolated heap, copy-on-send" still makes
+  sense or whether refcounted terms could be shared read-only across
+  processes. Size these two specifically when picked up — don't re-default to
+  "needs a full GC" without checking the acyclic argument first.
 - **Supervision trees / "let it crash"** — process linking/monitoring,
   restart strategies. An RTL-level feature (Track B, once the process model
   exists), not a frontend-syntax problem.
@@ -93,12 +131,19 @@ heaps need one), before committing to a build.
 
 A gap-map table (like [[feature-zig-frontend]]'s "AST/IR gap map") showing what
 lowers onto existing IR for free vs. what needs new shared machinery, plus an
-honest sizing of the scheduler gap **and** the per-process GC gap specifically
-(the two parts with no close existing analogue — do not let syntax-level
-familiarity understate either). No code required to close this ticket — only a
-scoping doc, same bar as the original Rust/Zig umbrellas before work started.
+honest sizing of the scheduler gap specifically (the one part with no close
+existing analogue) and a validated (not assumed) answer on whether refcounting
+extends cleanly to Erlang terms or hits a real wall (closures/ETS lifetime,
+refcount-traffic cost). No code required to close this ticket — only a scoping
+doc, same bar as the original Rust/Zig umbrellas before work started.
 
 ## Log
-- 2026-07-05 — filed per user decision to scope Erlang ahead of attempting Zig,
-  given Zig's comptime-determinism conflict with the fixedpoint self-host gate.
+- 2026-07-05 — filed per user decision to scope Erlang ahead of attempting Zig.
   Track A once picked up; not scheduled, not greenlit to build.
+- 2026-07-05 — corrected rationale twice this session: (1) dropped the
+  "determinism" framing (Zig's comptime risk is termination, not determinism;
+  Erlang's actor model is itself the more nondeterministic runtime model of
+  the two — see [[feature-zig-frontend]]); (2) corrected the GC gap sizing
+  downward — refcounting (already built for strings/dynarrays) plausibly
+  suffices since Erlang term data is acyclic by construction, so the scheduler,
+  not per-process GC, is now the single open unknown.
