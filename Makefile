@@ -446,6 +446,10 @@ test-core: $(COMPILER)
 	/tmp/test_rust_else_if26; test "$$?" = "20"
 	./$(COMPILER) --strict-ir test/test_rust_else_if.rs /tmp/test_rust_else_if_si26
 	/tmp/test_rust_else_if_si26; test "$$?" = "20"
+	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
+	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
+	./$(COMPILER) test/test_ada_skeleton.adb /tmp/test_ada_skeleton26
+	test "$$(/tmp/test_ada_skeleton26)" = "$$(printf 'sum correct\nwhile iter\nwhile iter\nwhile iter\nexit-when correct\nseven correct')"
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas /tmp/test_tobject_destroy_override26
 	test "$$(/tmp/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"
