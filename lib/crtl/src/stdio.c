@@ -49,7 +49,11 @@ extern long __pxx_write(int fd, const void *buf, unsigned long n);
 extern long __pxx_read(int fd, void *buf, unsigned long n);
 extern int __pxx_open(const char *path, int flags, int mode);
 extern int __pxx_close(int fd);
-extern long __pxx_seek(int fd, long offset, int whence);
+/* offset/return are 64-bit to match the Pascal bridge (__pxx_seek's `offset:
+   Int64`) — passing a native 32-bit `long` left the high word garbage on
+   riscv32 (i386/arm32 only survived because SEEK_SET's 0 whence happened to zero
+   it), so seeks failed with EFAULT. File offsets are 64-bit anyway. */
+extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_remove(const char *path);
 extern int __pxx_rename(const char *oldPath, const char *newPath);
 

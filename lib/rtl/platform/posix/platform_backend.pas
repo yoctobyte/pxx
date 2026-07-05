@@ -219,8 +219,22 @@ begin
 end;
 
 function PalBackendSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
+{$ifdef CPU_RISCV32}
+var res: Int64; r: Int64;
+{$endif}
 begin
+{$ifdef CPU_RISCV32}
+  { rv32 syscall 62 is _llseek(fd, off_hi, off_lo, loff_t *result, whence), NOT
+    plain lseek — the 3-arg form left the result pointer NULL and the kernel
+    faulted (EFAULT). Split the 64-bit offset and pass the address of a local to
+    receive the new position. }
+  res := 0;
+  r := __pxxrawsyscall(SYS_lseek, handle, (offset shr 32) and $FFFFFFFF,
+                       offset and $FFFFFFFF, Int64(@res), whence);
+  if r < 0 then Result := r else Result := res;
+{$else}
   Result := __pxxrawsyscall(SYS_lseek, handle, offset, whence, 0, 0, 0);
+{$endif}
 end;
 
 function PalBackendFlush(handle: Integer): Integer;

@@ -2871,7 +2871,7 @@ test-lua: $(COMPILER)
 # green; the other targets await their variadic-ABI bring-up (they build-fail
 # early, so are omitted here rather than reported as failures). Skips gracefully
 # when the lua tree or qemu is absent.
-LUA_CROSS_TARGETS ?= aarch64 arm32 i386
+LUA_CROSS_TARGETS ?= aarch64 arm32 i386 riscv32
 test-lua-cross: $(COMPILER)
 	@if [ ! -f "$(LUA_SRC)/lua.h" ]; then \
 	  echo "test-lua-cross: SKIP — no lua tree at $(LUA_SRC)"; exit 0; \
