@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (78)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
@@ -641,6 +642,7 @@ _none_
 - [A] feature-asm-source-frontend
 - [A] feature-asm-textual-emit-mode
 - [A] feature-assembler-first-class-citizen
+- [C] feature-c-cross-lua-sqlite
 - [C] feature-c-cross-target-feature-coverage
 - [C] feature-c-designated-init-compound-literals
 - [C] feature-c-gtk3-header-final-wiring
