@@ -1272,10 +1272,20 @@ begin
         if op = Ord(tkPlus) then EmitI32($8B010000)        { add x0, x0, x1 }
         else if op = Ord(tkMinus) then EmitI32($CB010000)  { sub x0, x0, x1 }
         else if op = Ord(tkStar) then EmitI32($9B017C00)   { mul x0, x0, x1 }
-        else if op = Ord(tkDiv) then EmitI32($9AC10C00)    { sdiv x0, x0, x1 }
+        else if op = Ord(tkDiv) then
+        begin
+          { UDIV for an unsigned dividend, SDIV otherwise (matches the arm32 /
+            riscv32 backends, which key off the dividend type). Emitting SDIV for
+            an unsigned operand whose top bit is set (e.g. size_t ~0) treated it
+            as -1, so `MAX_SIZET/24` came out 0 and lua's table-size guard tripped
+            a bogus "table overflow" (bug-aarch64-unsigned-div). }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then EmitI32($9AC10800) { udiv x0, x0, x1 }
+          else EmitI32($9AC10C00);                          { sdiv x0, x0, x1 }
+        end
         else if op = Ord(tkMod) then
         begin
-          EmitI32($9AC10C02);  { sdiv x2, x0, x1 }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then EmitI32($9AC10802) { udiv x2, x0, x1 }
+          else EmitI32($9AC10C02);                          { sdiv x2, x0, x1 }
           EmitI32($9B018040);  { msub x0, x2, x1, x0 }
         end
         else if op = Ord(tkAnd) then EmitI32($8A010000)    { and x0, x0, x1 }
