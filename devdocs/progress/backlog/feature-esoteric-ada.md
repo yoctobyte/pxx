@@ -1,7 +1,7 @@
 # Esoteric probe: Ada
 
 - **Type:** feature — esoteric-frontend-probe
-- **Status:** backlog — **chosen next pick** among the esoteric-probe candidates (2026-07-05)
+- **Status:** sub-ticket 1 (skeleton) DONE 2026-07-05 — see closing log below; sub-tickets 2-4 still backlog
 - **Umbrella:** [[feature-esoteric-frontend-probes]]
 - **Opened:** 2026-07-05
 
@@ -124,3 +124,75 @@ session's "platonic language / closest to human expression" tangent.)
   category rule unless explicitly re-scoped later, same as
   [[feature-pxx-basic]] was pulled out of the probe bucket when it earned
   that promotion.
+
+## Sub-ticket 1 (skeleton) DONE — 2026-07-05
+
+Built on branch `feature/ada-frontend-skeleton`, verified additive-only
+before merge (see acceptance below). `compiler/alexer.inc` (lexer) +
+`compiler/aparser.inc` (parser), wired via 3 minimal touches to
+`compiler.pas`/`defs.inc` mirroring the exact pattern C/BASIC/Rust already
+established (an `isAda` boolean, `.adb` extension detection, one dispatch
+branch) — no new AST nodes, no new IR, no backend work, confirming the
+umbrella's premise that Ada's Pascal-kinship makes it lower cleanly onto
+existing machinery.
+
+**What compiles and runs, verified with a real regression test**
+(`test/test_ada_skeleton.adb`, wired into `Makefile`'s test-core target):
+single top-level `procedure Name is <decls> begin <stmts> end Name;`
+program shape; `Integer`/`Boolean`/`String` var declarations with optional
+initializers; assignment; `if`/`elsif`/`else`/`end if`; `while ... loop ...
+end loop`; bare `loop ... end loop` (desugars to `while True`); `for I in
+lo..hi loop` (desugars to init+while+increment, same technique BASIC's
+`FOR` already uses); `exit` / `exit when` (loop break — see bug below);
+`Put_Line(expr)` (same `AN_WRITE`/`AN_WRITELN`/`AN_ARG` shape as BASIC's
+`PRINT`); `--` line comments; double-quoted strings with `""`-escaped
+quotes.
+
+**Two real bugs found and fixed while building this — both mine, not
+compiler bugs, but worth recording since they're exactly the kind of
+mistake this project's own conventions exist to prevent:**
+
+1. **Paramless recursive self-call without parens silently reads the
+   Result variable instead of recursing.** Wrote `elseNode :=
+   ParseAStatement;` (no parens) for the `elsif`-handling recursive call —
+   per this project's documented paramless-function-name semantics (a bare
+   paramless function name inside its own body means "the Result
+   variable," not "call myself"), this silently did NOT recurse, returned
+   whatever `Result` happened to hold, and looked like a hang/dispatch bug
+   until isolated to a minimal 15-line plain-Pascal repro. Fixed: `elseNode
+   := ParseAStatement();` (explicit parens) at both call sites. This is
+   already documented in project memory (`frank2-paramless-name-semantics`)
+   — I made the exact mistake that memory exists to prevent; recording here
+   too since it's a sharp trap for any future frontend hand-writing
+   recursive-descent parsers in this codebase.
+2. **`exit`/`exit when` mapped onto `AN_EXIT` (procedure/function exit)
+   instead of `AN_BREAK` (loop break).** `tkExit` is BASIC's token for
+   `RETURN` (procedure exit) — reusing it for Ada's `exit` silently exited
+   the whole enclosing procedure the first time a loop's exit condition
+   fired, truncating all output after it (looked like a working program
+   with a suspiciously short run, not a crash). Fixed: lex Ada's `exit` to
+   `tkBreak` (the same token Rust's `break` uses) and build `AN_BREAK`
+   nodes instead of `AN_EXIT`. Caught by testing actual program output
+   against expected, not by inspection — this is exactly the "silent-wrong
+   is worse than a compile error" pattern this project already tracks
+   (parallels the BASIC GOTO/GOSUB bug found earlier this session).
+3. **Also added a parser-hang guard in `ParseABlock`** (not a bug found,
+   a defense added after almost hitting one): before the bare-`loop`
+   support existed, a bare `loop` token wasn't recognized by any statement
+   branch, `ParseAStatement` returned -1 without consuming a token, and
+   `ParseABlock`'s loop spun forever. Fixed the missing case AND added a
+   `TokPos`-didn't-advance guard that now `Error`s clearly instead of
+   hanging, for any future unhandled construct.
+
+**Verification:** `make -k test` full suite green (244 passing compiles;
+the only failure is a pre-existing, unrelated missing external dependency —
+`library_candidates/tiny-regex-c` — confirmed present on clean `master`
+before this branch too). `tools/gui_suite.sh` and `apps/ide/test.sh` both
+green (confirms the shared `compiler.pas` dispatch touch has zero effect on
+GUI/Eliah). `make cross-bootstrap-i386` byte-identical (confirms zero
+effect on cross-target self-host). `tools/fuzz.sh --minutes 1` clean (0
+divergences) both before and after this branch's changes.
+
+**Not done (sub-tickets 2-4, still backlog):** packages/units, records,
+exceptions, generics. This closes only the skeleton acceptance bar from
+this ticket's original scope section.

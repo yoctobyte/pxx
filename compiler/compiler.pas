@@ -47,6 +47,7 @@ uses asmcore_base, asmcore_x64;
 {$include blexer.inc}
 {$include pylexer.inc}
 {$include rlexer.inc}
+{$include alexer.inc}
 {$include emit.inc}
 procedure AsmB(b: Integer); forward;
 procedure AsmI16(v: Int64); forward;
@@ -89,6 +90,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include bparser.inc}
 {$include pyparser.inc}
 {$include rparser.inc}
+{$include aparser.inc}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -534,6 +536,7 @@ begin
   isNilPy := (n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.');
   isAsm := (n >= 4) and (inFile[n] = 'm') and (inFile[n-1] = 's') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isRust := (n >= 3) and (inFile[n] = 's') and (inFile[n-1] = 'r') and (inFile[n-2] = '.');
+  isAda := (n >= 4) and (inFile[n] = 'b') and (inFile[n-1] = 'd') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
@@ -569,7 +572,7 @@ begin
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -662,6 +665,14 @@ begin
     Next;
     ParseRustProgram;
   end
+  else if isAda then
+  begin
+    ALexAll;
+    MainProgramTokCount := TokCount;
+    TokPos := 0;
+    Next;
+    ParseAProgram;
+  end
   else
   begin
     LexAll;
@@ -670,7 +681,7 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;
