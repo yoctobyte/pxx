@@ -4,9 +4,58 @@
   (C frontend + crtl headers + shared codegen). crtl headers = B (file-owned);
   cross C→IR / backend bugs found = A (file A ticket, self-resolve under the
   combined-track rule).
-- **Status:** backlog (analyzed, ready to start — Phase 0 baseline done)
-- **Owner:** unassigned
+- **Status:** working — Phase 1 (crtl headers) DONE; Phase 2 (cross lua) in
+  progress on aarch64: 8 cross bugs fixed, lua now builds + inits + loads all
+  libraries; walled at a `limit=-1` opcode-growth miscompile in lcode.c.
+- **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
+
+## Progress log (session 2026-07-05, aarch64 first)
+
+Commits: `3f0954bf` (headers + setjmp + variadic + deref), `d3672df7`
+(unsigned div), `851ff448` (unary `~` type). All keep x86-64 self-host
+byte-identical + `make test` green.
+
+**Fixed (all verified with minimal C repros):**
+1. **crtl headers (Phase 1, B):** `float.h`, `time.h`+`time.c`; `__pxx_time`/
+   `__pxx_clock` bridges in `pxxcio.pas` (per-arch clock_gettime). Cleared the
+   float.h→time.h preprocessor walls.
+2. **setjmp/longjmp cross stubs** (`cparser.inc` EmitCSetjmpStubs) — was
+   x86-64-only; per-ABI save/restore for i386/aarch64/arm32/riscv32.
+3. **Variadic C call site** (aarch64/arm32/i386): strict `nArgs=ParamCount`
+   check now bypassed for `ProcVariadic`.
+4. **Variadic callee prologue**: SysV register-save was emitted UNCONDITIONALLY
+   (x86-64 bytes → SIGILL when a variadic fn was called on cross). Now per-target;
+   aarch64 GP-only save area + `__pxx_va_arg_cross`. **arm32/i386/riscv32 raise a
+   clear "not yet" error** — their 4-byte-slot variadic model is still TODO.
+5. **Deref-of-call double-eval** (all 4 cross backends): statement driver's
+   `else` catch-all emitted `IR_LOAD_MEM` standalone, re-running its address
+   operand — `*f()` called f twice, corrupting va_arg. Added `IR_LOAD_MEM` to
+   each no-op list.
+6. **Unsigned 64-bit div/mod on aarch64** used SDIV not UDIV → `MAX_SIZET/N`=0
+   → lua bogus "table overflow"; also broke `%lu` of large values. Now keys off
+   `TypeDivideUnsigned(IRTk[left])` like arm32/riscv32.
+7. **Unary `~` result type** hardcoded tyInteger → `(~(size_t)0)/N` divided
+   signed. Now preserves the promoted operand type.
+
+**NEXT WALL (unresolved) — `limit=-1` opcode growth:** aarch64 lua loads all
+libs (F:open-done, every `req:` module OK) then fails compiling the test script
+bytecode: `LOAD-ERR too many opcodes (limit is -1)`. Traced to
+`luaM_growaux_` (lmem.c) receiving `limit=-1` for `what="opcodes"`. The limit is
+`luaM_limitN(MAX_INT, Instruction)` = `(cast_sizet(MAX_INT) <= MAX_SIZET/sizeof
+(Instruction)) ? MAX_INT : cast_uint(MAX_SIZET/sizeof(Instruction))`. When the
+guard comparison is (wrongly) false, the else branch yields `cast_uint(0x3FFF…)
+= 0xFFFFFFFF = -1`. **Reproduced in isolation: NONE of the pieces fail** —
+`MAX_SIZET/sizeof(Instruction)`, the `<=`, the full macro all return the right
+answer standalone. So the miscompile is **context-specific** (large lcode.c
+function; suspect register pressure / spill corrupting the div or compare
+operands, or a lost unsigned type on the div's left operand in that context).
+Debug path: instrument the real `luaM_limitN` at lcode.c:385, then rr/gdb the
+aarch64 division+compare in `luaK_code`. Debug markers used this session live in
+lstate.c/lmem.c/ltable.c (all reverted; the lua tree is gitignored scratch).
+
+**After that:** finish arm32/i386/riscv32 variadic (4-byte-slot model), then
+the remaining lua walls, then Phase 3 sqlite, Phase 4 make targets.
 
 ## Goal
 
