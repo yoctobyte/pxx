@@ -15,11 +15,13 @@
   blocked on va_list-passed-by-value (needs array-typed va_list or 32-bit
   struct-by-value >8B). i386 lua/sqlite get far but hit separate i386 gaps
   (external-call arg-count mismatch, a lua segfault). Then wire test-*-cross.
-  **UPDATE (session #2, commit `eb972e79`):** the "arm32/i386 lua garbage" was a
-  single shared 32-bit heap-corruption bug (PXXAlloc/Realloc stepped 8 while PWord
-  writes 4 on ILP32) — FIXED. Cross lua now **5/6 arm32, 5/6 i386**. Remaining:
-  arm32 numeric.lua (double codegen), i386 coroutines.lua (coroutine stack); +
-  riscv32 softfloat still open. See progress log item 18.
+  **UPDATE (session #2, commits `eb972e79` heap + `8b94020b` arm32 variadic
+  straddle):** the "arm32/i386 lua garbage" was a single shared 32-bit
+  heap-corruption bug (PXXAlloc/Realloc stepped 8 while PWord writes 4 on ILP32) —
+  FIXED; then arm32 numeric.lua's doubles fixed via the variadic 8-byte-straddle
+  read fix. **arm32 cross lua now 6/6 (wired into `make test-lua-cross`, default
+  `aarch64 arm32`); aarch64 6/6; i386 5/6** (only coroutines.lua left). Remaining:
+  i386 coroutines.lua (coroutine stack); riscv32 softfloat. See progress log item 18.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -49,10 +51,24 @@ their C `long` externs after long=native; byte-identical on x86-64).
   program corrupts on 32-bit only, torture the allocator FIRST.
 - **Result:** cross lua **5/6 on arm32, 5/6 on i386** (was total corruption).
   Remaining fails are separate narrower bugs, NOT this one:
-  - **arm32 numeric.lua — ROOT-CAUSED (not yet fixed): arm32 variadic 8-byte args
-    STRADDLE the r0-r3/stack boundary; the reg-save + `__pxx_va_arg_cross32` model
-    can't represent a straddling arg.** Reduced to pure C (no lua): `printf("%g %g
-    %g",1.0,2.0,4.0)` on arm32 gives the 1st double right, 2nd/3rd garbage.
+  - **arm32 numeric.lua — FIXED (commit `8b94020b`), arm32 cross lua now 6/6.**
+    Root cause: arm32 variadic 8-byte args STRADDLE the r0-r3/stack boundary
+    (pxx packs 64-bit variadic args as two unaligned words, so one spans the
+    reg/stack boundary — low word in r3, high on the stack). `__pxx_va_arg_cross32`
+    skipped the leftover reg word and read the whole 8 bytes from overflow →
+    dropped the low half + over-advanced, shifting every later arg. Fix (read side
+    only, NO call-site change → no mixed/integer regression): assemble the straddler
+    from its two halves into the 176-byte __va_save slack (arm32 uses 16 of 176).
+    First tried a call-site pad word instead — it fixed pure doubles but REGRESSED
+    lua's mixed integer varargs (desync with the tail-reversal); reverted. The
+    read-side assemble in stdarg.h is the correct, regression-free fix. i386 lua
+    unchanged (all-stack cdecl never straddles). Reduced to pure C:
+    `printf("%g %g %g",1.0,2.0,4.0)` gave 1st right / rest garbage before the fix.
+    - **Minor cfront finding (separate, not blocking):** a SMALL `long long`
+      literal like `100LL` is typed `tyInteger` (fits in int), so as a variadic
+      arg it is pushed as ONE word and `va_arg(long long)` misreads it. Large
+      int64 literals (>2^32) and int64 *variables* pass correctly. C conformance:
+      the `LL` suffix should force `long long` regardless of value. Low priority.
     Minimal repro & traces:
     - pxx passes each variadic 8-byte arg (double / int64) as TWO packed words,
       NO 8-byte alignment (ir_codegen_arm32.inc variadic-tail push ~2071-2089;
