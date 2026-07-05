@@ -4386,9 +4386,13 @@ begin
   end;
   TARGET_I386:
   begin
-    { env at [esp+4], val at [esp+8]. }
-    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);   { mov ecx, [esp+4] (env) }
-    EmitB($8B); EmitB($54); EmitB($24); EmitB($08);   { mov edx, [esp+8] (val) }
+    { pxx i386 ABI pushes args leftmost-deepest (arg0 at the HIGHER offset), so
+      env(arg0) is at [esp+8] and val(arg1) at [esp+4] — NOT standard cdecl order.
+      (setjmp's single env arg lands at [esp+4] either way, so only 2-arg longjmp
+      needs the swapped offsets; the old code read env from [esp+4]=val and
+      crashed dereferencing 7 as a jmp_buf pointer.) }
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($08);   { mov ecx, [esp+8] (env) }
+    EmitB($8B); EmitB($54); EmitB($24); EmitB($04);   { mov edx, [esp+4] (val) }
     EmitB($8B); EmitB($59); EmitB($00);               { mov ebx, [ecx+0] }
     EmitB($8B); EmitB($71); EmitB($04);               { mov esi, [ecx+4] }
     EmitB($8B); EmitB($79); EmitB($08);               { mov edi, [ecx+8] }
