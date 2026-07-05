@@ -4562,9 +4562,20 @@ begin
     through — it exit_group's), so the unit bodies sit after it, reached only via
     call. Guarded like the Pascal default-RTL pull: skip on bare-metal ESP and
     when default RTL is opted out. }
-  if (not NoDefaultRtl) and
-     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
+     ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  begin
+    { Hosted riscv32 has no FPU: every float op lowers to the __pxx_* soft-float
+      kernels, and pxxcio `uses math` (Sqrt etc.) pulls float bodies that compile
+      against them. Pull softfloat FIRST, mirroring the Pascal ParseProgram
+      epilogue — otherwise those bodies (and any C double op) fail with
+      "__pxx_dmul not found". The whole guard now matches the Pascal default-RTL
+      pull: hosted riscv32 is INCLUDED (was skipped entirely, leaving riscv32 C
+      with no __pxx_write/malloc bridge and no softfloat). }
+    if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) then
+      ParseUsesUnit('softfloat');
     ParseUsesUnit('pxxcio');
+  end;
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
     any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
