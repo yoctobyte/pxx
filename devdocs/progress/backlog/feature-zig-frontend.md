@@ -1,10 +1,34 @@
-# Zig frontend — umbrella
+# Zig frontend — PARKED
 
 - **Type:** feature — umbrella (spans Track A + Track B)
-- **Status:** backlog — design/scoping only, no code yet
+- **Status:** backlog — **PARKED** (2026-07-05, user decision — see "Why parked" below)
 - **Owner:** —
 - **Opened:** 2026-07-03 (feature request — filed next to [[feature-rust-frontend]])
 - **Priority:** unranked — scoping ticket, not a greenlit build
+
+## Why parked (2026-07-05, user decision)
+
+`comptime` is not just a big feature — it requires a compile-time interpreter
+(CTFE, same family as C++ `constexpr`/Rust Miri) that is recursive and
+Turing-complete: a comptime function can trigger semantic analysis of another
+comptime function, which can trigger more comptime evaluation, bounded only by
+a branch-quota/step limiter. That open-ended, self-referential evaluation is in
+tension with this project's core guarantee — **byte-identical fixedpoint
+self-host** (`make stabilize`/`make pin`, Track A's gate). A comptime engine is
+a second, recursive compiler-within-the-compiler; reasoning about its
+determinism/termination is a materially different (and larger) problem than
+anything the C/Rust frontends need. Not worth attempting before a language with
+a cleaner, non-recursive execution model.
+
+**Decision: prioritize an Erlang frontend scoping exercise ahead of Zig** — see
+[[feature-erlang-frontend-scoping]]. Revisit Zig only if/when a general
+comptime-style compile-time-execution engine is independently justified by
+something else needing it (e.g. Rust `const fn` generics, if that ever grows
+that far), not as a Zig-specific special case.
+
+---
+
+## Original scoping (2026-07-03, pre-park)
 
 ## Motivation
 

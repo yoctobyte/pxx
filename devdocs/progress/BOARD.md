@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (81)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -62,6 +62,7 @@ _none_
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
+| feature-erlang-frontend-scoping | A | feature | Erlang frontend — scoping only | — |
 | feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
@@ -105,7 +106,7 @@ _none_
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| feature-zig-frontend | B | feature | Zig frontend — umbrella | — |
+| feature-zig-frontend | B | feature | Zig frontend — PARKED | — |
 | idea-c-realworld-test-targets | C | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
@@ -667,6 +668,7 @@ _none_
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
 - [A] feature-emission-size-dce
+- [A] feature-erlang-frontend-scoping
 - [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-float-exception-mask-control
