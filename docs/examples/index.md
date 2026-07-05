@@ -74,6 +74,37 @@ GUI program automatically.
 | `fm` | `examples/fm/fm.pas` | GTK file manager. |
 | `player` | `examples/player/player.pas` | GTK media-player shell. |
 
+## Apps
+
+`apps/ide/` is a larger application built with PXX: a single-window IDE,
+Lazarus/Delphi-inspired but deliberately stripped down (no multi-window, no
+modal forms, no scattered subwindows — everything tiled in one window). It
+doubles as a real-world stress test for the compiler.
+
+The components use a Hebrew naming scheme, all transliterating names tied to
+the prophet Elijah and the theme of testimony/witness:
+
+| Name | Hebrew | Meaning | Role |
+| --- | --- | --- | --- |
+| `garin` | גרעין | kernel / core | Render-agnostic engine: editor buffer, project model, the designed-form document, the builder. Both faces grow from this seed. |
+| `eliah` | אליה | Elijah | GTK face (posix + GTK) — the graphical IDE window. |
+| `ilja` | איליה | Elijah | ANSI/TUI face (posix + terminal) — same prophet, second face. |
+| `bochan` | בוחן | examiner | Headless test driver for `garin`. Links no GUI/TUI face, proving the core is render-agnostic. |
+| `eduth` | עדות | testimony | The validator `bochan` reports to: witnesses results, tallies pass/fail, yields a verdict. |
+
+Build and run the GTK face with the pinned stable compiler:
+
+```sh
+apps/ide/build.sh
+apps/ide/eliah/eliah
+```
+
+Run the headless core test gate (no GUI library on the search path):
+
+```sh
+apps/ide/test.sh
+```
+
 ## Networking demo
 
 The networking demo has its own notes in `examples/net/README.md`. It runs a

@@ -43,6 +43,19 @@ order: 93
 | ESP profile | Embedded platform profile selected by `--esp-profile=bare`. |
 | Object output | Relocatable `.o` output selected by `--emit-obj` or a `.o` output name. |
 
+## Eliah IDE terms
+
+`apps/ide/` names its components with a Hebrew scheme; see
+[Examples → Apps](../examples/#apps) for the full table.
+
+| Term | Meaning |
+| --- | --- |
+| `garin` | Render-agnostic IDE core (editor buffer, project model, form document, builder). |
+| `eliah` | GTK face of the IDE. |
+| `ilja` | ANSI/TUI face of the IDE. |
+| `bochan` | Headless test driver that exercises `garin` with no GUI/TUI face linked. |
+| `eduth` | Assertion/verdict library `bochan` reports results to. |
+
 ## Next
 
 - [Command line](./cli.md)
