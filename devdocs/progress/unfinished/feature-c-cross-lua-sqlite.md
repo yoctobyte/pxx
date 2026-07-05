@@ -52,6 +52,26 @@ green, self-host byte-identical, x86-64 lua 6/6 + cross 18/18 unaffected):
   work: `print(42)`, `print(3.14)`, `print("hi")`, `print(1+2)`, recursion
   `f(5)`, table LITERALS `{1,2,3}` + reads `t[2]`.
 
+**RESOLVED (session #3b→c): riscv32 lua now 6/6 — ALL FOUR cross targets pass
+lua 6/6 (24/24), riscv32 wired into `make test-lua-cross` default.** Two fixes:
+- **`fix(riscv32)` large stack frames (>2047B) truncated the prologue addi** (THE
+  table-corruption bug). The prologue reserved the frame with one
+  `addi sp,sp,-frame`, but addi's imm is 12-bit signed (±2048). luaV_execute's
+  3312B frame → `-3312` truncated to +784 → prologue moved sp UP, leaving locals
+  below sp where callees overwrote them (the "wild store of 16" = the corrupted
+  pointer). Fix: reserve 3 prologue words, patch `addi+2nop` (small) or
+  `lui t0,hi; addi t0,t0,lo; sub sp,sp,t0` (large). GENERAL riscv32 bug — fixed
+  latent breakage in ANY large-frame riscv32 function, not just lua.
+- **`fix(riscv32)` file seek**: rv32 syscall 62 is `_llseek` (5-arg, result
+  pointer), not plain lseek → PalBackendSeek passed NULL → EFAULT; plus the
+  `__pxx_seek` extern was native-`long` vs Pascal `Int64`. Fixed the _llseek shape
+  + widened the extern to `long long`. Unblocked files.lua.
+
+LESSON: the "heisenbug + wild store of a small constant" signature = a stack-frame
+sizing/overflow bug; check the PROLOGUE frame reservation against the target's
+immediate range FIRST (each backend's PatchProcPrologue has its own limit).
+
+--- historical (the hunt that led here) ---
 **REMAINING riscv32 lua bug (razor-sharp repro): storing a NEW key that triggers
 rehash crashes.** `local t={} t[1]=5` (or `t.x=9`) SIGSEGVs; `local t={1,2,3}` +
 `t[2]` read is fine (array preallocated, no rehash). Localized via `__pxx_write`
