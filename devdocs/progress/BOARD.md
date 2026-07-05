@@ -111,12 +111,13 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
 
-## rainy-day (19)
+## rainy-day (20)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
+| experiment-compile-fpc-as-stress-probe | B | experiment | Experiment: compile FPC's own source as a pxx stress probe | — |
 | feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
