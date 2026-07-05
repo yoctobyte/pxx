@@ -6,6 +6,25 @@
 - **Opened:** 2026-07-05 (user decision — Sunday-afternoon brainstorm, made concrete)
 - **Priority:** unranked — opportunistic, pick up when convenient
 
+## Core vs opportunistic (2026-07-05, user narrowing)
+
+The **valid, first-class test surface** going forward is: **Pascal, C, BASIC,
+and the Python dialect (Nil-Python)**. These are the frontends actually worth
+investing real effort in (Pascal = the product; C/BASIC/Nil-Python = proven,
+already-real cross-language-import demonstrations — see
+[[feature-pxx-basic]]). Rust stays parked at its current landed state (3/12,
+per the earlier "no need beyond proving the concept" decision) — not core,
+not being advanced further either.
+
+**Everything else in this umbrella (Ada, Algol, Fortran, COBOL, Zig, Erlang,
+LOLCODE, Whitespace) is explicitly opportunistic, not core.** Pick one up only
+when it sounds fun/cheap in a given session; none of them compete for
+priority against real work. This also relaxes the "must be a compiled
+skeleton" expectation for anything in this outer ring — COBOL, for instance,
+is now fine as an interpreter instead of a frontend (see
+[[feature-esoteric-cobol]]'s "Scope relaxed further" note) purely as a
+pragmatic scope call, not because it needs that treatment the way Lisp does.
+
 ## The category, stated plainly
 
 A **skeleton-only** frontend (lexer + parser for a trivial subset, lowering

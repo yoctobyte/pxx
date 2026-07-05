@@ -30,6 +30,18 @@ fixed-decimal (`V99`-style) arithmetic in v1, no file/record I/O. Stop once a
 trivial "hello world"-shaped program compiles and runs, or a shared bug
 surfaces trying to get there.
 
+## Scope relaxed further (2026-07-05)
+
+COBOL isn't part of the narrowed "valid" core test surface (Pascal, C, BASIC,
+Python/Nil-Python — see [[feature-esoteric-frontend-probes]]'s "Core vs
+opportunistic" note), so a compiled-IR skeleton is no longer required to
+justify this ticket. **An interpreter (Pascal-hosted, same shape as
+`examples/lisp/lispdemo.pas`) is an equally acceptable outcome** — whichever
+is more convenient when this is picked up. Unlike Lisp, this isn't because
+COBOL has a paradigm-mismatch reason to prefer interpreting (it's still
+squarely imperative/static under the verbosity) — it's a pragmatic scope call
+now that COBOL sits outside the core set.
+
 ## Acceptance
 
 Either: (a) a shared IR/codegen/ABI bug is found and filed as its own Track A
