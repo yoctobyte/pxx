@@ -2600,7 +2600,11 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs <> Procs[procIdx].ParamCount then
+        { Variadic callee: cdecl pushes all actual args right-to-left and the
+          caller cleans `argBytes` (which counts them all), so a variadic call
+          with more args than declared params marshals correctly — only strict
+          equality blocked it. }
+        if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
         if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
@@ -3864,10 +3868,12 @@ begin
         end;
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
       IR_ATOMIC, IR_CLONE, IR_CONST_DATA, { value-producing: emitted by the consuming store, like x86-64 }
       IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
+      { IR_LOAD_MEM: pure value node — statement-level emit re-runs its address
+        operand (`*f()` calls f twice). See aarch64 note. }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }

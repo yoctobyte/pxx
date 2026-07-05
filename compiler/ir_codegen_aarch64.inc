@@ -1865,7 +1865,13 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs <> Procs[procIdx].ParamCount then
+        { A variadic callee (e.g. lua's lua_pushfstring) legitimately receives
+          more args than declared params. AAPCS-Linux passes variadic args in the
+          same registers/stack as named ones, and the pxx value model carries
+          every scalar (floats included) as bits in an x-register, so the generic
+          push-all/pop-into-x[i] path below is already correct for them. Only the
+          strict equality guard blocked it. }
+        if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target aarch64: call argument count mismatch');
 
         if nArgs <= 8 then
@@ -2924,10 +2930,15 @@ begin
         IREmitNodeAarch64(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
       IR_SLOTADDR, IR_DYNUNIQUE,
       IR_FIELD, IR_INDEX, IR_VAR_BOX, IR_VAR_BINOP: ;
+      { IR_LOAD_MEM is a pure value node (a deref); like IR_LOAD_SYM it must NOT
+        be emitted at statement level — doing so re-evaluates its address operand,
+        so `*f()` (deref of a call result) called f twice, advancing va_arg's
+        cursor an extra slot and breaking every variadic call. x86-64's driver has
+        no statement-level catch-all, so it never had this bug. }
 
       else
         IREmitNodeAarch64(i);

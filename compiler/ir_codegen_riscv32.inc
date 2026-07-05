@@ -2143,9 +2143,11 @@ begin
         IREmitNodeRISCV32(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
+      { IR_LOAD_MEM: pure value node — statement-level emit re-runs its address
+        operand (`*f()` calls f twice). See aarch64 note. }
 
       else
         IREmitNodeRISCV32(i);

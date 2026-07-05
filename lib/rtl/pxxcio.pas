@@ -52,6 +52,12 @@ function __pxx_realloc(p: Pointer; n: Int64): Pointer;
 { C process exit (exit/abort/_Exit) -> the PAL/RTL terminate path. }
 procedure __pxx_exit(code: Integer);
 
+{ C time bridge: wall-clock seconds since the Unix epoch (time()) and process
+  CPU time in microseconds (clock()), both via a per-arch clock_gettime syscall.
+  Libc-free; UTC. Returns 0 on an unsupported target (never asserts). }
+function __pxx_time: Int64;
+function __pxx_clock: Int64;
+
 implementation
 
 type
@@ -203,6 +209,45 @@ begin
     because __pxxrawsyscall is intercepted in expression context; the syscall
     never returns, so r is unused. }
   r := __pxxrawsyscall(231, code, 0, 0, 0, 0, 0);
+end;
+
+{ clock_gettime syscall number per target (mirrors baseunix.pas SysClockGettime).
+  riscv32 omitted intentionally — no lua/sqlite test exercises time on it, so it
+  falls through to the 0 stub rather than risking the rv32 time64 ABI. }
+function SysClockGettimeNr: Integer;
+begin
+  Result := -1;
+  {$ifdef CPUX86_64} Result := 228; {$endif}
+  {$ifdef CPU_I386}  Result := 265; {$endif}
+  {$ifdef CPU_AARCH64} Result := 113; {$endif}
+  {$ifdef CPU_ARM32} Result := 263; {$endif}
+end;
+
+type
+  TKernelTimeSpec2 = record
+    Sec:  NativeInt;
+    Nsec: NativeInt;
+  end;
+
+function __pxx_time: Int64;
+var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+begin
+  Result := 0;
+  n := SysClockGettimeNr;
+  if n = -1 then Exit;
+  r := __pxxrawsyscall(n, 0, Int64(@ts), 0, 0, 0, 0); { 0 = CLOCK_REALTIME }
+  if r = 0 then Result := ts.Sec;
+end;
+
+function __pxx_clock: Int64;
+var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+begin
+  Result := 0;
+  n := SysClockGettimeNr;
+  if n = -1 then Exit;
+  { 2 = CLOCK_PROCESS_CPUTIME_ID; report microseconds (CLOCKS_PER_SEC=1e6). }
+  r := __pxxrawsyscall(n, 2, Int64(@ts), 0, 0, 0, 0);
+  if r = 0 then Result := Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000;
 end;
 
 end.

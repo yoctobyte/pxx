@@ -2121,7 +2121,11 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs <> Procs[procIdx].ParamCount then
+        { Variadic callee: more args than declared params is legitimate (AAPCS
+          passes them like named args; the arg-word count `j` already reflects
+          the actual args pushed, so the register/stack marshalling below is
+          correct). Only strict equality blocked it. }
+        if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target arm32: call argument count mismatch');
 
         for i := 0 to j - 1 do
@@ -3223,9 +3227,11 @@ begin
         IREmitNodeArm32(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
       IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ;
+      { IR_LOAD_MEM: pure value node — must not emit at statement level, else its
+        address operand re-evaluates (`*f()` calls f twice). See aarch64 note. }
 
       else
         IREmitNodeArm32(i);

@@ -64,6 +64,24 @@ static void *__pxx_va_arg_fp(struct __pxx_va_elem *ap) {
   return addr;
 }
 
+/* Cross-target (aarch64) variadic model: the pxx value model passes every scalar
+   — floats included — as bits in a general argument register, so there is ONE
+   register save area of 8 eight-byte slots (x0..x7 = 64 bytes) and no separate
+   FP region. va_arg reads that area for every type, then spills to overflow.
+   Seeded via __pxx_va_start_impl (gp_offset = nnamed*8, reg_save_area, overflow;
+   fp_offset unused). x86-64 keeps its two-class SysV helpers above. */
+static void *__pxx_va_arg_cross(struct __pxx_va_elem *ap) {
+  void *addr;
+  if (ap->gp_offset < 64) {
+    addr = (char *)ap->reg_save_area + ap->gp_offset;
+    ap->gp_offset = ap->gp_offset + 8;
+  } else {
+    addr = ap->overflow_arg_area;
+    ap->overflow_arg_area = (char *)ap->overflow_arg_area + 8;
+  }
+  return addr;
+}
+
 /* va_start/va_arg/va_end are handled by the frontend (it knows the save-area
    local and the named-GP count); these macros stay for source compatibility. */
 #define va_start(ap, last) __builtin_va_start(ap, last)

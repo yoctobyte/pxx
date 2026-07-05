@@ -405,7 +405,11 @@ begin
           FP save area, va_arg(int/ptr) the GP area. (An earlier model pushed every
           arg through GP and read floats from gp too; that mismatched the actual
           SysV call+prologue and made %f/%g render 0 — bug-c-double-vararg.) }
-        if TypeIsFloat(vt) then
+        if TargetArch <> TARGET_X86_64 then
+          { Cross: single GP-style save area (floats carried as GP bits), so every
+            type reads through the one cross helper. }
+          helper := FindProc('__pxx_va_arg_cross')
+        else if TypeIsFloat(vt) then
           helper := FindProc('__pxx_va_arg_fp')
         else
           helper := FindProc('__pxx_va_arg_gp');
@@ -432,8 +436,20 @@ begin
           would misindex it. The stack-spilled named params are skipped via
           the __va_overflow anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
-        if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
-        if ASTIVal[a3] > 6 then ASTIVal[a3] := 6;
+        if TargetArch <> TARGET_X86_64 then
+        begin
+          { Cross: one GP save area, every named param (any class) consumed one
+            slot, so seed gp_offset past ALL named args (capped to the 8-slot
+            area). fp_offset is unused by __pxx_va_arg_cross. }
+          if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] + ProcNamedFP[CurProc]
+          else ASTIVal[a3] := 0;
+          if ASTIVal[a3] > 8 then ASTIVal[a3] := 8;
+        end
+        else
+        begin
+          if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
+          if ASTIVal[a3] > 6 then ASTIVal[a3] := 6;
+        end;
         ASTTk[a3] := Ord(tyInteger);
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
@@ -4171,47 +4187,211 @@ end;
   them as __pxx_setjmp/__pxx_longjmp (BodyAddr = stub). lua's error model rides
   setjmp/longjmp; libc's crash here (the jmp_buf arrives NULL through the import),
   so provide them directly. jmp_buf is `long[16]` in setjmp.h, so the C arg decays
-  to the buffer ADDRESS in rdi. Layout: [0]=rbx [8]=rbp [16]=r12 [24]=r13 [32]=r14
-  [40]=r15 [48]=caller-rsp [56]=return-addr. setjmp returns 0 the first time and
-  the longjmp value when jumped to; longjmp restores and resumes the setjmp call
-  site. x86-64 only (the desktop lua/sqlite path). }
+  to the buffer ADDRESS in the first argument register. Each target saves its
+  ABI's callee-saved registers plus the caller stack pointer and the return
+  address into env; setjmp returns 0 first and the longjmp value (mapped 0->1)
+  when jumped to. Implemented for every hosted target (x86-64 desktop + the four
+  cross targets that build lua/sqlite: i386, aarch64, arm32, riscv32). }
 procedure EmitCSetjmpStubs;
 var sjIdx, ljIdx: Integer;
     pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
 begin
-  if TargetArch <> TARGET_X86_64 then Exit;
   pn[0] := 'env'; pt[0] := tyPointer;
   sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
   Procs[sjIdx].BodyAddr := CodeLen;
-  EmitB($48); EmitB($89); EmitB($5F); EmitB($00);              { mov [rdi+0], rbx }
-  EmitB($48); EmitB($89); EmitB($6F); EmitB($08);              { mov [rdi+8], rbp }
-  EmitB($4C); EmitB($89); EmitB($67); EmitB($10);              { mov [rdi+16], r12 }
-  EmitB($4C); EmitB($89); EmitB($6F); EmitB($18);              { mov [rdi+24], r13 }
-  EmitB($4C); EmitB($89); EmitB($77); EmitB($20);              { mov [rdi+32], r14 }
-  EmitB($4C); EmitB($89); EmitB($7F); EmitB($28);              { mov [rdi+40], r15 }
-  EmitB($48); EmitB($8D); EmitB($44); EmitB($24); EmitB($08);  { lea rax, [rsp+8] }
-  EmitB($48); EmitB($89); EmitB($47); EmitB($30);              { mov [rdi+48], rax }
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);              { mov rax, [rsp] }
-  EmitB($48); EmitB($89); EmitB($47); EmitB($38);              { mov [rdi+56], rax }
-  EmitB($31); EmitB($C0);                                      { xor eax, eax }
-  EmitB($C3);                                                  { ret }
+  case TargetArch of
+  TARGET_X86_64:
+  begin
+    { env in rdi. Layout: [0]=rbx [8]=rbp [16]=r12 [24]=r13 [32]=r14 [40]=r15
+      [48]=caller-rsp [56]=return-addr. }
+    EmitB($48); EmitB($89); EmitB($5F); EmitB($00);              { mov [rdi+0], rbx }
+    EmitB($48); EmitB($89); EmitB($6F); EmitB($08);              { mov [rdi+8], rbp }
+    EmitB($4C); EmitB($89); EmitB($67); EmitB($10);              { mov [rdi+16], r12 }
+    EmitB($4C); EmitB($89); EmitB($6F); EmitB($18);              { mov [rdi+24], r13 }
+    EmitB($4C); EmitB($89); EmitB($77); EmitB($20);              { mov [rdi+32], r14 }
+    EmitB($4C); EmitB($89); EmitB($7F); EmitB($28);              { mov [rdi+40], r15 }
+    EmitB($48); EmitB($8D); EmitB($44); EmitB($24); EmitB($08);  { lea rax, [rsp+8] }
+    EmitB($48); EmitB($89); EmitB($47); EmitB($30);              { mov [rdi+48], rax }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($24);              { mov rax, [rsp] }
+    EmitB($48); EmitB($89); EmitB($47); EmitB($38);              { mov [rdi+56], rax }
+    EmitB($31); EmitB($C0);                                      { xor eax, eax }
+    EmitB($C3);                                                  { ret }
+  end;
+  TARGET_I386:
+  begin
+    { cdecl: env at [esp+4]. Layout: [0]=ebx [4]=esi [8]=edi [12]=ebp
+      [16]=caller-esp(post-ret) [20]=return-addr. }
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);   { mov ecx, [esp+4] (env) }
+    EmitB($89); EmitB($59); EmitB($00);               { mov [ecx+0], ebx }
+    EmitB($89); EmitB($71); EmitB($04);               { mov [ecx+4], esi }
+    EmitB($89); EmitB($79); EmitB($08);               { mov [ecx+8], edi }
+    EmitB($89); EmitB($69); EmitB($0C);               { mov [ecx+12], ebp }
+    EmitB($8D); EmitB($44); EmitB($24); EmitB($04);   { lea eax, [esp+4] (esp after ret) }
+    EmitB($89); EmitB($41); EmitB($10);               { mov [ecx+16], eax }
+    EmitB($8B); EmitB($04); EmitB($24);               { mov eax, [esp] (return addr) }
+    EmitB($89); EmitB($41); EmitB($14);               { mov [ecx+20], eax }
+    EmitB($31); EmitB($C0);                           { xor eax, eax }
+    EmitB($C3);                                       { ret }
+  end;
+  TARGET_AARCH64:
+  begin
+    { env in x0. Save x19..x28, x29, caller-sp, x30(return). Offsets in 8s. }
+    EmitI32($F9000013);   { str x19, [x0, #0] }
+    EmitI32($F9000414);   { str x20, [x0, #8] }
+    EmitI32($F9000815);   { str x21, [x0, #16] }
+    EmitI32($F9000C16);   { str x22, [x0, #24] }
+    EmitI32($F9001017);   { str x23, [x0, #32] }
+    EmitI32($F9001418);   { str x24, [x0, #40] }
+    EmitI32($F9001819);   { str x25, [x0, #48] }
+    EmitI32($F9001C1A);   { str x26, [x0, #56] }
+    EmitI32($F900201B);   { str x27, [x0, #64] }
+    EmitI32($F900241C);   { str x28, [x0, #72] }
+    EmitI32($F900281D);   { str x29, [x0, #80] }
+    EmitI32($910003E9);   { mov x9, sp }
+    EmitI32($F9002C09);   { str x9,  [x0, #88] }
+    EmitI32($F900301E);   { str x30, [x0, #96] }
+    EmitI32($52800000);   { mov w0, #0 }
+    EmitI32($D65F03C0);   { ret }
+  end;
+  TARGET_ARM32:
+  begin
+    { env in r0. Save r4..r11, sp, lr. Offsets in 4s. }
+    EmitI32($E5804000);   { str r4,  [r0, #0] }
+    EmitI32($E5805004);   { str r5,  [r0, #4] }
+    EmitI32($E5806008);   { str r6,  [r0, #8] }
+    EmitI32($E580700C);   { str r7,  [r0, #12] }
+    EmitI32($E5808010);   { str r8,  [r0, #16] }
+    EmitI32($E5809014);   { str r9,  [r0, #20] }
+    EmitI32($E580A018);   { str r10, [r0, #24] }
+    EmitI32($E580B01C);   { str r11, [r0, #28] }
+    EmitI32($E580D020);   { str sp,  [r0, #32] }
+    EmitI32($E580E024);   { str lr,  [r0, #36] }
+    EmitI32($E3A00000);   { mov r0, #0 }
+    EmitI32($E12FFF1E);   { bx lr }
+  end;
+  TARGET_RISCV32:
+  begin
+    { env in a0(x10). Save ra, sp, s0..s11. Offsets in 4s. }
+    EmitI32($00152023);   { sw ra,  0(a0) }
+    EmitI32($00252223);   { sw sp,  4(a0) }
+    EmitI32($00852423);   { sw s0,  8(a0) }
+    EmitI32($00952623);   { sw s1,  12(a0) }
+    EmitI32($01252823);   { sw s2,  16(a0) }
+    EmitI32($01352A23);   { sw s3,  20(a0) }
+    EmitI32($01452C23);   { sw s4,  24(a0) }
+    EmitI32($01552E23);   { sw s5,  28(a0) }
+    EmitI32($03652023);   { sw s6,  32(a0) }
+    EmitI32($03752223);   { sw s7,  36(a0) }
+    EmitI32($03852423);   { sw s8,  40(a0) }
+    EmitI32($03952623);   { sw s9,  44(a0) }
+    EmitI32($03A52823);   { sw s10, 48(a0) }
+    EmitI32($03B52A23);   { sw s11, 52(a0) }
+    EmitI32($00000513);   { li a0, 0 }
+    EmitI32($00008067);   { ret }
+  end;
+  else
+    Error('EmitCSetjmpStubs: unsupported target');
+  end;
 
   pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
   ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
   Procs[ljIdx].BodyAddr := CodeLen;
-  EmitB($48); EmitB($8B); EmitB($5F); EmitB($00);              { mov rbx, [rdi+0] }
-  EmitB($48); EmitB($8B); EmitB($6F); EmitB($08);              { mov rbp, [rdi+8] }
-  EmitB($4C); EmitB($8B); EmitB($67); EmitB($10);              { mov r12, [rdi+16] }
-  EmitB($4C); EmitB($8B); EmitB($6F); EmitB($18);              { mov r13, [rdi+24] }
-  EmitB($4C); EmitB($8B); EmitB($77); EmitB($20);              { mov r14, [rdi+32] }
-  EmitB($4C); EmitB($8B); EmitB($7F); EmitB($28);              { mov r15, [rdi+40] }
-  EmitB($48); EmitB($8B); EmitB($67); EmitB($30);              { mov rsp, [rdi+48] }
-  EmitB($48); EmitB($8B); EmitB($4F); EmitB($38);              { mov rcx, [rdi+56] }
-  EmitB($89); EmitB($F0);                                      { mov eax, esi  (val) }
-  EmitB($85); EmitB($C0);                                      { test eax, eax }
-  EmitB($75); EmitB($02);                                      { jnz +2 }
-  EmitB($FF); EmitB($C0);                                      { inc eax  (0 -> 1) }
-  EmitB($FF); EmitB($E1);                                      { jmp rcx }
+  case TargetArch of
+  TARGET_X86_64:
+  begin
+    EmitB($48); EmitB($8B); EmitB($5F); EmitB($00);              { mov rbx, [rdi+0] }
+    EmitB($48); EmitB($8B); EmitB($6F); EmitB($08);              { mov rbp, [rdi+8] }
+    EmitB($4C); EmitB($8B); EmitB($67); EmitB($10);              { mov r12, [rdi+16] }
+    EmitB($4C); EmitB($8B); EmitB($6F); EmitB($18);              { mov r13, [rdi+24] }
+    EmitB($4C); EmitB($8B); EmitB($77); EmitB($20);              { mov r14, [rdi+32] }
+    EmitB($4C); EmitB($8B); EmitB($7F); EmitB($28);              { mov r15, [rdi+40] }
+    EmitB($48); EmitB($8B); EmitB($67); EmitB($30);              { mov rsp, [rdi+48] }
+    EmitB($48); EmitB($8B); EmitB($4F); EmitB($38);              { mov rcx, [rdi+56] }
+    EmitB($89); EmitB($F0);                                      { mov eax, esi  (val) }
+    EmitB($85); EmitB($C0);                                      { test eax, eax }
+    EmitB($75); EmitB($02);                                      { jnz +2 }
+    EmitB($FF); EmitB($C0);                                      { inc eax  (0 -> 1) }
+    EmitB($FF); EmitB($E1);                                      { jmp rcx }
+  end;
+  TARGET_I386:
+  begin
+    { env at [esp+4], val at [esp+8]. }
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);   { mov ecx, [esp+4] (env) }
+    EmitB($8B); EmitB($54); EmitB($24); EmitB($08);   { mov edx, [esp+8] (val) }
+    EmitB($8B); EmitB($59); EmitB($00);               { mov ebx, [ecx+0] }
+    EmitB($8B); EmitB($71); EmitB($04);               { mov esi, [ecx+4] }
+    EmitB($8B); EmitB($79); EmitB($08);               { mov edi, [ecx+8] }
+    EmitB($8B); EmitB($69); EmitB($0C);               { mov ebp, [ecx+12] }
+    EmitB($89); EmitB($D0);                           { mov eax, edx (val) }
+    EmitB($85); EmitB($C0);                           { test eax, eax }
+    EmitB($75); EmitB($01);                           { jnz +1 }
+    EmitB($40);                                       { inc eax (0 -> 1) }
+    EmitB($8B); EmitB($61); EmitB($10);               { mov esp, [ecx+16] }
+    EmitB($FF); EmitB($61); EmitB($14);               { jmp [ecx+20] }
+  end;
+  TARGET_AARCH64:
+  begin
+    { env in x0, val in w1. Restore, map 0->1, branch to saved return. }
+    EmitI32($F9400013);   { ldr x19, [x0, #0] }
+    EmitI32($F9400414);   { ldr x20, [x0, #8] }
+    EmitI32($F9400815);   { ldr x21, [x0, #16] }
+    EmitI32($F9400C16);   { ldr x22, [x0, #24] }
+    EmitI32($F9401017);   { ldr x23, [x0, #32] }
+    EmitI32($F9401418);   { ldr x24, [x0, #40] }
+    EmitI32($F9401819);   { ldr x25, [x0, #48] }
+    EmitI32($F9401C1A);   { ldr x26, [x0, #56] }
+    EmitI32($F940201B);   { ldr x27, [x0, #64] }
+    EmitI32($F940241C);   { ldr x28, [x0, #72] }
+    EmitI32($F940281D);   { ldr x29, [x0, #80] }
+    EmitI32($F9402C09);   { ldr x9,  [x0, #88] }
+    EmitI32($9100013F);   { mov sp, x9 }
+    EmitI32($F9403009);   { ldr x9,  [x0, #96] (return addr) }
+    EmitI32($7100003F);   { cmp w1, #0 }
+    EmitI32($1A9F1420);   { csinc w0, w1, wzr, ne  (val==0 -> 1) }
+    EmitI32($D61F0120);   { br x9 }
+  end;
+  TARGET_ARM32:
+  begin
+    { env in r0, val in r1. }
+    EmitI32($E5904000);   { ldr r4,  [r0, #0] }
+    EmitI32($E5905004);   { ldr r5,  [r0, #4] }
+    EmitI32($E5906008);   { ldr r6,  [r0, #8] }
+    EmitI32($E590700C);   { ldr r7,  [r0, #12] }
+    EmitI32($E5908010);   { ldr r8,  [r0, #16] }
+    EmitI32($E5909014);   { ldr r9,  [r0, #20] }
+    EmitI32($E590A018);   { ldr r10, [r0, #24] }
+    EmitI32($E590B01C);   { ldr r11, [r0, #28] }
+    EmitI32($E590D020);   { ldr sp,  [r0, #32] }
+    EmitI32($E5902024);   { ldr r2,  [r0, #36] (return addr) }
+    EmitI32($E1B00001);   { movs r0, r1  (val, set flags) }
+    EmitI32($03A00001);   { moveq r0, #1  (val==0 -> 1) }
+    EmitI32($E12FFF12);   { bx r2 }
+  end;
+  TARGET_RISCV32:
+  begin
+    { env in a0(x10), val in a1(x11). }
+    EmitI32($00052083);   { lw ra,  0(a0) }
+    EmitI32($00452103);   { lw sp,  4(a0) }
+    EmitI32($00852403);   { lw s0,  8(a0) }
+    EmitI32($00C52483);   { lw s1,  12(a0) }
+    EmitI32($01052903);   { lw s2,  16(a0) }
+    EmitI32($01452983);   { lw s3,  20(a0) }
+    EmitI32($01852A03);   { lw s4,  24(a0) }
+    EmitI32($01C52A83);   { lw s5,  28(a0) }
+    EmitI32($02052B03);   { lw s6,  32(a0) }
+    EmitI32($02452B83);   { lw s7,  36(a0) }
+    EmitI32($02852C03);   { lw s8,  40(a0) }
+    EmitI32($02C52C83);   { lw s9,  44(a0) }
+    EmitI32($03052D03);   { lw s10, 48(a0) }
+    EmitI32($03452D83);   { lw s11, 52(a0) }
+    EmitI32($00058513);   { mv a0, a1  (val) }
+    EmitI32($00051463);   { bnez a0, +8 }
+    EmitI32($00100513);   { li a0, 1   (val==0 -> 1) }
+    EmitI32($00008067);   { ret }
+  end;
+  else
+    Error('EmitCSetjmpStubs: unsupported target');
+  end;
 end;
 
 procedure ParseCProgram;
@@ -4750,36 +4930,70 @@ begin
   Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
 
-  { Variadic register-save prologue (System V): store the 6 GP + 8 XMM arg
-    registers into __va_save so va_arg can read the variadic args. Registers are
-    still pristine here (the param copy below only reads them). Additive + gated
-    to variadic functions, so non-variadic / Pascal codegen is unchanged. }
+  { Variadic register-save prologue: store the incoming argument registers into
+    __va_save so va_arg can read the variadic tail. Registers are still pristine
+    here (the param copy below only reads them). Additive + gated to variadic
+    functions, so non-variadic / Pascal codegen is unchanged. Per-target: SysV
+    x86-64 saves 6 GP + 8 XMM (two classes); aarch64 saves x0..x7 as one 8-byte
+    GP area (the pxx value model carries floats as GP bits). }
   if vaSaveSym >= 0 then
   begin
-    { overflow_arg_area starts PAST any stack-spilled NAMED params (7th+ GP /
-      9th+ FP arg, 8 bytes each) — with e.g. 7 named ints the 7th sits at
-      [rbp+16] and the variadic tail begins at [rbp+24]. Anchoring at a flat
-      rbp+16 made va_arg re-read the spilled named params as variadic ones
-      (bug-c-vararg-vastart-named-fp-stack, the overflow-area half). }
-    sz := 0;
-    if ProcNamedGP[procIdx] > 6 then sz := (ProcNamedGP[procIdx] - 6) * 8;
-    if ProcNamedFP[procIdx] > 8 then sz := sz + (ProcNamedFP[procIdx] - 8) * 8;
-    EmitB($48); EmitB($8D); EmitB($85); EmitI32(16 + sz);                     { lea rax, [rbp+16+namedSpill] }
-    EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset);   { mov [rbp+o], rax }
-    EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
-    EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
-    EmitB($48); EmitB($89); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 16);   { rdx }
-    EmitB($48); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 24);   { rcx }
-    EmitB($4C); EmitB($89); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 32);   { r8 }
-    EmitB($4C); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 40);   { r9 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 48);   { movsd [rbp+o], xmm0 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 80);   { xmm2 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($9D); EmitI32(Syms[vaSaveSym].Offset + 96);   { xmm3 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($A5); EmitI32(Syms[vaSaveSym].Offset + 112);  { xmm4 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($AD); EmitI32(Syms[vaSaveSym].Offset + 128);  { xmm5 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 144);  { xmm6 }
-    EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
+    case TargetArch of
+    TARGET_X86_64:
+    begin
+      { overflow_arg_area starts PAST any stack-spilled NAMED params (7th+ GP /
+        9th+ FP arg, 8 bytes each) — with e.g. 7 named ints the 7th sits at
+        [rbp+16] and the variadic tail begins at [rbp+24]. Anchoring at a flat
+        rbp+16 made va_arg re-read the spilled named params as variadic ones
+        (bug-c-vararg-vastart-named-fp-stack, the overflow-area half). }
+      sz := 0;
+      if ProcNamedGP[procIdx] > 6 then sz := (ProcNamedGP[procIdx] - 6) * 8;
+      if ProcNamedFP[procIdx] > 8 then sz := sz + (ProcNamedFP[procIdx] - 8) * 8;
+      EmitB($48); EmitB($8D); EmitB($85); EmitI32(16 + sz);                     { lea rax, [rbp+16+namedSpill] }
+      EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset);   { mov [rbp+o], rax }
+      EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
+      EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
+      EmitB($48); EmitB($89); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 16);   { rdx }
+      EmitB($48); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 24);   { rcx }
+      EmitB($4C); EmitB($89); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 32);   { r8 }
+      EmitB($4C); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 40);   { r9 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 48);   { movsd [rbp+o], xmm0 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 80);   { xmm2 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($9D); EmitI32(Syms[vaSaveSym].Offset + 96);   { xmm3 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($A5); EmitI32(Syms[vaSaveSym].Offset + 112);  { xmm4 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($AD); EmitI32(Syms[vaSaveSym].Offset + 128);  { xmm5 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 144);  { xmm6 }
+      EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
+    end;
+    TARGET_AARCH64:
+    begin
+      { AAPCS64: x0..x7 hold the first 8 args (named + variadic), floats included
+        as GP bits. Save them into __va_save[0..56] (one 8-byte slot each). The
+        overflow area is the caller stack args just above the frame: [x29+16],
+        pushed past any named args that spilled there (namedTotal>8). }
+      EmitLoadImmA64(9, Syms[vaSaveSym].Offset);
+      EmitI32($8B0903A9);                                { add x9, x29, x9 (&__va_save) }
+      EmitI32($F9000120);                                { str x0, [x9, #0] }
+      EmitI32($F9000521);                                { str x1, [x9, #8] }
+      EmitI32($F9000922);                                { str x2, [x9, #16] }
+      EmitI32($F9000D23);                                { str x3, [x9, #24] }
+      EmitI32($F9001124);                                { str x4, [x9, #32] }
+      EmitI32($F9001525);                                { str x5, [x9, #40] }
+      EmitI32($F9001926);                                { str x6, [x9, #48] }
+      EmitI32($F9001D27);                                { str x7, [x9, #56] }
+      sz := 16;
+      if ProcNamedGP[procIdx] + ProcNamedFP[procIdx] > 8 then
+        sz := 16 + (ProcNamedGP[procIdx] + ProcNamedFP[procIdx] - 8) * 8;
+      EmitLoadImmA64(10, sz);
+      EmitI32($8B0A03AA);                                { add x10, x29, x10 (overflow) }
+      EmitLoadImmA64(9, Syms[vaOverflowSym].Offset);
+      EmitI32($8B0903A9);                                { add x9, x29, x9 }
+      EmitI32($F900012A);                                { str x10, [x9, #0] }
+    end;
+    else
+      Error('variadic C functions (va_arg) are not yet supported on this cross target');
+    end;
   end;
 
   if TargetArch = TARGET_I386 then
