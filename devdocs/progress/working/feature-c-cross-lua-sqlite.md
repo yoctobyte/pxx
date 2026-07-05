@@ -5,11 +5,12 @@
   cross C→IR / backend bugs found = A (file A ticket, self-resolve under the
   combined-track rule).
 - **Status:** working — Phase 1 (crtl headers) DONE. Phase 2 **aarch64 lua 5.4
-  GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 COMPILES +
-  opens a :memory: DB**; `sqlite3_exec("CREATE TABLE …")` segfaults (next bug).
-  13 cross bugs fixed total. Remaining: the sqlite CREATE-TABLE segfault, then
-  variadic ABI for arm32/i386/riscv32 (their lua/sqlite build-fail at the "not
-  yet" gate), then their runs.
+  GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 GREEN** —
+  `csqlite_extended_test.c` runs under qemu-aarch64 with **byte-identical output
+  to x86-64** (CRUD, transactions, COUNT/SUM/AVG, floats 2000.75/35.00). 14 cross
+  bugs fixed total. Remaining: variadic ABI for arm32/i386/riscv32 (their
+  lua/sqlite build-fail at the "not yet" gate), then their runs; wire a
+  `test-sqlite-cross` make target.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -72,7 +73,29 @@ procs) and `sqlite3_open(":memory:")` works. Bugs fixed to get there:
     (sqlite aSyscall[] pointer table). symtab.inc EmitExternalProcAddr.
 13. aarch64 external variadic calls guarded (fcntl/open `int f(int,int,...)`).
 
-**NEXT WALL — sqlite CREATE TABLE segfault (aarch64):** minimal repro = the
+**14. sqlite CREATE TABLE segfault (aarch64) — FIXED (bug-aarch64-signed-subword-load-32bit-extend).**
+Root cause: **narrow signed loads (`ldrsb`/`ldrsh`) sign-extended to only 32 bits,
+not 64.** `ir_codegen_aarch64.inc` emitted the 32-bit-Wt variant (opc=11,
+`$39C0…`/`$79C0…`) for signed byte/half loads. Since aarch64 W-register writes
+zero the top 32 bits, a stored `i8 = -1` (0xFF) loaded via `ldrsb w0` became
+`x0 = 0x0000_0000_FFFF_FFFF` — then used in a **64-bit** compare it reads as a
+large POSITIVE number. sqlite's `BtCursor.iPage` (i8, init `-1`) thus tested
+`iPage >= 0` TRUE, so `moveToRoot` took the "page already loaded" branch with
+`pCur->pPage == NULL` → NULL deref in `getAndInitPage`/`sqlite3PagerPageRefcount(
+pPage->pDbPage)`. Fix: emit the 64-bit-Xt sign-extending variant (opc=10,
+`$3980…`/`$7980…`) at all 8 signed sub-word load sites (IR_LOAD_MEM deref +
+EmitLoadVar global/ref-param/local; `sz=4` already used `ldrsw`=64-bit, correct;
+unsigned `ldrb`/`ldrh` zero-extend to 64 via top-zeroing, correct). Matches
+x86-64's `movsbq`/`movswq`. GENERAL bug — any negative i8/i16 compared/used as
+64-bit on aarch64 was wrong; only surfaced here because the value flowed into a
+signed `>= 0` guard. DEBUG PATH: 18-deep qemu stack → walked frame chain by x29
+→ identified crashing struct via BFS of its object graph for ASCII strings
+(":memory:", "sqlite_master", column names) → `BtCursor` (iPage@84 i8, pPage@136)
+→ pxx struct layout == gcc (verified via a standalone offsetof-probe TU), so gcc
+`ptype /o` gave field names. Marker recipe (decl-style, cfront-safe): `long
+__pxm = __pxx_write(2,"[tag]\n",N);` among the function's leading decls.
+
+**PRIOR WALL (now cleared) — sqlite CREATE TABLE segfault (aarch64):** minimal repro = the
 extended-test head (SQLITE_THREADSAFE 0 + amalgam includes) with body
 `sqlite3_exec(db,"CREATE TABLE t(x INTEGER)",0,0,&e)`. x86-64 rc=0; aarch64
 SIGSEGV after "DB opened". Fault at a tiny accessor `f(arg){ …arg->[0x70]… }`

@@ -624,11 +624,11 @@ begin
     EmitGlobRef(Syms[idx].Offset);
     if sz = 1 then
     begin
-      if sgn then EmitI32($39C00020) else EmitI32($39400020);
+      if sgn then EmitI32($39800020) else EmitI32($39400020);
     end
     else if sz = 2 then
     begin
-      if sgn then EmitI32($79C00020) else EmitI32($79400020);
+      if sgn then EmitI32($79800020) else EmitI32($79400020);
     end
     else if sz = 4 then
     begin
@@ -646,11 +646,11 @@ begin
       EmitI32($F9400121);  { ldr x1, [x9] }
       if sz = 1 then
       begin
-        if sgn then EmitI32($39C00020) else EmitI32($39400020);
+        if sgn then EmitI32($39800020) else EmitI32($39400020);
       end
       else if sz = 2 then
       begin
-        if sgn then EmitI32($79C00020) else EmitI32($79400020);
+        if sgn then EmitI32($79800020) else EmitI32($79400020);
       end
       else if sz = 4 then
       begin
@@ -663,11 +663,11 @@ begin
     begin
       if sz = 1 then
       begin
-        if sgn then EmitI32($39C00120) else EmitI32($39400120);
+        if sgn then EmitI32($39800120) else EmitI32($39400120);
       end
       else if sz = 2 then
       begin
-        if sgn then EmitI32($79C00120) else EmitI32($79400120);
+        if sgn then EmitI32($79800120) else EmitI32($79400120);
       end
       else if sz = 4 then
       begin
@@ -2150,11 +2150,11 @@ begin
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
-          if sgn then EmitI32($39C00000) else EmitI32($39400000); { ldrsb/ldrb x0/w0, [x0] }
+          if sgn then EmitI32($39800000) else EmitI32($39400000); { ldrsb x0 (64-bit sign-ext) / ldrb w0, [x0] }
         end
         else if sz = 2 then
         begin
-          if sgn then EmitI32($79C00000) else EmitI32($79400000); { ldrsh/ldrh }
+          if sgn then EmitI32($79800000) else EmitI32($79400000); { ldrsh x0 (64-bit sign-ext) / ldrh }
         end
         else if sz = 4 then
         begin
