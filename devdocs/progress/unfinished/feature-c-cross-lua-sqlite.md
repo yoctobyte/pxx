@@ -56,16 +56,42 @@ green, self-host byte-identical, x86-64 lua 6/6 + cross 18/18 unaffected):
 rehash crashes.** `local t={} t[1]=5` (or `t.x=9`) SIGSEGVs; `local t={1,2,3}` +
 `t[2]` read is fine (array preallocated, no rehash). Localized via `__pxx_write`
 markers in ltable.c: the crash is in the `luaH_newkey`→`rehash`→`luaH_resize`
-path. It is a HEISENBUG — adding markers moves the crash point downstream (first
-inside setnodevector, then past reinsert), the classic MEMORY-CORRUPTION
-signature. So a riscv32 codegen bug corrupts memory during the resize/reinsert
-pointer+realloc work (Node/TValue pointer arithmetic, exchangehashpart, or
-luaM_reallocvector sizing), surfacing as `lw a0,0(a0)` on a corrupt pointer
-downstream. arm32/i386 pass this (their heap+straddle fixes covered them), so it
-is riscv32-specific. NEXT: gdb the resize path (or bisect setnodevector/reinsert
-with a fixed static probe buffer, not stack markers, to avoid moving the frame),
-suspect riscv32 pointer/size codegen in the Node-vector loop. crtl instrumentation
-in library_candidates/lua is gitignored scratch — reverted clean.
+path. It is a HEISENBUG — adding markers moves the crash point downstream, the classic
+MEMORY-CORRUPTION signature. arm32/i386 pass this, so it is riscv32-specific.
+
+**Deep localization (session #3b, gdb on the clean binary — addresses stable, no
+ASLR under qemu-user):**
+- Trigger is table GROWTH specifically: `t[1]=5`/`t.x=9`/`t={5,6,7};t[4]=8` all
+  crash (any rehash/resize); `t={0};t[1]=9` (existing slot), all GETS, and
+  `{1,2,3}` literals are FINE. So the bug is on the SET-that-grows path only.
+- The crash instruction is in `luaV_execute` (`lw a0,0(a0)` deref of a corrupt
+  pointer). The corrupt value is **`0x10` = 16 = `nsize` = `newasize*sizeof(TValue)`
+  = 1*16**, i.e. an allocation BYTE SIZE landed in a pointer slot.
+- Ruled OUT with minimal repros: the crtl heap/realloc (malloc torture bad=0 on
+  riscv32), indirect-call-returning-pointer (works), `luaM_realloc_` itself
+  (returns a valid pointer, `nb=` dumped fine), Node/Table/TValue sizeof (24/32/16,
+  IDENTICAL to arm32 — layout is consistent), and the rehash SIZE computation
+  (na=1 nh=0, identical to arm32).
+- WILD STORE confirmed via gdb: in `luaV_execute` the local `[s0-8]` (fixed stack
+  addr, e.g. 0x2b2aaaf8) = a valid pointer (0x81fe8e0) BEFORE the `luaV_finishset`
+  call and = 0x10 AFTER it returns. Breaking at `luaH_resize` entry+exit and
+  `luaH_newkey` entry+exit shows the slot INTACT there — so the wild store is in
+  `luaV_finishset`'s value-insertion, NOT in resize/newkey. Something writes 16 to
+  a stack address ABOVE the callee frames (a positive-offset / out-of-bounds store
+  relative to a callee's s0).
+- **NEXT (needs better tooling — qemu-riscv32 has NO hardware-watchpoint support,
+  and the victim stack slot is reused across frames so single-address gdb tracking
+  is ambiguous):** either (a) disassemble `luaV_finishset` + `luaH_set` +
+  `reinsert`/`luaH_newkey` looking for a STORE with a POSITIVE offset off s0/sp (a
+  local-address miscomputed as +N instead of -N, or a `TValue aux`/`k`
+  16-byte-write overflowing its slot upward), or (b) run under a riscv32
+  record/replay or valgrind-equivalent. The value being exactly 16 = one
+  `sizeof(TValue)` strongly implicates the array-grow store sequence
+  (`t->array = newarray; setempty(&t->array[0])`) or the `luaH_set` that re-inserts
+  the value after rehash. Break addrs (this binary): luaH_resize 0x81333a4,
+  luaH_newkey 0x8134d94, rehash 0x8134138, setnodevector 0x8132248, reinsert
+  0x8132dbc, luaV_finishset 0x8149b74. crtl instrumentation in
+  library_candidates/lua is gitignored scratch — reverted clean.
 
 ## Progress log (session 2026-07-05 #2, 32-bit heap corruption ROOT-CAUSED + FIXED)
 
