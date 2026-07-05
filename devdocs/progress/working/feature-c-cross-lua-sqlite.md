@@ -8,11 +8,13 @@
   GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 GREEN** —
   `csqlite_extended_test.c` runs under qemu-aarch64 with **byte-identical output
   to x86-64** (CRUD, transactions, COUNT/SUM/AVG, floats 2000.75/35.00). 14 cross
-  bugs fixed total. **arm32 + riscv32 variadic C ABI now works for direct
-  va_arg** (commit 2647f41f) — printf/lua/sqlite on those targets is blocked
-  next on va_list-passed-by-value (24-byte struct; needs array-typed va_list or
-  32-bit struct-by-value). i386 variadic still gated (reversed cdecl order).
-  Then wire a `test-sqlite-cross` make target.
+  bugs fixed total. **Variadic C ABI now on all 5 targets.** i386 (commit
+  c5f80ac6) printf incl %f is byte-identical to x86-64 — i386's all-stack cdecl
+  passes the 24-byte va_list by value naturally, so printf→__crtl_vformat works.
+  arm32 + riscv32 direct va_arg works (2647f41f) but printf/lua/sqlite there are
+  blocked on va_list-passed-by-value (needs array-typed va_list or 32-bit
+  struct-by-value >8B). i386 lua/sqlite get far but hit separate i386 gaps
+  (external-call arg-count mismatch, a lua segfault). Then wire test-*-cross.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -113,7 +115,23 @@ sequences, in loops, order-sensitive across the reg/stack boundary):
   the param-copy read it (surfaced only when the callee re-read a named param,
   e.g. a loop bound `i<n`).
 
-**BLOCKER for printf/lua/sqlite on 32-bit — va_list passed BY VALUE.** crtl's
+**16. i386 variadic C ABI — DONE (commit c5f80ac6), printf incl %f byte-identical
+to x86-64.** i386 has no arg registers (all-stack cdecl) and normally pushes
+leftmost-deepest (reversed) to match the callee's reversed spill — undecodable
+for a variadic callee. Fix, variadic-call-only: call site pushes ALL args in
+reverse index order → FORWARD layout (arg0 at [ebp+8]) via an order array (reuses
+the per-type push logic; 64-bit tail arg = two dwords); callee named-spill uses
+the forward disp (params to the LEFT) for variadic fns; prologue reg-area size 0,
+overflow = [ebp+8+namedBytes]. i386's all-stack ABI passes the 24-byte va_list by
+value naturally, so printf→__crtl_vformat "just works" (unlike arm32/riscv32).
+LANDMINE self-caught: the float branch's arg-advance wasn't converted to the
+order array → a double param not-last reprocessed the next arg under the wrong
+index (non-variadic regression); all advance sites now go through the order
+array. i386 lua/sqlite get much further but hit SEPARATE i386 gaps: sqlite = a
+non-variadic "external call argument count mismatch" (ir_codegen386 external
+path's strict nArgs=ParamCount check); lua = a SIGSEGV (unrelated i386 codegen).
+
+**BLOCKER for printf/lua/sqlite on arm32/riscv32 — va_list passed BY VALUE.** crtl's
 `printf` (and sqlite's/lua's own printf) do `va_start(ap,fmt)` then hand the
 whole `va_list` (24-byte struct) to a formatter (`__crtl_vformat`, sqlite
 `sqlite3VXPrintf`) by value. arm32/riscv32 have no struct-by-value >8 bytes ABI,
