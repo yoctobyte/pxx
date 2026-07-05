@@ -4483,7 +4483,13 @@ begin
     rv32_sw(reg_s0, reg_sp, 8);
     rv32_addi(reg_s0, reg_sp, 0);
     Result := CodeLen;
+    { Reserve THREE words for the frame adjustment (patched in PatchProcPrologue):
+      a single `addi sp,sp,-frame` only reaches +/-2048, so a larger frame needs
+      `lui t0,hi; addi t0,t0,lo; sub sp,sp,t0`. Small frames patch addi + 2 nops.
+      (t0 is scratch at entry — the interrupt path already saved it above.) }
     rv32_addi(reg_sp, reg_sp, 0);
+    rv32_addi(reg_zero, reg_zero, 0);
+    rv32_addi(reg_zero, reg_zero, 0);
     Exit;
   end;
   EmitB($55);
@@ -4493,7 +4499,7 @@ begin
 end;
 
 procedure PatchProcPrologue(patchPos, size: Integer);
-var aligned, a64imm: Integer;
+var aligned, a64imm, rvLo, rvHi: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
   { Windowed xtensa keeps sp constant and runs its expression/argument stack in
@@ -4541,7 +4547,28 @@ begin
     end;
   end
   else if TargetArch = TARGET_RISCV32 then
-    Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned))
+  begin
+    { addi's immediate is 12-bit signed (+/-2048); a larger frame silently
+      truncated to a positive value and allocated the frame UPWARD, so callees
+      overwrote this function's locals (bug-riscv32-large-frame-addi-truncate).
+      Small frames: `addi sp,sp,-aligned` + 2 nops. Large: build the size in t0
+      (lui+addi) and `sub sp,sp,t0` — three words, matching the reservation. }
+    if aligned <= 2047 then
+    begin
+      Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned));
+      Patch32(patchPos + 4, EncodeRISCVAddi(0, 0, 0));   { nop }
+      Patch32(patchPos + 8, EncodeRISCVAddi(0, 0, 0));   { nop }
+    end
+    else
+    begin
+      rvLo := aligned and $FFF;
+      if (rvLo and $800) <> 0 then rvLo := rvLo - $1000;  { addi's lo is sign-extended }
+      rvHi := aligned - rvLo;                             { multiple of 4096 for lui }
+      Patch32(patchPos,     EncodeRISCVLui(reg_t0, rvHi));
+      Patch32(patchPos + 4, EncodeRISCVAddi(reg_t0, reg_t0, rvLo));
+      Patch32(patchPos + 8, EncodeRISCVSub(reg_sp, reg_sp, reg_t0));
+    end;
+  end
   else
     Patch32(patchPos, aligned);
 end;

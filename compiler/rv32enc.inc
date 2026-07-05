@@ -75,6 +75,14 @@ function EncodeRISCVAuipc(rd, hi: Integer): Integer;
 begin
   Result := (hi and Integer($FFFFF000)) or (rd shl 7) or $17;
 end;
+function EncodeRISCVLui(rd, hi: Integer): Integer;
+begin
+  Result := (hi and Integer($FFFFF000)) or (rd shl 7) or $37;
+end;
+function EncodeRISCVSub(rd, rs1, rs2: Integer): Integer;
+begin
+  Result := ($20 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (rd shl 7) or $33;
+end;
 function EncodeRISCVJalr(rd, rs1, imm: Integer): Integer;
 begin
   Result := (((imm and $FFF) shl 20) or (rs1 shl 15) or (rd shl 7) or $67);
