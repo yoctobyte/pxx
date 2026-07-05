@@ -1212,7 +1212,15 @@ begin
       operand := ParseCUnary();
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
-      ASTTk[node] := Ord(tyInteger);
+      { Preserve the (promoted) operand type, mirroring unary `-`. Hardcoding
+        tyInteger dropped an unsigned/64-bit operand's type, so `~(size_t)0`
+        divided as a SIGNED int (-1) — e.g. `(~(size_t)0)/4` came out 0 on
+        aarch64. Sub-int operands promote to int per C. }
+      opTk := IntToTypeKind(ASTTk[operand]);
+      if (opTk = tyChar) or (opTk = tyBoolean) or (TypeSize(opTk) < 4) then
+        ASTTk[node] := Ord(tyInteger)
+      else
+        ASTTk[node] := ASTTk[operand];
       Result := node;
     end;
     tkLogNot:   { `!` logical NOT -> (operand == 0), a 0/1 boolean }
