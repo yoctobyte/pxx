@@ -49,11 +49,38 @@ their C `long` externs after long=native; byte-identical on x86-64).
   program corrupts on 32-bit only, torture the allocator FIRST.
 - **Result:** cross lua **5/6 on arm32, 5/6 on i386** (was total corruption).
   Remaining fails are separate narrower bugs, NOT this one:
-  - **arm32 numeric.lua** — all floats garbage (`4.27e+86`, `5.31e-315`, mean=0);
-    an arm32 double codegen / double-arg bug in lua's number path. (Note: arm32
-    printf `%f` is byte-identical per item-17, so this is lua-internal double
-    handling — `l_mathop`/`lua_number2str`, or double arg passing through lua's
-    own varargs, not crtl snprintf.)
+  - **arm32 numeric.lua — ROOT-CAUSED (not yet fixed): arm32 variadic 8-byte args
+    STRADDLE the r0-r3/stack boundary; the reg-save + `__pxx_va_arg_cross32` model
+    can't represent a straddling arg.** Reduced to pure C (no lua): `printf("%g %g
+    %g",1.0,2.0,4.0)` on arm32 gives the 1st double right, 2nd/3rd garbage.
+    Minimal repro & traces:
+    - pxx passes each variadic 8-byte arg (double / int64) as TWO packed words,
+      NO 8-byte alignment (ir_codegen_arm32.inc variadic-tail push ~2071-2089;
+      stdarg.h cross32 comment "packed (no 8-byte alignment)"). The first 4 arg
+      words load into r0-r3, the rest go to the stack.
+    - So after e.g. one named int word (`cnt` in r0) + one double (r1:r2), the
+      NEXT double's low word lands in **r3** and its high word on the **stack** —
+      it straddles the register/stack boundary.
+    - `__pxx_va_arg_cross32` (lib/crtl/include/stdarg.h) can't read a straddling
+      arg: when `gp_offset+8 > regsize` it *consumes the leftover reg word* (skips
+      r3) and reads the whole 8 bytes from overflow(stack) → gets [hi-of-arg,
+      lo-of-next] = garbage. Confirmed by C repros (`/tmp/va*.c`):
+      `fd(3,1.0,2.0,4.0)` → `xY yN zN`; single double/int64 (j≤4) work
+      (`iY dY`); but ANY multi-8-byte-arg variadic call fails, even for args that
+      sit fully in registers (`j5`: 1 named + two int64, 1st int64 in r1:r2 still
+      reads N once a straddling 2nd arg follows) — so there is ALSO a
+      frame/reg-save interaction beyond the pure straddle, needs gdb on __va_save.
+    - **i386 numeric.lua PASSES** — i386's all-stack cdecl has no reg/stack
+      boundary, so it never straddles. This is why the bug is arm32-only.
+    - **FIX DIRECTION:** make 8-byte variadic args 8-byte-aligned so they never
+      straddle — i.e. at the call site insert a padding word when an 8-byte arg
+      would start at word index 3 (the only straddle position for a 4-word reg
+      area), AND seed `regsize`/`gpbytes` + reg-save consistently so
+      `__pxx_va_arg_cross32`'s existing "skip leftover reg word, read from
+      overflow" path lines up with the padded layout. Must also re-check the
+      variadic-tail reversal (~2157) and the multi-arg in-register failure. Keep
+      the aarch64/i386/riscv32 paths and the non-variadic Int64 ABI unchanged;
+      gate on the existing va_arg exit-code tests + test-lua-cross arm32.
   - **i386 coroutines.lua** — empty output (early crash); i386 coroutine path
     (separate lua stack; likely setjmp/longjmp or stack-switch on i386).
   Both worth their own repro+fix next.
