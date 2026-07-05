@@ -8,20 +8,20 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-rust-frontend-skeleton | R | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
-## unfinished (3)
+## unfinished (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
