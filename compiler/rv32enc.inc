@@ -67,6 +67,28 @@ begin
   Result := (((imm and $FFF) shl 20) or (rs1 shl 15) or (rd shl 7) or $13);
 end;
 
+{ auipc rd, hi  (hi already a multiple of 4096 = the upper-20-bit immediate) and
+  jalr rd, rs1, lo  — the two halves of a PC-relative long call (auipc+jalr spans
+  the full 32-bit range, unlike JAL's +/-1MB). Split a call offset via
+  RISCVPcrelSplit. }
+function EncodeRISCVAuipc(rd, hi: Integer): Integer;
+begin
+  Result := (hi and Integer($FFFFF000)) or (rd shl 7) or $17;
+end;
+function EncodeRISCVJalr(rd, rs1, imm: Integer): Integer;
+begin
+  Result := (((imm and $FFF) shl 20) or (rs1 shl 15) or (rd shl 7) or $67);
+end;
+{ Split a PC-relative offset (target - auipc_pos) into the auipc upper immediate
+  (multiple of 4096) and the sign-extended jalr low-12; auipc adds hi, jalr adds
+  sign-extended lo, so hi+lo = off exactly. }
+procedure RISCVPcrelSplit(off: Integer; var hi: Integer; var lo: Integer);
+begin
+  lo := off and $FFF;
+  if (lo and $800) <> 0 then lo := lo - $1000;   { sign-extend to [-2048, 2047] }
+  hi := off - lo;                                { multiple of 4096 }
+end;
+
 procedure rv32_add(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 0, rd, $33); end;
 procedure rv32_sub(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 0, rd, $33); end;
 procedure rv32_addi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $13); end;

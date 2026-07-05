@@ -5281,7 +5281,7 @@ begin
 end;
 
 procedure EmitCallProc(procIdx: Integer);
-var extIdx: Integer;
+var extIdx, rvHi, rvLo: Integer;
 begin
   if ProcExternal[procIdx] then
   begin
@@ -5422,15 +5422,23 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
+    { auipc+jalr (full 32-bit range) rather than a single JAL (+/-1MB) — a large
+      binary like cross lua (1.75MB code) places callees beyond JAL's reach, so a
+      truncated offset jumped to garbage. reg_t0 is a caller-saved scratch. }
     if Procs[procIdx].BodyAddr >= 0 then
-      rv32_jal(reg_ra, Procs[procIdx].BodyAddr - CodeLen)
+    begin
+      RISCVPcrelSplit(Procs[procIdx].BodyAddr - CodeLen, rvHi, rvLo);
+      rv32_auipc(reg_t0, rvHi);
+      rv32_jalr(reg_ra, reg_t0, rvLo);
+    end
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
       CallFix[CallFixCount].ProcIdx := procIdx;
       Inc(CallFixCount);
-      rv32_jal(reg_ra, 0);
+      rv32_auipc(reg_t0, 0);
+      rv32_jalr(reg_ra, reg_t0, 0);
     end;
     Exit;
   end;
@@ -5448,7 +5456,7 @@ begin
 end;
 
 procedure ApplyCallFixups;
-var i, procIdx: Integer;
+var i, procIdx, rvHi, rvLo: Integer;
 begin
   if DebugTrace then
     for i := 0 to ProcCount-1 do
@@ -5470,7 +5478,12 @@ begin
         Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[procIdx].BodyAddr));
     end
     else if TargetArch = TARGET_RISCV32 then
-      Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, Procs[procIdx].BodyAddr - CallFix[i].CodePos))
+    begin
+      { auipc+jalr pair (see EmitCallProc): patch both words. }
+      RISCVPcrelSplit(Procs[procIdx].BodyAddr - CallFix[i].CodePos, rvHi, rvLo);
+      Patch32(CallFix[i].CodePos, EncodeRISCVAuipc(reg_t0, rvHi));
+      Patch32(CallFix[i].CodePos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
+    end
     else
       Patch32(CallFix[i].CodePos, Procs[procIdx].BodyAddr - (CallFix[i].CodePos + 4));
   end;

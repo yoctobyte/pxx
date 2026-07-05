@@ -4470,7 +4470,7 @@ begin
 end;
 
 procedure ParseCProgram;
-var firstIdx, callPatch, mainIdx: Integer;
+var firstIdx, callPatch, mainIdx, rvHi, rvLo: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -4547,7 +4547,9 @@ begin
       rv32_sw(reg_sp, reg_t0, 0);         { sw sp, 0(t0) }
       rv32_lw(reg_a0, reg_sp, 0);         { a0 = argc = [sp] }
       rv32_addi(reg_a1, reg_sp, 4);       { a1 = argv = sp+4 }
-      callPatch := CodeLen; rv32_jal(reg_ra, 0);   { jal ra, main (patched) }
+      { auipc+jalr (full range) not JAL (+/-1MB): main can sit past 1MB in a
+        large image (cross lua = 1.75MB). Both words patched below. }
+      callPatch := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
       rv32_addi(reg_a7, reg_zero, 94);    { a7 = 94 (exit_group) }
       EmitI32($00000073);                 { ecall (a0 = exit code) }
     end;
@@ -4634,7 +4636,11 @@ begin
     Patch32(callPatch, Integer($94000000) or
       (((Procs[mainIdx].BodyAddr - callPatch) div 4) and $03FFFFFF))
   else if TargetArch = TARGET_RISCV32 then
-    Patch32(callPatch, EncodeRISCVJAL(reg_ra, Procs[mainIdx].BodyAddr - callPatch))
+  begin
+    RISCVPcrelSplit(Procs[mainIdx].BodyAddr - callPatch, rvHi, rvLo);
+    Patch32(callPatch, EncodeRISCVAuipc(reg_t0, rvHi));
+    Patch32(callPatch + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
+  end
   else
     Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
