@@ -6265,8 +6265,23 @@ begin
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -2; { PChar adapter }
             ASTTk[node]   := Ord(tyPointer);
+            { PChar(s)[i]: index the cast result -> a char element. The shared
+              postfix loop's AN_PTR_CAST branch reads AliasElemTk[ASTIVal], which
+              the -2 adapter has no entry for, so handle the subscript here. }
+            while CurTok.Kind = tkLBrack do
+            begin
+              Next; { consume '[' }
+              ParseExpr;
+              Expect(tkRBrack, ']');
+              indexNode := AllocNode(AN_INDEX);
+              ASTLeft[indexNode]  := node;
+              ASTRight[indexNode] := CurASTNode;
+              ASTTk[indexNode]    := Ord(tyChar);
+              node := indexNode;
+            end;
             CurASTNode    := node;
-            LastExprTk    := tyPointer;
+            if ASTKind[node] = AN_INDEX then LastExprTk := tyChar
+            else LastExprTk := tyPointer;
             Exit;
           end;
           if CaseEqual(name, 'pointer') then castTk := tyPointer
@@ -14975,6 +14990,8 @@ begin
           CaseEqual(CurTok.SVal, 'iram') or
           CaseEqual(CurTok.SVal, 'interrupt') or
           CaseEqual(CurTok.SVal, 'flexcolumn') or
+          CaseEqual(CurTok.SVal, 'static') or
+          CaseEqual(CurTok.SVal, 'reintroduce') or
           CaseEqual(CurTok.SVal, 'deprecated') or
           CaseEqual(CurTok.SVal, 'platform') or
           CaseEqual(CurTok.SVal, 'experimental') or

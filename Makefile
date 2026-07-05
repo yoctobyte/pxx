@@ -473,6 +473,9 @@ test-core: $(COMPILER)
 	# multi-param generics <TKey, TData> + constrained type params (fgl TFPGMap/TFPGObjectList shapes)
 	./$(COMPILER) test/test_generic_multiparam.pas /tmp/test_generic_multiparam26
 	test "$$(/tmp/test_generic_multiparam26 | tail -1)" = "total ok 4 / 4"
+	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
+	./$(COMPILER) test/test_impl_static_and_pchar_index.pas /tmp/test_impl_static_and_pchar_index26
+	test "$$(/tmp/test_impl_static_and_pchar_index26 | tail -1)" = "total ok 5 / 5"
 	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
 	./$(COMPILER) test/test_fpc_compat_batch.pas /tmp/test_fpc_compat_batch26
 	test "$$(/tmp/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"

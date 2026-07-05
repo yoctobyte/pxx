@@ -752,11 +752,21 @@ begin
     begin
       indexNode := IRLowerAST(ASTRight[node]);
       aliasIdx := ASTIVal[baseNode];
-      tk := IntToTypeKind(AliasElemTk[aliasIdx]);
-      if tk = tyRecord then
-        elemSize := RecSize(AliasElemRec[aliasIdx])
+      if aliasIdx < 0 then
+      begin
+        { PChar(expr)[i] / built-in pointer-cast adapter (ASTIVal -2/-1): no
+          alias entry, the pointed-at element is a char (byte stride). }
+        tk := tyChar;
+        elemSize := 1;
+      end
       else
-        elemSize := TypeSize(tk);
+      begin
+        tk := IntToTypeKind(AliasElemTk[aliasIdx]);
+        if tk = tyRecord then
+          elemSize := RecSize(AliasElemRec[aliasIdx])
+        else
+          elemSize := TypeSize(tk);
+      end;
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
