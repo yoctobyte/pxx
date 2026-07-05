@@ -4,9 +4,10 @@
   (C frontend + crtl headers + shared codegen). crtl headers = B (file-owned);
   cross C→IR / backend bugs found = A (file A ticket, self-resolve under the
   combined-track rule).
-- **Status:** working — Phase 1 (crtl headers) DONE; Phase 2 (cross lua) in
-  progress on aarch64: 8 cross bugs fixed, lua now builds + inits + loads all
-  libraries; walled at a `limit=-1` opcode-growth miscompile in lcode.c.
+- **Status:** working — Phase 1 (crtl headers) DONE. Phase 2 **aarch64 lua 5.4
+  GREEN** — all 6 test-lua scripts pass under qemu (`make test-lua-cross`). 9
+  cross bugs fixed. Remaining: variadic ABI for arm32/i386/riscv32 (their lua
+  build-fails at the "not yet" gate), then those targets' lua, then sqlite.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -38,24 +39,35 @@ byte-identical + `make test` green.
 7. **Unary `~` result type** hardcoded tyInteger → `(~(size_t)0)/N` divided
    signed. Now preserves the promoted operand type.
 
-**NEXT WALL (unresolved) — `limit=-1` opcode growth:** aarch64 lua loads all
-libs (F:open-done, every `req:` module OK) then fails compiling the test script
-bytecode: `LOAD-ERR too many opcodes (limit is -1)`. Traced to
-`luaM_growaux_` (lmem.c) receiving `limit=-1` for `what="opcodes"`. The limit is
-`luaM_limitN(MAX_INT, Instruction)` = `(cast_sizet(MAX_INT) <= MAX_SIZET/sizeof
-(Instruction)) ? MAX_INT : cast_uint(MAX_SIZET/sizeof(Instruction))`. When the
-guard comparison is (wrongly) false, the else branch yields `cast_uint(0x3FFF…)
-= 0xFFFFFFFF = -1`. **Reproduced in isolation: NONE of the pieces fail** —
-`MAX_SIZET/sizeof(Instruction)`, the `<=`, the full macro all return the right
-answer standalone. So the miscompile is **context-specific** (large lcode.c
-function; suspect register pressure / spill corrupting the div or compare
-operands, or a lost unsigned type on the div's left operand in that context).
-Debug path: instrument the real `luaM_limitN` at lcode.c:385, then rr/gdb the
-aarch64 division+compare in `luaK_code`. Debug markers used this session live in
-lstate.c/lmem.c/ltable.c (all reverted; the lua tree is gitignored scratch).
+8. **Unsigned integer compares on aarch64** used signed condition codes
+   (`EmitSetccA64` always lt/le/gt/ge) — this was the `limit=-1` wall.
+   `luaM_limitN`'s guard `cast_sizet(MAX_INT) <= MAX_SIZET/sizeof(ls_byte)` (=
+   `<= 0xFFFF…F`) went FALSE because 0xFFFF…F read as -1, so the else branch
+   returned `cast_uint(0xFFFF…F) = -1` as the opcode-array limit → "too many
+   opcodes (limit is -1)". The 4-byte Instruction case had slipped through only
+   because `MAX_SIZET/4 = 0x3FFF…F` reads positive-as-signed. Added
+   `EmitSetccA64Ex(op,isUnsigned)` → lo/ls/hi/hs; the compare site passes
+   unsigned when either operand is an unsigned ordinal.
+9. (bonus, same root family) the two-step diagnosis above also depended on the
+   #6 unsigned-div and #7 `~`-type fixes to get `MAX_SIZET/N` right first.
 
-**After that:** finish arm32/i386/riscv32 variadic (4-byte-slot model), then
-the remaining lua walls, then Phase 3 sqlite, Phase 4 make targets.
+**Phase 4 (partial):** `make test-lua-cross` added (LUA_CROSS_TARGETS, default
+`aarch64`); mirrors test-lua's skip guard, runs each script under qemu vs the
+same .expected. Green for aarch64. NOT wired into `make test`.
+
+**NEXT (future session):**
+- **arm32/i386/riscv32 variadic ABI** — the callee register-save prologue is
+  aarch64-only (`cparser.inc` EmitCSetjmpStubs' sibling: the vaSave block raises
+  "variadic C functions … not yet supported on this cross target"). They need a
+  4-byte-slot save area + a `__pxx_va_arg_cross32` helper (arm32: r0-r3 then
+  stack; i386: pure cdecl stack; riscv32: a0-a7). Until then their lua/sqlite
+  build-fails at the first variadic fn (printf).
+- Then each target's lua run (same unsigned-div/compare fixes likely already
+  cover arm32/riscv32, which branch on signedness; i386/x86-64 were fine).
+- Then **Phase 3 sqlite** cross (csqlite_extended_test.c per target).
+- Debug tip: instrumenting 3rd-party lua .c with `__pxx_write(2,…)` markers is
+  the fast cross probe — but the C frontend rejects a mid-block `extern`; put
+  the extern at file scope and all block decls before statements.
 
 ## Goal
 

@@ -2861,6 +2861,43 @@ test-lua: $(COMPILER)
 	test "$$fail" = "0" || { echo "test-lua: FAILURES"; exit 1; }; \
 	echo "test-lua: all lua programs match expected"
 
+# Cross-target lua 5.4 (feature-c-cross-lua-sqlite). Builds the lua runner for a
+# cross target and runs every script under qemu, comparing to the same .expected
+# files as test-lua. NOT part of `make test` (3rd-party dep + qemu). aarch64 is
+# green; the other targets await their variadic-ABI bring-up (they build-fail
+# early, so are omitted here rather than reported as failures). Skips gracefully
+# when the lua tree or qemu is absent.
+LUA_CROSS_TARGETS ?= aarch64
+test-lua-cross: $(COMPILER)
+	@if [ ! -f "$(LUA_SRC)/lua.h" ]; then \
+	  echo "test-lua-cross: SKIP — no lua tree at $(LUA_SRC)"; exit 0; \
+	fi; \
+	overall=0; \
+	for T in $(LUA_CROSS_TARGETS); do \
+	  if ! command -v qemu-$$T >/dev/null 2>&1 && ! command -v qemu-$${T%32} >/dev/null 2>&1; then \
+	    echo "test-lua-cross: SKIP $$T (qemu-$$T not installed)"; continue; \
+	  fi; \
+	  echo "test-lua-cross: building lua for $$T ..."; \
+	  if ! ./$(COMPILER) --target=$$T -g -Ilib/crtl/include -Ilib/crtl/src -I$(LUA_SRC) \
+	       test/lua/runner.c /tmp/pxx_lua_$$T 2>/tmp/pxx_lua_$$T.err; then \
+	    echo "test-lua-cross: FAIL $$T (build error)"; head -3 /tmp/pxx_lua_$$T.err; overall=1; continue; \
+	  fi; \
+	  fail=0; \
+	  for p in test/lua/*.lua; do \
+	    exp="$${p%.lua}.expected"; \
+	    cp "$$p" /tmp/pxx_lua_input.lua; \
+	    timeout 120 tools/run_target.sh $$T /tmp/pxx_lua_$$T 2>/dev/null > /tmp/pxx_lua_got.txt; \
+	    if diff -u "$$exp" /tmp/pxx_lua_got.txt > /tmp/pxx_lua_diff.txt; then \
+	      echo "test-lua-cross: PASS $$T $$(basename $$p)"; \
+	    else \
+	      echo "test-lua-cross: FAIL $$T $$(basename $$p)"; head -12 /tmp/pxx_lua_diff.txt; fail=1; \
+	    fi; \
+	  done; \
+	  test "$$fail" = "0" || overall=1; \
+	done; \
+	test "$$overall" = "0" || { echo "test-lua-cross: FAILURES"; exit 1; }; \
+	echo "test-lua-cross: all cross lua runs match expected"
+
 # cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make
 # test`: the base gate carries no 3rd-party dependency. Amalgamates lib/crtl + the
 # cJSON 1.7.18 core (from library_candidates/cjson/src — gitignored scratch, fetch
