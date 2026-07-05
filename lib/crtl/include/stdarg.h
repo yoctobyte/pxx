@@ -103,13 +103,33 @@ static void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size) {
   void *addr;
   step = (size <= 4) ? 4 : 8;
   if (ap->gp_offset + step <= ap->fp_offset) {
+    /* Fully inside the register-save area. */
     addr = (char *)ap->reg_save_area + ap->gp_offset;
     ap->gp_offset = ap->gp_offset + step;
+  } else if (ap->gp_offset < ap->fp_offset) {
+    /* STRADDLE: an 8-byte arg begins in the last reg-save word and continues in
+       the caller's overflow (stack) area. pxx packs 64-bit variadic args as two
+       words with NO 8-byte alignment, so one can span the reg/stack boundary
+       (e.g. arm32: low word in r3, high word on the stack). The two halves are
+       not contiguous in memory, so assemble them: the low half is already in the
+       reg-save tail; copy the overflow half into the save-area slack immediately
+       after it (the 176-byte __va_save uses only 16 bytes on arm32 / 32 on
+       riscv32, so [fp_offset..] is free), then return the low-half address as one
+       contiguous span. Advance overflow by ONLY the copied half — the next arg
+       starts right after the high word, not a full step later (the old code
+       skipped the reg word and read the whole 8 bytes from overflow, dropping the
+       low half AND over-advancing, which shifted every following variadic arg). */
+    unsigned int inReg = ap->fp_offset - ap->gp_offset;   /* bytes still in regs */
+    unsigned int fromOvf = step - inReg;                  /* bytes taken from stack */
+    char *lo = (char *)ap->reg_save_area + ap->gp_offset;
+    char *hi = lo + inReg;
+    unsigned int k;
+    for (k = 0; k < fromOvf; k++) hi[k] = ((char *)ap->overflow_arg_area)[k];
+    ap->overflow_arg_area = (char *)ap->overflow_arg_area + fromOvf;
+    ap->gp_offset = ap->fp_offset;
+    addr = lo;
   } else {
-    /* Past (or straddling) the reg area: the caller placed this arg on the
-       stack. Consume any leftover reg word so a later smaller arg does not read
-       it. */
-    if (ap->gp_offset < ap->fp_offset) ap->gp_offset = ap->fp_offset;
+    /* Fully past the reg area: the caller placed this arg on the stack. */
     addr = ap->overflow_arg_area;
     ap->overflow_arg_area = (char *)ap->overflow_arg_area + step;
   }
