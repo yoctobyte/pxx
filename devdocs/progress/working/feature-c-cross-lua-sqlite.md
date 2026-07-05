@@ -8,9 +8,11 @@
   GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 GREEN** —
   `csqlite_extended_test.c` runs under qemu-aarch64 with **byte-identical output
   to x86-64** (CRUD, transactions, COUNT/SUM/AVG, floats 2000.75/35.00). 14 cross
-  bugs fixed total. Remaining: variadic ABI for arm32/i386/riscv32 (their
-  lua/sqlite build-fail at the "not yet" gate), then their runs; wire a
-  `test-sqlite-cross` make target.
+  bugs fixed total. **arm32 + riscv32 variadic C ABI now works for direct
+  va_arg** (commit 2647f41f) — printf/lua/sqlite on those targets is blocked
+  next on va_list-passed-by-value (24-byte struct; needs array-typed va_list or
+  32-bit struct-by-value). i386 variadic still gated (reversed cdecl order).
+  Then wire a `test-sqlite-cross` make target.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -94,6 +96,40 @@ signed `>= 0` guard. DEBUG PATH: 18-deep qemu stack → walked frame chain by x2
 → pxx struct layout == gcc (verified via a standalone offsetof-probe TU), so gcc
 `ptype /o` gave field names. Marker recipe (decl-style, cfront-safe): `long
 __pxm = __pxx_write(2,"[tag]\n",N);` among the function's leading decls.
+
+**15. arm32 + riscv32 variadic C ABI — DONE (direct va_arg), commit `2647f41f`.**
+The va_arg machinery (was x86-64 + aarch64 only) now covers the 32-bit cross
+targets. Verified end-to-end via exit codes under qemu (int / int64 / pointer
+sequences, in loops, order-sensitive across the reg/stack boundary):
+- Frontend: `__builtin_va_arg` → size-driven `__pxx_va_arg_cross32(ap,size)`
+  (4-byte word slots, 64-bit steps two); `__builtin_va_start` →
+  `__pxx_va_start_impl32(ap,save,gpbytes,overflow,regsize)`. Reg-save prologue:
+  riscv32 saves a0..a7, arm32 saves r0..r3 into `__va_save`.
+- Call site: variadic-tail 64-bit args now pushed as 2 words (the ParamCount
+  gate skipped them, dropping the high word); arm32 reverses its variadic stack
+  tail so the callee's forward va_arg walk reads args in order.
+- LANDMINE (fixed): arm32 must use r12 scratch (not an arg reg) to compute the
+  overflow anchor `fp+8` — clobbering r0 corrupted the first named param before
+  the param-copy read it (surfaced only when the callee re-read a named param,
+  e.g. a loop bound `i<n`).
+
+**BLOCKER for printf/lua/sqlite on 32-bit — va_list passed BY VALUE.** crtl's
+`printf` (and sqlite's/lua's own printf) do `va_start(ap,fmt)` then hand the
+whole `va_list` (24-byte struct) to a formatter (`__crtl_vformat`, sqlite
+`sqlite3VXPrintf`) by value. arm32/riscv32 have no struct-by-value >8 bytes ABI,
+so `ap`'s `reg_save_area` pointer arrives garbage → SIGSEGV. Direct va_arg works;
+only the pass-va_list-to-a-helper pattern breaks. FIX OPTIONS (next session):
+(a) array-typed `va_list` (`typedef struct __pxx_va_elem va_list[1]`) so it
+decays to a pointer on any call — but `CVaListAddr` unconditionally emits `&ap`,
+which is wrong for an array-decayed *pointer parameter* (double indirection);
+needs `__builtin_va_arg`/`va_start` to detect ap-is-already-a-pointer.
+(b) 32-bit struct-by-value >8 bytes (or by-hidden-ref) in the arm32/riscv32
+backends. Also: riscv32 printf independently needs softfloat (`__pxx_dcmp` …);
+riscv32 has a separate int64-local + int-local-both-used codegen bug (an int64
+va_arg result added to an int va_arg result dropped the int — `(int)a+b`
+returned `a` only; non-variadic pointer-deref equivalent works, so it is a
+riscv32 int64-local interaction, not the variadic ABI). i386 variadic still
+gated off (reversed cdecl arg order needs a forward-order call-site pass).
 
 **PRIOR WALL (now cleared) — sqlite CREATE TABLE segfault (aarch64):** minimal repro = the
 extended-test head (SQLITE_THREADSAFE 0 + amalgam includes) with body
