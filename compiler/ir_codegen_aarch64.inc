@@ -782,15 +782,24 @@ begin
   end;
 end;
 
-procedure EmitSetccA64(opTk: Integer);
+{ isUnsigned selects unsigned condition codes (lo/ls/hi/hs) for a magnitude
+  compare of unsigned operands; without it `(size_t)x <= 0xFFFF...F` used the
+  signed `le` and read the RHS as -1 (bug-aarch64-unsigned-compare, the lua
+  luaM_limitN limit=-1 wall). eq/ne are sign-agnostic. }
+procedure EmitSetccA64Ex(opTk: Integer; isUnsigned: Boolean);
 begin
   if opTk = Ord(tkEq) then EmitAsmA64('cset x0, eq')
   else if opTk = Ord(tkNeq) then EmitAsmA64('cset x0, ne')
-  else if opTk = Ord(tkLt) then EmitAsmA64('cset x0, lt')
-  else if opTk = Ord(tkLe) then EmitAsmA64('cset x0, le')
-  else if opTk = Ord(tkGt) then EmitAsmA64('cset x0, gt')
-  else if opTk = Ord(tkGe) then EmitAsmA64('cset x0, ge')
+  else if opTk = Ord(tkLt) then begin if isUnsigned then EmitAsmA64('cset x0, lo') else EmitAsmA64('cset x0, lt') end
+  else if opTk = Ord(tkLe) then begin if isUnsigned then EmitAsmA64('cset x0, ls') else EmitAsmA64('cset x0, le') end
+  else if opTk = Ord(tkGt) then begin if isUnsigned then EmitAsmA64('cset x0, hi') else EmitAsmA64('cset x0, gt') end
+  else if opTk = Ord(tkGe) then begin if isUnsigned then EmitAsmA64('cset x0, hs') else EmitAsmA64('cset x0, ge') end
   else Error('target aarch64: unsupported compare operator');
+end;
+
+procedure EmitSetccA64(opTk: Integer);
+begin
+  EmitSetccA64Ex(opTk, False);
 end;
 
 procedure IREmitNodeAarch64(node: Integer);
@@ -1329,7 +1338,11 @@ begin
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin
           EmitI32($EB01001F); { cmp x0, x1 }
-          EmitSetccA64(op);
+          { Unsigned magnitude compare when either operand is an unsigned ordinal
+            (C usual-arithmetic-conversions make the whole compare unsigned). }
+          EmitSetccA64Ex(op,
+            TypeDivideUnsigned(IntToTypeKind(IRTk[left])) or
+            TypeDivideUnsigned(IntToTypeKind(IRTk[right])));
         end
         else if op = Ord(tkIn) then
         begin
