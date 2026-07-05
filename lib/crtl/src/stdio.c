@@ -22,6 +22,13 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <errno.h>
+/* vsscanf below delegates numeric conversions to strtol/strtod and skips
+   whitespace with isspace. Include the crtl headers (not bare externs) so the
+   auto-pull links their libc-free bodies (stdlib.c / ctype.c) — otherwise they
+   stay unresolved and only "work" on targets that can DT_NEEDED libc, breaking
+   the static riscv32/xtensa image. */
+#include <stdlib.h>
+#include <ctype.h>
 
 #ifndef EOF
 #define EOF (-1)
@@ -55,12 +62,13 @@ struct PxxCrtlFile {
   int err;
   int eof;
   int heap;
+  int unget;   /* one-char pushback for ungetc; -1 = empty */
 };
 typedef struct PxxCrtlFile FILE;
 
-static FILE __crtl_stdin  = { 0, 0, 0, 0 };
-static FILE __crtl_stdout = { 1, 0, 0, 0 };
-static FILE __crtl_stderr = { 2, 0, 0, 0 };
+static FILE __crtl_stdin  = { 0, 0, 0, 0, -1 };
+static FILE __crtl_stdout = { 1, 0, 0, 0, -1 };
+static FILE __crtl_stderr = { 2, 0, 0, 0, -1 };
 static FILE __crtl_files[16];
 
 FILE *stdin  = &__crtl_stdin;
@@ -464,19 +472,46 @@ int putchar(int c) {
 
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   unsigned long total = (unsigned long)size * (unsigned long)nmemb;
+  unsigned long got = 0;
   long r;
   if (total == 0) return 0;
-  r = __pxx_read(stream->fd, ptr, total);
-  if (r <= 0) { stream->eof = 1; return 0; }
+  if (stream->unget >= 0) {           /* honor a pending ungetc pushback */
+    ((unsigned char *)ptr)[0] = (unsigned char)stream->unget;
+    stream->unget = -1;
+    got = 1;
+    if (total == 1) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+  }
+  r = __pxx_read(stream->fd, (unsigned char *)ptr + got, total - got);
+  if (r <= 0) {
+    if (got == 0) { stream->eof = 1; return 0; }
+    r = 0;                            /* pushback byte still counts */
+  }
+  got += (unsigned long)r;
   if (size == 0) return 0;
-  return (size_t)((unsigned long)r / (unsigned long)size);
+  return (size_t)(got / (unsigned long)size);
 }
 
 int fgetc(FILE *stream) {
   unsigned char ch;
-  long r = __pxx_read(stream->fd, &ch, 1);
+  long r;
+  if (stream->unget >= 0) {           /* pending pushback (see ungetc) */
+    int c = stream->unget;
+    stream->unget = -1;
+    return c;
+  }
+  r = __pxx_read(stream->fd, &ch, 1);
   if (r <= 0) { stream->eof = 1; return -1; }
   return (int)ch;
+}
+
+/* Push one char back so the next fgetc returns it (single-level, per C). EOF is
+   a no-op. lua's chunk loader uses getc/ungetc to peek/skip a leading '#!' or
+   BOM. */
+int ungetc(int c, FILE *stream) {
+  if (c < 0 || !stream) return -1;
+  stream->unget = (unsigned char)c;
+  stream->eof = 0;
+  return (unsigned char)c;
 }
 
 int getc(FILE *stream) { return fgetc(stream); }
@@ -538,6 +573,7 @@ FILE *fopen(const char *path, const char *mode) {
   f->fd = fd;
   f->err = 0;
   f->eof = 0;
+  f->unget = -1;
   return f;
 }
 
@@ -551,6 +587,7 @@ FILE *freopen(const char *path, const char *mode, FILE *stream) {
   stream->fd = fd;
   stream->err = 0;
   stream->eof = 0;
+  stream->unget = -1;
   return stream;
 }
 
@@ -619,10 +656,6 @@ void setbuf(FILE *stream, char *buf) { (void)stream; (void)buf; }
    and the '*' assignment-suppression flag are NOT supported (cJSON uses neither).
    Numeric conversions delegate to strtol/strtod for correctness. Returns the
    number of input items successfully assigned (C sscanf semantics). */
-extern long strtol(const char *s, char **end, int base);
-extern double strtod(const char *s, char **end);
-extern int isspace(int c);
-
 int vsscanf(const char *s, const char *fmt, va_list ap) {
   int count = 0;
   const char *p = fmt;

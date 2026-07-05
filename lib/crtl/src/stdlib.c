@@ -124,6 +124,14 @@ double strtod(const char *s, char **end) {
   return sign * v;
 }
 
+/* system(): the libc-free runtime has no command processor. Per C, system(NULL)
+   queries availability — return 0 (none). A real command returns -1 (failure).
+   lua's os.execute links this but the test scripts never shell out. */
+int system(const char *command) {
+  if (command == 0) return 0;
+  return -1;
+}
+
 /* ---- qsort (insertion sort — simple, stable enough for lua's small uses) --- */
 
 static void __crtl_swap(char *a, char *b, size_t n) {
