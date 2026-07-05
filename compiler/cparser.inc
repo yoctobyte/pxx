@@ -1916,8 +1916,18 @@ begin
   end
   else
   begin
+    { C `long` is machine-word-sized (ILP32/LP64): 8 bytes on a 64-bit target,
+      4 on a 32-bit one. `long long` is always 64-bit. (Previously `long` was
+      64-bit on every target — consistent but C-divergent, and it bloated
+      size_t/ptrdiff_t/intptr_t on 32-bit. size_t = `unsigned long` etc. follow
+      this automatically via CUnsignedOf.) 64-bit targets keep `long`=tyInt64
+      exactly as before (byte-identical); only 32-bit `long` drops to tyInt32. }
     if shortCount > 0 then base := tyInt16
-    else if longCount > 0 then base := tyInt64
+    else if longCount >= 2 then base := tyInt64
+    else if longCount = 1 then
+    begin
+      if TARGET_PTR_SIZE = 8 then base := tyInt64 else base := tyInt32;
+    end
     else base := tyInt32;
     if isUnsigned then base := CUnsignedOf(base);
     Result := base;

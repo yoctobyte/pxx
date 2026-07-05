@@ -38,10 +38,11 @@ int main(void)
   unsigned int uv = 1;
   if (((unsigned int)sv < uv) == 0) ok++;                     /* 6 */
 
-  /* hex/octal literal suffix ranges: bare large hex (no suffix) still a
-     sane (64-bit-capable) value */
-  long bare = 0x100000000;
-  if (bare == 4294967296L) ok++;                              /* 7 */
+  /* hex/octal literal suffix ranges: a >32-bit hex literal held in a 64-bit
+     type. (`long` is native/word-sized — 8 bytes on LP64, 4 on ILP32 — so use
+     `long long` for the 64-bit-capacity check, valid on every target.) */
+  long long bare = 0x100000000;
+  if (bare == 4294967296LL) ok++;                             /* 7 */
 
   /* UL / ULL suffix width */
   unsigned long ulmax = 0xFFFFFFFFu;
