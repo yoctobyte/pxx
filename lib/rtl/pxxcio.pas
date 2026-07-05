@@ -45,9 +45,9 @@ function __pxx_getsockerror(fd: Integer): Integer;
   GetMem (PXXAlloc/PXXFree/PXXRealloc), which self-inits lazily (HeapPtr=0 ->
   fresh mmap) so no program prologue is needed — libc-free, one heap with Pascal.
   PXXAlloc returns zeroed memory, so calloc needs no extra clear. }
-function __pxx_malloc(n: Int64): Pointer;
+function __pxx_malloc(n: NativeInt): Pointer;
 procedure __pxx_free(p: Pointer);
-function __pxx_realloc(p: Pointer; n: Int64): Pointer;
+function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 
 { C process exit (exit/abort/_Exit) -> the PAL/RTL terminate path. }
 procedure __pxx_exit(code: Integer);
@@ -187,7 +187,7 @@ begin
   Result := PalGetSockError(fd);
 end;
 
-function __pxx_malloc(n: Int64): Pointer;
+function __pxx_malloc(n: NativeInt): Pointer;
 begin
   Result := PXXAlloc(n, 8);
 end;
@@ -197,7 +197,7 @@ begin
   PXXFree(p);
 end;
 
-function __pxx_realloc(p: Pointer; n: Int64): Pointer;
+function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 begin
   Result := PXXRealloc(p, n, 8);
 end;
