@@ -1412,6 +1412,19 @@ begin
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }
             Inc(nArgs, 2);
           end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i >= Procs[procIdx].ParamCount) and
+             Is64BitRISCV32(IntToTypeKind(IRTk[IRA[argNode]])) then
+          begin
+            { Variadic tail arg (past the named params) that is 64-bit (int64/
+              uint64/double): push two words lo:hi, matching the callee reg-save +
+              __pxx_va_arg_cross32's 8-byte step. Without this the high word was
+              dropped and every later variadic arg shifted by one word. }
+            EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);
+            Inc(nArgs, 2);
+          end
           else
           begin
             IREmitNodeRISCV32(IRA[argNode]);

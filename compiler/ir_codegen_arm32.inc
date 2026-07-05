@@ -814,6 +814,7 @@ procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
   classIdx, elemSize, lo: Integer;
+  vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
   sVal: AnsiString;
@@ -2067,6 +2068,25 @@ begin
             EmitI32($E92D0002); { push {r1} (hi = word j+1) }
             Inc(j, 2);
           end
+          else if (procIdx >= 0) and (nArgs >= Procs[procIdx].ParamCount) and
+                  (IntToTypeKind(IRTk[IRA[argNode]]) in [tyInt64, tyUInt64]) then
+          begin
+            { Variadic tail int64/uint64: two words lo:hi, matching the callee
+              reg-save + __pxx_va_arg_cross32's 8-byte step (else the high word
+              was dropped, shifting every later variadic arg). }
+            EmitNode64Arm32(IRA[argNode]);  { r0=lo, r1=hi }
+            EmitI32($E92D0001); EmitI32($E92D0002);
+            Inc(j, 2);
+          end
+          else if (procIdx >= 0) and (nArgs >= Procs[procIdx].ParamCount) and
+                  (IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble) then
+          begin
+            { Variadic tail double: two words from d0. }
+            IREmitNodeArm32(IRA[argNode]);  { d0 }
+            EmitI32($EC510B10);             { vmov r0, r1, d0 }
+            EmitI32($E92D0001); EmitI32($E92D0002);
+            Inc(j, 2);
+          end
           else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
                   (nArgs < MAX_PROC_PARAMS) and
                   (Procs[procIdx].Params[nArgs].TypeKind = tyRecord) and
@@ -2127,6 +2147,26 @@ begin
           correct). Only strict equality blocked it. }
         if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target arm32: call argument count mismatch');
+
+        { Variadic stack tail (words 4..j-1) was pushed in index order, so it lands
+          REVERSED in memory (word j-1 lowest = [fp+8], word 4 highest). The callee
+          reads variadic args with a FORWARD va_arg walk from [fp+8], so reverse the
+          (j-4) low words in place. The four register words (high offsets) and any
+          hidden-dest word (at [sp+j*4]) are untouched. A variadic fn's named params
+          are the register words, so only the variadic tail is reordered. }
+        if ProcVariadic[procIdx] and (j > 5) then
+        begin
+          vaRevM := j - 4;
+          for vaRevP := 0 to (vaRevM div 2) - 1 do
+          begin
+            vaRevO1 := vaRevP * 4;
+            vaRevO2 := (vaRevM - 1 - vaRevP) * 4;
+            EmitI32($E59D9000 or vaRevO1);   { ldr r9,  [sp, #o1] }
+            EmitI32($E59DC000 or vaRevO2);   { ldr r12, [sp, #o2] }
+            EmitI32($E58DC000 or vaRevO1);   { str r12, [sp, #o1] }
+            EmitI32($E58D9000 or vaRevO2);   { str r9,  [sp, #o2] }
+          end;
+        end;
 
         for i := 0 to j - 1 do
           if i < 4 then

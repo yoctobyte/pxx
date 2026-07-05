@@ -82,6 +82,40 @@ static void *__pxx_va_arg_cross(struct __pxx_va_elem *ap) {
   return addr;
 }
 
+/* 32-bit cross targets (i386/arm32/riscv32): argument slots are 4 bytes (one
+   machine word), not 8. A 64-bit variadic arg (double/long long) occupies two
+   consecutive word slots, packed (no 8-byte alignment — pxx's own word-based
+   call convention). reg_save_area holds the saved GP arg registers (a0..a7 =
+   32 bytes on riscv32, r0..r3 = 16 on arm32, empty on i386-cdecl); the frontend
+   passes the reg-area byte size in fp_offset. gp_offset walks the reg area, then
+   overflow (caller stack). The frontend passes each arg's byte size so the walk
+   steps by 4 or 8. */
+static void __pxx_va_start_impl32(struct __pxx_va_elem *ap, void *save,
+                                  unsigned int gpbytes, void *overflow,
+                                  unsigned int regsize) {
+  ap->gp_offset = gpbytes;    /* reg-area bytes already consumed by named params */
+  ap->fp_offset = regsize;    /* total reg-area byte size (0/16/32) */
+  ap->reg_save_area = save;
+  ap->overflow_arg_area = overflow;
+}
+static void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size) {
+  unsigned int step;
+  void *addr;
+  step = (size <= 4) ? 4 : 8;
+  if (ap->gp_offset + step <= ap->fp_offset) {
+    addr = (char *)ap->reg_save_area + ap->gp_offset;
+    ap->gp_offset = ap->gp_offset + step;
+  } else {
+    /* Past (or straddling) the reg area: the caller placed this arg on the
+       stack. Consume any leftover reg word so a later smaller arg does not read
+       it. */
+    if (ap->gp_offset < ap->fp_offset) ap->gp_offset = ap->fp_offset;
+    addr = ap->overflow_arg_area;
+    ap->overflow_arg_area = (char *)ap->overflow_arg_area + step;
+  }
+  return addr;
+}
+
 /* va_start/va_arg/va_end are handled by the frontend (it knows the save-area
    local and the named-GP count); these macros stay for source compatibility. */
 #define va_start(ap, last) __builtin_va_start(ap, last)

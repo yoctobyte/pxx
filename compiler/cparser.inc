@@ -316,6 +316,7 @@ end;
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
+    vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
     vt: TTypeKind;
     name: AnsiString;
 begin
@@ -405,9 +406,22 @@ begin
           FP save area, va_arg(int/ptr) the GP area. (An earlier model pushed every
           arg through GP and read floats from gp too; that mismatched the actual
           SysV call+prologue and made %f/%g render 0 — bug-c-double-vararg.) }
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+        begin
+          { 32-bit cross: 4-byte word slots; a 64-bit arg spans two. The helper is
+            size-driven — pass the arg's byte size so it steps by 4 or 8. }
+          helper := FindProc('__pxx_va_arg_cross32');
+          a3 := AllocNode(AN_INT_LIT); ASTIVal[a3] := TypeSize(vt); ASTTk[a3] := Ord(tyInteger);
+          argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
+          a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[a2] := -1; ASTRight[argNode] := a2;
+          callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
+          ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+          node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
+          Result := node; Exit;
+        end;
         if TargetArch <> TARGET_X86_64 then
-          { Cross: single GP-style save area (floats carried as GP bits), so every
-            type reads through the one cross helper. }
+          { Cross (aarch64): single GP-style save area (floats carried as GP bits),
+            so every type reads through the one 8-byte-slot cross helper. }
           helper := FindProc('__pxx_va_arg_cross')
         else if TypeIsFloat(vt) then
           helper := FindProc('__pxx_va_arg_fp')
@@ -436,11 +450,35 @@ begin
           would misindex it. The stack-spilled named params are skipped via
           the __va_overflow anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
-        if TargetArch <> TARGET_X86_64 then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
         begin
-          { Cross: one GP save area, every named param (any class) consumed one
-            slot, so seed gp_offset past ALL named args (capped to the 8-slot
-            area). fp_offset is unused by __pxx_va_arg_cross. }
+          { 32-bit cross: seed gp_offset with the reg-area BYTES consumed by named
+            params (one word = 4 bytes, a by-value i64/double = 8), capped at the
+            reg-area size; fp_offset carries that reg-area size. i386 has no arg
+            registers (regsize 0) so every named+variadic arg is on the stack. }
+          if TargetArch = TARGET_ARM32 then vaRegSz := 16
+          else if TargetArch = TARGET_RISCV32 then vaRegSz := 32
+          else vaRegSz := 0;
+          vaGpBytes := 0;
+          if CurProc >= 0 then
+            for vaK := 0 to Procs[CurProc].ParamCount - 1 do
+            begin
+              vaPIdx := Procs[CurProc].Params[vaK].SymIdx;
+              if ((Procs[CurProc].Params[vaK].TypeKind = tyInt64) or
+                  (Procs[CurProc].Params[vaK].TypeKind = tyUInt64) or
+                  (Procs[CurProc].Params[vaK].TypeKind = tyDouble)) and
+                 (not Syms[vaPIdx].IsRef) and (not Syms[vaPIdx].IsArray) then
+                Inc(vaGpBytes, 8)
+              else Inc(vaGpBytes, 4);
+            end;
+          if vaGpBytes > vaRegSz then vaGpBytes := vaRegSz;
+          ASTIVal[a3] := vaGpBytes;
+        end
+        else if TargetArch <> TARGET_X86_64 then
+        begin
+          { Cross (aarch64): one GP save area, every named param (any class)
+            consumed one slot, so seed gp_offset past ALL named args (capped to
+            the 8-slot area). fp_offset is unused by __pxx_va_arg_cross. }
           if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] + ProcNamedFP[CurProc]
           else ASTIVal[a3] := 0;
           if ASTIVal[a3] > 8 then ASTIVal[a3] := 8;
@@ -454,10 +492,18 @@ begin
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
         a5 := AllocNode(AN_INT_LIT);
-        if CurProc >= 0 then ASTIVal[a5] := ProcNamedFP[CurProc] else ASTIVal[a5] := 0;
-        if ASTIVal[a5] > 8 then ASTIVal[a5] := 8;
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+          ASTIVal[a5] := vaRegSz                 { 5th arg = reg-area size for impl32 }
+        else
+        begin
+          if CurProc >= 0 then ASTIVal[a5] := ProcNamedFP[CurProc] else ASTIVal[a5] := 0;
+          if ASTIVal[a5] > 8 then ASTIVal[a5] := 8;
+        end;
         ASTTk[a5] := Ord(tyInteger);
-        helper := FindProc('__pxx_va_start_impl');
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+          helper := FindProc('__pxx_va_start_impl32')
+        else
+          helper := FindProc('__pxx_va_start_impl');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
         calleeNode := AllocNode(AN_ARG); ASTLeft[calleeNode] := node; ASTRight[argNode] := calleeNode;
         valNode := AllocNode(AN_ARG); ASTLeft[valNode] := a3; ASTRight[calleeNode] := valNode;
@@ -5005,6 +5051,50 @@ begin
       EmitLoadImmA64(9, Syms[vaOverflowSym].Offset);
       EmitI32($8B0903A9);                                { add x9, x29, x9 }
       EmitI32($F900012A);                                { str x10, [x9, #0] }
+    end;
+    TARGET_RISCV32:
+    begin
+      { RV32: the first 8 argument words arrive in a0..a7 (named + variadic, one
+        word each; a by-value i64/double spans two). Save all 8 into __va_save
+        (32 bytes, 4-byte slots). va_arg walks that reg area (size 32, seeded in
+        fp_offset) then the overflow. Overflow points at the first caller stack
+        word [s0+8] (used only when the total exceeds 8 words). }
+      EmitLoadImmRISCV32(reg_t0, Syms[vaSaveSym].Offset);
+      rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_save }
+      rv32_sw(reg_a0, reg_t0, 0);
+      rv32_sw(reg_a0 + 1, reg_t0, 4);
+      rv32_sw(reg_a0 + 2, reg_t0, 8);
+      rv32_sw(reg_a0 + 3, reg_t0, 12);
+      rv32_sw(reg_a0 + 4, reg_t0, 16);
+      rv32_sw(reg_a0 + 5, reg_t0, 20);
+      rv32_sw(reg_a0 + 6, reg_t0, 24);
+      rv32_sw(reg_a0 + 7, reg_t0, 28);
+      EmitLoadImmRISCV32(reg_t1, 8);
+      rv32_add(reg_t1, reg_s0, reg_t1);                  { t1 = s0+8 (first stack word) }
+      EmitLoadImmRISCV32(reg_t0, Syms[vaOverflowSym].Offset);
+      rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_overflow }
+      rv32_sw(reg_t1, reg_t0, 0);                        { *__va_overflow = s0+8 }
+    end;
+    TARGET_ARM32:
+    begin
+      { AAPCS32: r0..r3 hold the first 4 argument words (named + variadic, one
+        word each; a by-value i64/double spans two). Save them into __va_save
+        [0..12] (16-byte reg area, 4-byte slots). va_arg walks that area (size 16,
+        seeded in fp_offset) then the overflow. Overflow points at the first
+        caller stack word [fp+8] (used only when the total exceeds 4 words). }
+      EmitLoadImmArm32(9, Syms[vaSaveSym].Offset);
+      EmitI32($E08B9009);                                { add r9, fp, r9 (&__va_save) }
+      EmitI32($E5890000);                                { str r0, [r9, #0] }
+      EmitI32($E5891004);                                { str r1, [r9, #4] }
+      EmitI32($E5892008);                                { str r2, [r9, #8] }
+      EmitI32($E589300C);                                { str r3, [r9, #12] }
+      { Use r12 (ip) scratch for fp+8 — NOT an arg register: the param-copy below
+        still reads the incoming args from r0..r3 (clobbering r0 here corrupted
+        the first named param). }
+      EmitI32($E28BC008);                                { add r12, fp, #8 (first stack word) }
+      EmitLoadImmArm32(9, Syms[vaOverflowSym].Offset);
+      EmitI32($E08B9009);                                { add r9, fp, r9 (&__va_overflow) }
+      EmitI32($E589C000);                                { str r12, [r9, #0] }
     end;
     else
       Error('variadic C functions (va_arg) are not yet supported on this cross target');
