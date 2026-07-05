@@ -97,9 +97,16 @@ their C `long` externs after long=native; byte-identical on x86-64).
       variadic-tail reversal (~2157) and the multi-arg in-register failure. Keep
       the aarch64/i386/riscv32 paths and the non-variadic Int64 ABI unchanged;
       gate on the existing va_arg exit-code tests + test-lua-cross arm32.
-  - **i386 coroutines.lua** — empty output (early crash); i386 coroutine path
-    (separate lua stack; likely setjmp/longjmp or stack-switch on i386).
-  Both worth their own repro+fix next.
+  - **i386 coroutines.lua — FIXED (commit `49b7cbd6`), i386 cross lua now 6/6.**
+    Root cause: the hand-written i386 `__pxx_longjmp` stub read env/val from
+    standard-cdecl slots ([esp+4]=env, [esp+8]=val), but pxx's i386 ABI pushes
+    args leftmost-deepest (arg0 at the HIGHER offset) — so env(arg0) is at [esp+8],
+    val(arg1) at [esp+4]. longjmp dereferenced the small int val as a jmp_buf →
+    segfault. setjmp (1 arg) was fine ([esp+4] either way). Lua coroutines ride
+    setjmp/longjmp (yield longjmps to resume). Fixed by swapping the two loads.
+    Pure-C repro: nested setjmp/longjmp (x86-64/arm32 pass args in registers, were
+    fine). **All three cross targets aarch64+arm32+i386 now 6/6 (18/18), wired
+    into `make test-lua-cross` default.**
 
 ## Progress log (session 2026-07-05, aarch64 first)
 
