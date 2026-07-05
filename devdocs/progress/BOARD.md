@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (81)
+## backlog (80)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -58,7 +58,6 @@ _none_
 | feature-dynarray-insert-delete-managed-elements | A | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
-| feature-eliah-pane-header-strip | B | feature | feature: Eliah pane header — labelled collapse strip + chevron | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
@@ -149,7 +148,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (466)
+## done (467)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -474,6 +473,7 @@ _none_
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
+| feature-eliah-pane-header-strip | B | feature | feature: Eliah pane header — labelled collapse strip + chevron | — |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
@@ -664,7 +664,6 @@ _none_
 - [A] feature-dynarray-insert-delete-managed-elements
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
-- [B] feature-eliah-pane-header-strip
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
 - [A] feature-emission-size-dce

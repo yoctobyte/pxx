@@ -694,10 +694,11 @@ end;
 
 procedure TGtk3WidgetSet.SetParent(AControl: TComponent; AParent: TComponent);
 var
-  ch, ph, container: Pointer;
+  ch, ph, container, lst: Pointer;
   ctl: TControl;
   pctl: TControl;
   cls: PClassRTTI;
+  n: LongWord;
 begin
   ctl := TControl(AControl);
   pctl := TControl(AParent);
@@ -722,11 +723,21 @@ begin
   end;
 
   { TBox: gtk_box, any number of children, packed in Add order along its axis.
-    No absolute coords; Expand/Fill=0 so each child keeps its natural size. }
+    Header-then-content convention: the first child packed keeps its natural
+    size (a fixed header row); every child packed after it expands/fills to
+    take the remaining space. Matches this box's only current use (a pane
+    header strip above its content) — revisit if a caller needs a different
+    split. }
   if IsSubclassOf(cls, 'TBox') then
   begin
     if gtk_widget_get_parent(ch) = ph then Exit;
-    gtk_box_pack_start(ph, ch, 0, 0, 0);
+    lst := gtk_container_get_children(ph);
+    n := g_list_length(lst);
+    if lst <> nil then g_list_free(lst);
+    if n = 0 then
+      gtk_box_pack_start(ph, ch, 0, 0, 0)
+    else
+      gtk_box_pack_start(ph, ch, 1, 1, 0);
     Exit;
   end;
 

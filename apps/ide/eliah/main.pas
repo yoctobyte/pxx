@@ -119,6 +119,14 @@ type
     colCenter: TPaned;
     colRight: TPaned;
     colInspector: TPaned;
+    { pane header strips: TBox(header button + content), collapse via the
+      existing OnToggle* handlers; header caption chevron flips with state }
+    leftBox: TBox;
+    leftHdr: TButton;
+    rightBox: TBox;
+    rightHdr: TButton;
+    outputBox: TBox;
+    outputHdr: TButton;
     { event handlers bound from eliah.lfm }
     procedure OnUp(Sender: TObject);
     procedure OnCompile(Sender: TObject);
@@ -520,27 +528,42 @@ procedure TEliahForm.OnPerspDesign(Sender: TObject); begin SetPerspective('desig
 procedure TEliahForm.OnPerspSplit(Sender: TObject);  begin SetPerspective('split');  end;
 
 { View-menu toggles flip a column's visibility choice, then re-apply. }
+{ header buttons show a chevron that flips with collapse state: v = shown
+  (click to collapse), > = collapsed (click to restore). }
+procedure SetHdrChevron(btn: TButton; const title: AnsiString; shown: Boolean);
+begin
+  if btn = nil then Exit;
+  if shown then btn.Caption := 'v ' + title
+  else btn.Caption := '> ' + title;
+end;
+
 procedure TEliahForm.OnToggleLeft(Sender: TObject);
-var i: Integer;
+var i: Integer; shown: Boolean;
 begin
   if Persp = nil then Exit;
   i := Persp.IndexOf('left');
-  Persp.SetVisible(i, not Persp.PaneVisible(i));
+  shown := not Persp.PaneVisible(i);
+  Persp.SetVisible(i, shown);
   if lastW > 0 then ApplyLayout(lastW);
+  SetHdrChevron(leftHdr, 'Project', shown);
 end;
 
 procedure TEliahForm.OnToggleRight(Sender: TObject);
-var i: Integer;
+var i: Integer; shown: Boolean;
 begin
   if Persp = nil then Exit;
   i := Persp.IndexOf('right');
-  Persp.SetVisible(i, not Persp.PaneVisible(i));
+  shown := not Persp.PaneVisible(i);
+  Persp.SetVisible(i, shown);
   if lastW > 0 then ApplyLayout(lastW);
+  SetHdrChevron(rightHdr, 'Designer', shown);
 end;
 
 procedure TEliahForm.OnToggleOutput(Sender: TObject);
 begin
-  if colCenter <> nil then colCenter.Toggle(2, 0);    { vertical sub-pane: build/run output }
+  if colCenter = nil then Exit;
+  colCenter.Toggle(2, 0);    { vertical sub-pane: build/run output }
+  SetHdrChevron(outputHdr, 'Output', colCenter.CollapsedPane <> 2);
 end;
 
 procedure TEliahForm.OnFormResize(Sender: TControl; w, h: Integer);

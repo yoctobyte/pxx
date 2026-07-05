@@ -95,13 +95,21 @@ object EliahForm: TEliahForm
     Top = 40
     Width = 1100
     Height = 660
-    object colLeft: TPaned
+    object leftBox: TBox
       Vertical = True
-      object Tree: TListBox
-        OnClick = OnTreeClick
+      object leftHdr: TButton
+        Height = 22
+        Caption = 'v Project'
+        OnClick = OnToggleLeft
       end
-      object Errors: TListBox
-        OnClick = OnErrorClick
+      object colLeft: TPaned
+        Vertical = True
+        object Tree: TListBox
+          OnClick = OnTreeClick
+        end
+        object Errors: TListBox
+          OnClick = OnErrorClick
+        end
       end
     end
     object midRight: TPaned
@@ -109,24 +117,40 @@ object EliahForm: TEliahForm
         Vertical = True
         object Editor: TMemo
         end
-        object Output: TMemo
+        object outputBox: TBox
+          Vertical = True
+          object outputHdr: TButton
+            Height = 22
+            Caption = 'v Output'
+            OnClick = OnToggleOutput
+          end
+          object Output: TMemo
+          end
         end
       end
-      object colRight: TPaned
+      object rightBox: TBox
         Vertical = True
-        object DesignBox: TPaintBox
-          OnPaint = OnDesignPaint
-          OnMouseDown = OnDesignMouseDown
-          OnMouseMove = OnDesignMouseMove
-          OnMouseUp = OnDesignMouseUp
+        object rightHdr: TButton
+          Height = 22
+          Caption = 'v Designer'
+          OnClick = OnToggleRight
         end
-        object colInspector: TPaned
+        object colRight: TPaned
           Vertical = True
-          object Props: TListBox
-            OnClick = OnPropClick
+          object DesignBox: TPaintBox
+            OnPaint = OnDesignPaint
+            OnMouseDown = OnDesignMouseDown
+            OnMouseMove = OnDesignMouseMove
+            OnMouseUp = OnDesignMouseUp
           end
-          object ValueEdit: TEdit
-            OnKeyDown = OnValueKey
+          object colInspector: TPaned
+            Vertical = True
+            object Props: TListBox
+              OnClick = OnPropClick
+            end
+            object ValueEdit: TEdit
+              OnKeyDown = OnValueKey
+            end
           end
         end
       end

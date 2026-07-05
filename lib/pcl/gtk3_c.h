@@ -160,6 +160,9 @@ void* gtk_box_new(int orientation, int spacing);
 void gtk_box_pack_start(void* box, void* child, int expand, int fill, unsigned int padding);
 void gtk_box_reorder_child(void* box, void* child, int position);
 void gtk_container_remove(void* container, void* widget);
+void* gtk_container_get_children(void* container);   // returns a GList*
+unsigned int g_list_length(void* list);
+void g_list_free(void* list);
 
 // Paned (draggable splitter): orientation 0=horizontal (side-by-side),
 // 1=vertical (stacked). pack1/pack2 take the two children; resize=child grows
