@@ -166,7 +166,20 @@ type is an array typedef. Then `va_list` params are 1-word pointers on every
 target and printf works uniformly. (Verified the array typedef itself is fine
 for LOCALS + direct va_arg on all 5 targets; only the PARAM decay is missing.)
 
-**Separate DESIGN DECISION (future work, user-owned): `long` sizing.** pxx makes
+**RESOLVED (commit 1b12f4a6): `long` is now native (machine-word-sized).**
+`long`/`size_t`=8 on LP64 (x86-64/aarch64, unchanged/byte-identical), 4 on ILP32
+(i386/arm32/riscv32); `long long` always 64-bit. 3-line ParseCDeclType change,
+crtl typedefs follow automatically. **arm32 printf incl %f now byte-identical to
+x86-64** — size_t=4 keeps crtl snprintf's va_list arg in a register, dodging the
+typedef-array-param stack bug (which still exists for the >4-word case but is no
+longer hit by common printf). make test + self-host + test-{i386,arm32,riscv32}
+green (fixed one test that hardcoded long=64). STILL OPEN: riscv32 printf =
+softfloat (__pxx_dcmp, %f); arm32/i386 lua/sqlite build but emit garbage / hit
+separate 32-bit codegen bugs; the typedef-array-param decay (item 17) is still
+worth doing for correctness (>4-word va_list args). The remaining consideration
+below is now historical/optional.
+
+**Historical DESIGN NOTE (was future work, now done above): `long` sizing.** pxx made
 `long`/`size_t` 64-bit on every target (`sizeof(long)`=8 even on arm32/i386) —
 consistent but C-divergent (real ILP32 `long`=4). This is what pushes crtl's
 `va_list` arg onto the stack in the first place. Purists / memory-tight targets
