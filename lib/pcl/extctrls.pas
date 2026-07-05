@@ -76,6 +76,24 @@ type
     property Vertical: Boolean read FVertical write FVertical;
   end;
 
+  { TBox — a gtk_box stacking container: children are packed in order along one
+    axis (no absolute coords, no draggable handle — unlike TPaned, any number of
+    children). Horizontal by default; set Vertical before adding children (the
+    handle is built lazily at CreateHandle). Each child packs with Expand=False,
+    Fill=False by default, so children keep their natural size — set Vertical /
+    Spacing before use; per-child expand is not yet exposed. }
+  TBox = class(TWinControl)
+  private
+    FVertical: Boolean;
+    FSpacing: Integer;
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure CreateHandle; override;
+  published
+    property Vertical: Boolean read FVertical write FVertical;
+    property Spacing: Integer read FSpacing write FSpacing;
+  end;
+
 implementation
 
 { TPanel }
@@ -195,6 +213,22 @@ end;
 function TPaned.CollapsedPane: Integer;
 begin
   Result := FCollapsedPane;
+end;
+
+{ TBox }
+
+constructor TBox.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FVertical := False;
+  FSpacing := 0;
+end;
+
+procedure TBox.CreateHandle;
+var orient: Integer;
+begin
+  if FVertical then orient := 1 else orient := 0;
+  Self.Handle := gtk_box_new(orient, FSpacing);
 end;
 
 { TTimer }

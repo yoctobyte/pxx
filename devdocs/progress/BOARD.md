@@ -17,20 +17,18 @@ _none_
 | feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
-## unfinished (4)
+## unfinished (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
-| feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
-| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 
 ## blocked (0)
 
 _none_
 
-## backlog (78)
+## backlog (79)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -59,6 +57,7 @@ _none_
 | feature-dynarray-insert-delete-managed-elements | A | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
+| feature-eliah-pane-header-strip | B | feature | feature: Eliah pane header — labelled collapse strip + chevron | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
@@ -148,7 +147,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (464)
+## done (466)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -467,10 +466,12 @@ _none_
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
+| feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
+| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
@@ -660,6 +661,7 @@ _none_
 - [A] feature-dynarray-insert-delete-managed-elements
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
+- [B] feature-eliah-pane-header-strip
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
 - [A] feature-emission-size-dce

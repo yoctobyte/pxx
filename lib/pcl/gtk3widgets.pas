@@ -721,6 +721,15 @@ begin
     Exit;
   end;
 
+  { TBox: gtk_box, any number of children, packed in Add order along its axis.
+    No absolute coords; Expand/Fill=0 so each child keeps its natural size. }
+  if IsSubclassOf(cls, 'TBox') then
+  begin
+    if gtk_widget_get_parent(ch) = ph then Exit;
+    gtk_box_pack_start(ph, ch, 0, 0, 0);
+    Exit;
+  end;
+
   container := GetContainerFixed(ph, cls);
   if container = nil then Exit;
 

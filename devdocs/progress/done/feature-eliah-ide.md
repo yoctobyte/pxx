@@ -1,7 +1,7 @@
 # Eliah / Ilja — single-window IDE (GUI + TUI)
 
 - **Type:** feature (app / demo, supermeta)
-- **Status:** unfinished (parked — no active agent; GTK/Xvfb work, resume when picked up)
+- **Status:** done
 - **Track:** B (built with `$(PXX_STABLE)`; never rebuilds the compiler)
 - **Owner:** Track B agent
 - **Opened:** 2026-06-22
@@ -58,3 +58,19 @@ window. Each later milestone green where it matters (Track B: builds + runs).
 
 ## Log
 - 2026-06-22 — ticket opened and taken (working/). Design locked with user.
+
+## Closing 2026-07-05
+
+M0 through M5 all shipped (see `devdocs/progress/done/feature-eliah-{m0-window,
+m1-designer,m2-builder,layout-tree,pane-reflow,component-palette,perspectives,
+selection-link,from-lfm,shell}.md`). Re-verified this session: `apps/ide/build.sh`
+builds clean, `apps/ide/test.sh` (headless garin/bochan/eduth gate) 162/162,
+`tools/gui_suite.sh` all green including `eliah_ide`, and the built binary opens
+a single tiled GTK window under Xvfb with no regressions.
+
+Remaining scope from this epic is tracked in its own tickets, not blocking the
+epic itself: **feature-ilja-tui** (the ANSI/TUI face — backlog),
+**feature-eliah-pane-header-strip** (labelled collapse strip, filed today),
+**feature-eliah-component-tabbar** and **feature-eliah-ai-command-rail**
+(backlog). Closing this epic done — Eliah (the GTK face) is a working,
+tested IDE; further work continues under the milestone/feature tickets above.
