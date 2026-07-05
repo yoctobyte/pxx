@@ -5075,6 +5075,24 @@ begin
       rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_overflow }
       rv32_sw(reg_t1, reg_t0, 0);                        { *__va_overflow = s0+8 }
     end;
+    TARGET_I386:
+    begin
+      { i386 cdecl: NO argument registers — every arg is on the caller stack.
+        The reg area is empty (size 0, seeded in fp_offset), so va_arg reads only
+        the overflow. A variadic call pushes ALL args in forward order (arg0 at
+        [ebp+8]); the named params occupy the low `namedBytes`, so the first
+        variadic arg (overflow anchor) is at [ebp+8+namedBytes]. No register save. }
+      sz := 0;
+      for i := 0 to nparams - 1 do
+        if ((ptypes[i] = tyDouble) or (ptypes[i] = tyInt64) or (ptypes[i] = tyUInt64)) and
+           (not Syms[Procs[procIdx].Params[i].SymIdx].IsRef) and
+           (not Syms[Procs[procIdx].Params[i].SymIdx].IsArray) then
+          Inc(sz, 8)
+        else
+          Inc(sz, 4);
+      EmitB($8D); EmitB($85); EmitI32(8 + sz);                    { lea eax, [ebp+8+namedBytes] }
+      EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset); { mov [ebp+o], eax }
+    end;
     TARGET_ARM32:
     begin
       { AAPCS32: r0..r3 hold the first 4 argument words (named + variadic, one
@@ -5113,6 +5131,20 @@ begin
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := 0;
+      { Non-variadic: reversed push (leftmost deepest) -> param i is above the
+        params to its RIGHT, so disp = width of params i+1..n-1. Variadic: the
+        call site pushes ALL args forward (arg0 at [ebp+8]), so disp = width of
+        the params to its LEFT (0..i-1). }
+      if ProcVariadic[procIdx] then
+      begin
+        for j := 0 to i - 1 do
+        begin
+          if Syms[Procs[procIdx].Params[j].SymIdx].IsRef then Inc(sz, 4)
+          else if (ptypes[j] = tyDouble) or (ptypes[j] = tyInt64) or (ptypes[j] = tyUInt64) then Inc(sz, 8)
+          else Inc(sz, 4);
+        end;
+      end
+      else
       for j := i + 1 to nparams - 1 do
       begin
         if Syms[Procs[procIdx].Params[j].SymIdx].IsRef then Inc(sz, 4)

@@ -818,6 +818,9 @@ procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
   classIdx, elemSize, lo, hi, itemNode, p1, p2: Integer;
+  vaNvw, vaK, vaO1, vaO2, vaTk: Integer;
+  vaFwd: Boolean;
+  vaOrder: array[0..127] of Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
@@ -2496,12 +2499,38 @@ begin
         end;
         { Internal i386 convention: evaluate and push args left to right
           (leftmost ends up deepest, matching the callee's spill formula),
-          call, then the caller pops the arg area. Result in eax. }
+          call, then the caller pops the arg area. Result in eax.
+          For a VARIADIC call ALL args are pushed in REVERSE index order so the
+          whole block is FORWARD in memory (arg0 at [ebp+8], ascending). The
+          callee then reads its named params with the FORWARD spill (ProcVariadic
+          branch in parser.inc) and va_arg walks the tail forward from
+          [ebp+8+namedBytes]. A non-variadic call keeps plain index order (the
+          reversed spill). }
+        vaNvw := 0;
         argNode := IRB[node];
-        nArgs := 0;
-        argBytes := 0;
         while argNode <> -1 do
         begin
+          if vaNvw > 127 then Error('target i386: too many call arguments');
+          vaOrder[vaNvw] := argNode; Inc(vaNvw); argNode := IRB[argNode];
+        end;
+        vaFwd := (procIdx >= 0) and ProcVariadic[procIdx];
+        if vaFwd then
+        begin
+          vaO1 := 0; vaO2 := vaNvw - 1;
+          while vaO1 < vaO2 do
+          begin
+            i := vaOrder[vaO1]; vaOrder[vaO1] := vaOrder[vaO2]; vaOrder[vaO2] := i;
+            Inc(vaO1); Dec(vaO2);
+          end;
+        end;
+        nArgs := 0;
+        vaK := 0;
+        argBytes := 0;
+        if vaNvw > 0 then argNode := vaOrder[0] else argNode := -1;
+        while argNode <> -1 do
+        begin
+          { param index of the current arg (vaOrder is reversed when vaFwd) }
+          if vaFwd then nArgs := vaNvw - 1 - vaK else nArgs := vaK;
           IREmitNode386(IRA[argNode]);
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              (Procs[procIdx].Params[nArgs].TypeKind = tySet) and
@@ -2517,7 +2546,7 @@ begin
             end;
             Inc(argBytes, TypeSize(tySet));
             Inc(nArgs);
-            argNode := IRB[argNode];
+            Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
             Continue;
           end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
@@ -2536,7 +2565,29 @@ begin
             EmitB($50);                                { push eax (lo) }
             Inc(argBytes, 8);
             Inc(nArgs);
-            argNode := IRB[argNode];
+            Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
+            Continue;
+          end;
+          if (procIdx >= 0) and (nArgs >= Procs[procIdx].ParamCount) and
+             (Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) or
+              (IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble)) then
+          begin
+            { Variadic tail 64-bit arg (int64/uint64 in edx:eax, double in xmm0):
+              push both dwords, lo at the lower address. }
+            vaTk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if vaTk = tyDouble then
+            begin
+              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
+              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+            end
+            else
+            begin
+              EmitB($52);                              { push edx (hi) }
+              EmitB($50);                              { push eax (lo) }
+            end;
+            Inc(argBytes, 8);
+            Inc(nArgs);
+            Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
             Continue;
           end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) then
@@ -2563,7 +2614,7 @@ begin
                 Inc(argBytes, 8);
               end;
               Inc(nArgs);
-              argNode := IRB[argNode];
+              Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
               Continue;
             end;
             if Procs[procIdx].Params[nArgs].TypeKind = tyAnsiString then
@@ -2598,13 +2649,13 @@ begin
           EmitB($50);                                { push eax }
           Inc(argBytes, 4);
           Inc(nArgs);
-          argNode := IRB[argNode];
+          Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         { Variadic callee: cdecl pushes all actual args right-to-left and the
           caller cleans `argBytes` (which counts them all), so a variadic call
           with more args than declared params marshals correctly — only strict
           equality blocked it. }
-        if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
+        if (vaNvw <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
         if RetViaHiddenDest(Procs[procIdx].RetType) then
         begin
