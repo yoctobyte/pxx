@@ -77,14 +77,21 @@ extended-test head (SQLITE_THREADSAFE 0 + amalgam includes) with body
 `sqlite3_exec(db,"CREATE TABLE t(x INTEGER)",0,0,&e)`. x86-64 rc=0; aarch64
 SIGSEGV after "DB opened". Fault at a tiny accessor `f(arg){ …arg->[0x70]… }`
 with arg=NULL; its caller passed `P->[0x88]` which is NULL on aarch64 but set on
-x86-64. So a struct pointer field at offset 0x88 is unpopulated — suspect a
-static aggregate initializer or struct-field-offset miscompile (possibly related
-to the new @extern-in-initializer path, or a struct containing fn-ptr fields
-after the #11 fix). Debug: gdb-multiarch via `qemu-aarch64 -g`, disassemble the
-accessor chain; then trace who WRITES P->[0x88] in sqlite's CREATE-TABLE path.
-Instrument sqlite3.c with `__pxx_write(2,…)` (extern at file scope, decls before
-statements). pxx -g DWARF lines are a flat counter into the amalgam, ~1390 crtl
-lines precede sqlite3.c.
+x86-64. So a struct pointer field at offset 0x88 is unpopulated. NARROWED via
+`__pxx_write` markers: the initial CREATE codegen runs fine; `sqlite3EndTable` is
+entered TWICE (codegen with init.busy=0, then during the **schema reparse** with
+init.busy=1 = the in-memory-representation insert). The crash is in that
+**schema-load path** (VDBE `OP_ParseSchema` re-running the CREATE to build the
+in-memory Table), AFTER EndTable's `sqlite3HashInsert` — not the first codegen.
+So the NULL field is on a Table/Schema struct built during schema load. Bitfield
+struct layout was verified identical aarch64-vs-x86-64, so suspect a larger/
+nested struct offset, an aggregate initializer, or a field written on one path
+and read on another with a mismatched offset. Debug: gdb-multiarch via
+`qemu-aarch64 -g`; instrument the schema-load callbacks (sqlite3InitCallback /
+the OP_ParseSchema VDBE handler) and trace who writes struct+0x88. Marker recipe:
+file-scope `extern long __pxx_write(int,const void*,unsigned long);`, block decls
+before statements (cfront rejects mid-block `extern`). The sqlite tree is
+gitignored scratch — debug edits there are untracked and were reverted.
 
 **Then (future session):**
 - **arm32/i386/riscv32 variadic ABI** — the callee register-save prologue is
