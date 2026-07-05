@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (79)
+## backlog (80)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ _none_
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
+| feature-cross-frontend-interop-contract | A | feature | Cross-frontend interop contract — umbrella | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -650,6 +651,7 @@ _none_
 - [C] feature-c-runtime-library
 - [A] feature-callconv-register-args
 - [A] feature-cdecl-indirect-cross-targets
+- [A] feature-cross-frontend-interop-contract
 - [A] feature-cross-virtual-indirect-hidden-dest
 - [B] feature-crtl-strtok-missing
 - [B] feature-demo-chess
