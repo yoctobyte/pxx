@@ -5291,33 +5291,64 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
-    { RV32 word-based (mirrors the Pascal riscv32 spill): args arrive in a0..a7
-      (word k in a[k]); scalar = 1 word, by-value Int64/UInt64/Double = 2 (lo
-      then hi). Up to 8 words (no stack args yet). }
+    { RV32 word-based (mirrors the Pascal riscv32 spill in parser.inc): args
+      arrive in a0..a7 (word k in a[k]); scalar = 1 word, by-value
+      Int64/UInt64/Double = 2 (lo then hi). Words 8+ stay on the CALLER's stack
+      (the IR_CALL site keeps the whole pushed block live when the total exceeds
+      8): word k>=8 sits at [entry_sp + (pnWords-1-k)*4] = [s0 + 16 +
+      (pnWords-1-k)*4] after the ra/s0 prologue. }
+    pnWordsA := 0;
+    for i := 0 to nparams - 1 do
+      if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyUInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyDouble)) and
+         (not Syms[Procs[procIdx].Params[i].SymIdx].IsRef) and
+         (not Syms[Procs[procIdx].Params[i].SymIdx].IsArray) then
+        Inc(pnWordsA, 2)
+      else
+        Inc(pnWordsA, 1);
     pwA := 0;
     for i := 0 to nparams - 1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
-      if pwA >= 8 then
-        Error('target riscv32: C function with more than 8 parameter words not yet supported');
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);   { t0 = &slot }
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
-        rv32_sw(reg_a0 + pwA, reg_t0, 0);          { lo (word pw) }
-        if pwA + 1 >= 8 then
-          Error('target riscv32: C function with more than 8 parameter words not yet supported');
-        rv32_sw(reg_a0 + pwA + 1, reg_t0, 4);      { hi (word pw+1) }
+        if pwA < 8 then
+          rv32_sw(reg_a0 + pwA, reg_t0, 0)                 { lo (word pw) }
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - pwA) * 4);
+          rv32_sw(reg_t1, reg_t0, 0);
+        end;
+        if pwA + 1 < 8 then
+          rv32_sw(reg_a0 + pwA + 1, reg_t0, 4)             { hi (word pw+1) }
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - (pwA + 1)) * 4);
+          rv32_sw(reg_t1, reg_t0, 4);
+        end;
         Inc(pwA, 2);
       end
       else
       begin
-        if sz = 1 then rv32_sb(reg_a0 + pwA, reg_t0, 0)
-        else if sz = 2 then rv32_sh(reg_a0 + pwA, reg_t0, 0)
-        else rv32_sw(reg_a0 + pwA, reg_t0, 0);
+        if pwA < 8 then
+        begin
+          if sz = 1 then rv32_sb(reg_a0 + pwA, reg_t0, 0)
+          else if sz = 2 then rv32_sh(reg_a0 + pwA, reg_t0, 0)
+          else rv32_sw(reg_a0 + pwA, reg_t0, 0);
+        end
+        else
+        begin
+          rv32_lw(reg_t1, reg_s0, 16 + (pnWordsA - 1 - pwA) * 4);
+          if sz = 1 then rv32_sb(reg_t1, reg_t0, 0)
+          else if sz = 2 then rv32_sh(reg_t1, reg_t0, 0)
+          else rv32_sw(reg_t1, reg_t0, 0);
+        end;
         Inc(pwA, 1);
       end;
     end;
