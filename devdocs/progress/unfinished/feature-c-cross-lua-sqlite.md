@@ -25,6 +25,48 @@
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
+## Progress log (session 2026-07-05 #3, riscv32 hosted C brought up to near-lua)
+
+**19. riscv32 hosted C lua — from "won't link" to "runs all init + scalars, one
+remaining table-rehash corruption."** Chain of fixes (all committed, test-riscv32
+green, self-host byte-identical, x86-64 lua 6/6 + cross 18/18 unaffected):
+- **`fix(cfront)`: pull pxxcio+softfloat for hosted riscv32 C** (ParseCProgram
+  skipped ALL riscv32; Pascal path only skips ESP-bare). Hosted riscv32 C had no
+  runtime bridge — `__pxx_write`/malloc unresolvable, every double failed
+  "__pxx_dmul not found". Now float C runs (verified dmul/malloc/write).
+- **`fix(crtl)`: libc-free ungetc/system + auto-pull for sscanf helpers.**
+  stdio.c used bare `extern strtol/strtod/isspace` instead of #include, so the
+  crtl auto-pull never linked their bodies → unresolved externals on the static
+  riscv32 image. Added `#include`s; added a one-char pushback slot to FILE for
+  ungetc (honored by fgetc AND fread — lua's loader peeks a '#!'/BOM then
+  bulk-reads); added a `system()` stub. riscv32 printf now byte-identical to x64.
+- **`feat(riscv32)`: C callee reads >8-word params from the stack** (mirror the
+  Pascal riscv32 spill: word k>=8 at [s0+16+(pnWords-1-k)*4]). The IR_CALL site
+  already pushed them; only the C prologue errored.
+- **`fix(riscv32)`: long-range calls via auipc+jalr not JAL (+/-1MB).** THE big
+  one — cross lua is 1.75MB, so main and most callees sit past JAL's reach; the
+  truncated offset jumped to garbage and segfaulted before any output. auipc+jalr
+  (RISCVPcrelSplit) gives full 32-bit range; patched EmitCallProc (symtab.inc),
+  ApplyCallFixups (both words), and the ParseCProgram entry stub.
+- **Result:** riscv32 lua now LINKS and RUNS — through ALL library init and these
+  work: `print(42)`, `print(3.14)`, `print("hi")`, `print(1+2)`, recursion
+  `f(5)`, table LITERALS `{1,2,3}` + reads `t[2]`.
+
+**REMAINING riscv32 lua bug (razor-sharp repro): storing a NEW key that triggers
+rehash crashes.** `local t={} t[1]=5` (or `t.x=9`) SIGSEGVs; `local t={1,2,3}` +
+`t[2]` read is fine (array preallocated, no rehash). Localized via `__pxx_write`
+markers in ltable.c: the crash is in the `luaH_newkey`→`rehash`→`luaH_resize`
+path. It is a HEISENBUG — adding markers moves the crash point downstream (first
+inside setnodevector, then past reinsert), the classic MEMORY-CORRUPTION
+signature. So a riscv32 codegen bug corrupts memory during the resize/reinsert
+pointer+realloc work (Node/TValue pointer arithmetic, exchangehashpart, or
+luaM_reallocvector sizing), surfacing as `lw a0,0(a0)` on a corrupt pointer
+downstream. arm32/i386 pass this (their heap+straddle fixes covered them), so it
+is riscv32-specific. NEXT: gdb the resize path (or bisect setnodevector/reinsert
+with a fixed static probe buffer, not stack markers, to avoid moving the frame),
+suspect riscv32 pointer/size codegen in the Node-vector loop. crtl instrumentation
+in library_candidates/lua is gitignored scratch — reverted clean.
+
 ## Progress log (session 2026-07-05 #2, 32-bit heap corruption ROOT-CAUSED + FIXED)
 
 **18. THE "arm32/i386 lua/sqlite emit garbage" BUG — FIXED (commit `eb972e79`).**
