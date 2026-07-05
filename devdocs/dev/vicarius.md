@@ -47,11 +47,12 @@ Runners-up:
 - **locum tenens** — "holding the place." Accurate but implies the original
   returns; here the predecessor is gone for good.
 - **successor** — true but flavorless.
-- **襲名 / shūmei** (Japanese, non-Latin) — the closest single concept: a Kabuki
-  successor formally *takes the dead master's name and craft* with no shared
-  memory (e.g. becomes "Danjūrō XII"). Recorded here for completeness; the Latin
-  *vicarius* is the working term because this repo's authors read the Latin
-  alphabet.
+- **shūmei** (襲名, Japanese) — the closest single *concept*: a Kabuki successor
+  formally *takes the dead master's name and craft* with no shared memory (e.g.
+  becomes "Danjūrō XII"). But it survives here only in transliteration — the
+  original script (襲名) can't be typed on a Latin keyboard, and a term you can't
+  spell at the point of use is a poor working term. That practical fact is itself
+  the argument for *vicarius*: same idea, writable everywhere this repo is read.
 
 ## The companion word
 
