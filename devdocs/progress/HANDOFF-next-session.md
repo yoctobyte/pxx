@@ -11,6 +11,17 @@ internals is filed as a Track A ticket but you may self-resolve it. Read
 until then.** Real-world C programs are the proven bug-finders — keep grinding
 them until the cross targets are solid.
 
+### The WHY (the capstone this is all for)
+
+The golden demo: **a ~25-line Nil-Python program that statically links BOTH
+sqlite AND lua** — opens a SQLite DB, runs a Lua script, libc-free, one binary,
+cross-compilable to every target. That one file exercises the ENTIRE stack at
+once: C frontend (compiles sqlite+lua), crtl (the libc-free runtime they call
+into), Nil-Python frontend (calls both), one IR → many backends, static linking
+(zero deps). That is why C + the cross targets must be rock-solid FIRST — the
+Python layer sits on top of the C-compiled libraries. Every 32-bit lua/sqlite
+codegen bug fixed below is a brick under that demo.
+
 ## Where things stand (all pushed, master green)
 
 Variadic C ABI is DONE on all 5 targets; `va_list` is an array typedef
