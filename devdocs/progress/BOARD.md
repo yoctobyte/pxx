@@ -31,7 +31,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (88)
+## backlog (89)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -75,6 +75,7 @@ _none_
 | feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
+| feature-fuzzer-idle-scheduling | A | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
 | feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
@@ -689,6 +690,7 @@ _none_
 - [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-float-exception-mask-control
+- [A] feature-fuzzer-idle-scheduling
 - [B+C] feature-game-library-candidate-suite
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
