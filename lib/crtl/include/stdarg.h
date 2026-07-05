@@ -13,7 +13,7 @@ typedef struct __pxx_va_elem {
   void *reg_save_area;
 } __pxx_va_elem;
 
-typedef struct __pxx_va_elem va_list;
+typedef struct __pxx_va_elem va_list[1];
 
 /* 176-byte register-save area: 6 GP slots (48) + 8 XMM slots (16 each). The
    variadic prologue stores the incoming arg registers here; one of these is
