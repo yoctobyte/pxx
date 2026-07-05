@@ -9,21 +9,41 @@
 ## Motivation
 
 User chose Erlang over Zig as the next frontend to *scope* (not necessarily
-build first — Rust is already in progress). Reasoning: Zig's `comptime` needs a
-recursive, Turing-complete compile-time interpreter that sits in tension with
-PXX's byte-identical fixedpoint self-host guarantee (see [[feature-zig-frontend]]
-"Why parked"). Erlang's hard parts — actor-model concurrency, pattern matching,
-immutable data, the BEAM's preemptive scheduling — are a **different kind of
-hard**: none of them require a compile-time-recursive evaluator. They're
-runtime/RTL problems (a scheduler, message-passing mailboxes, immutable/
-persistent data structures), which is a shape of problem this project already
-has some machinery for (coroutine runtime, `coroutine_emit.inc`) rather than a
-wholly new compiler-architecture risk.
+build first — Rust is already in progress).
+
+**Correcting the original rationale (2026-07-05):** the first cut of this
+ticket justified the choice as "Zig risks determinism, Erlang doesn't." That
+doesn't hold up — see [[feature-zig-frontend]]'s corrected "Why parked" section.
+Recursion/Turing-completeness in a comptime interpreter is a *termination* risk
+(bounded by a step quota), not a determinism one, and it can't touch the
+compiler's own self-host fixedpoint gate since it only runs while compiling Zig
+source. Meanwhile Erlang's actor model — preemptive scheduling, message
+ordering across processes — is itself a classically *nondeterministic runtime
+execution model*. If determinism were the metric, Zig would win, not lose.
+Determinism is not why Erlang is worth scoping.
+
+**The real reason:** Zig and Erlang are hard in genuinely different domains.
+Zig's cost is concentrated in one place (a comptime interpreter/CTFE engine)
+that is pervasive but at least *conceptually contained*. Erlang's cost is
+spread across the *runtime*: a preemptive, fair, reduction-counted scheduler
+for potentially millions of lightweight processes, **per-process isolated
+heaps with independent garbage collection** (PXX today only has string
+refcounting, not a tracing/generational GC — Erlang needs the latter, per
+process), and copying message-passing between those isolated heaps. That is
+not "syntax sugar and hashing" — the syntax (pattern matching, immutability,
+tuples/atoms/maps) is the easy part, same as Zig's type theory was the easy
+part of Zig. **The hard part — a real preemptive scheduler + per-process GC —
+is arguably a bigger, more novel runtime-engineering lift than Zig's comptime
+interpreter, not a smaller one.** It's a different kind of hard, not an easier
+one. Worth scoping specifically *because* it's a different domain (proves out
+runtime/scheduler architecture this project doesn't have yet, useful beyond
+Erlang), not because it's a shortcut.
 
 **This ticket is scoping only** — same posture as the original Rust/Zig
 umbrellas before any code: map Erlang's constructs onto existing/needed IR,
-identify what's free vs. what needs new shared machinery, before committing to
-a build.
+identify what's free vs. what needs new shared machinery (especially: how far
+is PXX today from *any* form of tracing GC, since Erlang's process-isolated
+heaps need one), before committing to a build.
 
 ## Known hard parts, unscoped (fill in when picked up)
 
@@ -41,6 +61,14 @@ a build.
   (`coroutine_emit.inc`), but BEAM's preemptive (reduction-counted) scheduling
   is a different model than cooperative coroutines — gap needs honest sizing,
   not assumed-free.
+- **Per-process isolated heap + garbage collection** — the part most likely to
+  be underestimated. BEAM processes each get their own heap, collected
+  independently (no stop-the-world pause across the whole system), with
+  messages *copied* between heaps on send (shared-nothing). PXX's memory model
+  today is refcounted managed strings, not a tracing/generational collector —
+  there is no existing GC to extend here, this is new from scratch. Size this
+  gap explicitly before estimating anything else; it is plausibly the single
+  largest item in this whole ticket, bigger than the scheduler itself.
 - **Supervision trees / "let it crash"** — process linking/monitoring,
   restart strategies. An RTL-level feature (Track B, once the process model
   exists), not a frontend-syntax problem.
@@ -65,8 +93,9 @@ a build.
 
 A gap-map table (like [[feature-zig-frontend]]'s "AST/IR gap map") showing what
 lowers onto existing IR for free vs. what needs new shared machinery, plus an
-honest sizing of the actor-model/scheduler gap specifically (the one part with
-no close existing analogue). No code required to close this ticket — only a
+honest sizing of the scheduler gap **and** the per-process GC gap specifically
+(the two parts with no close existing analogue — do not let syntax-level
+familiarity understate either). No code required to close this ticket — only a
 scoping doc, same bar as the original Rust/Zig umbrellas before work started.
 
 ## Log

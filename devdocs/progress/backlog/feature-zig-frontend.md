@@ -6,25 +6,37 @@
 - **Opened:** 2026-07-03 (feature request — filed next to [[feature-rust-frontend]])
 - **Priority:** unranked — scoping ticket, not a greenlit build
 
-## Why parked (2026-07-05, user decision)
+## Why parked (2026-07-05, user decision — rationale corrected 2026-07-05)
 
-`comptime` is not just a big feature — it requires a compile-time interpreter
-(CTFE, same family as C++ `constexpr`/Rust Miri) that is recursive and
-Turing-complete: a comptime function can trigger semantic analysis of another
-comptime function, which can trigger more comptime evaluation, bounded only by
-a branch-quota/step limiter. That open-ended, self-referential evaluation is in
-tension with this project's core guarantee — **byte-identical fixedpoint
-self-host** (`make stabilize`/`make pin`, Track A's gate). A comptime engine is
-a second, recursive compiler-within-the-compiler; reasoning about its
-determinism/termination is a materially different (and larger) problem than
-anything the C/Rust frontends need. Not worth attempting before a language with
-a cleaner, non-recursive execution model.
+Original log entry claimed comptime's recursive/Turing-complete evaluation
+"undermines determinism" and conflicts with the byte-identical fixedpoint
+self-host gate. **That claim was wrong and is withdrawn.** Recursion and
+Turing-completeness threaten *termination* (an unbounded comptime loop — hence
+Zig's own branch-quota limiter), not determinism: a pure interpreter with no
+access to wall-clock/randomness/filesystem/mutable global state gives the same
+output for the same input regardless of recursion depth. And the fixedpoint
+gate is about the PXX *compiler itself* (written in Pascal) reproducing
+byte-identically across bootstrap stages — a Zig frontend's comptime
+interpreter only runs while compiling Zig *source*, never during the
+compiler's own self-compile, so it cannot threaten a gate it is never part of.
 
-**Decision: prioritize an Erlang frontend scoping exercise ahead of Zig** — see
-[[feature-erlang-frontend-scoping]]. Revisit Zig only if/when a general
-comptime-style compile-time-execution engine is independently justified by
-something else needing it (e.g. Rust `const fn` generics, if that ever grows
-that far), not as a Zig-specific special case.
+**Actual reason to park:** pure engineering scope, not architectural risk.
+`comptime` is pervasive (not a corner feature — no separate generics syntax;
+generics, `@TypeOf`, conditional compilation, and most of `std` all lean on
+it), and the builtin surface is large (`@import`, `@sizeOf`, `@ptrCast`,
+`@field`, …, each comptime-typed) with no "ignore and link" escape hatch the
+way C headers give other frontends. See "Notes on scale" below — that section
+already had the honest framing; the determinism paragraph was an unnecessary
+and incorrect addition on top of it.
+
+**Decision: scope an Erlang frontend first** — see
+[[feature-erlang-frontend-scoping]], on its own merits (different engineering
+domain: runtime/scheduler work vs. a compile-time interpreter), **not** because
+it is "more deterministic" — Erlang's actor-model preemptive scheduling is
+itself a classically nondeterministic *runtime* execution model (message
+arrival order, process interleaving), so determinism was never a valid axis to
+rank these two on. Revisit Zig if a comptime-style engine becomes independently
+justified by something else needing it.
 
 ---
 
