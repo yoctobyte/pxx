@@ -6,6 +6,14 @@
 - **Opened:** 2026-07-05 (user decision — prioritized ahead of [[feature-zig-frontend]] (parked))
 - **Priority:** unranked
 
+## Reframed under the esoteric-frontend-probe category (2026-07-05)
+
+The full-language scoping below still stands, but a **skeleton-only pass**
+(lexer/parser for a trivial subset, lowering onto existing IR, no scheduler/
+GC work) is separately in scope as a bug-probe against shared internals — not
+to make Erlang usable. See [[feature-esoteric-frontend-probes]] for the
+category rule.
+
 ## Motivation
 
 User chose Erlang over Zig as the next frontend to *scope* (not necessarily

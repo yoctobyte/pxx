@@ -1,0 +1,70 @@
+# Esoteric/legacy frontend probes — umbrella (new category: "esoteric")
+
+- **Type:** feature — umbrella, new category **esoteric-frontend-probe**
+- **Status:** backlog — category definition + candidate list, no code yet
+- **Owner:** —
+- **Opened:** 2026-07-05 (user decision — Sunday-afternoon brainstorm, made concrete)
+- **Priority:** unranked — opportunistic, pick up when convenient
+
+## The category, stated plainly
+
+A **skeleton-only** frontend (lexer + parser for a trivial subset, lowering
+straight onto the *existing* shared IR — no new IR primitives, no new backend
+work) for a language chosen for how *differently shaped* it is from anything
+PXX already parses, done **specifically to shake bugs out of shared internals**
+that Pascal/C/Nil-Python/Rust never think to exercise.
+
+**The goal is explicitly NOT "make the language work."** Inverted success
+criteria, stated up front so nobody chases scope later:
+
+- **Finds a bug in shared IR/codegen/ABI** → the probe earned its keep. File
+  the bug as its own ticket immediately (Track A), same as
+  `bug-selfhost-multifn-ifelse-miscompile` came out of the Rust skeleton
+  landing. This is the *expected*, valuable outcome.
+- **Compiles and runs correctly, first try, no bugs found** → also fine, not a
+  failure. It means the shared internals are more robust than assumed for that
+  shape of program. Cheap confirmation, still worth having done it.
+- **Either way, stop at skeleton depth.** Do not chase "compiles a real
+  program in this language." That escalation is explicitly what happened with
+  Rust (12 sub-tickets, "multi-week project") and what was rejected for Zig
+  (comptime engine) and de-prioritized for Erlang (scheduler) — those stay
+  parked *as full-language efforts*. A skeleton-only pass at any of them is
+  back in scope under this category, precisely because the scope is capped.
+
+## Precedent (why this isn't a new idea, just a named one)
+
+- The C frontend's whole multi-session bring-up repeatedly surfaced shared
+  bugs unrelated to C itself.
+- Landing the Rust skeleton (3/12 sub-tickets, [[feature-rust-frontend]])
+  surfaced `bug-selfhost-multifn-ifelse-miscompile` — a pre-existing shared
+  bug, found *because* Rust's syntax shape hit a code path Pascal never does.
+- `examples/lisp/lispdemo.pas` similarly proved the RTL robust enough to host
+  a real interpreter — different axis (RTL capability, not frontend), same
+  spirit: an unusual workload finds things a normal one doesn't.
+
+## Candidates (add more as they come up — this list is not exhaustive)
+
+| Candidate | Why it's a good/different probe shape | Notes |
+| --- | --- | --- |
+| **Zig** (skeleton only) | C-like type theory, own lexer/parser needed (not a C superset — confirmed this session). Full comptime engine stays out of scope. | See [[feature-zig-frontend]] (parked for full-language effort; skeleton subset still fair game here). |
+| **Erlang** (skeleton only) | Pattern-matching-as-dispatch, immutability — different control-flow shape than anything else attempted. Full scheduler/actor-model stays out of scope. | See [[feature-erlang-frontend-scoping]] (same: full effort deprioritized, skeleton subset fair game). |
+| **LOLCODE** | Dynamically typed, BASIC-shaped, informal/loose grammar (`HAI`/`VISIBLE`/`GIMMEH`). Likely the single cheapest candidate on this list. | New, see [[feature-esoteric-lolcode]]. |
+| **Whitespace** | Syntax is *only* whitespace characters — the opposite extreme from every other frontend's token-based lexer. Genuinely different lexer shape (no visible tokens at all). | New, see [[feature-esoteric-whitespace]]. |
+| **Ada** | User's own hunch: "should be trivial" — Ada is Pascal's own language family (strong static typing, `begin`/`end`, similar declaration shape), plausible easy win and a good sanity check that the IR's Pascal-shaped assumptions generalize to a close cousin. | New, see [[feature-esoteric-ada]]. |
+| **Fortran** | Old, array-heavy, historically column-sensitive fixed-form source, GOTO-heavy control flow, quirky implicit-typing rules (pre-F90). Different enough era/shape to be worth a look. | New, see [[feature-esoteric-fortran]]. |
+| **COBOL** | Verbose, English-like syntax (division-based structure: IDENTIFICATION/ENVIRONMENT/DATA/PROCEDURE DIVISION), fixed-decimal `PICTURE`-clause data types unlike anything else on this list. Genuinely different shape, good fuzz diversity. | New, see [[feature-esoteric-cobol]]. |
+
+## Explicit non-goals (the whole point of this category)
+
+- Not a commitment to ship any of these as usable frontends.
+- Not competing with Rust for "real second language" status — this category
+  is bug-probing, Rust (parked at 3/12) is the one actual attempt at
+  real-language usability.
+- Not scheduled, not prioritized against each other — pick whichever sounds
+  fun/cheap in a given session.
+
+## Log
+- 2026-07-05 — filed per user decision: reframe exotic/joke-tier frontend
+  ideas (Zig, Erlang, LOLCODE, Whitespace, plus new candidates Ada/Fortran/
+  COBOL) not as feature requests but as a deliberate, capped bug-finding
+  technique. New ticket category "esoteric-frontend-probe" established.

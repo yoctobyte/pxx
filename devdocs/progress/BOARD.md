@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (86)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -62,6 +62,12 @@ _none_
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-erlang-frontend-scoping | A | feature | Erlang frontend — scoping only | — |
+| feature-esoteric-ada | A | feature | Esoteric probe: Ada | — |
+| feature-esoteric-cobol | A | feature | Esoteric probe: COBOL | — |
+| feature-esoteric-fortran | A | feature | Esoteric probe: Fortran | — |
+| feature-esoteric-frontend-probes | A | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
+| feature-esoteric-lolcode | A | feature | Esoteric probe: LOLCODE | — |
+| feature-esoteric-whitespace | A | feature | Esoteric probe: Whitespace | — |
 | feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
@@ -668,6 +674,12 @@ _none_
 - [B] feature-embed-pascal-script
 - [A] feature-emission-size-dce
 - [A] feature-erlang-frontend-scoping
+- [A] feature-esoteric-ada
+- [A] feature-esoteric-cobol
+- [A] feature-esoteric-fortran
+- [A] feature-esoteric-frontend-probes
+- [A] feature-esoteric-lolcode
+- [A] feature-esoteric-whitespace
 - [A] feature-esp-hardware-flash-validation
 - [B] feature-esp-peripheral-callback-api
 - [A] feature-float-exception-mask-control

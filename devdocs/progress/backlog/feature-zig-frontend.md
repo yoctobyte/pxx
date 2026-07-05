@@ -6,6 +6,13 @@
 - **Opened:** 2026-07-03 (feature request — filed next to [[feature-rust-frontend]])
 - **Priority:** unranked — scoping ticket, not a greenlit build
 
+## Reframed under the esoteric-frontend-probe category (2026-07-05)
+
+Parked as a full-language effort (below), but a **skeleton-only pass** (lexer/
+parser for a trivial subset, lowering onto existing IR, no comptime engine) is
+back in scope — not to make Zig usable, but as a bug-probe against shared
+internals. See [[feature-esoteric-frontend-probes]] for the category rule.
+
 ## Why parked (2026-07-05, user decision — rationale corrected 2026-07-05)
 
 Original log entry claimed comptime's recursive/Turing-complete evaluation
