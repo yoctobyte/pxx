@@ -66,6 +66,8 @@ function __pxxPos(const sub, s: AnsiString): Integer;
   feature-move-fillchar-intrinsics tracks the optimized emission. }
 procedure __pxxMove(const Source; var Dest; Count: Integer);
 procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
+procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
+function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
 
 implementation
 
@@ -88,6 +90,29 @@ var d: PByte; i: Integer;
 begin
   d := PByte(@X);
   for i := 0 to Count - 1 do d[i] := Value;
+end;
+
+procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
+var d: PInt32; i: Integer;
+begin
+  { FPC FillDWord: Count is in 4-byte units }
+  d := PInt32(@X);
+  for i := 0 to Count - 1 do d[i] := Integer(Value);
+end;
+
+function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
+var a, b: PByte; i: Int64;
+begin
+  { FPC System.CompareByte: 0 if equal, else sign of first difference }
+  a := PByte(@Buf1);
+  b := PByte(@Buf2);
+  __pxxCompareByte := 0;
+  for i := 0 to Len - 1 do
+    if a[i] <> b[i] then
+    begin
+      __pxxCompareByte := Int64(a[i]) - Int64(b[i]);
+      Exit;
+    end;
 end;
 
 

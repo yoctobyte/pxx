@@ -220,7 +220,9 @@ begin
       while i < size do
       begin
         PWord(cur + i)^ := 0;
-        i := i + 8;
+        i := i + SizeOf(NativeInt);      { PWord writes one machine word: 8 on
+                                           64-bit, 4 on 32-bit — must match the
+                                           step or half the span is skipped }
       end;
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
@@ -297,7 +299,9 @@ begin
   while i < oldSize do                       { oldSize is a multiple of 8 }
   begin
     PWord(dst + i)^ := PWord(src + i)^;
-    i := i + 8;
+    i := i + SizeOf(NativeInt);              { one machine word per PWord copy —
+                                               step 8 dropped every other word on
+                                               32-bit (NativeInt=4) }
   end;
   PXXFree(p);
   Result := np;

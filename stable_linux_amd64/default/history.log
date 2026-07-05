@@ -173,3 +173,4 @@
 2026-07-04T13:39:58Z  v173  74f3acc89149d76ce033304e0d977facfb75f75840c7e33a76694b675563c9de  3bce76211b6e64474fbe642a990ceb3a7c392c99  feat(opt): promote inline slice 2b to -O2
 2026-07-04T18:56:06Z  v174  b93d9a062df4d75deeb67c4d649ef54eaf444c7d2423595f49668b08bc1a46e2  776e498efbcab8018ccf113eea08b63d71cb6934  feat(rtl): types unit + TPersistent/TComponent (FPC Classes surface)
 2026-07-04T20:16:55Z  v175  7bf4ebd91854fb77af05fcd5c4a6140afeb830cfa39dadd0a8c52c54bfb25ae5  e8aa9a993521701692dad07389efe73bb401c38d  docs(ticket): close bug-downcast-inherited-property-wrong-offset
+2026-07-05T20:04:39Z  v176  7e78318fc3d9490e8500082e1eaff89f91bd4880bea691dea3ef0e8caee5597d  a9338bf86bc4d682e35bced78407005a33f49840  docs(ticket): i386 coroutines.lua FIXED (longjmp arg-order); all 3 cross targets lua 6/6 (18/18)
