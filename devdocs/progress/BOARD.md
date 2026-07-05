@@ -30,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (77)
+## backlog (78)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -106,6 +106,7 @@ _none_
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | feature-zig-frontend | B | feature | Zig frontend — umbrella | — |
+| idea-c-realworld-test-targets | C | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
@@ -706,6 +707,7 @@ _none_
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [B] feature-zig-frontend
+- [C] idea-c-realworld-test-targets
 - [A] meta-dialect-extensions-and-fpc-strict
 - [A] meta-multithreading
 - [B] task-sqlite-libc-free-runtime-bringup
