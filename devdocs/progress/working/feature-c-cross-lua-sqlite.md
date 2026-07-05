@@ -5,9 +5,11 @@
   cross C→IR / backend bugs found = A (file A ticket, self-resolve under the
   combined-track rule).
 - **Status:** working — Phase 1 (crtl headers) DONE. Phase 2 **aarch64 lua 5.4
-  GREEN** — all 6 test-lua scripts pass under qemu (`make test-lua-cross`). 9
-  cross bugs fixed. Remaining: variadic ABI for arm32/i386/riscv32 (their lua
-  build-fails at the "not yet" gate), then those targets' lua, then sqlite.
+  GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 COMPILES +
+  opens a :memory: DB**; `sqlite3_exec("CREATE TABLE …")` segfaults (next bug).
+  13 cross bugs fixed total. Remaining: the sqlite CREATE-TABLE segfault, then
+  variadic ABI for arm32/i386/riscv32 (their lua/sqlite build-fail at the "not
+  yet" gate), then their runs.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
@@ -55,7 +57,36 @@ byte-identical + `make test` green.
 `aarch64`); mirrors test-lua's skip guard, runs each script under qemu vs the
 same .expected. Green for aarch64. NOT wired into `make test`.
 
-**NEXT (future session):**
+**Phase 3 — aarch64 sqlite3 (commit de9741a0):** compiles + links (6.3MB, 3861
+procs) and `sqlite3_open(":memory:")` works. Bugs fixed to get there:
+10. crtl VFS headers (B): fcntl.h, inttypes.h, sys/{stat,time,ioctl,mman}.h +
+    time.h timespec/nanosleep/clock_gettime + utimes. Declarations only (the
+    :memory: DB never calls the file VFS; they just must compile/link).
+11. **fn-ptr param with a `(void)` signature dropped from ParamCount** — parsing
+    `void (*x)(void)` leaked global CTypeIsVoid so the outer param list skipped
+    the whole fn-ptr param. GENERAL bug (x86-64 silently miscompiled, pushing a
+    garbage extra arg; aarch64's strict arg-count check caught it). Fix in
+    cparser: clear CTypeIsVoid once the declarator is a pointer.
+12. **@extern** (address of an external routine) for aarch64 + arm32 (was
+    x86-64-only) — reuse the GOT-slot machinery with a load instead of a call
+    (sqlite aSyscall[] pointer table). symtab.inc EmitExternalProcAddr.
+13. aarch64 external variadic calls guarded (fcntl/open `int f(int,int,...)`).
+
+**NEXT WALL — sqlite CREATE TABLE segfault (aarch64):** minimal repro = the
+extended-test head (SQLITE_THREADSAFE 0 + amalgam includes) with body
+`sqlite3_exec(db,"CREATE TABLE t(x INTEGER)",0,0,&e)`. x86-64 rc=0; aarch64
+SIGSEGV after "DB opened". Fault at a tiny accessor `f(arg){ …arg->[0x70]… }`
+with arg=NULL; its caller passed `P->[0x88]` which is NULL on aarch64 but set on
+x86-64. So a struct pointer field at offset 0x88 is unpopulated — suspect a
+static aggregate initializer or struct-field-offset miscompile (possibly related
+to the new @extern-in-initializer path, or a struct containing fn-ptr fields
+after the #11 fix). Debug: gdb-multiarch via `qemu-aarch64 -g`, disassemble the
+accessor chain; then trace who WRITES P->[0x88] in sqlite's CREATE-TABLE path.
+Instrument sqlite3.c with `__pxx_write(2,…)` (extern at file scope, decls before
+statements). pxx -g DWARF lines are a flat counter into the amalgam, ~1390 crtl
+lines precede sqlite3.c.
+
+**Then (future session):**
 - **arm32/i386/riscv32 variadic ABI** — the callee register-save prologue is
   aarch64-only (`cparser.inc` EmitCSetjmpStubs' sibling: the vaSave block raises
   "variadic C functions … not yet supported on this cross target"). They need a
