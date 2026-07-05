@@ -15,8 +15,48 @@
   blocked on va_list-passed-by-value (needs array-typed va_list or 32-bit
   struct-by-value >8B). i386 lua/sqlite get far but hit separate i386 gaps
   (external-call arg-count mismatch, a lua segfault). Then wire test-*-cross.
+  **UPDATE (session #2, commit `eb972e79`):** the "arm32/i386 lua garbage" was a
+  single shared 32-bit heap-corruption bug (PXXAlloc/Realloc stepped 8 while PWord
+  writes 4 on ILP32) — FIXED. Cross lua now **5/6 arm32, 5/6 i386**. Remaining:
+  arm32 numeric.lua (double codegen), i386 coroutines.lua (coroutine stack); +
+  riscv32 softfloat still open. See progress log item 18.
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
+
+## Progress log (session 2026-07-05 #2, 32-bit heap corruption ROOT-CAUSED + FIXED)
+
+**18. THE "arm32/i386 lua/sqlite emit garbage" BUG — FIXED (commit `eb972e79`).**
+It was NOT garbage output or per-backend codegen — it was **one shared 32-bit
+heap-corruption bug**. `builtinheap.pas` PXXAlloc (zero-on-reuse) and PXXRealloc
+(grow-copy) loops walk with `PWord` (= `^NativeInt`, machine-word: **8 bytes on
+64-bit, 4 on 32-bit**) but advanced the index by a **hardcoded 8**. On ILP32 each
+PWord write moves 4 bytes while the loop steps 8, so bytes [0-3],[8-11],… are
+written and **[4-7],[12-15],… are skipped**: every `realloc` silently dropped
+half the payload, reused blocks were half-uninitialised. Any 32-bit program doing
+real realloc corrupted — lua/sqlite hammer realloc, so BOTH i386 and arm32 broke;
+x86-64 was fine only because there NativeInt=8=step. Fix: step by
+`SizeOf(NativeInt)` in both loops. Also retyped the crtl↔RTL bridge
+`__pxx_malloc/__pxx_realloc` params `Int64`→`NativeInt` (latent width mismatch vs
+their C `long` externs after long=native; byte-identical on x86-64).
+- **Diagnosis path that worked** (record for reuse): the symptom (lua reserved
+  words lexed as NAMEs → `'end' expected near 'end'`, and layout-sensitive
+  heisenbug segfaults — reached LOAD-ERR under gdb, segfaulted standalone) pointed
+  at interned-string-table corruption. Ruled out narrow-load (item-14 family) and
+  luaS_hash with tiny standalone C repros (both byte-identical across targets).
+  Then a **malloc/realloc torture repro** (alloc→memset(i)→realloc→verify first
+  bytes) gave `bad=47` on arm32/i386 vs `bad=0` on x86-64 — isolated it to the
+  allocator in ~15 lines, no qemu-gdb spelunking needed. LESSON: when a heavy real
+  program corrupts on 32-bit only, torture the allocator FIRST.
+- **Result:** cross lua **5/6 on arm32, 5/6 on i386** (was total corruption).
+  Remaining fails are separate narrower bugs, NOT this one:
+  - **arm32 numeric.lua** — all floats garbage (`4.27e+86`, `5.31e-315`, mean=0);
+    an arm32 double codegen / double-arg bug in lua's number path. (Note: arm32
+    printf `%f` is byte-identical per item-17, so this is lua-internal double
+    handling — `l_mathop`/`lua_number2str`, or double arg passing through lua's
+    own varargs, not crtl snprintf.)
+  - **i386 coroutines.lua** — empty output (early crash); i386 coroutine path
+    (separate lua stack; likely setjmp/longjmp or stack-switch on i386).
+  Both worth their own repro+fix next.
 
 ## Progress log (session 2026-07-05, aarch64 first)
 
