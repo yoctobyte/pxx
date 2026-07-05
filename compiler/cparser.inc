@@ -2063,6 +2063,13 @@ begin
     Procs[fpSig].BodyAddr := -1;
     ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
     CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
+    { A function pointer is a non-void pointer VALUE. The inner signature parse
+      (e.g. `void (*x)(void)`'s `void` return / `(void)` params) leaves the
+      global CTypeIsVoid set, which made an enclosing param list treat the whole
+      fn-ptr parameter as a `(void)` no-arg and DROP it — undercounting the outer
+      ParamCount (bug-c-fnptr-void-param-dropped, the sqlite3BenignMallocHooks
+      arg-count mismatch). Clear it now that the declarator is a pointer. }
+    CTypeIsVoid := False;
     if fpName <> '' then
     begin
       CTypeFnPtrName := fpName;

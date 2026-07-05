@@ -5213,15 +5213,40 @@ end;
 procedure EmitExternalProcAddr(procIdx: Integer);
 var extIdx: Integer;
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('@ on external routine not supported on this target');
   extIdx := RegisterExternal(procIdx);
   if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); { mov rax, qword ptr [absolute address] }
-  DynCallCodePos[DynCallCount] := CodeLen;
-  DynCallExtIdx[DynCallCount] := extIdx;
-  Inc(DynCallCount);
-  EmitI32(0);
+  { @extern -> the resolved function pointer in the result register, via the same
+    GOT slot the call path uses (PatchDynCallSites patches the address), but with
+    a plain load instead of a call. Lets sqlite's unix VFS build its aSyscall[]
+    table of pointers to open/close/fstat/... (never called with a :memory: DB). }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); { mov rax, [abs GOT slot] }
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    DynCallCodePos[DynCallCount] := CodeLen;   { movz/movk pair patched with slot VA }
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32($D2800010);   { movz x16, #0        (lo16 patched) }
+    EmitI32($F2A00010);   { movk x16, #0, lsl 16 (hi16 patched) }
+    EmitI32($F9400200);   { ldr  x0, [x16]      (resolved fn ptr) }
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    DynCallCodePos[DynCallCount] := CodeLen;   { movw/movt pair patched with slot VA }
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32($E300C000);   { movw ip, #0   (lo16 patched) }
+    EmitI32($E340C000);   { movt ip, #0   (hi16 patched) }
+    EmitI32($E59C0000);   { ldr  r0, [ip] (resolved fn ptr) }
+  end
+  else
+    Error('@ on external routine not supported on this target');
 end;
 
 { aarch64 external call through the GOT slot. The slot's absolute VA (< 2^32

@@ -1841,8 +1841,21 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs <> Procs[procIdx].ParamCount then
+          if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
             Error('target aarch64: external call argument count mismatch');
+          if ProcVariadic[procIdx] then
+          begin
+            { Variadic external (e.g. fcntl/open declared `int f(int,int,...)`):
+              AArch64-Linux passes the variadic tail in x0..x7 then the stack,
+              same as GP named args, so load every arg sequentially into x[i].
+              (sqlite only reaches these in its file VFS; a :memory: DB never
+              calls them, so this just has to link. >8 args unsupported.) }
+            if nArgs > 8 then
+              Error('target aarch64: variadic external call with more than 8 arguments not supported');
+            for i := nArgs - 1 downto 0 do
+              EmitI32($F84107E0 + i);            { ldr x[i], [sp], #16 }
+          end
+          else
           { Pop reverse (top = last arg) into the target register. }
           for i := nArgs - 1 downto 0 do
           begin
@@ -2009,7 +2022,10 @@ begin
         { @proc -> x0 = absolute code address, via a PC-relative load of an
           8-byte literal patched at finalize. }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          EmitExternalProcAddr(IRA[node]);           { x0 = resolved external fn ptr (GOT) }
+          Exit;
+        end;
         EmitI32($58000040);                          { ldr x0, [pc, #8] (literal below) }
         EmitI32($14000003);                          { b .+12 (skip 8-byte literal) }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');

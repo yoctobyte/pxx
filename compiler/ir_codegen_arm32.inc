@@ -2281,7 +2281,10 @@ begin
         { @proc -> r0 = absolute code address, via a PC-relative load of a 4-byte
           literal patched at finalize. }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          EmitExternalProcAddr(IRA[node]);           { r0 = resolved external fn ptr (GOT) }
+          Exit;
+        end;
         EmitI32($E59F0000);                          { ldr r0, [pc] (literal below) }
         EmitI32($EA000000);                          { b .+8 (skip the 4-byte literal) }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');

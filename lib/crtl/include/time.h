@@ -24,8 +24,18 @@ struct tm {
   int tm_isdst;  /* daylight-saving flag (always 0 — pxx crtl is UTC) */
 };
 
+struct timespec {
+  long tv_sec;
+  long tv_nsec;
+};
+
+#define CLOCK_REALTIME  0
+#define CLOCK_MONOTONIC 1
+
 time_t time(time_t *t);
 clock_t clock(void);
+int nanosleep(const struct timespec *req, struct timespec *rem);
+int clock_gettime(int clk_id, struct timespec *tp);
 double difftime(time_t end, time_t beginning);
 time_t mktime(struct tm *tm);
 struct tm *gmtime(const time_t *timer);
