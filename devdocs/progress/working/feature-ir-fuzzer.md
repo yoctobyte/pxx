@@ -118,3 +118,28 @@ probes — this fuzzer follows the same spirit for a different technique).
   installed and working (`tools/run_target.sh`, all 4 QEMU binaries present)
   and the seed corpus size (629 `test/*.pas` files) before committing to the
   design above.
+- 2026-07-05 — `tools/fuzz.sh` v1 written and run. Two real bugs in the
+  harness itself, found and fixed before trusting any output:
+  1. **Mutants can hang.** A mutation (flip a comparison, bump a bound) can
+     trivially turn a terminating loop into an infinite one — the first run
+     hung past its time budget because no individual execution had a
+     timeout. Fixed: every run (native and cross) goes through `timeout`
+     (`FUZZ_RUN_TIMEOUT`, default 5s); a timeout is its own distinct result,
+     and native-vs-cross both timing out is correctly treated as agreement,
+     not a divergence.
+  2. **Seed pool false positives.** First real run against the full
+     `test/*.pas` corpus reported 8 "divergences," all traced to ESP32/
+     bare-metal fixtures using `__pxxrawsyscall` with hardcoded syscall
+     numbers — legitimately different per architecture ABI, never meant for
+     naive same-output-everywhere comparison. Not compiler bugs, a seed
+     selection mistake. Fixed: default seed glob narrowed to
+     `test/test_cross_*.pas` (49 files, the project's own existing
+     cross-target-parity naming convention), plus an explicit grep-exclude
+     for `__pxxrawsyscall`/`CPU_XTENSA`/`CPU_RISCV32`/`PXX_ESP` in case a
+     future `test_cross_*` file uses them too.
+  After both fixes: a 2-minute run against the corrected 48-file pool
+  produced 204 trials, 203 compiled, **0 divergences** — clean, which per
+  the umbrella's inverted-success-criteria logic is itself a useful result
+  (confirms robustness for the mutation shapes tried), not "nothing to
+  report." Harness committed at `tools/fuzz.sh`. Next: longer/scheduled
+  runs, richer mutation set, then extend to C/BASIC/Nil-Python per sub-step 4.
