@@ -30,7 +30,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (87)
+## backlog (88)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -65,6 +65,7 @@ _none_
 | feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-erlang-frontend-scoping | A | feature | Erlang frontend — scoping only | — |
 | feature-esoteric-ada | A | feature | Esoteric probe: Ada | — |
+| feature-esoteric-algol | A | feature | Esoteric probe: Algol (60) | — |
 | feature-esoteric-cobol | A | feature | Esoteric probe: COBOL | — |
 | feature-esoteric-fortran | A | feature | Esoteric probe: Fortran | — |
 | feature-esoteric-frontend-probes | A | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
@@ -678,6 +679,7 @@ _none_
 - [A] feature-emission-size-dce
 - [A] feature-erlang-frontend-scoping
 - [A] feature-esoteric-ada
+- [A] feature-esoteric-algol
 - [A] feature-esoteric-cobol
 - [A] feature-esoteric-fortran
 - [A] feature-esoteric-frontend-probes

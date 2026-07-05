@@ -14,6 +14,18 @@ work) for a language chosen for how *differently shaped* it is from anything
 PXX already parses, done **specifically to shake bugs out of shared internals**
 that Pascal/C/Nil-Python/Rust never think to exercise.
 
+**Restated even more precisely (2026-07-05, user correction):** the real goal
+is not "compile language X" at all — it's **proving AST/IR correctness**.
+"Oh, and it compiles Fortran" is the funny side effect people notice, not the
+actual point. The point is that feeding a structurally-different program
+through the shared lexer→AST→IR→backend pipeline is a differential test of
+that pipeline's correctness — the specific source language is just a vehicle
+for generating a test case shaped unlike anything the existing test suite
+thinks to write. Keep this framing in mind when picking candidates: the
+question is "what shape of program would exercise the AST/IR in a way nothing
+else does," not "which language would be a cool demo" (that's
+[[feature-pxx-basic]]'s job, a different bucket entirely — see below).
+
 **The goal is explicitly NOT "make the language work."** Inverted success
 criteria, stated up front so nobody chases scope later:
 
@@ -53,6 +65,8 @@ criteria, stated up front so nobody chases scope later:
 | **Ada** ⭐ **chosen next pick** | User's own hunch: "should be trivial" — Ada is Pascal's own language family (strong static typing, `begin`/`end`, similar declaration shape), plausible easy win and a good sanity check that the IR's Pascal-shaped assumptions generalize to a close cousin, not just Pascal itself. Ranked over the others (2026-07-05) because it tests IR generality (a kinship question), where COBOL/Fortran/LOLCODE/Whitespace mainly test grammar-shape diversity (already well covered by C/Rust/Nil-Python). | New, see [[feature-esoteric-ada]] for the full ranking rationale. |
 | **Fortran** | Old, array-heavy, historically column-sensitive fixed-form source, GOTO-heavy control flow, quirky implicit-typing rules (pre-F90). Different enough era/shape to be worth a look. | New, see [[feature-esoteric-fortran]]. |
 | **COBOL** | Verbose, English-like syntax (division-based structure: IDENTIFICATION/ENVIRONMENT/DATA/PROCEDURE DIVISION), fixed-decimal `PICTURE`-clause data types unlike anything else on this list. Genuinely different shape, good fuzz diversity. | New, see [[feature-esoteric-cobol]]. |
+| **Algol (1958)** | Even stronger kinship test than Ada: Algol60 is Pascal's direct ancestor (parent→child, not siblings). If a trivial Algol subset doesn't lower cleanly, that's a sharper signal the IR is Pascal-specific than Ada would give. Trivial by the same logic as Ada/Fortran. | New, see [[feature-esoteric-algol]]. |
+| ~~**Lisp**~~ | Correctly excluded, not just deprioritized: different paradigm entirely (homoiconic S-expressions, dynamic typing, cons-cell memory that can form real cycles — refcounting doesn't cleanly suffice the way it does for Erlang's acyclic-by-construction terms). Not a "trivial" probe by any honest reading. Already satisfied differently: `examples/lisp/lispdemo.pas` is a real Lisp *interpreter* written in Pascal (done, proves RTL capability) — user is explicitly lax about not needing a compiled Lisp *frontend* on top of that. No ticket filed for a Lisp frontend; the interpreter already covers the spirit of it. | See `devdocs/progress/done/feature-demo-lisp.md` for what exists today. |
 
 ## Explicit non-goals (the whole point of this category)
 
