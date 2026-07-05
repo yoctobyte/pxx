@@ -131,7 +131,52 @@ array. i386 lua/sqlite get much further but hit SEPARATE i386 gaps: sqlite = a
 non-variadic "external call argument count mismatch" (ir_codegen386 external
 path's strict nArgs=ParamCount check); lua = a SIGSEGV (unrelated i386 codegen).
 
-**BLOCKER for printf/lua/sqlite on arm32/riscv32 — va_list passed BY VALUE.** crtl's
+**17. va_list → array type (commit 74d6d4b7), the by-value blocker below is
+CLEARED for the simple case.** `typedef struct __pxx_va_elem va_list[1]` — a local
+`va_list` is still 24 bytes on the stack (no alloc) but the bare name decays to a
+pointer, so `printf → __crtl_vformat(va_list)` passes a pointer, not a 24-byte
+copy. ONE-line change: cfront already handles the array typedef, `CVaListAddr`'s
+`&ap` is right for both local (→&ap[0]) and a param (already a decayed pointer) —
+compiler binary byte-identical. Verified: x86-64/aarch64/i386 printf incl %f
+byte-identical (no regression); direct va_arg on all 5 targets unchanged; simple
+`printf→helper` va_list-passing now works on arm32/riscv32.
+
+**REMAINING arm32/riscv32 printf blocker — ROOT-CAUSED: cfront drops the array
+dimension when an array-TYPEDEF is used as a PARAMETER.** `va_list ap` (with
+`typedef struct __pxx_va_elem va_list[1]`) should decay the param to a pointer
+(C: array params → pointers). Instead cfront types it as a BY-VALUE `tyRecord`
+(the struct) — confirmed via a DBGPUSH writeln in the arm32 call loop:
+`inner`'s `ap` param = `tk=5 (tyRecord) isarr=0`. The explicit-bracket decay at
+`cparser.inc:4780` only fires on a literal `T name[...]`, never for a
+typedef-array param. Consequence on arm32: the by-value-record push (the
+`RecSize<=8` branch, ir_codegen_arm32.inc ~2090) pushes the arg as TWO words
+(`&ap` + garbage r1) instead of one pointer word, shifting every following arg
+so the callee reads `ap` from the wrong stack slot → helper gets ap=NULL →
+SIGSEGV. x86-64/aarch64 tolerate it (real struct-by-value + `&ap` still lands on
+the copy); i386 tolerates it (all-stack). It only surfaces once crtl's `size_t`
+(=`unsigned long`=8 on arm32, see below) pushes the va_list arg past r3 onto the
+stack. Minimal repro (no va_list): `inner(int,int,int,int, Box b)` with
+`typedef struct{int a;} Box[1]` SIGSEGVs; a plain-pointer 5th arg works.
+
+**FIX (well-scoped cfront work, the real "A"):** make a typedef-array PARAMETER
+decay to a pointer, the same as `T name[...]`. Needs (1) `ParseCTypedef` to
+record the array dimension of `typedef T Y[N]`, and (2) the param loop
+(`cparser.inc` ~4777-4806) to apply the pointer decay when the resolved param
+type is an array typedef. Then `va_list` params are 1-word pointers on every
+target and printf works uniformly. (Verified the array typedef itself is fine
+for LOCALS + direct va_arg on all 5 targets; only the PARAM decay is missing.)
+
+**Separate DESIGN DECISION (future work, user-owned): `long` sizing.** pxx makes
+`long`/`size_t` 64-bit on every target (`sizeof(long)`=8 even on arm32/i386) —
+consistent but C-divergent (real ILP32 `long`=4). This is what pushes crtl's
+`va_list` arg onto the stack in the first place. Purists / memory-tight targets
+(riscv on ESP) may want native `long`. Option **B** — make `long`/`size_t` 32-bit
+on 32-bit targets — would ALSO unblock printf (keeps the va_list in registers)
+and is more C-correct, but reverses the consistent-64-bit model. Deferred; do the
+cfront typedef-array-param decay (A) instead, which is orthogonal and correct
+regardless of the `long` choice.
+
+**PRIOR BLOCKER (now cleared for simple case) — va_list passed BY VALUE.** crtl's
 `printf` (and sqlite's/lua's own printf) do `va_start(ap,fmt)` then hand the
 whole `va_list` (24-byte struct) to a formatter (`__crtl_vformat`, sqlite
 `sqlite3VXPrintf`) by value. arm32/riscv32 have no struct-by-value >8 bytes ABI,
