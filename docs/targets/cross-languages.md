@@ -21,6 +21,14 @@ The Pascal frontend is the supported user-facing path. The other frontends exist
 to test interop and backend reuse, and their accepted language subsets are still
 moving.
 
+BASIC (`.bas`) was PXX's first proof of this idea — a lexer/parser with a
+totally different grammar than Pascal, calling into arbitrary Pascal and C
+libraries through the same `USES` mechanism the other frontends use. It mixes
+classic line-numbered control flow (`GOTO`/`GOSUB`) with modern numberless
+loops (`FOR`/`WHILE`) in the same program by design — a deliberately
+non-standard dialect, not a spec to conform to. Currently blocked on a real
+`GOTO`/`GOSUB` bug (tracked internally); revisit before relying on it.
+
 ## C Frontend
 
 PXX features a C frontend that compiles `.c` source files directly to native executables. It supports a substantial subset of C, featuring a libc-free runtime and the "magic link" model.
