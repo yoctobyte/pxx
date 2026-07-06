@@ -31,3 +31,16 @@ reading derails. Fix: mirror the local fnptr-typedef handling for a function's
 RETURN type (register `go` with retType tyPointer + the fnptr proc signature, read
 name+params normally). 00124 separately needs the inline full declarator
 `int (*f(int,int))(int,int)`. Bounded-ish declarator work, focused session.
+
+## Further pinning 2026-07-07 — a fnptr-typedef declarator cluster
+Probed the fnptr-typedef (`typedef int (*fty)(void)`) in several positions:
+- `fty go(void);` (prototype) — WORKS (pass-1 registration is fine).
+- `fty go(void){ return &z; }` (definition) — CERR "expected C expression" in the
+  BODY (the proto registers, but compiling the body of a fnptr-typedef-returning
+  function derails).
+- `fty gp = &z;` (global variable) — CERR "call to undeclared function: gp" (a
+  fnptr-typedef-typed GLOBAL isn't registered either).
+- `myint go(void)` (non-fnptr typedef return) — WORKS.
+So it's a cluster of fnptr-typedef declarator gaps (function-definition body,
+global-var decl) beyond the original 00089/00124, all rooted in how a tyPointer +
+CTypeProcSig "callable" type flows through the def/global paths. Focused session.
