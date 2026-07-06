@@ -30,7 +30,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (89)
+## backlog (88)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -107,7 +107,6 @@ _none_
 | feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
-| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -159,7 +158,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (468)
+## done (469)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -592,6 +591,7 @@ _none_
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
+| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-sysutils-decodedate-missing | A | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -723,7 +723,6 @@ _none_
 - [A] feature-selfhost-guard-ir-unsupported
 - [A] feature-signal-handlers
 - [B] feature-synapse-compile-check
-- [B] feature-syscall-pthread-shim
 - [A] feature-threadsafe-heap-optimize
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store

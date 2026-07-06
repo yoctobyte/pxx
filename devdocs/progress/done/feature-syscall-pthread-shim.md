@@ -1,12 +1,48 @@
 # Syscall-only pthread shim for libc-free C libraries
 
 - **Type:** feature
-- **Status:** backlog — **READY, unblocked 2026-07-02** (both blockers closed:
+- **Status:** DONE (2026-07-06) — libc-free pthread shim + multithreaded SQLite green on x86-64; see the DONE block below.
   heap contract v151, I/O serialization v146). Track B (lib/crtl files) + C
   (cfront gaps). See "Entry point" below.
-- **Owner:** —
+- **Owner:** Track A+B+C (combined)
 - **Unblocks:** task-sqlite-libc-free-runtime-bringup
 - **Found / Opened:** 2026-06-28, Track B sqlite/pthread discussion
+
+## DONE (2026-07-06, commits 9955810a + b48af4cf) — libc-free pthread + multithreaded SQLite
+
+Shipped as a thin façade over the existing PAL (one thread layer, two consumers),
+NOT a raw-syscall reimplementation. Surface = exactly what SQLite THREADSAFE=1
+(HOMEGROWN recursive mutex) uses + create/join: mutex, mutexattr (no-op),
+self/equal, create/join. No cond vars / TLS keys (SQLite references neither).
+
+- `lib/rtl/palpthread.pas` — flat C-callable bridge over palsync (Drepper futex
+  mutex) + palthread (clone/futex/gettid). `pthread_mutex_t` == `TMutex` (one
+  futex word, zeroed = free).
+- `lib/crtl/include/pthread.h` + `lib/crtl/src/pthread.c` — C veneer; create/join
+  keep a tid->handle registry (POSIX returns only a `pthread_t`, but PalThreadJoin
+  needs the 32-byte handle; the handle block stays opaque to C).
+- `cparser.inc` pulls palpthread alongside pxxcio under `--threadsafe`.
+- `parser.inc` — pthread removed from `CHeaderDefaultSystem` so `<pthread.h>`
+  resolves to the pxx shim by default (real libpthread via `--system-libs=pthread`).
+
+**Two landmines hit:** (1) `<pthread.h>` was force-resolved to glibc (pthread in
+the default-system-lib list) — the whole shim was silently bypassed until removed
+from that list; the giveaway was `Fatal glibc error: pthread_mutex_lock.c` + a
+`libc.so.6` DT_NEEDED on a supposedly libc-free binary. (2) THREADSAFE=1 hung
+because sqlite's default (non-VxWorks) path uses `PTHREAD_MUTEX_RECURSIVE`; our
+mutex is non-recursive → deadlock on the first recursive enter. Fix: build with
+`SQLITE_HOMEGROWN_RECURSIVE_MUTEX=1` so sqlite does recursion itself (owner-tid +
+nRef counter over a plain mutex). A shared connection across threads additionally
+needs `SQLITE_OPEN_FULLMUTEX` (serialized); the default THREADSAFE=1 mode is
+MULTITHREAD (per-connection, not serialized) — standard sqlite, not a shim bug.
+
+**Acceptance met:** libc-free (no DT_NEEDED), 8-thread mutex-contention counter
+exact, SQLite THREADSAFE=1 opens `:memory:` and runs schema, AND real concurrent
+multithreaded SQLite (8 threads / 8000 inserts on one FULLMUTEX connection +
+8 per-thread connections) passes repeatably. `make test-sqlite-threads` +
+`test/csqlite_thread_test.c`. Gate: make test + self-host byte-identical,
+test-threads, test-lua-cross 24/24 all green. x86-64 (--threadsafe is x86-64/i386);
+cross targets deferred (the PAL atomics/clone are x86-64/i386 today — M5).
 
 ## Motivation
 
