@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (112)
+## backlog (111)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,7 +63,6 @@ _none_
 | feature-c-cross-target-feature-coverage | C | 65 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
-| feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
@@ -180,7 +179,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (482)
+## done (483)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -447,6 +446,7 @@ _none_
 | feature-c-cross-lua-sqlite | C | 50 | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
+| feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
@@ -738,7 +738,6 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-designated-init-compound-literals
-- [p 45] [C] feature-c-forward-enum-decl
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [C] feature-c-statement-expressions
 - [p 45] [C] feature-c-vla-and-label-in-if

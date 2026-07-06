@@ -16,3 +16,6 @@ prio: 45  # auto
 
 ## Gate
 Drop 00170.c from test/c-conformance/pxx.skip; runner green.
+
+## Log
+- 2026-07-06 — resolved, commit 6ea9389e.
