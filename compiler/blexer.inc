@@ -34,7 +34,9 @@ begin
     4: begin
       if lower = 'then' then Result := tkThen;
       if lower = 'else' then Result := tkElse;
-      if lower = 'goto' then Result := tkHalt;
+      { 'goto' stays tkIdent — dispatched by text in bparser.inc and lowered
+        to a real AN_GOTO (bug-basic-goto-gosub-halts-program: the old
+        goto->tkHalt alias silently ENDED the program at the jump). }
       if lower = 'next' then Result := tkEnd;
       if lower = 'wend' then Result := tkEnd;
       if lower = 'step' then Result := tkTo;
@@ -43,7 +45,7 @@ begin
     5: begin
       if lower = 'print' then Result := tkwriteln;
       if lower = 'while' then Result := tkWhile;
-      if lower = 'gosub' then Result := tkHalt;
+      { 'gosub' stays tkIdent — same fix as 'goto' above. }
     end;
     6: begin
       if lower = 'return' then Result := tkExit;

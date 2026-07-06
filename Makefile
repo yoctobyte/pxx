@@ -455,6 +455,15 @@ test-core: $(COMPILER)
 	# break/continue, integer / lowered as trunc div, std.debug.print {} placeholders.
 	./$(COMPILER) test/test_zig_skeleton.zig /tmp/test_zig_skeleton26
 	test "$$(/tmp/test_zig_skeleton26)" = "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
+	# BASIC GOTO/GOSUB (bug-basic-goto-gosub-halts-program): real jumps via shared
+	# AN_LABEL/AN_GOTO; nested GOSUB over the Int64 shift-register return stack;
+	# LET-less assignment off-by-one. Previously GOTO/GOSUB silently HALTED (exit 0).
+	./$(COMPILER) test/test_basic_goto_gosub.bas /tmp/test_basic_goto_gosub26
+	test "$$(/tmp/test_basic_goto_gosub26)" = "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')"
+	# the frontend's own comprehensive file: GOTO/GOSUB loop section + FOR/WHILE +
+	# cross-language imports; used to print 1 line of ~21 and exit 0 (silently wrong)
+	./$(COMPILER) test/test_basic_comprehensive.bas /tmp/test_basic_comprehensive26
+	test "$$(/tmp/test_basic_comprehensive26 | wc -l)" = "21"
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas /tmp/test_tobject_destroy_override26
 	test "$$(/tmp/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"
