@@ -28,13 +28,12 @@ _none_
 
 _none_
 
-## backlog (115)
+## backlog (114)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
-| bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
@@ -183,7 +182,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (479)
+## done (480)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -208,6 +207,7 @@ _none_
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
+| bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
 | bug-c-cast-as-call-arg-parse-error | C | 50 | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-chained-pointer-index-loses-base-type | C | 50 | bug | C chained pointer indexing loses base type | — |
@@ -718,7 +718,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-anonymous-struct-union-members
-- [p 55] [C] bug-c-block-scope-func-decl
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [C] bug-c-float-single-precision
 - [p 55] [C] bug-c-fnptr-to-crtl-variadic
