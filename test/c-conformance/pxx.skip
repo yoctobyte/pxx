@@ -7,7 +7,6 @@
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
 00024.c	anon-struct typedef global — bug-c-anonymous-struct-union-members
 00037.c	ptrdiff of &x[i] wrong stride — bug-c-ptrdiff-of-addr-elem
-00038.c	sizeof expr without parens — bug-c-sizeof-expr-no-parens
 00046.c	anonymous struct/union members — bug-c-anonymous-struct-union-members
 00050.c	anonymous union inside braced init — bug-c-init-designated-and-nested
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device

@@ -1125,8 +1125,31 @@ begin
   else if CurTok.Kind = tkIdent then
   begin
     si := FindSym(CurTok.SVal);
-    if si >= 0 then sz := TypeSize(Syms[si].TypeKind);
+    if si >= 0 then
+    begin
+      if Syms[si].IsArray then
+      begin
+        if Syms[si].ElemType = tyRecord then
+          sz := Syms[si].ArrLen * RecSize(Syms[si].ElemRecName)
+        else
+          sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType);
+      end
+      else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
+      else sz := TypeSize(Syms[si].TypeKind);
+    end;
     Next;
+  end
+  else
+  begin
+    { `sizeof unary-expression` without parens (C 6.5.3), e.g. `sizeof 0`,
+      `sizeof !a`. Parse the operand at unary precedence (so `sizeof 0 < 2` is
+      `(sizeof 0) < 2`) and size it by its result type. A bare integer constant
+      is int (4). }
+    node := ParseCUnary;
+    tk := IntToTypeKind(ASTTk[node]);
+    if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
+    else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
+    else sz := TypeSize(tk);
   end;
   node := AllocNode(AN_INT_LIT);
   ASTIVal[node] := sz;

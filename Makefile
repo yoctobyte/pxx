@@ -749,6 +749,8 @@ test-core: $(COMPILER)
 	/tmp/cinit_struct_designator_b15226; test "$$?" = "42"
 	./$(COMPILER) test/cinit_array_designator_b153.c /tmp/cinit_array_designator_b15326
 	/tmp/cinit_array_designator_b15326; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_no_parens_b154.c /tmp/csizeof_no_parens_b15426
+	/tmp/csizeof_no_parens_b15426; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
