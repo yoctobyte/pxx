@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (113)
+## backlog (112)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +68,6 @@ _none_
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
-| feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
 | feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
 | feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
 | feature-callconv-register-args | A | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
@@ -181,7 +180,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (481)
+## done (482)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -455,6 +454,7 @@ _none_
 | feature-c-system-libs-granular-opt-out | C | 50 | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
+| feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
 | feature-class-is-as | A | 50 | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-class-variables | A | 50 | feature | feature: class variables (`class var`) | — |
@@ -741,7 +741,6 @@ _none_
 - [p 45] [C] feature-c-forward-enum-decl
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [C] feature-c-statement-expressions
-- [p 45] [C] feature-c-variadic-macros
 - [p 45] [C] feature-c-vla-and-label-in-if
 - [p 45] [A] feature-callconv-register-args
 - [p 45] [A] feature-cross-frontend-interop-contract

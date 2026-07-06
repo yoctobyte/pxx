@@ -20,3 +20,6 @@ compiler/cpreproc.inc macro parameter collection + expansion: `...` parameter,
 
 ## Gate
 Drop 00083.c/00084.c from test/c-conformance/pxx.skip; runner green.
+
+## Log
+- 2026-07-06 — resolved, commit d26fd5da.
