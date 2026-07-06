@@ -1,0 +1,14 @@
+object MainForm: TMainForm
+  Left = 0
+  Top = 0
+  Width = 400
+  Height = 300
+  Caption = 'E'
+  object PB: TPaintBox
+    Left = 20
+    Top = 60
+    Width = 200
+    Height = 100
+    OnPaint = PBPaint
+  end
+end
