@@ -66,19 +66,35 @@ committed; make test + self-host byte-identical + test-lua-cross 24/24 green.
 + prepared), `SELECT` of int/text/real/NULL columns (single- and multi-column,
 `SELECT *`), all byte-identical to x86-64.
 
-**OPEN — riscv32 ONLY, 3rd distinct bug: ORDER BY (VDBE sorter) SIGSEGVs.** The
-extended test's `SELECT * FROM users ORDER BY id ASC` crashes; minimal repro
-`SELECT * FROM u ORDER BY a ASC` (`/tmp/sqord.c` pattern) SIGSEGVs before printing
-any row. Crash `lw a0,0(a0)` at (this build) 0x8183194, a0=0x50 — a `p->field@0x50`
-deref with p=NULL (uninitialised/wrong pointer in the sorter setup). ra=0x81a195c.
-Everything WITHOUT ORDER BY works, so it's isolated to the VdbeSorter path
-(sqlite3VdbeSorterInit / OP_SorterOpen / OP_SorterInsert / OP_SorterSort — likely a
-sorter struct pointer not set on rv32, or another int/pointer confusion). NEXT
-SESSION: build `--target=riscv32 -g`, break at 0x8183194 under qemu-riscv32 + gdb,
-identify the function (address-dump technique: print `&sqlite3VdbeSorterInit` etc
-from a helper called in main, bracket the crash PC), walk the NULL pointer to its
-source. riscv32 remains LOWEST PRIO (user: gimmick/assume-IDF) so fine to leave the
-sorter for later; core sqlite (no ORDER BY) is functional.
+**3rd bug — ORDER BY (VDBE sorter) crash — FIXED (commit `2c83830c`, `fix(cfront):
+keep base record for double-pointer struct fields`).** Turned out NOT
+riscv32-specific: `SELECT ... ORDER BY <non-indexed column>` (the sorter path)
+SIGSEGV'd on ALL 32-bit targets (i386/arm32/riscv32), and was latently wrong on
+LP64 too. The extended test only did `ORDER BY id` (primary key → btree already
+ordered → no sorter), so it was never exercised. Root cause = a general C-frontend
+miscompile: a struct field declared `T **m` dropped its base record
+(cparser.inc's C struct-field declarator loop set `declElemRec := REC_NONE` for
+`declStars>=2`), so `p->m[i]->field` resolved the trailing `->field` to REC_NONE →
+offset 0. sqlite's `p->apCsr[pOp->p3]->cacheStatus = CACHE_STALE` in OP_SorterData
+thus wrote offset 0, zeroing the pseudo-cursor's `eCurType`/`nullRow` instead of
+`cacheStatus@24`. OP_Column then saw a bogus CURTYPE_BTREE cursor, dereferenced
+sqlite's fake cursor (`sqlite3BtreeFakeValidCursor`, a 1-byte static), and crashed
+in getCellInfo→btreeParseCell(NULL pPage). On LP64 the fake cursor's static
+neighbour happened to be nonzero (`info.nSize`), so getCellInfo skipped the parse
+and survived. Fix mirrors the existing local-variable `T**` fix in ParseCDeclType:
+keep `declElemRec := baseElemRec` (declElemTk stays tyPointer for stride). Minimal
+repro: `struct Vm{int x; struct Cur **apCsr;}; p->apCsr[i]->cacheStatus=0;` clobbered
+`apCsr[i]->eCurType` before the fix. DEBUG PATH (recorded): bisected VdbeExec by
+per-opcode markers → OP_SorterData zeroed cursor 2 → bracketed the exact write →
+local-pointer split fixed it → minimal 3-level `p->arr[i]->field` repro reproduced
+on x64 too → cparser declStars>=2. **riscv32 `ORDER BY a` now sorts correctly;
+make test + self-host byte-identical + test-lua-cross 24/24 green.** GENERAL cfront
+fix (any `struct{...T**m...}; p->m[i]->field`).
+
+**riscv32 sqlite is now essentially GREEN** — CREATE/INSERT/SELECT/ORDER BY/
+transactions/aggregates all run (extended-test byte-identical check in progress).
+All three 2026-07-06 #3 fixes (heap, variadic, double-pointer-field) are GENERAL
+compiler/runtime fixes, not riscv32 hacks.
 
 ## Progress log (session 2026-07-06 #2, i386 + arm32 sqlite GREEN — 4/5 targets)
 
