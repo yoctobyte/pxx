@@ -1,12 +1,21 @@
 ---
-prio: 90  # auto
+prio: 90
+blocked-by: [bug-c-init-struct-designators, bug-c-init-array-designators, bug-c-init-brace-elision-nested]
 ---
 
-# C initializers: designated + nested/brace-elided initializers give SILENT wrong values
+# C initializers: designated + nested/brace-elided initializers (EPIC)
 
-- **Type:** bug (miscompile — compiles clean, runs wrong). Track C (cparser init lowering).
+- **Type:** bug epic (miscompile — compiles clean, runs wrong). Track C (cparser init lowering).
 - **Priority:** HIGH — silent wrong data, biggest c-testsuite failure cluster (9 tests).
 - **Found:** 2026-07-06, c-testsuite conformance run (tools/run_c_conformance.sh), baseline 178/220.
+- **Decomposed 2026-07-06** (too big for one landing; three code sites + a
+  recursive rework). Now an epic that completes when its three slices land —
+  do them in order:
+  1. [[bug-c-init-struct-designators]] — `.field =` (local + global cursor).
+  2. [[bug-c-init-array-designators]] — `[i] =` + `[]` size inference.
+  3. [[bug-c-init-brace-elision-nested]] — recursive elision walker (hardest,
+     subsumes the two cursors).
+  The prio (90) propagates to all three, so they float to the top of Track C.
 
 ## Failing tests (library_candidates/c-testsuite/tests/single-exec)
 - 00048 `struct S s = { .b = 2, .a = 1 };` — designated struct init, exit 1 (s.a != 1)
