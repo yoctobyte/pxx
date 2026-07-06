@@ -23,3 +23,6 @@ cparser.inc global var init const-expr evaluation.
 
 ## Gate
 Drop 00107.c/00119.c from test/c-conformance/pxx.skip; runner green.
+
+## Log
+- 2026-07-07 — resolved, commit 5ba2f898.

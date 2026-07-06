@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (111)
+## backlog (110)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -46,7 +46,6 @@ _none_
 | bug-c-preproc-paste-rescan | C | 55 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
-| bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -179,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (483)
+## done (484)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -252,6 +251,7 @@ _none_
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | C | 50 | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | C | 50 | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
+| bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-static-local-initializer-reruns-every-call | A/C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
@@ -686,7 +686,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
-- [p 90] [C] bug-c-static-init-cast-and-int-to-double
 - [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
