@@ -10,7 +10,6 @@
 00046.c	anonymous struct/union members — bug-c-anonymous-struct-union-members
 00050.c	anonymous union inside braced init — bug-c-init-designated-and-nested
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device
-00078.c	block-scope function declaration — bug-c-block-scope-func-decl
 00083.c	__VA_ARGS__ variadic macro — feature-c-variadic-macros
 00084.c	__VA_ARGS__ variadic macro — feature-c-variadic-macros
 00089.c	function returning typedef fnptr type — bug-c-function-returning-fnptr-declarator

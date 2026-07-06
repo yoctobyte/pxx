@@ -2359,6 +2359,21 @@ begin
   begin
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    if CurTok.Kind = tkLParen then
+    begin
+      { Block-scope function prototype `int f(params);` (C 6.7 — a declaration,
+        no definition). The function lives at file scope; the local proto is a
+        no-op, so skip the balanced parameter list and emit no code. }
+      brDepth := 1; Next;
+      while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
+      begin
+        if CurTok.Kind = tkLParen then Inc(brDepth)
+        else if CurTok.Kind = tkRParen then Dec(brDepth);
+        Next;
+      end;
+      if CurTok.Kind = tkComma then begin Next; Continue; end;
+      Break;
+    end;
     if CurTok.Kind = tkLBrack then
     begin
       { fixed array  T name[N][M]...  — dimensions are constant expressions.
