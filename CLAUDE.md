@@ -12,10 +12,16 @@ The user runs **multiple Claude agents at once** on this repo. A track is a
 **lane to keep concurrent agents from clobbering each other's files, plus the
 gate each must stay green** — it is NOT an ontology of the codebase. So:
 
-- **One agent often holds several tracks** (e.g. "you're A+B+C"). That's the
-  normal case, not a failure — then you're free to touch all of them, you just
-  respect every gate you span. The letters only matter *when* two agents run at
-  once and must not fight over the same file.
+- **Default: one lane per session.** Infer a single track from the request and
+  stay in it. This is for *your context*, not git — juggling two topics (say the
+  Pascal frontend and the Rust frontend at once) makes you reason worse, even
+  though their source rarely collides. Mergeable ≠ free to mix: the cost is
+  context confusion, not merge conflicts.
+- **Several tracks only when the user explicitly assigns them** ("you're A+C").
+  Then it's fine — you're free to touch all of them, you just respect every gate
+  you span, and a shared-internals change is still filed as a Track A ticket
+  (combined-track note below). The letters otherwise only matter *when* two
+  agents run at once and must not fight over the same file.
 - **Don't invent new letters.** No Track L for libraries, no "LC" for C
   libraries. The set below is deliberately small; resist splitting it finer.
 
@@ -114,14 +120,31 @@ and is what stops AST-node-number / token collisions. Gate = C tests green +
 self-host byte-identical + cross. Land only green; big destabilizing work goes in
 behind a flag or incrementally, never a long-lived branch.
 
-### Combined-track assignment (one agent, two tracks)
-The user may put a single agent on **two tracks at once** — e.g. "you are Track A
-*and* C". Then the tracks stay distinct (own files, own gates) and a shared-code
+### Combined-track assignment (one agent, several tracks)
+The user may put a single agent on **more than one track** — e.g. "you are Track
+A *and* C". Then the tracks stay distinct (own files, own gates) and a shared-code
 change is **still filed as a Track A ticket** for traceability — but the *same
 agent may resolve its own ticket*, because the user has confirmed no other agent
 holds Track A concurrently, so there is no coordination hazard. File → (normally
 hand off) → here, file → self-resolve. Drop back to file-and-hand-off the moment
 the agent is single-track again.
+
+Not all combinations carry the same risk, and it's about **shared files, not
+topics**:
+- **Frontend + frontend** (C/P/R/Z pairs) is the low-risk combo — each owns a
+  mostly-disjoint file set (`cparser` vs `zparser` vs the Rust files…), so their
+  edits merge cleanly. The catch is **P**: the Pascal frontend still lives in the
+  *shared* `lexer.inc`/`parser.inc`, so "P + anything" touches A's ground — treat
+  the P edits under A's gate + no-concurrent-edit rule.
+- **Anything + A** is the combo that needs the "no other agent holds A"
+  confirmation, because A is where the shared files (`ir*.inc`, `symtab.inc`,
+  `defs.inc`, backends, and the P-shared `lexer`/`parser`) actually live. Two
+  agents editing one of those at once is the only real hazard the letters exist
+  to prevent.
+
+Even when the source would merge, keep the *default* to one lane (top of this
+section) — combining is a deliberate call the user makes, not a convenience you
+reach for, because the context cost lands on your reasoning, not on git.
 
 ### Track D in one line
 Own `docs/**` (Markdown the website publishes verbatim from git). No build,
