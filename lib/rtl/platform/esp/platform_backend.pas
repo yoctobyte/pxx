@@ -25,6 +25,17 @@ function PalBackendRmdir(path: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
+function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
+function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalBackendFsync(handle: Integer): Integer;
+function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendGetpid: Integer;
+function PalBackendNanosleep(sec, nsec: Int64): Integer;
+function PalBackendRealtime(var sec, nsec: Int64): Integer;
+function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+function PalBackendMmapAnon(len: Int64): Pointer;
+function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -373,6 +384,64 @@ end;
 function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
 begin
   ClearPalFileStat(info);
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
+begin
+  ClearPalFileStat(info);
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  ClearPalFileStat(info);
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFsync(handle: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFchmod(handle, mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetpid: Integer;
+begin
+  Result := 1;
+end;
+
+function PalBackendNanosleep(sec, nsec: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRealtime(var sec, nsec: Int64): Integer;
+begin
+  sec := 0; nsec := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendMmapAnon(len: Int64): Pointer;
+begin
+  Result := Pointer(-1);
+end;
+
+function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
+begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

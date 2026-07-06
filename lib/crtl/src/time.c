@@ -15,6 +15,16 @@
 
 extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
+extern int __pxx_nanosleep(long long sec, long long nsec);
+
+/* nanosleep: suspend for req->tv_sec + req->tv_nsec. `rem` (unslept remainder on
+   signal) is zeroed — the PAL bridge does not surface EINTR partial sleeps, which
+   sqlite's busy-wait retry does not depend on. */
+int nanosleep(const struct timespec *req, struct timespec *rem) {
+  int r = __pxx_nanosleep((long long)req->tv_sec, (long long)req->tv_nsec);
+  if (rem) { rem->tv_sec = 0; rem->tv_nsec = 0; }
+  return r;
+}
 
 time_t time(time_t *t) {
   time_t now = (time_t)__pxx_time();

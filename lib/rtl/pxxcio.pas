@@ -58,11 +58,40 @@ procedure __pxx_exit(code: Integer);
 function __pxx_time: Int64;
 function __pxx_clock: Int64;
 
+{ C filesystem-metadata bridge for sqlite's unix VFS (libc-free). stat/fstat/lstat
+  fill this fixed-layout record (5 Int64 + 2 Integer = 48 bytes, identical on every
+  target); the C veneer copies it into the caller's `struct stat`. }
+type
+  PPxxStatBuf = ^TPxxStatBuf;
+  TPxxStatBuf = record
+    Size:    Int64;
+    MTime:   Int64;
+    Ino:     Int64;
+    Dev:     Int64;
+    Blocks:  Int64;
+    Mode:    Integer;
+    BlkSize: Integer;
+  end;
+
+function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;
+function __pxx_stat(path: PChar; sb: PPxxStatBuf): Integer;
+function __pxx_lstat(path: PChar; sb: PPxxStatBuf): Integer;
+function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
+function __pxx_fsync(fd: Integer): Integer;
+function __pxx_fchmod(fd, mode: Integer): Integer;
+function __pxx_mkdir(path: PChar; mode: Integer): Integer;
+function __pxx_getpid: Integer;
+function __pxx_nanosleep(sec, nsec: Int64): Integer;
+function __pxx_utimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+{ fills two Int64 out-slots the C gettimeofday veneer narrows into struct timeval }
+function __pxx_realtime(secOut, usecOut: Pointer): Integer;
+
 implementation
 
 type
   PLongWord = ^LongWord;
   PInteger = ^Integer;
+  PInt64 = ^Int64;
 
 function __pxx_write(fd: Integer; buf: Pointer; n: Int64): Int64;
 begin
@@ -248,6 +277,81 @@ begin
   { 2 = CLOCK_PROCESS_CPUTIME_ID; report microseconds (CLOCKS_PER_SEC=1e6). }
   r := __pxxrawsyscall(n, 2, Int64(@ts), 0, 0, 0, 0);
   if r = 0 then Result := Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000;
+end;
+
+procedure FillStatBuf(const info: TPalFileStat; sb: PPxxStatBuf);
+begin
+  sb^.Size    := info.Size;
+  sb^.MTime   := info.MTimeSec;
+  sb^.Ino     := info.Ino;
+  sb^.Dev     := info.Dev;
+  sb^.Blocks  := info.Blocks;
+  sb^.Mode    := info.Mode;
+  sb^.BlkSize := info.BlkSize;
+end;
+
+function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;
+var info: TPalFileStat;
+begin
+  Result := PalFstat(fd, info);
+  if Result >= 0 then FillStatBuf(info, sb);
+end;
+
+function __pxx_stat(path: PChar; sb: PPxxStatBuf): Integer;
+var info: TPalFileStat;
+begin
+  Result := PalStat(path, info);
+  if Result >= 0 then FillStatBuf(info, sb);
+end;
+
+function __pxx_lstat(path: PChar; sb: PPxxStatBuf): Integer;
+var info: TPalFileStat;
+begin
+  Result := PalLstat(path, info);
+  if Result >= 0 then FillStatBuf(info, sb);
+end;
+
+function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
+begin
+  Result := PalFcntl(fd, cmd, arg);
+end;
+
+function __pxx_fsync(fd: Integer): Integer;
+begin
+  Result := PalFsync(fd);
+end;
+
+function __pxx_fchmod(fd, mode: Integer): Integer;
+begin
+  Result := PalFchmod(fd, mode);
+end;
+
+function __pxx_mkdir(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalMkdir(path, mode);
+end;
+
+function __pxx_getpid: Integer;
+begin
+  Result := PalGetpid;
+end;
+
+function __pxx_nanosleep(sec, nsec: Int64): Integer;
+begin
+  Result := PalNanosleep(sec, nsec);
+end;
+
+function __pxx_utimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+begin
+  Result := PalUtimes(path, atimeSec, mtimeSec);
+end;
+
+function __pxx_realtime(secOut, usecOut: Pointer): Integer;
+var sec, nsec: Int64;
+begin
+  Result := PalRealtime(sec, nsec);
+  PInt64(secOut)^ := sec;
+  PInt64(usecOut)^ := nsec div 1000;
 end;
 
 end.

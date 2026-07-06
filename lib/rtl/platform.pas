@@ -85,6 +85,17 @@ function PalRmdir(path: PChar): Integer;
 function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalStat(path: PChar; var info: TPalFileStat): Integer;
 function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+function PalFstat(handle: Integer; var info: TPalFileStat): Integer;
+function PalLstat(path: PChar; var info: TPalFileStat): Integer;
+function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalFsync(handle: Integer): Integer;
+function PalFchmod(handle, mode: Integer): Integer;
+function PalGetpid: Integer;
+function PalNanosleep(sec, nsec: Int64): Integer;
+function PalRealtime(var sec, nsec: Int64): Integer;
+function PalUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+function PalMmapAnon(len: Int64): Pointer;
+function PalMunmap(addr: Pointer; len: Int64): Integer;
 
 function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -216,6 +227,61 @@ end;
 function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
 begin
   Result := PalBackendStatAt(dirHandle, path, info);
+end;
+
+function PalFstat(handle: Integer; var info: TPalFileStat): Integer;
+begin
+  Result := PalBackendFstat(handle, info);
+end;
+
+function PalLstat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := PalBackendLstat(path, info);
+end;
+
+function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
+begin
+  Result := PalBackendFcntl(handle, cmd, arg);
+end;
+
+function PalFsync(handle: Integer): Integer;
+begin
+  Result := PalBackendFsync(handle);
+end;
+
+function PalFchmod(handle, mode: Integer): Integer;
+begin
+  Result := PalBackendFchmod(handle, mode);
+end;
+
+function PalGetpid: Integer;
+begin
+  Result := PalBackendGetpid;
+end;
+
+function PalNanosleep(sec, nsec: Int64): Integer;
+begin
+  Result := PalBackendNanosleep(sec, nsec);
+end;
+
+function PalRealtime(var sec, nsec: Int64): Integer;
+begin
+  Result := PalBackendRealtime(sec, nsec);
+end;
+
+function PalUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+begin
+  Result := PalBackendUtimes(path, atimeSec, mtimeSec);
+end;
+
+function PalMmapAnon(len: Int64): Pointer;
+begin
+  Result := PalBackendMmapAnon(len);
+end;
+
+function PalMunmap(addr: Pointer; len: Int64): Integer;
+begin
+  Result := PalBackendMunmap(addr, len);
 end;
 
 function PalSocket(domain, kind, proto: Integer): Integer;

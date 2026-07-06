@@ -25,6 +25,17 @@ function PalBackendRmdir(path: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
+function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
+function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalBackendFsync(handle: Integer): Integer;
+function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendGetpid: Integer;
+function PalBackendNanosleep(sec, nsec: Int64): Integer;
+function PalBackendRealtime(var sec, nsec: Int64): Integer;
+function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+function PalBackendMmapAnon(len: Int64): Pointer;
+function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -74,6 +85,7 @@ const
   SYS_sendto=44; SYS_recvfrom=45; SYS_ppoll=271;
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
+  SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -86,6 +98,7 @@ const
   SYS_ppoll=309;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
+  SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -97,6 +110,7 @@ const
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
+  SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -108,6 +122,7 @@ const
   SYS_sendto=290; SYS_recvfrom=292; SYS_ppoll=336;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
+  SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -123,8 +138,11 @@ const
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
+  SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
 {$endif}
   PAL_AT_FDCWD = -100;
+  PAL_AT_EMPTY_PATH = $1000;
+  PAL_AT_SYMLINK_NOFOLLOW = $100;
   PAL_AT_REMOVEDIR = $200;
   PAL_STATX_BASIC_STATS = $000007FF;
   PAL_S_IFMT = $F000;
@@ -284,6 +302,12 @@ begin
   Result := Integer(StatxByte(buf, off)) + Integer(StatxByte(buf, off + 1)) * 256;
 end;
 
+function StatxDwordLE(buf: Pointer; off: Integer): Int64;
+begin
+  Result := Int64(StatxByte(buf, off)) + Int64(StatxByte(buf, off + 1)) * 256 +
+            Int64(StatxByte(buf, off + 2)) * 65536 + Int64(StatxByte(buf, off + 3)) * 16777216;
+end;
+
 function StatxInt64LE(buf: Pointer; off: Integer): Int64;
 var
   i: Integer;
@@ -305,29 +329,112 @@ begin
   info.Mode := 0;
   info.IsDir := False;
   info.IsFile := False;
+  info.Ino := 0;
+  info.Dev := 0;
+  info.Blocks := 0;
+  info.BlkSize := 4096;
 end;
 
-function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+{ statx(2) — arch-neutral stat with a uniform struct layout on every target, so
+  one field-offset map works for x86-64/i386/aarch64/arm32/riscv32 alike. }
+function DoStatx(dirHandle: Integer; path: PChar; flags: Integer; var info: TPalFileStat): Integer;
 var
   sx: array[0..255] of Byte;
-  mode: Integer;
+  mode, major, minor: Integer;
 begin
   ClearPalFileStat(info);
-  Result := Integer(__pxxrawsyscall(SYS_statx, dirHandle, Int64(path), 0,
+  Result := Integer(__pxxrawsyscall(SYS_statx, dirHandle, Int64(path), flags,
     PAL_STATX_BASIC_STATS, Int64(@sx[0]), 0));
   if Result < 0 then Exit;
 
   mode := StatxWordLE(@sx[0], $1C);
   info.Mode := mode;
+  info.BlkSize := Integer(StatxDwordLE(@sx[0], $04));
+  info.Ino := StatxInt64LE(@sx[0], $20);
   info.Size := StatxInt64LE(@sx[0], $28);
+  info.Blocks := StatxInt64LE(@sx[0], $30);
   info.MTimeSec := StatxInt64LE(@sx[0], $70);
+  major := Integer(StatxDwordLE(@sx[0], $88));
+  minor := Integer(StatxDwordLE(@sx[0], $8C));
+  info.Dev := (Int64(major) shl 20) or Int64(minor and $FFFFF);  { stable (dev,ino) key for sqlite locks }
   info.IsDir := (mode and PAL_S_IFMT) = PAL_S_IFDIR;
   info.IsFile := (mode and PAL_S_IFMT) = PAL_S_IFREG;
 end;
 
+function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := DoStatx(dirHandle, path, 0, info);
+end;
+
 function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
 begin
-  Result := PalBackendStatAt(PAL_AT_FDCWD, path, info);
+  Result := DoStatx(PAL_AT_FDCWD, path, 0, info);
+end;
+
+function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := DoStatx(PAL_AT_FDCWD, path, PAL_AT_SYMLINK_NOFOLLOW, info);
+end;
+
+function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
+var empty: array[0..0] of Byte;
+begin
+  empty[0] := 0;   { statx(fd, "", AT_EMPTY_PATH) = fstat }
+  Result := DoStatx(handle, PChar(@empty[0]), PAL_AT_EMPTY_PATH, info);
+end;
+
+function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fcntl, handle, cmd, arg, 0, 0, 0));
+end;
+
+function PalBackendFsync(handle: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fsync, handle, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendFchmod(handle, mode: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fchmod, handle, mode, 0, 0, 0, 0));
+end;
+
+function PalBackendGetpid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getpid, 0, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendNanosleep(sec, nsec: Int64): Integer;
+var ts: array[0..1] of NativeInt;   { struct timespec {tv_sec; tv_nsec}, native-word fields per arch }
+begin
+  ts[0] := NativeInt(sec); ts[1] := NativeInt(nsec);
+  Result := Integer(__pxxrawsyscall(SYS_nanosleep, Int64(@ts[0]), 0, 0, 0, 0, 0));
+end;
+
+function PalBackendRealtime(var sec, nsec: Int64): Integer;
+var ts: array[0..1] of NativeInt;
+begin
+  ts[0] := 0; ts[1] := 0;
+  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, 0, Int64(@ts[0]), 0, 0, 0, 0)); { 0 = CLOCK_REALTIME }
+  sec := ts[0]; nsec := ts[1];
+end;
+
+function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+var ts: array[0..3] of NativeInt;  { struct timespec[2] {atime, mtime} }
+begin
+  ts[0] := NativeInt(atimeSec); ts[1] := 0;
+  ts[2] := NativeInt(mtimeSec); ts[3] := 0;
+  Result := Integer(__pxxrawsyscall(SYS_utimensat, PAL_AT_FDCWD, Int64(path), Int64(@ts[0]), 0, 0, 0));
+end;
+
+function PalBackendMmapAnon(len: Int64): Pointer;
+begin
+  { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0); 32-bit = mmap2, page-offset 0 }
+  Result := Pointer(__pxxrawsyscall(SYS_mmap, 0, len, 3, 34, -1, 0));
+end;
+
+function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_munmap, Int64(addr), len, 0, 0, 0, 0));
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
