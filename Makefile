@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-zlib test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -3037,6 +3037,14 @@ test-cjson: $(COMPILER)
 # ticket-referenced line per test; anything else failing = regression, exit 1.
 test-c-conformance: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER)
+
+# Track C gate bundle: the base gate (test-core self-host + C unit tests) PLUS
+# the c-testsuite conformance battery. Run this before pushing a C-frontend
+# change — `make test` alone does NOT run c-conformance, so a cparser/clexer
+# change can pass test-core + self-host and still silently regress c-testsuite
+# (e.g. the 00022 typedef-shadow regression, 2026-07-06).
+test-c: test-core test-c-conformance
+	@echo "test-c: base gate + c-conformance green"
 
 # zlib v1.3.1 bring-up (feature-c-corpus-zlib, corpus step 2). Unity-builds
 # crtl + the zlib TUs + zlib's own test/example.c and diffs stdout+exit against
