@@ -19,3 +19,6 @@ Check what's already predefined (`__x86_64__` etc.) and align with gcc -dM.
 
 ## Gate
 Drop 00212.c from test/c-conformance/pxx.skip; runner green.
+
+## Log
+- 2026-07-06 — resolved, commit 576ff6ca.
