@@ -25,6 +25,61 @@
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
+## Progress log (session 2026-07-06 #3, riscv32 sqlite: heap + variadic FIXED, core CRUD works)
+
+**riscv32 sqlite CREATE TABLE / INSERT / SELECT now RUN** (was: SIGSEGV at the
+first CREATE TABLE). Two root causes fixed, both GENERAL riscv32 bugs, both
+committed; make test + self-host byte-identical + test-lua-cross 24/24 green.
+
+1. **`fix(riscv32): hosted heap uses mmap, not the 64 KiB ESP static arena`
+   (commit 8f59aad3).** THE "sqlite3EndTable crash." `builtinheap.pas` line 7 did
+   `{$ifdef CPU_RISCV32}{$define PXX_ESP}` — hosted riscv32 (qemu-user linux) was
+   forced onto the bare-metal ESP path: a single 64 KiB static `EspArena`, no
+   mmap. Cross lua fits in 64 KiB so it passed; sqlite runs hundreds of allocs
+   during CREATE TABLE, exhausts the arena → `HeapMmap` returns 0 → `PXXAlloc`
+   bump path sets base=0 and stores the size header through NULL
+   (`PWord(0)^ := size`, the `sw a1,0(a0)` a0=0 crash). Fix: only ESP-heap for
+   bare-metal riscv32 (`PXX_ESP_BARE`); hosted riscv32 uses the normal 256 MiB
+   mmap pool (its read/write already use linux syscalls 63/64) via a new HeapMmap
+   branch (generic mmap = 222). Verified: malloc+realloc torture (>64 KiB, 300
+   blocks) bad=0. DIAGNOSIS: the crash disasm was PXXAlloc's `PWord(base)^:=size;
+   Result:=base+8`; markers showed all mallocs valid until the arena ran dry.
+
+2. **`fix(riscv32): variadic args that spill past a0-a7` (commit b9d924de).** After
+   the heap fix, CREATE TABLE reached VDBE exec and crashed in OP_SeekRowid
+   indexing `aMem[pOp->p3]` with p3 = a stack pointer. Traced UP: p3 ← ExprCodeTarget
+   TK_REGISTER `iTable` ← the `#N` token in the nested-parse SQL ← `sqlite3NestedParse
+   ("...WHERE rowid=#%d", ..., pParse->regRowid)`. regRowid was 1, but the formatted
+   SQL was `rowid=#724214432` (a stack ptr in decimal). Root: the format has 9 total
+   args (2 named + 7 varargs); the trailing `%d` is the 7th vararg = the FIRST to
+   spill past a0-a7 onto the stack, and it read garbage. Two bugs in the riscv32
+   variadic ABI: (a) va_start overflow anchor hardcoded `s0+8` but the callee's
+   incoming stack-arg base is `s0+16` (=entry_sp, per parser.inc rv32 spill); (b) the
+   call site pushes args in index order so the stack tail is REVERSED — arm32 already
+   reverses its variadic tail, riscv32 didn't. Fix: anchor at s0+16 (cparser.inc) +
+   reverse the (nArgs-8) variadic stack-tail words at the call site
+   (ir_codegen_riscv32.inc, mirrors arm32). Repro: variadic fn, 2 named + 7..N int
+   varargs → 7th+ read garbage/reversed; now in order. GENERAL riscv32 bug (any
+   variadic call with >8 total arg words).
+
+**Verified working on riscv32 (qemu-user):** `CREATE TABLE`, `INSERT` (incl multi-row
++ prepared), `SELECT` of int/text/real/NULL columns (single- and multi-column,
+`SELECT *`), all byte-identical to x86-64.
+
+**OPEN — riscv32 ONLY, 3rd distinct bug: ORDER BY (VDBE sorter) SIGSEGVs.** The
+extended test's `SELECT * FROM users ORDER BY id ASC` crashes; minimal repro
+`SELECT * FROM u ORDER BY a ASC` (`/tmp/sqord.c` pattern) SIGSEGVs before printing
+any row. Crash `lw a0,0(a0)` at (this build) 0x8183194, a0=0x50 — a `p->field@0x50`
+deref with p=NULL (uninitialised/wrong pointer in the sorter setup). ra=0x81a195c.
+Everything WITHOUT ORDER BY works, so it's isolated to the VdbeSorter path
+(sqlite3VdbeSorterInit / OP_SorterOpen / OP_SorterInsert / OP_SorterSort — likely a
+sorter struct pointer not set on rv32, or another int/pointer confusion). NEXT
+SESSION: build `--target=riscv32 -g`, break at 0x8183194 under qemu-riscv32 + gdb,
+identify the function (address-dump technique: print `&sqlite3VdbeSorterInit` etc
+from a helper called in main, bracket the crash PC), walk the NULL pointer to its
+source. riscv32 remains LOWEST PRIO (user: gimmick/assume-IDF) so fine to leave the
+sorter for later; core sqlite (no ORDER BY) is functional.
+
 ## Progress log (session 2026-07-06 #2, i386 + arm32 sqlite GREEN — 4/5 targets)
 
 **MILESTONE: sqlite3 runs byte-identical to the oracle on x86-64, aarch64, i386,
