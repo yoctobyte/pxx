@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (111)
+## backlog (110)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -61,7 +61,6 @@ _none_
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-gzgetc-fnlike-macro-call |
 | feature-c-cross-target-feature-coverage | C | 65 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
-| feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
@@ -179,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (484)
+## done (485)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -445,6 +444,7 @@ _none_
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-cross-lua-sqlite | C | 50 | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
+| feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
@@ -687,7 +687,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
-- [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [C] feature-c-cross-target-feature-coverage

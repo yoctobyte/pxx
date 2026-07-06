@@ -32,3 +32,6 @@ ticket.
 ## Gate
 Drop 00210/00211/00215/00217 from test/c-conformance/pxx.skip; runner green;
 make test + self-host byte-identical.
+
+## Log
+- 2026-07-07 — resolved, commit 147087b0.
