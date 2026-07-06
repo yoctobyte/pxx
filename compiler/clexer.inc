@@ -338,9 +338,11 @@ begin
         else done := True;
       end;
     end else begin
+      { C octal: a leading 0 followed by digits is base 8 (e.g. 0100 = 64, as in
+        the O_* fcntl flags). The leading 0 was already consumed above. }
       n := 0;
-      while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
-        begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
+      while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7']) do
+        begin n := n * 8 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end;
     { consume an integer suffix (u/U/l/L) on hex/octal/decimal-zero literals;
       u/U marks unsigned (SVal='u') -> parser tags tyUInt32 }
