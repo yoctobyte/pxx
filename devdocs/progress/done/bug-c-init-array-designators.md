@@ -28,3 +28,6 @@ set the running `ei` to it (consume `[ ] =`); else keep sequential `ei`. Track
 ## Gate
 00092/00147 exit 0 (00148 needs struct designators too); drop from
 `test/c-conformance/pxx.skip`; regression test; `make test` + self-host.
+
+## Log
+- 2026-07-06 — resolved, commit 3f4bc2b3.

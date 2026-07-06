@@ -16,7 +16,6 @@
 00084.c	__VA_ARGS__ variadic macro — feature-c-variadic-macros
 00089.c	function returning typedef fnptr type — bug-c-function-returning-fnptr-declarator
 00091.c	nested braces array-of-struct init — bug-c-init-designated-and-nested
-00092.c	array designated initializer [2]= — bug-c-init-designated-and-nested
 00104.c	~int vs 0xffffffff hex-const typing — bug-c-expr-result-type-model
 00107.c	cast in global initializer yields 0 — bug-c-static-init-cast-and-int-to-double
 00112.c	"abc" == (void*)0 SIGSEGV, literal must decay to char* — bug-c-string-literal-binop-decay
@@ -25,8 +24,6 @@
 00129.c	goto over decls + #define s s shadowing — bug-c-goto-shadowing-00129
 00130.c	pointer-to-array declarator char (*p)[4] — bug-c-pointer-to-array-declarator
 00143.c	Duff's device (case in nested do-while) — bug-c-switch-nonblock-and-duffs-device
-00147.c	array designated initializer out-of-order — bug-c-init-designated-and-nested
-00148.c	array-of-struct designated initializer — bug-c-init-designated-and-nested
 00149.c	file-scope compound literal SIGSEGV — feature-c-compound-literals
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
 00170.c	forward enum declaration — feature-c-forward-enum-decl

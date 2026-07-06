@@ -3230,26 +3230,48 @@ end;
   richer zero-inits + balanced skips. Non-consuming (scans Tokens from the inner
   token). }
 function CBraceFlatIntInitCountAt(openIdx: Integer): Integer;
-var j, depth: Integer; sawValue: Boolean;
+var j, depth, ei, maxSeen: Integer; sawValue: Boolean;
 begin
+  { Returns the element COUNT of a flat integer brace init = max index + 1,
+    honouring `[k] =` array designators (C 6.7.8) so `{5, [2]=2, 3}` counts as
+    4, not 3. -1 = not a flat int init (nested aggregate / string / non-literal
+    designator index). }
   Result := 0;
   depth := 1;
   sawValue := False;
+  ei := 0; maxSeen := -1;
   j := openIdx + 1;
   while (depth > 0) and (j < TokCount) do
   begin
     case Tokens[j].Kind of
       tkBegin: begin Result := -1; Exit; end;   { nested aggregate -> not flat }
+      tkLBrack:
+        begin
+          { `[<int>] =` element designator repositions the running index. Only a
+            literal index is understood here (the scanner can't fold consts). }
+          if (depth = 1) and (Tokens[j + 1].Kind = tkInteger) and
+             (Tokens[j + 2].Kind = tkRBrack) then
+          begin
+            ei := Tokens[j + 1].IVal;
+            Inc(j, 2);   { land on ']'; the loop's Inc(j) steps past it }
+          end
+          else begin Result := -1; Exit; end;
+        end;
+      tkAssign: ;   { designator '=' — skip }
       tkEnd:
         begin
-          if (depth = 1) and sawValue then Inc(Result);
+          if (depth = 1) and sawValue and (ei > maxSeen) then maxSeen := ei;
           Dec(depth);
         end;
       tkComma:
         begin
           if depth = 1 then
           begin
-            if sawValue then Inc(Result);
+            if sawValue then
+            begin
+              if ei > maxSeen then maxSeen := ei;
+              Inc(ei);
+            end;
             sawValue := False;
           end;
         end;
@@ -3269,7 +3291,8 @@ begin
     end;
     Inc(j);
   end;
-  if depth <> 0 then Result := -1;
+  if depth <> 0 then begin Result := -1; Exit; end;
+  Result := maxSeen + 1;
 end;
 
 function CBraceIsFlatIntInit: Boolean;
@@ -3753,8 +3776,17 @@ begin
         ei := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          { `[k] =` array element designator repositions the index (C 6.7.8);
+            skipped slots stay 0 (globals are BSS-zeroed). }
+          if CurTok.Kind = tkLBrack then
+          begin
+            Next;                                     { '[' }
+            ei := CEvalConstExpr;
+            Expect(tkRBrack, ']');
+            if CurTok.Kind = tkAssign then Next;      { '=' }
+          end;
           initV := CEvalConstExpr;
-          if (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+          if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
           begin
             PendingInitSym[PendingInitCount]  := idx;
             PendingInitElem[PendingInitCount] := ei;
@@ -3777,6 +3809,14 @@ begin
         ei := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          { `[k] = {...}` array-element designator repositions the outer index. }
+          if CurTok.Kind = tkLBrack then
+          begin
+            Next;                                     { '[' }
+            ei := CEvalConstExpr;
+            Expect(tkRBrack, ']');
+            if CurTok.Kind = tkAssign then Next;      { '=' }
+          end;
           if CurTok.Kind = tkBegin then
           begin
             Next;   { consume element opening brace }
