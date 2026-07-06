@@ -20,3 +20,14 @@ Drop 00089.c/00124.c from test/c-conformance/pxx.skip; runner green.
 
 ## Triage note (2026-07-06)
 00089: `fty go()` where `fty` is a typedef for a fn-pointer — `go` is not registered as a function ("call to undeclared function: go"), so the fn-def detector mis-handles a typedef-fnptr RETURN type (likely treats `go` as a fn-pointer variable via the typedef proc-signature). 00124: full inline declarator `int (*f1(int,int))(int,int)` compiles but the double-indirect call returns garbage (85). Both are C declarator-grammar work (function returning function pointer), a focused session.
+
+## Pinned 2026-07-07
+00089 core reduced: `typedef int (*fty)(void); fty go(void){...}` -> CERR
+"expected C expression". A LOCAL `fty f = &zero;` works (ParseCLocalDeclAST has
+the CTypeFnPtrName inline-fnptr branch). ParseCSubroutine's return-type path
+(retType := ParseCDeclType at cparser.inc:5013) does NOT handle a fnptr-typedef
+return type — after consuming `fty` (tyPointer + CTypeProcSig set), the name/param
+reading derails. Fix: mirror the local fnptr-typedef handling for a function's
+RETURN type (register `go` with retType tyPointer + the fnptr proc signature, read
+name+params normally). 00124 separately needs the inline full declarator
+`int (*f(int,int))(int,int)`. Bounded-ish declarator work, focused session.
