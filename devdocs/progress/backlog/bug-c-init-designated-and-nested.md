@@ -11,7 +11,8 @@ blocked-by: [bug-c-init-struct-designators, bug-c-init-array-designators, bug-c-
 - **Decomposed 2026-07-06** (too big for one landing; three code sites + a
   recursive rework). Now an epic that completes when its three slices land —
   do them in order:
-  1. [[bug-c-init-struct-designators]] — `.field =` (local + global cursor).
+  1. ~~[[bug-c-init-struct-designators]]~~ — **DONE 2026-07-06** (098e5b94):
+     `.field =` cursor, local + global; 00048/00049 pass.
   2. [[bug-c-init-array-designators]] — `[i] =` + `[]` size inference.
   3. [[bug-c-init-brace-elision-nested]] — recursive elision walker (hardest,
      subsumes the two cursors).

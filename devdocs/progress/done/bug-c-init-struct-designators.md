@@ -26,3 +26,6 @@ continues from there).
 ## Gate
 00048/00049 exit 0; drop them from `test/c-conformance/pxx.skip`; add a
 regression test; `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-06 — resolved, commit 098e5b94.

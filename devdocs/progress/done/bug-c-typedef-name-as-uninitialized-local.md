@@ -43,3 +43,6 @@ Repro compiles + runs exit 0 under pxx; zlib runner advances past trees.c.
 
 ## Log
 - 2026-07-06 — resolved, commit 0e2740ee.
+
+## Log
+- 2026-07-06 — followup (commit 098e5b94): the shadow check wrongly fired on any same-name symbol, breaking c-testsuite 00022 (`typedef int x;` suppressed by a builtin `x`). Restricted to skLocal/skParam. Missed originally because c-conformance is not in `make test`.
