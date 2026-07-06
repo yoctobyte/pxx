@@ -3575,6 +3575,21 @@ begin
         begin
           left := IRLowerAST(ASTLeft[node]);
           right := IRLowerAST(ASTRight[node]);
+          { C: a string literal in a binop is a char* VALUE (its address, past
+            the 8-byte Pascal length prefix — same +8 as the store/call paths).
+            Without this, `"abc" == (void*)0` hit the Pascal content-compare,
+            which dereferences the NULL operand -> SIGSEGV. }
+          if CProgramMode then
+          begin
+            if ASTKind[ASTLeft[node]] = AN_STR_LIT then
+              left := IRAppend(IR_BINOP, left,
+                               IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                               Ord(tkPlus), 0, Ord(tyPointer));
+            if ASTKind[ASTRight[node]] = AN_STR_LIT then
+              right := IRAppend(IR_BINOP, right,
+                                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                                Ord(tkPlus), 0, Ord(tyPointer));
+          end;
           Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
         end;
       end;
