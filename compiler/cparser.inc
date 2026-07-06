@@ -4677,8 +4677,82 @@ begin
   end;
 end;
 
+{ Known crtl-provided libc functions -> their <header> module. A C89-style
+  program may declare printf/malloc/strcpy by hand instead of including the
+  header (c-testsuite does this throughout); without the include the crtl
+  auto-pull never fires, the prototype is marked external against libc, and in
+  a libc-free link the call silently does nothing. Used by
+  CPullCrtlForPrototypes below to pull the impl after pass 1. }
+function CCrtlHeaderForName(const name: AnsiString): AnsiString;
+begin
+  Result := '';
+  if (name='printf') or (name='fprintf') or (name='sprintf') or (name='snprintf') or
+     (name='vprintf') or (name='vfprintf') or (name='vsprintf') or (name='vsnprintf') or
+     (name='puts') or (name='putchar') or (name='getchar') or (name='fputs') or (name='fputc') or
+     (name='fgets') or (name='fgetc') or (name='fopen') or (name='fclose') or (name='fread') or
+     (name='fwrite') or (name='fflush') or (name='sscanf') or (name='scanf') or (name='ungetc') or
+     (name='fseek') or (name='ftell') or (name='perror') or (name='remove') or (name='rename') then
+    Result := 'stdio.h'
+  else if (name='malloc') or (name='calloc') or (name='realloc') or (name='free') or
+     (name='exit') or (name='abort') or (name='atoi') or (name='atol') or (name='atof') or
+     (name='strtol') or (name='strtoul') or (name='strtod') or (name='qsort') or (name='abs') or
+     (name='labs') or (name='getenv') or (name='rand') or (name='srand') then
+    Result := 'stdlib.h'
+  else if (name='strcpy') or (name='strncpy') or (name='strlen') or (name='strcmp') or
+     (name='strncmp') or (name='strcat') or (name='strncat') or (name='strchr') or (name='strrchr') or
+     (name='strstr') or (name='memcpy') or (name='memmove') or (name='memset') or (name='memcmp') or
+     (name='memchr') or (name='strdup') or (name='strerror') then
+    Result := 'string.h'
+  else if (name='isdigit') or (name='isalpha') or (name='isalnum') or (name='isspace') or
+     (name='isupper') or (name='islower') or (name='toupper') or (name='tolower') or
+     (name='isxdigit') or (name='ispunct') or (name='iscntrl') or (name='isprint') or (name='isgraph') then
+    Result := 'ctype.h'
+  else if (name='sqrt') or (name='sin') or (name='cos') or (name='tan') or (name='pow') or
+     (name='exp') or (name='log') or (name='floor') or (name='ceil') or (name='fabs') or (name='fmod') then
+    Result := 'math.h';
+end;
+
+{ After pass 1: any proc still marked external (= prototype with no definition
+  anywhere in the TU) whose name is a known crtl libc function pulls its crtl
+  module, exactly as if the program had included the header. Returns the first
+  appended token index, or -1 when nothing was pulled. The synthetic source is
+  just the #include lines; CPreprocess resolves them on the normal crtl include
+  path and the header auto-pull brings the sibling src/<name>.c in. The pulled
+  region then goes through the same pass 1 / pass 2 as the main program.
+  No-op under --system-libs (there the externals SHOULD bind to glibc). }
+function CPullCrtlForPrototypes: Integer;
+var
+  i: Integer;
+  hdr, synth: AnsiString;
+  wantStdio, wantStdlib, wantString, wantCtype, wantMath: Boolean;
+begin
+  Result := -1;
+  if CUseSystemLibs then Exit;
+  wantStdio := False; wantStdlib := False; wantString := False;
+  wantCtype := False; wantMath := False;
+  for i := 0 to ProcCount - 1 do
+    if ProcExternal[i] then
+    begin
+      hdr := CCrtlHeaderForName(Procs[i].Name);
+      if hdr = 'stdio.h' then wantStdio := True
+      else if hdr = 'stdlib.h' then wantStdlib := True
+      else if hdr = 'string.h' then wantString := True
+      else if hdr = 'ctype.h' then wantCtype := True
+      else if hdr = 'math.h' then wantMath := True;
+    end;
+  synth := '';
+  if wantStdio then AppendString(synth, '#include <stdio.h>'#10);
+  if wantStdlib then AppendString(synth, '#include <stdlib.h>'#10);
+  if wantString then AppendString(synth, '#include <string.h>'#10);
+  if wantCtype then AppendString(synth, '#include <ctype.h>'#10);
+  if wantMath then AppendString(synth, '#include <math.h>'#10);
+  if Length(synth) = 0 then Exit;
+  CPreprocess(synth, SourceFileDir);
+  Result := CLexAppend(synth);
+end;
+
 procedure ParseCProgram;
-var firstIdx, callPatch, mainIdx, rvHi, rvLo: Integer;
+var firstIdx, callPatch, mainIdx, rvHi, rvLo, crtlStart: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -4827,6 +4901,33 @@ begin
   end;
   CHeaderMode := False;
 
+  { Hand-declared libc prototypes (no header include): pull the crtl modules
+    now and run the pulled region through its own pass 1, so the definitions
+    replace the silent libc externals before any caller compiles. }
+  crtlStart := CPullCrtlForPrototypes;
+  if crtlStart >= 0 then
+  begin
+    TokPos := crtlStart; Next;
+    CHeaderMode := True;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CIsTopLevelTypeDecl then
+      begin
+        if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
+        else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
+        else ParseCStructDecl;
+      end
+      else if IsCTypeTok then
+      begin
+        if CTopLevelIsFunc then ParseCSubroutine
+        else ParseCGlobalVarDecl;
+      end
+      else
+        Next;
+    end;
+    CHeaderMode := False;
+  end;
+
   { pass 2: compile function bodies; types/globals already done in pass 1 }
   TokPos := firstIdx; Next;
   while CurTok.Kind <> tkEOF do
@@ -4840,6 +4941,24 @@ begin
     end
     else
       Next;
+  end;
+
+  { pass 2 over the pulled crtl region: compile the pulled bodies. }
+  if crtlStart >= 0 then
+  begin
+    TokPos := crtlStart; Next;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CIsTopLevelTypeDecl then
+        SkipCDeclToSemi
+      else if IsCTypeTok then
+      begin
+        if CTopLevelIsFunc then ParseCSubroutine
+        else SkipCDeclToSemi;
+      end
+      else
+        Next;
+    end;
   end;
 
   CProgramMode := False;
