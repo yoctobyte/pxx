@@ -507,7 +507,7 @@ begin
     Floats ride the 8-byte slot via xmm0; variants are addressed in place. }
   if not (TypeIsOrdinal(Syms[symIdx].TypeKind) or
           (Syms[symIdx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass,
-           tySingle, tyDouble, tyExtended, tyVariant])) then
+           tySingle, tyDouble, tyExtended, tyVariant, tyRecord])) then
     Error('target i386: only ordinal/pointer/string variables supported yet');
 end;
 
@@ -928,6 +928,18 @@ begin
         begin
           { Variant in value position = its slot address. }
           EmitLoadVariantAddr386(node);
+          Exit;
+        end;
+        if tk = tyRecord then
+        begin
+          { Record in value position = its slot address (by-reference value model,
+            like x86-64). The slot holds the record storage itself. }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, slot addr }
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { mov eax, [ebp+off] = &record }
+          else
+            begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
           Exit;
         end;
         if Is64Bit386(tk) then
@@ -2939,12 +2951,14 @@ begin
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
-                (tk = tyAnsiString) or (tk = tyClass)) then
+                (tk = tyAnsiString) or (tk = tyClass) or (tk = tyRecord)) then
           Error('target i386: load through pointer of this type not yet supported');
-        if Is64Bit386(tk) then
+        if Is64Bit386(tk) or (tk = tyRecord) then
         begin
           { Full 8-byte load -> edx:eax (high dword first so the address in eax
-            is still valid for the low load). }
+            is still valid for the low load). tyRecord: TypeSize=8, so mirror the
+            x86-64 8-byte `mov rax,[rax]` (a small by-value struct used as a
+            scalar; over-read high bytes are ignored, same as x86-64). }
           EmitB($8B); EmitB($50); EmitB($04);        { mov edx, [eax+4] }
           EmitB($8B); EmitB($00);                    { mov eax, [eax] }
           Exit;
