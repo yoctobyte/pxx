@@ -378,7 +378,15 @@ begin
   begin
     while decExp > 0 do
     begin
-      while N > 1844674407370955161 do begin N := N shr 1; Inc(bexp); end;
+      { Lossy halvings use round-to-odd (sticky low bit): with 60+ working bits
+        vs the 53 target, round-to-odd intermediates compose safely and the
+        final round-to-nearest-even stays correct — plain truncation biased
+        long scaling chains (1e300, DBL_MAX) 1 ulp low. }
+      while N > 1844674407370955161 do
+      begin
+        if (N and 1) <> 0 then N := (N shr 1) or 1 else N := N shr 1;
+        Inc(bexp);
+      end;
       N := N * 5;
       Inc(bexp);
       Dec(decExp);
@@ -390,8 +398,14 @@ begin
     begin
       if D > 922337203685477580 then
       begin
-        N := N div 10;
-        if N = 0 then begin Result := signBit; Exit; end;
+        { D at its cap: the /10 must come out of N. Scale N up by 2s first
+          (exact, tracked in bexp) so the truncating div costs < 2^-60 relative
+          per step instead of a whole decimal digit (1.0e-100 formerly decayed
+          to 0, and every large negative exponent lost most of its mantissa). }
+        while N <= 1844674407370955161 do begin N := N * 2; Dec(bexp); end;
+        { round-to-odd div (see the positive-exponent loop's comment) }
+        if (N mod 10) <> 0 then N := (N div 10) or 1
+        else N := N div 10;
       end
       else
         D := D * 10;
@@ -409,7 +423,12 @@ begin
   while (N - D) >= D do
   begin
     if D <= $3FFFFFFFFFFFFFFF then begin D := D * 2; Inc(bexp); end
-    else begin N := N shr 1; Inc(bexp); end;
+    else
+    begin
+      { round-to-odd (see the exponent-scaling loops) }
+      if (N and 1) <> 0 then N := (N shr 1) or 1 else N := N shr 1;
+      Inc(bexp);
+    end;
   end;
 
   if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
@@ -420,9 +439,26 @@ begin
   bitval := $8000000000000;  { 2^51 = top mantissa bit }
   while bitval > 0 do
   begin
-    N := N * 2;
-    if N >= D then begin mant := mant or bitval; N := N - D; end;
+    { overflow-safe 2N vs D: N >= D-N <=> 2N >= D. D can exceed 2^62 after the
+      normalize doubling above, where a bare N*2 would wrap Int64 and silently
+      drop the bit. In the else arm 2N < D <= High(Int64) so N*2 is safe. }
+    if N >= D - N then begin mant := mant or bitval; N := N - (D - N); end
+    else N := N * 2;
     bitval := bitval shr 1;
+  end;
+  { Round to nearest, ties to even (remainder N/D vs one half). Truncating here
+    left every inexact literal 1 ulp low (0.1 -> ...999 instead of ...99A),
+    which broke e.g. sqlite's Dekker double-double kernels built on exact
+    decimal constants. }
+  if (N > D - N) or ((N = D - N) and ((mant and 1) = 1)) then
+  begin
+    mant := mant + 1;
+    if mant = $10000000000000 then   { carry out of the 52 mantissa bits }
+    begin
+      mant := 0;
+      Inc(bexp);
+      if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
+    end;
   end;
 
   be := bexp + 1023; biasedExp := be * $10000000000000;  { be shl 52 }

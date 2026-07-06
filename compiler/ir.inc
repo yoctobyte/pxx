@@ -4633,7 +4633,16 @@ begin
       argNode := AllocNode(AN_ASSIGN); ASTLeft[argNode] := lhsNode; ASTRight[argNode] := ASTRight[pairNode];
       IRMarkStatementNode(IRLowerAST(argNode));
       IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
-      Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
+      { Record values are carried by address in the IR value model (IR_COPY_REC
+        takes source/dest addresses; every other record producer emits IR_LEA).
+        IR_LOAD_SYM on a record local falls into EmitLoadVar's scalar path and
+        loads the record's FIRST 8 BYTES instead — the consumer then used that
+        field value as the source address (C `c = cond ? a : b` with struct
+        arms copied from *(a.z): the sqlite CREATE TRIGGER NOMEM bug). }
+      if argTk = tyRecord then
+        Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(argTk))
+      else
+        Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
     end;
 
     AN_SWITCH:

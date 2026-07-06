@@ -5720,6 +5720,14 @@ begin
     else
       Result := REC_NONE;
   end
+  else if ASTKind[node] = AN_TERNARY then
+  begin
+    { A record-valued conditional (`cond ? recA : recB`) has the arms' record
+      type. Without this a NESTED struct ternary resolved REC_NONE -> the outer
+      arm's hidden temp got no RecName -> wrong RecSize -> garbage copy. }
+    Result := ResolveNodeRec(ASTLeft[ASTRight[node]]);
+    if Result = REC_NONE then Result := ResolveNodeRec(ASTRight[ASTRight[node]]);
+  end
   else
     Result := REC_NONE;
 end;

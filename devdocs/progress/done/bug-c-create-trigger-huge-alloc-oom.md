@@ -129,3 +129,47 @@ First steps:
    make test + self-host byte-identical + test-lua-cross 24/24. Reduce+commit a
    regression test. USER HUNCH: "smells like recursion / unhandled trigger path"
    — weigh it, but the ASCII-as-pointer evidence says argument passing.
+
+## RESOLUTION (2026-07-06, Track A/C)
+
+FIXED — three compiler bugs, none of them in argument passing (the ASCII-as-
+pointer evidence pointed one level earlier: a struct COPY, not a call):
+
+1. **Ternary with struct-valued arms (ir.inc AN_TERNARY)** — root cause of the
+   CREATE TRIGGER NOMEM. The lowering yielded `IR_LOAD_SYM` for the record
+   hidden temp; `EmitLoadVar` on a record local takes the scalar path and loads
+   the record's FIRST 8 BYTES, but `IR_COPY_REC` consumes source ADDRESSES. So
+   `c = cond ? a : b` copied 16 bytes from `*(a.z)`. The corrupting site was the
+   sqlite grammar's A-overwrites-T Token copy
+   (`yymsp[-10].minor.yy0 = (yymsp[-6].minor.yy0.n==0 ? T : D)`), which filled
+   the Token with SQL text bytes ("t1 AFTER" as .z, " INS" as .n); FinishTrigger
+   then passed those to DbStrNDup. Fix: record-typed ternary yields `IR_LEA`
+   (target-independent, fixes all backends).
+
+2. **ResolveNodeRec had no AN_TERNARY case (symtab.inc)** — a NESTED struct
+   ternary resolved REC_NONE → outer temp had no RecName → garbage copy size.
+   Fix: recurse into the arms.
+
+3. **Float-literal decode imprecision (lexer.inc StrToDoubleBits)** — found by
+   the suite's remaining ROUND diffs vs a SAME-VERSION gcc oracle
+   (ROUND(2.5,0)=2.0, ROUND(75.125,2)=75.12). Two defects: (a) mantissa was
+   truncated, never rounded → EVERY inexact literal 1 ulp low (0.1 = ...999);
+   (b) the negative-exponent loop shed a whole decimal digit of N per step once
+   D capped → 1.0e-100 decoded to 0. sqlite's Dekker double-double kernels
+   (AtoF, FpDecode) depend on exactly-decoded compensation constants, so runtime
+   REAL parsing was silently off (invisible at %.15g, visible at ROUND halfway
+   cases). Fix: round-to-nearest-even final rounding + round-to-odd (sticky) on
+   all lossy intermediate steps + exact power-of-2 rescaling of N before lossy
+   divs; also made the mantissa-extraction loop overflow-safe for D > 2^62.
+   Result: exponent sweep e-307..e+308 is 94% bit-exact vs gcc, residual worst
+   case 1 ulp on sparse |e| ≳ 130 literals (Int64 precision ceiling; a 128-bit
+   intermediate would finish the job if ever needed). All sqlite constants
+   decode exactly.
+
+Regression tests: test/cternary_struct_value_b141.c,
+test/cfloat_literal_precise_b142.c (wired into make test).
+Gates: /tmp trg repro rc=0; FULL test/csqlite_suite.c byte-identical vs
+same-version gcc oracle (build oracle with an extra TU defining
+`const char sqlite3_version[]` — the vendored amalgamation's line-498 edit
+drops the definition when sqlite3.h is pre-included); make test + self-host
+fixedpoint; test-lua-cross 24/24.

@@ -30,11 +30,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (89)
+## backlog (88)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-c-create-trigger-huge-alloc-oom | A | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -159,7 +158,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (469)
+## done (470)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -188,6 +187,7 @@ _none_
 | bug-c-chained-pointer-index-loses-base-type | C | bug | C chained pointer indexing loses base type | — |
 | bug-c-const-cast-in-array-dim | C | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-create-trigger-huge-alloc-oom | A | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
 | bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
 | bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-crtl-missing-unistd-syscalls | C | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
@@ -651,7 +651,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-c-create-trigger-huge-alloc-oom
 - [C] bug-c-printf-without-stdio-include-varargs
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-constructor-exception-cleanup-semantics

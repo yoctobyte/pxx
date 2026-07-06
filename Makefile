@@ -787,6 +787,10 @@ test-core: $(COMPILER)
 	/tmp/cstatic_local_init_once_b13926; test "$$?" = "42"
 	./$(COMPILER) test/cmath_round_trunc_b140.c /tmp/cmath_round_trunc_b14026
 	/tmp/cmath_round_trunc_b14026; test "$$?" = "42"
+	./$(COMPILER) test/cternary_struct_value_b141.c /tmp/cternary_struct_value_b14126
+	/tmp/cternary_struct_value_b14126; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_literal_precise_b142.c /tmp/cfloat_literal_precise_b14226
+	/tmp/cfloat_literal_precise_b14226; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26
