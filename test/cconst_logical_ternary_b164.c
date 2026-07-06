@@ -7,11 +7,13 @@ int go = (0 || 7);            /* logical or  -> 1 */
 int gc = (5 > 3) + (2 == 2);  /* comparisons -> 2 */
 enum E { EA = (1 && 1), EB = (0 || 5), EC = (3 > 2 ? 10 : 20) };
 int band[1 && 1];             /* const array bound with && */
+int bter[2 ? 3 : 9];          /* const array bound with ?: -> size 3 */
 int main(void) {
     if (gt != 5) return 1;
     if (ga != 1 || go != 1) return 2;
     if (gc != 2) return 3;
     if (EA != 1 || EB != 1 || EC != 10) return 4;
     if (sizeof(band) != sizeof(int)) return 5;
+    if (sizeof(bter) != 3 * sizeof(int)) return 6;
     return 42;
 }

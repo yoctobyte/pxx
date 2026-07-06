@@ -6126,7 +6126,7 @@ begin
     Next;
     t := CEvalConstExpr;            { then-branch is a full expression }
     if CurTok.Kind = tkColon then Next;
-    e := CEvalConstTernary;         { else-branch is another conditional }
+    e := CEvalConstExpr;            { else-branch }
     if Result <> 0 then Result := t else Result := e;
   end;
 end;
