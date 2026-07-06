@@ -23,3 +23,9 @@ types for `!`, `~`, `<<`, comparisons.
 ## Gate
 Drop 00104.c/00178.c/00200.c from test/c-conformance/pxx.skip; runner green.
 Sweep note: same model feeds sizeof, so check sizeof-of-expression paths after fix.
+
+## Update 2026-07-07
+00178 (sizeof of a general non-ident expression) FIXED (commit 827cddfc). Remaining:
+- 00104: `~x == 0xffffffff` — C types a hex constant that overflows int as *unsigned int*; usual arithmetic conversions then make the int/unsigned compare equal. pxx types 0xffffffff as int64 -> unequal. Needs the C integer-constant type ladder (dec vs hex, int->unsigned->long) + conversion rules.
+- 00200: `X << T` result type = promoted LEFT operand (a macro battery probing sign/size via sizeof((M)+0)).
+- Also: an ident-starting sizeof expr `sizeof(a<b)` still sizes by the first ident (char=1) not the int result; same integer-type-model work.
