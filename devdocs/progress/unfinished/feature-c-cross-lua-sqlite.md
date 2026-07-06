@@ -70,9 +70,18 @@ targets, no regression).
 `sqlite3_open` OK, struct-by-value + double-conv now fixed (sbv6 passes), but still
 SIGSEGVs at the first CREATE TABLE with a distinct bug: `sw a1,0(a0)` with a0=0 —
 a local pointer at `s0-40` is NULL and stored through (`*p = v`, p NULL). No source
-line (riscv32 -g DWARF not read by gdb-multiarch). NEXT: map the pc via --dump-cpp
-+ objdump, find which NULL pointer; likely a riscv32-specific codegen gap in a
-store path (record return? aggregate? pointer local init?).
+line (riscv32 -g DWARF not read by gdb-multiarch; addr2line = ??:0).
+**LOCALIZED (session #2, printf-marker bisection of the scratch sqlite3.c):**
+SELECT/PRAGMA/BEGIN all run fine — only DDL crashes. `sqlite3StartTable` and every
+`sqlite3AddColumn` complete (markers M1 aNew / M2 pCol / M3 done all print, struct
+args correct). The crash is INSIDE **`sqlite3EndTable`** (sqlite3.c ~123985, the
+CREATE TABLE VDBE-codegen / schema-write function): x64 prints "EndTable ENTER"
+then r=0; riscv32 prints "EndTable ENTER" then SIGSEGV. NEXT SESSION: printf-bisect
+within sqlite3EndTable (it's large — writes sqlite_master row, builds the VDBE
+program, updates the in-memory schema hash) to find the NULL-base store; likely a
+riscv32-specific codegen gap (a pointer local not initialized, or a returned
+pointer read wrong on rv32). Fast repro: in-memory `CREATE TABLE t(x)` = `/tmp/sqx.c`
+pattern, build `--target=riscv32 -g`, run under `qemu-riscv32` (crashes ~instantly).
 
 ## Progress log (session 2026-07-06, cross sqlite libc-free + all 4 targets build)
 
