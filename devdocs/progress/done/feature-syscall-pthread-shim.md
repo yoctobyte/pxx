@@ -41,7 +41,7 @@ exact, SQLite THREADSAFE=1 opens `:memory:` and runs schema, AND real concurrent
 multithreaded SQLite (8 threads / 8000 inserts on one FULLMUTEX connection +
 8 per-thread connections) passes repeatably. `make test-sqlite-threads` +
 `test/csqlite_thread_test.c`. Gate: make test + self-host byte-identical,
-test-threads, test-lua-cross 24/24 all green. x86-64 (--threadsafe is x86-64/i386);
+test-threads, test-lua-cross 24/24 all green. x86-64 + i386 (both --threadsafe-capable targets tested green);
 cross targets deferred (the PAL atomics/clone are x86-64/i386 today — M5).
 
 ## Motivation

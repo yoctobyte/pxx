@@ -2905,29 +2905,45 @@ test-lua-cross: $(COMPILER)
 # Multithreaded SQLite over the libc-free PXX pthread shim (lib/crtl pthread.h/.c
 # bridged to the PAL via lib/rtl/palpthread.pas). Builds SQLITE_THREADSAFE=1 and
 # runs test/csqlite_thread_test.c: N threads on one FULLMUTEX (serialized)
-# connection + N per-thread connections, self-checking. x86-64 only (--threadsafe
-# is x86-64/i386). Skips when the gitignored sqlite amalgamation is absent, like
-# test-cjson. NOT in `make test` (large 3rd-party build); run explicitly.
+# connection + N per-thread connections, self-checking. Both threading-capable
+# targets: x86-64 (native) + i386 (qemu). --threadsafe is x86-64/i386 only (the
+# PAL atomics/clone are not ported to arm32/aarch64/riscv32 yet — M5). Skips when
+# the gitignored sqlite amalgamation is absent, like test-cjson. NOT in `make
+# test` (large 3rd-party build); run explicitly.
 SQLITE_SRC ?= library_candidates/sqlite
 test-sqlite-threads: $(COMPILER)
 	@if [ ! -f "$(SQLITE_SRC)/sqlite3.c" ]; then \
 	  echo "test-sqlite-threads: SKIP — no sqlite amalgamation at $(SQLITE_SRC)/sqlite3.c"; exit 0; \
 	fi; \
+	want="$$(printf 'shared OK\nperthread OK\nall OK')"; \
+	overall=0; \
 	echo "test-sqlite-threads: building threadsafe sqlite (x86-64) ..."; \
 	if ! ./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
 	     test/csqlite_thread_test.c /tmp/csqlite_thread_test26 2>/tmp/cstt.err; then \
-	  echo "test-sqlite-threads: FAIL (build error)"; head -5 /tmp/cstt.err; exit 1; \
-	fi; \
-	if readelf -d /tmp/csqlite_thread_test26 2>/dev/null | grep -qi 'NEEDED'; then \
-	  echo "test-sqlite-threads: FAIL (not libc-free — has DT_NEEDED)"; \
-	  readelf -d /tmp/csqlite_thread_test26 | grep -i needed; exit 1; \
-	fi; \
-	out="$$(timeout 60 /tmp/csqlite_thread_test26)"; \
-	if [ "$$out" = "$$(printf 'shared OK\nperthread OK\nall OK')" ]; then \
-	  echo "test-sqlite-threads: PASS (libc-free, shared+per-thread)"; \
+	  echo "test-sqlite-threads: FAIL x86-64 (build error)"; head -5 /tmp/cstt.err; overall=1; \
+	elif readelf -d /tmp/csqlite_thread_test26 2>/dev/null | grep -qi 'NEEDED'; then \
+	  echo "test-sqlite-threads: FAIL x86-64 (not libc-free — has DT_NEEDED)"; overall=1; \
+	elif [ "$$(timeout 60 /tmp/csqlite_thread_test26)" = "$$want" ]; then \
+	  echo "test-sqlite-threads: PASS x86-64 (libc-free, shared+per-thread)"; \
 	else \
-	  echo "test-sqlite-threads: FAIL"; echo "$$out"; exit 1; \
-	fi
+	  echo "test-sqlite-threads: FAIL x86-64 (output mismatch)"; overall=1; \
+	fi; \
+	if command -v qemu-i386 >/dev/null 2>&1; then \
+	  echo "test-sqlite-threads: building threadsafe sqlite (i386) ..."; \
+	  if ! ./$(COMPILER) --threadsafe --target=i386 -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
+	       test/csqlite_thread_test.c /tmp/csqlite_thread_test26_i386 2>/tmp/cstt_i386.err; then \
+	    echo "test-sqlite-threads: FAIL i386 (build error)"; head -5 /tmp/cstt_i386.err; overall=1; \
+	  elif readelf -d /tmp/csqlite_thread_test26_i386 2>/dev/null | grep -qi 'NEEDED'; then \
+	    echo "test-sqlite-threads: FAIL i386 (not libc-free — has DT_NEEDED)"; overall=1; \
+	  elif [ "$$(timeout 90 tools/run_target.sh i386 /tmp/csqlite_thread_test26_i386)" = "$$want" ]; then \
+	    echo "test-sqlite-threads: PASS i386 (libc-free, shared+per-thread)"; \
+	  else \
+	    echo "test-sqlite-threads: FAIL i386 (output mismatch)"; overall=1; \
+	  fi; \
+	else \
+	  echo "test-sqlite-threads: SKIP i386 (qemu-i386 not installed)"; \
+	fi; \
+	test "$$overall" = "0" || exit 1
 
 # cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make
 # test`: the base gate carries no 3rd-party dependency. Amalgamates lib/crtl + the
