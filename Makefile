@@ -713,6 +713,8 @@ test-core: $(COMPILER)
 	/tmp/cptr_array_decay_stride_b6126; test "$$?" = "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c /tmp/cfield_2d_row_decay_b6226
 	/tmp/cfield_2d_row_decay_b6226; test "$$?" = "42"
+	./$(COMPILER) test/ctypedef_shadow_local_b151.c /tmp/ctypedef_shadow_local_b15126
+	/tmp/ctypedef_shadow_local_b15126; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

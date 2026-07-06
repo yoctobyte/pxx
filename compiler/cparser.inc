@@ -1784,6 +1784,19 @@ begin
   if idx >= 0 then CTypedefProcSig[idx] := sigPi;
 end;
 
+function CTypedefShadowed(const name: AnsiString): Boolean;
+var si: Integer;
+begin
+  { True when an in-scope ordinary identifier hides a typedef of this name.
+    C 6.2.1: an object/function declared in an inner scope with the same name
+    hides the typedef there. Must be an EXACT-case match — C is case-sensitive,
+    and FindSym has a case-insensitive fallback (`item` would otherwise match a
+    typedef `Item` and wrongly suppress it). FindSym is block-scope-aware, so
+    this only fires for a live shadow. }
+  si := FindSym(name);
+  Result := (si >= 0) and StrEqual(Syms[si].Name, name);
+end;
+
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
@@ -1791,7 +1804,10 @@ begin
     tkRecord { 'struct' }];
   if (not Result) and (CurTok.Kind = tkIdent) then
     Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
-              (FindCTypedef(CurTok.SVal) >= 0);
+              { typedef name is a type only if not shadowed by a variable of the
+                same exact name — zlib inftrees.h `typedef ... code;` vs trees.c
+                `int code;` loop var. }
+              ((FindCTypedef(CurTok.SVal) >= 0) and not CTypedefShadowed(CurTok.SVal));
 end;
 
 function CUnsignedOf(tk: TTypeKind): TTypeKind;
