@@ -312,6 +312,15 @@ var
   mt: TThreadMethod;
 begin
   t := TThread(arg);
+  { The parent stores the child tid into FHandlePtr^.Tid only after __pxxclone
+    returns — but this thread can reach Execute first. Every child-side
+    tid-identity check (CurrentThread's registry match, Suspend's own-thread
+    guard, WaitFor/Destroy self-call guards) then compares against a stale 0:
+    CurrentThread returned nil ~1% of runs, and a lost Suspend guard skips the
+    park entirely (main's `while not Suspended` spins forever). Writing our own
+    tid here is program-order-safe for all child-side reads; the parent's later
+    store writes the identical value. }
+  t.FHandlePtr^.Tid := PalThreadSelf;
   t.Execute;
   { Field-wise copy into a local before the call: reading the record FIELD as
     a value trips the i386 backend's load-through-pointer gap; two pointer
