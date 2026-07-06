@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (120)
+## backlog (119)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +44,6 @@ _none_
 | bug-c-init-array-designators | C | 50→90 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
 | bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
-| bug-c-init-struct-designators | C | 50→90 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-preproc-paste-rescan | C | 55 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
@@ -54,6 +53,7 @@ _none_
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
+| bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -100,7 +100,6 @@ _none_
 | feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
 | feature-esoteric-fortran | A | 45 | feature | Esoteric probe: Fortran | — |
 | feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
-| feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
@@ -188,7 +187,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (473)
+## done (475)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -234,6 +233,7 @@ _none_
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
+| bug-c-init-struct-designators | C | 50→90 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | C | 50 | bug | C: local static const multidimensional array initializer in sqlite | — |
@@ -526,6 +526,7 @@ _none_
 | feature-enum-explicit-values | A | 50 | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | 50 | feature | `Eof` (standard input) not recognized | — |
 | feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
+| feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
 | feature-esp-bare-exceptions | A | 50 | feature | ESP bare: try/except (raise currently terminates) | — |
 | feature-esp-float | B | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-int64-arith | A | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
@@ -686,7 +687,6 @@ _none_
 
 - [p 90] [C] bug-c-init-array-designators (unblocks 1)
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
-- [p 90] [C] bug-c-init-struct-designators (unblocks 1)
 - [p 90] [C] bug-c-static-init-cast-and-int-to-double
 - [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
@@ -764,7 +764,6 @@ _none_
 - [p 45] [A] feature-esoteric-algol
 - [p 45] [A] feature-esoteric-cobol
 - [p 45] [A] feature-esoteric-fortran
-- [p 45] [A] feature-esoteric-whitespace
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling
 - [p 45] [B] feature-ilja-tui
@@ -796,6 +795,7 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 28] [C] bug-c-goto-shadowing-00129
 - [p 28] [C] feature-c-generic-selection
@@ -807,5 +807,4 @@ _none_
 - **1** — bug-c-gzgetc-fnlike-macro-call
 - **1** — bug-c-init-array-designators
 - **1** — bug-c-init-brace-elision-nested
-- **1** — bug-c-init-struct-designators
 - **1** — task-sqlite-libc-free-runtime-bringup

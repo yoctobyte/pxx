@@ -5,7 +5,7 @@ prio: 45  # auto
 # Esoteric probe: Whitespace
 
 - **Type:** feature — esoteric-frontend-probe
-- **Status:** backlog
+- **Status:** done (2026-07-06) — skeleton landed, prescan bug filed, probe closed
 - **Umbrella:** [[feature-esoteric-frontend-probes]]
 - **Opened:** 2026-07-05
 
@@ -39,3 +39,26 @@ probe successfully. Do not extend past the minimal instruction set.
 
 ## Log
 - 2026-07-05 — filed as part of the esoteric-frontend-probes umbrella.
+
+## Probe done (2026-07-06, Track Z session)
+
+Skeleton landed: `compiler/wparser.inc` (new; NO lexer file — the frontend
+never touches Tokens[]/CurTok and reads Source[] char-by-char, since S/T/L
+are the only meaningful characters), `isWs` + `.ws` dispatch in compiler.pas,
+state vars in defs.inc. The stack-machine → AST direction worked as designed:
+a compile-time stack of AST node ids folds push/dup/discard and
+add/sub/mul/div/mod into expression trees; only the two output instructions
+emit statements (AN_WRITE). Labels/jumps/heap/read stay out per the cap.
+Test: test/test_ws_skeleton.ws (prints Hi\n40\n2\n36) in make test.
+
+**Probe verdict: one real shared-internals find** — an include-level `var`
+section at wparser.inc's (late) include position trips the impl prescan's
+"global declared later" error even though the declarations lexically precede
+every use; the identical shape works at bparser.inc's earlier position.
+Filed as [[bug-impl-prescan-late-include-var-section]] (Track A) with a
+repro sketch; worked around by declaring the state in defs.inc. Also
+re-confirmed a known limitation loudly (nested routines can't capture
+fixed-size arrays — existing explicit compiler error, no ticket needed).
+
+Acceptance (a) met: shared-internals bug found and filed. Closed at skeleton
+depth.

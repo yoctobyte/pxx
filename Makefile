@@ -460,6 +460,12 @@ test-core: $(COMPILER)
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.
 	./$(COMPILER) test/test_lolcode_skeleton.lol /tmp/test_lolcode_skeleton26
 	test "$$(/tmp/test_lolcode_skeleton26)" = "$$(printf 'HAI WORLD\ny is 42\nsaem correct\nacc is 15\nsmoosh works')"
+	# Whitespace frontend skeleton (feature-esoteric-whitespace, esoteric probe):
+	# tokenless char-level frontend, stack-machine instructions folded into AST
+	# expression trees at compile time (push/dup/discard, add/sub/mul/div/mod,
+	# out-char/out-number). Prints Hi\n40\n2\n36.
+	./$(COMPILER) test/test_ws_skeleton.ws /tmp/test_ws_skeleton26
+	test "$$(/tmp/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
 	# BASIC GOTO/GOSUB (bug-basic-goto-gosub-halts-program): real jumps via shared
 	# AN_LABEL/AN_GOTO; nested GOSUB over the Int64 shift-register return stack;
 	# LET-less assignment off-by-one. Previously GOTO/GOSUB silently HALTED (exit 0).

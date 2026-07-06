@@ -1944,5 +1944,17 @@ begin
   end;
 end;
 
+const
+  MAX_WS_STACK = 64;   { Whitespace frontend compile-time expression stack }
+
 var
-  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol: Boolean;
+  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs: Boolean;
+
+  { Whitespace frontend state (wparser.inc) — here rather than in the
+    include because a var section that late in the chain trips the
+    impl-prescan's declared-later check. }
+  WsPos: Integer;                                 { read cursor into Source }
+  WsStk: array[0..MAX_WS_STACK-1] of Integer;     { AST node ids }
+  WsSp: Integer;
+  WsStmtList: Integer;
+  WsDone: Boolean;
