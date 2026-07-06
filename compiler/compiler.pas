@@ -489,8 +489,8 @@ begin
     --threadsafe would silently emit an UNLOCKED runtime. Fail clearly instead
     (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks). }
   if ThreadSafeMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
-     and (TargetArch <> TARGET_AARCH64) then
-  begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
+     and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
+  begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   { Derive the platform from the target unless --platform= set it explicitly.

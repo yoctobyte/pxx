@@ -2958,6 +2958,21 @@ test-sqlite-threads: $(COMPILER)
 	else \
 	  echo "test-sqlite-threads: SKIP aarch64 (qemu-aarch64 not installed)"; \
 	fi; \
+	if command -v qemu-arm >/dev/null 2>&1; then \
+	  echo "test-sqlite-threads: building threadsafe sqlite (arm32) ..."; \
+	  if ! ./$(COMPILER) --threadsafe --target=arm32 -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
+	       test/csqlite_thread_test.c /tmp/csqlite_thread_test26_arm32 2>/tmp/cstt_arm.err; then \
+	    echo "test-sqlite-threads: FAIL arm32 (build error)"; head -5 /tmp/cstt_arm.err; overall=1; \
+	  elif readelf -d /tmp/csqlite_thread_test26_arm32 2>/dev/null | grep -qi 'NEEDED'; then \
+	    echo "test-sqlite-threads: FAIL arm32 (not libc-free — has DT_NEEDED)"; overall=1; \
+	  elif [ "$$(timeout 150 tools/run_target.sh arm32 /tmp/csqlite_thread_test26_arm32)" = "$$want" ]; then \
+	    echo "test-sqlite-threads: PASS arm32 (libc-free, shared+per-thread)"; \
+	  else \
+	    echo "test-sqlite-threads: FAIL arm32 (output mismatch)"; overall=1; \
+	  fi; \
+	else \
+	  echo "test-sqlite-threads: SKIP arm32 (qemu-arm not installed)"; \
+	fi; \
 	test "$$overall" = "0" || exit 1
 
 # cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make

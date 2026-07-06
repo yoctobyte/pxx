@@ -141,6 +141,38 @@ begin
     { patch the leading branch to land here (past the stub). B imm26 in words. }
     Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
   end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    { arm32 EABI leg. Stub input contract (set by IR_CLONE): r0=flags
+      r1=childStack r2=entry r3=arg r4=ctidptr. EABI clone(2) arg order is
+      r0=flags, r1=stack, r2=parent_tid, r3=tls, r4=child_tid; r7=SYS_clone(120);
+      svc 0. Child resumes with sp = the stack arg; the stub stages [entry][arg]
+      at the top so the child pops them. SYS_exit=1. Hex verified against clang
+      -march=armv7-a. }
+    EmitI32($EA000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
+    CloneStubAddr := CodeLen;
+    EmitI32($E2411010);                 { sub r1, r1, #16       (stage area) }
+    EmitI32($E5812000);                 { str r2, [r1]          (entry) }
+    EmitI32($E5813004);                 { str r3, [r1, #4]      (arg) }
+    EmitI32($E1A02004);                 { mov r2, r4            (parent_tid = ctidptr) }
+    EmitI32($E3A03000);                 { mov r3, #0            (tls = NULL) }
+    EmitI32($E3A07078);                 { mov r7, #120          (SYS_clone) }
+    EmitI32($EF000000);                 { svc 0 }
+    EmitI32($E3500000);                 { cmp r0, #0 }
+    EmitI32($1A000005);                 { bne .parent  (+7) }
+    { ---- child: sp = childStack-16, [sp]=entry [sp+4]=arg ---- }
+    EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }
+    EmitI32($E59D0004);                 { ldr r0, [sp, #4]      (arg -> r0) }
+    EmitI32($E12FFF31);                 { blx r1                (entry(arg)) }
+    EmitI32($E3A00000);                 { mov r0, #0            (exit code 0) }
+    EmitI32($E3A07001);                 { mov r7, #1            (SYS_exit) }
+    EmitI32($EF000000);                 { svc 0                 (thread exits here) }
+    { ---- .parent: r0 = child tid ---- }
+    EmitI32($E1A01FC0);                 { mov r1, r0, asr #31   sign-extend tid into Int64 hi word }
+    EmitI32($E12FFF1E);                 { bx lr }
+    { patch the leading branch to land here (ARM pc is 2 instr ahead). }
+    Patch32(jmpOver, $EA000000 or (((((CodeLen - jmpOver) div 4) - 2)) and $00FFFFFF));
+  end;
   { esp/riscv32 stay out of scope for threading; IR_CLONE guards them with a
     clean compile-error, so EnsureCloneStub is never reached there. }
 end;

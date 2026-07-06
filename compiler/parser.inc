@@ -15,6 +15,7 @@ procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
 procedure EmitIoLockStubs386; forward;
 procedure EmitIoLockStubsA64; forward;
+procedure EmitIoLockStubsArm32; forward;
 
 
 function AllocNode(kind: Integer): Integer;
@@ -18005,6 +18006,7 @@ begin
   if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
   if (TargetArch = TARGET_I386) and ThreadSafeMode then EmitIoLockStubs386;
   if (TargetArch = TARGET_AARCH64) and ThreadSafeMode then EmitIoLockStubsA64;
+  if (TargetArch = TARGET_ARM32) and ThreadSafeMode then EmitIoLockStubsArm32;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 

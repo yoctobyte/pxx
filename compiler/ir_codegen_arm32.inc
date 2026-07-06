@@ -223,6 +223,53 @@ begin
   EmitDataRef(dataOff);
 end;
 
+procedure EmitIoLockStubsArm32;
+{ --threadsafe statement-atomic console I/O, the arm32 port of EmitIoLockStubs.
+  Reentrant owner-tid spinlock: BSS_IO_OWNER = owning tid (0 = free), BSS_IO_DEPTH
+  = nesting depth (so a write-arg that itself writes cannot self-deadlock). gettid
+  (svc 224) per I/O statement; LL/SC (ldrex/strex) spinlock with an explicit dmb
+  ish barrier (ARM has no implicit acquire/release on ldrex/strex). Fronted by a
+  branch so it is reached only via bl. r9=&owner, r10=&depth held across the
+  gettid syscall (the EABI syscall preserves r4-r12). Hex verified vs clang. }
+var jmpOver: Integer;
+begin
+  EmitI32($EA000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
+  IOLockAddr := CodeLen;
+  EmitI32($E59F9000); EmitI32($EA000000); EmitGlobRef(BSS_IO_OWNER);   { ldr r9,[pc]; b; &owner }
+  EmitI32($E59FA000); EmitI32($EA000000); EmitGlobRef(BSS_IO_DEPTH);   { ldr r10,[pc]; b; &depth }
+  EmitI32($E3A070E0);   { mov r7, #224        gettid }
+  EmitI32($EF000000);   { svc 0               r0 = tid }
+  EmitI32($E5991000);   { ldr r1, [r9]        owner }
+  EmitI32($E1510000);   { cmp r1, r0 }
+  EmitI32($0A000006);   { beq bump  (+6, already ours) }
+  EmitI32($E1991F9F);   { ldrex r1, [r9]      (spin) }
+  EmitI32($E3510000);   { cmp r1, #0 }
+  EmitI32($1AFFFFFC);   { bne spin  (-3, owned by other) }
+  EmitI32($E1892F90);   { strex r2, r0, [r9]  take with our tid }
+  EmitI32($E3520000);   { cmp r2, #0 }
+  EmitI32($1AFFFFF9);   { bne spin  (-6, sc failed) }
+  EmitI32($F57FF05B);   { dmb ish }
+  EmitI32($E59A1000);   { ldr r1, [r10]       (bump) }
+  EmitI32($E2811001);   { add r1, r1, #1 }
+  EmitI32($E58A1000);   { str r1, [r10] }
+  EmitI32($E12FFF1E);   { bx lr }
+
+  IOUnlockAddr := CodeLen;
+  EmitI32($E59F9000); EmitI32($EA000000); EmitGlobRef(BSS_IO_OWNER);   { ldr r9,[pc]; b; &owner }
+  EmitI32($E59FA000); EmitI32($EA000000); EmitGlobRef(BSS_IO_DEPTH);   { ldr r10,[pc]; b; &depth }
+  EmitI32($F57FF05B);   { dmb ish }
+  EmitI32($E59A1000);   { ldr r1, [r10] }
+  EmitI32($E2411001);   { sub r1, r1, #1 }
+  EmitI32($E58A1000);   { str r1, [r10] }
+  EmitI32($E3510000);   { cmp r1, #0 }
+  EmitI32($1A000001);   { bne keep  (+1, still nested) }
+  EmitI32($E3A02000);   { mov r2, #0 }
+  EmitI32($E5892000);   { str r2, [r9]        release: owner := 0 }
+  EmitI32($E12FFF1E);   { bx lr  (keep) }
+
+  Patch32(jmpOver, $EA000000 or ((((CodeLen - jmpOver) div 4) - 2) and $00FFFFFF));
+end;
+
 { ===== 64-bit (Int64/UInt64) value model: r0:r1 = lo:hi register pair =====
   Unlike the low-word fat-slot model for ordinary ordinals, true 8-byte values
   live in r0(low):r1(high) while in flight, are loaded/stored as two words, and
@@ -2830,6 +2877,87 @@ begin
         EmitI32($E1A01FC0); { mov r1, r0, asr #31 }
       end;
 
+    IR_CLONE:
+      begin
+        { __pxxclone(flags, childStack, entry, arg, ctidptr): evaluate the five
+          args left-to-right, pop into r0..r4 (the clone stub's input contract:
+          r0=flags r1=childStack r2=entry r3=arg r4=ctidptr), then bl the bare
+          clone+trampoline stub. Child tid stays in r0. }
+        EnsureCloneStub;
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeArm32(IRA[argNode]);
+          EmitI32($E92D0001);           { push {r0} }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          EmitI32($E8BD0000 or (1 shl i));   { pop {r[i]}  (i=4..0) }
+        EmitI32($EB000000 or ((((CloneStubAddr - CodeLen) div 4) - 2) and $00FFFFFF)); { bl stub }
+      end;
+
+    IR_ATOMIC:
+      begin
+        { Atomic read-modify-write on addr^, returning the OLD value, via an
+          LL/SC (ldrex/strex) retry loop + a trailing dmb ish (ARM has no
+          implicit barrier on ldrex/strex, unlike aarch64's ldaxr/stlxr or x86
+          TSO). Args popped into r1=addr (+ r2=val/expected, r3=newval). Result
+          (old) in r0. The 64-bit variants need ldrexd/strexd register pairs —
+          rejected, exactly like i386. Hex verified against clang -march=armv7-a. }
+        if (IRIVal[node] = ATOMIC_XCHG64) or (IRIVal[node] = ATOMIC_CAS64) or
+           (IRIVal[node] = ATOMIC_ADD64) then
+          Error('target arm32: __pxxatomic_*64 not supported (32-bit target)');
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeArm32(IRA[argNode]);
+          EmitI32($E92D0001);           { push {r0} }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        case IRIVal[node] of
+          ATOMIC_CAS:
+            begin
+              EmitI32($E8BD0008);       { pop {r3}  newval }
+              EmitI32($E8BD0004);       { pop {r2}  expected }
+              EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($E1910F9F);       { ldrex r0, [r1]   old }
+              EmitI32($E1500002);       { cmp r0, r2 }
+              EmitI32($1A000002);       { bne done (+2) }
+              EmitI32($E1814F93);       { strex r4, r3, [r1] }
+              EmitI32($E3540000);       { cmp r4, #0 }
+              EmitI32($1AFFFFF9);       { bne loop (-7) }
+              EmitI32($F57FF05B);       { dmb ish  (done) }
+            end;
+          ATOMIC_ADD:
+            begin
+              EmitI32($E8BD0004);       { pop {r2}  delta }
+              EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($E1910F9F);       { ldrex r0, [r1]   old }
+              EmitI32($E0804002);       { add r4, r0, r2 }
+              EmitI32($E1813F94);       { strex r3, r4, [r1] }
+              EmitI32($E3530000);       { cmp r3, #0 }
+              EmitI32($1AFFFFFA);       { bne loop (-6) }
+              EmitI32($F57FF05B);       { dmb ish }
+            end;
+          else { ATOMIC_XCHG }
+            begin
+              EmitI32($E8BD0004);       { pop {r2}  val }
+              EmitI32($E8BD0002);       { pop {r1}  addr }
+              EmitI32($E1910F9F);       { ldrex r0, [r1] }
+              EmitI32($E1813F92);       { strex r3, r2, [r1] }
+              EmitI32($E3530000);       { cmp r3, #0 }
+              EmitI32($1AFFFFFB);       { bne loop (-5) }
+              EmitI32($F57FF05B);       { dmb ish }
+            end;
+        end;
+        { The old value is a 32-bit word in r0, but the intrinsic is typed Int64
+          (r0:r1). Sign-extend into the high word so the full-64-bit result is
+          correct — mirrors IR_SYSCALL's `mov r1, r0, asr #31`. }
+        EmitI32($E1A01FC0);             { mov r1, r0, asr #31 }
+      end;
+
     IR_NEG:
       begin
         tk := IntToTypeKind(IRTk[node]);
@@ -3339,10 +3467,19 @@ begin
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeArm32(i);
 
+      IR_IO_LOCK:
+        EmitI32($EB000000 or ((((IOLockAddr - CodeLen) div 4) - 2) and $00FFFFFF));   { bl io-lock }
+
+      IR_IO_UNLOCK:
+        EmitI32($EB000000 or ((((IOUnlockAddr - CodeLen) div 4) - 2) and $00FFFFFF)); { bl io-unlock }
+
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
-      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ;
+      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX,
+      IR_ATOMIC, IR_CLONE: ;
+      { IR_ATOMIC / IR_CLONE are value nodes consumed by their parent store, like
+        IR_SYSCALL — emitting them at statement level too ran the rmw/spawn twice. }
       { IR_LOAD_MEM: pure value node — must not emit at statement level, else its
         address operand re-evaluates (`*f()` calls f twice). See aarch64 note. }
 
