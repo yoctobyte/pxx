@@ -38,6 +38,14 @@ Don't build two thread layers — the C shim is a thin façade over the same PAL
 - **M4 — C pthread shim.** [[feature-syscall-pthread-shim]] over the same PAL.
 - **M5 — optimize.** [[feature-threadsafe-heap-optimize]] (per-thread arenas /
   lock-free fast path; cross-target the threadsafe atomics, today x86-64-only).
+  **Cross-target atomics DONE (2026-07-06, commits 0eb4d9bd + 07fee084):**
+  `--threadsafe` now works on **x86-64 + i386 + aarch64 + arm32** — the atomics
+  (`__pxxatomic_*`), `__pxxclone` trampoline and reentrant IO lock are emitted on
+  each; heap+ARC ride the Pascal `PXX_TS_SOFTLOCK` path (aarch64/arm32 joined
+  i386). Multithreaded SQLite (`make test-sqlite-threads`) + the Pascal thread
+  suite pass on all four, libc-free. riscv32/xtensa stay gated (no PAL). The
+  remaining M5 work is the *optimization* half (per-thread arenas / lock-free
+  fast path), not portability. See [[project_arm_threading_aarch64_arm32_v184]].
 
 ## Current state (2026-06-30 survey)
 `--threadsafe` = x86-64 `lock`-prefix atomics on heap alloc + ARC refcounts
