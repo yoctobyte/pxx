@@ -759,6 +759,8 @@ test-core: $(COMPILER)
 	/tmp/cvariadic_macro_b15726; test "$$?" = "42"
 	./$(COMPILER) test/cenum_typed_decl_b158.c /tmp/cenum_typed_decl_b15826
 	/tmp/cenum_typed_decl_b15826; test "$$?" = "42"
+	./$(COMPILER) test/cstatic_init_cast_intdouble_b159.c /tmp/cstatic_init_cast_intdouble_b15926
+	/tmp/cstatic_init_cast_intdouble_b15926; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

@@ -3443,7 +3443,7 @@ end;
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di: Integer; wasArr: Boolean; initV: Int64;
-    negFloat: Boolean; signMask: Int64;
+    negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     initStr: AnsiString;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
@@ -4254,6 +4254,34 @@ begin
         else
           while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
                 (CurTok.Kind <> tkEOF) do Next;
+      end
+      else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
+              (baseTk <> tyPointer) and (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Scalar ordinal/float global with a constant-expression initializer the
+          bare-literal fast paths above did not catch: a cast `(int)7`, an
+          arithmetic const `2+3`, or an integer literal assigned to a float
+          (`double x = 100;`). Fold with CEvalConstExpr; for a float target,
+          reinterpret the integer value as its IEEE-754 double bits (the value
+          lowering then narrows a tySingle slot). }
+        initV := CEvalConstExpr;
+        if TypeIsFloat(baseTk) then
+        begin
+          dvv := initV;              { Int64 -> Double value }
+          Move(dvv, initV, 8);       { reinterpret to IEEE-754 bits }
+        end;
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := -1;
+        PendingInitFLen[PendingInitCount] := 0;
+        PendingInitVal[PendingInitCount]  := initV;
+        PendingInitTk[PendingInitCount]   := Ord(baseTk);
+        if TypeIsFloat(baseTk) then
+          PendingInitKind[PendingInitCount] := 3
+        else
+          PendingInitKind[PendingInitCount] := 0;
+        Inc(PendingInitCount);
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkString) and
