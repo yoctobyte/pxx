@@ -133,6 +133,7 @@ begin
   CPMValueOff[mi] := CPStoreLiteral(value);
   CPMValueLen[mi] := Length(value);
   CPMFunction[mi] := False;
+  CPMVariadic[mi] := False;
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
 end;
@@ -154,6 +155,7 @@ begin
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
   CPMFunction[mi] := False;
+  CPMVariadic[mi] := False;
 
   { The opening parenthesis must immediately follow a function-like name. }
   if (p <= last) and (line[p] = '(') then
@@ -173,6 +175,12 @@ begin
         CPPNameLen[CPPCount] := paramEnd - paramStart + 1;
         Inc(CPPCount);
         CPMParamCount[mi] := CPMParamCount[mi] + 1;
+      end
+      else if (p <= last) and (line[p] = '.') then
+      begin
+        { `...` -> variadic macro; the tail args bind to __VA_ARGS__. }
+        CPMVariadic[mi] := True;
+        while (p <= last) and (line[p] = '.') do Inc(p);
       end
       else
         Inc(p);
@@ -233,6 +241,7 @@ begin
   CPMValueOff[ni]   := CPMValueOff[mi];
   CPMValueLen[ni]   := CPMValueLen[mi];
   CPMFunction[ni]   := CPMFunction[mi];
+  CPMVariadic[ni]   := CPMVariadic[mi];
   CPMParamBase[ni]  := CPMParamBase[mi];
   CPMParamCount[ni] := CPMParamCount[mi];
 end;
@@ -736,6 +745,16 @@ begin
   end;
 end;
 
+function CPRangeIsVaArgs(a, b: Integer): Boolean;
+const VA = '__VA_ARGS__';
+var i: Integer;
+begin
+  Result := (b - a + 1) = Length(VA);
+  if not Result then Exit;
+  for i := 1 to Length(VA) do
+    if CPrepChars[a + i - 1] <> VA[i] then begin Result := False; Exit; end;
+end;
+
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
 var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
@@ -790,6 +809,15 @@ begin
       a := p;
       while (p <= last) and CPIsIdentChar(CPrepChars[p]) do Inc(p);
       b := p - 1;
+      if CPMVariadic[mi] and CPRangeIsVaArgs(a, b) then
+      begin
+        { __VA_ARGS__ -> the raw comma-joined tail arguments (indices
+          namedCount..argCount-1). Copied raw; the caller rescans and expands. }
+        if argCount > CPMParamCount[mi] then
+          for k := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
+            AppendChar(dst, src[k]);
+        Continue;
+      end;
       ai := CPParamIndex(mi, a, b - a + 1);
       if (ai >= 0) and (ai < argCount) then
       begin

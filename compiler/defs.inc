@@ -1451,6 +1451,7 @@ var
   CPMParamBase  : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMParamCount : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
+  CPMVariadic   : array[0..MAX_CPREP_MACROS-1] of Boolean;   { `...` / __VA_ARGS__ }
   CPMCount      : Integer;
   { #pragma push_macro/pop_macro stack: each push snapshots the active macro
     index for a name; pop appends a fresh macro entry cloning that snapshot. }
