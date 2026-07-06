@@ -13,7 +13,8 @@ blocked-by: [bug-c-init-struct-designators, bug-c-init-array-designators, bug-c-
   do them in order:
   1. ~~[[bug-c-init-struct-designators]]~~ — **DONE 2026-07-06** (098e5b94):
      `.field =` cursor, local + global; 00048/00049 pass.
-  2. [[bug-c-init-array-designators]] — `[i] =` + `[]` size inference.
+  2. ~~[[bug-c-init-array-designators]]~~ — **DONE 2026-07-06** (c0abec31):
+     `[i] =` cursor + `[]` size inference; 00092/00147/00148 pass.
   3. [[bug-c-init-brace-elision-nested]] — recursive elision walker (hardest,
      subsumes the two cursors).
   The prio (90) propagates to all three, so they float to the top of Track C.
