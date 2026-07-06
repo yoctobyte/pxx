@@ -6280,7 +6280,14 @@ begin
         begin
           declTk := Ord(tyPointer); declRec := REC_NONE;
           declElemTk := baseElemTk; declElemRec := baseElemRec;
-          if declStars >= 2 then begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+          { Pointer-to-pointer field `T **m`: the immediate element is a pointer
+            (stride = pointer size, so declElemTk = tyPointer), but KEEP the base
+            record so `p->m[i]->field` resolves the field offset — mirrors the
+            local-variable T** fix in ParseCDeclType (declStars>=2 there). Was
+            REC_NONE, which dropped the struct and every `p->m[i]->field` landed at
+            offset 0 (e.g. sqlite's `p->apCsr[i]->cacheStatus` clobbering eCurType,
+            crashing ORDER BY on 32-bit targets). }
+          if declStars >= 2 then begin declElemTk := Ord(tyPointer); declElemRec := baseElemRec; end;
           sz := TARGET_PTR_SIZE; al := TARGET_PTR_SIZE;
         end
         else if (IntToTypeKind(baseScalarTk) = tyRecord) and (baseRecId >= REC_UCLASS_BASE) then
