@@ -9,13 +9,21 @@
 ## The plan, ranked by variation-per-effort
 
 ### 1. c-testsuite (FIRST — cheapest, broadest)
-- https://github.com/c-testsuite/c-testsuite — ~220 small single-file
-  conformance programs (`tests/single-exec/`), each isolating one C corner
-  (promotion edges, struct passing, bitfields, declarators). Expected outputs
-  ship alongside; tests self-report or diff vs a gcc build.
-- Wire as a loop gate like test-lua-cross: compile each with pxx, run, compare.
-  Expect a tail of legit-unsupported cases (VLA?, K&R?) — keep an explicit
-  skip-list with reasons, no silent skips.
+- https://github.com/c-testsuite/c-testsuite — exactly 220 single-file
+  conformance programs (`tests/single-exec/00001.c`..`00220.c`), each isolating
+  one C corner (promotion edges, struct passing, bitfields, declarators).
+- **No toolchain dependency (verified 2026-07-06 against the repo tree):** the
+  suite is pure DATA. Contract: `main` is the entry point, and `NNN.c.expected`
+  must match the test's stdout+stderr (220 .c / 220 .expected, 1:1). The
+  repo's own runner infra (POSIX sh + Python3 + TAP + TMSU tag queries) is only
+  THEIR multi-compiler CI for the daily results page — we bypass it. Their
+  per-compiler runners are ~10-line `CC=x` shell wrappers around a generic
+  `runners/single-exec/posix` script, paired with a `<name>.skip` file — we can
+  mirror that shape (pxx runner + pxx.skip) or write our own loop; either is
+  trivial.
+- Each test also has `NNN.c.tags` metadata (C-standard level, portability,
+  arch assumptions) — ready-made input for the explicit skip-list, no
+  guessing why a test is out of scope. No silent skips.
 - Graduate later to gcc c-torture `execute/` (~1500 tests) once green.
 
 ### 2. zlib (quick win, new workload class)
