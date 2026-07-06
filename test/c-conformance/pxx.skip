@@ -21,7 +21,6 @@
 00143.c	Duff's device (case in nested do-while) — bug-c-switch-nonblock-and-duffs-device
 00149.c	file-scope compound literal SIGSEGV — feature-c-compound-literals
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
-00170.c	forward enum declaration — feature-c-forward-enum-decl
 00174.c	float single-precision arithmetic rounding — bug-c-float-single-precision
 00175.c	implicit char/int/float arg conversions — bug-c-float-single-precision
 00178.c	sizeof(!a) must be 4 (int) — bug-c-expr-result-type-model

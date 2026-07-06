@@ -757,6 +757,8 @@ test-core: $(COMPILER)
 	/tmp/cpragma_push_pop_macro_b15626; test "$$?" = "42"
 	./$(COMPILER) test/cvariadic_macro_b157.c /tmp/cvariadic_macro_b15726
 	/tmp/cvariadic_macro_b15726; test "$$?" = "42"
+	./$(COMPILER) test/cenum_typed_decl_b158.c /tmp/cenum_typed_decl_b15826
+	/tmp/cenum_typed_decl_b15826; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

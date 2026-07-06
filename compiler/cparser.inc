@@ -14,6 +14,7 @@ procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
 procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
+function IsBareEnumDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
@@ -4385,7 +4386,7 @@ end;
 function CIsTopLevelTypeDecl: Boolean;
 begin
   Result := ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef')) or
-            ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum')) or
+            ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') and IsBareEnumDecl) or
             (((CurTok.Kind = tkRecord) or
               ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and IsBareStructDecl);
 end;
@@ -6804,6 +6805,30 @@ begin
   { Scan past the balanced body; a `;` right after it is a bare type definition,
     but an identifier (a variable) means this is a struct-typed GLOBAL/var decl
     (`struct { ... } g;`) that must route to ParseCGlobalVarDecl, not ParseCStructDecl. }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin Dec(depth); if depth = 0 then begin Inc(i); Break; end; end;
+    Inc(i);
+  end;
+  Result := (i < TokCount) and (Tokens[i].Kind = tkSemicolon);
+end;
+
+{ True when the upcoming `enum` tokens are a bare enum declaration/definition
+  (`enum Tag;` forward, or `enum [Tag] { ... };`) rather than a function/variable
+  typed by the enum (`enum Tag g(void){...}` / `enum Tag x;`). Without this, an
+  enum-typed function definition was mis-routed to ParseCEnumDecl, which skips to
+  the first `;` — the one INSIDE the body — desyncing the whole parse (00170). }
+function IsBareEnumDecl: Boolean;
+var i, depth: Integer;
+begin
+  i := TokPos;                      { token after 'enum' }
+  if (i < TokCount) and (Tokens[i].Kind = tkIdent) then Inc(i);  { skip tag }
+  if i >= TokCount then begin Result := False; Exit; end;
+  if Tokens[i].Kind = tkSemicolon then begin Result := True; Exit; end;   { `enum Tag;` forward }
+  if Tokens[i].Kind <> tkBegin then begin Result := False; Exit; end;     { `enum Tag x/g(...)` }
   depth := 0;
   while i < TokCount do
   begin
