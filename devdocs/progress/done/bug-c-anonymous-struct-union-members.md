@@ -27,3 +27,6 @@ C11 anonymous struct/union MEMBERS (an unnamed `union {...};` / `struct {...};`
 inside a struct, whose fields are accessed directly as `v.b1`, `v.c`). That is a
 record-layout change (promote an unnamed aggregate member's fields into the
 parent's name scope at the member's offset) — Track A-adjacent, own effort.
+
+## Log
+- 2026-07-07 — resolved, commit dccc4461.

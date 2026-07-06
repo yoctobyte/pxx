@@ -28,12 +28,11 @@ _none_
 
 _none_
 
-## backlog (109)
+## backlog (108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
-| bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-external-func-address-indirect-call | A | 55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
@@ -177,7 +176,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (486)
+## done (487)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -201,6 +200,7 @@ _none_
 | bug-byvalue-record-managed-field-aliases-caller | A | 50 | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
+| bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
@@ -717,7 +717,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [A] bug-c-external-func-address-indirect-call (unblocks 1)
 - [p 55] [C] bug-c-abi-battery-00204
-- [p 55] [C] bug-c-anonymous-struct-union-members
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [C] bug-c-float-single-precision
 - [p 55] [C] bug-c-function-returning-fnptr-declarator
