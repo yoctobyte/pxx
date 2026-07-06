@@ -26,6 +26,17 @@ type
     on exit (CLONE_CHILD_CLEARTID). Its address must stay stable from create to
     join, so keep the handle alive (caller stack / heap) across the thread's life. }
   TThreadHandle = record
+    { RACE CONTRACT (see devdocs/dev/threading.md "Tid identity"): Tid is stored
+      by the PARENT after __pxxclone returns, but the child may already be
+      running — so Tid is safe for parent-side reads (program order) and for any
+      thread that obtained the handle after PalThreadCreate returned, but NOT
+      for the child's own early reads (it can observe a stale 0 before Execute).
+      A child that needs its identity in the handle must self-write it first
+      (PalThreadSelf; same value, so the duplicate store is benign — see
+      ThreadObjLauncher in palthreadobj.pas), or use TidWord, which the KERNEL
+      fills before the child runs (CLONE_PARENT_SETTID) — but TidWord is
+      cleared again at thread exit (CLONE_CHILD_CLEARTID), so it is only valid
+      while the thread lives. }
     Tid:       Int64;     { child tid (kernel thread id), > 0 on success }
     TidWord:   Integer;   { CLONE_*_TID futex word — join waits on this }
     StackBase: Int64;     { mmap'd child-stack base (freed by Join) }
@@ -153,6 +164,8 @@ begin
   ignore := __pxxrawsyscall(SYS_mprotect, h.StackBase, PAGE_SIZE, PROT_NONE, 0, 0, 0);
   { Child stack grows down from the high end; must be 16-byte aligned (mmap is
     page-aligned and stackSize is a multiple of 16, so the top is too). }
+  { NOTE: this parent-side store of h.Tid races the child's startup — the child
+    can run before it lands. See the RACE CONTRACT on TThreadHandle. }
   h.Tid := __pxxclone(PXX_CLONE_THREAD, h.StackBase + h.StackSize,
                       entry, arg, @h.TidWord);
   if h.Tid <= 0 then

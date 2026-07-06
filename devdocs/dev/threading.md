@@ -77,6 +77,58 @@ w := TWorker.Create(True);  w.Start;  ...  w.WaitFor;
 A file-level trampoline (`ThreadObjLauncher`) receives the instance from
 `PalThreadCreate` and virtual-dispatches into the subclass `Execute`.
 
+## Tid identity — who writes the tid, and when it is safe to read
+
+There are two tid fields in `TThreadHandle`, with different write timing:
+
+| field     | writer                | written when                          | valid until      |
+|-----------|-----------------------|---------------------------------------|------------------|
+| `TidWord` | **kernel** (`CLONE_PARENT_SETTID`) | before the child runs any user code | thread exit (`CLONE_CHILD_CLEARTID` zeroes it + futex-wakes join) |
+| `Tid`     | **parent**, user space | after `__pxxclone` returns in the parent | handle lifetime |
+
+The consequence is a startup race on `Tid`: the child can be scheduled and reach
+`Execute` **before** the parent's `h.Tid := __pxxclone(...)` store lands. Any
+*child-side* identity check against `Tid` (`CurrentThread`'s registry match,
+`Suspend`'s own-thread guard, `WaitFor`/`Destroy` self-call guards) can then
+compare against a stale `0`. Observed in practice: `test_tthread_final`'s
+`CurrentThread = Self` failed ~1% of runs (the recurring `make stabilize`
+flake), and a lost `Suspend` guard would skip the self-park entirely — leaving
+`while not s.Suspended` in the caller spinning forever.
+
+**The fix (2026-07-06, `86f16026`):** `ThreadObjLauncher` writes its own tid
+(`PalThreadSelf`) into `FHandlePtr^.Tid` as its first act, before `Execute`.
+
+- **Safe:** all child-side reads are now program-ordered after that store. The
+  parent's later store writes the *identical value*, so the duplicate is benign
+  — even on 32-bit targets where an Int64 store tears into two word stores,
+  every interleaving of two same-value stores yields the same bytes.
+- **Zero cost:** no locking, no handshake, no delay to thread start — one store
+  the child performs anyway before touching anything tid-dependent.
+
+**Rejected alternatives** (for the record, so nobody "improves" this later):
+
+- *Startup handshake* (child spins/futex-waits until the parent has stored
+  `Tid`): correct but strictly worse — adds synchronization and couples the
+  child's start latency to the parent's scheduling. Nothing needs it.
+- *`CLONE_CHILD_SETTID` pointed at `Tid`*: the kernel would write the tid in
+  the child's context before it runs user code — equally race-free, equally
+  zero-cost at runtime, and arguably the cleanest. Rejected on porting risk,
+  not performance: it touches all five per-target `__pxxclone` stubs, and the
+  kernel writes a 32-bit `pid_t` while `Tid` is `Int64` — exactly the
+  width/endianness trap class of the v184 arm32 tid-high-word bug (a garbage
+  high word surfaced far away as `pthread_join` ESRCH). If a third PAL consumer
+  with child-side tid checks ever appears, promote the fix into the PAL this
+  way; until then the one-line launcher store wins.
+
+**Where the contract lives in code:** `TThreadHandle` in `lib/rtl/palthread.pas`
+carries the RACE CONTRACT comment (parent-written `Tid` vs kernel-written
+`TidWord`); the launcher self-write in `lib/rtl/palthreadobj.pas` explains the
+consumer side. The C pthread shim (`lib/crtl/src/pthread.c`) is *not* affected:
+its registry is populated under a lock before `pthread_create` returns, every
+`pthread_join(t)` caller can only hold `t` after that return, and
+`pthread_self` bypasses the registry (direct `gettid`) — no child-side read of
+the parent-written field exists there.
+
 ## Heap & shared state — the safety contract
 
 The heap allocator is thread-safe **only under `--threadsafe`** (a `{$threadsafe

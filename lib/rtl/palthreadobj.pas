@@ -319,7 +319,10 @@ begin
     CurrentThread returned nil ~1% of runs, and a lost Suspend guard skips the
     park entirely (main's `while not Suspended` spins forever). Writing our own
     tid here is program-order-safe for all child-side reads; the parent's later
-    store writes the identical value. }
+    store writes the identical value, so the duplicate is benign even where an
+    Int64 store tears (32-bit). Full contract + rejected alternatives
+    (handshake, CLONE_CHILD_SETTID): devdocs/dev/threading.md "Tid identity"
+    and the RACE CONTRACT on TThreadHandle in palthread.pas. }
   t.FHandlePtr^.Tid := PalThreadSelf;
   t.Execute;
   { Field-wise copy into a local before the call: reading the record FIELD as
