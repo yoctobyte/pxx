@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (114)
+## backlog (113)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,7 +66,6 @@ _none_
 | feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
-| feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
 | feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
@@ -182,7 +181,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (480)
+## done (481)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -450,6 +449,7 @@ _none_
 | feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | 50→60 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-system-libs-granular-opt-out | C | 50 | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
@@ -740,7 +740,6 @@ _none_
 - [p 45] [C] feature-c-designated-init-compound-literals
 - [p 45] [C] feature-c-forward-enum-decl
 - [p 45] [C] feature-c-gtk3-header-final-wiring
-- [p 45] [C] feature-c-pragma-push-pop-macro
 - [p 45] [C] feature-c-statement-expressions
 - [p 45] [C] feature-c-variadic-macros
 - [p 45] [C] feature-c-vla-and-label-in-if

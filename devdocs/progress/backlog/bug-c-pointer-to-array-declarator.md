@@ -15,3 +15,6 @@ prio: 55  # auto
 
 ## Gate
 Drop 00130.c from test/c-conformance/pxx.skip; runner green.
+
+## Triage note (2026-07-06)
+Confirmed not a quick fix: needs a real "pointer whose element is an array" type (element = array-of-N, stride N*elem) plus 2-D stride through it for `p[i][j]`. The `(*p)[4]` declarator, the decay `p = arr`, and the double index all depend on that type existing. Codegen ICE "Unsupported linear node Kind=10" is the AST for the unmodelled type reaching codegen. A dedicated modeling change, not a patch.
