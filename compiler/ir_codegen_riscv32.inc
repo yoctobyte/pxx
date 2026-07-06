@@ -895,6 +895,44 @@ begin
       begin
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
+        { Float destination: coerce the RHS to the target float width (i2d/l2d/
+          i2s/s2d/d2s) before storing. Must precede the Is64Bit branch — a Double
+          target is Is64Bit but an integer RHS needs int->double conversion, not a
+          raw 64-bit bit-copy. Mirrors the IR_STORE_SYM float path. Without this,
+          `*(double*)p = intval` stored the raw integer bits as a denormal (e.g.
+          sqlite3AtoF's `*pResult = s` for an integer-valued real hung FpDecode). }
+        if IsFloatRISCV32(tk) then
+        begin
+          EmitFloatOperandRISCV32(IRB[node], tk);   { a0(single) / a0:a1(double) }
+          if tk = tyDouble then
+          begin
+            rv32_addi(reg_sp, reg_sp, -8);
+            rv32_sw(reg_a0, reg_sp, 0);
+            rv32_sw(reg_a1, reg_sp, 4);
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeRISCV32(IRA[node]);
+            InLValueWrite := savedLVW;
+            rv32_lw(reg_a1, reg_sp, 0);
+            rv32_lw(reg_t1, reg_sp, 4);
+            rv32_addi(reg_sp, reg_sp, 8);
+            rv32_sw(reg_a1, reg_a0, 0);
+            rv32_sw(reg_t1, reg_a0, 4);
+          end
+          else
+          begin
+            rv32_addi(reg_sp, reg_sp, -4);
+            rv32_sw(reg_a0, reg_sp, 0);
+            savedLVW := InLValueWrite;
+            InLValueWrite := True;
+            IREmitNodeRISCV32(IRA[node]);
+            InLValueWrite := savedLVW;
+            rv32_lw(reg_a1, reg_sp, 0);
+            rv32_addi(reg_sp, reg_sp, 4);
+            rv32_sw(reg_a1, reg_a0, 0);
+          end;
+          Exit;
+        end;
         if (sz = 8) and Is64BitRISCV32(tk) then
         begin
           { 64-bit store through memory: spill both value words across the
