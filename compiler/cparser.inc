@@ -1794,7 +1794,15 @@ begin
     typedef `Item` and wrongly suppress it). FindSym is block-scope-aware, so
     this only fires for a live shadow. }
   si := FindSym(name);
-  Result := (si >= 0) and StrEqual(Syms[si].Name, name);
+  { Only a block-scope local or a parameter can validly shadow a typedef in C —
+    a file-scope object with a typedef's name is a redefinition, illegal. So
+    restrict to skLocal/skParam: this both matches the real case (trees.c local
+    `int code;`) and avoids false shadows from unrelated globals/builtins that
+    merely share the name (e.g. a builtin `x` would otherwise suppress `typedef
+    int x;` — c-testsuite 00022). Exact-case (C is case-sensitive; FindSym has a
+    case-insensitive fallback). }
+  Result := (si >= 0) and StrEqual(Syms[si].Name, name)
+            and (Syms[si].Kind in [skLocal, skParam]);
 end;
 
 function IsCTypeTok: Boolean;
@@ -2625,6 +2633,15 @@ begin
             fldI := 0;
             while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
             begin
+              { struct field designator `.name =` repositions the cursor (C 6.7.8). }
+              if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+              begin
+                Next;                                    { '.' }
+                di := FindUField(scalarRec - REC_UCLASS_BASE, CurTok.SVal);
+                if di >= 0 then fldI := di - recBase;
+                Next;                                    { field name }
+                if CurTok.Kind = tkAssign then Next;     { '=' }
+              end;
               if fldI < UClsFCount[scalarRec - REC_UCLASS_BASE] then
               begin
                 if CurTok.Kind = tkBegin then
@@ -3363,7 +3380,7 @@ end;
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
-    recId, initSymIdx, procIdx, initOff: Integer; wasArr: Boolean; initV: Int64;
+    recId, initSymIdx, procIdx, initOff, di: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     initStr: AnsiString;
@@ -3934,6 +3951,16 @@ begin
         fldI := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          { struct field designator `.name =` repositions the field cursor
+            (C 6.7.8) — `{ .b = 2, .a = 1 }` writes a=1,b=2, not by order. }
+          if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+          begin
+            Next;                                        { '.' }
+            di := FindUField(recId - REC_UCLASS_BASE, CurTok.SVal);
+            if di >= 0 then fldI := di - recBase;
+            Next;                                        { field name }
+            if CurTok.Kind = tkAssign then Next;         { '=' }
+          end;
           if fldI < UClsFCount[recId - REC_UCLASS_BASE] then
           begin
             fTk := UFldTk[recBase + fldI];

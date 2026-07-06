@@ -729,6 +729,8 @@ test-core: $(COMPILER)
 	/tmp/cfield_2d_row_decay_b6226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c /tmp/ctypedef_shadow_local_b15126
 	/tmp/ctypedef_shadow_local_b15126; test "$$?" = "42"
+	./$(COMPILER) test/cinit_struct_designator_b152.c /tmp/cinit_struct_designator_b15226
+	/tmp/cinit_struct_designator_b15226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
