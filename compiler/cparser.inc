@@ -6052,10 +6052,35 @@ begin
   end;
 end;
 
-function CEvalConstAnd: Int64;
+function CEvalConstRelational: Int64;
+var r: Int64;
 begin
   Result := CEvalConstShift;
-  while CurTok.Kind = tkAmp do begin Next; Result := Result and CEvalConstShift; end;
+  while (CurTok.Kind = tkLt) or (CurTok.Kind = tkLe) or
+        (CurTok.Kind = tkGt) or (CurTok.Kind = tkGe) do
+  begin
+    if CurTok.Kind = tkLt then begin Next; r := CEvalConstShift; if Result < r then Result := 1 else Result := 0; end
+    else if CurTok.Kind = tkLe then begin Next; r := CEvalConstShift; if Result <= r then Result := 1 else Result := 0; end
+    else if CurTok.Kind = tkGt then begin Next; r := CEvalConstShift; if Result > r then Result := 1 else Result := 0; end
+    else begin Next; r := CEvalConstShift; if Result >= r then Result := 1 else Result := 0; end;
+  end;
+end;
+
+function CEvalConstEquality: Int64;
+var r: Int64;
+begin
+  Result := CEvalConstRelational;
+  while (CurTok.Kind = tkEq) or (CurTok.Kind = tkNeq) do
+  begin
+    if CurTok.Kind = tkEq then begin Next; r := CEvalConstRelational; if Result = r then Result := 1 else Result := 0; end
+    else begin Next; r := CEvalConstRelational; if Result <> r then Result := 1 else Result := 0; end;
+  end;
+end;
+
+function CEvalConstAnd: Int64;
+begin
+  Result := CEvalConstEquality;
+  while CurTok.Kind = tkAmp do begin Next; Result := Result and CEvalConstEquality; end;
 end;
 
 function CEvalConstXor: Int64;
@@ -6064,10 +6089,53 @@ begin
   while CurTok.Kind = tkXor do begin Next; Result := Result xor CEvalConstAnd; end;
 end;
 
-function CEvalConstExpr: Int64;
+function CEvalConstBitOr: Int64;
 begin
   Result := CEvalConstXor;
   while CurTok.Kind = tkPipe do begin Next; Result := Result or CEvalConstXor; end;
+end;
+
+function CEvalConstLogAnd: Int64;
+var r: Int64;
+begin
+  Result := CEvalConstBitOr;
+  while CurTok.Kind = tkAnd do   { `&&` (the C lexer maps && -> tkAnd) }
+  begin
+    Next; r := CEvalConstBitOr;
+    if (Result <> 0) and (r <> 0) then Result := 1 else Result := 0;
+  end;
+end;
+
+function CEvalConstLogOr: Int64;
+var r: Int64;
+begin
+  Result := CEvalConstLogAnd;
+  while CurTok.Kind = tkOr do    { `||` (the C lexer maps || -> tkOr) }
+  begin
+    Next; r := CEvalConstLogAnd;
+    if (Result <> 0) or (r <> 0) then Result := 1 else Result := 0;
+  end;
+end;
+
+function CEvalConstTernary: Int64;
+var t, e: Int64;
+begin
+  Result := CEvalConstLogOr;
+  if CurTok.Kind = tkQuestion then
+  begin
+    Next;
+    t := CEvalConstExpr;            { then-branch is a full expression }
+    if CurTok.Kind = tkColon then Next;
+    e := CEvalConstTernary;         { else-branch is another conditional }
+    if Result <> 0 then Result := t else Result := e;
+  end;
+end;
+
+function CEvalConstExpr: Int64;
+begin
+  { Full C constant-expression precedence: ?: , || , && , | , ^ , & , ==/!= ,
+    </<=/>/>= , <</>> , +/- , */ /% , unary , primary. }
+  Result := CEvalConstTernary;
 end;
 
 { Parse an enumerator list. CurTok must be at the opening tkBegin (the brace).

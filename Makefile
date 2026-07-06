@@ -769,6 +769,8 @@ test-core: $(COMPILER)
 	/tmp/ccrtl_hand_declared_proto_b16226; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstr_literal_binop_b163.c /tmp/cstr_literal_binop_b16326
 	/tmp/cstr_literal_binop_b16326; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cconst_logical_ternary_b164.c /tmp/cconst_logical_ternary_b16426
+	/tmp/cconst_logical_ternary_b16426; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
