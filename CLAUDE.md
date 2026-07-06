@@ -6,44 +6,72 @@ riscv cross targets), and a Nil-Python frontend. The authoritative source of
 project state is `devdocs/progress/BOARD.md` (regenerate with `tools/progress.sh
 board-md`).
 
-## Six parallel agents — figure out which one you are
+## Tracks — coordination lanes, not a taxonomy
 
-The user runs **multiple Claude agents at once** on this repo, split by track.
-The letter is a stable ID; **always pair it with its name** (e.g. "Track C
-(C frontend)") so the slot is never ambiguous — the letters are mnemonic:
-C = the *C-language* frontend, D = *documentation*, P = the *Pascal*-language
-frontend, Z = the *Zig* frontend. **At session start, infer your track from the
-request:**
+The user runs **multiple Claude agents at once** on this repo. A track is a
+**lane to keep concurrent agents from clobbering each other's files, plus the
+gate each must stay green** — it is NOT an ontology of the codebase. So:
 
-- **Track A — compiler (Pascal).** codegen / IR / backends / a target, parser /
-  lexer / ABI / ELF, bootstrap / self-host / `make stabilize`, compiler bugs,
-  language features, `compiler/**`. Works on `master`.
-- **Track B — libraries / demos.** `lib/rtl` · `lib/pcl`, `examples/**`, writing
-  or fixing a library (JSON, hashing, `IntToStr`, `Copy`…), demo apps, `make
-  lib-test` / `make demos`, tickets tagged "(library)". Works on `master`.
+- **One agent often holds several tracks** (e.g. "you're A+B+C"). That's the
+  normal case, not a failure — then you're free to touch all of them, you just
+  respect every gate you span. The letters only matter *when* two agents run at
+  once and must not fight over the same file.
+- **Don't invent new letters.** No Track L for libraries, no "LC" for C
+  libraries. The set below is deliberately small; resist splitting it finer.
+
+Two axes cut the repo, and the tracks follow them:
+
+1. **Accepted languages (frontends)** — what the compiler *parses*: **P** Pascal
+   (the full dialect — classes, generics, RTL semantics, *far* past the subset
+   self-host needs), **C**, **R** Rust, **Z** Zig. Each is a whole language with
+   its own tests; each lowers to the shared IR.
+2. **The core + everything around it** — **A** the language-agnostic machinery
+   (AST/IR/backends/ABI/ELF/self-host), **B** libraries (all languages), **D**
+   public docs.
+
+The compiler is *written in* a thin Pascal subset, bootstrappable with FPC —
+but that's incidental: it could have been written in C, Zig, or whitespace. "The
+compiler is in Pascal" (Track A's impl) and "Pascal is a frontend" (Track P) are
+different things. **Always pair the letter with its name** (e.g. "Track C (C
+frontend)"). **At session start, infer your track from the request:**
+
+- **Track A — compiler core (language-agnostic).** AST / IR / backends / a
+  target / codegen / ABI / ELF, bootstrap / self-host / `make stabilize`,
+  cross-target work, the shared `ir*.inc` / `symtab.inc` / `defs.inc` and the
+  backends. The integrator: everything below the frontends, plus the self-host
+  gate that blesses the stable binary all other tracks build on. Works on
+  `master`.
+- **Track B — libraries / demos (all languages).** `lib/rtl` (Pascal) · `lib/pcl`
+  · `lib/crtl` (C) · future `lib/zrtl` (Zig), `examples/**`, writing or fixing a
+  library (JSON, hashing, `IntToStr`, `Copy`…), demo apps, `make lib-test` /
+  `make demos`, tickets tagged "(library)". Language-neutral by design — libs are
+  split by *what they do*, never by source language. Works on `master`.
 - **Track C — C frontend (cfront).** The C-language frontend
   (`compiler/clexer.inc`, `cparser.inc`, `cpreproc.inc`, C-exclusive C→IR
   lowering), `lib/crtl`, C tests. **Works on `master`** (as of v80, when the C
-  frontend merged in — the old `feat/cfront` worktree is retired). The branch
-  existed only while C was destabilizing; now C *is* part of the compiler, so it
-  lives on `master` like everyone else, protected by the same pin boundary (B/D
-  build on `pinned`, not HEAD).
+  frontend merged in — the old `feat/cfront` worktree is retired). Protected by
+  the same pin boundary (B/D build on `pinned`, not HEAD).
 - **Track D — documentation (user / website).** `docs/**` — the user-facing
   docs the website pulls straight from git and publishes (getting-started,
   language reference, tutorials, install, the public landing copy). Prose only:
   **never** touches `compiler/**` or `lib/**`. NOT the internal dev docs
   (`devdocs/dev/**`) or the agent board (`devdocs/progress/**`) — those belong to A/B.
   Works on `master`.
-- **Track P — Pascal-language frontend.** The Pascal *dialect* itself: Pascal
-  syntax / semantics / new language features and their frontend bugs, living in
-  the Pascal paths of `lexer.inc` / `parser.inc` (plus Pascal-facing `defs.inc`
-  / `symtab.inc` entries). **These are the SHARED front-of-compiler files A also
-  owns** — Pascal, being the seed language, has no separate frontend includes
-  the way C has `cparser.inc` et al. So P is *scoped Track A*: same `master`,
-  same self-host gate, same node/token-numbering discipline. Any change below
-  the frontend (IR ops, backends, ABI, ELF) is still core A work. P and A must
-  not run concurrently on the same shared files — coordinate exactly like the
-  combined-track note below. Works on `master`.
+- **Track P — Pascal frontend (pfront).** The Pascal *dialect* as a language:
+  syntax / semantics / new language features and their frontend bugs — a full
+  frontend, peer of C/Z, not "the compiler's impl language." *Physical catch:*
+  Pascal was the seed, so its frontend still lives inside the SHARED `lexer.inc`
+  / `parser.inc` (and Pascal-facing `defs.inc` / `symtab.inc`) rather than its
+  own `plexer` / `pparser` the way C got carved out. So today P shares those
+  files with A: same `master`, same self-host gate, same node/token-numbering
+  discipline, and **P and A must not edit them concurrently** (combined-track
+  note below). Anything below the frontend (IR ops, backends, ABI, ELF) is core
+  A. The clean long-term shape is to split out `plexer`/`pparser` so P owns files
+  like C/Z do. Works on `master`.
+- **Track R — Rust frontend (rfront).** The Rust-language frontend and its
+  Rust→IR lowering, `lib/rrtl` (as it lands), Rust tests. Live work in
+  `devdocs/progress/working/feature-rust-*`. Same rule as C/Z: own your frontend
+  files; shared-internals change → **file a Track A ticket**. Works on `master`.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
@@ -54,10 +82,11 @@ request:**
   + cross. Land only green; destabilizing work behind a flag or incremental,
   never a long-lived branch.
 
-If genuinely ambiguous, **ask: "Track A (compiler), B (libraries/demos), C (C
-frontend), D (docs/website), P (Pascal frontend), or Z (Zig frontend)?"** —
-don't guess; the tracks have opposite rules about rebuilding the compiler and
-where they work.
+If genuinely ambiguous, **ask: "Track A (core), B (libraries/demos), C (C
+frontend), D (docs/website), P (Pascal frontend), R (Rust frontend), or Z (Zig
+frontend)?"** — don't guess; the tracks have opposite rules about rebuilding the
+compiler and where they work. (And remember one agent may legitimately hold
+several at once.)
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
@@ -102,12 +131,20 @@ while documenting → file a ticket in `devdocs/progress/backlog`, don't fix cod
 Verify code snippets by compiling them; don't invent behaviour.
 
 ### Track P in one line
-Own the Pascal-language surface in the SHARED `lexer.inc` / `parser.inc` (Pascal
-paths) — scoped Track A, so same `master`, same gate = `make test` + self-host
-fixedpoint (byte-identical), plus cross where a target is touched. IR / backends
-/ ABI / ELF are core A. Because the files are shared with A, never run P and A on
-them at once; on a Pascal feature that needs a new IR op / AST node, that part is
-an A change (self-resolve if you also hold A, else file + hand off).
+Full Pascal-language frontend (peer of C/Z), but its files aren't carved out yet
+— it lives in the SHARED `lexer.inc` / `parser.inc` (Pascal paths). So same
+`master`, same gate = `make test` + self-host fixedpoint (byte-identical), plus
+cross where a target is touched, and **never edit those files concurrently with
+A**. IR / backends / ABI / ELF are core A: a Pascal feature needing a new IR op /
+AST node is an A change (self-resolve if you also hold A, else file + hand off).
+
+### Track R in one line
+Own the Rust-frontend files (`rfront` lexer/parser, Rust→IR lowering, `lib/rrtl`,
+Rust tests) on `master`; live work under `devdocs/progress/working/feature-rust-*`.
+**Shared compiler internals stay A's** — new AST node / IR op / symtab field /
+backend → **file a Track A ticket**, don't edit under R. Gate = Rust tests green +
+self-host byte-identical + cross. Land only green; destabilizing work behind a
+flag or incrementally, never a long-lived branch.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
