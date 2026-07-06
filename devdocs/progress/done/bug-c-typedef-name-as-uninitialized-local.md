@@ -40,3 +40,6 @@ Whole zlib runner fails to compile. See [[feature-c-corpus-zlib]].
 
 ## Gate
 Repro compiles + runs exit 0 under pxx; zlib runner advances past trees.c.
+
+## Log
+- 2026-07-06 — resolved, commit 0e2740ee.

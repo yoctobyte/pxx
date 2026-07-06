@@ -1,6 +1,6 @@
 ---
 prio: 60
-blocked-by: [bug-c-typedef-name-as-uninitialized-local]
+blocked-by: [bug-c-gzgetc-fnlike-macro-call]
 ---
 # C corpus step 2: zlib v1.3.1 bring-up
 
@@ -24,11 +24,11 @@ blocked-by: [bug-c-typedef-name-as-uninitialized-local]
 - Each zlib TU group compiles alone under pxx; the failures are specific
   interactions/constructs below.
 
-## Blockers (both must clear before the runner links)
-1. **[[bug-c-typedef-name-as-uninitialized-local]]** (HIGH, isolated, 3-line
-   repro). `inftrees.h` `typedef struct{...} code;` + `trees.c` `int code;` loop
-   var → "expected C expression". Blocks the whole amalgam.
-2. **zlib.h `gzgetc` function-like macro** — `crtl + zlib.h + example.c` fails:
+## Blockers
+1. ~~**bug-c-typedef-name-as-uninitialized-local**~~ — **FIXED 2026-07-06**
+   (commit 0e2740ee): shadowed-typedef-name-as-local now parses; `trees.c` clears.
+2. **[[bug-c-gzgetc-fnlike-macro-call]]** (open blocker) — `crtl + zlib.h +
+   example.c` fails:
    `Expected: ), but got: (Kind: 74) near: gzgetc >>> file`. example.c calls the
    `gzgetc(file)` macro that zlib.h defines to inline the fast path (expands to a
    comma/ternary expr referencing gzFile internals). Not yet reduced to a minimal

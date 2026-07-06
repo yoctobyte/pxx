@@ -42,6 +42,7 @@ _none_
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
 | bug-c-function-returning-fnptr-declarator | C | 55 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
+| bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
 | bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
@@ -52,7 +53,6 @@ _none_
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
-| bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -62,7 +62,7 @@ _none_
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
-| feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-typedef-name-as-uninitialized-local |
+| feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-gzgetc-fnlike-macro-call |
 | feature-c-cross-target-feature-coverage | C | 65 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
@@ -188,7 +188,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (470)
+## done (471)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -259,6 +259,7 @@ _none_
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-c-ternary-middle-comma | C | 50 | bug | C: ternary middle arm rejects comma expression | — |
+| bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
@@ -682,7 +683,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [A] bug-basic-goto-gosub-halts-program
-- [p 94] [C] bug-c-typedef-name-as-uninitialized-local (unblocks 1)
 - [p 90] [C] bug-c-init-designated-and-nested
 - [p 90] [C] bug-c-static-init-cast-and-int-to-double
 - [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
@@ -696,6 +696,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 60] [C] bug-c-gzgetc-fnlike-macro-call (unblocks 1)
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-runtime-library
@@ -801,5 +802,5 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — bug-c-typedef-name-as-uninitialized-local
+- **1** — bug-c-gzgetc-fnlike-macro-call
 - **1** — task-sqlite-libc-free-runtime-bringup
