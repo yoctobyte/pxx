@@ -203,6 +203,20 @@ destabilizing work behind a flag or incrementally, never a long-lived branch.
   rate goals and the chain follows. Loop `next → claim <slug> <agent> → do →
   resolve <slug> <commit> → board-md`. origin/master is truth (pull --rebase,
   push green). Full model: `devdocs/progress/README.md`.
+- **Cold start — "continue on tickets" (no track named):** self-dispatch,
+  auto-pick the global top.
+  1. `git pull --rebase` (origin is truth).
+  2. `tools/progress.sh next` — the single highest-effective-prio ready ticket,
+     any track. (If the user *did* name a track, use `next --track <X>` instead.)
+  3. **Sole-A guard:** if that ticket is Track A — or a Track P edit that touches
+     the shared `lexer.inc`/`parser.inc` (i.e. it edits shared core/IR files) —
+     confirm you are the *only* agent on Track A right now; ask the user if you
+     can't tell. If you're not sole-A, skip it and take the top of a non-A track
+     (`next --track C|B|R|D`). Any non-shared ticket: just claim it.
+  4. `claim <slug> <agent-id>` → do it → land green (your lane's gate) →
+     `resolve <slug> <commit>` → `board-md` → commit the move + push.
+  5. Loop: `pull --rebase`, `next`, repeat. Stop when the queue is dry for your
+     lane or the user says so.
 - Tickets live in
   `devdocs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
   regenerate `BOARD.md` after moving them. `working/` is a **live lock** — a
