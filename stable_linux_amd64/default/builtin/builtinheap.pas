@@ -1,10 +1,14 @@
 { SPDX-License-Identifier: Zlib }
 unit builtinheap;
 
-{ ESP (xtensa/riscv32) has no mmap and no OS heap of its own here; back the
-  allocator with a fixed static arena instead. One marker for both ESP ISAs. }
+{ ESP (xtensa/bare riscv32) has no mmap and no OS heap of its own here; back the
+  allocator with a fixed static arena instead. One marker for both ESP ISAs.
+  HOSTED riscv32 (qemu-user linux) DOES have mmap and the linux syscall ABI (its
+  read/write already use syscalls 63/64), so it must NOT take the static-arena
+  path — a 64 KiB arena OOMs on any real workload (e.g. sqlite) and PXXAlloc then
+  stores through a NULL base. Only bare-metal riscv32 (PXX_ESP_BARE) is ESP. }
 {$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
-{$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}
+{$ifdef CPU_RISCV32}{$ifdef PXX_ESP_BARE}{$define PXX_ESP}{$endif}{$endif}
 
 { Heap allocator + managed-string runtime helpers, split out of `builtin` so a
   program that only needs the heap (New/Dispose/GetMem) or the managed-string
@@ -173,6 +177,13 @@ begin
 {$endif}
 {$ifdef CPU_I386}
   Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  { hosted linux (qemu-user): generic syscall ABI mmap = 222 (byte offset, 0 here).
+    prot=PROT_READ|PROT_WRITE=3, flags=MAP_PRIVATE|MAP_ANONYMOUS=0x22=34. }
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$endif}
 {$endif}
 {$ifdef PXX_ESP}
   { Static arena: hand out the fixed buffer once (len is HEAP_ARENA here, so

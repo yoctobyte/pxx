@@ -47,6 +47,8 @@ function __pxx_i2d(v: Integer): Int64;         { signed int -> double }
 function __pxx_l2d(v: Int64): Int64;            { signed int64 -> double (RNE) }
 function __pxx_ul2d(v: Int64): Int64;           { unsigned 64-bit pattern -> double (RNE) }
 function __pxx_d2i(a: Int64): Integer;          { double -> signed int, trunc to 0 }
+function __pxx_d2i64(a: Int64): Int64;          { double -> signed Int64, trunc to 0 }
+function __pxx_d2i64_rne(a: Int64): Int64;      { double -> signed Int64, round-half-even }
 function __pxx_s2d(a: LongWord): Int64;         { single -> double (exact repack) }
 function __pxx_d2s(a: Int64): LongWord;         { double -> single (round-near-even) }
 
@@ -569,6 +571,68 @@ begin
   else r := m shr (-shift);                               { truncate toward zero }
   if sign = 1 then r := -r;
   Result := Integer(r);
+end;
+
+{ double -> signed 64-bit int, truncate toward zero. Full Int64 range (the 32-bit
+  __pxx_d2i saturates at 2^31, wrong for e.g. sqlite's %f which casts a ~1.5e18
+  double to u64). On arm32/riscv32 the VFP/soft path only converts to 32 bits, so
+  a 64-bit C cast routes here. }
+function __pxx_d2i64(a: Int64): Int64;
+var sign, exp, shift: Integer; m, r: Int64;
+begin
+  exp := (a shr 52) and $7FF;
+  if exp < 1023 then begin Result := 0; Exit; end;       { |x| < 1 }
+  sign := (a shr 63) and 1;
+  if exp = 2047 then                                      { inf / NaN }
+  begin
+    if (a and D_MANT) <> 0 then begin Result := 0; Exit; end;
+    if sign = 1 then Result := -(Int64(1) shl 63) else Result := (Int64(1) shl 63) - 1;
+    Exit;
+  end;
+  if exp >= 1086 then                                     { |x| >= 2^63 -> saturate }
+  begin
+    if sign = 1 then Result := -(Int64(1) shl 63) else Result := (Int64(1) shl 63) - 1;
+    Exit;
+  end;
+  m := (Int64(1) shl 52) or (a and D_MANT);               { value = m * 2^(exp-1075) }
+  shift := exp - 1075;
+  if shift > 0 then r := m shl shift
+  else r := m shr (-shift);                               { truncate toward zero }
+  if sign = 1 then r := -r;
+  Result := r;
+end;
+
+{ double -> signed 64-bit int, round-half-to-even (mirrors __pxx_d2i_rne at 64-bit). }
+function __pxx_d2i64_rne(a: Int64): Int64;
+var sign, exp, shift: Integer; m, r, dropped, half: Int64;
+begin
+  exp := (a shr 52) and $7FF;
+  sign := (a shr 63) and 1;
+  if exp = 2047 then                                       { inf / NaN }
+  begin
+    if (a and D_MANT) <> 0 then begin Result := 0; Exit; end;
+    if sign = 1 then Result := -(Int64(1) shl 63) else Result := (Int64(1) shl 63) - 1;
+    Exit;
+  end;
+  if exp < 1022 then begin Result := 0; Exit; end;         { |x| < 0.5 -> 0 }
+  if exp >= 1086 then                                       { |x| >= 2^63 -> saturate }
+  begin
+    if sign = 1 then Result := -(Int64(1) shl 63) else Result := (Int64(1) shl 63) - 1;
+    Exit;
+  end;
+  m := (Int64(1) shl 52) or (a and D_MANT);
+  shift := 1075 - exp;
+  if shift <= 0 then r := m shl (-shift)
+  else
+  begin
+    dropped := m and ((Int64(1) shl shift) - 1);
+    r := m shr shift;
+    half := Int64(1) shl (shift - 1);
+    if dropped > half then r := r + 1
+    else if dropped = half then begin if (r and 1) = 1 then r := r + 1; end;
+  end;
+  if sign = 1 then r := -r;
+  Result := r;
 end;
 
 function __pxx_s2d(a: LongWord): Int64;
