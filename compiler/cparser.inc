@@ -6506,7 +6506,41 @@ begin
       repeat
         declStars := 0;
         while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
-        if CurTok.Kind <> tkIdent then Break;
+        if CurTok.Kind <> tkIdent then
+        begin
+          { ANONYMOUS aggregate member (no declarator, e.g. `union { int b1; };`):
+            promote the sub-record's fields into THIS record at the member's
+            offset (C11 6.7.2.1), so `v.b1` resolves directly. Composes
+            recursively — a nested anon aggregate already promoted its own fields
+            into subci. }
+          if (subci >= 0) and (declStars = 0) then
+          begin
+            if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
+            for k := 0 to UClsFCount[subci] - 1 do
+              if bfCount < MAX_BF then
+              begin
+                bfNOff[bfCount]    := UFldNOff[UClsFBase[subci] + k];
+                bfNLen[bfCount]    := UFldNLen[UClsFBase[subci] + k];
+                bfOff[bfCount]     := thisOff + UFldOff_[UClsFBase[subci] + k];
+                bfTk[bfCount]      := UFldTk[UClsFBase[subci] + k];
+                bfRec[bfCount]     := UFldRec_[UClsFBase[subci] + k];
+                bfElemTk[bfCount]  := UFldPtrElemTk[UClsFBase[subci] + k];
+                bfElemRec[bfCount] := UFldPtrElemRec[UClsFBase[subci] + k];
+                bfIsArr[bfCount]   := UFldIsArray[UClsFBase[subci] + k];
+                bfArrLen[bfCount]  := UFldArrLen[UClsFBase[subci] + k];
+                bfProcSig[bfCount] := UFldProcSig[UClsFBase[subci] + k];
+                bfBitWidth[bfCount] := UFldBitWidth[UClsFBase[subci] + k];
+                bfBitShift[bfCount] := UFldBitShift[UClsFBase[subci] + k];
+                bfBitBytes[bfCount] := UFldBitBytes[UClsFBase[subci] + k];
+                bfNDims[bfCount]   := 0;
+                Inc(bfCount);
+              end;
+            if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
+            else curOff := thisOff + subRecSz;
+            if subAl > maxAlign then maxAlign := subAl;
+          end;
+          Break;
+        end;
         fnOff := Tokens[TokPos - 1].SOffset; fnLen := Tokens[TokPos - 1].SLen; Next;
         isArr := False; arrLen := 1; fldNDims := 0;
         while CurTok.Kind = tkLBrack do
