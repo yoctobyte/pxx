@@ -763,6 +763,8 @@ test-core: $(COMPILER)
 	/tmp/cstatic_init_cast_intdouble_b15926; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_expr_result_b160.c /tmp/csizeof_expr_result_b16026
 	/tmp/csizeof_expr_result_b16026; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_fnptr_addressof_b161.c /tmp/cglobal_fnptr_addressof_b16126
+	/tmp/cglobal_fnptr_addressof_b16126; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

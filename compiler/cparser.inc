@@ -3537,8 +3537,12 @@ begin
     else if CurTok.Kind = tkAssign then
     begin
       { scalar initializer `= expr;` — record a single proc address if it is a
-        bare function name, else skip to the terminator (zero default). }
+        (optionally address-of'd) function name, else skip to the terminator
+        (zero default). `&func` == `func` for a function pointer, so a global
+        `int (*f)(int) = &fred;` must bind the address like the bare form (else
+        the pointer stayed 0 and calling it SIGSEGV'd). }
       Next;
+      if CurTok.Kind = tkAmp then Next;   { optional `&` before the function name }
       if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
       begin
         arrKind[0] := 3; arrSym[0] := FindProc(CurTok.SVal); nArrElems := 1; Next;
