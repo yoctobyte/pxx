@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -2901,6 +2901,33 @@ test-lua-cross: $(COMPILER)
 	done; \
 	test "$$overall" = "0" || { echo "test-lua-cross: FAILURES"; exit 1; }; \
 	echo "test-lua-cross: all cross lua runs match expected"
+
+# Multithreaded SQLite over the libc-free PXX pthread shim (lib/crtl pthread.h/.c
+# bridged to the PAL via lib/rtl/palpthread.pas). Builds SQLITE_THREADSAFE=1 and
+# runs test/csqlite_thread_test.c: N threads on one FULLMUTEX (serialized)
+# connection + N per-thread connections, self-checking. x86-64 only (--threadsafe
+# is x86-64/i386). Skips when the gitignored sqlite amalgamation is absent, like
+# test-cjson. NOT in `make test` (large 3rd-party build); run explicitly.
+SQLITE_SRC ?= library_candidates/sqlite
+test-sqlite-threads: $(COMPILER)
+	@if [ ! -f "$(SQLITE_SRC)/sqlite3.c" ]; then \
+	  echo "test-sqlite-threads: SKIP — no sqlite amalgamation at $(SQLITE_SRC)/sqlite3.c"; exit 0; \
+	fi; \
+	echo "test-sqlite-threads: building threadsafe sqlite (x86-64) ..."; \
+	if ! ./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
+	     test/csqlite_thread_test.c /tmp/csqlite_thread_test26 2>/tmp/cstt.err; then \
+	  echo "test-sqlite-threads: FAIL (build error)"; head -5 /tmp/cstt.err; exit 1; \
+	fi; \
+	if readelf -d /tmp/csqlite_thread_test26 2>/dev/null | grep -qi 'NEEDED'; then \
+	  echo "test-sqlite-threads: FAIL (not libc-free — has DT_NEEDED)"; \
+	  readelf -d /tmp/csqlite_thread_test26 | grep -i needed; exit 1; \
+	fi; \
+	out="$$(timeout 60 /tmp/csqlite_thread_test26)"; \
+	if [ "$$out" = "$$(printf 'shared OK\nperthread OK\nall OK')" ]; then \
+	  echo "test-sqlite-threads: PASS (libc-free, shared+per-thread)"; \
+	else \
+	  echo "test-sqlite-threads: FAIL"; echo "$$out"; exit 1; \
+	fi
 
 # cJSON integration suite (feature-c-source-frontend smoke). DISTINCT from `make
 # test`: the base gate carries no 3rd-party dependency. Amalgamates lib/crtl + the
