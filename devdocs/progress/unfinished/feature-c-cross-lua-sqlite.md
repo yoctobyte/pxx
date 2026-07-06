@@ -25,6 +25,55 @@
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
+## Progress log (session 2026-07-06 #2, i386 + arm32 sqlite GREEN — 4/5 targets)
+
+**MILESTONE: sqlite3 runs byte-identical to the oracle on x86-64, aarch64, i386,
+AND arm32 — all libc-free static. Only riscv32 left (lowest priority).** Chased
+the shared "32-bit schema-write segfault" from the previous log to root causes:
+
+**i386 (commit `fix(i386): sqlite green`):** two bugs.
+1. IR_CALL_IND pushed every arg as 4 bytes; a 64-bit (sqlite_int64) or double
+   by-value arg through a function pointer needs 8 — sqlite's VFS xWrite takes an
+   i64 offset, so memjrnlWrite got a shifted `sqlite3_file*` and segfaulted.
+   Marshal by the signature proc's param types.
+2. double->int64 (Trunc, used by C casts) did `cvttsd2si eax + cdq` = 32-bit
+   convert sign-extended, so |x|>=2^31 became the 0x80000000 sentinel. sqlite's
+   %f casts a ~1.5e18 double to u64 (sqlite3FpDecode) -> u64-max garbage
+   (`balance = 18446.744...`). Use x87 `fld`+`fisttp`/`fistp` for a true 64-bit
+   convert. DIAGNOSIS: gdb-under-qemu (`qemu-i386 -g 1234` + gdb-multiarch) +
+   `--dump-cpp` to map the amalgamation TU line -> `memjrnlWrite`; then isolated
+   `sqlite3_mprintf("%f",1500.5)` -> `va_arg(double)` OK -> `sqlite3FpDecode`
+   -> `(u64)rr[0]` -> minimal `(u64)1.5e18` repro.
+
+**arm32 (commit `fix(arm32): sqlite green`):** two bugs, both shared.
+3. **C struct-by-value ABI** (shared, all backends): a C record param uses the
+   by-ref ABI (caller copies to a temp, passes &temp; callee derefs). BUT
+   `RegisterProc` (symtab.inc) hardcoded `Procs[].Params[].IsRef := False`, so the
+   arm32/riscv32 CALLER's record-by-value branch fired and pushed the 8-byte
+   record as TWO words (value + a stale 2nd word = 0) while the callee read ONE
+   pointer word -> the 2nd struct arg (`sqlite3AddColumn`'s `Token sType`) came
+   through NULL -> segfault at the first CREATE TABLE. FIX: `Params[].IsRef :=
+   CProgramMode and (ptypes[i] = tyRecord)`. Minimal repro `/tmp/sbv6.c` (justA OK,
+   justB crashed). This also silently fixed riscv32's struct-by-value.
+4. **double->int64** (shared arm32+riscv32): VFP `vcvt.s32.f64` / soft `__pxx_d2i`
+   are 32-bit only (saturate at 2^31). Added `__pxx_d2i64`/`_rne` soft-float
+   kernels (full Int64 range) + routed arm32 Trunc/Round and riscv32 Trunc/Round
+   for Int64 results through them. arm32 now pulls softfloat (C + Pascal; falls
+   back to 32-bit VFP if absent so no hard dep). LANDMINE: the Pascal RTL's float
+   formatter uses Trunc->Int64, so the arm32 softfloat pull had to cover the
+   Pascal path too or `-g --target=arm32` (dwarf smoke gate) broke.
+
+**Gate:** make test + self-host byte-identical + test-lua-cross 24/24 (all 4
+targets, no regression).
+
+**OPEN — riscv32 only (LOWEST PRIO, user: gimmick/assume-IDF):** builds libc-free,
+`sqlite3_open` OK, struct-by-value + double-conv now fixed (sbv6 passes), but still
+SIGSEGVs at the first CREATE TABLE with a distinct bug: `sw a1,0(a0)` with a0=0 —
+a local pointer at `s0-40` is NULL and stored through (`*p = v`, p NULL). No source
+line (riscv32 -g DWARF not read by gdb-multiarch). NEXT: map the pc via --dump-cpp
++ objdump, find which NULL pointer; likely a riscv32-specific codegen gap in a
+store path (record return? aggregate? pointer local init?).
+
 ## Progress log (session 2026-07-06, cross sqlite libc-free + all 4 targets build)
 
 **MILESTONE: sqlite3 now builds LIBC-FREE STATIC on all 5 targets; x86-64 +
