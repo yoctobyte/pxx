@@ -25,6 +25,72 @@
 - **Owner:** Track C+B+A (combined)
 - **Opened:** 2026-07-05
 
+## Progress log (session 2026-07-06, cross sqlite libc-free + all 4 targets build)
+
+**MILESTONE: sqlite3 now builds LIBC-FREE STATIC on all 5 targets; x86-64 +
+aarch64 run byte-identical to the oracle.** Before this session x86-64/aarch64
+sqlite were *dynamically linked against libc.so.6* (the unix VFS POSIX syscalls
+resolved via GOT); i386/arm32/riscv32 could not build at all. Now zero libc,
+zero external symbols, one static binary — the golden-demo direction.
+
+**Landed (all pushed, master green: make test + self-host byte-identical +
+test-lua-cross 24/24 all 4 targets):**
+
+1. **libc-free POSIX syscall veneer** (`feat(crtl)`, commit on master): sqlite's
+   unix VFS calls open/fstat/lstat/stat/fcntl/fsync/fchmod/mkdir/getpid/
+   nanosleep/gettimeofday/utimes/sysconf/mmap directly. Added real wrappers
+   routed **crtl C → pxxcio `__pxx_*` → platform PAL**:
+   - PAL backend (`lib/rtl/platform/posix/platform_backend.pas`): statx(2)-based
+     fstat/lstat/stat (arch-neutral struct — ONE field-offset map for all
+     targets; returns real (dev,ino) so sqlite's POSIX lock manager keys file
+     identity correctly) + fcntl/fsync/fchmod/getpid/nanosleep/realtime/utimes/
+     mmap/munmap, with per-arch SYS_* numbers for all 5 arches. esp backend =
+     unsupported stubs. Extended `TPalFileStat` with Ino/Dev/Blocks/BlkSize.
+   - pxxcio: `__pxx_fstat/stat/lstat` fill a fixed 48-byte `TPxxStatBuf`
+     (5×i64+2×i32) the C veneer copies into `struct stat`; fcntl/etc pass
+     through. **off_t == native long, so struct flock / lseek offsets match each
+     arch's kernel ABI with no translation** (the keystone that makes fcntl a raw
+     passthrough).
+   - crtl src (auto-pulled via header→sibling-.c mechanism): `fcntl.c`,
+     `sys/stat.c`, `unistd.c`, `sys/time.c`, `sys/mman.c` (mmap→MAP_FAILED:
+     sqlite mmap defaults off, only needs to link), nanosleep in `time.c`.
+2. **C octal literals** (`fix(cfront)` clexer.inc): `0100`/`01000` were parsed
+   base-10 → the fcntl O_* flag macros came out 100/1000 not 64/512, injecting a
+   phantom O_EXCL into open(2) flags (second open of a file → EEXIST). Now base-8.
+   GENERAL cfront bug.
+3. **64-bit C signed `>>`** (`fix(cross)` i386/arm32/riscv32): binop64 lowering
+   only handled shr via tkIdent (Pascal shr = always logical). C `>>` is tkShr,
+   arithmetic on signed Int64 — added sar/asr (+ sign-fill on shift≥32) branches.
+4. **riscv32 @external routine** (symtab.inc EmitExternalProcAddr): was a hard
+   error; now mirrors the external CALL path (auipc + DynCall-patched inline
+   literal), loading the resolved fn addr into a0.
+5. **arm32 indirect call >4 params** (ir_codegen_arm32.inc IR_CALL_IND): capped
+   at 4; sqlite's pVfs->xOpen has 5. Mirror the IR_VIRTUAL_CALL >4 stack-spill.
+6. **i386 record variables + tyRecord load-through-pointer** (ir_codegen386.inc):
+   the fat-slot backend refused records; admit tyRecord (value = slot address,
+   by-ref model like x86-64; IR_LOAD_MEM loads 8 bytes edx:eax matching x64).
+
+**Verified:** x86-64 + aarch64 sqlite3 = **statically linked, MATCH oracle**
+byte-for-byte (CRUD, transactions, COUNT/SUM/AVG, floats 2000.75/35.00, NULL).
+Minimal syscall test (open/write/fstat/fcntl/fsync/getpid) works on arm32/riscv32.
+(A `printf %lld`-with-many-args display drift on arm32 is a SEPARATE cosmetic
+crtl varargs issue — the raw struct bytes are correct; not a wrapper bug.)
+
+**OPEN — shared 32-bit schema-write segfault (i386 + arm32 + riscv32, IDENTICAL):**
+All three now build libc-free static, link, `sqlite3_open` succeeds ("DB opened
+successfully" prints), then SIGSEGV during the FIRST `CREATE TABLE` (schema
+write), before "Table and index created". 64-bit targets are perfect → this is a
+single SHARED 32-bit bug (codegen or struct-layout), NOT per-backend and NOT the
+syscall wrappers. i386 gdb-under-qemu backtrace: crash `mov (%eax),%eax` with eax
+bad, in the **pager/pcache sub-allocation carve** region (~`sqlite3PagerOpen`,
+sqlite3.c ~61970: `pPager=(Pager*)pPtr; pPtr += ROUND8(sizeof(*pPager))` pattern).
+Call chain (amalgamation TU lines): #0 75409 → … → #13 145809. STRONG hypothesis:
+a 32-bit `sizeof`/struct-field-offset or pointer-arithmetic miscompile (cf. the
+aarch64 v177 BtCursor.iPage struct-layout family) — probe with an offsetof/sizeof
+TU comparing pxx vs gcc layout on i386. NEXT SESSION: root-cause this one bug →
+lights up all three 32-bit targets at once (i386/arm32 practical; riscv32 = bonus,
+USER SAYS LOWEST PRIO / "assume IDF", fine to leave last).
+
 ## Progress log (session 2026-07-05 #3, riscv32 hosted C brought up to near-lua)
 
 **19. riscv32 hosted C lua — from "won't link" to "runs all init + scalars, one
