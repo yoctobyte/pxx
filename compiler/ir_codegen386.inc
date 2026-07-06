@@ -2262,11 +2262,31 @@ begin
             if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
             begin
               if j = 203 then
-                begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);       { cvttsd2si eax, xmm0 }
-                  EmitB($99); end                                          { cdq (Trunc -> Int64) }
+              begin
+                { Trunc -> Int64. cvttsd2si only yields a 32-bit result on i386
+                  (no 64-bit GPR); cdq-extending it overflows any |x|>=2^31 to the
+                  0x80000000 sentinel (breaks e.g. sqlite's double->u64 in %f
+                  formatting). Do a true 64-bit truncating convert via x87 fisttp. }
+                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
+                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+                EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
+                EmitB($DD); EmitB($0C); EmitB($24);                        { fisttp qword [esp] (truncate) }
+                EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
+                EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
+                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+              end
               else if j = 204 then
-                begin EmitB($F2); EmitB($0F); EmitB($2D); EmitB($C0);       { cvtsd2si eax, xmm0 }
-                  EmitB($99); end                                          { cdq (Round -> Int64) }
+              begin
+                { Round -> Int64 via x87 fistp (uses the default round-to-nearest
+                  control word), full 64-bit result in edx:eax. }
+                EmitB($83); EmitB($EC); EmitB($08);                        { sub esp, 8 }
+                EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+                EmitB($DD); EmitB($04); EmitB($24);                        { fld qword [esp] }
+                EmitB($DF); EmitB($3C); EmitB($24);                        { fistp qword [esp] (round) }
+                EmitB($8B); EmitB($04); EmitB($24);                        { mov eax, [esp] }
+                EmitB($8B); EmitB($54); EmitB($24); EmitB($04);            { mov edx, [esp+4] }
+                EmitB($83); EmitB($C4); EmitB($08);                        { add esp, 8 }
+              end
               else if j = 205 then
               begin
                 { Frac = x - trunc(x) }
@@ -2716,14 +2736,60 @@ begin
         { Indirect call through a proc-typed value. Same caller-cleanup cdecl
           push convention as IR_CALL; the callee address is evaluated last (args
           already on the stack, so a simple proc-var load can't disturb them)
-          and reached via `call eax`. }
+          and reached via `call eax`. Args are marshalled by the SIGNATURE proc's
+          param types — critically a 64-bit (int64) or double by-value param is 8
+          bytes, not 4; pushing it as 4 shifts every following arg's stack slot
+          in the callee (sqlite's VFS xRead/xWrite take an sqlite_int64 offset). }
+        procIdx := Integer(IRIVal[node]);            { signature proc index }
         argBytes := 0;
+        nArgs := 0;
         argNode := IRB[node];
         while argNode <> -1 do
         begin
-          IREmitNode386(IRA[argNode]);               { eax = arg }
-          EmitB($50);                                { push eax }
-          Inc(argBytes, 4);
+          IREmitNode386(IRA[argNode]);
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
+             (not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            { 64-bit by-value param: widen a 32-bit value to edx:eax, push hi then lo. }
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if not Is64Bit386(tk) then
+            begin
+              if TypeSigned(tk) then EmitB($99)              { cdq }
+              else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
+            end;
+            EmitB($52);                              { push edx (hi) }
+            EmitB($50);                              { push eax (lo) }
+            Inc(argBytes, 8);
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            { double by-value param: value in xmm0 -> 8-byte stack slot. }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, eax }
+            EmitB($83); EmitB($EC); EmitB($08);                          { sub esp, 8 }
+            EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movsd [esp], xmm0 }
+            Inc(argBytes, 8);
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  (Procs[procIdx].Params[nArgs].TypeKind = tySingle) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, eax }
+            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
+            EmitB($83); EmitB($EC); EmitB($04);                          { sub esp, 4 }
+            EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movss [esp], xmm0 }
+            Inc(argBytes, 4);
+          end
+          else
+          begin
+            EmitB($50);                              { push eax }
+            Inc(argBytes, 4);
+          end;
+          Inc(nArgs);
           argNode := IRB[argNode];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }

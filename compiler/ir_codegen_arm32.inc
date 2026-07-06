@@ -2253,11 +2253,40 @@ begin
         EmitI32($E92D0001);                          { push {r0} (callee, deepest) }
         argNode := IRB[node];
         j := 0;
+        nArgs := 0;
         while argNode <> -1 do
         begin
-          IREmitNodeArm32(IRA[argNode]);
-          EmitI32($E92D0001);                        { push {r0} }
-          Inc(j, 1);
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             ((Procs[procIdx].Params[nArgs].TypeKind = tyInt64) or
+              (Procs[procIdx].Params[nArgs].TypeKind = tyUInt64)) and
+             (not Procs[procIdx].Params[nArgs].IsRef) and
+             (not Procs[procIdx].Params[nArgs].IsArray) then
+          begin
+            { 64-bit by-value param = two words (lo then hi), as the direct call
+              does — sqlite's VFS xRead/xWrite take an sqlite_int64 offset; pushing
+              it as one word shifts every following arg word in the callee. }
+            EmitNode64Arm32(IRA[argNode]);             { r0=lo, r1=hi }
+            EmitI32($E92D0001);                        { push {r0} (lo) }
+            EmitI32($E92D0002);                        { push {r1} (hi) }
+            Inc(j, 2);
+          end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          begin
+            IREmitNodeArm32(IRA[argNode]);             { d0 }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then EmitIntToD0Arm32;
+            EmitI32($EC510B10);                        { vmov r0, r1, d0 }
+            EmitI32($E92D0001); EmitI32($E92D0002);    { push lo, hi }
+            Inc(j, 2);
+          end
+          else
+          begin
+            IREmitNodeArm32(IRA[argNode]);
+            EmitI32($E92D0001);                        { push {r0} }
+            Inc(j, 1);
+          end;
+          Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if j <= 4 then
