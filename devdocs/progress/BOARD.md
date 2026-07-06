@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (118)
+## backlog (115)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,15 +41,12 @@ _none_
 | bug-c-function-returning-fnptr-declarator | C | 55 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
-| bug-c-init-array-designators | C | 50→90 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
 | bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
-| bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-preproc-paste-rescan | C | 55 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
-| bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -186,7 +183,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (476)
+## done (479)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -232,6 +229,7 @@ _none_
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
+| bug-c-init-array-designators | C | 50→90 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
 | bug-c-init-struct-designators | C | 50→90 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
@@ -240,6 +238,7 @@ _none_
 | bug-c-lua-tests-regressed-segfault | C | 50 | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-main-argc-argv-not-wired | C | 50 | bug | C `main(argc, argv)` gets real argc/argv | — |
 | bug-c-math-round-undefined-symbol | A+B | 50 | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
+| bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-multidim-array-field-partial-row | A | 50 | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-nested-anon-union-struct | C | 50 | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
@@ -249,6 +248,7 @@ _none_
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
 | bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
+| bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
 | bug-c-sizeof-string-literal | C | 50 | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-sqlite-offsetof-style-field-address-array-bound | C | 50 | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-c-sqlite-sql-exec-schema-argv-pointer | C | 50 | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
@@ -685,7 +685,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 90] [C] bug-c-init-array-designators (unblocks 1)
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
 - [p 90] [C] bug-c-static-init-cast-and-int-to-double
 - [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
@@ -724,11 +723,9 @@ _none_
 - [p 55] [C] bug-c-float-single-precision
 - [p 55] [C] bug-c-fnptr-to-crtl-variadic
 - [p 55] [C] bug-c-function-returning-fnptr-declarator
-- [p 55] [C] bug-c-missing-lp64-predefines
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-preproc-paste-rescan
 - [p 55] [C] bug-c-ptrdiff-of-addr-elem
-- [p 55] [C] bug-c-sizeof-expr-no-parens
 - [p 55] [C] bug-c-string-literal-binop-decay
 - [p 55] [C] bug-c-switch-nonblock-and-duffs-device
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -804,6 +801,5 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **1** — bug-c-gzgetc-fnlike-macro-call
-- **1** — bug-c-init-array-designators
 - **1** — bug-c-init-brace-elision-nested
 - **1** — task-sqlite-libc-free-runtime-bringup

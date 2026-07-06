@@ -18,3 +18,6 @@ expression not a type name, parse unary-expression.
 
 ## Gate
 Drop 00038.c from test/c-conformance/pxx.skip; runner green.
+
+## Log
+- 2026-07-06 — resolved, commit 92390c01.
