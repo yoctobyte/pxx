@@ -170,6 +170,13 @@ destabilizing work behind a flag or incrementally, never a long-lived branch.
   each time. The old "never push without ok" rule is retired. Still: don't push a
   known-broken or mid-refactor state, and don't push another agent's in-flight
   uncommitted work — only what you committed.
+- **Self-serve queue:** `tools/progress.sh next --track <X>` prints the single
+  top ticket to grab (and why); `ready --track <X>` is the whole ranked queue.
+  Ranking = one human `prio:` (0-100, frontmatter, unset=50) propagated down
+  dependency edges — a blocker inherits the priority of what it unblocks, so you
+  rate goals and the chain follows. Loop `next → claim <slug> <agent> → do →
+  resolve <slug> <commit> → board-md`. origin/master is truth (pull --rebase,
+  push green). Full model: `devdocs/progress/README.md`.
 - Tickets live in
   `devdocs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
   regenerate `BOARD.md` after moving them. `working/` is a **live lock** — a

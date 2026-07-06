@@ -15,16 +15,19 @@ This replaces the older split `devdocs/bugs/` and `devdocs/features/` folders.
 
 | Folder | Meaning |
 | --- | --- |
-| `backlog/` | Captured, not prioritized. New tickets land here (or `urgent/`). |
-| `urgent/` | Prioritized, do soon. |
+| `backlog/` | Captured. New tickets land here (or `urgent/`). Rank is derived. |
+| `urgent/` | Human override — do regardless; always sorts to the top. Keep to ~3. |
 | `working/` | Claimed and in progress. Set `Owner` so agents don't collide. |
+| `unfinished/` | Work halted with the ticket incomplete (parked). Track A/C here is CRITICAL — `check` flags it. |
 | `blocked/` | Needs a user decision, external input, or can't-reproduce. Say why. |
+| `rainy-day/` | Someday/maybe — real but not now, kept out of the ready queue. |
+| `done-followup/` | Done, but spawned a follow-up worth tracking. |
 | `done/` | Completed/fixed. Note the commit and the regression test. |
 | `rejected/` | Declined / wontfix (for now). Say why. |
 
 Normal flow: `backlog/` (or `urgent/`) → `working/` → `done/`. A ticket may move
-to `blocked/` or `rejected/` from anywhere. Re-organize the folder set later if
-it stops fitting.
+to `unfinished/`, `blocked/`, `rainy-day/`, or `rejected/` from anywhere.
+Re-organize the folder set later if it stops fitting.
 
 ## Filename convention
 
@@ -67,6 +70,7 @@ YAML-frontmatter style (`summary` replaces the H1 in BOARD.md; inline
 ---
 summary: "Short title"
 type: bug | feature | test | chore | docs | idea
+prio: 60                          # 0-100 human rating; omit = 50
 owner: <agent/name>
 blocked-by: [slug, slug]
 ---
@@ -76,45 +80,77 @@ blocked-by: [slug, slug]
 ## <body, log — same as above>
 ```
 
+`prio:` is the one human priority knob (see "Priority" below). Rate goals; a
+blocker inherits the priority of what it unblocks, so most tickets can stay at
+the default 50. It also works as a `**Prio:** 60` bullet, but frontmatter is
+preferred for structured fields.
+
 When moving to `done/`, append the commit hash and the regression test that
 proves it. When moving to `blocked/`/`rejected/`, append the reason.
 
-## Priority = dependencies, not labels
+## Priority = one human rating (0-100) + dependency propagation
 
-There are **no P1/P2 labels**. A hand-assigned priority is a global total order;
-this project has dependency chains, locality, and several agents — a fixed rank
-goes stale and makes agents collide on the same item. Instead, priority is
-*derived* from edges that are cheap to keep correct:
+One knob a human sets, everything else derived. No P1/P2 labels, no hand-ranked
+global total order (that goes stale and makes agents collide).
 
-- **`Blocked-by:`** — slugs that must reach `done/` before this is workable.
-- **`Unblocks:`** — slugs this one frees up (the inverse edge, for humans;
-  the script derives it from everyone's `Blocked-by`).
+- **`prio:` (0-100)** in the ticket's YAML frontmatter — the human's rating.
+  Unset = **50**. You only need to rate the things you care about — typically
+  the *goals* (a milestone, a feature you want). Blockers inherit; see below.
+- **`blocked-by:`** — slugs that must reach `done/` before this is workable.
+- **`Unblocks:`** — the inverse edge, for humans; the script derives it from
+  everyone's `blocked-by`.
 
-From those two fields, priority falls out and never goes stale:
+From the rating + the edges, a stable queue falls out:
 
-- **Ready** = a backlog/urgent ticket whose `Blocked-by` slugs are all in `done/`
-  (or it has none). Only ready tickets are pullable.
-- **Leverage** = how many tickets name this one in their `Blocked-by`. High
-  leverage + ready = do it now; it frees the most downstream work.
+- **Effective priority = propagation.** A ticket's effective priority is the max
+  of its own `prio` and the effective priority of everything it unblocks
+  (transitively). So a low-rated bug that blocks a 90-rated feature ranks ~90 —
+  it's in the way, so it rises automatically. **Rate the goal; the chain
+  follows.** The board shows `own→effective` when they differ.
+- **Ready** = a backlog/urgent ticket whose `blocked-by` slugs are all in
+  `done/` (or none). Only ready tickets are pullable. The ready list is **sorted
+  by effective priority** — highest first.
+- **Leverage** = how many tickets name this one in `blocked-by` (a tiebreaker
+  after priority).
 
-Keep the edges honest: when you notice "X must land before Y", add `Blocked-by`
+Keep the edges honest: when you notice "X must land before Y", add `blocked-by`
 to Y. Landing X then makes Y ready automatically — no re-ranking.
 
-`urgent/` is the **human override on top of the graph**: a WIP-limited (keep it
-to ~3) "do these regardless." Scarcity forces a real choice. For a swarm, prefer
-pulling by **locality** — grab tickets in the topic cluster you're already in
-(`*managed*`, `*c-header*`) over the globally "highest" one.
+`urgent/` is the **human override on top of the graph**: a WIP-limited (~3)
+"do these regardless," always sorted to the top. For a swarm, still prefer
+**locality** — grab tickets in the cluster you're already in (`*managed*`,
+`*c-header*`) over the globally highest one.
 
-Compute the queue: `tools/progress.sh` (ready list + leverage + board summary).
-Validate the board: `tools/progress.sh check` (dangling `Blocked-by` slugs,
-dependency cycles, working/ without Owner, stale `BOARD.md`). Historical hygiene
-items such as done tickets without commit notes are counted as warnings by
-default; use `tools/progress.sh check --strict` when you want details and a
-failing exit status.
-Render a human grid: `tools/progress.sh board-md` → `BOARD.md` (a **committed**
-kanban snapshot; its git history is the board's progress log). Regenerate it
-after any board change — `check` fails on a stale `BOARD.md`. The render is
-deterministic (no timestamp) so it diffs cleanly.
+### Self-serve loop (do tickets at will)
+
+```
+tools/progress.sh next --track C   # the single top ticket to grab (+ why)
+tools/progress.sh ready --track C  # the whole ranked queue for your track
+tools/progress.sh claim <slug> <your-agent-id>   # -> working/, sets Owner
+# ... do the work; land only green (your lane's gate) ...
+tools/progress.sh resolve <slug> <commit>        # -> done/, logs the commit
+tools/progress.sh board-md          # regen BOARD.md/.html; commit with the move
+```
+
+`next` picks the top of the ranked ready queue for the track and prints why it
+won (effective priority, what it inherits, what it unblocks). An agent — or
+several across tracks — can loop `next → claim → do → resolve` with no human
+dispatch. **origin/master is the source of truth**: `git pull --rebase` before
+you push, push when your gate is green. Your "working folder" is your set of
+Owner-tagged tickets in `working/` — no git worktrees (retired); everyone edits
+`master`, the ticket lock + file-ownership rules keep agents off each other's
+files. Know your track's gate and its branch/push/pin rules (see
+`../dev/parallel-tracks.md`): **push** when green, **pin** only on Track A after
+`make stabilize` when a downstream track needs the new binary, **branch** ≈
+never.
+
+Validate the board: `tools/progress.sh check` (dangling `blocked-by` slugs,
+dependency cycles, working/ without Owner, stale `BOARD.md`). Hygiene items like
+done tickets without commit notes are warnings by default; `--strict` shows
+detail and fails. Render the grid: `tools/progress.sh board-md` → `BOARD.md`
+(a **committed** kanban snapshot; deterministic, no timestamp, diffs cleanly) +
+`BOARD.html`. Regenerate after any board change — `check` fails on a stale
+`BOARD.md`.
 
 ## Multi-agent use
 

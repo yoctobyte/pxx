@@ -1,3 +1,7 @@
+---
+prio: 60
+blocked-by: [bug-c-typedef-name-as-uninitialized-local]
+---
 # C corpus step 2: zlib v1.3.1 bring-up
 
 - **Type:** feature (C frontend validation) — Track A/C. Sub-step of

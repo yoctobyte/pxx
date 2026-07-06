@@ -6,25 +6,25 @@ lives in git, not in a timestamp._
 
 ## urgent (1)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| bug-basic-goto-gosub-halts-program | A | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-basic-goto-gosub-halts-program | A | 50 | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
 
 ## working (5)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-ir-fuzzer | A | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
-| feature-rust-frontend-skeleton | R | feature | Rust frontend — lexer/parser skeleton + entry point | — |
-| feature-rust-frontend | R | feature | Rust frontend — umbrella | — |
-| feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
-| feature-rust-match-enum-payload | R | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-ir-fuzzer | A | 50 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
+| feature-rust-frontend-skeleton | R | 50 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-frontend | R | 50 | feature | Rust frontend — umbrella | — |
+| feature-rust-generics-trait-bounds | R | 50 | feature | Rust frontend — generics with trait bounds | — |
+| feature-rust-match-enum-payload | R | 50 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
 ## unfinished (1)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-c-desktop-lua-sqlite-path | C | 50 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 
 ## blocked (0)
 
@@ -32,774 +32,774 @@ _none_
 
 ## backlog (118)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | C | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
-| bug-c-anonymous-struct-union-members | C | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
-| bug-c-block-scope-func-decl | C | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
-| bug-c-expr-result-type-model | C | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
-| bug-c-float-single-precision | C | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
-| bug-c-fnptr-to-crtl-variadic | C | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
-| bug-c-function-returning-fnptr-declarator | C | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
-| bug-c-goto-shadowing-00129 | C | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
-| bug-c-init-designated-and-nested | C | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
-| bug-c-missing-lp64-predefines | C | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
-| bug-c-pointer-to-array-declarator | C | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
-| bug-c-preproc-paste-rescan | C | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
-| bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-c-ptrdiff-of-addr-elem | C | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
-| bug-c-sizeof-expr-no-parens | C | bug | C `sizeof expr` without parentheses fails to parse | — |
-| bug-c-static-init-cast-and-int-to-double | C | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
-| bug-c-string-literal-binop-decay | C | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
-| bug-c-switch-nonblock-and-duffs-device | C | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
-| bug-c-typedef-name-as-uninitialized-local | C | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
-| chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
-| decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
-| decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
-| doc-licensing-split-mpl-zlib | D | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
-| feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
-| feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
-| feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-compound-literals | C | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
-| feature-c-corpus-expansion | A | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
-| feature-c-corpus-zlib | A | feature | C corpus step 2: zlib v1.3.1 bring-up | — |
-| feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
-| feature-c-crtl-bind-hand-declared-prototypes | C | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
-| feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
-| feature-c-forward-enum-decl | C | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
-| feature-c-generic-selection | C | feature | C11 _Generic selection | — |
-| feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
-| feature-c-pragma-push-pop-macro | C | feature | C preprocessor: #pragma push_macro / pop_macro | — |
-| feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
-| feature-c-statement-expressions | C | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
-| feature-c-variadic-macros | C | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
-| feature-c-vla-and-label-in-if | C | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
-| feature-c-wide-string-literals | C | feature | C wide string literals L"..." / wchar_t | — |
-| feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
-| feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-cross-frontend-interop-contract | A | feature | Cross-frontend interop contract — umbrella | — |
-| feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
-| feature-crtl-implement-libc-assumptions | B | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
-| feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
-| feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
-| feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
-| feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
-| feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
-| feature-dynarray-insert-delete-managed-elements | A | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
-| feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
-| feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
-| feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
-| feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
-| feature-emission-size-dce | A | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
-| feature-erlang-frontend-scoping | A | feature | Erlang frontend — scoping only | — |
-| feature-esoteric-ada | A | feature | Esoteric probe: Ada | — |
-| feature-esoteric-algol | A | feature | Esoteric probe: Algol (60) | — |
-| feature-esoteric-cobol | A | feature | Esoteric probe: COBOL | — |
-| feature-esoteric-fortran | A | feature | Esoteric probe: Fortran | — |
-| feature-esoteric-frontend-probes | A | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
-| feature-esoteric-lolcode | A | feature | Esoteric probe: LOLCODE | — |
-| feature-esoteric-whitespace | A | feature | Esoteric probe: Whitespace | — |
-| feature-esp-hardware-flash-validation | A | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-float-exception-mask-control | A | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
-| feature-fuzzer-idle-scheduling | A | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
-| feature-game-library-candidate-suite | B+C | feature | Game and engine library candidate suite | — |
-| feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
-| feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | — |
-| feature-inline-asm-xtensa | A | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
-| feature-inline-nonleaf-and-branch-locals | A | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
-| feature-js-frontend-parked | A | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
-| feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-networking | B | feature | Networking runtime | — |
-| feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-opt-store-reload-elimination | A | feature | Store-reload (redundant load) elimination — -O1 pass | — |
-| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
-| feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-pxx-basic | A | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
-| feature-r-frontend-parked | A | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
-| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-real-dynlib-loader | B | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
-| feature-require-forward-strict-mode | A | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
-| feature-rtl-optout-for-lcl | A+B | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-rust-borrowed-slice-type | R | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
-| feature-rust-derive-macros | R | feature | Rust frontend — derive-macro codegen | — |
-| feature-rust-drop-move-tracking | R | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
-| feature-rust-dyn-trait-dispatch | R | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-macro-rules | R | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
-| feature-rust-misc-semantics | R | feature | Rust frontend — integer overflow mode + format-string parser | — |
-| feature-rust-rtl-concurrency | R | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
-| feature-rust-rtl-core-types | R | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
-| feature-rust-rtl-macros-io | R | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
-| feature-selfhost-guard-ir-unsupported | A | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
-| feature-signal-handlers | A | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
-| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | — |
-| feature-threadsafe-heap-optimize | A | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
-| feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
-| feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
-| feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
-| feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
-| feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| feature-zig-frontend | B | feature | Zig frontend — PARKED | — |
-| idea-c-realworld-test-targets | C | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
-| meta-dialect-extensions-and-fpc-strict | A | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
-| meta-multithreading | A | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
-| task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
-| test-sqlite-external-vs-self-compiled-parity | C | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
-| wish-compile-gnu-pascal | B+C | wish | Wish: compile GPC | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-c-abi-battery-00204 | C | 50 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-anonymous-struct-union-members | C | 50 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
+| bug-c-block-scope-func-decl | C | 50 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
+| bug-c-expr-result-type-model | C | 50 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
+| bug-c-float-single-precision | C | 50 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
+| bug-c-fnptr-to-crtl-variadic | C | 50 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
+| bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
+| bug-c-goto-shadowing-00129 | C | 50 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
+| bug-c-init-designated-and-nested | C | 50 | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
+| bug-c-missing-lp64-predefines | C | 50 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
+| bug-c-pointer-to-array-declarator | C | 50 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
+| bug-c-preproc-paste-rescan | C | 50 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
+| bug-c-printf-without-stdio-include-varargs | C | 50 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-ptrdiff-of-addr-elem | C | 50 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
+| bug-c-sizeof-expr-no-parens | C | 50 | bug | C `sizeof expr` without parentheses fails to parse | — |
+| bug-c-static-init-cast-and-int-to-double | C | 50 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
+| bug-c-string-literal-binop-decay | C | 50 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
+| bug-c-switch-nonblock-and-duffs-device | C | 50 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
+| bug-c-typedef-name-as-uninitialized-local | C | 50→60 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
+| chore-sqlite-static-capacity-bumps | A | 50 | chore | sqlite arc — interim static capacity bumps | — |
+| decide-constructor-exception-cleanup-semantics | A | 50 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
+| decide-int-div-zero-behavior-unification | A | 50 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| doc-licensing-split-mpl-zlib | D | 50 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
+| feature-asm-source-frontend | A | 50 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
+| feature-asm-textual-emit-mode | A | 50 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
+| feature-assembler-first-class-citizen | A | 50 | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-compound-literals | C | 50 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
+| feature-c-corpus-expansion | A | 50 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
+| feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-typedef-name-as-uninitialized-local |
+| feature-c-cross-target-feature-coverage | C | 50 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
+| feature-c-crtl-bind-hand-declared-prototypes | C | 50 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
+| feature-c-designated-init-compound-literals | C | 50 | feature | C99 designated initializers + compound literals unsupported | — |
+| feature-c-forward-enum-decl | C | 50 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
+| feature-c-generic-selection | C | 50 | feature | C11 _Generic selection | — |
+| feature-c-gtk3-header-final-wiring | C | 50 | feature | GTK3 header import final wiring | — |
+| feature-c-pragma-push-pop-macro | C | 50 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
+| feature-c-runtime-library | C | 50 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-statement-expressions | C | 50 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
+| feature-c-variadic-macros | C | 50 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
+| feature-c-vla-and-label-in-if | C | 50 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
+| feature-c-wide-string-literals | C | 50 | feature | C wide string literals L"..." / wchar_t | — |
+| feature-callconv-register-args | A | 50 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
+| feature-cdecl-indirect-cross-targets | A | 50 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
+| feature-cross-frontend-interop-contract | A | 50 | feature | Cross-frontend interop contract — umbrella | — |
+| feature-cross-virtual-indirect-hidden-dest | A | 50 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-implement-libc-assumptions | B | 50 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-crtl-strtok-missing | B | 50 | feature | crtl: `strtok` not implemented (undeclared function) | — |
+| feature-demo-chess | B | 50 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-mandelbrot-gui-threaded | B | 50 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
+| feature-dns-resolver-library | B | 50 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
+| feature-dynamic-compiler-tables | A | 50 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
+| feature-dynamic-include-paths-config | A | 50 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
+| feature-dynamic-soname-discovery | A | 50 | feature | Dynamic soname discovery (no execve) | — |
+| feature-dynarray-insert-delete-managed-elements | A | 50 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
+| feature-eliah-ai-command-rail | B | 50 | feature | feature: Eliah AI command rail + console pane | — |
+| feature-eliah-component-tabbar | B | 50 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
+| feature-embed-dwscript-rtti | B | 50 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
+| feature-embed-pascal-script | B | 50 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
+| feature-emission-size-dce | A | 50 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
+| feature-erlang-frontend-scoping | A | 50 | feature | Erlang frontend — scoping only | — |
+| feature-esoteric-ada | A | 50 | feature | Esoteric probe: Ada | — |
+| feature-esoteric-algol | A | 50 | feature | Esoteric probe: Algol (60) | — |
+| feature-esoteric-cobol | A | 50 | feature | Esoteric probe: COBOL | — |
+| feature-esoteric-fortran | A | 50 | feature | Esoteric probe: Fortran | — |
+| feature-esoteric-frontend-probes | A | 50 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
+| feature-esoteric-lolcode | A | 50 | feature | Esoteric probe: LOLCODE | — |
+| feature-esoteric-whitespace | A | 50 | feature | Esoteric probe: Whitespace | — |
+| feature-esp-hardware-flash-validation | A | 50 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
+| feature-esp-peripheral-callback-api | B | 50 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-float-exception-mask-control | A | 50 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
+| feature-fuzzer-idle-scheduling | A | 50 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
+| feature-game-library-candidate-suite | B+C | 50 | feature | Game and engine library candidate suite | — |
+| feature-gui-real-window-xvfb-smoke | B | 50 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
+| feature-ilja-tui | B | 50 | feature | Ilja — TUI (ANSI) face | — |
+| feature-inline-asm-xtensa | A | 50 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
+| feature-inline-nonleaf-and-branch-locals | A | 50 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
+| feature-inline-routines | A | 50 | feature | Inline routine expansion (`inline;`) | — |
+| feature-js-frontend-parked | A | 50 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
+| feature-move-fillchar-intrinsics | B | 50 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
+| feature-networking | B | 50 | feature | Networking runtime | — |
+| feature-nilpy-idf-import | A | 50 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-opt-store-reload-elimination | A | 50 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
+| feature-optimization-levels | A | 50 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-pal-esp-posix-fd-semantics | B | 50 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
+| feature-parallel-processing | A | 50 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-pxx-basic | A | 50 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
+| feature-r-frontend-parked | A | 50 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
+| feature-random-library | B | 50 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
+| feature-real-dynlib-loader | B | 50 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
+| feature-require-forward-strict-mode | A | 50 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
+| feature-rtl-optout-for-lcl | A+B | 50 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
+| feature-rust-borrowed-slice-type | R | 50 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
+| feature-rust-derive-macros | R | 50 | feature | Rust frontend — derive-macro codegen | — |
+| feature-rust-drop-move-tracking | R | 50 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
+| feature-rust-dyn-trait-dispatch | R | 50 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
+| feature-rust-macro-rules | R | 50 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
+| feature-rust-misc-semantics | R | 50 | feature | Rust frontend — integer overflow mode + format-string parser | — |
+| feature-rust-rtl-concurrency | R | 50 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
+| feature-rust-rtl-core-types | R | 50 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
+| feature-rust-rtl-macros-io | R | 50 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-selfhost-guard-ir-unsupported | A | 50 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
+| feature-signal-handlers | A | 50 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+| feature-synapse-compile-check | B | 50 | feature | Synapse library — proper compile check (Track B) | — |
+| feature-threadsafe-heap-optimize | A | 50 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
+| feature-tls-provider-abstraction | B | 50 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
+| feature-tls-system-trust-store | B | 50 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
+| feature-tls13-from-scratch | B | 50 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
+| feature-toolchain-cli-ux | A | 50 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
+| feature-writeln-as-library | B | 50 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| feature-xtensa-stack-args-over-6-words | A | 50 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
+| feature-zero-init-contract | A | 50 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| feature-zig-frontend | B | 50 | feature | Zig frontend — PARKED | — |
+| idea-c-realworld-test-targets | C | 50 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
+| meta-dialect-extensions-and-fpc-strict | A | 50 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
+| meta-multithreading | A | 50 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
+| task-sqlite-libc-free-runtime-bringup | B | 50 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
+| test-sqlite-external-vs-self-compiled-parity | C | 50 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
+| wish-compile-gnu-pascal | B+C | 50 | wish | Wish: compile GPC | — |
 
 ## rainy-day (20)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
-| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
-| experiment-compile-fpc-as-stress-probe | B | experiment | Experiment: compile FPC's own source as a pxx stress probe | — |
-| feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
-| feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
-| feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
-| feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
-| feature-extended-type-support | A | feature | Proper `Extended` type support (currently aliased to Double) | — |
-| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
-| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
-| feature-mode-delphi-remaining | A | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
-| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
-| feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
-| feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
-| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
-| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
-| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
-| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
+| design-record-copy-dynarray-field-semantics | A | 50 | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
+| experiment-compile-fpc-as-stress-probe | B | 50 | experiment | Experiment: compile FPC's own source as a pxx stress probe | — |
+| feature-additional-cpu-targets | A | 50 | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
+| feature-allocator-quality | A | 50 | feature | Allocator quality: split / coalesce / bins / alignment | — |
+| feature-async-auto-backend | A | 50 | feature | Auto stackless/stackful backend selection | — |
+| feature-dwarf-debug-info | A | 50 | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
+| feature-extended-type-support | A | 50 | feature | Proper `Extended` type support (currently aliased to Double) | — |
+| feature-fpc-vs-pxx-feature-boundary | A | 50 | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-handle-compacting-heap | A | 50 | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-kernel-matrix-bootroom | B | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
+| feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
+| feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
+| feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
+| feature-stackful-coro-port | A | 50 | feature | Port the stackful coroutine backend to all targets | — |
+| feature-static-arena-profile | A | 50 | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
+| idea-demo-app-candidates | B | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
+| idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
 ## done-followup (5)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| bug-static-array-length-direct | A | bug | `Length`/`High` of a static array used directly returns garbage | — |
-| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
-| feature-interfaces | A | feature | Interfaces | — |
-| feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
-| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-static-array-length-direct | A | 50 | bug | `Length`/`High` of a static array used directly returns garbage | — |
+| feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
+| feature-interfaces | A | 50 | feature | Interfaces | — |
+| feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
+| feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
 ## done (470)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| audit-shared-global-reentrancy-thread-safety | A | audit | Audit: shared-global state — reentrancy & thread-safety | — |
-| bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
-| bug-aarch64-arm32-record-temp-byvalue-arg | A | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
-| bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
-| bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
-| bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
-| bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
-| bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
-| bug-array-const-too-many-elements-synapse | A | bug | `too many array constant elements` — Synapse `synautil` wall | — |
-| bug-array-ctor-statement-arg-after-dynarray-record-param | A | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
-| bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
-| bug-asmcore-fpc-bootstrap | A | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
-| bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
-| bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
-| bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
-| bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
-| bug-byvalue-record-managed-field-aliases-caller | A | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
-| bug-c-addr-of-global-array-element-const-index-wrong-offset | C | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
-| bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
-| bug-c-arrow-on-array-store-of-call-result-clobbered | A | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
-| bug-c-call-inline-function-pointer-struct-member | C | bug | C: calling an inline function-pointer struct member mis-lowers | — |
-| bug-c-cast-as-call-arg-parse-error | C | bug | C: cast expression as call argument fails to parse | — |
-| bug-c-chained-pointer-index-loses-base-type | C | bug | C chained pointer indexing loses base type | — |
-| bug-c-const-cast-in-array-dim | C | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
-| bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
-| bug-c-create-trigger-huge-alloc-oom | A | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
-| bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
-| bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
-| bug-c-crtl-missing-unistd-syscalls | C | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
-| bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
-| bug-c-double-vararg | C | bug | C: double passed as a variadic arg reads 0 | — |
-| bug-c-external-function-address-dlsym-sqlite | C | bug | C: address of external libc function used as function pointer | — |
-| bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
-| bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
-| bug-c-float-int-cast-and-spill | C | bug | C: int<->float numeric cast + computed-double spill across branches | — |
-| bug-c-function-pointer-local-variable | C | bug | C: function-pointer local variable declaration not parsed | — |
-| bug-c-function-pointer-struct-member | C | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
-| bug-c-function-returning-function-pointer-prototype-sqlite | C | bug | C: function returning function pointer prototype not registered | — |
-| bug-c-global-double-init | C | bug | C: global `double`/`float` initializer stored as 0 | — |
-| bug-c-global-struct-array-fnptr-cast-init | C | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
-| bug-c-header-case-sensitivity-lookup | A | bug | Case-sensitive C header lookup mismatch on Linux | — |
-| bug-c-large-record-byval-param | C | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
-| bug-c-libc-data-symbol-stdio | C | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
-| bug-c-local-static-const-multidim-array-init-sqlite | C | bug | C: local static const multidimensional array initializer in sqlite | — |
-| bug-c-local-static-record-array-vfs-sqlite | C | bug | C: block-scope static record arrays in sqlite VFS init | — |
-| bug-c-lua-tests-regressed-segfault | C | bug | C: lua runner tests regressed (segfault on most scripts) | — |
-| bug-c-main-argc-argv-not-wired | C | bug | C `main(argc, argv)` gets real argc/argv | — |
-| bug-c-math-round-undefined-symbol | A+B | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
-| bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
-| bug-c-nested-anon-union-struct | C | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
-| bug-c-null-pointer-literal-call-arg-sqlite | C | bug | C: null pointer literal call arg lowers as address in sqlite | — |
-| bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
-| bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
-| bug-c-preprocessor-defined-expression-sqlite | C | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
-| bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
-| bug-c-signed-arith-shift-right | A | bug | C signed `>>` is a logical (not arithmetic) shift | — |
-| bug-c-sizeof-array-yields-element-size | C | bug | C: `sizeof(array)` yields element size, not total array size | — |
-| bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
-| bug-c-sqlite-offsetof-style-field-address-array-bound | C | bug | C: sqlite offsetof-style field address in array bound | — |
-| bug-c-sqlite-sql-exec-schema-argv-pointer | C | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
-| bug-c-sqlite-sql-exec-schema-parse-corrupt | C | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
-| bug-c-sqlite-undefined-symbol-memsetdefault | C | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
-| bug-c-sqlite-unsupported-ternary-ir | C | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
-| bug-c-static-local-initializer-reruns-every-call | A/C | bug | C `static` local with an initializer re-runs the initializer every call | — |
-| bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
-| bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
-| bug-c-ternary-middle-comma | C | bug | C: ternary middle arm rejects comma expression | — |
-| bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
-| bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
-| bug-c-unsigned-div-mod-32bit-backends | A | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
-| bug-c-unsigned-int-32bit-arithmetic-semantics | A | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
-| bug-c-va-arg-local-fnptr-typedef-sqlite | C | bug | C: va_arg with local function-pointer typedef in sqlite | — |
-| bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
-| bug-c-vararg-vastart-named-fp-stack | A | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
-| bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
-| bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
-| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
-| bug-case-else-multi-statement-parse-error | A | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
-| bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
-| bug-char-literal-concat-in-const-expr | A | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
-| bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
-| bug-chr-builtin-shadows-param-name | A | bug | Bug: `Chr` as parameter name treated as built-in function | — |
-| bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
-| bug-compiler-hang-on-nested-if-in-begin | A | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
-| bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
-| bug-conditional-directive-miscount-synautil | A | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
-| bug-const-array-of-ansistring-literal-too-many-elements | A | bug | Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count | — |
-| bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
-| bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
-| bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
-| bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
-| bug-const-open-array-param-stack-copies-caller-frame | A | bug | Bug: passing a FIXED-size array to an `array of T` open-array parameter stack-copies into the caller's frame | — |
-| bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
-| bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
-| bug-consteval-named-type-cast | A | bug | Bug: named-type cast in constant expression fails ConstEval | — |
-| bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
-| bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
-| bug-downcast-inherited-property-wrong-offset | A | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
-| bug-dynarray-concat-silent-miscompile | A | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
-| bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
-| bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
-| bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
-| bug-emitasmx64-heap-helpers-oom-selfhost | A | bug | EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host | — |
-| bug-emitasmx64-no-sib-index-silent-misparse | A | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
-| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
-| bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
-| bug-except-base-handler-misses-derived | A | bug | `except on E: BaseClass` does not catch a derived exception | — |
-| bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
-| bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
-| bug-float-field-record-function-return | A | bug | `Single` field/element inside a record or array stores/loads as zero | — |
-| bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
-| bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
-| bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
-| bug-forward-class-decl-with-later-base-loses-fields | A | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
-| bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
-| bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
-| bug-fpc-seeded-binary-runtime-segfault | A | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
-| bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
-| bug-frozen-string-result-global-not-reentrant | A | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
-| bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
-| bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
-| bug-hard-keyword-intrinsics-block-identifier-use | A | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
-| bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
-| bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
-| bug-i386-float-byval-param | A | bug | i386 backend: by-value set parameter unsupported | — |
-| bug-i386-try-except-segfault | A | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
-| bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
-| bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
-| bug-implicit-self-method-loses-to-unit-proc | A | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
-| bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
-| bug-import-class-sibling-call-corrupts-resolution | A | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
-| bug-integer-div-zero-sigfpe-uncatchable | A | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
-| bug-integer-to-enum-typecast-undefined-variable | A | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
-| bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
-| bug-keywords-case-sensitive | A | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
-| bug-length-of-dynarray-call-result | A | bug | bug: `Length()` of a dynamic-array function-call result is wrong/crashes | — |
-| bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
-| bug-lfm-streaming-skips-constructors | B | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
-| bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
-| bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
-| bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
-| bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
-| bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
-| bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
-| bug-max-proc-params-32-selfmiscompile | A | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
-| bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
-| bug-method-call-before-body-byvalue-small-record-arg | A | bug | Method call before body: by-value <=8-byte record arg mislowers (i386 error; x64 program-level unresolved-forward) | — |
-| bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
-| bug-method-miscompiled-by-context | A | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
-| bug-method-ptr-no-coerce-pointer-arg | A | bug | bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument | — |
-| bug-mimic-fpc-version-defines-missing | A | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
-| bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
-| bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
-| bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
-| bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
-| bug-narrowing-typecast-rvalue-no-truncate | A | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
-| bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
-| bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
-| bug-nested-dynarray-cross-segfault | A | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
-| bug-nested-proc-sibling-call-unresolved | A | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
-| bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
-| bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
-| bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
-| bug-open-array-ctor-statement-call | A | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
-| bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
-| bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
-| bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
-| bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
-| bug-pchar-empty-managed-string-nil | A | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
-| bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
-| bug-pinned-stable-reads-live-builtin-rtl | A | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
-| bug-plain-byvalue-record-param-temp | A | bug | Plain (non-`const`) by-value record param >8B rejects a temporary argument | — |
-| bug-pointer-cast-custom-alias | A | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
-| bug-pointer-deref-depth-over-2 | A | bug | Pointer dereference collapses past depth 2 (Pascal `P^^^` / C `***p`) | — |
-| bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
-| bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
-| bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
-| bug-procedure-typed-procvalue | A | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
-| bug-procptr-record-field-call | A | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
-| bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
-| bug-read-preserves-line-remainder | A | bug | `read` consumes a whole line like `readln` | — |
-| bug-read-write-reserved-as-method-names | A | bug | `Read` / `Write` can't be used as method names (reserved) | — |
-| bug-record-byvalue-arg-truncation | A | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
-| bug-record-fn-codegen-crash | A | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
-| bug-riscv32-chess-perft-runtime-corruption | A | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
-| bug-riscv32-hosted-writeln-hello-hangs | A | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
-| bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
-| bug-selfhost-multifn-ifelse-miscompile | R | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
-| bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
-| bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
-| bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
-| bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
-| bug-setlength-multidim-one-call | A | bug | `SetLength(a, x, y)` one-call multidim allocation not parsed | — |
-| bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
-| bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
-| bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
-| bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
-| bug-sizeof-array-and-typename-wrong | A | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
-| bug-sizeof-variable-unsupported | A | bug | SizeOf intrinsic does not support variable or expression operands | — |
-| bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
-| bug-stderr-not-fd2 | A | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
-| bug-string-const-index-and-typed-init | A | bug | Typed string constant with a string initializer won't parse | — |
-| bug-string-literal-concat-compare-segfault | A | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |
-| bug-string-ordering-comparison-constant | A | bug | AnsiString `<` `>` `<=` `>=` return constants, not a real comparison | — |
-| bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
-| bug-subclass-field-offset-calculation | A | bug | bug-subclass-field-offset-calculation (Track A) | — |
-| bug-sysutils-unit-hard-skipped | A | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
-| bug-textfile-primitives-not-ambient-in-units | A | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
-| bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
-| bug-tobject-destroy-not-virtual-override | A | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
-| bug-tthread-execute-writeln-crash | A | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
-| bug-typed-const-array-of-string-broken | A | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
-| bug-unit-qualified-constant-not-resolved | A | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
-| bug-unqualified-property-in-method | A | bug | Unqualified property access inside a method body fails | — |
-| bug-untyped-float-const | A | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
-| bug-untyped-params-in-methods | A | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
-| bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
-| bug-var-array-of-ansistring-param-loses-writes | A | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
-| bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
-| bug-var-section-eats-constructor-destructor | A | bug | `var` section before a constructor/destructor impl fails — ctor/dtor eaten as a var name | — |
-| bug-variant-boxing-temp-global-shared | A | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
-| bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
-| bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
-| bug-whole-record-copy-main-body-noop | A | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
-| bug-widgetset-virtual-arg-corruption | A | bug | bug: new virtual method on TWidgetSet miscompiles its object argument | — |
-| bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
-| bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
-| bug-writeln-real-width | A | bug | bug: `WriteLn(real:w:d)` ignores the field width | — |
-| bug-xtensa-call0-large-frame-truncates | A | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
-| bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
-| chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
-| chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
-| chore-fast-pin-tiered-tests | A | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
-| chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
-| chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
-| chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
-| chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
-| docs-user-documentation-site-structure | D | docs | User documentation site structure and first content pass | — |
-| feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
-| feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
-| feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
-| feature-anonymous-record-type | A | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
-| feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
-| feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
-| feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
-| feature-asm-mvp-frontend | A | feature | MVP `.asm` -> executable path (head #3, fast-tracked ahead of #1/#2) | — |
-| feature-asm-text-emitter | A | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
-| feature-asmcore-encoder-library | B | feature | `lib/asmcore` — clean standalone multi-target instruction encoder library | — |
-| feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
-| feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
-| feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
-| feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
-| feature-c-alignment-attributes | C | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
-| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
-| feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
-| feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
-| feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | — |
-| feature-c-system-libs-granular-opt-out | C | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
-| feature-c-unsigned-semantics-suite-resweep | A | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
-| feature-c-varargs-design | C | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
-| feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
-| feature-class-methods-in-generic-class | A | feature | `class function` / `class procedure` members inside a generic class | — |
-| feature-class-variables | A | feature | feature: class variables (`class var`) | — |
-| feature-classes-tlist-notify-hook | B | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
-| feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
-| feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
-| feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
-| feature-conditional-declared-directive | A | feature | `{$IF DECLARED(...)}` conditional directive support | — |
-| feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
-| feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
-| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
-| feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
-| feature-cross-bootstrap | A | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
-| feature-cross-codegen-gaps | A | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
-| feature-cross-compiler-probe-walls | A | feature | Cross compiler.pas probe walls | — |
-| feature-cross-exceptions | A | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
-| feature-cross-extern-abi-breadth | A | feature | Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align) | — |
-| feature-cross-float-returns | A | feature | Cross-target float function results | — |
-| feature-cross-float-variant | A | feature | Float + Variant codegen on cross targets | — |
-| feature-cross-managed-aggregate-locals | A | feature | Managed aggregate locals on cross targets | — |
-| feature-cross-managed-aggregates | A | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
-| feature-cross-managed-string-cow | A | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
-| feature-cross-param-abi | A | feature | Full parameter/result ABI on cross targets | — |
-| feature-cross-readln-console-input | A | feature | Cross targets: readln (console input) unsupported — chess demo wall #3 | — |
-| feature-cross-selfhost-aarch64 | A | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
-| feature-cross-selfhost-arm32 | A | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
-| feature-cross-selfhost-i386 | A | feature | Cross self-host: i386 generated compiler runs under Linux | — |
-| feature-cross-streaming-lfm | A | feature | Component streaming + LFM loading on the cross targets | — |
-| feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
-| feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
-| feature-default-parameters | A | feature | feature: default parameter values | — |
-| feature-default-params-on-methods | A | feature | Default parameter values on class/interface methods (works on free routines) | — |
-| feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
-| feature-demo-2048 | B | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
-| feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
-| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
-| feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
-| feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
-| feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
-| feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
-| feature-demo-maze | B | feature | Demo — maze generator + solver | — |
-| feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
-| feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
-| feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
-| feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
-| feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
-| feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
-| feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
-| feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
-| feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
-| feature-dynarray-insert-delete | A | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
-| feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
-| feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
-| feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
-| feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
-| feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
-| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
-| feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
-| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | — |
-| feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
-| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | — |
-| feature-eliah-pane-header-strip | B | feature | feature: Eliah pane header — labelled collapse strip + chevron | — |
-| feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
-| feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
-| feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
-| feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
-| feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
-| feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
-| feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
-| feature-esp-bare-exceptions | A | feature | ESP bare: try/except (raise currently terminates) | — |
-| feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
-| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
-| feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
-| feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
-| feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
-| feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
-| feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
-| feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
-| feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
-| feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
-| feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
-| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | — |
-| feature-float-math-and-demo | B | feature | Float math library (Single+Double) + numerical float demo | — |
-| feature-float-str-val | A | feature | Float Str / Val | — |
-| feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
-| feature-forin-member-access-source | A | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
-| feature-general-typename-cast | B | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
-| feature-generators-yield | A | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
-| feature-hashing-library | B | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
-| feature-high-low-of-type | A | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
-| feature-hint-directives-deprecated-platform | A | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
-| feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
-| feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
-| feature-i386-threadsafe-locks | A | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
-| feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
-| feature-implicit-identifier-binding-strictness-switch | A | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
-| feature-implicit-locals-sloppy-switch | A | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
-| feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
-| feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
-| feature-inline-asm-depth | A | feature | Inline assembler depth | — |
-| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
-| feature-inline-loop-var-rio | A | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
-| feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
-| feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
-| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
-| feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
-| feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
-| feature-library-test-suite | A+B | feature | Track B library test suite | — |
-| feature-library-var-out-lvalue-actuals | A | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
-| feature-local-typed-constant | B | feature | Local typed constants (initialized const inside a routine) | — |
-| feature-managed-exception-cleanup | A | feature | Finalize managed values on exception unwind | — |
-| feature-managed-string-default | A | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
-| feature-member-access-on-call-result | B | feature | Member access on a function-call result (`f(args).field`) | — |
-| feature-metaclass-construct-dispatch | A | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
-| feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
-| feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
-| feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
-| feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
-| feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
-| feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
-| feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
-| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
-| feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
-| feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
-| feature-opt-imm-fold-binop | A | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
-| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
-| feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
-| feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
-| feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
-| feature-pal-thread-primitives | A | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
-| feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
-| feature-pascal-tthread | A | feature | Native Pascal TThread class (M3) | — |
-| feature-pcl-component-ctor-owner | B | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
-| feature-pcl-input-events | B | feature | PCL: mouse-coordinate + keyboard input events | — |
-| feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
-| feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
-| feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
-| feature-procedural-types | A | feature | Procedural types and method pointers | — |
-| feature-progress-check-makefile | A | feature | Wire `progress.sh check` into a make target | — |
-| feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
-| feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
-| feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
-| feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
-| feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
-| feature-riscv32-hosted-exceptions | A | feature | riscv32 hosted: exception machinery (raise/try) — last wall before chess | — |
-| feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
-| feature-riscv32-var-param-forwarding | A | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
-| feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
-| feature-rtl-image-bitmap-library | B | feature | RTL image bitmap library | — |
-| feature-rtl-terminal-raw-mode | B | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
-| feature-rtti-layout-table | A | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
-| feature-rv32-asm-emitter | A | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
-| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
-| feature-setlength-var-array-param-abi | A | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
-| feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
-| feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
-| feature-sizeof-const-intrinsic-in-const-eval | A | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
-| feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
-| feature-stackless-generator-record-locals | A | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
-| feature-stackless-generator-yield-in-case | A | feature | Stackless generator: allow `yield` inside a `case` statement | — |
-| feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
-| feature-subrange-type-decl | A | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
-| feature-sync-primitives-futex | A | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
-| feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
-| feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
-| feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
-| feature-syscall-pthread-shim | B | feature | Syscall-only pthread shim for libc-free C libraries | — |
-| feature-sysutils-decodedate-missing | A | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
-| feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
-| feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
-| feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |
-| feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
-| feature-tcomponent-tpersistent | B | feature | TComponent / TPersistent (FPC Classes owner-child surface) | — |
-| feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
-| feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
-| feature-threadsafe-heap-contract | B | feature | Threadsafe heap contract by memory-management mode | — |
-| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | — |
-| feature-transcendental-math | A | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
-| feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
-| feature-typed-const-record | A | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
-| feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
-| feature-types-unit | B | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
-| feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
-| feature-untyped-parameters | B | feature | Untyped `var` / `const` / `out` parameters | — |
-| feature-uses-alias-as | ACA | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
-| feature-value-bearing-expressions-for-c | A | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
-| feature-warn-oversized-stack-frame | A | feature | Warn on oversized stack locals / stack frames | — |
-| feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
-| feature-xtensa-class-instantiation | A | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
-| feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
-| fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
-| idea-progress-board-md | B | idea | On-demand `BOARD.md` kanban grid | — |
-| lib-intToStr-missing | B | lib | `IntToStr` not available | — |
-| lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
-| lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
-| meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
-| perf-compiler-hotspots-algorithmic | A | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
-| task-license-mpl2-rollout | A | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
-| task-remove-sysutils-move-fillchar-copies | B | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
-| test-c-crypt | C | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
-| test-c-dlopen | C | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
-| track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
-| track-a-c-stdio-needs-pascal-import-and-data-relocs | A | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
-| track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
-| track-c-ternary-string-literal-segfault | C | track | C: ternary with two string-literal arms segfaults at runtime | — |
-| track-c-va-arg-nonint-lea | C | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| audit-shared-global-reentrancy-thread-safety | A | 50 | audit | Audit: shared-global state — reentrancy & thread-safety | — |
+| bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
+| bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
+| bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
+| bug-argstr-managed-dest-cross | A | 50 | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
+| bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | 50 | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
+| bug-arm32-writeln-longword-high-bit | A | 50 | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
+| bug-array-const-too-many-elements-synapse | A | 50 | bug | `too many array constant elements` — Synapse `synautil` wall | — |
+| bug-array-ctor-statement-arg-after-dynarray-record-param | A | 50 | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
+| bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
+| bug-asmcore-fpc-bootstrap | A | 50 | bug | FPC bootstrap can't compile the asmcore units the compiler now `uses` | — |
+| bug-bare-function-name-call-vs-resultvar | A | 50 | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
+| bug-bare-read-write-in-method-hits-intrinsic | A | 50 | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
+| bug-builtin-val-miscompiles | A | 50 | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
+| bug-builtin-write-case-sensitive | A | 50 | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-byvalue-record-managed-field-aliases-caller | A | 50 | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
+| bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
+| bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
+| bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
+| bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
+| bug-c-cast-as-call-arg-parse-error | C | 50 | bug | C: cast expression as call argument fails to parse | — |
+| bug-c-chained-pointer-index-loses-base-type | C | 50 | bug | C chained pointer indexing loses base type | — |
+| bug-c-const-cast-in-array-dim | C | 50 | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
+| bug-c-const-eval-bitwise-not | C | 50 | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-create-trigger-huge-alloc-oom | A | 50 | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
+| bug-c-crtl-fopen-missing | B | 50 | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
+| bug-c-crtl-missing-getpid | B | 50 | bug | C: crtl `unistd.h` misses `getpid` | — |
+| bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
+| bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
+| bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-external-function-address-dlsym-sqlite | C | 50 | bug | C: address of external libc function used as function pointer | — |
+| bug-c-field-of-call-result | C | 50 | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
+| bug-c-field-on-pointer-arithmetic | C | 50 | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
+| bug-c-float-int-cast-and-spill | C | 50 | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-function-pointer-local-variable | C | 50 | bug | C: function-pointer local variable declaration not parsed | — |
+| bug-c-function-pointer-struct-member | C | 50 | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
+| bug-c-function-returning-function-pointer-prototype-sqlite | C | 50 | bug | C: function returning function pointer prototype not registered | — |
+| bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
+| bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
+| bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
+| bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
+| bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-local-static-const-multidim-array-init-sqlite | C | 50 | bug | C: local static const multidimensional array initializer in sqlite | — |
+| bug-c-local-static-record-array-vfs-sqlite | C | 50 | bug | C: block-scope static record arrays in sqlite VFS init | — |
+| bug-c-lua-tests-regressed-segfault | C | 50 | bug | C: lua runner tests regressed (segfault on most scripts) | — |
+| bug-c-main-argc-argv-not-wired | C | 50 | bug | C `main(argc, argv)` gets real argc/argv | — |
+| bug-c-math-round-undefined-symbol | A+B | 50 | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
+| bug-c-multidim-array-field-partial-row | A | 50 | bug | C: 2D array struct field — partial-index row decay broken | — |
+| bug-c-nested-anon-union-struct | C | 50 | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
+| bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
+| bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-preprocessor-defined-expression-sqlite | C | 50 | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
+| bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
+| bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
+| bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
+| bug-c-sizeof-string-literal | C | 50 | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
+| bug-c-sqlite-offsetof-style-field-address-array-bound | C | 50 | bug | C: sqlite offsetof-style field address in array bound | — |
+| bug-c-sqlite-sql-exec-schema-argv-pointer | C | 50 | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
+| bug-c-sqlite-sql-exec-schema-parse-corrupt | C | 50 | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
+| bug-c-sqlite-undefined-symbol-memsetdefault | C | 50 | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
+| bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
+| bug-c-static-local-initializer-reruns-every-call | A/C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
+| bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
+| bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
+| bug-c-ternary-middle-comma | C | 50 | bug | C: ternary middle arm rejects comma expression | — |
+| bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |
+| bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
+| bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
+| bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
+| bug-c-va-arg-local-fnptr-typedef-sqlite | C | 50 | bug | C: va_arg with local function-pointer typedef in sqlite | — |
+| bug-c-vararg-overflow-area | A | 50 | bug | C: 6+ variadic args (overflow area) segfault | — |
+| bug-c-vararg-vastart-named-fp-stack | A | 50 | bug | C: `va_start` ignores named FP and stack-spilled parameters | — |
+| bug-capital-write-undefined-in-compiler-selfbuild | A | 50 | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
+| bug-cardinal-expr-promotion-shr-orphan | A | 50 | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
+| bug-cardinal-expr-promotion | A | 50 | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
+| bug-case-else-multi-statement-parse-error | A | 50 | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
+| bug-case-insensitive-incomplete-builtins-funcs | A | 50 | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
+| bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
+| bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
+| bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
+| bug-codegen-nested-index-load-width-pressure | A | 50 | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
+| bug-compiler-hang-on-nested-if-in-begin | A | 50 | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
+| bug-compiler-tmyclass-hardcoded-clash | A | 50 | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
+| bug-conditional-directive-miscount-synautil | A | 50 | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
+| bug-const-array-of-ansistring-literal-too-many-elements | A | 50 | bug | Bug: `const array[0..N-1] of AnsiString = (...)` literal fails "too many array constant elements" despite correct count | — |
+| bug-const-byref-record-param-temp | A | 50 | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
+| bug-const-expr-shl-shr-not-folded | A | 50 | bug | `shl` / `shr` in a constant expression not accepted | — |
+| bug-const-managed-record-param-byref-crash | A | 50 | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
+| bug-const-open-array-managed-elem-length | A | 50 | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
+| bug-const-open-array-param-stack-copies-caller-frame | A | 50 | bug | Bug: passing a FIXED-size array to an `array of T` open-array parameter stack-copies into the caller's frame | — |
+| bug-const-section-before-constructor | A | 50 | bug | bug: const section before constructor/destructor not terminated | — |
+| bug-const-string-index-miscompiles | A | 50 | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
+| bug-consteval-named-type-cast | A | 50 | bug | Bug: named-type cast in constant expression fails ConstEval | — |
+| bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
+| bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-downcast-inherited-property-wrong-offset | A | 50 | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
+| bug-dynarray-concat-silent-miscompile | A | 50 | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
+| bug-dynarray-in-record-corrupt | A | 50 | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
+| bug-dynarray-managed-record-field-reassign | A | 50 | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
+| bug-dynarray-whole-var-assign-cross | A | 50 | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
+| bug-emitasmx64-heap-helpers-oom-selfhost | A | 50 | bug | EmitAsmX64 conversion of heap-alloc/free/ansistr-retain/release codegen causes unbounded memory growth (OOM) + non-determinism during self-host | — |
+| bug-emitasmx64-no-sib-index-silent-misparse | A | 50 | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
+| bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | 50 | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
+| bug-esp-not-always-boolean | A | 50 | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
+| bug-except-base-handler-misses-derived | A | 50 | bug | `except on E: BaseClass` does not catch a derived exception | — |
+| bug-explicit-tobject-base | A | 50 | bug | bug: explicit `class(TObject)` base "type not found" | — |
+| bug-fixed-array-assignment-no-copy | A | 50 | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
+| bug-float-field-record-function-return | A | 50 | bug | `Single` field/element inside a record or array stores/loads as zero | — |
+| bug-for-in-implicit-self-field | A | 50 | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
+| bug-forin-in-method-global-var-corruption | A | 50 | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
+| bug-forin-qualified-set-member-source | A | 50 | bug | `for-in` over a qualified set member source fails | — |
+| bug-forward-class-decl-with-later-base-loses-fields | A | 50 | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
+| bug-fpc-bootstrap-compiler-source-not-clean | A | 50 | bug | FPC bootstrap no longer compiles compiler source | — |
+| bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | 50 | bug | FPC seed build fails after Lua C frontend helper additions | — |
+| bug-fpc-seeded-binary-runtime-segfault | A | 50 | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
+| bug-frozen-string-length-pointer-deref-cross | A | 50 | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
+| bug-frozen-string-result-global-not-reentrant | A | 50 | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
+| bug-generator-yield-call-expression | A | 50 | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
+| bug-generic-class-methods-in-program | A | 50 | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
+| bug-hard-keyword-intrinsics-block-identifier-use | A | 50 | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
+| bug-hex-char-code-literal | A | 50 | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
+| bug-i386-arm32-int64-conformance | A | 50 | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
+| bug-i386-float-byval-param | A | 50 | bug | i386 backend: by-value set parameter unsupported | — |
+| bug-i386-try-except-segfault | A | 50 | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
+| bug-impl-prescan-codegen-regression | A | 50 | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
+| bug-implicit-self-dynarray-length | A | 50 | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
+| bug-implicit-self-method-loses-to-unit-proc | A | 50 | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
+| bug-implicit-textfile-unit-method-local | A | 50 | bug | Implicit textfile import misses method-local `Text` in units | — |
+| bug-import-class-sibling-call-corrupts-resolution | A | 50 | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
+| bug-integer-div-zero-sigfpe-uncatchable | A | 50 | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
+| bug-integer-to-enum-typecast-undefined-variable | A | 50 | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
+| bug-ir-unsupported-call-lvalue | A | 50 | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
+| bug-keywords-case-sensitive | A | 50 | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
+| bug-length-of-dynarray-call-result | A | 50 | bug | bug: `Length()` of a dynamic-array function-call result is wrong/crashes | — |
+| bug-length-rejects-non-variable | A | 50 | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
+| bug-lfm-streaming-skips-constructors | B | 50 | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
+| bug-low-missing-high-wrong-nonzero-array | A | 50 | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
+| bug-managed-byref-string-param-store | A | 50 | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
+| bug-managed-length-via-pointer-deref | A | 50 | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
+| bug-managed-record-result-self-arg | A | 50 | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
+| bug-managed-to-frozen-string-assign-crash | A | 50 | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
+| bug-many-param-call-corruption | A | 50 | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
+| bug-max-proc-params-32-selfmiscompile | A | 50 | bug | Bumping MAX_PROC_PARAMS 16→32 makes the compiler segfault (self-miscompile?) | — |
+| bug-metaclass-new-getclass-vmt | A | 50 | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
+| bug-method-call-before-body-byvalue-small-record-arg | A | 50 | bug | Method call before body: by-value <=8-byte record arg mislowers (i386 error; x64 program-level unresolved-forward) | — |
+| bug-method-call-free-tobject | A | 50 | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
+| bug-method-miscompiled-by-context | A | 50 | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
+| bug-method-ptr-no-coerce-pointer-arg | A | 50 | bug | bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument | — |
+| bug-mimic-fpc-version-defines-missing | A | 50 | bug | Bug: `--mimic-fpc` missing FPC version integer defines (`FPC_VERSION`, `FPC_RELEASE`, `FPC_FULLVERSION`) | — |
+| bug-mixed-signature-vmt-misdispatch | A | 50 | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
+| bug-movslq-on-64bit-pointer-load | A | 50 | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
+| bug-multi-interface-method-corruption | A | 50 | bug | Memory/String corruption when calling methods on secondary interfaces | — |
+| bug-named-dynarray-field-setlength | A | 50 | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
+| bug-narrowing-typecast-rvalue-no-truncate | A | 50 | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
+| bug-nested-brace-comments | A | 50 | bug | bug: `{ }` comments do not nest | — |
+| bug-nested-comment-breaks-fpc-brace | A | 50 | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
+| bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
+| bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
+| bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
+| bug-object-ref-array-identity-in-method | A | 50 | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
+| bug-open-array-copy-temp-leak | A | 50 | bug | Open-array copy temp leaked a heap block per call | — |
+| bug-open-array-ctor-statement-call | A | 50 | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
+| bug-operator-result-inferred-var | A | 50 | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
+| bug-overload-resolution-by-type | A | 50 | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
+| bug-paramless-self-recursion-silent-result-read | A | 50 | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
+| bug-paramstr-inline-argstr | A | 50 | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
+| bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
+| bug-pchar-to-string-implicit-conv | A | 50 | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
+| bug-pinned-stable-reads-live-builtin-rtl | A | 50 | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
+| bug-plain-byvalue-record-param-temp | A | 50 | bug | Plain (non-`const`) by-value record param >8B rejects a temporary argument | — |
+| bug-pointer-cast-custom-alias | A | 50 | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
+| bug-pointer-deref-depth-over-2 | A | 50 | bug | Pointer dereference collapses past depth 2 (Pascal `P^^^` / C `***p`) | — |
+| bug-pointer-deref-not-accepted-as-var-arg | A | 50 | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
+| bug-proc-local-managed-record-uninit | A | 50 | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
+| bug-proc-typed-call-const-record-arg | A | 50 | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
+| bug-procedure-typed-procvalue | A | 50 | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
+| bug-procptr-record-field-call | A | 50 | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
+| bug-r-directive-toggle-treated-as-resource | A | 50 | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
+| bug-read-preserves-line-remainder | A | 50 | bug | `read` consumes a whole line like `readln` | — |
+| bug-read-write-reserved-as-method-names | A | 50 | bug | `Read` / `Write` can't be used as method names (reserved) | — |
+| bug-record-byvalue-arg-truncation | A | 50 | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
+| bug-record-fn-codegen-crash | A | 50 | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
+| bug-riscv32-chess-perft-runtime-corruption | A | 50 | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
+| bug-riscv32-hosted-writeln-hello-hangs | A | 50 | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
+| bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
+| bug-set-of-char-const-corrupts-char-codegen | A | 50 | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
+| bug-setlength-array-element | A | 50 | bug | bug: SetLength rejects an indexed array element as target | — |
+| bug-setlength-dynarray-function-result | A | 50 | bug | SetLength rejects dynamic-array function result | — |
+| bug-setlength-ir-string-in-complex-method | A | 50 | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
+| bug-setlength-multidim-one-call | A | 50 | bug | `SetLength(a, x, y)` one-call multidim allocation not parsed | — |
+| bug-setlength-nested-dynarray-field | A | 50 | bug | SetLength on a nested sub-array slot through a record field | — |
+| bug-setlength-record-field-via-var-param | A | 50 | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
+| bug-shl-signed-integer-width | A | 50 | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
+| bug-shr-signed-integer-width | A | 50 | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
+| bug-sizeof-array-and-typename-wrong | A | 50 | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
+| bug-sizeof-variable-unsupported | A | 50 | bug | SizeOf intrinsic does not support variable or expression operands | — |
+| bug-stack-corruption-inline-string-concat | A | 50 | bug | Stack frame corruption on inline string concatenation assignments | — |
+| bug-stderr-not-fd2 | A | 50 | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
+| bug-string-const-index-and-typed-init | A | 50 | bug | Typed string constant with a string initializer won't parse | — |
+| bug-string-literal-concat-compare-segfault | A | 50 | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |
+| bug-string-ordering-comparison-constant | A | 50 | bug | AnsiString `<` `>` `<=` `>=` return constants, not a real comparison | — |
+| bug-string-type-size-mismatch | A | 50 | bug | String type size mismatch in TypeSize vs codegen copies | — |
+| bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
+| bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
+| bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
+| bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
+| bug-tthread-execute-writeln-crash | A | 50 | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
+| bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
+| bug-unit-qualified-constant-not-resolved | A | 50 | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
+| bug-unqualified-property-in-method | A | 50 | bug | Unqualified property access inside a method body fails | — |
+| bug-untyped-float-const | A | 50 | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
+| bug-untyped-params-in-methods | A | 50 | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
+| bug-v36-pinned-binary-missing | A | 50 | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
+| bug-var-array-of-ansistring-param-loses-writes | A | 50 | bug | Bug: `var array[..] of AnsiString` parameter silently loses writes | — |
+| bug-var-open-array-fixed-arg-length | A | 50 | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
+| bug-var-section-eats-constructor-destructor | A | 50 | bug | `var` section before a constructor/destructor impl fails — ctor/dtor eaten as a var name | — |
+| bug-variant-boxing-temp-global-shared | A | 50 | bug | Variant-boxing temporaries are shared globals (thread-unsafe) | — |
+| bug-variant-record-no-overlap | A | 50 | bug | bug: variant record (case fields) do not share storage | — |
+| bug-virtual-keyword-name-result | A | 50 | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
+| bug-whole-record-copy-main-body-noop | A | 50 | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
+| bug-widgetset-virtual-arg-corruption | A | 50 | bug | bug: new virtual method on TWidgetSet miscompiles its object argument | — |
+| bug-writeln-boolean-format | A | 50 | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
+| bug-writeln-real-format | A | 50 | bug | bug: `WriteLn(real)` default format differs from FPC | — |
+| bug-writeln-real-width | A | 50 | bug | bug: `WriteLn(real:w:d)` ignores the field width | — |
+| bug-xtensa-call0-large-frame-truncates | A | 50 | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
+| bugfix-cfront-sqlite3-crash-vdbecursor-layout | A+C | 50 | bugfix | bugfix: cfront — sqlite3 aggregate crash from inline struct pointer field | — |
+| chess-pal-getdents-link | B | 50 | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
+| chore-asmtext-per-platform-split | A | 50 | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
+| chore-fast-pin-tiered-tests | A | 50 | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
+| chore-qemu-test-env | A | 50 | chore | QEMU cross-target test environment | — |
+| chore-repin-c-stdio-pal-bridge | A/C | 50 | chore | Re-pin stable for C stdio/socket PAL bridge | — |
+| chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
+| chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
+| docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
+| feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
+| feature-abs-sqr-intrinsics | A | 50 | feature | `Abs` / `Sqr` System intrinsics missing | — |
+| feature-adventure-scene-asset-pipeline | B | 50 | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
+| feature-anonymous-record-type | A | 50 | feature | Anonymous (inline) record types — `var x: record ... end;` | — |
+| feature-arm32-asm-emitter | A | 50 | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
+| feature-arm32-large-aggregate-result | A | 50 | feature | arm32: support record function results larger than 4 param words (sret) | — |
+| feature-array-of-const | A | 50 | feature | `array of const` (TVarRec) parameter support | — |
+| feature-asm-mvp-frontend | A | 50 | feature | MVP `.asm` -> executable path (head #3, fast-tracked ahead of #1/#2) | — |
+| feature-asm-text-emitter | A | 50 | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
+| feature-asmcore-encoder-library | B | 50 | feature | `lib/asmcore` — clean standalone multi-target instruction encoder library | — |
+| feature-async-coroutines | A | 50 | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
+| feature-bignum-library | B | 50 | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
+| feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
+| feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
+| feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
+| feature-c-cross-lua-sqlite | C | 50 | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
+| feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
+| feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
+| feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
+| feature-c-source-frontend | C | 50 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
+| feature-c-system-libs-granular-opt-out | C | 50 | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
+| feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
+| feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
+| feature-class-is-as | A | 50 | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
+| feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
+| feature-class-variables | A | 50 | feature | feature: class variables (`class var`) | — |
+| feature-classes-tlist-notify-hook | B | 50 | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
+| feature-compiler-search-path-pcl | A | 50 | feature | feature-compiler-search-path-pcl (Track A) | — |
+| feature-compiler-warnings | A | 50 | feature | Compiler warning diagnostics facility | — |
+| feature-compression-library | B | 50 | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
+| feature-conditional-declared-directive | A | 50 | feature | `{$IF DECLARED(...)}` conditional directive support | — |
+| feature-const-eval-typecast-int64 | A | 50 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
+| feature-const-set-literal | A | 50 | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
+| feature-copy-intrinsic | B | 50 | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
+| feature-cross-bootstrap-selfhost | A | 50 | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
+| feature-cross-bootstrap | A | 50 | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
+| feature-cross-codegen-gaps | A | 50 | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
+| feature-cross-compiler-probe-walls | A | 50 | feature | Cross compiler.pas probe walls | — |
+| feature-cross-exceptions | A | 50 | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-extern-abi-breadth | A | 50 | feature | Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align) | — |
+| feature-cross-float-returns | A | 50 | feature | Cross-target float function results | — |
+| feature-cross-float-variant | A | 50 | feature | Float + Variant codegen on cross targets | — |
+| feature-cross-managed-aggregate-locals | A | 50 | feature | Managed aggregate locals on cross targets | — |
+| feature-cross-managed-aggregates | A | 50 | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
+| feature-cross-managed-string-cow | A | 50 | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-param-abi | A | 50 | feature | Full parameter/result ABI on cross targets | — |
+| feature-cross-readln-console-input | A | 50 | feature | Cross targets: readln (console input) unsupported — chess demo wall #3 | — |
+| feature-cross-selfhost-aarch64 | A | 50 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
+| feature-cross-selfhost-arm32 | A | 50 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
+| feature-cross-selfhost-i386 | A | 50 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
+| feature-cross-streaming-lfm | A | 50 | feature | Component streaming + LFM loading on the cross targets | — |
+| feature-cross-target-feature-parity | A | 50 | feature | Cross-target language-feature parity (Intel + ARM) | — |
+| feature-declaration-prescan | A | 50 | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
+| feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
+| feature-default-params-on-methods | A | 50 | feature | Default parameter values on class/interface methods (works on free routines) | — |
+| feature-default-standard-units | A | 50 | feature | Default standard units: `System` + `textfile` | — |
+| feature-demo-2048 | B | 50 | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
+| feature-demo-calc | B | 50 | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
+| feature-demo-file-browser | B | 50 | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
+| feature-demo-gui-solitaire | B | 50 | feature | Demo — GUI Patience / Solitaire | — |
+| feature-demo-life | B | 50 | feature | Demo — Conway's Game of Life | — |
+| feature-demo-lisp | B | 50 | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-mandelbrot | B | 50 | feature | Demo — zoomable Mandelbrot explorer | — |
+| feature-demo-maze | B | 50 | feature | Demo — maze generator + solver | — |
+| feature-demo-raytracer | B | 50 | feature | Demo — CPU ray tracer | — |
+| feature-demo-solitaire | B | 50 | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
+| feature-demo-sudoku | B | 50 | feature | Demo — Sudoku (solver + generator + interactive play) | — |
+| feature-demo-video-player-audio-sync | B | 50 | feature | Video player audio playback and sync | — |
+| feature-demo-video-player | B | 50 | feature | Flagship Demo — Console Video Player (libc-free) | — |
+| feature-demo-vm | B | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
+| feature-directive-if-numeric | A | 50 | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |
+| feature-double-to-single-narrowing | A | 50 | feature | Double literal / value → Single narrowing on assign and argument | — |
+| feature-dynarray-insert-delete | A | 50 | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
+| feature-dynarray-torture-test | A | 50 | feature | Dynamic-array torture test — make dynarray trustable | — |
+| feature-elf-rel-writer | A | 50 | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-eliah-component-palette | B | 50 | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
+| feature-eliah-from-lfm | B | 50 | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
+| feature-eliah-ide | B | 50 | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
+| feature-eliah-layout-tree | B | 50 | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
+| feature-eliah-m0-window | B | 50 | feature | Eliah M0 — single tiled GTK3 window | — |
+| feature-eliah-m1-designer | B | 50 | feature | Eliah M1 — form designer (box emulation) | — |
+| feature-eliah-m2-builder | B | 50 | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
+| feature-eliah-pane-collapse | B | 50 | feature | feature: Eliah pane collapse/restore + ratio memory | — |
+| feature-eliah-pane-header-strip | B | 50 | feature | feature: Eliah pane header — labelled collapse strip + chevron | — |
+| feature-eliah-pane-reflow | B | 50 | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
+| feature-eliah-perspectives | B | 50 | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
+| feature-eliah-selection-link | B | 50 | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
+| feature-eliah-shell | B | 50 | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
+| feature-empty-class-shorthand | A | 50 | feature | Empty class descendant shorthand | — |
+| feature-enum-explicit-values | A | 50 | feature | feature: enumerated type with explicit ordinal values | — |
+| feature-eof-stdin-builtin | A | 50 | feature | `Eof` (standard input) not recognized | — |
+| feature-esp-bare-exceptions | A | 50 | feature | ESP bare: try/except (raise currently terminates) | — |
+| feature-esp-float | B | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
+| feature-esp-int64-arith | A | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
+| feature-esp-isa-baseline-softfallback | A | 50 | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-esp32-bare-boot | A | 50 | feature | ESP32 bare-metal boot profile (no IDF) | — |
+| feature-esp32-idf-riscv32 | A | 50 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-idf-xtensa | A | 50 | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
+| feature-esp32-isr-iram | B | 50 | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
+| feature-esp32-managed-features | A | 50 | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
+| feature-esp32-managed-strings | A | 50 | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-exception-base-class | B | 50 | feature | Built-in / RTL `Exception` base class | — |
+| feature-explicit-typecasts | A | 50 | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
+| feature-extended-alias-or-reject | A | 50 | feature | Extended: formalize as Double alias (or reject) | — |
+| feature-flexcolumn-directive | A | 50 | feature | `flexcolumn` calling-convention directive | — |
+| feature-float-math-and-demo | B | 50 | feature | Float math library (Single+Double) + numerical float demo | — |
+| feature-float-str-val | A | 50 | feature | Float Str / Val | — |
+| feature-for-in-iteration | A | 50 | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
+| feature-forin-member-access-source | A | 50 | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
+| feature-general-typename-cast | B | 50 | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
+| feature-generators-yield | A | 50 | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
+| feature-hashing-library | B | 50 | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
+| feature-high-low-of-type | A | 50 | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
+| feature-hint-directives-deprecated-platform | A | 50 | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
+| feature-i386-asm-emitter | A | 50 | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
+| feature-i386-int64-codegen | A | 50 | feature | Full Int64 codegen for i386 | — |
+| feature-i386-threadsafe-locks | A | 50 | feature | i386 --threadsafe runtime locks (heap / ARC / I-O) | — |
+| feature-image-ascii-renderer-library | B | 50 | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
+| feature-implicit-identifier-binding-strictness-switch | A | 50 | feature | Implicit identifier binding — forward-visible globals + optional auto-local, with a strictness switch | — |
+| feature-implicit-locals-sloppy-switch | A | 50 | feature | Implicit (sloppy) local variables behind a switch — `{$IMPLICITVARS ON}` / `--auto-locals` | — |
+| feature-indexed-array-properties | B | 50 | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
+| feature-indexed-proc-value-call | A | 50 | feature | Indexed / element proc-value call: `arr[i](args)` | — |
+| feature-inline-asm-depth | A | 50 | feature | Inline assembler depth | — |
+| feature-inline-asm-multi-arch | A | 50 | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
+| feature-inline-loop-var-rio | A | 50 | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
+| feature-int-to-float-assign | A | 50 | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
+| feature-interface-refcounting | A | 50 | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-json-library | B | 50 | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
+| feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
+| feature-lazycasing-c-imports | A | 50 | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
+| feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |
+| feature-library-var-out-lvalue-actuals | A | 50 | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
+| feature-local-typed-constant | B | 50 | feature | Local typed constants (initialized const inside a routine) | — |
+| feature-managed-exception-cleanup | A | 50 | feature | Finalize managed values on exception unwind | — |
+| feature-managed-string-default | A | 50 | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
+| feature-member-access-on-call-result | B | 50 | feature | Member access on a function-call result (`f(args).field`) | — |
+| feature-metaclass-construct-dispatch | A | 50 | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
+| feature-metaclass-descendant-enforcement | A | 50 | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
+| feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
+| feature-multidim-fixed-arrays | A | 50 | feature | Multidimensional fixed arrays | — |
+| feature-native-arch-binaries | A | 50 | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
+| feature-nested-anonymous-fixed-array | A | 50 | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
+| feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
+| feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
+| feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
+| feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
+| feature-opt-imm-fold-binop | A | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
+| feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+| feature-pal-esp-lwip-sockaddr-readback | B | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
+| feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
+| feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
+| feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
+| feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
+| feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
+| feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |
+| feature-pcl-opengl-glarea-demo | B | 50 | feature | PCL OpenGL GLArea demo | — |
+| feature-platform-abstraction-layer | B | 50 | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
+| feature-png-decoder-library | B | 50 | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
+| feature-procedural-types | A | 50 | feature | Procedural types and method pointers | — |
+| feature-progress-check-makefile | A | 50 | feature | Wire `progress.sh check` into a make target | — |
+| feature-progress-transition-helpers | A | 50 | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-real-cross-target-consistency | A | 50 | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
+| feature-relative-path-units | A | 50 | feature | Relative/absolute path support in `uses`/`includes` | — |
+| feature-release-packaging | B | 50 | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
+| feature-result-in-loop | A | 50 | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
+| feature-riscv32-hosted-exceptions | A | 50 | feature | riscv32 hosted: exception machinery (raise/try) — last wall before chess | — |
+| feature-riscv32-record-function-results | A | 50 | feature | riscv32: support record (by-value struct) function results | — |
+| feature-riscv32-var-param-forwarding | A | 50 | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
+| feature-rtl-conversion-and-bitset-library | B | 50 | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
+| feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
+| feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
+| feature-rtti-layout-table | A | 50 | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
+| feature-rv32-asm-emitter | A | 50 | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-sat-solver-library | B | 50 | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
+| feature-setlength-var-array-param-abi | A | 50 | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
+| feature-short-circuit-eval | A | 50 | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
+| feature-single-first-class | A | 50 | feature | Single (32-bit float) first-class on the internal-call ABI | — |
+| feature-sizeof-const-intrinsic-in-const-eval | A | 50 | feature | `SizeOf(...)` (and const-intrinsics) not accepted by the compile-time ConstEval | — |
+| feature-softfloat-lib | B | 50 | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
+| feature-stackless-generator-record-locals | A | 50 | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
+| feature-stackless-generator-yield-in-case | A | 50 | feature | Stackless generator: allow `yield` inside a `case` statement | — |
+| feature-string-copy-intrinsic-norter | A | 50 | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
+| feature-subrange-type-decl | A | 50 | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
+| feature-sync-primitives-futex | A | 50 | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
+| feature-synthetic-feature-matrix-test | A | 50 | feature | Synthetic all-features stress test (cross-target conformance) | — |
+| feature-sys-getdents | B | 50 | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
+| feature-sys-process-spawning | B | 50 | feature | Process spawning and execution support — libc-free execve pipeline | — |
+| feature-syscall-pthread-shim | B | 50 | feature | Syscall-only pthread shim for libc-free C libraries | — |
+| feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
+| feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
+| feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
+| feature-target-esp32 | A | 50 | feature | Compile target: ESP32 / embedded | — |
+| feature-target-i386 | A | 50 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-tcomponent-tpersistent | B | 50 | feature | TComponent / TPersistent (FPC Classes owner-child surface) | — |
+| feature-terminal-ansi-library | B | 50 | feature | Terminal ANSI library | — |
+| feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
+| feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
+| feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
+| feature-transcendental-math | A | 50 | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
+| feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
+| feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
+| feature-typed-instruction-encoders | A | 50 | feature | Typed instruction encoders for codegen | — |
+| feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
+| feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
+| feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |
+| feature-uses-alias-as | ACA | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
+| feature-value-bearing-expressions-for-c | A | 50 | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
+| feature-warn-oversized-stack-frame | A | 50 | feature | Warn on oversized stack locals / stack frames | — |
+| feature-xtensa-asm-emitter | A | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
+| feature-xtensa-class-instantiation | A | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
+| feature-xtensa-windowed-abi | A | 50 | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
+| fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
+| idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
+| lib-intToStr-missing | B | 50 | lib | `IntToStr` not available | — |
+| lib-string-copy-trim-missing | B | 50 | lib | String `Copy` / `Trim` not available | — |
+| lib-text-file-io-assign-rewrite | B | 50 | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+| meta-track-b-compiler-wishlist | B | 50 | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
+| perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
+| task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
+| task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
+| test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
+| test-c-dlopen | C | 50 | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
+| track-a-c-frontend-shared-ir-touchpoints | A | 50 | track | C frontend — shared-IR touch points that belong to Track A | — |
+| track-a-c-stdio-needs-pascal-import-and-data-relocs | A | 50 | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
+| track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | 50 | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
+| track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
+| track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
 ## rejected (11)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| bug-c-invalid-symbol-in-lea-sqlite | C | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
-| bug-compiler-uses-unit-interactions | A | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
-| bug-frozen-self-build-unreliable | A | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
-| bug-lexer-identifier-ends-with-keyword | A | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
-| bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
-| bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
-| bugfix-cfront-bitfield-packing-gcc-compat | A+C | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
-| chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
-| chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
-| feature-asm-structured-ir-library | A | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
-| feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-c-invalid-symbol-in-lea-sqlite | C | 50 | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
+| bug-compiler-uses-unit-interactions | A | 50 | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
+| bug-frozen-self-build-unreliable | A | 50 | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
+| bug-lexer-identifier-ends-with-keyword | A | 50 | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
+| bug-nonreproducible-miscompile-2026-06-02 | A | 50 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
+| bug-str-float-broken-by-copy-shadow | A | 50 | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bugfix-cfront-bitfield-packing-gcc-compat | A+C | 50 | bugfix | bugfix: C front — bitfield packing GCC-compatibility | — |
+| chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
+| chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
+| feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
+| feature-lazy-standard-unit-emission | A | 50 | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 
 ## Ready (no unmet blocker)
 
-- [C] bug-c-abi-battery-00204
-- [C] bug-c-anonymous-struct-union-members
-- [C] bug-c-block-scope-func-decl
-- [C] bug-c-expr-result-type-model
-- [C] bug-c-float-single-precision
-- [C] bug-c-fnptr-to-crtl-variadic
-- [C] bug-c-function-returning-fnptr-declarator
-- [C] bug-c-goto-shadowing-00129
-- [C] bug-c-init-designated-and-nested
-- [C] bug-c-missing-lp64-predefines
-- [C] bug-c-pointer-to-array-declarator
-- [C] bug-c-preproc-paste-rescan
-- [C] bug-c-printf-without-stdio-include-varargs
-- [C] bug-c-ptrdiff-of-addr-elem
-- [C] bug-c-sizeof-expr-no-parens
-- [C] bug-c-static-init-cast-and-int-to-double
-- [C] bug-c-string-literal-binop-decay
-- [C] bug-c-switch-nonblock-and-duffs-device
-- [C] bug-c-typedef-name-as-uninitialized-local
-- [A] chore-sqlite-static-capacity-bumps
-- [A] decide-constructor-exception-cleanup-semantics
-- [A] decide-int-div-zero-behavior-unification
-- [D] doc-licensing-split-mpl-zlib
-- [A] feature-asm-source-frontend
-- [A] feature-asm-textual-emit-mode
-- [A] feature-assembler-first-class-citizen
-- [C] feature-c-compound-literals
-- [A] feature-c-corpus-expansion
-- [A] feature-c-corpus-zlib
-- [C] feature-c-cross-target-feature-coverage
-- [C] feature-c-crtl-bind-hand-declared-prototypes
-- [C] feature-c-designated-init-compound-literals
-- [C] feature-c-forward-enum-decl
-- [C] feature-c-generic-selection
-- [C] feature-c-gtk3-header-final-wiring
-- [C] feature-c-pragma-push-pop-macro
-- [C] feature-c-runtime-library
-- [C] feature-c-statement-expressions
-- [C] feature-c-variadic-macros
-- [C] feature-c-vla-and-label-in-if
-- [C] feature-c-wide-string-literals
-- [A] feature-callconv-register-args
-- [A] feature-cdecl-indirect-cross-targets
-- [A] feature-cross-frontend-interop-contract
-- [A] feature-cross-virtual-indirect-hidden-dest
-- [B] feature-crtl-implement-libc-assumptions
-- [B] feature-crtl-strtok-missing
-- [B] feature-demo-chess
-- [B] feature-demo-mandelbrot-gui-threaded
-- [B] feature-dns-resolver-library
-- [A] feature-dynamic-compiler-tables
-- [A] feature-dynamic-include-paths-config
-- [A] feature-dynamic-soname-discovery
-- [A] feature-dynarray-insert-delete-managed-elements
-- [B] feature-eliah-ai-command-rail
-- [B] feature-eliah-component-tabbar
-- [B] feature-embed-dwscript-rtti
-- [B] feature-embed-pascal-script
-- [A] feature-emission-size-dce
-- [A] feature-erlang-frontend-scoping
-- [A] feature-esoteric-ada
-- [A] feature-esoteric-algol
-- [A] feature-esoteric-cobol
-- [A] feature-esoteric-fortran
-- [A] feature-esoteric-frontend-probes
-- [A] feature-esoteric-lolcode
-- [A] feature-esoteric-whitespace
-- [A] feature-esp-hardware-flash-validation
-- [B] feature-esp-peripheral-callback-api
-- [A] feature-float-exception-mask-control
-- [A] feature-fuzzer-idle-scheduling
-- [B+C] feature-game-library-candidate-suite
-- [B] feature-gui-real-window-xvfb-smoke
-- [B] feature-ilja-tui
-- [A] feature-inline-asm-xtensa
-- [A] feature-inline-nonleaf-and-branch-locals
-- [A] feature-inline-routines
-- [A] feature-js-frontend-parked
-- [B] feature-move-fillchar-intrinsics
-- [B] feature-networking
-- [A] feature-nilpy-idf-import
-- [A] feature-opt-store-reload-elimination
-- [A] feature-optimization-levels
-- [B] feature-pal-esp-posix-fd-semantics
-- [A] feature-parallel-processing
-- [A] feature-pxx-basic
-- [A] feature-r-frontend-parked
-- [B] feature-random-library
-- [B] feature-real-dynlib-loader
-- [A] feature-require-forward-strict-mode
-- [A+B] feature-rtl-optout-for-lcl
-- [R] feature-rust-borrowed-slice-type
-- [R] feature-rust-derive-macros
-- [R] feature-rust-drop-move-tracking
-- [R] feature-rust-dyn-trait-dispatch
-- [R] feature-rust-macro-rules
-- [R] feature-rust-misc-semantics
-- [R] feature-rust-rtl-concurrency
-- [R] feature-rust-rtl-core-types
-- [R] feature-rust-rtl-macros-io
-- [A] feature-selfhost-guard-ir-unsupported
-- [A] feature-signal-handlers
-- [B] feature-synapse-compile-check
-- [A] feature-threadsafe-heap-optimize
-- [B] feature-tls-provider-abstraction
-- [B] feature-tls-system-trust-store
-- [B] feature-tls13-from-scratch
-- [A] feature-toolchain-cli-ux
-- [B] feature-writeln-as-library
-- [A] feature-xtensa-stack-args-over-6-words
-- [A] feature-zero-init-contract
-- [B] feature-zig-frontend
-- [C] idea-c-realworld-test-targets
-- [A] meta-dialect-extensions-and-fpc-strict
-- [A] meta-multithreading
-- [B] task-sqlite-libc-free-runtime-bringup
-- [B+C] wish-compile-gnu-pascal
-- [urgent] [A] bug-basic-goto-gosub-halts-program
+- [urgent p 50] [A] bug-basic-goto-gosub-halts-program
+- [p 60] [C] bug-c-typedef-name-as-uninitialized-local (unblocks 1)
+- [p 50] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 50] [C] bug-c-abi-battery-00204
+- [p 50] [C] bug-c-anonymous-struct-union-members
+- [p 50] [C] bug-c-block-scope-func-decl
+- [p 50] [C] bug-c-expr-result-type-model
+- [p 50] [C] bug-c-float-single-precision
+- [p 50] [C] bug-c-fnptr-to-crtl-variadic
+- [p 50] [C] bug-c-function-returning-fnptr-declarator
+- [p 50] [C] bug-c-goto-shadowing-00129
+- [p 50] [C] bug-c-init-designated-and-nested
+- [p 50] [C] bug-c-missing-lp64-predefines
+- [p 50] [C] bug-c-pointer-to-array-declarator
+- [p 50] [C] bug-c-preproc-paste-rescan
+- [p 50] [C] bug-c-printf-without-stdio-include-varargs
+- [p 50] [C] bug-c-ptrdiff-of-addr-elem
+- [p 50] [C] bug-c-sizeof-expr-no-parens
+- [p 50] [C] bug-c-static-init-cast-and-int-to-double
+- [p 50] [C] bug-c-string-literal-binop-decay
+- [p 50] [C] bug-c-switch-nonblock-and-duffs-device
+- [p 50] [A] chore-sqlite-static-capacity-bumps
+- [p 50] [A] decide-constructor-exception-cleanup-semantics
+- [p 50] [A] decide-int-div-zero-behavior-unification
+- [p 50] [D] doc-licensing-split-mpl-zlib
+- [p 50] [A] feature-asm-source-frontend
+- [p 50] [A] feature-asm-textual-emit-mode
+- [p 50] [A] feature-assembler-first-class-citizen
+- [p 50] [C] feature-c-compound-literals
+- [p 50] [A] feature-c-corpus-expansion
+- [p 50] [C] feature-c-cross-target-feature-coverage
+- [p 50] [C] feature-c-crtl-bind-hand-declared-prototypes
+- [p 50] [C] feature-c-designated-init-compound-literals
+- [p 50] [C] feature-c-forward-enum-decl
+- [p 50] [C] feature-c-generic-selection
+- [p 50] [C] feature-c-gtk3-header-final-wiring
+- [p 50] [C] feature-c-pragma-push-pop-macro
+- [p 50] [C] feature-c-runtime-library
+- [p 50] [C] feature-c-statement-expressions
+- [p 50] [C] feature-c-variadic-macros
+- [p 50] [C] feature-c-vla-and-label-in-if
+- [p 50] [C] feature-c-wide-string-literals
+- [p 50] [A] feature-callconv-register-args
+- [p 50] [A] feature-cdecl-indirect-cross-targets
+- [p 50] [A] feature-cross-frontend-interop-contract
+- [p 50] [A] feature-cross-virtual-indirect-hidden-dest
+- [p 50] [B] feature-crtl-implement-libc-assumptions
+- [p 50] [B] feature-crtl-strtok-missing
+- [p 50] [B] feature-demo-chess
+- [p 50] [B] feature-demo-mandelbrot-gui-threaded
+- [p 50] [B] feature-dns-resolver-library
+- [p 50] [A] feature-dynamic-compiler-tables
+- [p 50] [A] feature-dynamic-include-paths-config
+- [p 50] [A] feature-dynamic-soname-discovery
+- [p 50] [A] feature-dynarray-insert-delete-managed-elements
+- [p 50] [B] feature-eliah-ai-command-rail
+- [p 50] [B] feature-eliah-component-tabbar
+- [p 50] [B] feature-embed-dwscript-rtti
+- [p 50] [B] feature-embed-pascal-script
+- [p 50] [A] feature-emission-size-dce
+- [p 50] [A] feature-erlang-frontend-scoping
+- [p 50] [A] feature-esoteric-ada
+- [p 50] [A] feature-esoteric-algol
+- [p 50] [A] feature-esoteric-cobol
+- [p 50] [A] feature-esoteric-fortran
+- [p 50] [A] feature-esoteric-frontend-probes
+- [p 50] [A] feature-esoteric-lolcode
+- [p 50] [A] feature-esoteric-whitespace
+- [p 50] [A] feature-esp-hardware-flash-validation
+- [p 50] [B] feature-esp-peripheral-callback-api
+- [p 50] [A] feature-float-exception-mask-control
+- [p 50] [A] feature-fuzzer-idle-scheduling
+- [p 50] [B+C] feature-game-library-candidate-suite
+- [p 50] [B] feature-gui-real-window-xvfb-smoke
+- [p 50] [B] feature-ilja-tui
+- [p 50] [A] feature-inline-asm-xtensa
+- [p 50] [A] feature-inline-nonleaf-and-branch-locals
+- [p 50] [A] feature-inline-routines
+- [p 50] [A] feature-js-frontend-parked
+- [p 50] [B] feature-move-fillchar-intrinsics
+- [p 50] [B] feature-networking
+- [p 50] [A] feature-nilpy-idf-import
+- [p 50] [A] feature-opt-store-reload-elimination
+- [p 50] [A] feature-optimization-levels
+- [p 50] [B] feature-pal-esp-posix-fd-semantics
+- [p 50] [A] feature-parallel-processing
+- [p 50] [A] feature-pxx-basic
+- [p 50] [A] feature-r-frontend-parked
+- [p 50] [B] feature-random-library
+- [p 50] [B] feature-real-dynlib-loader
+- [p 50] [A] feature-require-forward-strict-mode
+- [p 50] [A+B] feature-rtl-optout-for-lcl
+- [p 50] [R] feature-rust-borrowed-slice-type
+- [p 50] [R] feature-rust-derive-macros
+- [p 50] [R] feature-rust-drop-move-tracking
+- [p 50] [R] feature-rust-dyn-trait-dispatch
+- [p 50] [R] feature-rust-macro-rules
+- [p 50] [R] feature-rust-misc-semantics
+- [p 50] [R] feature-rust-rtl-concurrency
+- [p 50] [R] feature-rust-rtl-core-types
+- [p 50] [R] feature-rust-rtl-macros-io
+- [p 50] [A] feature-selfhost-guard-ir-unsupported
+- [p 50] [A] feature-signal-handlers
+- [p 50] [B] feature-synapse-compile-check
+- [p 50] [A] feature-threadsafe-heap-optimize
+- [p 50] [B] feature-tls-provider-abstraction
+- [p 50] [B] feature-tls-system-trust-store
+- [p 50] [B] feature-tls13-from-scratch
+- [p 50] [A] feature-toolchain-cli-ux
+- [p 50] [B] feature-writeln-as-library
+- [p 50] [A] feature-xtensa-stack-args-over-6-words
+- [p 50] [A] feature-zero-init-contract
+- [p 50] [B] feature-zig-frontend
+- [p 50] [C] idea-c-realworld-test-targets
+- [p 50] [A] meta-dialect-extensions-and-fpc-strict
+- [p 50] [A] meta-multithreading
+- [p 50] [B+C] wish-compile-gnu-pascal
 
 ## Leverage (tickets each one unblocks)
 
+- **1** — bug-c-typedef-name-as-uninitialized-local
 - **1** — task-sqlite-libc-free-runtime-bringup

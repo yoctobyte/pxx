@@ -157,6 +157,17 @@ class Ticket:
         return sorted(set(vals))
 
     @property
+    def prio(self) -> int:
+        """Human 0-100 priority rating. `prio:` in frontmatter (preferred) or a
+        `**Prio:**` bullet as fallback; unset defaults to 50. This is the ONLY
+        knob a human sets — dependency propagation derives everything else."""
+        v = self.fm.get("prio", "") or first_bullet_value(self.text, "Prio")
+        m = re.search(r"\d+", v)
+        if m:
+            return max(0, min(100, int(m.group())))
+        return 50
+
+    @property
     def track(self) -> str:
         # Track R = the Rust frontend. Its tickets declare "Track A (working
         # name: Track R, Rust frontend)" on the Type/Track line so they still
@@ -292,25 +303,90 @@ class Board:
     def track_matches(self, track: str, filt: str) -> bool:
         return not filt or filt in track
 
+    def effective_prio(self) -> dict[str, int]:
+        """Priority propagation: a ticket's effective priority is the max of its
+        own `prio` and the effective priority of everything it unblocks (its
+        dependents, transitively). So a low-rated blocker inherits the priority
+        of the high-value work it gates — you rate the goal, the chain follows.
+        Only OPEN dependents pull a blocker up (a done/rejected dependent no
+        longer needs it). The graph is a DAG (check() enforces); a stray cycle
+        is guarded so this can't recurse forever."""
+        terminal = {"done", "rejected"}
+        dependents: dict[str, list[str]] = defaultdict(list)
+        for t in self.tickets:
+            if t.status in terminal:
+                continue
+            for b in t.blockers:
+                if b in self.by_slug:
+                    dependents[b].append(t.slug)
+        memo: dict[str, int] = {}
+
+        def eff(slug: str, stack: frozenset[str]) -> int:
+            if slug in memo:
+                return memo[slug]
+            best = self.by_slug[slug].prio
+            for d in dependents.get(slug, []):
+                if d in stack:
+                    continue
+                best = max(best, eff(d, stack | {slug}))
+            memo[slug] = best
+            return best
+
+        return {s: eff(s, frozenset()) for s in self.by_slug}
+
     def ready_tickets(self, track_filter: str = "") -> list[Ticket]:
         done = self.done_slugs
+        eff = self.effective_prio()
+        lev = self.leverage_counts()
         out = []
         for st in ("backlog", "urgent"):
             for t in self.by_status[st]:
                 if self.track_matches(t.track, track_filter) and all(b in done for b in t.blockers):
                     out.append(t)
+        # urgent first, then highest effective priority, then most-unblocking,
+        # then slug for a stable order. This IS the queue: pull from the top.
+        out.sort(key=lambda t: (t.status != "urgent", -eff[t.slug], -lev.get(t.slug, 0), t.slug))
         return out
 
     def cmd_ready(self, track_filter: str = "") -> str:
+        eff = self.effective_prio()
+        lev = self.leverage_counts()
         if track_filter:
-            lines = [f"== READY (Track {track_filter}; no unmet blocker; pull from here) =="]
+            lines = [f"== READY (Track {track_filter}; no unmet blocker; ranked — pull from the top) =="]
         else:
-            lines = ["== READY (no unmet blocker; pull from here) =="]
+            lines = ["== READY (no unmet blocker; ranked — pull from the top) =="]
         for t in self.ready_tickets(track_filter):
-            if t.status == "urgent":
-                lines.append(f"  [urgent] [{t.track}] {t.slug}")
-            else:
-                lines.append(f"  [{t.track}] {t.slug}")
+            tag = "urgent " if t.status == "urgent" else ""
+            unb = lev.get(t.slug, 0)
+            extra = f" (unblocks {unb})" if unb else ""
+            lines.append(f"  [{tag}p{eff[t.slug]:>3}] [{t.track}] {t.slug}{extra}")
+        return "\n".join(lines) + "\n"
+
+    def cmd_next(self, track_filter: str = "") -> str:
+        """The single top-of-queue ticket to grab — the 'do tickets at will'
+        entry point. Prints the winner plus why it's on top."""
+        rt = self.ready_tickets(track_filter)
+        if not rt:
+            scope = f" for Track {track_filter}" if track_filter else ""
+            return f"no ready ticket{scope} (all blocked or none in backlog/urgent)\n"
+        eff = self.effective_prio()
+        lev = self.leverage_counts()
+        t = rt[0]
+        unb = lev.get(t.slug, 0)
+        why = f"effective prio {eff[t.slug]}"
+        if t.prio != eff[t.slug]:
+            why += f" (own {t.prio}, inherited from work it unblocks)"
+        if unb:
+            why += f"; unblocks {unb} ticket(s)"
+        if t.status == "urgent":
+            why = "URGENT; " + why
+        lines = [
+            f"== NEXT{(' (Track ' + track_filter + ')') if track_filter else ''} ==",
+            f"  {t.slug}   [{t.track}]",
+            f"  {why}",
+            f"  {t.path.relative_to(ROOT)}",
+            f"  claim: tools/progress.sh claim {t.slug} <your-agent-id>",
+        ]
         return "\n".join(lines) + "\n"
 
     def leverage_counts(self) -> Counter[str]:
@@ -345,6 +421,7 @@ class Board:
             "lives in git, not in a timestamp._",
             "",
         ]
+        eff = self.effective_prio()
         for st in STATUSES:
             tickets = self.by_status[st]
             lines.append(f"## {st} ({len(tickets)})")
@@ -354,13 +431,14 @@ class Board:
                 continue
             lines.extend(
                 [
-                    "| Ticket | Track | Type | Summary | Blocked-by |",
-                    "| --- | --- | --- | --- | --- |",
+                    "| Ticket | Track | Prio | Type | Summary | Blocked-by |",
+                    "| --- | --- | --- | --- | --- | --- |",
                 ]
             )
             for t in tickets:
                 blockers = ", ".join(t.blockers) if t.blockers else "—"
-                lines.append(f"| {t.slug} | {t.track} | {t.type} | {t.summary} | {blockers} |")
+                pr = f"{t.prio}" if eff[t.slug] == t.prio else f"{t.prio}→{eff[t.slug]}"
+                lines.append(f"| {t.slug} | {t.track} | {pr} | {t.type} | {t.summary} | {blockers} |")
             lines.append("")
         lines.extend(["## Ready (no unmet blocker)", ""])
         for line in self.cmd_ready().splitlines():
@@ -391,6 +469,7 @@ class Board:
         linking to the full ticket rendered further down the same page.
         Works from file:// — no server, no external assets."""
         slugs = set(self.by_slug)
+        eff = self.effective_prio()
 
         def esc(x: str) -> str:
             return x.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -515,15 +594,16 @@ pre code{background:none;padding:0}
             if not tickets:
                 h.append("<p class='gen'>none</p>")
                 continue
-            h.append("<table><tr><th>Ticket</th><th>Track</th><th>Type</th>"
+            h.append("<table><tr><th>Ticket</th><th>Track</th><th>Prio</th><th>Type</th>"
                      "<th>Summary</th><th>Blocked-by</th></tr>")
             for t in tickets:
                 blockers = ", ".join(
                     (f"<a href='#t-{b}'>{b}</a>" if b in slugs else esc(b)) for b in t.blockers
                 ) or "&mdash;"
+                pr = f"{t.prio}" if eff[t.slug] == t.prio else f"{t.prio}&rarr;{eff[t.slug]}"
                 h.append(
                     f"<tr><td><a href='#t-{t.slug}'>{esc(t.slug)}</a></td>"
-                    f"<td>{esc(t.track)}</td><td>{esc(t.type)}</td>"
+                    f"<td>{esc(t.track)}</td><td>{pr}</td><td>{esc(t.type)}</td>"
                     f"<td>{inline(t.summary)}</td><td>{blockers}</td></tr>"
                 )
             h.append("</table>")
@@ -705,11 +785,11 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [ready|leverage|board|board-md|check|all] [--track A|B|C|D|R]\n"
+        usage="%(prog)s [next|ready|leverage|board|board-md|check|all] [--track A|B|C|D|R]\n"
         "       %(prog)s claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
-    for name in ["ready", "leverage", "board", "board-md", "check", "all"]:
+    for name in ["next", "ready", "leverage", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
         sp.add_argument("--track", choices=["A", "B", "C", "D", "R"], default="")
         sp.add_argument("--strict", action="store_true")
@@ -735,7 +815,9 @@ def main(argv: list[str]) -> int:
     board = Board()
     cmd = args.cmd or "all"
     track = getattr(args, "track", "") or ""
-    if cmd == "ready":
+    if cmd == "next":
+        sys.stdout.write(board.cmd_next(track))
+    elif cmd == "ready":
         sys.stdout.write(board.cmd_ready(track))
     elif cmd == "leverage":
         sys.stdout.write(board.cmd_leverage())
@@ -753,7 +835,7 @@ def main(argv: list[str]) -> int:
     elif cmd == "all":
         sys.stdout.write(board.cmd_board())
         sys.stdout.write("\n")
-        sys.stdout.write(board.cmd_leverage())
+        sys.stdout.write(board.cmd_next(track))
         sys.stdout.write("\n")
         sys.stdout.write(board.cmd_ready(track))
     return 0
