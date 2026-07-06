@@ -20,11 +20,10 @@ lives in git, not in a timestamp._
 | feature-rust-generics-trait-bounds | R | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
-## unfinished (2)
+## unfinished (1)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 
 ## blocked (0)
@@ -160,7 +159,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (467)
+## done (468)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -416,6 +415,7 @@ _none_
 | feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
+| feature-c-cross-lua-sqlite | C | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
 | feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |

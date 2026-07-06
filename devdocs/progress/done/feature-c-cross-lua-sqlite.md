@@ -4,7 +4,14 @@
   (C frontend + crtl headers + shared codegen). crtl headers = B (file-owned);
   cross C→IR / backend bugs found = A (file A ticket, self-resolve under the
   combined-track rule).
-- **Status:** working — Phase 1 (crtl headers) DONE. Phase 2 **aarch64 lua 5.4
+- **Status:** DONE (2026-07-06 #4) — **ALL 5 TARGETS GREEN.** Cross lua 24/24
+  (aarch64/arm32/i386/riscv32 6/6 each via `make test-lua-cross`) and sqlite3
+  `csqlite_extended_test.c` **byte-identical to the x86-64 oracle on all of
+  x86-64/aarch64/i386/arm32/riscv32.** The last open item (riscv32 integer-valued
+  REAL formatting hang) was fixed as commit 59831ced — an `IR_STORE_MEM`
+  int->double codegen gap, not a formatter bug (see the FIXED block below).
+  make test + self-host byte-identical green. Historical status follows.
+  ~~working~~ — Phase 1 (crtl headers) DONE. Phase 2 **aarch64 lua 5.4
   GREEN** (`make test-lua-cross`, 6/6). Phase 3 **aarch64 sqlite3 GREEN** —
   `csqlite_extended_test.c` runs under qemu-aarch64 with **byte-identical output
   to x86-64** (CRUD, transactions, COUNT/SUM/AVG, floats 2000.75/35.00). 14 cross
@@ -96,7 +103,25 @@ CRUD + CREATE INDEX/sorter + transactions + aggregates), confirming the
 double-pointer-field fix. All three 2026-07-06 #3 fixes (heap, variadic,
 double-pointer-field) are GENERAL compiler/runtime fixes, not riscv32 hacks.
 
-**OPEN — riscv32 ONLY, 4th distinct bug (PRE-EXISTING, LOWEST PRIO): formatting an
+**FIXED (2026-07-06, commit 59831ced) — 4th distinct bug: int-valued REAL hang.**
+Root cause was NOT the formatter/FpDecode and NOT context-dependent register
+pressure. It was a plain riscv32 codegen gap in `IR_STORE_MEM`: storing an integer
+value through a `double*` pointer stored the raw integer bits with no int->double
+conversion. `sqlite3AtoF` parses an integer-valued literal ("2.0") down to
+`*pResult = s` (s = u64 = 2), so the column was stored as `0x0000000000000002` — an
+IEEE denormal ~= 0. Every later read then spun forever in FpDecode's Dekker L1 loop
+(rr[0] never grows). Fractional reals took AtoF's dekker multiply path, never hit the
+bare `*pResult = s`, so they were fine. The earlier "word-swap MEASUREMENT artifact"
+note steered off — a `char`-based byte dump (reliable, unlike `%llx`) showed the
+store wrote raw int bits. Fix mirrors the x86-64 `IR_STORE_MEM` cvtsi2sd path and the
+riscv32 `IR_STORE_SYM` float path: route a float-target store's RHS through
+`EmitFloatOperandRISCV32` (i2d/l2d/i2s) before the store; a genuine-double source is a
+no-op repack. riscv32 sqlite extended test now BYTE-IDENTICAL to the x86-64 oracle —
+**all 5 targets identical.** make test + self-host + test-lua-cross 24/24 green.
+Minimal repro (no sqlite): `void f(double*p,unsigned long long s){*p=s;}` with s=2 →
+bytes `00..02` before, `40 00..` after.
+
+**(historical, now fixed) — riscv32 ONLY, 4th distinct bug: formatting an
 integer-valued REAL hangs.** `SELECT` of a REAL whose value is integer-valued (2.0,
 100.0, 35.00, Bob's 2000.0) HANGS on riscv32; fractional values (1500.5, 2.5) work.
 So the extended test hangs in the first `SELECT * ... ORDER BY id` after row 1 (it's
