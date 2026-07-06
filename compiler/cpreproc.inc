@@ -1803,6 +1803,20 @@ begin
   CPActiveMacroCount := 0;
   CPAddLiteral('__linux__', '01');
   CPAddLiteral('__x86_64__', '01');
+  { Data-model predefines (C 5.2.4.2): real code branches on these to size long
+    (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are
+    ILP32 (long/pointer = 4) — matches the native-`long` model (see the C
+    `long`=native work). }
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) then
+  begin
+    CPAddLiteral('__LP64__', '01');
+    CPAddLiteral('_LP64', '01');
+  end
+  else
+  begin
+    CPAddLiteral('__ILP32__', '01');
+    CPAddLiteral('_ILP32', '01');
+  end;
   CPAddLiteral('__STDC__', '01');
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
