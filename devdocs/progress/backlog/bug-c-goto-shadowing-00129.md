@@ -15,3 +15,6 @@ prio: 28  # auto
 
 ## Gate
 Drop 00129.c from test/c-conformance/pxx.skip; runner green.
+
+## Update 2026-07-07
+Status: the COMPILER itself SIGSEGVs while compiling 00129 (pathological `#define s s` + `struct s s` var + goto over decls into a label `s:`). It no longer errors cleanly — it crashes. Low priority (prio 28, pathological); a compiler crash on adversarial input, needs a focused debug (likely the `s` name colliding across the tag/member/object/label namespaces + the goto-over-declaration jump). 
