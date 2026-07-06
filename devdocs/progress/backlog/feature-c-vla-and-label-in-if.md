@@ -30,3 +30,14 @@ array bounds fold correctly. Remaining for 00207:
   ParseCLocalDeclAST double-reading or a token-position issue).
 - VLA `char test[argc]` (runtime-sized array) — the big part.
 - label as the sole statement of a braceless `if`.
+
+## Trace 2026-07-07 — array-bound ternary else-branch bug pinned
+Instrumented CEvalConstTernary on `int a[2?3:4]`: cond done (CurTok=tkQuestion),
+then-branch = 3 (correct, CurTok=tkColon), after consuming ':' CurTok = the `4`
+integer token — but the ELSE-branch `e := CEvalConstTernary` returns 2, not 4,
+and leaves CurTok on that integer (so the array loop's Expect(']') fails).
+So the else-branch reads the WRONG value / mis-tracks token position, but ONLY
+in the array-dim eval context (scalar/enum/global const ternary is correct).
+Subtle mutual-recursion / token-position bug in the const evaluator's array-dim
+call path — needs focused debugging (compare TokPos handling of the array-dim
+CEvalConstExpr call site vs the scalar-init one).
