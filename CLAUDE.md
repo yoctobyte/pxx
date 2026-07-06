@@ -96,7 +96,10 @@ several at once.)
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
-**`devdocs/dev/parallel-tracks.md`**. Read it before starting your track.
+**`devdocs/dev/parallel-tracks.md`**. Read it before starting your track. The
+*why* behind the whole track split — Track A / the IR is the one gate and the one
+multiplier, so push generality down into the core and keep frontends thin — is
+the north-star note **`devdocs/dev/ir-as-substrate.md`**.
 
 ### Track A in one line
 Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
