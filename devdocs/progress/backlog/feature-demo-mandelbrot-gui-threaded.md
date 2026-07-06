@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Demo — GUI Mandelbrot, multithreaded tiled zoom
 
 - **Type:** feature

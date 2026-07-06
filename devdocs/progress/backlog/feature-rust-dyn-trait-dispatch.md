@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend — `dyn Trait` dispatch for arbitrary types
 
 - **Type:** feature — Track A

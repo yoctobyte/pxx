@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # xtensa: support calls/definitions with more than 6 parameter words
 
 - **Type:** feature (Track A — xtensa codegen / ABI)

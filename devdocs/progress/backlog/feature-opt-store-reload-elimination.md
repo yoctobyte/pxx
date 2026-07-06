@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Store-reload (redundant load) elimination — -O1 pass
 
 - **Type:** feature (codegen — optimization pass) — Track A

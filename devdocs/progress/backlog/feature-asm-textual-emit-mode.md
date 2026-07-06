@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # Codegen: emit human-readable assembly text instead of raw bytes
 
 - **Type:** feature (codegen / diagnostics) — Track A

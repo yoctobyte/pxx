@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Rust frontend — lexer/parser skeleton + entry point
 
 - **Type:** feature — Track A (working name: **Track R**, Rust frontend)

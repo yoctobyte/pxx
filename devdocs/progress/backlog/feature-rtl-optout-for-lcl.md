@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL
 
 - **Type:** feature (RTL layering / compiler flag — Track A/B) — **not now, keep in mind**

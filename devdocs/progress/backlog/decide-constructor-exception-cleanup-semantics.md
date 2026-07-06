@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?)
 
 - **Type:** decision (language semantics / FPC-compat) — Track A

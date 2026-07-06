@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Aggregate / frozen-string result via virtual or indirect call — cross backends
 
 - **Type:** feature (codegen — cross targets) — Track A

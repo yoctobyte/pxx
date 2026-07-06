@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend — integer overflow mode + format-string parser
 
 - **Type:** feature — Track A

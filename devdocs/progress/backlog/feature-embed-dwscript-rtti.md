@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
 
 - **Type:** feature / investigation (real-world compat target + RTTI driver)

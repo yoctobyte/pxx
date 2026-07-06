@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs)
 
 - **Type:** bug (umbrella — run AFTER the other init/float tickets). Track C/A.

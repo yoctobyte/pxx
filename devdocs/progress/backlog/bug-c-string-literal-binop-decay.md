@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C: string literal as binop operand must decay to char* value (== compare SIGSEGVs)
 
 - **Type:** bug (C→IR lowering). Track C — but touches shared ir.inc AN_BINOP

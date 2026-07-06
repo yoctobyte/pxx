@@ -1,3 +1,7 @@
+---
+prio: 30  # auto
+---
+
 # sqlite arc — interim static capacity bumps
 
 - **Type:** chore (capacity tuning) — Track A

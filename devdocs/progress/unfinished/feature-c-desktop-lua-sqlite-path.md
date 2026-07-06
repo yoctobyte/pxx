@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)

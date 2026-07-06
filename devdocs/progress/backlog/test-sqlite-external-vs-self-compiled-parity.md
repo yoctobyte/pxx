@@ -1,3 +1,7 @@
+---
+prio: 40  # auto
+---
+
 # SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation
 
 - **Type:** test / milestone validation — Track C+A

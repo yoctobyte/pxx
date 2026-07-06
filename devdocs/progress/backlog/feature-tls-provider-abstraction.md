@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
 
 - **Type:** feature (library / architecture) — the TLS seam

@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C functions returning function pointers: typedef'd return type + full declarator
 
 - **Type:** bug (cparser declarators). Track C.

@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Zero-init contract — one library-owned managed-slot zeroing guarantee
 
 - **Type:** feature (refactor / hardening)

@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C GNU statement expressions ({ ... }) + __builtin_expect
 
 - **Type:** feature (GCC extension, kernel-style code). Track C.

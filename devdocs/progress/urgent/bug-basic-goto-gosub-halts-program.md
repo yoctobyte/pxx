@@ -1,3 +1,7 @@
+---
+prio: 70  # auto
+---
+
 # bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping
 
 - **Type:** bug (Track A — `compiler/blexer.inc`/`bparser.inc`)

@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Game and engine library candidate suite
 
 - **Type:** feature / investigation (library-suite discovery + compiler test workloads)

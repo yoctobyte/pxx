@@ -1,3 +1,7 @@
+---
+prio: 90  # auto
+---
+
 # C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode
 
 - **Type:** bug/feature (cfront crtl binding). Track C.

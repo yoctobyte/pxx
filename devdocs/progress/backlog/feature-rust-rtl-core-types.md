@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>`
 
 - **Type:** feature — Track B

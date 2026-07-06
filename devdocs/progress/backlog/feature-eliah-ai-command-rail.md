@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # feature: Eliah AI command rail + console pane
 
 - **Type:** feature (Track B)

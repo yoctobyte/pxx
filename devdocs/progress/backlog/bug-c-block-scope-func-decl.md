@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C block-scope function declaration `int f(char *);` inside a body fails
 
 - **Type:** bug (cparser). Track C.

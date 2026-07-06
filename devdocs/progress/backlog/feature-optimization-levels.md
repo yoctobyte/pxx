@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
 
 - **Type:** feature — umbrella

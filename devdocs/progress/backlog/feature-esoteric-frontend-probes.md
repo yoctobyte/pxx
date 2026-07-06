@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Esoteric/legacy frontend probes — umbrella (new category: "esoteric")
 
 - **Type:** feature — umbrella, new category **esoteric-frontend-probe**

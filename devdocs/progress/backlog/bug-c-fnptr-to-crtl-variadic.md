@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs
 
 - **Type:** bug. Track C (crtl binding / variadic-through-pointer).

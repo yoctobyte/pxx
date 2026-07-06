@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend — Drop-on-scope-exit + move tracking
 
 - **Type:** feature — Track A

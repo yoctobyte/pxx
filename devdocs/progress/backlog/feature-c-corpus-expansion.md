@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness)
 
 - **Type:** feature (C frontend validation) — Track A/C.

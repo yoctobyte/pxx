@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Ilja — TUI (ANSI) face
 
 - **Type:** feature (app / demo)

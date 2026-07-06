@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Cross-frontend interop contract — umbrella
 
 - **Type:** feature — umbrella (Track A: AST/IR/symtab/ABI/backends)

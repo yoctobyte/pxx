@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Dynamic soname discovery (no execve)
 
 - **Type:** feature

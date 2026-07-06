@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Rust frontend — generics with trait bounds
 
 - **Type:** feature — Track A (Track R)

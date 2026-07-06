@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C float (single precision): arithmetic rounding + implicit arg conversions wrong
 
 - **Type:** bug (float semantics). Track C.

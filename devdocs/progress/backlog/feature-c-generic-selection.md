@@ -1,3 +1,7 @@
+---
+prio: 28  # auto
+---
+
 # C11 _Generic selection
 
 - **Type:** feature (cparser). Track C. Low priority (C11, rare in target corpus).

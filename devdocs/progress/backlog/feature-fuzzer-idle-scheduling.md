@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # feature: run the IR fuzzer automatically whenever the project is otherwise idle
 
 - **Type:** feature (Track A — tooling/automation)

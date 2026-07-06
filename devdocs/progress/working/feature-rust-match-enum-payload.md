@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Rust frontend — `match` pattern-bind + generalized tagged union
 
 - **Type:** feature — Track A (Track R)

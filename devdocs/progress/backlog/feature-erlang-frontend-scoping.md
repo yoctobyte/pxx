@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Erlang frontend — scoping only
 
 - **Type:** feature — scoping ticket (Track A, once picked up)

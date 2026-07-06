@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
 
 - **Type:** feature (Track B PAL / ESP-IDF)

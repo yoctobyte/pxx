@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C anonymous struct/union members (C11) reject with "expected C expression"
 
 - **Type:** bug/feature. Track C.

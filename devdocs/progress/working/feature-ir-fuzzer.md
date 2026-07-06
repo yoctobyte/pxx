@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # IR correctness fuzzer — cross-target differential + mutation-seeded
 
 - **Type:** feature (Track A — compiler/tools infrastructure)

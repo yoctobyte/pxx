@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets
 
 - **Type:** feature (compiler intrinsic — extension) — Track A

@@ -1,3 +1,7 @@
+---
+prio: 43  # auto
+---
+
 # DECIDE: unify integer div/mod-by-zero behavior across targets
 
 - **Type:** decision (low priority) — Track A

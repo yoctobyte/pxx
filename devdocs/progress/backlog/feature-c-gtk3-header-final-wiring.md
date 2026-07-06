@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # GTK3 header import final wiring
 
 - **Type:** feature

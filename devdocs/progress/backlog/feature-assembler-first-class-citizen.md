@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # Assembler as a first-class citizen (umbrella)
 
 - **Type:** feature (compiler architecture) — Track A

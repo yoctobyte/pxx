@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # write/writeln as a library function (via `array of const` + variadic sugar)
 
 - **Type:** feature

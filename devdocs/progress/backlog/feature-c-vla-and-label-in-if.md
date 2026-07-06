@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C VLA `char test[argc]` + label as sole statement of braceless if
 
 - **Type:** feature (VLA) + parse bug. Track C.

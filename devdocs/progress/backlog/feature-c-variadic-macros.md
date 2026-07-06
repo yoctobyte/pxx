@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C preprocessor: __VA_ARGS__ variadic macros
 
 - **Type:** feature (cpreproc). Track C.

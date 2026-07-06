@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe)
 
 - **Type:** feature (Track A — `compiler/blexer.inc`/`bparser.inc`, `lib/` RTL bits as needed)

@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature

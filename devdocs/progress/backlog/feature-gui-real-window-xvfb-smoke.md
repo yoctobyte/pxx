@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test
 
 - **Type:** feature / test-coverage

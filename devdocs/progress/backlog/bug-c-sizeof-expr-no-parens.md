@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C `sizeof expr` without parentheses fails to parse
 
 - **Type:** bug (cparser), likely EASY. Track C.

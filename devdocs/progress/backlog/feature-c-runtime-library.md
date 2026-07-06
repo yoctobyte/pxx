@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # C runtime/library layer (`lib/crtl`) plus direct C-library packages
 
 - **Type:** feature (C frontend / RTL — legitimately Track B library work

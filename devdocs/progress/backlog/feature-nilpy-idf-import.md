@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # nilpy includes anything from ESP-IDF and it just works
 
 - **Type:** feature

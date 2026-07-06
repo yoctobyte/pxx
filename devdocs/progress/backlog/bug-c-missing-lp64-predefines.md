@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C predefined macros: __LP64__ / _LP64 (and arch predefines) missing
 
 - **Type:** bug (cpreproc), EASY WIN. Track C.

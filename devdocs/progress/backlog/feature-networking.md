@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Networking runtime
 
 - **Type:** feature

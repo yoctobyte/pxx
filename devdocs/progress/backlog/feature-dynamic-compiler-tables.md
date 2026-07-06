@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A

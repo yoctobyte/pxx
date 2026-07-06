@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Esoteric probe: COBOL
 
 - **Type:** feature — esoteric-frontend-probe

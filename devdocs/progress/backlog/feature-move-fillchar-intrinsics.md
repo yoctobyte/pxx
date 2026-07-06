@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Move / FillChar as compiler intrinsics (future optimization)
 
 - **Type:** feature (compiler optimization) — future

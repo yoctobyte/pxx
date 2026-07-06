@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # DNS resolver library (`dns.pas`) with selectable backends
 
 - **Type:** feature (Track B networking / resolver policy)

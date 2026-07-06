@@ -1,3 +1,7 @@
+---
+prio: 90  # auto
+---
+
 # C initializers: designated + nested/brace-elided initializers give SILENT wrong values
 
 - **Type:** bug (miscompile — compiles clean, runs wrong). Track C (cparser init lowering).

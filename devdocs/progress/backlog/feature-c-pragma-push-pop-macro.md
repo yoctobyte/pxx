@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C preprocessor: #pragma push_macro / pop_macro
 
 - **Type:** feature (cpreproc). Track C. Small.

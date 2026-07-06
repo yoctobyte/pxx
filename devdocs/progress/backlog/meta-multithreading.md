@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Meta: multithreading — libc-free Pascal threads (umbrella / epic)
 
 - **Type:** meta (epic / index) — Track A (+ B for the C-shim consumer)

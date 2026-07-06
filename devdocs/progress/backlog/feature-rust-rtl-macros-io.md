@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime
 
 - **Type:** feature — Track B

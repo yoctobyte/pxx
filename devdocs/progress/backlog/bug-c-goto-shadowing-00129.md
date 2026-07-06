@@ -1,3 +1,7 @@
+---
+prio: 28  # auto
+---
+
 # c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s
 
 - **Type:** bug (cparser scoping/labels). Track C. Low priority (pathological).

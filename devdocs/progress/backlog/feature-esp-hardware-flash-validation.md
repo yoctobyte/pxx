@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # ESP32 real-hardware flash + boot validation (S2/S3, C3)
 
 - **Type:** feature (validation — requires physical hardware) — Track A

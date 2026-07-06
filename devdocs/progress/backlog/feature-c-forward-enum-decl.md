@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C forward enum declaration `enum efoo;` (GCC extension, common in the wild)
 
 - **Type:** feature (cparser). Track C.

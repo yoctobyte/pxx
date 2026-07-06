@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride
 
 - **Type:** bug (C→IR pointer-diff lowering). Track C.

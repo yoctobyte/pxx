@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Dynamic Include Paths, Configuration Files, and System Scanner
 
 - **Type:** feature

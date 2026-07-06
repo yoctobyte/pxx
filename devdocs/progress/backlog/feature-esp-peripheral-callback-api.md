@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt"
 
 - **Type:** feature (library / Track B)

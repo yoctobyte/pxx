@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Register-based internal calling convention (args in registers, not stack slots)
 
 - **Type:** feature (codegen — ABI-wide) — Track A

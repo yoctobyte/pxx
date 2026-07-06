@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)

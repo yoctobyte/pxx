@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client
 
 - **Type:** feature (library) — TLS trust anchoring

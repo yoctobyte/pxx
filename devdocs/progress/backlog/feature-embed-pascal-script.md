@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
 
 - **Type:** feature / investigation (real-world compat target + feature)

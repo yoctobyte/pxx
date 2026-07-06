@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # crtl: `strtok` not implemented (undeclared function)
 
 - **Type:** feature (crtl coverage gap)

@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # Flagship demo — chess engine (real-world app + cross-target oracle + benchmark)
 
 - **Type:** feature

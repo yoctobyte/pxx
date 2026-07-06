@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Wish: compile GPC
 
 - **Type:** wish

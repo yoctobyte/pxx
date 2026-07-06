@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C switch: non-compound body + case labels inside nested statements (Duff's device)
 
 - **Type:** bug (cparser statement lowering). Track C.

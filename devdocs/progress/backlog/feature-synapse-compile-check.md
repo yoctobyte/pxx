@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Synapse library — proper compile check (Track B)
 
 - **Type:** feature / investigation (library compat target)

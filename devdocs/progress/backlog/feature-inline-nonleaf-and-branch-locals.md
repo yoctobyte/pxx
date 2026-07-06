@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
 
 - **Type:** feature (codegen — optimization) — Track A

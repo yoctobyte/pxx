@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Zig frontend — PARKED
 
 - **Type:** feature — umbrella (spans Track A + Track B)

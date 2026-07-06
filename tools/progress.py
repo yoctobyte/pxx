@@ -277,6 +277,52 @@ class Ticket:
         return "A"
 
 
+# --- auto-rating -----------------------------------------------------------
+# Deterministic 0-100 suggestion from signals already in the ticket. This only
+# SEEDS a static rating; dependency propagation still raises blockers of rated
+# goals at query time. Kept transparent (fixed weights, reasons printed) so the
+# board stays reproducible — no LLM, no network.
+
+TYPE_BASE = {"bug": 55, "feature": 45, "test": 40, "chore": 30, "docs": 30, "idea": 25}
+# prose priority words (in **Priority:** / Type line) pin the base.
+PROSE_PRIO = [
+    (re.compile(r"\b(critical|highest|urgent|must[- ]fix)\b", re.I), 90),
+    (re.compile(r"\b(high|blocker|blocks the entire|major)\b", re.I), 75),
+    (re.compile(r"\b(medium|moderate|normal)\b", re.I), 50),
+    (re.compile(r"\b(low|minor|nice[- ]to[- ]have|cosmetic|someday)\b", re.I), 28),
+]
+# correctness/severity keywords → bump (a silent miscompile beats a cosmetic gap).
+SEV_STRONG = re.compile(r"\b(miscompile|corrupt|data loss|silently|silent wrong|wrong (value|data|result|answer))\b", re.I)
+SEV_MED = re.compile(r"\b(sigsegv|segfault|crash|hang|oom|deadlock|infinite loop|clobber)\b", re.I)
+
+
+def suggest_prio(t: "Ticket", leverage: int) -> tuple[int, str]:
+    reasons: list[str] = []
+    decl = first_bullet_value(t.text, "Priority") + " " + first_bullet_value(t.text, "Type")
+    score = TYPE_BASE.get(t.type, 45)
+    reasons.append(f"type {t.type}={score}")
+    for pat, val in PROSE_PRIO:
+        if pat.search(decl):
+            score = val
+            reasons.append(f"prose→{val}")
+            break
+    body = t.text
+    sev = 0
+    if SEV_STRONG.search(body):
+        sev += 15
+        reasons.append("severe(+15)")
+    if SEV_MED.search(body):
+        sev += 8
+        reasons.append("crash/hang(+8)")
+    score += min(sev, 20)
+    if leverage:
+        b = min(leverage * 4, 15)
+        score += b
+        reasons.append(f"unblocks {leverage}(+{b})")
+    score = max(0, min(100, score))
+    return score, ", ".join(reasons)
+
+
 class Board:
     def __init__(self) -> None:
         self.tickets: list[Ticket] = []
@@ -387,6 +433,34 @@ class Board:
             f"  {t.path.relative_to(ROOT)}",
             f"  claim: tools/progress.sh claim {t.slug} <your-agent-id>",
         ]
+        return "\n".join(lines) + "\n"
+
+    def cmd_autorate(self, write: bool = False, track_filter: str = "") -> str:
+        """Suggest (or write) a 0-100 prio for open tickets from ticket signals.
+        Never touches a ticket a human already rated: writes carry a `# auto`
+        tag and only tickets with no prio, or an existing `# auto` prio, are
+        (re)written. Dry-run by default — inspect, then pass --write."""
+        lev = self.leverage_counts()
+        head = "WRITE" if write else "DRY-RUN (pass --write to apply)"
+        lines = [f"== AUTORATE ({head}; * = human-set, skipped) =="]
+        n_write = 0
+        for st in ("urgent", "working", "unfinished", "backlog"):
+            for t in self.by_status[st]:
+                if not self.track_matches(t.track, track_filter):
+                    continue
+                m = re.search(r"(?m)^prio:\s*(\d+)(.*)$", t.text)
+                human = bool(m and "auto" not in m.group(2).lower())
+                sug, why = suggest_prio(t, lev.get(t.slug, 0))
+                if human:
+                    lines.append(f"  * [{t.track}] {t.slug}  (human {int(m.group(1))}, keep)")
+                    continue
+                cur = f"{int(m.group(1))}→" if m else ""
+                lines.append(f"    [{t.track}] {t.slug}  {cur}{sug}   ({why})")
+                if write:
+                    set_prio_auto(t.path, sug)
+                    n_write += 1
+        if write:
+            lines.append(f"-- wrote prio to {n_write} ticket(s). Regenerate: tools/progress.sh board-md")
         return "\n".join(lines) + "\n"
 
     def leverage_counts(self) -> Counter[str]:
@@ -741,6 +815,22 @@ def move_ticket(src: Path, dst: Path) -> None:
         subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def set_prio_auto(path: Path, value: int) -> None:
+    """Write `prio: <value>  # auto` into the ticket's YAML frontmatter: replace
+    an existing prio line, else insert into the frontmatter block, else create a
+    frontmatter block. The `# auto` tag marks it machine-set so a later run may
+    refresh it but a human `prio:` (no tag) is never overwritten."""
+    text = path.read_text(encoding="utf-8")
+    line = f"prio: {value}  # auto"
+    if re.search(r"(?m)^prio:.*$", text):
+        text = re.sub(r"(?m)^prio:.*$", line, text, count=1)
+    elif text.startswith("---\n"):
+        text = "---\n" + line + "\n" + text[4:]
+    else:
+        text = f"---\n{line}\n---\n\n" + text
+    path.write_text(text, encoding="utf-8")
+
+
 def set_field(path: Path, marker: str, value: str) -> None:
     text = path.read_text(encoding="utf-8")
     pat = re.compile(rf"^(\s*-?\s*\*\*{re.escape(marker)}:\*\*\s*).*$", re.I | re.M)
@@ -785,14 +875,15 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|board|board-md|check|all] [--track A|B|C|D|R]\n"
-        "       %(prog)s claim <slug> <owner> | resolve <slug> <commit>",
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|R]\n"
+        "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
-    for name in ["next", "ready", "leverage", "board", "board-md", "check", "all"]:
+    for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
         sp.add_argument("--track", choices=["A", "B", "C", "D", "R"], default="")
         sp.add_argument("--strict", action="store_true")
+        sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
     sp.add_argument("owner")
@@ -821,6 +912,8 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(board.cmd_ready(track))
     elif cmd == "leverage":
         sys.stdout.write(board.cmd_leverage())
+    elif cmd == "autorate":
+        sys.stdout.write(board.cmd_autorate(getattr(args, "write", False), track))
     elif cmd == "board":
         sys.stdout.write(board.cmd_board())
     elif cmd == "board-md":

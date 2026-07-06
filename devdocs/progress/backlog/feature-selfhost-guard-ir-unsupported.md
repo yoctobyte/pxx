@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile)
 
 - **Type:** feature (compiler — self-host safety) — Track A

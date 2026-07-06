@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Esoteric probe: Fortran
 
 - **Type:** feature — esoteric-frontend-probe

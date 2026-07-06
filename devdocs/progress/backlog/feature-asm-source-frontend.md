@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # `.asm` as a first-class source frontend (assemble + link to object/exe/.so)
 
 - **Type:** feature (frontend / linker) — Track A

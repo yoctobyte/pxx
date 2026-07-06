@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Inline routine expansion (`inline;`)
 
 - **Type:** feature

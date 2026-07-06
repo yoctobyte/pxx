@@ -8,23 +8,23 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-basic-goto-gosub-halts-program | A | 50 | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
+| bug-basic-goto-gosub-halts-program | A | 70 | bug | bug: BASIC frontend's GOTO/GOSUB silently halt the program instead of jumping | — |
 
 ## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-ir-fuzzer | A | 50 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
-| feature-rust-frontend-skeleton | R | 50 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
-| feature-rust-frontend | R | 50 | feature | Rust frontend — umbrella | — |
-| feature-rust-generics-trait-bounds | R | 50 | feature | Rust frontend — generics with trait bounds | — |
-| feature-rust-match-enum-payload | R | 50 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
+| feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
+| feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
+| feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
+| feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 
 ## unfinished (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-c-desktop-lua-sqlite-path | C | 50 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 
 ## blocked (0)
 
@@ -34,124 +34,124 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | C | 50 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
-| bug-c-anonymous-struct-union-members | C | 50 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
-| bug-c-block-scope-func-decl | C | 50 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
-| bug-c-expr-result-type-model | C | 50 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
-| bug-c-float-single-precision | C | 50 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
-| bug-c-fnptr-to-crtl-variadic | C | 50 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
-| bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
-| bug-c-goto-shadowing-00129 | C | 50 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
-| bug-c-init-designated-and-nested | C | 50 | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
-| bug-c-missing-lp64-predefines | C | 50 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
-| bug-c-pointer-to-array-declarator | C | 50 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
-| bug-c-preproc-paste-rescan | C | 50 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
-| bug-c-printf-without-stdio-include-varargs | C | 50 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-c-ptrdiff-of-addr-elem | C | 50 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
-| bug-c-sizeof-expr-no-parens | C | 50 | bug | C `sizeof expr` without parentheses fails to parse | — |
-| bug-c-static-init-cast-and-int-to-double | C | 50 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
-| bug-c-string-literal-binop-decay | C | 50 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
-| bug-c-switch-nonblock-and-duffs-device | C | 50 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
-| bug-c-typedef-name-as-uninitialized-local | C | 50→60 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
-| chore-sqlite-static-capacity-bumps | A | 50 | chore | sqlite arc — interim static capacity bumps | — |
-| decide-constructor-exception-cleanup-semantics | A | 50 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
-| decide-int-div-zero-behavior-unification | A | 50 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
-| doc-licensing-split-mpl-zlib | D | 50 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
-| feature-asm-source-frontend | A | 50 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
-| feature-asm-textual-emit-mode | A | 50 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
-| feature-assembler-first-class-citizen | A | 50 | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-compound-literals | C | 50 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
-| feature-c-corpus-expansion | A | 50 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
+| bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
+| bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
+| bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
+| bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
+| bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
+| bug-c-function-returning-fnptr-declarator | C | 55 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
+| bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
+| bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
+| bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
+| bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
+| bug-c-preproc-paste-rescan | C | 55 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
+| bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
+| bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
+| bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
+| bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
+| bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
+| bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
+| chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
+| decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
+| decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
+| feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
+| feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
+| feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
+| feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-typedef-name-as-uninitialized-local |
-| feature-c-cross-target-feature-coverage | C | 50 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
-| feature-c-crtl-bind-hand-declared-prototypes | C | 50 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
-| feature-c-designated-init-compound-literals | C | 50 | feature | C99 designated initializers + compound literals unsupported | — |
-| feature-c-forward-enum-decl | C | 50 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
-| feature-c-generic-selection | C | 50 | feature | C11 _Generic selection | — |
-| feature-c-gtk3-header-final-wiring | C | 50 | feature | GTK3 header import final wiring | — |
-| feature-c-pragma-push-pop-macro | C | 50 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
-| feature-c-runtime-library | C | 50 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
-| feature-c-statement-expressions | C | 50 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
-| feature-c-variadic-macros | C | 50 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
-| feature-c-vla-and-label-in-if | C | 50 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
-| feature-c-wide-string-literals | C | 50 | feature | C wide string literals L"..." / wchar_t | — |
-| feature-callconv-register-args | A | 50 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
-| feature-cdecl-indirect-cross-targets | A | 50 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-cross-frontend-interop-contract | A | 50 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-cross-virtual-indirect-hidden-dest | A | 50 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
-| feature-crtl-implement-libc-assumptions | B | 50 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-strtok-missing | B | 50 | feature | crtl: `strtok` not implemented (undeclared function) | — |
-| feature-demo-chess | B | 50 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-mandelbrot-gui-threaded | B | 50 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
-| feature-dns-resolver-library | B | 50 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
-| feature-dynamic-compiler-tables | A | 50 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
-| feature-dynamic-include-paths-config | A | 50 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
-| feature-dynamic-soname-discovery | A | 50 | feature | Dynamic soname discovery (no execve) | — |
-| feature-dynarray-insert-delete-managed-elements | A | 50 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
-| feature-eliah-ai-command-rail | B | 50 | feature | feature: Eliah AI command rail + console pane | — |
-| feature-eliah-component-tabbar | B | 50 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
-| feature-embed-dwscript-rtti | B | 50 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
-| feature-embed-pascal-script | B | 50 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
-| feature-emission-size-dce | A | 50 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
-| feature-erlang-frontend-scoping | A | 50 | feature | Erlang frontend — scoping only | — |
-| feature-esoteric-ada | A | 50 | feature | Esoteric probe: Ada | — |
-| feature-esoteric-algol | A | 50 | feature | Esoteric probe: Algol (60) | — |
-| feature-esoteric-cobol | A | 50 | feature | Esoteric probe: COBOL | — |
-| feature-esoteric-fortran | A | 50 | feature | Esoteric probe: Fortran | — |
-| feature-esoteric-frontend-probes | A | 50 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
-| feature-esoteric-lolcode | A | 50 | feature | Esoteric probe: LOLCODE | — |
-| feature-esoteric-whitespace | A | 50 | feature | Esoteric probe: Whitespace | — |
-| feature-esp-hardware-flash-validation | A | 50 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | B | 50 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-float-exception-mask-control | A | 50 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
-| feature-fuzzer-idle-scheduling | A | 50 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
-| feature-game-library-candidate-suite | B+C | 50 | feature | Game and engine library candidate suite | — |
-| feature-gui-real-window-xvfb-smoke | B | 50 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
-| feature-ilja-tui | B | 50 | feature | Ilja — TUI (ANSI) face | — |
-| feature-inline-asm-xtensa | A | 50 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
-| feature-inline-nonleaf-and-branch-locals | A | 50 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-inline-routines | A | 50 | feature | Inline routine expansion (`inline;`) | — |
-| feature-js-frontend-parked | A | 50 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
-| feature-move-fillchar-intrinsics | B | 50 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-networking | B | 50 | feature | Networking runtime | — |
-| feature-nilpy-idf-import | A | 50 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-opt-store-reload-elimination | A | 50 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
-| feature-optimization-levels | A | 50 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
-| feature-pal-esp-posix-fd-semantics | B | 50 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-parallel-processing | A | 50 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-pxx-basic | A | 50 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
-| feature-r-frontend-parked | A | 50 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
-| feature-random-library | B | 50 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-real-dynlib-loader | B | 50 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
-| feature-require-forward-strict-mode | A | 50 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
-| feature-rtl-optout-for-lcl | A+B | 50 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-rust-borrowed-slice-type | R | 50 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
-| feature-rust-derive-macros | R | 50 | feature | Rust frontend — derive-macro codegen | — |
-| feature-rust-drop-move-tracking | R | 50 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
-| feature-rust-dyn-trait-dispatch | R | 50 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-macro-rules | R | 50 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
-| feature-rust-misc-semantics | R | 50 | feature | Rust frontend — integer overflow mode + format-string parser | — |
-| feature-rust-rtl-concurrency | R | 50 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
-| feature-rust-rtl-core-types | R | 50 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
-| feature-rust-rtl-macros-io | R | 50 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
-| feature-selfhost-guard-ir-unsupported | A | 50 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
-| feature-signal-handlers | A | 50 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
-| feature-synapse-compile-check | B | 50 | feature | Synapse library — proper compile check (Track B) | — |
-| feature-threadsafe-heap-optimize | A | 50 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| feature-tls-provider-abstraction | B | 50 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
-| feature-tls-system-trust-store | B | 50 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
-| feature-tls13-from-scratch | B | 50 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
-| feature-toolchain-cli-ux | A | 50 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
-| feature-writeln-as-library | B | 50 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-xtensa-stack-args-over-6-words | A | 50 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
-| feature-zero-init-contract | A | 50 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| feature-zig-frontend | B | 50 | feature | Zig frontend — PARKED | — |
-| idea-c-realworld-test-targets | C | 50 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
-| meta-dialect-extensions-and-fpc-strict | A | 50 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
-| meta-multithreading | A | 50 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
-| task-sqlite-libc-free-runtime-bringup | B | 50 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
-| test-sqlite-external-vs-self-compiled-parity | C | 50 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
-| wish-compile-gnu-pascal | B+C | 50 | wish | Wish: compile GPC | — |
+| feature-c-cross-target-feature-coverage | C | 65 | feature | C frontend + lua — cross-target / ESP feature coverage | — |
+| feature-c-crtl-bind-hand-declared-prototypes | C | 90 | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
+| feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
+| feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
+| feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
+| feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
+| feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
+| feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
+| feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
+| feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
+| feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
+| feature-callconv-register-args | A | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
+| feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
+| feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
+| feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
+| feature-demo-chess | B | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-mandelbrot-gui-threaded | B | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
+| feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
+| feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
+| feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
+| feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
+| feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
+| feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
+| feature-eliah-component-tabbar | B | 45 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
+| feature-embed-dwscript-rtti | B | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
+| feature-embed-pascal-script | B | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
+| feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
+| feature-erlang-frontend-scoping | A | 65 | feature | Erlang frontend — scoping only | — |
+| feature-esoteric-ada | A | 65 | feature | Esoteric probe: Ada | — |
+| feature-esoteric-algol | A | 45 | feature | Esoteric probe: Algol (60) | — |
+| feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
+| feature-esoteric-fortran | A | 45 | feature | Esoteric probe: Fortran | — |
+| feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
+| feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
+| feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
+| feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
+| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
+| feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
+| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
+| feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
+| feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
+| feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
+| feature-inline-nonleaf-and-branch-locals | A | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
+| feature-inline-routines | A | 60 | feature | Inline routine expansion (`inline;`) | — |
+| feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
+| feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
+| feature-networking | B | 45 | feature | Networking runtime | — |
+| feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-opt-store-reload-elimination | A | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
+| feature-optimization-levels | A | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
+| feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
+| feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
+| feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
+| feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
+| feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
+| feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
+| feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
+| feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
+| feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
+| feature-rust-dyn-trait-dispatch | R | 45 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
+| feature-rust-macro-rules | R | 60 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
+| feature-rust-misc-semantics | R | 45 | feature | Rust frontend — integer overflow mode + format-string parser | — |
+| feature-rust-rtl-concurrency | R | 45 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
+| feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
+| feature-rust-rtl-macros-io | R | 45 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-selfhost-guard-ir-unsupported | A | 60 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
+| feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
+| feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
+| feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
+| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
+| feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
+| feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
+| feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
+| feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
+| feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| feature-zig-frontend | B | 45 | feature | Zig frontend — PARKED | — |
+| idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
+| meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
+| meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
+| task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
+| test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
+| wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
 ## rainy-day (20)
 
@@ -450,7 +450,7 @@ _none_
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | C | 50 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
+| feature-c-source-frontend | C | 50→60 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-system-libs-granular-opt-out | C | 50 | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
@@ -681,123 +681,123 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [urgent p 50] [A] bug-basic-goto-gosub-halts-program
-- [p 60] [C] bug-c-typedef-name-as-uninitialized-local (unblocks 1)
-- [p 50] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
-- [p 50] [C] bug-c-abi-battery-00204
-- [p 50] [C] bug-c-anonymous-struct-union-members
-- [p 50] [C] bug-c-block-scope-func-decl
-- [p 50] [C] bug-c-expr-result-type-model
-- [p 50] [C] bug-c-float-single-precision
-- [p 50] [C] bug-c-fnptr-to-crtl-variadic
-- [p 50] [C] bug-c-function-returning-fnptr-declarator
-- [p 50] [C] bug-c-goto-shadowing-00129
-- [p 50] [C] bug-c-init-designated-and-nested
-- [p 50] [C] bug-c-missing-lp64-predefines
-- [p 50] [C] bug-c-pointer-to-array-declarator
-- [p 50] [C] bug-c-preproc-paste-rescan
-- [p 50] [C] bug-c-printf-without-stdio-include-varargs
-- [p 50] [C] bug-c-ptrdiff-of-addr-elem
-- [p 50] [C] bug-c-sizeof-expr-no-parens
-- [p 50] [C] bug-c-static-init-cast-and-int-to-double
-- [p 50] [C] bug-c-string-literal-binop-decay
-- [p 50] [C] bug-c-switch-nonblock-and-duffs-device
-- [p 50] [A] chore-sqlite-static-capacity-bumps
-- [p 50] [A] decide-constructor-exception-cleanup-semantics
-- [p 50] [A] decide-int-div-zero-behavior-unification
-- [p 50] [D] doc-licensing-split-mpl-zlib
-- [p 50] [A] feature-asm-source-frontend
-- [p 50] [A] feature-asm-textual-emit-mode
-- [p 50] [A] feature-assembler-first-class-citizen
-- [p 50] [C] feature-c-compound-literals
-- [p 50] [A] feature-c-corpus-expansion
-- [p 50] [C] feature-c-cross-target-feature-coverage
-- [p 50] [C] feature-c-crtl-bind-hand-declared-prototypes
-- [p 50] [C] feature-c-designated-init-compound-literals
-- [p 50] [C] feature-c-forward-enum-decl
-- [p 50] [C] feature-c-generic-selection
-- [p 50] [C] feature-c-gtk3-header-final-wiring
-- [p 50] [C] feature-c-pragma-push-pop-macro
-- [p 50] [C] feature-c-runtime-library
-- [p 50] [C] feature-c-statement-expressions
-- [p 50] [C] feature-c-variadic-macros
-- [p 50] [C] feature-c-vla-and-label-in-if
-- [p 50] [C] feature-c-wide-string-literals
-- [p 50] [A] feature-callconv-register-args
-- [p 50] [A] feature-cdecl-indirect-cross-targets
-- [p 50] [A] feature-cross-frontend-interop-contract
-- [p 50] [A] feature-cross-virtual-indirect-hidden-dest
-- [p 50] [B] feature-crtl-implement-libc-assumptions
-- [p 50] [B] feature-crtl-strtok-missing
-- [p 50] [B] feature-demo-chess
-- [p 50] [B] feature-demo-mandelbrot-gui-threaded
-- [p 50] [B] feature-dns-resolver-library
-- [p 50] [A] feature-dynamic-compiler-tables
-- [p 50] [A] feature-dynamic-include-paths-config
-- [p 50] [A] feature-dynamic-soname-discovery
-- [p 50] [A] feature-dynarray-insert-delete-managed-elements
-- [p 50] [B] feature-eliah-ai-command-rail
-- [p 50] [B] feature-eliah-component-tabbar
-- [p 50] [B] feature-embed-dwscript-rtti
-- [p 50] [B] feature-embed-pascal-script
-- [p 50] [A] feature-emission-size-dce
-- [p 50] [A] feature-erlang-frontend-scoping
-- [p 50] [A] feature-esoteric-ada
-- [p 50] [A] feature-esoteric-algol
-- [p 50] [A] feature-esoteric-cobol
-- [p 50] [A] feature-esoteric-fortran
-- [p 50] [A] feature-esoteric-frontend-probes
-- [p 50] [A] feature-esoteric-lolcode
-- [p 50] [A] feature-esoteric-whitespace
-- [p 50] [A] feature-esp-hardware-flash-validation
-- [p 50] [B] feature-esp-peripheral-callback-api
-- [p 50] [A] feature-float-exception-mask-control
-- [p 50] [A] feature-fuzzer-idle-scheduling
-- [p 50] [B+C] feature-game-library-candidate-suite
-- [p 50] [B] feature-gui-real-window-xvfb-smoke
-- [p 50] [B] feature-ilja-tui
-- [p 50] [A] feature-inline-asm-xtensa
-- [p 50] [A] feature-inline-nonleaf-and-branch-locals
-- [p 50] [A] feature-inline-routines
-- [p 50] [A] feature-js-frontend-parked
-- [p 50] [B] feature-move-fillchar-intrinsics
-- [p 50] [B] feature-networking
-- [p 50] [A] feature-nilpy-idf-import
-- [p 50] [A] feature-opt-store-reload-elimination
-- [p 50] [A] feature-optimization-levels
-- [p 50] [B] feature-pal-esp-posix-fd-semantics
-- [p 50] [A] feature-parallel-processing
-- [p 50] [A] feature-pxx-basic
-- [p 50] [A] feature-r-frontend-parked
-- [p 50] [B] feature-random-library
-- [p 50] [B] feature-real-dynlib-loader
-- [p 50] [A] feature-require-forward-strict-mode
-- [p 50] [A+B] feature-rtl-optout-for-lcl
-- [p 50] [R] feature-rust-borrowed-slice-type
-- [p 50] [R] feature-rust-derive-macros
-- [p 50] [R] feature-rust-drop-move-tracking
-- [p 50] [R] feature-rust-dyn-trait-dispatch
-- [p 50] [R] feature-rust-macro-rules
-- [p 50] [R] feature-rust-misc-semantics
-- [p 50] [R] feature-rust-rtl-concurrency
-- [p 50] [R] feature-rust-rtl-core-types
-- [p 50] [R] feature-rust-rtl-macros-io
-- [p 50] [A] feature-selfhost-guard-ir-unsupported
-- [p 50] [A] feature-signal-handlers
-- [p 50] [B] feature-synapse-compile-check
-- [p 50] [A] feature-threadsafe-heap-optimize
-- [p 50] [B] feature-tls-provider-abstraction
-- [p 50] [B] feature-tls-system-trust-store
-- [p 50] [B] feature-tls13-from-scratch
-- [p 50] [A] feature-toolchain-cli-ux
-- [p 50] [B] feature-writeln-as-library
-- [p 50] [A] feature-xtensa-stack-args-over-6-words
-- [p 50] [A] feature-zero-init-contract
-- [p 50] [B] feature-zig-frontend
-- [p 50] [C] idea-c-realworld-test-targets
-- [p 50] [A] meta-dialect-extensions-and-fpc-strict
-- [p 50] [A] meta-multithreading
-- [p 50] [B+C] wish-compile-gnu-pascal
+- [urgent p 70] [A] bug-basic-goto-gosub-halts-program
+- [p 94] [C] bug-c-typedef-name-as-uninitialized-local (unblocks 1)
+- [p 90] [C] bug-c-init-designated-and-nested
+- [p 90] [C] bug-c-static-init-cast-and-int-to-double
+- [p 90] [C] feature-c-crtl-bind-hand-declared-prototypes
+- [p 70] [C] bug-c-printf-without-stdio-include-varargs
+- [p 65] [A] feature-c-corpus-expansion
+- [p 65] [C] feature-c-cross-target-feature-coverage
+- [p 65] [A] feature-cross-virtual-indirect-hidden-dest
+- [p 65] [A] feature-erlang-frontend-scoping
+- [p 65] [A] feature-esoteric-ada
+- [p 65] [A] feature-optimization-levels
+- [p 65] [A] feature-signal-handlers
+- [p 65] [A] feature-zero-init-contract
+- [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 60] [A] decide-constructor-exception-cleanup-semantics
+- [p 60] [A] feature-asm-source-frontend
+- [p 60] [C] feature-c-runtime-library
+- [p 60] [A] feature-cdecl-indirect-cross-targets
+- [p 60] [B] feature-crtl-strtok-missing
+- [p 60] [B] feature-dns-resolver-library
+- [p 60] [A] feature-esoteric-frontend-probes
+- [p 60] [A] feature-float-exception-mask-control
+- [p 60] [B+C] feature-game-library-candidate-suite
+- [p 60] [A] feature-inline-asm-xtensa
+- [p 60] [A] feature-inline-routines
+- [p 60] [A] feature-opt-store-reload-elimination
+- [p 60] [A] feature-pxx-basic
+- [p 60] [A] feature-require-forward-strict-mode
+- [p 60] [R] feature-rust-macro-rules
+- [p 60] [A] feature-selfhost-guard-ir-unsupported
+- [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 55] [C] bug-c-abi-battery-00204
+- [p 55] [C] bug-c-anonymous-struct-union-members
+- [p 55] [C] bug-c-block-scope-func-decl
+- [p 55] [C] bug-c-expr-result-type-model
+- [p 55] [C] bug-c-float-single-precision
+- [p 55] [C] bug-c-fnptr-to-crtl-variadic
+- [p 55] [C] bug-c-function-returning-fnptr-declarator
+- [p 55] [C] bug-c-missing-lp64-predefines
+- [p 55] [C] bug-c-pointer-to-array-declarator
+- [p 55] [C] bug-c-preproc-paste-rescan
+- [p 55] [C] bug-c-ptrdiff-of-addr-elem
+- [p 55] [C] bug-c-sizeof-expr-no-parens
+- [p 55] [C] bug-c-string-literal-binop-decay
+- [p 55] [C] bug-c-switch-nonblock-and-duffs-device
+- [p 53] [A] feature-asm-textual-emit-mode
+- [p 53] [A] feature-assembler-first-class-citizen
+- [p 53] [C] feature-c-compound-literals
+- [p 53] [B] feature-demo-chess
+- [p 53] [B] feature-esp-peripheral-callback-api
+- [p 53] [B] feature-gui-real-window-xvfb-smoke
+- [p 53] [A] feature-threadsafe-heap-optimize
+- [p 53] [B] feature-tls-provider-abstraction
+- [p 53] [B] feature-tls13-from-scratch
+- [p 45] [D] doc-licensing-split-mpl-zlib
+- [p 45] [C] feature-c-designated-init-compound-literals
+- [p 45] [C] feature-c-forward-enum-decl
+- [p 45] [C] feature-c-gtk3-header-final-wiring
+- [p 45] [C] feature-c-pragma-push-pop-macro
+- [p 45] [C] feature-c-statement-expressions
+- [p 45] [C] feature-c-variadic-macros
+- [p 45] [C] feature-c-vla-and-label-in-if
+- [p 45] [A] feature-callconv-register-args
+- [p 45] [A] feature-cross-frontend-interop-contract
+- [p 45] [B] feature-crtl-implement-libc-assumptions
+- [p 45] [B] feature-demo-mandelbrot-gui-threaded
+- [p 45] [A] feature-dynamic-compiler-tables
+- [p 45] [A] feature-dynamic-include-paths-config
+- [p 45] [A] feature-dynamic-soname-discovery
+- [p 45] [A] feature-dynarray-insert-delete-managed-elements
+- [p 45] [B] feature-eliah-ai-command-rail
+- [p 45] [B] feature-eliah-component-tabbar
+- [p 45] [B] feature-embed-dwscript-rtti
+- [p 45] [B] feature-embed-pascal-script
+- [p 45] [A] feature-emission-size-dce
+- [p 45] [A] feature-esoteric-algol
+- [p 45] [A] feature-esoteric-cobol
+- [p 45] [A] feature-esoteric-fortran
+- [p 45] [A] feature-esoteric-lolcode
+- [p 45] [A] feature-esoteric-whitespace
+- [p 45] [A] feature-esp-hardware-flash-validation
+- [p 45] [A] feature-fuzzer-idle-scheduling
+- [p 45] [B] feature-ilja-tui
+- [p 45] [A] feature-inline-nonleaf-and-branch-locals
+- [p 45] [A] feature-js-frontend-parked
+- [p 45] [B] feature-move-fillchar-intrinsics
+- [p 45] [B] feature-networking
+- [p 45] [A] feature-nilpy-idf-import
+- [p 45] [B] feature-pal-esp-posix-fd-semantics
+- [p 45] [A] feature-parallel-processing
+- [p 45] [A] feature-r-frontend-parked
+- [p 45] [B] feature-random-library
+- [p 45] [B] feature-real-dynlib-loader
+- [p 45] [A+B] feature-rtl-optout-for-lcl
+- [p 45] [R] feature-rust-borrowed-slice-type
+- [p 45] [R] feature-rust-derive-macros
+- [p 45] [R] feature-rust-drop-move-tracking
+- [p 45] [R] feature-rust-dyn-trait-dispatch
+- [p 45] [R] feature-rust-misc-semantics
+- [p 45] [R] feature-rust-rtl-concurrency
+- [p 45] [R] feature-rust-rtl-core-types
+- [p 45] [R] feature-rust-rtl-macros-io
+- [p 45] [B] feature-synapse-compile-check
+- [p 45] [B] feature-tls-system-trust-store
+- [p 45] [A] feature-toolchain-cli-ux
+- [p 45] [B] feature-writeln-as-library
+- [p 45] [A] feature-xtensa-stack-args-over-6-words
+- [p 45] [B] feature-zig-frontend
+- [p 45] [A] meta-multithreading
+- [p 45] [B+C] wish-compile-gnu-pascal
+- [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 30] [A] chore-sqlite-static-capacity-bumps
+- [p 28] [C] bug-c-goto-shadowing-00129
+- [p 28] [C] feature-c-generic-selection
+- [p 28] [C] feature-c-wide-string-literals
+- [p 25] [C] idea-c-realworld-test-targets
 
 ## Leverage (tickets each one unblocks)
 

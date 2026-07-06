@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk)
 
 - **Type:** feature (library / crypto / protocol) — flagship

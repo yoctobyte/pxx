@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded)
 
 - **Type:** meta (governance / index / epic) — Track A

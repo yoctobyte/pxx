@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Emission size — reachability-gated dead-code elimination (umbrella)
 
 - **Type:** feature (codegen / optimization) — Track A

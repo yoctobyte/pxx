@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Document the licensing split (MPL 2.0 compiler / Zlib RTL)
 
 - **Type:** doc (Track D — user/website licensing docs)

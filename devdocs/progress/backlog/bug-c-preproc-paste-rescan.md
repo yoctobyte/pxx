@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C preprocessor: ## paste result must be rescanned for further macro expansion
 
 - **Type:** bug (cpreproc). Track C.

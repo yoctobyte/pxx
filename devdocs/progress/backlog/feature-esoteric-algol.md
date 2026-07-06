@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Esoteric probe: Algol (60)
 
 - **Type:** feature — esoteric-frontend-probe

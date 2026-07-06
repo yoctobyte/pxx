@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Float exception mask control (SetExceptionMask-style, FPC emulation opt-in)
 
 - **Type:** feature (runtime / math) — Track A

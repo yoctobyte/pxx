@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node"
 
 - **Type:** bug (cparser declarator + C→IR lowering). Track C.

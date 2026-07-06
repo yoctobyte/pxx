@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend — derive-macro codegen
 
 - **Type:** feature — Track A

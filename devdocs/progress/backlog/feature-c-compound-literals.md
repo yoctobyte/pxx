@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails
 
 - **Type:** feature/bug. Track C.

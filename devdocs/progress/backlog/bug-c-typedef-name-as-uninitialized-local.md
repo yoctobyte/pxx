@@ -1,6 +1,7 @@
 ---
-prio: 50
+prio: 94  # auto
 ---
+
 # C: uninitialized local named same as an in-scope typedef mis-parses
 
 - **Type:** bug (cfront parser — declaration vs typedef disambiguation). Track C.

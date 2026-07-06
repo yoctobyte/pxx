@@ -1,3 +1,7 @@
+---
+prio: 25  # auto
+---
+
 # Real-world C programs as compiler stress tests (brainstorm)
 
 - **Type:** idea / test-coverage backlog — Track C+B (C frontend + crtl)

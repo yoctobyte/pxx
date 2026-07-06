@@ -1,3 +1,7 @@
+---
+prio: 90  # auto
+---
+
 # C static initializers: cast-expression and int→double conversion silently produce 0
 
 - **Type:** bug (miscompile — silent zero). Track C.

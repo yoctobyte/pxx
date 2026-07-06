@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Rust frontend — umbrella
 
 - **Type:** feature — umbrella (spans Track A + Track B) — working name **Track R**

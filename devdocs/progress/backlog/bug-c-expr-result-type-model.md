@@ -1,3 +1,7 @@
+---
+prio: 55  # auto
+---
+
 # C expression result-type model: `!` width, shift result type, hex-constant typing
 
 - **Type:** bug (C type semantics). Track C (C→IR lowering type computation).

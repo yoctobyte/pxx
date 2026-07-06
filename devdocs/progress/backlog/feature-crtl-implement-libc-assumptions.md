@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # crtl: implement the libc assumptions real-world C leans on
 
 - **Type:** feature (libraries) — Track B (`lib/crtl`).

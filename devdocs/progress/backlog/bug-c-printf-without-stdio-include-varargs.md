@@ -1,3 +1,7 @@
+---
+prio: 70  # auto
+---
+
 # C: printf without #include <stdio.h> silently drops output / formatting
 
 - **Type:** bug (C frontend / crtl binding) — Track C

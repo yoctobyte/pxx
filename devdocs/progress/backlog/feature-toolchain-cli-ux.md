@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
 
 - **Type:** feature (project infrastructure / user experience)

@@ -1,3 +1,7 @@
+---
+prio: 64  # auto
+---
+
 # sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge
 
 - **Type:** task (libc-free runtime bring-up) — Track B (`lib/crtl/**`) +

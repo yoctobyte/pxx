@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Esoteric probe: Ada
 
 - **Type:** feature — esoteric-frontend-probe

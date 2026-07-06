@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # C99 designated initializers + compound literals unsupported
 
 - **Type:** feature (C99 parser gap)

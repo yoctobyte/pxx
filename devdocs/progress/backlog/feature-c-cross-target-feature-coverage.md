@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # C frontend + lua — cross-target / ESP feature coverage
 
 - **Type:** feature (test coverage) — Track C (+ A for any backend gap found)

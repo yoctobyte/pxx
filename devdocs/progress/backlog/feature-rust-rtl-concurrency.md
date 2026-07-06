@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend RTL — thread / atomics / mpsc shims
 
 - **Type:** feature — Track B

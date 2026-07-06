@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # feature: Eliah tabbed component bar (Lazarus-style, with icons)
 
 - **Type:** feature (Track B)

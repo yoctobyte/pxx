@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Parallel processing as a language feature
 
 - **Type:** feature

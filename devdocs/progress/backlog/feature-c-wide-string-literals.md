@@ -1,3 +1,7 @@
+---
+prio: 28  # auto
+---
+
 # C wide string literals L"..." / wchar_t
 
 - **Type:** feature (clexer + crtl <wchar.h>). Track C. Low priority.

@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # Rust frontend — borrowed slice type (`&[T]`, generalized `&str`)
 
 - **Type:** feature — Track A

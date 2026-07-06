@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # R frontend — PARKED (dynamic-runtime language, not a math overlay)
 
 - **Type:** feature — frontend request

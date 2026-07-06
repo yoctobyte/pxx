@@ -144,6 +144,25 @@ files. Know your track's gate and its branch/push/pin rules (see
 `make stabilize` when a downstream track needs the new binary, **branch** ≈
 never.
 
+### Auto-rating
+
+`tools/progress.sh autorate` suggests a `prio:` for every open ticket from
+signals already in it — type (bug > feature > idea), any prose priority word
+(HIGH/critical/low…), correctness/severity keywords (miscompile, silent-wrong,
+SIGSEGV, hang…), and leverage (how many it unblocks). Dry-run by default (prints
+`slug  suggested   (reasons)`); `--write` applies it. Deterministic and
+dependency-free, so the board stays reproducible.
+
+Writes are tagged `prio: N  # auto`. autorate **never overwrites a human
+`prio:`** (a bare line with no `# auto`) — hand-rate the few you care about, let
+autorate fill the rest, and re-run `autorate --write` anytime to refresh the
+auto ones as tickets change. This is the daily path for a 100+ ticket backlog.
+
+> An LLM can override the rating too: read a ticket, decide a better 0-100, and
+> write a bare `prio: N` (no `# auto`) — that pins it as human-set and autorate
+> leaves it alone. Use this for judgment the keyword heuristic can't make (e.g. a
+> low-severity bug that quietly blocks a strategic goal).
+
 Validate the board: `tools/progress.sh check` (dangling `blocked-by` slugs,
 dependency cycles, working/ without Owner, stale `BOARD.md`). Hygiene items like
 done tickets without commit notes are warnings by default; `--strict` shows

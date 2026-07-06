@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella)
 
 - **Type:** feature (parser architecture / FPC-compat) — Track A

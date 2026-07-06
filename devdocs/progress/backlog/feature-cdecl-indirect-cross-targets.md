@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Port cdecl indirect calls (dynamic library loading) to the other targets
 
 - **Type:** feature (Track A — cross codegen / call ABI)

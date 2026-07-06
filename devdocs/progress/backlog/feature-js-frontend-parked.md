@@ -1,3 +1,7 @@
+---
+prio: 45  # auto
+---
+
 # JavaScript frontend — PARKED (architectural wall on the stated goal)
 
 - **Type:** feature — frontend request

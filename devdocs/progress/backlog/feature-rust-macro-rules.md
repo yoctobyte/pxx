@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Rust frontend — `macro_rules!` (scope-cut: builtins first)
 
 - **Type:** feature — Track A

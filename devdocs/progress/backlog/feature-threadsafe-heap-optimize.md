@@ -1,3 +1,7 @@
+---
+prio: 53  # auto
+---
+
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A

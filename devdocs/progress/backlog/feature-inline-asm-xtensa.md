@@ -1,3 +1,7 @@
+---
+prio: 60  # auto
+---
+
 # Inline asm blocks on xtensa (last leg of the multi-arch rollout)
 
 - **Type:** feature — Track A

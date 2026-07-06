@@ -1,3 +1,7 @@
+---
+prio: 65  # auto
+---
+
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
