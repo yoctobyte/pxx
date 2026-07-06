@@ -91,10 +91,35 @@ on x64 too → cparser declStars>=2. **riscv32 `ORDER BY a` now sorts correctly;
 make test + self-host byte-identical + test-lua-cross 24/24 green.** GENERAL cfront
 fix (any `struct{...T**m...}; p->m[i]->field`).
 
-**riscv32 sqlite is now essentially GREEN** — CREATE/INSERT/SELECT/ORDER BY/
-transactions/aggregates all run (extended-test byte-identical check in progress).
-All three 2026-07-06 #3 fixes (heap, variadic, double-pointer-field) are GENERAL
-compiler/runtime fixes, not riscv32 hacks.
+**i386 + arm32 sqlite extended test = BYTE-IDENTICAL to the x86-64 oracle** (full
+CRUD + CREATE INDEX/sorter + transactions + aggregates), confirming the
+double-pointer-field fix. All three 2026-07-06 #3 fixes (heap, variadic,
+double-pointer-field) are GENERAL compiler/runtime fixes, not riscv32 hacks.
+
+**OPEN — riscv32 ONLY, 4th distinct bug (PRE-EXISTING, LOWEST PRIO): formatting an
+integer-valued REAL hangs.** `SELECT` of a REAL whose value is integer-valued (2.0,
+100.0, 35.00, Bob's 2000.0) HANGS on riscv32; fractional values (1500.5, 2.5) work.
+So the extended test hangs in the first `SELECT * ... ORDER BY id` after row 1 (it's
+NOT the sorter — `SELECT ... ORDER BY <col>` sorts fine now). i386/arm32/x64/aarch64
+are unaffected → riscv32-specific, and never seen before because riscv32 didn't get
+this far. LOCALIZED: the hang is `sqlite3FpDecode`'s Dekker double-double scaling
+loop `while(rr[0]<9.22e7){ dekkerMul2(rr,1e10,0); }` (L1) spinning — for an
+integer-valued real, rr[0] never grows past the threshold, so the loop never exits.
+Confirmed by per-opcode + in-loop markers: reaches OP_ResultRow → vdbeMemRenderNum
+(RN.real) → sqlite3_str_appendf("%!.15g") → FpDecode → L1 spins. RULED OUT (all work
+standalone on riscv32): int→double `(double)i` (c2.c — the apparent word-swap was a
+`memcpy(u64,&double,8)` MEASUREMENT artifact, not a real bug), the softfloat i2d/l2d
+kernels (k.c — return correct lo/hi), dekkerMul2 + the exact L1/L2 loops (dek.c —
+terminate for 2.0/100.0/1500.5), long double (sizeof=8 → bUseLongDouble=false, Dekker
+path). So the bug is a CONTEXT-DEPENDENT riscv32 codegen issue: the Dekker loop that
+works standalone spins inside the large `sqlite3FpDecode` (suspect: register/double
+spilling of the non-volatile `double rr[2]` across the `volatile`-pointer dekkerMul2
+call, or the loop-condition double compare miscompiled under register pressure). NEXT
+SESSION: minimal repro = the FpDecode Dekker `else` block verbatim inside a large
+function with many live doubles; instrument L1 with `%g`-printed rr[0] (NOT memcpy —
+memcpy-of-double bit-printing is unreliable on rv32) to see if rr[0] fails to grow
+(dekkerMul2 result lost) vs the compare is wrong. riscv32 = LOWEST PRIO
+(gimmick/assume-IDF); core sqlite (CRUD, ORDER BY, non-integer-real formatting) works.
 
 ## Progress log (session 2026-07-06 #2, i386 + arm32 sqlite GREEN — 4/5 targets)
 
