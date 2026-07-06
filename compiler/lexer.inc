@@ -717,12 +717,13 @@ begin
     name := 'PXX_ESP_BARE';
     PasDefine(name);
   end;
-  { --threadsafe on i386: the runtime locks live in Pascal (builtinheap takes a
-    spinlock in PXXAlloc/PXXFree, refcounts go through __pxxatomic_*) instead of
-    x86-64's hand-emitted lock blobs. The define selects those paths; default
-    (non-threadsafe) builds skip the region entirely, so the single-threaded
-    build stays byte-identical. See feature-i386-threadsafe-locks. }
-  if ThreadSafeMode and (TargetArch = TARGET_I386) then
+  { --threadsafe on i386/aarch64: the runtime locks live in Pascal (builtinheap
+    takes a spinlock in PXXAlloc/PXXFree, refcounts go through __pxxatomic_*)
+    instead of x86-64's hand-emitted lock blobs. The define selects those paths;
+    default (non-threadsafe) builds skip the region entirely, so the
+    single-threaded build stays byte-identical. See feature-i386-threadsafe-locks.
+    aarch64 joins the softlock model now that __pxxatomic_* is implemented there. }
+  if ThreadSafeMode and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64)) then
   begin
     name := 'PXX_TS_SOFTLOCK';
     PasDefine(name);
@@ -1356,10 +1357,11 @@ begin
           define is applied at startup from the CLI flag — the mid-source
           directive is too late to re-lex builtinheap, so on i386 require the
           flag form. }
-        if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386) then
-          Error('{$threadsafe on} is x86-64/i386 only: the heap/ARC/I-O locks are not implemented on this target yet');
-        if (TargetArch = TARGET_I386) and (not ThreadSafeMode) then
-          Error('{$threadsafe on} on i386 must be the --threadsafe flag: the softlock define is applied before lexing');
+        if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
+           and (TargetArch <> TARGET_AARCH64) then
+          Error('{$threadsafe on} is x86-64/i386/aarch64 only: the heap/ARC/I-O locks are not implemented on this target yet');
+        if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64)) and (not ThreadSafeMode) then
+          Error('{$threadsafe on} on i386/aarch64 must be the --threadsafe flag: the softlock define is applied before lexing');
         ThreadSafeMode := True;
       end
       else if CaseEqual(name, 'off') then ThreadSafeMode := False

@@ -298,9 +298,9 @@ test-threads: $(COMPILER)
 	! ./$(COMPILER) test/test_thread_clone.pas /tmp/test_thread_clone_guard26 > /tmp/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" /tmp/test_thread_clone_guard.log
 	# heap contract: --threadsafe on a target without the locked runtime is rejected
-	# (i386 got its locked runtime — feature-i386-threadsafe-locks — so the guard probe is arm32 now)
-	! ./$(COMPILER) --target=arm32 --threadsafe test/hello.pas /tmp/test_threadsafe_arm32_guard26 > /tmp/test_threadsafe_arm32_guard.log 2>&1
-	grep -q "x86-64/i386 only" /tmp/test_threadsafe_arm32_guard.log
+	# (x86-64/i386/aarch64 got the locked runtime; riscv32 has no threading PAL, so it is the guard probe)
+	! ./$(COMPILER) --target=riscv32 --threadsafe test/hello.pas /tmp/test_threadsafe_riscv32_guard26 > /tmp/test_threadsafe_riscv32_guard.log 2>&1
+	grep -q "only" /tmp/test_threadsafe_riscv32_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
 	# M2 final slice: 64-bit atomics + TConditionVariable
@@ -2942,6 +2942,21 @@ test-sqlite-threads: $(COMPILER)
 	  fi; \
 	else \
 	  echo "test-sqlite-threads: SKIP i386 (qemu-i386 not installed)"; \
+	fi; \
+	if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  echo "test-sqlite-threads: building threadsafe sqlite (aarch64) ..."; \
+	  if ! ./$(COMPILER) --threadsafe --target=aarch64 -Ilib/crtl/include -Ilib/crtl/src -I$(SQLITE_SRC) \
+	       test/csqlite_thread_test.c /tmp/csqlite_thread_test26_aarch64 2>/tmp/cstt_a64.err; then \
+	    echo "test-sqlite-threads: FAIL aarch64 (build error)"; head -5 /tmp/cstt_a64.err; overall=1; \
+	  elif readelf -d /tmp/csqlite_thread_test26_aarch64 2>/dev/null | grep -qi 'NEEDED'; then \
+	    echo "test-sqlite-threads: FAIL aarch64 (not libc-free — has DT_NEEDED)"; overall=1; \
+	  elif [ "$$(timeout 120 tools/run_target.sh aarch64 /tmp/csqlite_thread_test26_aarch64)" = "$$want" ]; then \
+	    echo "test-sqlite-threads: PASS aarch64 (libc-free, shared+per-thread)"; \
+	  else \
+	    echo "test-sqlite-threads: FAIL aarch64 (output mismatch)"; overall=1; \
+	  fi; \
+	else \
+	  echo "test-sqlite-threads: SKIP aarch64 (qemu-aarch64 not installed)"; \
 	fi; \
 	test "$$overall" = "0" || exit 1
 

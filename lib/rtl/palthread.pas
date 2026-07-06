@@ -86,6 +86,23 @@ const
   SYS_futex    = 240;
   SYS_gettid   = 224;
 {$else}
+{$ifdef CPUAARCH64}
+  { aarch64 uses the asm-generic syscall table. Real mmap (222), byte offset. }
+  SYS_mmap     = 222;
+  SYS_munmap   = 215;
+  SYS_mprotect = 226;
+  SYS_futex    = 98;
+  SYS_gettid   = 178;
+{$else}
+{$ifdef CPUARM}
+  { arm32 EABI. mmap2 (192, page offset — we pass 0). These five happen to match
+    the i386 int-0x80 numbers. }
+  SYS_mmap     = 192;
+  SYS_munmap   = 91;
+  SYS_mprotect = 125;
+  SYS_futex    = 240;
+  SYS_gettid   = 224;
+{$else}
   { Other targets trip the __pxxclone compile-error before these matter; define
     placeholders so the unit still parses. }
   SYS_mmap     = -1;
@@ -93,6 +110,8 @@ const
   SYS_mprotect = -1;
   SYS_futex    = -1;
   SYS_gettid   = -1;
+{$endif}
+{$endif}
 {$endif}
 {$endif}
 

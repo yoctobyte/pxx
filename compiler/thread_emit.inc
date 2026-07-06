@@ -110,7 +110,37 @@ begin
     EmitB($C3);                                       { ret }
     Patch32(jmpOver, CodeLen - (jmpOver + 4));
   end;
-  { Other targets (esp/arm) are out of scope for threading. The IR_CLONE codegen
-    guards those with a clean compile-error, so EnsureCloneStub is never
-    reached on them. }
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { aarch64 leg. Stub input contract (set by IR_CLONE): x0=flags x1=childStack
+      x2=entry x3=arg x4=ctidptr. aarch64 clone(2) arg order is x0=flags,
+      x1=stack, x2=parent_tid, x3=tls, x4=child_tid (tls/ctid are NOT swapped the
+      way x86-64 needs). Child resumes with sp = the stack arg; the stub stages
+      [entry][arg] at the top so the child pops them. SYS_clone=220, SYS_exit=93,
+      svc #0. Hex verified against aarch64-linux-gnu-as. }
+    EmitI32($14000000);                 { b .parent-skip — patched below (branch over stub) }
+    jmpOver := CodeLen - 4;
+    CloneStubAddr := CodeLen;
+    EmitI32($D1004021);                 { sub  x1, x1, #16        (stage area) }
+    EmitI32($F9000022);                 { str  x2, [x1]           (entry) }
+    EmitI32($F9000423);                 { str  x3, [x1, #8]       (arg) }
+    EmitI32($AA0403E2);                 { mov  x2, x4             (parent_tid = ctidptr) }
+    EmitI32($D2800003);                 { mov  x3, #0             (tls = NULL) }
+    EmitI32($D2801B88);                 { mov  x8, #220           (SYS_clone) }
+    EmitI32($D4000001);                 { svc  #0 }
+    EmitI32($B50000E0);                 { cbnz x0, .parent  (+7 words) }
+    { ---- child: sp = childStack-16, [sp]=entry [sp+8]=arg ---- }
+    EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
+    EmitI32($F94007E0);                 { ldr  x0, [sp, #8]       (arg -> x0) }
+    EmitI32($D63F0020);                 { blr  x1                 (entry(arg)) }
+    EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
+    EmitI32($D2800BA8);                 { mov  x8, #93            (SYS_exit) }
+    EmitI32($D4000001);                 { svc  #0                 (thread exits here) }
+    { ---- .parent: x0 = child tid ---- }
+    EmitI32($D65F03C0);                 { ret }
+    { patch the leading branch to land here (past the stub). B imm26 in words. }
+    Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
+  end;
+  { esp/riscv32 stay out of scope for threading; IR_CLONE guards them with a
+    clean compile-error, so EnsureCloneStub is never reached there. }
 end;

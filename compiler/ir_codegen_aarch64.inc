@@ -112,6 +112,47 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitIoLockStubsA64;
+{ --threadsafe statement-atomic console I/O, the aarch64 port of EmitIoLockStubs.
+  Reentrant owner-tid spinlock: BSS_IO_OWNER = owning tid (0 = free), BSS_IO_DEPTH
+  = the owner's nesting depth, so a write argument that itself writes cannot
+  self-deadlock. gettid (svc 178) per I/O statement; the futex-free spinlock uses
+  LL/SC (ldaxr/stlxr) for acquire/release ordering. Fronted by a branch so it is
+  reached only via bl. x9=&owner, x13=&depth held across the gettid syscall (the
+  aarch64 syscall ABI preserves x1-x30). Hex verified against aarch64-linux-gnu-as. }
+var jmpOver: Integer;
+begin
+  EmitI32($14000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
+  IOLockAddr := CodeLen;
+  EmitLoadGlobAddrA64(9, BSS_IO_OWNER);
+  EmitLoadGlobAddrA64(13, BSS_IO_DEPTH);
+  EmitI32($D2801648);   { mov  x8, #178          gettid }
+  EmitI32($D4000001);   { svc  #0                x0 = tid }
+  EmitI32($F940012A);   { ldr  x10, [x9]         current owner }
+  EmitI32($EB00015F);   { cmp  x10, x0 }
+  EmitI32($540000A0);   { b.eq bump  (+5, already ours) }
+  EmitI32($C85FFD2B);   { ldaxr x11, [x9]        (spin) }
+  EmitI32($B5FFFFEB);   { cbnz x11, spin  (-1, owned by other) }
+  EmitI32($C80CFD20);   { stlxr w12, x0, [x9]    take with our tid }
+  EmitI32($35FFFFAC);   { cbnz w12, spin  (-3, sc failed) }
+  EmitI32($F94001AA);   { ldr  x10, [x13]        (bump) }
+  EmitI32($9100054A);   { add  x10, x10, #1 }
+  EmitI32($F90001AA);   { str  x10, [x13] }
+  EmitI32($D65F03C0);   { ret }
+
+  IOUnlockAddr := CodeLen;
+  EmitLoadGlobAddrA64(9, BSS_IO_OWNER);
+  EmitLoadGlobAddrA64(13, BSS_IO_DEPTH);
+  EmitI32($F94001AA);   { ldr  x10, [x13] }
+  EmitI32($D100054A);   { sub  x10, x10, #1 }
+  EmitI32($F90001AA);   { str  x10, [x13] }
+  EmitI32($B500004A);   { cbnz x10, keep  (+2, still nested) }
+  EmitI32($F900013F);   { str  xzr, [x9]         release: owner := 0 }
+  EmitI32($D65F03C0);   { ret  (keep) }
+
+  Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
+end;
+
 procedure EmitAnsiStringFromNodeA64(valNode: Integer);
 { Build a managed AnsiString handle in x0 from a literal, char, inline string,
   or existing handle (retained unless a fresh concat/function result). }
@@ -2460,6 +2501,101 @@ begin
         EmitI32($D4000001); { svc #0 }
       end;
 
+    IR_CLONE:
+      begin
+        { __pxxclone(flags, childStack, entry, arg, ctidptr): evaluate the five
+          args left-to-right onto the stack, pop into x0..x4 (the clone stub's
+          input contract: x0=flags x1=childStack x2=entry x3=arg x4=ctidptr),
+          then bl the bare clone+trampoline stub. Child tid stays in x0. Stub is
+          emitted lazily the first time we reach here. }
+        EnsureCloneStub;
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeAarch64(IRA[argNode]);
+          EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          EmitI32($F84107E0 + i);       { ldr x[i], [sp], #16  (i=4..0) }
+        EmitI32($94000000 or (((CloneStubAddr - CodeLen) div 4) and $03FFFFFF)); { bl stub }
+      end;
+
+    IR_ATOMIC:
+      begin
+        { Atomic read-modify-write on addr^, returning the OLD value, via an
+          LL/SC (ldxr/stxr) retry loop. Args pushed left-to-right; popped into
+          x1=addr (+ x2=val/expected, x3=newval). Result (old) in x0. Encodings
+          + branch offsets verified against aarch64-linux-gnu-as. }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeAarch64(IRA[argNode]);
+          EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        case IRIVal[node] of
+          ATOMIC_CAS:
+            begin
+              EmitI32($F84107E3);       { ldr x3, [sp], #16  newval }
+              EmitI32($F84107E2);       { ldr x2, [sp], #16  expected }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
+              EmitI32($885F7C20);       { ldxr w0, [x1]      old }
+              EmitI32($6B02001F);       { cmp  w0, w2 }
+              EmitI32($54000061);       { b.ne +3 (done) }
+              EmitI32($88047C23);       { stxr w4, w3, [x1] }
+              EmitI32($35FFFF84);       { cbnz w4, -4 (retry) }
+            end;
+          ATOMIC_CAS64:
+            begin
+              EmitI32($F84107E3);       { ldr x3, [sp], #16 }
+              EmitI32($F84107E2);       { ldr x2, [sp], #16 }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16 }
+              EmitI32($C85F7C20);       { ldxr x0, [x1] }
+              EmitI32($EB02001F);       { cmp  x0, x2 }
+              EmitI32($54000061);       { b.ne +3 }
+              EmitI32($C8047C23);       { stxr w4, x3, [x1] }
+              EmitI32($35FFFF84);       { cbnz w4, -4 }
+            end;
+          ATOMIC_ADD:
+            begin
+              EmitI32($F84107E2);       { ldr x2, [sp], #16  delta }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
+              EmitI32($885F7C20);       { ldxr w0, [x1]      old }
+              EmitI32($0B020004);       { add  w4, w0, w2 }
+              EmitI32($88037C24);       { stxr w3, w4, [x1] }
+              EmitI32($35FFFFA3);       { cbnz w3, -3 }
+            end;
+          ATOMIC_ADD64:
+            begin
+              EmitI32($F84107E2);       { ldr x2, [sp], #16 }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16 }
+              EmitI32($C85F7C20);       { ldxr x0, [x1] }
+              EmitI32($8B020004);       { add  x4, x0, x2 }
+              EmitI32($C8037C24);       { stxr w3, x4, [x1] }
+              EmitI32($35FFFFA3);       { cbnz w3, -3 }
+            end;
+          ATOMIC_XCHG64:
+            begin
+              EmitI32($F84107E2);       { ldr x2, [sp], #16  val }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
+              EmitI32($C85F7C20);       { ldxr x0, [x1] }
+              EmitI32($C8037C22);       { stxr w3, x2, [x1] }
+              EmitI32($35FFFFC3);       { cbnz w3, -2 }
+            end;
+          else { ATOMIC_XCHG }
+            begin
+              EmitI32($F84107E2);       { ldr x2, [sp], #16  val }
+              EmitI32($F84107E1);       { ldr x1, [sp], #16  addr }
+              EmitI32($885F7C20);       { ldxr w0, [x1] }
+              EmitI32($88037C22);       { stxr w3, w2, [x1] }
+              EmitI32($35FFFFC3);       { cbnz w3, -2 }
+            end;
+        end;
+      end;
+
     IR_NEG:
       begin
         IREmitNodeAarch64(IRA[node]);
@@ -2968,11 +3104,22 @@ begin
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeAarch64(i);
 
+      IR_IO_LOCK:
+        EmitI32($94000000 or (((IOLockAddr - CodeLen) div 4) and $03FFFFFF));   { bl io-lock stub }
+
+      IR_IO_UNLOCK:
+        EmitI32($94000000 or (((IOUnlockAddr - CodeLen) div 4) and $03FFFFFF)); { bl io-unlock stub }
+
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
       IR_SLOTADDR, IR_DYNUNIQUE,
-      IR_FIELD, IR_INDEX, IR_VAR_BOX, IR_VAR_BINOP: ;
+      IR_FIELD, IR_INDEX, IR_VAR_BOX, IR_VAR_BINOP,
+      IR_ATOMIC, IR_CLONE: ;
+      { IR_ATOMIC / IR_CLONE are value nodes (return old value / child tid) that
+        their parent store_sym consumes — like IR_SYSCALL above. Emitting them at
+        statement level too ran the read-modify-write / thread-spawn TWICE (the
+        result store then re-evaluated the side-effecting node). }
       { IR_LOAD_MEM is a pure value node (a deref); like IR_LOAD_SYM it must NOT
         be emitted at statement level — doing so re-evaluates its address operand,
         so `*f()` (deref of a call result) called f twice, advancing va_arg's
