@@ -25,3 +25,6 @@ instead of shared ir.inc? does it double-apply on paths that already add +8?).
 
 ## Gate
 Drop 00112.c from test/c-conformance/pxx.skip; runner green; self-host clean.
+
+## Log
+- 2026-07-07 — resolved, commit a1cfe29f.
