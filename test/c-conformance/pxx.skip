@@ -34,7 +34,6 @@
 00202.c	## paste edge cases (empty arg, operator paste) — bug-c-preproc-paste-rescan
 00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
 00205.c	brace-elided array-of-struct init wrong values — bug-c-init-designated-and-nested
-00206.c	#pragma push_macro/pop_macro — feature-c-pragma-push-pop-macro
 00210.c	hand-declared printf silently no-ops — feature-c-crtl-bind-hand-declared-prototypes
 00211.c	hand-declared printf silently no-ops — feature-c-crtl-bind-hand-declared-prototypes
 00207.c	VLA char test[argc] + label in if body — feature-c-vla-and-label-in-if

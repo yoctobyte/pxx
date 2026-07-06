@@ -213,6 +213,80 @@ begin
   end;
 end;
 
+{ Restore macro `name` (line[nameA..nameB]) to snapshot `mi`: append a fresh
+  macro entry cloning mi's value/params (newest-wins, so it becomes active), or
+  tombstone the name when the snapshot was "undefined" (mi < 0). mi's value
+  fields survive an intervening #undef (which only sets NameLen := -1). }
+procedure CPPragmaRestore(mi: Integer; const line: AnsiString; nameA, nameB: Integer);
+var ni, cur: Integer;
+begin
+  if mi < 0 then
+  begin
+    cur := CPFindMacro(line, nameA, nameB);
+    if cur >= 0 then CPMNameLen[cur] := -1;
+    Exit;
+  end;
+  if CPMCount >= MAX_CPREP_MACROS then Error('too many C macros');
+  ni := CPMCount; Inc(CPMCount);
+  CPMNameOff[ni]    := CPStoreRange(line, nameA, nameB);
+  CPMNameLen[ni]    := nameB - nameA + 1;
+  CPMValueOff[ni]   := CPMValueOff[mi];
+  CPMValueLen[ni]   := CPMValueLen[mi];
+  CPMFunction[ni]   := CPMFunction[mi];
+  CPMParamBase[ni]  := CPMParamBase[mi];
+  CPMParamCount[ni] := CPMParamCount[mi];
+end;
+
+{ `#pragma push_macro("NAME")` / `pop_macro("NAME")` (GCC/MSVC). Other pragmas
+  are ignored. Handled at directive level (before macro expansion), so a user
+  macro also named push_macro/pop_macro — c-testsuite 00206 defines both — does
+  not interfere. }
+procedure CPPragma(const line: AnsiString; p, last: Integer);
+var a, b, nameA, nameB, mi, k, kk: Integer; isPush, isPop: Boolean;
+begin
+  while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
+  a := p;
+  while (p <= last) and CPIsIdentChar(line[p]) do Inc(p);
+  b := p - 1;
+  isPush := CPRangeIsLiteral(line, a, b, 'push_macro');
+  isPop  := CPRangeIsLiteral(line, a, b, 'pop_macro');
+  if not (isPush or isPop) then Exit;
+  while (p <= last) and (line[p] <> '"') do Inc(p);
+  if p > last then Exit;
+  Inc(p);                    { past opening quote }
+  nameA := p;
+  while (p <= last) and (line[p] <> '"') do Inc(p);
+  nameB := p - 1;
+  if nameB < nameA then Exit;
+  if isPush then
+  begin
+    if CPPushCount > High(CPPushMi) then Error('C #pragma push_macro stack overflow');
+    mi := CPFindMacro(line, nameA, nameB);
+    CPPushNameOff[CPPushCount] := CPStoreRange(line, nameA, nameB);
+    CPPushNameLen[CPPushCount] := nameB - nameA + 1;
+    CPPushMi[CPPushCount]      := mi;
+    Inc(CPPushCount);
+  end
+  else
+  begin
+    { pop the topmost stack entry for this name (per-name LIFO) }
+    k := -1;
+    for kk := CPPushCount - 1 downto 0 do
+      if CPPoolEquals(CPPushNameOff[kk], CPPushNameLen[kk], line, nameA, nameB) then
+      begin k := kk; Break; end;
+    if k < 0 then Exit;      { pop without matching push — ignore }
+    mi := CPPushMi[k];
+    for kk := k to CPPushCount - 2 do
+    begin
+      CPPushNameOff[kk] := CPPushNameOff[kk + 1];
+      CPPushNameLen[kk] := CPPushNameLen[kk + 1];
+      CPPushMi[kk]      := CPPushMi[kk + 1];
+    end;
+    Dec(CPPushCount);
+    CPPragmaRestore(mi, line, nameA, nameB);
+  end;
+end;
+
 function CPActive: Boolean;
 begin
   if CPCondCount = 0 then Result := True
@@ -1706,7 +1780,9 @@ begin
   else if CPActive and CPRangeIsLiteral(line, a, b, 'undef') then
     CPUndef(line, p, last)
   else if CPActive and CPRangeIsLiteral(line, a, b, 'include') then
-    CPInclude(line, p, last, depth, baseDir);
+    CPInclude(line, p, last, depth, baseDir)
+  else if CPActive and CPRangeIsLiteral(line, a, b, 'pragma') then
+    CPPragma(line, p, last);
 end;
 
 { Net parenthesis depth of a line, ignoring `"..."` / `'...'` literals. Used to
@@ -1801,6 +1877,7 @@ begin
   CPPCount := 0;
   CPCondCount := 0;
   CPActiveMacroCount := 0;
+  CPPushCount := 0;
   CPAddLiteral('__linux__', '01');
   CPAddLiteral('__x86_64__', '01');
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long

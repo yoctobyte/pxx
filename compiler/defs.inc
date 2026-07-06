@@ -1452,6 +1452,12 @@ var
   CPMParamCount : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
   CPMCount      : Integer;
+  { #pragma push_macro/pop_macro stack: each push snapshots the active macro
+    index for a name; pop appends a fresh macro entry cloning that snapshot. }
+  CPPushNameOff : array[0..255] of Integer;
+  CPPushNameLen : array[0..255] of Integer;
+  CPPushMi      : array[0..255] of Integer;   { snapshot macro idx, -1 = was undefined }
+  CPPushCount   : Integer;
   CPPNameOff    : array[0..MAX_CPREP_PARAMS-1] of Integer;
   CPPNameLen    : array[0..MAX_CPREP_PARAMS-1] of Integer;
   CPPCount      : Integer;
