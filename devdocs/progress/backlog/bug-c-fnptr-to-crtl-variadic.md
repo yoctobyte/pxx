@@ -1,4 +1,5 @@
 ---
+blocked-by: [bug-c-external-func-address-indirect-call]
 prio: 55  # auto
 ---
 
@@ -20,3 +21,6 @@ prio: 55  # auto
 
 ## Gate
 Drop 00189.c from test/c-conformance/pxx.skip; runner green.
+
+## Update 2026-07-07
+The `&func` (internal) global-fnptr init bug was fixed (b161). The remaining 00189 failure = calling an EXTERNAL crtl function (fprintf/puts) through a pointer prints nothing — now tracked as [[bug-c-external-func-address-indirect-call]]. Blocked on that.

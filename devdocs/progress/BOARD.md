@@ -12,7 +12,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
+| bug-c-external-func-address-indirect-call | A | 55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -29,15 +29,16 @@ _none_
 
 _none_
 
-## backlog (110)
+## backlog (111)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
-| bug-c-external-func-address-indirect-call | A | 55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
+| bug-c-external-func-address-indirect-call | A | 50→55 | bug |  | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
+| bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | bug-c-external-func-address-indirect-call |
 | bug-c-function-returning-fnptr-declarator | C | 55 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
@@ -716,10 +717,10 @@ _none_
 - [p 60] [R] feature-rust-macro-rules
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 55] [A] bug-c-external-func-address-indirect-call (unblocks 1)
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-anonymous-struct-union-members
 - [p 55] [C] bug-c-expr-result-type-model
-- [p 55] [A] bug-c-external-func-address-indirect-call
 - [p 55] [C] bug-c-float-single-precision
 - [p 55] [C] bug-c-function-returning-fnptr-declarator
 - [p 55] [C] bug-c-pointer-to-array-declarator
@@ -796,6 +797,7 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
+- **1** — bug-c-external-func-address-indirect-call
 - **1** — bug-c-gzgetc-fnlike-macro-call
 - **1** — bug-c-init-brace-elision-nested
 - **1** — task-sqlite-libc-free-runtime-bringup
