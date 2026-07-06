@@ -16541,7 +16541,12 @@ var stem: AnsiString;
 begin
   Result := False;
   if not CHeaderStem(name, stem) then Exit;
-  Result := CStemMatches(stem, 'pthread') or CStemMatches(stem, 'gtk-3') or
+  { pthread is NOT default-system: pxx ships a libc-free `<pthread.h>` + pthread.c
+    shim over the PAL (lib/crtl, bridged via palpthread.pas), so `#include
+    <pthread.h>` resolves to the project's own implementation like <stdio.h>/
+    <math.h>. The real glibc libpthread is still available on demand via
+    `--system-libs=pthread` (CSystemLibStemSelected below still honours it). }
+  Result := CStemMatches(stem, 'gtk-3') or
             CStemMatches(stem, 'gtk-x11-2.0') or CStemMatches(stem, 'dl') or
             CStemMatches(stem, 'rt') or CStemMatches(stem, 'z') or
             CStemMatches(stem, 'sqlite3');

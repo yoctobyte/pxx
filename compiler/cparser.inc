@@ -4582,6 +4582,14 @@ begin
         kernels are unused dead code on arm32. }
       ParseUsesUnit('softfloat');
     ParseUsesUnit('pxxcio');
+    { --threadsafe C: pull the libc-free pthread bridge (palpthread over the
+      palthread/palsync PAL) so a `<pthread.h>` shim's extern __pxx_pmutex_*/
+      __pxx_pthread_* resolve to bodied procs. Gated on ThreadSafeMode because
+      the create/join path lowers onto __pxxclone, which is a compile error
+      without the thread-safe runtime — the same gate pthread.c needs anyway.
+      Dead (DCE'd) if the program includes no <pthread.h>. }
+    if ThreadSafeMode then
+      ParseUsesUnit('palpthread');
   end;
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
