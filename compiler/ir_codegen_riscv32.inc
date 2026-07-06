@@ -425,7 +425,8 @@ begin
       '.end:'
     ]);
   end
-  else if op = Ord(tkIdent) then   { 'shr' parses as ident; logical on Int64/UInt64 }
+  else if (op = Ord(tkIdent)) or ((op = Ord(tkShr)) and not signedOp) then
+  { Pascal 'shr' (tkIdent) or C unsigned '>>' (tkShr): logical on Int64/UInt64 }
   begin
     EmitAsmRv32([
       'andi t5, a0, 63',
@@ -442,6 +443,30 @@ begin
       'sub t3, t5, t2',      { n - 32 }
       'srl a0, t1, t3',      { hi >> (n-32) }
       'addi a1, zero, 0',
+      'j .end',
+      '.zero:',
+      'addi a0, t0, 0',
+      'addi a1, t1, 0',
+      '.end:'
+    ]);
+  end
+  else if op = Ord(tkShr) then   { C signed '>>': arithmetic (sign-propagating) }
+  begin
+    EmitAsmRv32([
+      'andi t5, a0, 63',
+      'addi t2, zero, 32',
+      'bgeu t5, t2, .big',
+      'beq t5, zero, .zero',
+      'sub t3, t2, t5',      { 32 - n }
+      'sll t4, t1, t3',      { hi << (32-n) }
+      'srl a0, t0, t5',      { lo >> n (logical for lo) }
+      'or a0, a0, t4',
+      'sra a1, t1, t5',      { hi >>a n (arithmetic) }
+      'j .end',
+      '.big:',
+      'sub t3, t5, t2',      { n - 32 }
+      'sra a0, t1, t3',      { hi >>a (n-32) }
+      'srai a1, t1, 31',     { sign-fill high word }
       'j .end',
       '.zero:',
       'addi a0, t0, 0',
@@ -633,7 +658,10 @@ begin
           (same shape as the iram cross-section call literal). Needed for raw ISR
           install (mtvec) and @isr -> esp_intr_alloc. }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          EmitExternalProcAddr(IRA[node]);   { a0 = resolved external fn addr }
+          Exit;
+        end;
         rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
         rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');

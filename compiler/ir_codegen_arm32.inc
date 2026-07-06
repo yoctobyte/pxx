@@ -387,7 +387,7 @@ begin
     Exit;
   end;
 
-  if (op = Ord(tkShl)) or (op = Ord(tkIdent)) then
+  if (op = Ord(tkShl)) or (op = Ord(tkIdent)) or (op = Ord(tkShr)) then
   begin
     { shift count in r0 (right.lo); value = left popped into r2:r3. }
     EmitI32($E8BD000C);  { pop {r2, r3} (value lo, hi) }
@@ -403,9 +403,22 @@ begin
       EmitI32($41811C32);  { orrmi r1, r1, r2, lsr r12 }
       EmitI32($41A00012);  { lslmi r0, r2, r0 }
     end
+    else if (op = Ord(tkShr)) and signedOp then
+    begin
+      { C signed '>>' — arithmetic. n>=32: lo = hi>>a(n-32); hi = sign(hi) }
+      EmitI32($51A00C53);  { asrpl r0, r3, r12 }
+      EmitI32($51A01FC3);  { asrpl r1, r3, #31 (sign-fill hi) }
+      { n<32: lo = (lo>>n)|(hi<<(32-n)); hi = hi>>a n }
+      EmitI32($4260C020);  { rsbmi r12, r0, #32 }
+      EmitI32($41A04C13);  { lslmi r4, r3, r12 (hi<<(32-n)) }
+      EmitI32($41A01053);  { asrmi r1, r3, r0  (hi>>a n) }
+      EmitI32($41A00032);  { lsrmi r0, r2, r0  (lo>>n, logical for lo bits) }
+      EmitI32($41800004);  { orrmi r0, r0, r4 }
+    end
     else
     begin
-      { logical shr (FPC shr on Int64/UInt64). n>=32: lo = hi>>(n-32); hi = 0 }
+      { Pascal 'shr' (tkIdent) or C unsigned '>>' — logical.
+        n>=32: lo = hi>>(n-32); hi = 0 }
       EmitI32($51A00C33);  { lsrpl r0, r3, r12 }
       EmitI32($53A01000);  { movpl r1, #0 }
       { n<32: lo = (lo>>n)|(hi<<(32-n)); hi = hi>>n }
@@ -2236,8 +2249,6 @@ begin
           block, then `blx r9`. (Int64-by-value / managed args via a proc pointer
           are not handled in v1.) }
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
-        if Procs[procIdx].ParamCount + Integer(IRC[node]) > 4 then
-          Error('target arm32: indirect call with more than 4 parameters not supported');
         IREmitNodeArm32(IRA[node]);                  { r0 = callee address }
         EmitI32($E92D0001);                          { push {r0} (callee, deepest) }
         argNode := IRB[node];
@@ -2249,13 +2260,28 @@ begin
           Inc(j, 1);
           argNode := IRB[argNode];
         end;
-        for i := 0 to j - 1 do
-          if i < 4 then
+        if j <= 4 then
+        begin
+          for i := 0 to j - 1 do
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
-        EmitI32($E59D9000 or (j * 4));               { ldr r9, [sp, #j*4] (callee) }
-        EmitLoadImmArm32(8, (j + 1) * 4);
-        EmitI32($E08DD008);                          { add sp, sp, r8 (drop args + callee) }
-        EmitI32($E12FFF39);                          { blx r9 }
+          EmitI32($E59D9000 or (j * 4));             { ldr r9, [sp, #j*4] (callee) }
+          EmitLoadImmArm32(8, (j + 1) * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee) }
+          EmitI32($E12FFF39);                        { blx r9 }
+        end
+        else
+        begin
+          { j>4: words 0-3 -> r0-r3, words 4..j-1 stay on the stack across the
+            call (the callee reads them at [fp+8+(pnWords-1-k)*4], same reversed
+            layout as the direct/virtual j>4 paths). Callee pointer sits above the
+            arg block at [sp+j*4]; drop args+callee after the call returns. }
+          for i := 0 to 3 do
+            EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+          EmitI32($E59D9000 or (j * 4));             { ldr r9, [sp, #j*4] (callee) }
+          EmitI32($E12FFF39);                        { blx r9 }
+          EmitLoadImmArm32(8, (j + 1) * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee) }
+        end;
       end;
 
     IR_VIRTUAL_CALL:

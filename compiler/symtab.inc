@@ -5272,6 +5272,20 @@ begin
     EmitI32($E340C000);   { movt ip, #0   (hi16 patched) }
     EmitI32($E59C0000);   { ldr  r0, [ip] (resolved fn ptr) }
   end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { Same inline-literal slot the riscv32 external CALL uses (EmitCallProc): the
+      DynCall pass patches the 4-byte literal to the resolved fn address. Here we
+      just load it into a0 instead of calling it — lets sqlite's unix VFS build
+      its aSyscall[] table of open/close/fstat/... pointers. }
+    rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
+    rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);                       { literal: resolved fn addr (patched) }
+    rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = fn addr }
+  end
   else
     Error('@ on external routine not supported on this target');
 end;

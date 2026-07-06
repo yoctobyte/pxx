@@ -735,7 +735,7 @@ begin
     EmitB($01); EmitB($CA);                        { add edx, ecx }
     EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
   end
-  else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) then
+  else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) or (op = Ord(tkShr)) then
   begin
     { shift count in eax (right.lo) -> cl; value = left from stack. }
     EmitB($89); EmitB($C1);                        { mov ecx, eax (count) }
@@ -751,9 +751,20 @@ begin
       EmitB($31); EmitB($C0);                      { xor eax, eax }
       Code[skipOff] := Byte(CodeLen - (skipOff + 1));
     end
+    else if (op = Ord(tkShr)) and signedOp then
+    begin
+      { C signed '>>' — arithmetic (sign-propagating) shift right }
+      EmitB($0F); EmitB($AD); EmitB($D0);          { shrd eax, edx, cl }
+      EmitB($D3); EmitB($FA);                      { sar edx, cl }
+      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
+      EmitB($89); EmitB($D0);                      { mov eax, edx }
+      EmitB($C1); EmitB($FA); EmitB($1F);          { sar edx, 31 (sign-fill) }
+      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+    end
     else
     begin
-      { 'shr' (logical), matching FPC shr on Int64/UInt64 }
+      { Pascal 'shr' (tkIdent) or C unsigned '>>' — logical shift right }
       EmitB($0F); EmitB($AD); EmitB($D0);          { shrd eax, edx, cl }
       EmitB($D3); EmitB($EA);                      { shr edx, cl }
       EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
