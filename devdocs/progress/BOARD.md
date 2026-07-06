@@ -30,11 +30,28 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (89)
+## backlog (115)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-abi-battery-00204 | C | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-anonymous-struct-union-members | C | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
+| bug-c-block-scope-func-decl | C | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
+| bug-c-expr-result-type-model | C | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
+| bug-c-float-single-precision | C | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
+| bug-c-fnptr-to-crtl-variadic | C | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | — |
+| bug-c-function-returning-fnptr-declarator | C | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
+| bug-c-goto-shadowing-00129 | C | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
+| bug-c-init-designated-and-nested | C | bug | C initializers: designated + nested/brace-elided initializers give SILENT wrong values | — |
+| bug-c-missing-lp64-predefines | C | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
+| bug-c-pointer-to-array-declarator | C | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
+| bug-c-preproc-paste-rescan | C | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
+| bug-c-ptrdiff-of-addr-elem | C | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
+| bug-c-sizeof-expr-no-parens | C | bug | C `sizeof expr` without parentheses fails to parse | — |
+| bug-c-static-init-cast-and-int-to-double | C | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
+| bug-c-string-literal-binop-decay | C | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
+| bug-c-switch-nonblock-and-duffs-device | C | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -42,11 +59,20 @@ _none_
 | feature-asm-source-frontend | A | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-compound-literals | C | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-expansion | A | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
+| feature-c-crtl-bind-hand-declared-prototypes | C | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
+| feature-c-forward-enum-decl | C | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
+| feature-c-generic-selection | C | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | feature | GTK3 header import final wiring | — |
+| feature-c-pragma-push-pop-macro | C | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-statement-expressions | C | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
+| feature-c-variadic-macros | C | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
+| feature-c-vla-and-label-in-if | C | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
+| feature-c-wide-string-literals | C | feature | C wide string literals L"..." / wchar_t | — |
 | feature-callconv-register-args | A | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-frontend-interop-contract | A | feature | Cross-frontend interop contract — umbrella | — |
@@ -652,7 +678,24 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [C] bug-c-abi-battery-00204
+- [C] bug-c-anonymous-struct-union-members
+- [C] bug-c-block-scope-func-decl
+- [C] bug-c-expr-result-type-model
+- [C] bug-c-float-single-precision
+- [C] bug-c-fnptr-to-crtl-variadic
+- [C] bug-c-function-returning-fnptr-declarator
+- [C] bug-c-goto-shadowing-00129
+- [C] bug-c-init-designated-and-nested
+- [C] bug-c-missing-lp64-predefines
+- [C] bug-c-pointer-to-array-declarator
+- [C] bug-c-preproc-paste-rescan
 - [C] bug-c-printf-without-stdio-include-varargs
+- [C] bug-c-ptrdiff-of-addr-elem
+- [C] bug-c-sizeof-expr-no-parens
+- [C] bug-c-static-init-cast-and-int-to-double
+- [C] bug-c-string-literal-binop-decay
+- [C] bug-c-switch-nonblock-and-duffs-device
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-constructor-exception-cleanup-semantics
 - [A] decide-int-div-zero-behavior-unification
@@ -660,11 +703,20 @@ _none_
 - [A] feature-asm-source-frontend
 - [A] feature-asm-textual-emit-mode
 - [A] feature-assembler-first-class-citizen
+- [C] feature-c-compound-literals
 - [A] feature-c-corpus-expansion
 - [C] feature-c-cross-target-feature-coverage
+- [C] feature-c-crtl-bind-hand-declared-prototypes
 - [C] feature-c-designated-init-compound-literals
+- [C] feature-c-forward-enum-decl
+- [C] feature-c-generic-selection
 - [C] feature-c-gtk3-header-final-wiring
+- [C] feature-c-pragma-push-pop-macro
 - [C] feature-c-runtime-library
+- [C] feature-c-statement-expressions
+- [C] feature-c-variadic-macros
+- [C] feature-c-vla-and-label-in-if
+- [C] feature-c-wide-string-literals
 - [A] feature-callconv-register-args
 - [A] feature-cdecl-indirect-cross-targets
 - [A] feature-cross-frontend-interop-contract

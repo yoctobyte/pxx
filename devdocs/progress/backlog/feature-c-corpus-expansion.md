@@ -2,6 +2,17 @@
 
 - **Type:** feature (C frontend validation) — Track A/C.
 - **Status:** backlog — planned 2026-07-06, order agreed with user ("variation is good").
+- **Step 1 DONE 2026-07-06:** c-testsuite vendored (install_lib_candidates.sh
+  c-testsuite), runner `tools/run_c_conformance.sh` + `make test-c-conformance`.
+  **Baseline 172/220 pass on pristine master**; all 48 fails are recorded
+  ticket-by-ticket in `test/c-conformance/pxx.skip` and filed as 22 backlog
+  tickets (bug-c-init-designated-and-nested is the big cluster — 9 tests,
+  silent wrong values). NOTE: a prior session drafted 3 inline fixes without
+  tickets; per workflow they were REVERTED into tickets (draft approach
+  recorded in each): feature-c-crtl-bind-hand-declared-prototypes,
+  bug-c-string-literal-binop-decay, bug-c-ptrdiff-of-addr-elem — the last
+  because the draft regressed test-core b133. Next inside step 1: burn down
+  the skip list ticket by ticket; then step 2 (zlib).
 - **Context:** corpus today = lua 5.4 + sqlite 3.46, both green and byte-identical
   to same-version gcc oracles on all targets. Recorded lesson (v185): big feature
   suites hide whole feature classes behind green CRUD — breadth beats depth.

@@ -30,6 +30,9 @@ TINYREGEX_COMMIT="f2632c6d9ed25272987471cdb8b70395c2460bdb"
 FREEBSD_URL="https://github.com/freebsd/freebsd-src"
 FREEBSD_COMMIT="22d66952555c86a5b7d1d499b48906c3a5f4c13d"
 
+CTESTSUITE_URL="https://github.com/c-testsuite/c-testsuite"
+CTESTSUITE_COMMIT="5c7275656d751de0e68b2d340a95b5681858ed07"
+
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
@@ -130,6 +133,20 @@ EOF
   say "freebsd-regex -> $DEST/freebsd-regex"
 }
 
+fetch_c_testsuite() {
+  if present c-testsuite; then say "c-testsuite present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$CTESTSUITE_URL" c-testsuite "$CTESTSUITE_COMMIT" tests/single-exec LICENSE README.md
+  cat > "$DEST/c-testsuite/PROVENANCE.md" <<EOF
+# c-testsuite Candidate
+Upstream: ${CTESTSUITE_URL}
+Commit: ${CTESTSUITE_COMMIT}
+Paths: tests/single-exec/ (220 conformance tests + .expected + .tags), LICENSE, README.md
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE (MIT).
+EOF
+  say "c-testsuite -> $DEST/c-testsuite"
+}
+
 fetch_sqlite() {
   if present sqlite; then say "sqlite present (FORCE=1 to re-fetch) — skip"; return 0; fi
   command -v curl >/dev/null 2>&1 || die "curl required for sqlite"
@@ -163,12 +180,13 @@ mkdir -p "$DEST"
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite ;;
     lua)           fetch_lua ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite)" ;;
+    c-testsuite)   fetch_c_testsuite ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."
