@@ -1476,6 +1476,26 @@ begin
           argNode := IRB[argNode];
         end;
 
+        { Variadic stack tail (words 8..nArgs-1) was pushed in index order, so it
+          lands REVERSED in memory (word nArgs-1 at [sp+0], word 8 highest). The
+          callee reads variadic args with a FORWARD va_arg walk from overflow =
+          s0+16, so reverse the (nArgs-8) low words in place. The eight register
+          words (high offsets) and any hidden-dest word (deepest) are untouched.
+          Mirrors the arm32 variadic-tail reversal (ir_codegen_arm32.inc). }
+        if (procIdx >= 0) and ProcVariadic[procIdx] and (nArgs > 9) then
+        begin
+          elemSize := nArgs - 8;
+          for i := 0 to (elemSize div 2) - 1 do
+          begin
+            j := i * 4;
+            sz := (elemSize - 1 - i) * 4;
+            rv32_lw(reg_t1, reg_sp, j);
+            rv32_lw(reg_t2, reg_sp, sz);
+            rv32_sw(reg_t2, reg_sp, j);
+            rv32_sw(reg_t1, reg_sp, sz);
+          end;
+        end;
+
         if nArgs > 8 then
         begin
           { Words 8+ pass on the stack: keep the WHOLE pushed word block live

@@ -5105,11 +5105,17 @@ begin
       rv32_sw(reg_a0 + 5, reg_t0, 20);
       rv32_sw(reg_a0 + 6, reg_t0, 24);
       rv32_sw(reg_a0 + 7, reg_t0, 28);
-      EmitLoadImmRISCV32(reg_t1, 8);
-      rv32_add(reg_t1, reg_s0, reg_t1);                  { t1 = s0+8 (first stack word) }
+      { Overflow (stack args past a7) starts at entry_sp = s0+16 — the callee's
+        incoming-stack-word base after the ra/s0 prologue (see parser.inc rv32
+        param spill: word k>=8 at [s0+16+(pnWords-1-k)*4]). The call site reverses
+        the variadic stack tail (ir_codegen_riscv32.inc) so word 8 lands at s0+16
+        and va_arg's forward walk reads args in order. Was s0+8 — off by 8, so the
+        first stack-passed variadic arg read a saved-frame word (garbage). }
+      EmitLoadImmRISCV32(reg_t1, 16);
+      rv32_add(reg_t1, reg_s0, reg_t1);                  { t1 = s0+16 (first stack word) }
       EmitLoadImmRISCV32(reg_t0, Syms[vaOverflowSym].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);                  { t0 = &__va_overflow }
-      rv32_sw(reg_t1, reg_t0, 0);                        { *__va_overflow = s0+8 }
+      rv32_sw(reg_t1, reg_t0, 0);                        { *__va_overflow = s0+16 }
     end;
     TARGET_I386:
     begin
