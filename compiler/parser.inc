@@ -18009,7 +18009,10 @@ begin
     builtinheap) so hosted riscv32 programs with floats (sysutils pulls float
     code) do not each need a manual `uses softfloat`. FIRST — the builtinheap/
     builtin float bodies compile against the kernels. }
-  if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) and
+  { arm32 has hardware VFP, but its double->int convert is 32-bit only; a 64-bit
+    Trunc/Round of a large double routes to the soft-float __pxx_d2i64 kernel
+    (mirrors the C-frontend pull in cparser), so arm32 pulls softfloat too. }
+  if ((((TargetArch = TARGET_RISCV32) and (not EspBareBoot))) or (TargetArch = TARGET_ARM32)) and
      (needHeapUnit or needsBuiltin) then
     ParseUsesUnit('softfloat');
   if needHeapUnit then ParseUsesUnit('builtinheap');

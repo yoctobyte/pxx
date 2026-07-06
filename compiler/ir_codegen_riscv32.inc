@@ -1258,8 +1258,15 @@ begin
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
             if tk = tyDouble then
             begin
+              { full 64-bit convert: the 32-bit d2i saturates at 2^31 (breaks a
+                double->u64 cast, e.g. sqlite %f). d2i64 returns the Int64 in
+                a0:a1 directly, so no sign-extend follows. }
               EmitNode64RISCV32(IRA[argNode]);    { a0:a1 = double bits }
-              if procIdx = -204 then sVal := '__pxx_d2i_rne' else sVal := '__pxx_d2i';
+              if procIdx = -204 then sVal := '__pxx_d2i64_rne' else sVal := '__pxx_d2i64';
+              procIdx := FindProc(sVal);
+              if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+              EmitCallProc(procIdx);              { a0:a1 = full Int64 result }
+              Exit;
             end
             else if tk = tySingle then
             begin

@@ -4574,7 +4574,12 @@ begin
       "__pxx_dmul not found". The whole guard now matches the Pascal default-RTL
       pull: hosted riscv32 is INCLUDED (was skipped entirely, leaving riscv32 C
       with no __pxx_write/malloc bridge and no softfloat). }
-    if (TargetArch = TARGET_RISCV32) and (not EspBareBoot) then
+    if ((TargetArch = TARGET_RISCV32) and (not EspBareBoot)) or
+       (TargetArch = TARGET_ARM32) then
+      { arm32 has hardware VFP, but VFP's double->int convert is 32-bit only;
+        a 64-bit cast of a large double (e.g. sqlite %f's double->u64) routes to
+        the soft-float __pxx_d2i64 kernel, so pull the unit here too. The other
+        kernels are unused dead code on arm32. }
       ParseUsesUnit('softfloat');
     ParseUsesUnit('pxxcio');
   end;

@@ -1735,6 +1735,21 @@ begin
             IREmitNodeArm32(valNode);
             if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
             begin
+              if j = 204 then procIdx := FindProc('__pxx_d2i64_rne')
+              else procIdx := FindProc('__pxx_d2i64');
+              if ((j = 203) or (j = 204)) and Is64BitArm32(IntToTypeKind(IRTk[node])) and
+                 (procIdx >= 0) then
+              begin
+                { 64-bit result: VFP vcvt.s32.f64 is 32-bit only and saturates at
+                  2^31, so an Int64 cast of a large double (e.g. sqlite's %f
+                  double->u64) came out wrong. Route through the soft-float 64-bit
+                  kernel. arm32 carries the value as double in d0. (Falls back to
+                  the 32-bit VFP path below when softfloat is absent — e.g. a
+                  minimal program with no builtin/heap that never pulled it.) }
+                EmitI32($EC510B10);                 { vmov r0, r1, d0 (double bits -> Int64 arg) }
+                EmitCallProc(procIdx);              { r0:r1 = Int64 result }
+                Exit;
+              end;
               if j = 203 then
               begin
                 EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 (round-zero) }

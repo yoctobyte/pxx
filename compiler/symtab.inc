@@ -3908,7 +3908,13 @@ begin
     Procs[ProcCount].Params[i].TypeKind := ptypes[i];
     Procs[ProcCount].Params[i].SymIdx   := -1;
     Procs[ProcCount].Params[i].IsArray  := False;
-    Procs[ProcCount].Params[i].IsRef    := False;
+    { C struct-by-value params use the by-ref ABI (an 8-byte pointer slot the
+      callee derefs; the caller copies to a temp and passes &temp — see cparser
+      AllocParam and ir.inc IRLowerCallArg). The proc's Params[].IsRef must agree
+      so the CALLER marshals it as one pointer word, not a 2-word by-value record
+      (which pushed a stale second word -> a NULL 2nd struct arg on arm32/riscv32).
+      C-mode-gated so Pascal proc registration stays byte-identical. }
+    Procs[ProcCount].Params[i].IsRef    := CProgramMode and (ptypes[i] = tyRecord);
   end;
   Result := ProcCount; Inc(ProcCount);
 end;
