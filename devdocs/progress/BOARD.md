@@ -30,10 +30,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (88)
+## backlog (89)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-create-trigger-huge-alloc-oom | A | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
 | bug-c-printf-without-stdio-include-varargs | C | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -650,6 +651,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-create-trigger-huge-alloc-oom
 - [C] bug-c-printf-without-stdio-include-varargs
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-constructor-exception-cleanup-semantics

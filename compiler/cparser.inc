@@ -2411,6 +2411,46 @@ begin
           end;
           nArrElems := 0;
         end;
+      end
+      else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkString) and
+              (declTk <> tyRecord) and (declTk <> tyPointer) and
+              (dimCount <= 1) and TypeIsOrdinal(declTk) then
+      begin
+        { Local `char buf[] = "literal"` (and int8/u8 element arrays): the global
+          path already sizes+inits from a string, but the local path only handled
+          `= {...}` braces, so a string-initialised block-scope array fell through
+          to arrLen=1 with no data — sqlite3JoinType's block-scope
+          `static const char zKeyText[]` read out of bounds, so every keyword join
+          (LEFT/INNER/...) was "unknown join type". Expand the string (and any
+          adjacent literals) into per-character element assignments + a NUL, the
+          same arrElems path the brace initializer uses. }
+        Next;   { consume '='; CurTok is now the string, i.e. Tokens[TokPos-1] }
+        while (CurTok.Kind = tkString) do
+        begin
+          ei := 0;
+          while ei < Tokens[TokPos - 1].SLen do
+          begin
+            if nArrElems > 255 then begin nArrElems := -1; Break; end;
+            idxLit := AllocNode(AN_INT_LIT);
+            ASTIVal[idxLit] := Ord(TokChars[Tokens[TokPos - 1].SOffset + ei]);
+            ASTTk[idxLit] := Ord(tyChar);
+            arrElems[nArrElems] := idxLit;
+            Inc(nArrElems);
+            Inc(ei);
+          end;
+          if nArrElems < 0 then Break;
+          Next;
+        end;
+        if nArrElems < 0 then
+          Error('local string-initialised array exceeds 256 bytes')
+        else
+        begin
+          { NUL terminator so the array is a valid C string. }
+          idxLit := AllocNode(AN_INT_LIT);
+          ASTIVal[idxLit] := 0; ASTTk[idxLit] := Ord(tyChar);
+          arrElems[nArrElems] := idxLit;
+          Inc(nArrElems);
+        end;
       end;
       if arrLen < 1 then
       begin

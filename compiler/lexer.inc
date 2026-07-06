@@ -332,7 +332,13 @@ begin
     c := s[i];
     if (c = '.') and not hasDot then begin hasDot := True; Inc(i); continue; end;
     if (c < '0') or (c > '9') then break;
-    if coeff <= 999999999999999999 then
+    { Absorb only while `coeff*10 + digit` cannot overflow Int64:
+      (High(Int64) - 9) div 10 = 922337203685477579. The old bound of 18 nines
+      let one extra digit in, so a 19-sig-figure literal whose 19th digit pushed
+      coeff to 2^63 (e.g. `9223372036854775808.0`, sqlite3IntFloatCompare's
+      overflow guard) wrapped to a negative coeff and decoded as 0 — making every
+      REAL-vs-INT SQL comparison wrong. }
+    if coeff <= 922337203685477579 then
     begin
       { Absorb the digit. Only count a fractional digit toward fracDigits when it
         is actually absorbed — otherwise a high-precision literal (e.g. 21 sig
