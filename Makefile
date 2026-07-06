@@ -34,7 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-zlib test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -3019,6 +3019,37 @@ test-cjson: $(COMPILER)
 # ticket-referenced line per test; anything else failing = regression, exit 1.
 test-c-conformance: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER)
+
+# zlib v1.3.1 bring-up (feature-c-corpus-zlib, corpus step 2). Unity-builds
+# crtl + the zlib TUs + zlib's own test/example.c and diffs stdout+exit against
+# the SAME sources built with gcc (the oracle). Skips if the gitignored tree is
+# absent (tools/install_lib_candidates.sh zlib). NOT in `make test` (3rd-party +
+# needs gcc). Currently blocked — see the ticket's two compiler blockers.
+ZLIB_SRC ?= library_candidates/zlib
+test-zlib: $(COMPILER)
+	@if [ ! -f "$(ZLIB_SRC)/zlib.h" ]; then \
+	  echo "test-zlib: SKIP — no zlib tree at $(ZLIB_SRC) (tools/install_lib_candidates.sh zlib)"; \
+	  exit 0; \
+	fi; \
+	command -v gcc >/dev/null 2>&1 || { echo "test-zlib: SKIP — gcc oracle not found"; exit 0; }; \
+	echo "building gcc oracle ..."; \
+	gcc -w -I$(ZLIB_SRC) -o /tmp/pxx_zlib_oracle \
+	  $(ZLIB_SRC)/adler32.c $(ZLIB_SRC)/crc32.c $(ZLIB_SRC)/zutil.c \
+	  $(ZLIB_SRC)/inftrees.c $(ZLIB_SRC)/inffast.c $(ZLIB_SRC)/inflate.c \
+	  $(ZLIB_SRC)/infback.c $(ZLIB_SRC)/trees.c $(ZLIB_SRC)/deflate.c \
+	  $(ZLIB_SRC)/compress.c $(ZLIB_SRC)/uncompr.c $(ZLIB_SRC)/gzlib.c \
+	  $(ZLIB_SRC)/gzread.c $(ZLIB_SRC)/gzwrite.c $(ZLIB_SRC)/gzclose.c \
+	  $(ZLIB_SRC)/test/example.c || exit 1; \
+	( cd /tmp && ./pxx_zlib_oracle > /tmp/pxx_zlib_oracle.txt 2>&1 ); \
+	echo "compiling pxx zlib runner ..."; \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(ZLIB_SRC) -I$(ZLIB_SRC)/test \
+	  test/zlib/runner.c /tmp/pxx_zlib_runner || exit 1; \
+	( cd /tmp && ./pxx_zlib_runner > /tmp/pxx_zlib_got.txt 2>&1 ); \
+	if diff -u /tmp/pxx_zlib_oracle.txt /tmp/pxx_zlib_got.txt; then \
+	  echo "test-zlib: PASS — byte-identical to gcc oracle"; \
+	else \
+	  echo "test-zlib: FAIL — output differs from gcc oracle"; exit 1; \
+	fi
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

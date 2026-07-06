@@ -33,6 +33,9 @@ FREEBSD_COMMIT="22d66952555c86a5b7d1d499b48906c3a5f4c13d"
 CTESTSUITE_URL="https://github.com/c-testsuite/c-testsuite"
 CTESTSUITE_COMMIT="5c7275656d751de0e68b2d340a95b5681858ed07"
 
+ZLIB_URL="https://github.com/madler/zlib"
+ZLIB_COMMIT="51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"   # v1.3.1 release tag
+
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
@@ -147,6 +150,20 @@ EOF
   say "c-testsuite -> $DEST/c-testsuite"
 }
 
+fetch_zlib() {
+  if present zlib; then say "zlib present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$ZLIB_URL" zlib "$ZLIB_COMMIT"
+  cat > "$DEST/zlib/PROVENANCE.md" <<EOF
+# zlib Candidate
+Upstream: ${ZLIB_URL}
+Commit: ${ZLIB_COMMIT} (v1.3.1 release tag)
+Paths: full source tree (*.c, *.h) + test/example.c, test/minigzip.c for oracle.
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: zlib license (see LICENSE / zlib.h header).
+EOF
+  say "zlib -> $DEST/zlib"
+}
+
 fetch_sqlite() {
   if present sqlite; then say "sqlite present (FORCE=1 to re-fetch) — skip"; return 0; fi
   command -v curl >/dev/null 2>&1 || die "curl required for sqlite"
@@ -180,13 +197,14 @@ mkdir -p "$DEST"
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib ;;
     lua)           fetch_lua ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;
     c-testsuite)   fetch_c_testsuite ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite)" ;;
+    zlib)          fetch_zlib ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

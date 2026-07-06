@@ -37,7 +37,12 @@
   guessing why a test is out of scope. No silent skips.
 - Graduate later to gcc c-torture `execute/` (~1500 tests) once green.
 
-### 2. zlib (quick win, new workload class)
+### 2. zlib (quick win, new workload class) — STARTED 2026-07-06
+See [[feature-c-corpus-zlib]]: vendored (v1.3.1), `test/zlib/runner.c` +
+`make test-zlib`, gcc oracle green. Two compiler blockers filed
+([[bug-c-typedef-name-as-uninitialized-local]] + a zlib.h `gzgetc` macro parse
+bug). libc-gap collector: [[feature-crtl-implement-libc-assumptions]].
+
 - Bit-twiddling, huffman tables, CRC loops, unsigned saturation, fn-ptr
   dispatch — different muscle than lua/sqlite. ~25k LOC.
 - Oracle: round-trip + `minigzip`/`example.c` output byte-compare vs gcc build.

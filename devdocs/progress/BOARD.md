@@ -30,7 +30,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (115)
+## backlog (118)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ _none_
 | bug-c-static-init-cast-and-int-to-double | C | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-string-literal-binop-decay | C | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-switch-nonblock-and-duffs-device | C | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
+| bug-c-typedef-name-as-uninitialized-local | C | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -61,6 +62,7 @@ _none_
 | feature-assembler-first-class-citizen | A | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-compound-literals | C | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-expansion | A | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
+| feature-c-corpus-zlib | A | feature | C corpus step 2: zlib v1.3.1 bring-up | — |
 | feature-c-cross-target-feature-coverage | C | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-crtl-bind-hand-declared-prototypes | C | feature | C: hand-declared libc prototypes (no #include) silently no-op in libc-free mode | — |
 | feature-c-designated-init-compound-literals | C | feature | C99 designated initializers + compound literals unsupported | — |
@@ -77,6 +79,7 @@ _none_
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-frontend-interop-contract | A | feature | Cross-frontend interop contract — umbrella | — |
 | feature-cross-virtual-indirect-hidden-dest | A | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-implement-libc-assumptions | B | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-crtl-strtok-missing | B | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
@@ -696,6 +699,7 @@ _none_
 - [C] bug-c-static-init-cast-and-int-to-double
 - [C] bug-c-string-literal-binop-decay
 - [C] bug-c-switch-nonblock-and-duffs-device
+- [C] bug-c-typedef-name-as-uninitialized-local
 - [A] chore-sqlite-static-capacity-bumps
 - [A] decide-constructor-exception-cleanup-semantics
 - [A] decide-int-div-zero-behavior-unification
@@ -705,6 +709,7 @@ _none_
 - [A] feature-assembler-first-class-citizen
 - [C] feature-c-compound-literals
 - [A] feature-c-corpus-expansion
+- [A] feature-c-corpus-zlib
 - [C] feature-c-cross-target-feature-coverage
 - [C] feature-c-crtl-bind-hand-declared-prototypes
 - [C] feature-c-designated-init-compound-literals
@@ -721,6 +726,7 @@ _none_
 - [A] feature-cdecl-indirect-cross-targets
 - [A] feature-cross-frontend-interop-contract
 - [A] feature-cross-virtual-indirect-hidden-dest
+- [B] feature-crtl-implement-libc-assumptions
 - [B] feature-crtl-strtok-missing
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
