@@ -49,6 +49,7 @@ uses asmcore_base, asmcore_x64;
 {$include rlexer.inc}
 {$include alexer.inc}
 {$include zlexer.inc}
+{$include llexer.inc}
 {$include emit.inc}
 procedure AsmB(b: Integer); forward;
 procedure AsmI16(v: Int64); forward;
@@ -93,6 +94,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include rparser.inc}
 {$include aparser.inc}
 {$include zparser.inc}
+{$include lparser.inc}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -541,6 +543,7 @@ begin
   isRust := (n >= 3) and (inFile[n] = 's') and (inFile[n-1] = 'r') and (inFile[n-2] = '.');
   isAda := (n >= 4) and (inFile[n] = 'b') and (inFile[n-1] = 'd') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isZig := (n >= 4) and (inFile[n] = 'g') and (inFile[n-1] = 'i') and (inFile[n-2] = 'z') and (inFile[n-3] = '.');
+  isLol := (n >= 4) and (inFile[n] = 'l') and (inFile[n-1] = 'o') and (inFile[n-2] = 'l') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
@@ -576,7 +579,7 @@ begin
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -685,6 +688,14 @@ begin
     Next;
     ParseZigProgram;
   end
+  else if isLol then
+  begin
+    LLexAll;
+    MainProgramTokCount := TokCount;
+    TokPos := 0;
+    Next;
+    ParseLProgram;
+  end
   else
   begin
     LexAll;
@@ -693,7 +704,7 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;

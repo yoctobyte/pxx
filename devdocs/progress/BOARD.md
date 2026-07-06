@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (121)
+## backlog (120)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,7 +100,6 @@ _none_
 | feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
 | feature-esoteric-fortran | A | 45 | feature | Esoteric probe: Fortran | — |
 | feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
-| feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
 | feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -189,7 +188,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (472)
+## done (473)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -526,6 +525,7 @@ _none_
 | feature-empty-class-shorthand | A | 50 | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | 50 | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | 50 | feature | `Eof` (standard input) not recognized | — |
+| feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
 | feature-esp-bare-exceptions | A | 50 | feature | ESP bare: try/except (raise currently terminates) | — |
 | feature-esp-float | B | 50 | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-int64-arith | A | 50 | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
@@ -764,7 +764,6 @@ _none_
 - [p 45] [A] feature-esoteric-algol
 - [p 45] [A] feature-esoteric-cobol
 - [p 45] [A] feature-esoteric-fortran
-- [p 45] [A] feature-esoteric-lolcode
 - [p 45] [A] feature-esoteric-whitespace
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling

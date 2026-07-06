@@ -5,7 +5,7 @@ prio: 45  # auto
 # Esoteric probe: LOLCODE
 
 - **Type:** feature — esoteric-frontend-probe
-- **Status:** backlog
+- **Status:** done (2026-07-06) — skeleton landed, probe closed
 - **Umbrella:** [[feature-esoteric-frontend-probes]]
 - **Opened:** 2026-07-05
 
@@ -39,3 +39,29 @@ successful, closed probe. Do not extend past the trivial subset either way.
 
 ## Log
 - 2026-07-05 — filed as part of the esoteric-frontend-probes umbrella.
+
+## Probe done (2026-07-06, Track Z session)
+
+Skeleton landed, additive-only per the Ada/Zig pattern: `compiler/llexer.inc`
++ `compiler/lparser.inc` (new), `isLol` + `.lol` dispatch in compiler.pas,
+one-line var in defs.inc. lparser reuses rparser.inc's node helpers.
+
+**Landed subset:** HAI/KTHXBYE, `I HAS A x [ITZ expr]` (type inferred:
+NUMBR->Int64/YARN->string/TROOF->bool), `x R expr`, VISIBLE with multiple
+operands, prefix ops SUM/DIFF/PRODUKT/QUOSHUNT/MOD OF, BOTH SAEM/DIFFRINT,
+`<expr>, O RLY? YA RLY/NO WAI/OIC` (the expression IS the condition — the
+IT variable is explicitly out of scope, a bare expression statement errors
+loudly instead of silently vanishing), IM IN YR/IM OUTTA YR + GTFO, SMOOSH
+... MKAY string concat (tkPlus chain), WIN/FAIL, BTW/OBTW..TLDR comments,
+newline/comma statement separators. Test: test/test_lolcode_skeleton.lol in
+make test.
+
+**Probe verdict: no shared-internals bug.** Dynamic-typing angle reduced to
+declare-time inference (honest skeleton cut). One frontend-local bug during
+bring-up, and it was the documented paramless-recursion pitfall AGAIN
+(`a := LParseExpr;` inside LParseExpr's own body reads Result instead of
+recursing — third frontend in a row to hit a variant of this; the pitfall
+memory earns its keep).
+
+Acceptance (b) met: trivial-plus subset compiles and runs clean. Closed at
+skeleton depth per the umbrella cap.

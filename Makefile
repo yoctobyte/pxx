@@ -455,6 +455,11 @@ test-core: $(COMPILER)
 	# break/continue, integer / lowered as trunc div, std.debug.print {} placeholders.
 	./$(COMPILER) test/test_zig_skeleton.zig /tmp/test_zig_skeleton26
 	test "$$(/tmp/test_zig_skeleton26)" = "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
+	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
+	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
+	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.
+	./$(COMPILER) test/test_lolcode_skeleton.lol /tmp/test_lolcode_skeleton26
+	test "$$(/tmp/test_lolcode_skeleton26)" = "$$(printf 'HAI WORLD\ny is 42\nsaem correct\nacc is 15\nsmoosh works')"
 	# BASIC GOTO/GOSUB (bug-basic-goto-gosub-halts-program): real jumps via shared
 	# AN_LABEL/AN_GOTO; nested GOSUB over the Int64 shift-register return stack;
 	# LET-less assignment off-by-one. Previously GOTO/GOSUB silently HALTED (exit 0).

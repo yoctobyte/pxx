@@ -1945,4 +1945,4 @@ begin
 end;
 
 var
-  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig: Boolean;
+  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol: Boolean;
