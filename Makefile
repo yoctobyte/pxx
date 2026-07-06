@@ -466,6 +466,11 @@ test-core: $(COMPILER)
 	# out-char/out-number). Prints Hi\n40\n2\n36.
 	./$(COMPILER) test/test_ws_skeleton.ws /tmp/test_ws_skeleton26
 	test "$$(/tmp/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
+	# Fortran frontend skeleton (feature-esoteric-fortran, esoteric probe): implicit
+	# first-letter typing (I-N int / else REAL->double), DO with step (incl. negative),
+	# IF/ELSE, PRINT * with correct double formatting (ARG decimals sentinel -1).
+	./$(COMPILER) test/test_fortran_skeleton.f90 /tmp/test_fortran_skeleton26
+	test "$$(/tmp/test_fortran_skeleton26)" = "$$(printf 'sum is55\ndownsum is30\ny is 1.0500000000000000E+001\nsum correct\nreal correct')"
 	# BASIC GOTO/GOSUB (bug-basic-goto-gosub-halts-program): real jumps via shared
 	# AN_LABEL/AN_GOTO; nested GOSUB over the Int64 shift-register return stack;
 	# LET-less assignment off-by-one. Previously GOTO/GOSUB silently HALTED (exit 0).
