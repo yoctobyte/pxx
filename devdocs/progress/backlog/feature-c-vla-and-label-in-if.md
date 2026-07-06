@@ -41,3 +41,11 @@ in the array-dim eval context (scalar/enum/global const ternary is correct).
 Subtle mutual-recursion / token-position bug in the const evaluator's array-dim
 call path — needs focused debugging (compare TokPos handling of the array-dim
 CEvalConstExpr call site vs the scalar-init one).
+
+## Update 2026-07-07 (2) — compiles + runs, VLA off-by-one remains
+With the const-fold + array-ternary fixes, 00207 now COMPILES and RUNS (label in
+braceless if works, const-sized arrays fold). Output is off by ONE extra "boom!"
+(3 vs 2): f1's `char test[argc]` VLA re-declared each loop iteration interacts
+with the `argc--` loop counter (a VLA-on-stack / counter aliasing off-by-one).
+So the ONLY remaining piece is true VLA semantics; everything else in 00207
+passes. Still skipped pending VLA.
