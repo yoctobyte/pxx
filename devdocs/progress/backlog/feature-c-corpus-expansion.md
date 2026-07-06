@@ -57,30 +57,39 @@
 
 You are Track A/C (compiler + C frontend), master. Task: land step 1 of the C
 corpus expansion — the c-testsuite conformance battery — per
-devdocs/progress/backlog/feature-c-corpus-expansion.md (read it; order and
-rationale are settled, do not re-litigate).
+devdocs/progress/backlog/feature-c-corpus-expansion.md (read it first; order
+and rationale are settled with the user, do not re-litigate).
+
+Verified facts (2026-07-06, do NOT re-derive): the suite is pure data — exactly
+220 tests `tests/single-exec/00001.c`..`00220.c`, contract = `main` entry +
+`NNN.c.expected` matches stdout+stderr, plus `NNN.c.tags` metadata (C-standard
+level, portability, arch). The repo's own runner infra (sh/Python3/TAP/TMSU) is
+their CI only — bypass it; their per-compiler runners are 10-line `CC=x`
+wrappers + a `.skip` script, nothing more.
 
 1. Vendor https://github.com/c-testsuite/c-testsuite via the
-   tools/install_lib_candidates.sh pattern (gitignored like sqlite/lua vendor
-   sources, add PROVENANCE.md with commit hash). Tests live in
-   tests/single-exec/*.c with expected outputs alongside.
-2. Build a runner (script + make target, e.g. `make test-c-conformance`):
-   for each test, compile with ./compiler/pascal26 -Ilib/crtl/include
-   -Ilib/crtl/src, run, compare exit code/output vs expected (and vs a gcc
-   -no-pie build where the suite lacks an expectation). Summary line:
-   pass/fail/skip counts.
-3. Triage failures: each one is either (a) a cfront/codegen bug — reduce to a
-   minimal repro, fix or file a ticket per lane rules (shared internals = Track
-   A ticket; you are A/C combined so you may self-resolve), or (b) a legit
-   unsupported feature — add to an EXPLICIT skip-list file with one-line reason
-   (no silent skips).
+   tools/install_lib_candidates.sh pattern (gitignored vendor source like
+   sqlite/lua, PROVENANCE.md with upstream commit hash).
+2. Write OUR OWN runner (tools/ script + `make test-c-conformance`): for each
+   test, compile `./compiler/pascal26 -Ilib/crtl/include -Ilib/crtl/src NNN.c`,
+   run with timeout, compare stdout+stderr against NNN.c.expected (byte-exact)
+   and exit code 0. TAP output not needed; summary line pass/fail/skip.
+3. Triage every failure: (a) cfront/codegen bug — reduce to minimal repro
+   (compare vs gcc), fix or file per lane rules (shared internals = Track A
+   ticket; as A/C combined you may self-resolve); (b) legit unsupported
+   feature — add to an EXPLICIT skip-list file (mirror their `<name>.skip`
+   idea) with one-line reason sourced from the test's .tags where possible.
+   No silent skips. Bug fixes >> skips; skip only what is genuinely out of
+   scope (e.g. features we have consciously deferred).
 4. Gate: runner green (skips documented), make test + self-host byte-identical,
    test-lua-cross 24/24, sqlite suite still byte-identical vs same-version gcc
-   oracle (build oracle with extra TU `const char sqlite3_version[]="3.46.0";`
-   — see done/bug-c-create-trigger-huge-alloc-oom.md for why).
-5. Commit runner + skip-list; wire into make test only if fast enough (<~30s),
-   else standalone target documented in BOARD/ticket. Then move this ticket's
-   step 1 to done-notes and leave steps 2-5 in backlog.
+   oracle (oracle needs extra TU `const char sqlite3_version[]="3.46.0";` —
+   see done/bug-c-create-trigger-huge-alloc-oom.md for why). If compiler bugs
+   were fixed: make stabilize + make pin (watch pin.log — a stabilize flake
+   makes pin silently re-bless the OLD binary; verify VERSION advanced).
+5. Commit runner + skip-list + any fixes with regression tests; wire into make
+   test only if fast (<~30s), else standalone target noted in this ticket.
+   Update this ticket (step 1 done-notes), regenerate BOARD.md, push.
 
 Steps 2 (zlib) and 3 (tcc) are separate sessions — do not start them unless
-step 1 lands early and gates are green.
+step 1 lands early and all gates are green.
