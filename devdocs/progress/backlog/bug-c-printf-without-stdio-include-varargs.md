@@ -83,3 +83,14 @@ correct the expected output): `test/hello.c` (in `make test`, expected
 "Hello, World!" keeps working via the include), `test/macro_soup_lib.c`,
 `test/csqlite_layout_probe.c`, `test/csqlite_schema_exec_probe.c`. The
 cvararg gate tests already `#include "stdio.c"` and are unaffected.
+
+## Update 2026-07-07 — symptom 2 FIXED
+Symptom 2 (explicit hand prototype `int printf(const char*,...)` → no output) is
+FIXED by feature-c-crtl-bind-hand-declared-prototypes (commit 147087b0): a
+hand-declared crtl prototype now auto-pulls the crtl impl. Verified `int
+printf(const char*,...); printf("x=%d\n",5)` prints `x=5`.
+Symptom 1 (IMPLICIT printf, no declaration at all) STILL prints the format
+literally (`x=%d`): an implicit C89 declaration gives printf a non-variadic
+int() signature, so the varargs are dropped at the call site. Remaining work =
+when an undeclared call names a known crtl function, bind the correct (variadic)
+crtl prototype at the call site, not an implicit int(). Separate fix.
