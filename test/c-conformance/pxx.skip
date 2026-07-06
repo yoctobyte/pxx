@@ -21,7 +21,6 @@
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
 00174.c	float single-precision arithmetic rounding — bug-c-float-single-precision
 00175.c	implicit char/int/float arg conversions — bug-c-float-single-precision
-00178.c	sizeof(!a) must be 4 (int) — bug-c-expr-result-type-model
 00189.c	&fprintf via fnptr SIGSEGV — bug-c-fnptr-to-crtl-variadic
 00200.c	left-shift result type = promoted left operand — bug-c-expr-result-type-model
 00201.c	## paste then rescan as macro call — bug-c-preproc-paste-rescan
