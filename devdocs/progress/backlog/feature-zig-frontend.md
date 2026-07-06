@@ -2,11 +2,45 @@
 prio: 45  # auto
 ---
 
-# Zig frontend — PARKED
+# Zig frontend — skeleton landed; full language stays PARKED
 
 - **Type:** feature — umbrella (spans Track A + Track B)
-- **Status:** backlog — **PARKED** (2026-07-05, user decision — see "Why parked" below)
+- **Status:** backlog — sub-ticket 1 (skeleton) DONE 2026-07-06 (Track Z);
+  deeper sub-tickets stay parked per the esoteric-probe cap
 - **Owner:** —
+
+## Skeleton landed (2026-07-06, Track Z)
+
+Sub-ticket **#1 (zig-frontend-skeleton)** is done, mirroring the Ada-skeleton
+precedent exactly (additive only: `compiler/zlexer.inc` + `compiler/zparser.inc`
+new files, `isZig` flag + `.zig` dispatch in compiler.pas, one-line `isZig`
+var in defs.inc — no new AST nodes, no new IR, no backend work). zparser
+reuses rparser.inc's node helpers (RSeqAppend/RMakeIdent/RBinOp/RWiden), so
+the two C-family skeletons share plumbing.
+
+**Landed subset:** top-level `[pub] fn` (≤4 scalar params, i8–u64/usize/
+isize/bool/void), calls + recursion, `var`/`const` with type inference and
+`= undefined`, assignment + compound (`+=` etc), if/else-if/else, while with
+`: (continue-expression)`, range `for (lo..hi) |i|` (exclusive hi, per Zig),
+break/continue, and/or, `_ = expr;` discard, `const std = @import("std");`
+header swallowed, and `std.debug.print("fmt", .{args})` lowered onto
+AN_WRITE/AN_WRITELN with `{}`-placeholder splitting (segments point straight
+into the fmt token's TokChars — no copies). Test: `test/test_zig_skeleton.zig`
+wired into `make test` next to the Ada one.
+
+**Probe verdict: no shared-internals bug found this pass** — shared pipeline
+(AN_* → IR → x86-64) handled the Zig shapes first try. Both bugs hit while
+building were frontend-local: (1) Zig integer `/` initially mapped to tkSlash
+= Pascal REAL division → double bits reinterpreted as int64 garbage; fixed by
+lowering `/` to tkDiv (trunc div) since all skeleton types are integers —
+note rparser.inc still maps Rust `/` to tkSlash, same latent hazard, its
+tests just never divide ([[feature-rust-frontend]], worth a one-line note
+there); (2) a `{ past } }` comment-brace typo in my own code.
+
+**Known deviations (accepted, documented in zparser.inc header):** `continue`
+inside `while ... : (expr)` skips the continue-expression (Zig runs it);
+`const` mutability not enforced; no overflow safety; `{{ }}` fmt escapes
+unhandled; x86-64 only.
 - **Opened:** 2026-07-03 (feature request — filed next to [[feature-rust-frontend]])
 - **Priority:** unranked — scoping ticket, not a greenlit build
 

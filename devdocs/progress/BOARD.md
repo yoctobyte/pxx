@@ -145,7 +145,7 @@ _none_
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| feature-zig-frontend | B | 45 | feature | Zig frontend — PARKED | — |
+| feature-zig-frontend | B | 45 | feature | Zig frontend — skeleton landed; full language stays PARKED | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |

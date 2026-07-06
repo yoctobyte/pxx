@@ -450,6 +450,11 @@ test-core: $(COMPILER)
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb /tmp/test_ada_skeleton26
 	test "$$(/tmp/test_ada_skeleton26)" = "$$(printf 'sum correct\nwhile iter\nwhile iter\nwhile iter\nexit-when correct\nseven correct')"
+	# Zig frontend skeleton (feature-zig-frontend, esoteric probe): fns/calls/recursion,
+	# var/const inference, if/else-if, while + continue-expr, range for (exclusive hi),
+	# break/continue, integer / lowered as trunc div, std.debug.print {} placeholders.
+	./$(COMPILER) test/test_zig_skeleton.zig /tmp/test_zig_skeleton26
+	test "$$(/tmp/test_zig_skeleton26)" = "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas /tmp/test_tobject_destroy_override26
 	test "$$(/tmp/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"
