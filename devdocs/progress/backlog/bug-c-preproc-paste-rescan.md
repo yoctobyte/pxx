@@ -23,3 +23,6 @@ case must NOT become `++`).
 
 ## Gate
 Drop 00201.c/00202.c from test/c-conformance/pxx.skip; runner green.
+
+## Triage note (2026-07-06)
+Hard: needs macro RESCAN across the expansion boundary. `CAT(A,B)` pastes to the identifier `AB`, and the `(x)` that follows in the *source* must then be consumed so `AB(x)` expands. This is the same rescan machinery as CPObjectAliasFuncMacro but for a paste result feeding a following source arg-list — a rescan-loop rework in CPExpandRange, not a patch. Also 00202 needs empty-arg paste (`a##<empty>`) + pasting onto operators without forming `++`. Defer to a focused session.

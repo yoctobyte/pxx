@@ -18,3 +18,12 @@ prio: 55  # auto
 
 ## Gate
 Drop 00024.c/00046.c from test/c-conformance/pxx.skip; runner green.
+
+## Update 2026-07-06
+00024 (`typedef struct {int x;int y;} s; s v;`) now PASSES — the old bogus
+"line 100" error was from the since-reverted CPullCrtl hand-declared-prototype
+append path. Dropped from pxx.skip (enforced). Remaining work = 00046 only:
+C11 anonymous struct/union MEMBERS (an unnamed `union {...};` / `struct {...};`
+inside a struct, whose fields are accessed directly as `v.b1`, `v.c`). That is a
+record-layout change (promote an unnamed aggregate member's fields into the
+parent's name scope at the member's offset) — Track A-adjacent, own effort.
