@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (106)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -37,7 +37,6 @@ _none_
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
-| bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
@@ -174,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (489)
+## done (490)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -223,6 +222,7 @@ _none_
 | bug-c-function-returning-function-pointer-prototype-sqlite | C | 50 | bug | C: function returning function pointer prototype not registered | — |
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
+| bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-init-array-designators | C | 50→90 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
 | bug-c-init-struct-designators | C | 50→90 | bug | C struct field designators `.field = v` in braced initializers | — |
@@ -697,9 +697,9 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
-- [p 60] [C] bug-c-gzgetc-fnlike-macro-call (unblocks 1)
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
+- [p 60] [A] feature-c-corpus-zlib
 - [p 60] [C] feature-c-runtime-library
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [B] feature-crtl-strtok-missing
@@ -792,6 +792,5 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — bug-c-gzgetc-fnlike-macro-call
 - **1** — bug-c-init-brace-elision-nested
 - **1** — task-sqlite-libc-free-runtime-bringup

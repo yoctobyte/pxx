@@ -32,3 +32,21 @@ regression test. Then zlib's runner should get past example.c parsing.
 
 ## Gate
 `crtl + zlib.h + example.c` parses; `make test-zlib` advances.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A)
+Isolated: NOT the comma-expression macro body (that always worked). The parse
+failure `Expected ), but got (` was the `(gzgetc)(g)` **parenthesized-function-
+name call**. A bare function name in parens decays to AN_PROCADDR (its address);
+CNodeProcSig had no AN_PROCADDR case, so the trailing `(args)` was never applied
+as a call and the postfix layer choked. Fix (cparser.inc CNodeProcSig): an
+AN_PROCADDR callee's own proc index IS its call signature → `(name)(args)` lowers
+to an indirect call through the address. Self-referential blue-paint already
+handled (macro name not re-expanded inside its own body).
+
+Result: zlib's example.c now PARSES, COMPILES and LINKS the runner (was
+parse-blocked). test-zlib advanced from parse-fail to a link-stage
+`undefined symbol: gz_error` — a separate zlib-internal-symbol issue, filed under
+[[feature-c-corpus-zlib]], NOT this macro bug. Regression b171 (parenthesized
+name call + self-ref macro fallback). make test self-host byte-identical;
+c-conformance 195/0.

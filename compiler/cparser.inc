@@ -1352,6 +1352,12 @@ begin
   callee := inner;
   if ASTKind[inner] = AN_IDENT then
     Result := SymProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_PROCADDR then
+    { `(name)(args)` — a parenthesized bare function name decayed to its address
+      (AN_PROCADDR). Its own proc is the call signature; the callee value is the
+      procaddr node. Enables the C `(gzgetc)(g)` parenthesized-function-name
+      call idiom (zlib's gzgetc macro fallback arm). }
+    Result := ASTIVal[inner]
   else if ASTKind[inner] = AN_CALL then
     { `go()(args)` — the callee is the RESULT of a call whose return type is a
       function pointer; that fn's return signature makes the second `()` an
