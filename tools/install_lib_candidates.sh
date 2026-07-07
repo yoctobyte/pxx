@@ -35,6 +35,8 @@ CTESTSUITE_COMMIT="5c7275656d751de0e68b2d340a95b5681858ed07"
 
 ZLIB_URL="https://github.com/madler/zlib"
 ZLIB_COMMIT="51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"   # v1.3.1 release tag
+TCC_URL="https://github.com/TinyCC/tinycc"
+TCC_COMMIT="a338258d309c888bde96b2d1f206299231a54ddf"   # mob, 2026-07 snapshot
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -164,6 +166,25 @@ EOF
   say "zlib -> $DEST/zlib"
 }
 
+fetch_tcc() {
+  if present tcc; then say "tcc present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$TCC_URL" tcc "$TCC_COMMIT"
+  # tcc needs a generated config.h (./configure) and tccdefs_.h (c2str) before
+  # any .c compiles. Generate them with the host toolchain once; they are part of
+  # the vendored (gitignored) tree, not committed.
+  ( cd "$DEST/tcc" && ./configure >/dev/null 2>&1 && make tccdefs_.h >/dev/null 2>&1 ) \
+    || say "tcc: WARN config.h / tccdefs_.h generation failed (need host gcc)"
+  cat > "$DEST/tcc/PROVENANCE.md" <<EOF
+# TinyCC Candidate
+Upstream: ${TCC_URL}
+Commit: ${TCC_COMMIT}
+Setup: ./configure (config.h) + make tccdefs_.h (c2str) run at fetch time.
+Paths: full source tree (*.c, *.h). Vendor source — gitignored, never committed.
+License: LGPL (see COPYING).
+EOF
+  say "tcc -> $DEST/tcc"
+}
+
 fetch_sqlite() {
   if present sqlite; then say "sqlite present (FORCE=1 to re-fetch) — skip"; return 0; fi
   command -v curl >/dev/null 2>&1 || die "curl required for sqlite"
@@ -197,14 +218,15 @@ mkdir -p "$DEST"
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc ;;
     lua)           fetch_lua ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;
     c-testsuite)   fetch_c_testsuite ;;
     zlib)          fetch_zlib ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib)" ;;
+    tcc)           fetch_tcc ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

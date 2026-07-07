@@ -36,3 +36,19 @@ general cfront bugs (declarators, initializers, macro corners) like zlib surface
 ## Gate
 `make test-tcc` advances (tcc builds + runs a hello.c to a correct result); file
 each compiler bug it surfaces as its own Track C/A ticket with a minimal repro.
+
+
+## Started 2026-07-07 — fetch wired, first blocker found
+- fetch_tcc added to tools/install_lib_candidates.sh (TCC_URL/COMMIT pinned to
+  a338258d, TinyCC mob). Setup that works: `./configure` (config.h) + `make
+  tccdefs_.h` (c2str.exe from conftest.c) — both run at fetch time with host gcc.
+- pxx PARSES most of libtcc.c (the amalgam core, 10k+ lines) with
+  `-Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/tcc`.
+- FIRST BLOCKER: `libtcc.c:10545: call to undeclared function: __builtin_va_copy`.
+  pxx supports __builtin_va_start/va_arg/va_end but not __builtin_va_copy (copy a
+  va_list). Likely a small add mirroring the va_start handling in ParseCPrimary
+  (cparser.inc). File as its own Track C ticket + minimal repro, then continue the
+  parse to surface the next blockers (expect a cascade like zlib).
+- NO runner/oracle yet: next is test/tcc/runner.c (unity include of the core .c)
+  + make test-tcc (gcc oracle: tcc compiling a hello.c). Watch for unity macro
+  leaks (#undef as needed, cf. zlib COPY).
