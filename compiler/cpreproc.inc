@@ -213,11 +213,17 @@ begin
   a := p;
   while (p <= last) and CPIsIdentChar(line[p]) do Inc(p);
   b := p - 1;
+  { Kill EVERY live entry with this name: repeated #define of the same macro
+    stacks entries (newest-wins lookup), so a single tombstone would just
+    re-expose the previous definition. tcc re-includes tcc.h per file, each
+    pass re-defining `_tcc_error`; its `#undef _tcc_error` must clear them all
+    or the real function definition gets renamed by a stale macro. }
   mi := CPFindMacro(line, a, b);
-  if mi >= 0 then
+  while mi >= 0 do
   begin
     CPMNameLen[mi] := -1;
     if DebugTrace then writeln('C preprocessor: undef #', mi);
+    mi := CPFindMacro(line, a, b);
   end;
 end;
 

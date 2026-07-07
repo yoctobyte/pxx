@@ -1011,6 +1011,7 @@ var node, sz, si, depth, recId, arrLen, savedPos: Integer; tk, elemTk: TTypeKind
 begin
   Next; { sizeof }
   sz := TARGET_PTR_SIZE;
+  node := -1;
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -1184,6 +1185,34 @@ begin
       Next;
     end;
     Expect(tkRParen, ')');
+    { `sizeof (expr)->field` / `sizeof (expr).field` (C 6.5.3: the postfix
+      chain is part of the operand), e.g. tcc's
+      `sizeof ((Stab_Sym*)0)->n_value`. Only fires when the parenthesized
+      operand was parsed as a general expression (node >= 0); the field access
+      after the `)` belongs to sizeof, so consume it and size the field.
+      tkDot covers both `.` and `->`. }
+    if (node >= 0) and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      Next;   { consume '.' / '->' }
+      fieldName := CurTok.SVal;
+      recId := CNodePtrElemRec(node);
+      if recId = REC_NONE then recId := ResolveNodeRec(node);
+      if recId <> REC_NONE then
+      begin
+        if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+        begin
+          arrLen := RecFieldArrLen(recId, fieldName);
+          elemTk := RecFieldType(recId, fieldName);
+          if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
+          else sz := arrLen * TypeSize(elemTk);
+        end
+        else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
+        else if RecFieldType(recId, fieldName) = tyRecord then
+          sz := RecSize(RecFieldRecId(recId, fieldName))
+        else sz := TypeSize(RecFieldType(recId, fieldName));
+      end;
+      Next;   { consume the field name }
+    end;
   end
   else if CurTok.Kind = tkIdent then
   begin
@@ -1345,6 +1374,17 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      { `&(call())` is a C constraint violation only the crtl setjmp macro's
+        `&(env)` can produce — when env is a POINTER-VALUED call (tcc's
+        `setjmp(_tcc_setjmp(...))`, glibc array-decay style). The pointer value
+        already IS the buffer address, so yield the call itself; a struct env
+        (an lvalue) still takes the normal address-of path. }
+      if (ASTKind[operand] = AN_CALL) and
+         (IntToTypeKind(ASTTk[operand]) = tyPointer) then
+      begin
+        Result := operand;
+        Exit;
+      end;
       node := AllocNode(AN_ADDR);
       ASTLeft[node] := operand;
       ASTIVal[node] := ResolveNodeRec(operand);
@@ -1418,13 +1458,22 @@ end;
   returns the node whose value is the function address (the var/field itself,
   never the deref) so `(*p->cb)(args)` calls through `p->cb`. }
 function CNodeProcSig(node: Integer; var callee: Integer): Integer;
-var inner, recId: Integer; fname: AnsiString;
+var inner, recId, commaCallee: Integer; fname: AnsiString;
 begin
   Result := -1; callee := node;
   if node < 0 then Exit;
   inner := node;
   while ASTKind[inner] = AN_DEREF do inner := ASTLeft[inner];
   callee := inner;
+  if ASTKind[inner] = AN_COMMA then
+  begin
+    { `(a, fn)(args)` — tcc's tcc_error_noabort macro: the comma expr yields the
+      callee. The signature comes from the RIGHT arm; the callee stays the WHOLE
+      comma node so the left arm's side effects still run (AN_CALL_IND evaluates
+      its callee node as a value). }
+    Result := CNodeProcSig(ASTRight[inner], commaCallee);
+    Exit;
+  end;
   if ASTKind[inner] = AN_IDENT then
     Result := SymProcSig[ASTIVal[inner]]
   else if ASTKind[inner] = AN_PROCADDR then
@@ -2010,7 +2059,19 @@ begin
           { A typedef name is a type only in type position (before any base
             type is seen); otherwise it is the declarator name — stop.
             `union`/`enum` keywords are idents in this lexer. }
-          if (not sawBase) and (CurTok.SVal = 'union') then
+          { Storage classes / qualifiers may appear anywhere in the
+            declaration-specifier sequence, including AFTER the type
+            (`TCCSem static rt_sem;` — tcc). They're idents in this lexer;
+            consume without affecting the type. (A LEADING `static` never
+            reaches here — the callers' IsCTypeTok gate fails on it and the
+            block-scope statement parser handles it explicitly.) }
+          if (CurTok.SVal = 'static') or (CurTok.SVal = 'extern') or
+             (CurTok.SVal = 'inline') or (CurTok.SVal = 'volatile') or
+             (CurTok.SVal = 'register') or (CurTok.SVal = 'restrict') or
+             (CurTok.SVal = '__inline') or (CurTok.SVal = '__inline__') or
+             (CurTok.SVal = '_Noreturn') then
+            Next
+          else if (not sawBase) and (CurTok.SVal = 'union') then
           begin
             Next;
             base := tyRecord; isAggBase := True; sawBase := True;
@@ -2432,19 +2493,47 @@ begin
       seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
       head := seq; tail := seq;
     end;
-    Eat(tkSemicolon);
-    blk := AllocNode(AN_BLOCK);
-    if CLocalStaticDecl and (head <> -1) then
+    if CurTok.Kind <> tkComma then
     begin
-      seq := AllocNode(AN_SEQ);
-      ASTLeft[seq] := CWrapStaticInitOnce(head); ASTRight[seq] := -1;
-      ASTLeft[blk] := seq;
+      Eat(tkSemicolon);
+      blk := AllocNode(AN_BLOCK);
+      if CLocalStaticDecl and (head <> -1) then
+      begin
+        seq := AllocNode(AN_SEQ);
+        ASTLeft[seq] := CWrapStaticInitOnce(head); ASTRight[seq] := -1;
+        ASTLeft[blk] := seq;
+      end
+      else
+        ASTLeft[blk] := head;
+      Result := blk;
+      Exit;
+    end;
+    { `int (*fp)(int, char**), ret;` (tcc_run) — more declarators follow the
+      inline fn-ptr. Fall into the multi-declarator loop below; the siblings'
+      scalar base is the fn-ptr's RETURN type (the declaration's specifier
+      base). head/tail keep any fn-ptr initializer already collected. }
+    scalarTk := Procs[procSig].RetType;
+    scalarRec := CTypeBaseRec;
+    hadStar := False;
+    Next;   { consume the ',' — the loop handles stars/name of each sibling }
+    declPtr := 0;
+    while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+    if declPtr > 0 then
+    begin
+      declTk := tyPointer; declPtrDepth := declPtr;
+      declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
+      if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
+      else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
     end
     else
-      ASTLeft[blk] := head;
-    Result := blk;
-    Exit;
-  end;
+    begin
+      declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
+      declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+    end;
+    declProcSig := -1;
+  end
+  else
+  begin
   { Multi-declarator support `T *a, b, *c;`: the `*` binds to each declarator, not
     the base. ParseCDeclType folded the FIRST declarator's star into baseTk, so
     recover the pre-star scalar base; each later declarator gets its own stars.
@@ -2456,6 +2545,7 @@ begin
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
   declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
   head := -1; tail := -1;
+  end;
   while True do
   begin
     if CurTok.Kind <> tkIdent then Break;
@@ -3091,7 +3181,7 @@ begin
   body := ParseCStatementAST;
   if CurTok.Kind = tkWhile then Next else Error('while expected after do');
   Expect(tkLParen, '(');
-  cond := ParseCExpr;
+  cond := ParseCCommaExpr;   { C `expression`: do..while (++p, f); — tcc }
   Expect(tkRParen, ')');
   Eat(tkSemicolon);
 
