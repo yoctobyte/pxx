@@ -168,6 +168,55 @@ begin
   Result := node;
 end;
 
+{ C 6.3.1.3: a cast to a narrower integer type TRUNCATES the value and
+  re-extends it by the TARGET's signedness. AN_PTR_CAST alone only retags, so
+  `(char)0x80` kept the full-width 0x80 and `c == (char)c` compared equal —
+  tcc's imm8-fit check then encoded `cmp $0x80` as a sign-extended imm8
+  (0xffffff80), miscompiling every C program it built (b192). Build
+  ((x & mask) ^ signbit) - signbit for signed targets, x & mask for unsigned.
+  Plain C char is SIGNED on x86-64/Linux, so tyChar extends. }
+function CMakeNarrowIntCast(operand: Integer; castTk: TTypeKind): Integer;
+var bits: Integer; isSgn: Boolean; m, sb: Int64;
+    lit, n1: Integer;
+begin
+  bits := TypeSize(castTk) * 8;
+  isSgn := castTk in [tyChar, tyInt8, tyInt16, tyInt32];
+  m := (Int64(1) shl bits) - 1;
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := m; ASTTk[lit] := Ord(tyInt64);
+  n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkAnd);
+  ASTLeft[n1] := operand; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInt64);
+  Result := n1;
+  if isSgn then
+  begin
+    sb := Int64(1) shl (bits - 1);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := sb; ASTTk[lit] := Ord(tyInt64);
+    n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkXor);
+    ASTLeft[n1] := Result; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInt64);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := sb; ASTTk[lit] := Ord(tyInt64);
+    Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkMinus);
+    ASTLeft[Result] := n1; ASTRight[Result] := lit; ASTTk[Result] := Ord(tyInt64);
+  end;
+end;
+
+{ C99 6.7.8p21: an aggregate initializer with fewer initializers than members
+  zero-initializes the remainder (and 6.7.8p10 semantics for what "zero" means).
+  Lower as an `x := Default(T)` assignment BEFORE the listed element stores:
+  AN_DEFAULT on a record / fixed-array lhs becomes IR_DEFAULT_MEM, a whole-
+  object zero of RecSize/ArrLen*elemSize bytes. Without this, a local
+  `struct scope f = { 0 };` left every member after the first as stack
+  garbage — tcc's self-compile read a garbage Sym* from exactly that
+  pattern (feature-c-corpus-tcc, b189). }
+function CMakeZeroLocal(idx: Integer; tk: TTypeKind): Integer;
+var idn, dn, asn, seq: Integer;
+begin
+  idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(tk);
+  dn := AllocNode(AN_DEFAULT);
+  asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := dn;
+  ASTTk[asn] := Ord(tk);
+  seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+  Result := seq;
+end;
+
 function CMakeBinop(cTok, l, r: Integer): Integer;
 var node, ivalOp: Integer;
 begin
@@ -1361,6 +1410,14 @@ begin
       ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
       Result := node; Exit;
     end;
+    { narrow integer cast: truncate + re-extend by target signedness
+      (C 6.3.1.3) — see CMakeNarrowIntCast. Pointer-width and 64-bit casts
+      keep the plain retag (no value change at full width). }
+    if (castDepth = 0) and TypeIsOrdinal(castTk) and (not TypeIsFloat(castTk))
+       and (castTk <> tyBoolean) and (castTk <> tyPointer)
+       and (TypeSize(castTk) < 8)
+       and TypeIsOrdinal(opTk) and (not TypeIsFloat(opTk)) then
+      operand := CMakeNarrowIntCast(operand, castTk);
     node := AllocNode(AN_PTR_CAST);
     ASTLeft[node] := operand;
     ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
@@ -2751,6 +2808,14 @@ begin
         SymPtrBaseTk[idx] := declBaseTk;
         SymPtrBaseRec[idx] := declBaseRec;
       end;
+      { C99 6.7.8p21: any brace initializer zero-fills the tail the list does
+        not reach — zero the whole array before the element stores. }
+      if (nArrElems > 0) or (recArrInitCount > 0) then
+      begin
+        seq := CMakeZeroLocal(idx, declTk);
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
       for ei := 0 to nArrElems - 1 do
       begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
@@ -2785,7 +2850,13 @@ begin
                 begin
                   fTk := UFldTk[recBase + fldI];
                   initExpr := ParseCExpr;
-                  if CurTok.Kind in [tkComma, tkEnd] then
+                  if fTk = tyRecord then
+                    { record-typed field: a flat scalar initializer here is
+                      brace-elision territory (p90 ticket); dropping the store
+                      is safe for the zero case since the whole aggregate was
+                      just zero-filled, while storing a scalar into a record
+                      slot miscompiled (stack stomp). }
+                  else if CurTok.Kind in [tkComma, tkEnd] then
                   begin
                     idn := AllocNode(AN_IDENT);
                     ASTIVal[idn] := idx;
@@ -2878,6 +2949,12 @@ begin
               fields as stack garbage. Nested aggregate fields are still skipped
               conservatively. }
             Next;   { consume the opening brace }
+            { C99 6.7.8p21: zero the whole record first; the listed field
+              stores then overwrite their slots. `= { 0 }` and partial lists
+              leave no stack garbage in the tail (tcc b189). }
+            seq := CMakeZeroLocal(idx, declTk);
+            if head = -1 then head := seq else ASTRight[tail] := seq;
+            tail := seq;
             recBase := UClsFBase[scalarRec - REC_UCLASS_BASE];
             fldI := 0;
             while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
@@ -2899,7 +2976,13 @@ begin
                 begin
                   fTk := UFldTk[recBase + fldI];
                   initExpr := ParseCExpr;
-                  if CurTok.Kind in [tkComma, tkEnd] then
+                  if fTk = tyRecord then
+                    { record-typed field: a flat scalar initializer here is
+                      brace-elision territory (p90 ticket); dropping the store
+                      is safe for the zero case since the whole aggregate was
+                      just zero-filled, while storing a scalar into a record
+                      slot miscompiled (stack stomp). }
+                  else if CurTok.Kind in [tkComma, tkEnd] then
                   begin
                     idn := AllocNode(AN_IDENT);
                     ASTIVal[idn] := idx;
@@ -7002,6 +7085,20 @@ begin
         begin
           declTk := Ord(tyPointer); declRec := REC_NONE;
           declElemTk := baseElemTk; declElemRec := baseElemRec;
+          { `int nb, *lv;` — a starred LATER declarator over a non-pointer
+            base type: baseElemTk is only populated when the decl type itself
+            was a pointer, so the pointee here fell to tyUnknown and
+            `lv[i]` loads defaulted to 8 bytes. A 64-bit read of a 4-byte int
+            slot dragged the neighbouring int into the upper half — tcc's
+            symbol-version table (`int nb_local_ver, *local_ver;`) indexed
+            sym_versions[2^32] and crashed (feature-c-corpus-tcc, b191).
+            The pointee of such a declarator is the base scalar itself. }
+          if (IntToTypeKind(declElemTk) = tyUnknown) and
+             (IntToTypeKind(baseScalarTk) <> tyPointer) then
+          begin
+            declElemTk := baseScalarTk;
+            declElemRec := baseRecId;    { struct S s, *p: keep the record }
+          end;
           { Pointer-to-pointer field `T **m`: the immediate element is a pointer
             (stride = pointer size, so declElemTk = tyPointer), but KEEP the base
             record so `p->m[i]->field` resolves the field offset — mirrors the

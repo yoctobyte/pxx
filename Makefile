@@ -833,6 +833,16 @@ test-core: $(COMPILER)
 	/tmp/cptr_deref_stride_b18726; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_string_noparen_b188.c /tmp/csizeof_string_noparen_b18826
 	/tmp/csizeof_string_noparen_b18826; test "$$?" = "42"
+	# b189-b192 (feature-c-corpus-tcc self-compile arc): {0} zero-fill,
+	# &floatField as pointer arg, `int nb, *lv;` declarator, narrow-cast extend
+	./$(COMPILER) test/czeroinit_partial_b189.c /tmp/czeroinit_partial_b18926
+	/tmp/czeroinit_partial_b18926; test "$$?" = "42"
+	./$(COMPILER) test/caddr_float_field_b190.c /tmp/caddr_float_field_b19026
+	/tmp/caddr_float_field_b19026; test "$$?" = "42"
+	./$(COMPILER) test/ccomma_star_declarator_b191.c /tmp/ccomma_star_declarator_b19126
+	/tmp/ccomma_star_declarator_b19126; test "$$?" = "42"
+	./$(COMPILER) test/cnarrow_cast_extend_b192.c /tmp/cnarrow_cast_extend_b19226
+	/tmp/cnarrow_cast_extend_b19226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

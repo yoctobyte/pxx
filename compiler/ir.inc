@@ -3393,6 +3393,16 @@ begin
     AN_ADDR:
     begin
       Result := IRLowerAddress(ASTLeft[node]);
+      { The address VALUE is a pointer no matter what it points at.
+        IRLowerAddress tags its node with the pointee's type; for a float
+        pointee (`&rec.dblField`, `&globalDouble`) that float tk leaked into
+        C call-arg marshalling, whose float->int-param truncation then
+        cvttsd2si'd the ADDRESS BITS — tcc's write_ldouble(ptr, &vtop->c.ld)
+        received s=0 and crashed (feature-c-corpus-tcc, b190). Retag only the
+        float case (minimal surface; ordinal-tagged addresses behave). }
+      if CProgramMode and (Result >= 0) and
+         TypeIsFloat(IntToTypeKind(IRTk[Result])) then
+        IRTk[Result] := Ord(tyPointer);
     end;
 
     AN_SLOTADDR:
