@@ -3409,9 +3409,16 @@ begin
 end;
 
 function ParseCBlockAST: Integer;
-var blockNode, seqNode, stmtNode, lastSeq: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj: Integer;
 begin
   Expect(tkBegin, '{');
+  { C block scope: an inner `int v` SHADOWS an outer v (FindSym's hash chain
+    is newest-first, so the inner decl wins while in scope) and DIES at the
+    closing brace — implemented by blanking the names of locals declared
+    inside the block on exit (below). tcc's struct_decl re-declares
+    `int v = btype.ref->v` in a nested block; without scoping it clobbered
+    the outer v and pushed a garbage symbol token. }
+  scopeMark := SymCount;
   blockNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
@@ -3429,6 +3436,25 @@ begin
     end;
   end;
   Expect(tkEnd, '}');
+  { End of scope: unhook this block's locals from their hash chains so name
+    lookup can't bind them anymore. AST nodes already hold sym INDICES, which
+    stay valid (codegen, DWARF); block-scope statics are skGlobal (BSS) and
+    survive. Splice, don't rename: renamed entries stayed in the chains and
+    turned hot lookups into full-chain misses (libtcc 12s -> hang). The dead
+    syms are near the chain head (just allocated), so the walk is short. }
+  for si := SymCount - 1 downto scopeMark do
+    if (Syms[si].Kind = skLocal) and (Syms[si].Name <> '') then
+    begin
+      hh := SymNameFoldHash(Syms[si].Name);
+      if SymHashHead[hh] = si then
+        SymHashHead[hh] := SymHashPrev[si]
+      else
+      begin
+        hj := SymHashHead[hh];
+        while (hj >= 0) and (SymHashPrev[hj] <> si) do hj := SymHashPrev[hj];
+        if hj >= 0 then SymHashPrev[hj] := SymHashPrev[si];
+      end;
+    end;
   Result := blockNode;
 end;
 
