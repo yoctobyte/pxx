@@ -3472,13 +3472,20 @@ begin
     bare 0. Register it here (array of callable pointers when bracketed, else a
     scalar callable pointer) and materialise the brace initializer as
     per-element proc-address PendingInits. }
-  if (CTypeFnPtrName <> '') and (baseTk = tyPointer) then
+  if (((CTypeFnPtrName <> '') or (CTypeProcSig >= 0)) and (baseTk = tyPointer)) and
+     ((CTypeFnPtrName <> '') or (CurTok.Kind = tkIdent)) then
   begin
     { Guard on baseTk = tyPointer: a real inline fn-ptr declarator collapses to a
       pointer, whereas a struct/union global whose LAST member is a fn pointer
       (`struct { void (*f)(void); } g;`) leaves CTypeFnPtrName set as leftover but
-      yields baseTk = tyRecord — that must fall through to the normal var loop. }
-    name := CTypeFnPtrName;
+      yields baseTk = tyRecord — that must fall through to the normal var loop.
+      Also handles a fn-pointer TYPEDEF global `fty gp = &z;` (CTypeProcSig set
+      but no inline CTypeFnPtrName): the name is the next token, and the shared
+      body below registers it callable (SymProcSig) and binds the init address. }
+    if CTypeFnPtrName <> '' then
+      name := CTypeFnPtrName
+    else
+    begin name := CurTok.SVal; Next; end;
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
     wasArr := (CTypeFnPtrArrLen >= -1);
     nArrElems := 0;

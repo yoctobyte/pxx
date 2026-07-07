@@ -773,6 +773,8 @@ test-core: $(COMPILER)
 	/tmp/cconst_logical_ternary_b16426; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/canon_struct_union_members_b165.c /tmp/canon_struct_union_members_b16526
 	/tmp/canon_struct_union_members_b16526; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_typedef_global_b166.c /tmp/cfnptr_typedef_global_b16626
+	/tmp/cfnptr_typedef_global_b16626; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
