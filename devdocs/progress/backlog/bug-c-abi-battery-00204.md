@@ -21,3 +21,13 @@ land (its structs use string/float inits); then diff section by section vs
 
 ## Gate
 Drop 00204.c from test/c-conformance/pxx.skip; runner green.
+
+
+## Triage 2026-07-07
+00204 COMPILES; the first "Arguments:" section prints BLANK where the struct
+fields (`struct s1 { char x[1]; } = {"0"}` ... s17) should appear — so passing a
+struct BY VALUE drops its data across the size classes. This is the whole
+struct-by-value ABI battery (1..17-byte structs, HFA float structs, structs
+through `...`), not a single bug. v180 fixed the 8-byte case; this exercises
+every class + register-return + varargs-of-struct. Large, deep ABI work per size
+class (SysV first, then cross) — focused multi-step session.
