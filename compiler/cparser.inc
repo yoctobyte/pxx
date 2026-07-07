@@ -759,6 +759,32 @@ begin
     Result := Ord(tyChar);
     Exit;
   end;
+  if ASTKind[node] = AN_DEREF then
+  begin
+    { Pointee of an already-deref'd value: `**(&mp)` — the inner `*(&mp)` IS
+      mp, so the outer load's width is mp's pointee (int), not tyInteger's
+      default vs a stale pointer width. `**p` with p a T** reads T. Without
+      these the outer deref of tcc's TOK_GET `**(p)` loaded 8 bytes and every
+      token comparison saw garbage in the high half. }
+    inner := ASTLeft[node];
+    if (inner >= 0) and (ASTKind[inner] = AN_ADDR) then
+    begin
+      Result := CNodePointeeTk(ASTLeft[inner]);   { *(&x) is x }
+      Exit;
+    end;
+    if (inner >= 0) and (ASTKind[inner] = AN_IDENT) and
+       (Syms[ASTIVal[inner]].TypeKind = tyPointer) and
+       (SymPtrDepth[ASTIVal[inner]] >= 2) then
+    begin
+      if SymPtrDepth[ASTIVal[inner]] > 2 then
+        Result := Ord(tyPointer)
+      else
+        Result := SymPtrBaseTk[ASTIVal[inner]];
+      Exit;
+    end;
+    Result := Ord(tyInteger);
+    Exit;
+  end;
   if ASTKind[node] = AN_ADDR then
   begin
     { `*(&x)` — the deref of an address-of yields x's own type. Without this the

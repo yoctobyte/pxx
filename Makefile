@@ -825,6 +825,8 @@ test-core: $(COMPILER)
 	/tmp/ctcc_batch2_b18526 > /dev/null; test "$$?" = "42"
 	./$(COMPILER) test/cblock_scope_b186.c /tmp/cblock_scope_b18626
 	/tmp/cblock_scope_b18626; test "$$?" = "42"
+	./$(COMPILER) test/cptr_deref_stride_b187.c /tmp/cptr_deref_stride_b18726
+	/tmp/cptr_deref_stride_b18726; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

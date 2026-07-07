@@ -1128,6 +1128,33 @@ begin
     Result := IRPointerStride(ASTLeft[node]);
     Exit;
   end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    { `*p` where p is a T**: the deref'd value is a T*, whose ptrdiff stride
+      is T's size — pointer size while still more than two levels deep, else
+      the base scalar/record size. Without this the case fell through to the
+      size-1 default and `++*(p)` stepped BYTES (tcc's TOK_GET walks an int*
+      through an int** and read tokens misaligned). }
+    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_ADDR) then
+    begin
+      { `*(&x)` is x itself — same stride as x (tcc's `++*(&mp)` via the
+        TOK_GET macro's argument substitution). }
+      Result := IRPointerStride(ASTLeft[ASTLeft[node]]);
+      Exit;
+    end;
+    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+       (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyPointer) and
+       (SymPtrDepth[ASTIVal[ASTLeft[node]]] >= 2) then
+    begin
+      if SymPtrDepth[ASTIVal[ASTLeft[node]]] > 2 then
+        elemTk := tyPointer
+      else
+      begin
+        elemTk := IntToTypeKind(SymPtrBaseTk[ASTIVal[ASTLeft[node]]]);
+        recId := SymPtrBaseRec[ASTIVal[ASTLeft[node]]];
+      end;
+    end;
+  end
   else if ASTKind[node] = AN_ASSIGN then
   begin
     Result := IRPointerStride(ASTLeft[node]);
