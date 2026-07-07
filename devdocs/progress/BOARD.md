@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-function-returning-fnptr-declarator | C | 55→50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -37,7 +38,7 @@ _none_
 | bug-c-external-func-address-indirect-call | A | 55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | bug-c-external-func-address-indirect-call |
-| bug-c-function-returning-fnptr-declarator | C | 55 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
+| bug-c-function-returning-fnptr-declarator | A | 50 | bug |  | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50→60 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
@@ -719,7 +720,6 @@ _none_
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [C] bug-c-float-single-precision
-- [p 55] [C] bug-c-function-returning-fnptr-declarator
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-preproc-paste-rescan
 - [p 55] [C] bug-c-ptrdiff-of-addr-elem
@@ -733,6 +733,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] bug-c-function-returning-fnptr-declarator
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-designated-init-compound-literals
 - [p 45] [C] feature-c-gtk3-header-final-wiring
