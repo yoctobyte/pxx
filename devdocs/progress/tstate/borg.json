@@ -203,6 +203,13 @@
    "new_red": [],
    "sha": "9a0fed867d6aaba92d3f4da4bc5a3c2456ad68b6",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-07T20:03:09Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "116230b14c47cd09bf81fdda0ddcce7c8c70f465",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1056,7 +1063,11 @@
   "test-core#644": "pass",
   "test-core#645": "pass",
   "test-core#646": "pass",
+  "test-core#647": "pass",
+  "test-core#648": "pass",
+  "test-core#649": "pass",
   "test-core#65": "pass",
+  "test-core#650": "pass",
   "test-core#66": "pass",
   "test-core#67": "pass",
   "test-core#68": "pass",
@@ -1261,11 +1272,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-07T19:49:09Z",
-  "sha": "9a0fed867d6aaba92d3f4da4bc5a3c2456ad68b6",
+  "date": "2026-07-07T20:03:09Z",
+  "sha": "116230b14c47cd09bf81fdda0ddcce7c8c70f465",
   "tier": "full",
   "verdict": "RED",
-  "wall": 375.0
+  "wall": 365.8
  },
  "open_regressions": [
   {

@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall |
 |------|-------------|------|---------|------|
-| borg | `9a0fed867d6a` | 2026-07-07T19:49:09Z | RED | 375.0s |
+| borg | `116230b14c47` | 2026-07-07T20:03:09Z | RED | 365.8s |
 
 ## Open regressions
 - **test-cjson#00** (borg): bad `ea8fc44a77bf`, last good `d1e08f225074`, 1 commit(s) in range
