@@ -21,12 +21,29 @@
   AN_WRITE/AN_WRITELN machinery Pascal's writeln and BASIC's PRINT use
   ({}/{d}/{s}/{c}/{any} placeholders; {{ }} escapes NOT handled).
 
+  Sub-ticket 2 (zig-structs-and-pointers) adds, still purely frontend-side
+  (structs reuse the UClass/AddUField machinery exactly like rparser.inc,
+  pointers/arrays reuse tyPointer/AN_ADDR/AN_DEREF and AllocArray/AN_INDEX):
+  - top-level `const Name = struct { f: T, ... };` with SCALAR fields only;
+    `var s: Name = undefined;`, field read/write `s.f`, and struct-literal
+    initializers `var s = Name{ .f = expr, ... };` lowered to per-field
+    assignments (same no-construct-node shape as the Rust skeleton).
+  - `*T` / `*const T` pointers to scalars: `&x` address-of (plain variables
+    only), `p.*` deref in expressions and as an assignment target, pointer
+    variables (annotated or inferred from `&x`) and pointer fn params.
+  - `[N]T` fixed arrays of scalars: `var a: [N]T = undefined;`, indexing
+    `a[i]` read/write, and `a.len`.
+  Postfix is single-level (fields are scalar, so `s.f.g` cannot arise;
+  no `&a[i]`, no pointer-to-struct auto-deref, no array literals).
+
   Known semantic deviations, accepted for a probe skeleton:
   - `continue` inside a `while ... : (expr)` loop skips the continue
     expression (Zig runs it); the test avoids that combination.
   - No integer overflow/underflow safety checks, no comptime, no error
-    unions/optionals/slices/structs — see the umbrella ticket's non-goals.
+    unions/optionals/slices — see the umbrella ticket's non-goals.
   - `const` is not enforced as immutable (parsed like `var`).
+  - Compound assignment (`+=` …) works on plain variables only, not on
+    `s.f` / `a[i]` / `p.*` targets (those take plain `=`).
   - `/` and `%` follow the shared IR's division semantics (no divTrunc
     distinction), fine for the positive-operand test programs. }
 
@@ -35,9 +52,15 @@ function ZParseBlock: Integer; forward;
 function ZParseStatement: Integer; forward;
 function ZParseIf: Integer; forward;
 
-function ZTypeKindFromName(const name: AnsiString): TTypeKind;
+{ Zig type name -> TTypeKind. Sets LastTypeRecId when the name is a known
+  struct (the AllocVar/AddUField convention every frontend uses to pass a
+  record id alongside tyRecord). allowStruct=False rejects struct names —
+  fn params/returns and struct fields stay scalar in this skeleton. }
+function ZTypeKindFromName(const name: AnsiString; allowStruct: Boolean): TTypeKind;
+var ci: Integer;
 begin
   Result := tyUnknown;
+  LastTypeRecId := REC_NONE;
   if name = 'i8' then Result := tyInt8
   else if name = 'u8' then Result := tyUInt8
   else if name = 'i16' then Result := tyInt16
@@ -52,11 +75,34 @@ begin
   { void: callers ignore the value; the unused Result slot trick C's void
     and the Rust skeleton's () already use. }
   else if name = 'void' then Result := tyInteger
-  else Error('Zig: unknown type ' + name + ' (skeleton supports the fixed-width integer types, bool and void only)');
+  else
+  begin
+    ci := FindUClass(name);
+    if ci >= 0 then
+    begin
+      if not allowStruct then
+        Error('Zig: struct type ' + name + ' is only allowed for local variables in the skeleton (scalar fn params/returns and struct fields only)');
+      LastTypeRecId := REC_UCLASS_BASE + ci;
+      Result := tyRecord;
+    end
+    else
+      Error('Zig: unknown type ' + name + ' (skeleton supports the fixed-width integer types, bool, void and declared struct names)');
+  end;
+end;
+
+{ Prime the LastTypePointer* globals AllocVar/AllocParam read for tyPointer
+  symbols: a single-level pointer to a scalar element type. }
+procedure ZSetPtrType(elemTk: TTypeKind);
+begin
+  LastTypePointerElemTk := elemTk;
+  LastTypePointerElemRec := REC_NONE;
+  LastTypePointerDepth := 1;
+  LastTypePointerBaseTk := Ord(elemTk);
+  LastTypePointerBaseRec := REC_NONE;
 end;
 
 function ZParsePrimary: Integer;
-var node, symIdx, procIdx, argNode, lastArg: Integer;
+var node, symIdx, procIdx, argNode, lastArg, idxNode, postNode, fTokIdx: Integer;
     name: AnsiString;
 begin
   case CurTok.Kind of
@@ -116,7 +162,57 @@ begin
       end;
       symIdx := FindSym(name);
       if symIdx < 0 then Error('Zig: undefined variable ' + name);
-      Result := RMakeIdent(symIdx);
+      node := RMakeIdent(symIdx);
+      { Postfix: a[i] / s.field / p.* / a.len — single level only (struct
+        fields are scalar in the skeleton, so chains cannot arise). }
+      if CurTok.Kind = tkLBrack then
+      begin
+        if not Syms[symIdx].IsArray then Error('Zig: [] index on non-array variable ' + name);
+        Next;
+        idxNode := ZParseExpr;
+        Expect(tkRBrack, ']');
+        postNode := AllocNode(AN_INDEX);
+        ASTLeft[postNode] := node;
+        ASTRight[postNode] := idxNode;
+        ASTTk[postNode] := Ord(Syms[symIdx].ElemType);
+        node := postNode;
+      end
+      else if CurTok.Kind = tkDot then
+      begin
+        Next;
+        if CurTok.Kind = tkStar then
+        begin
+          if Syms[symIdx].TypeKind <> tyPointer then Error('Zig: .* deref on non-pointer variable ' + name);
+          Next;
+          postNode := AllocNode(AN_DEREF);
+          ASTLeft[postNode] := node;
+          ASTTk[postNode] := Ord(Syms[symIdx].PtrElemTk);
+          node := postNode;
+        end
+        else if (CurTok.Kind = tkIdent) and Syms[symIdx].IsArray and (CurTok.SVal = 'len') then
+        begin
+          { Fixed-size array: .len is a compile-time constant. }
+          Next;
+          postNode := AllocNode(AN_INT_LIT);
+          ASTIVal[postNode] := Syms[symIdx].ArrLen;
+          ASTTk[postNode] := Ord(tyInt64);
+          node := postNode;
+        end
+        else if CurTok.Kind = tkIdent then
+        begin
+          if Syms[symIdx].TypeKind <> tyRecord then Error('Zig: field access on non-struct variable ' + name);
+          fTokIdx := TokPos - 1;
+          postNode := AllocNode(AN_FIELD);
+          ASTLeft[postNode] := node;
+          ASTSOffset[postNode] := Tokens[fTokIdx].SOffset;
+          ASTSLen[postNode] := Tokens[fTokIdx].SLen;
+          ASTTk[postNode] := Ord(RecFieldType(Syms[symIdx].RecName, CurTok.SVal));
+          node := postNode;
+          Next;
+        end
+        else Error('Zig: expected field name, * or len after .');
+      end;
+      Result := node;
     end;
     else
     begin
@@ -127,8 +223,26 @@ begin
 end;
 
 function ZParseUnary: Integer;
-var node: Integer;
+var node, symIdx: Integer;
 begin
+  if CurTok.Kind = tkAmp then
+  begin
+    { &x address-of — plain variables only (no &a[i] / &s.f in the skeleton;
+      keeping the operand an AN_IDENT also lets var-decl inference read the
+      addressed symbol's type straight off ASTLeft). }
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Zig: & needs a plain variable operand (skeleton)');
+    symIdx := FindSym(CurTok.SVal);
+    if symIdx < 0 then Error('Zig: undefined variable ' + CurTok.SVal);
+    if Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyRecord) then
+      Error('Zig: & on arrays/structs is not supported by the skeleton');
+    Next;
+    node := AllocNode(AN_ADDR);
+    ASTLeft[node] := RMakeIdent(symIdx);
+    ASTTk[node] := Ord(tyPointer);
+    Result := node;
+    Exit;
+  end;
   if CurTok.Kind = tkMinus then
   begin
     Next;
@@ -366,44 +480,144 @@ end;
 { `var name [: T] = expr;` / `const name [: T] = expr;` — const is parsed
   like var (no immutability enforcement in the skeleton). `= undefined`
   declares without initializing. Type inferred from the initializer when
-  no annotation is given (Zig infers pervasively). Trailing `;` left to
-  the caller. }
+  no annotation is given (Zig infers pervasively). Annotation forms:
+  scalar name, struct name, `*T` / `*const T` (scalar T), `[N]T` (scalar T,
+  N an integer literal; arrays take `= undefined` only — no array
+  literals). RHS forms besides plain expressions: a struct literal
+  `Name{ .f = expr, ... }` lowered to per-field assignments (the Rust
+  skeleton's no-construct-node shape), and `&x` whose pointer type is
+  inferred from the addressed variable. Trailing `;` left to the caller. }
 function ZParseVarDecl: Integer;
-var name: AnsiString; symIdx, rhsNode, node: Integer;
-    vtype: TTypeKind; hasType: Boolean;
+var name, fname: AnsiString;
+    symIdx, rhsNode, node, ci, fTokIdx, identNode, fieldNode, seq, arrLen: Integer;
+    vtype, ptrElemTk, arrElemTk: TTypeKind; hasType, isPtr, isArr: Boolean;
+    declRec: Integer;
 begin
   Next; { var / const }
   if CurTok.Kind <> tkIdent then Error('Zig: expected name after var/const');
   name := CurTok.SVal;
   Next;
-  vtype := tyInt64; hasType := False;
+  vtype := tyInt64; hasType := False; declRec := REC_NONE;
+  isPtr := False; ptrElemTk := tyUnknown;
+  isArr := False; arrElemTk := tyUnknown; arrLen := 0;
   if CurTok.Kind = tkColon then
   begin
     Next;
-    if CurTok.Kind <> tkIdent then Error('Zig: expected type name after :');
-    vtype := ZTypeKindFromName(CurTok.SVal);
+    if CurTok.Kind = tkStar then
+    begin
+      Next;
+      if CurTok.Kind = tkConst then Next; { *const T — constness ignored }
+      if CurTok.Kind <> tkIdent then Error('Zig: expected type name after *');
+      ptrElemTk := ZTypeKindFromName(CurTok.SVal, False);
+      isPtr := True;
+      Next;
+    end
+    else if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      if CurTok.Kind <> tkInteger then Error('Zig: array size must be an integer literal (skeleton)');
+      arrLen := CurTok.IVal;
+      if arrLen <= 0 then Error('Zig: array size must be positive');
+      Next;
+      Expect(tkRBrack, ']');
+      if CurTok.Kind <> tkIdent then Error('Zig: expected element type after [N]');
+      arrElemTk := ZTypeKindFromName(CurTok.SVal, False);
+      isArr := True;
+      Next;
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then Error('Zig: expected type name after :');
+      vtype := ZTypeKindFromName(CurTok.SVal, True);
+      declRec := LastTypeRecId;
+      Next;
+    end;
     hasType := True;
-    Next;
   end;
   Expect(tkAssign, '=');
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'undefined') then
   begin
     Next;
     if not hasType then Error('Zig: `= undefined` needs an explicit type annotation');
-    AllocVar(name, vtype);
+    if isArr then AllocArray(name, arrElemTk, 0, arrLen - 1)
+    else if isPtr then
+    begin
+      ZSetPtrType(ptrElemTk);
+      AllocVar(name, tyPointer);
+    end
+    else
+    begin
+      LastTypeRecId := declRec;
+      AllocVar(name, vtype);
+    end;
     Result := -1;
     Exit;
   end;
+  if isArr then Error('Zig: arrays only take `= undefined` (no array literals in the skeleton)');
+  { struct literal RHS: `Name{ .f = expr, ... }` }
+  if (CurTok.Kind = tkIdent) and (FindUClass(CurTok.SVal) >= 0) and
+     (Tokens[TokPos].Kind = tkBegin) then
+  begin
+    if isPtr then Error('Zig: struct literal assigned to a pointer variable');
+    ci := FindUClass(CurTok.SVal);
+    if hasType and (declRec <> REC_UCLASS_BASE + ci) then
+      Error('Zig: struct literal type does not match the annotation');
+    Next; Expect(tkBegin, '{');
+    LastTypeRecId := REC_UCLASS_BASE + ci;
+    symIdx := AllocVar(name, tyRecord);
+    identNode := RMakeIdent(symIdx);
+    seq := -1;
+    while CurTok.Kind <> tkEnd do
+    begin
+      Expect(tkDot, '.');
+      if CurTok.Kind <> tkIdent then Error('Zig: expected field name after . in struct literal');
+      fname := CurTok.SVal;
+      fTokIdx := TokPos - 1;
+      Next;
+      Expect(tkAssign, '=');
+      rhsNode := ZParseExpr;
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := identNode;
+      ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
+      ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
+      ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, fname));
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := fieldNode;
+      ASTRight[node] := rhsNode;
+      seq := RSeqAppend(seq, node);
+      if not Eat(tkComma) then Break;
+    end;
+    Expect(tkEnd, '}');
+    Result := seq;
+    Exit;
+  end;
   rhsNode := ZParseExpr;
-  if not hasType then
+  if isPtr then
+  begin
+    ZSetPtrType(ptrElemTk);
+    symIdx := AllocVar(name, tyPointer);
+  end
+  else if hasType then
+  begin
+    if vtype = tyRecord then Error('Zig: struct variables take `= undefined` or a struct literal');
+    symIdx := AllocVar(name, vtype);
+  end
+  else if ASTKind[rhsNode] = AN_ADDR then
+  begin
+    { `const p = &x;` — pointer type inferred from the addressed variable
+      (ZParseUnary guarantees ASTLeft is an AN_IDENT). }
+    ZSetPtrType(Syms[ASTIVal[ASTLeft[rhsNode]]].TypeKind);
+    symIdx := AllocVar(name, tyPointer);
+  end
+  else
   begin
     vtype := IntToTypeKind(ASTTk[rhsNode]);
     if vtype = tyUnknown then vtype := tyInt64;
     { Zig's `const x = 42` makes a comptime_int; the closest runtime type
       the skeleton has is i64 for integers, so widen small literals. }
     if vtype = tyInteger then vtype := tyInt64;
+    symIdx := AllocVar(name, vtype);
   end;
-  symIdx := AllocVar(name, vtype);
   node := AllocNode(AN_ASSIGN);
   ASTLeft[node] := RMakeIdent(symIdx);
   ASTRight[node] := rhsNode;
@@ -566,7 +780,20 @@ begin
     Exit;
   end;
 
-  Result := ZParseExpr;   { bare call statement }
+  Result := ZParseExpr;   { bare call statement, or a postfix lvalue }
+  { `s.f = e;` / `a[i] = e;` / `p.* = e;` — the plain-variable dispatch above
+    only catches ident-then-assign-op, so postfix targets land here as a
+    parsed expression followed by `=`. Plain `=` only (no compound). }
+  if (CurTok.Kind = tkAssign) and
+     ((ASTKind[Result] = AN_FIELD) or (ASTKind[Result] = AN_INDEX) or
+      (ASTKind[Result] = AN_DEREF)) then
+  begin
+    Next;
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := Result;
+    ASTRight[node] := ZParseExpr;
+    Result := node;
+  end;
   Expect(tkSemicolon, ';');
 end;
 
@@ -582,7 +809,51 @@ begin
   end;
 end;
 
-{ ===== Top-level: fn signature prescan, then body compilation ===== }
+{ ===== Top-level: struct + fn signature prescan, then body compilation ===== }
+
+{ Registers every top-level `const Name = struct { f: T, ... };` as a UClass
+  with laid-out fields — the same AddUClass/AddUField machinery rparser.inc's
+  struct pass uses. Fields must be scalar (no nested structs/arrays/pointers
+  in the skeleton). The token pattern is specific enough that no brace-depth
+  tracking is needed: `struct` only appears in this position. }
+procedure ZRegisterStructs;
+var i, j, ci, curOff, sz, align, nameTokIdx: Integer; tk: TTypeKind;
+begin
+  i := 0;
+  while Tokens[i].Kind <> tkEOF do
+  begin
+    if (Tokens[i].Kind = tkConst) and (Tokens[i + 1].Kind = tkIdent) and
+       (Tokens[i + 2].Kind = tkAssign) and (Tokens[i + 3].Kind = tkIdent) and
+       (GetTokenStr(i + 3) = 'struct') and (Tokens[i + 4].Kind = tkBegin) then
+    begin
+      if FindUClass(GetTokenStr(i + 1)) >= 0 then Error('Zig: duplicate struct ' + GetTokenStr(i + 1));
+      ci := AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
+      UClsIsRecord[ci] := True;
+      curOff := 0; align := 1;
+      j := i + 5;
+      while Tokens[j].Kind <> tkEnd do
+      begin
+        if Tokens[j].Kind = tkEOF then Error('Zig: unterminated struct ' + GetTokenStr(i + 1));
+        if Tokens[j].Kind <> tkIdent then Error('Zig: expected field name in struct ' + GetTokenStr(i + 1));
+        nameTokIdx := j; Inc(j);
+        if Tokens[j].Kind <> tkColon then Error('Zig: expected : after field name in struct ' + GetTokenStr(i + 1));
+        Inc(j);
+        if Tokens[j].Kind <> tkIdent then Error('Zig: expected scalar field type in struct ' + GetTokenStr(i + 1));
+        tk := ZTypeKindFromName(GetTokenStr(j), False);
+        Inc(j);
+        sz := TypeSize(tk);
+        if TypeAlign(tk) > align then align := TypeAlign(tk);
+        curOff := AlignTo(curOff, TypeAlign(tk));
+        AddUField(ci, Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen, curOff, Ord(tk), REC_NONE);
+        Inc(curOff, sz);
+        if Tokens[j].Kind = tkComma then Inc(j);
+      end;
+      UClsAlign[ci] := align;
+      UClsSize_[ci] := AlignTo(curOff, align);
+    end;
+    Inc(i);
+  end;
+end;
 
 { Registers the fn signature starting at Tokens[i] (must be tkFn); returns
   nothing useful beyond the registration side effect. Zig signature shape:
@@ -603,8 +874,21 @@ begin
     pnames[nparams] := GetTokenStr(j); Inc(j);
     if Tokens[j].Kind <> tkColon then Error('Zig: expected : in parameter list of ' + name);
     Inc(j);
-    if Tokens[j].Kind <> tkIdent then Error('Zig: expected parameter type in ' + name);
-    ptypes[nparams] := ZTypeKindFromName(GetTokenStr(j));
+    if Tokens[j].Kind = tkStar then
+    begin
+      { `p: *T` / `p: *const T` pointer parameter — an 8-byte scalar in the
+        same rdi/rsi/rdx/rcx slots; pointee recorded in the body pass. }
+      Inc(j);
+      if Tokens[j].Kind = tkConst then Inc(j);
+      if Tokens[j].Kind <> tkIdent then Error('Zig: expected pointee type after * in ' + name);
+      ZTypeKindFromName(GetTokenStr(j), False); { validate scalar }
+      ptypes[nparams] := tyPointer;
+    end
+    else
+    begin
+      if Tokens[j].Kind <> tkIdent then Error('Zig: expected parameter type in ' + name);
+      ptypes[nparams] := ZTypeKindFromName(GetTokenStr(j), False);
+    end;
     Inc(j);
     Inc(nparams);
     if Tokens[j].Kind = tkComma then Inc(j);
@@ -612,7 +896,7 @@ begin
   Inc(j); { consume ) }
   if Tokens[j].Kind <> tkIdent then Error('Zig: expected return type after ) in fn ' + name);
   retName := GetTokenStr(j);
-  retType := ZTypeKindFromName(retName);
+  retType := ZTypeKindFromName(retName, False);
   if (name = 'main') and (retName = 'void') then mainIsVoid := True;
   procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
   k := procIdx; { silence unused warning on compilers that care }
@@ -637,6 +921,7 @@ procedure ZParseTopLevelFn;
 var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
     pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
+    pElemTk: array[0..3] of TTypeKind;
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Zig: expected function name');
@@ -650,8 +935,20 @@ begin
     if CurTok.Kind <> tkIdent then Error('Zig: expected parameter name');
     pname := CurTok.SVal; Next;
     Expect(tkColon, ':');
-    if CurTok.Kind <> tkIdent then Error('Zig: expected parameter type');
-    ptypes[nparams] := ZTypeKindFromName(CurTok.SVal);
+    pElemTk[nparams] := tyUnknown;
+    if CurTok.Kind = tkStar then
+    begin
+      Next;
+      if CurTok.Kind = tkConst then Next;
+      if CurTok.Kind <> tkIdent then Error('Zig: expected pointee type after *');
+      pElemTk[nparams] := ZTypeKindFromName(CurTok.SVal, False);
+      ptypes[nparams] := tyPointer;
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then Error('Zig: expected parameter type');
+      ptypes[nparams] := ZTypeKindFromName(CurTok.SVal, False);
+    end;
     pnames[nparams] := pname;
     Next;
     Inc(nparams);
@@ -667,6 +964,8 @@ begin
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
+    if ptypes[i] = tyPointer then ZSetPtrType(pElemTk[i]);
+    LastTypeRecId := REC_NONE;
     idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
@@ -704,13 +1003,14 @@ begin
 end;
 
 procedure ParseZigProgram;
-var callPatch, mainIdx: Integer;
+var callPatch, mainIdx, structDepth: Integer;
     mainIsVoid: Boolean;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Zig frontend: only the x86-64 target is supported by the skeleton (feature-zig-frontend)');
 
   mainIsVoid := False;
+  ZRegisterStructs;
   ZRegisterFnSignatures(mainIsVoid);
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('Zig: no fn main() found');
@@ -743,6 +1043,24 @@ begin
             (GetTokenStr(TokPos) = 'std') then
     begin
       while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+      Expect(tkSemicolon, ';');
+    end
+    { `const Name = struct { ... };` — already registered by ZRegisterStructs;
+      skip past the balanced braces and the trailing semicolon. }
+    else if (CurTok.Kind = tkConst) and (Tokens[TokPos].Kind = tkIdent) and
+            (Tokens[TokPos + 1].Kind = tkAssign) and (Tokens[TokPos + 2].Kind = tkIdent) and
+            (GetTokenStr(TokPos + 2) = 'struct') then
+    begin
+      Next; Next; Next; Next; { const Name = struct }
+      Expect(tkBegin, '{');
+      structDepth := 1;
+      while structDepth > 0 do
+      begin
+        if CurTok.Kind = tkEOF then Error('Zig: unterminated struct declaration');
+        if CurTok.Kind = tkBegin then Inc(structDepth)
+        else if CurTok.Kind = tkEnd then Dec(structDepth);
+        Next;
+      end;
       Expect(tkSemicolon, ';');
     end
     else if CurTok.Kind = tkFn then ZParseTopLevelFn

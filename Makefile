@@ -455,6 +455,10 @@ test-core: $(COMPILER)
 	# break/continue, integer / lowered as trunc div, std.debug.print {} placeholders.
 	./$(COMPILER) test/test_zig_skeleton.zig /tmp/test_zig_skeleton26
 	test "$$(/tmp/test_zig_skeleton26)" = "$$(printf 'add gives 5\nscratch 50\nfor-sum 10\nevens 5\nodd-sum 25\nclassify ok\nfib(10) is 55\npair 2 and 4')"
+	# Zig frontend sub-ticket 2 (zig-structs-and-pointers): struct decl/literal/fields,
+	# *T pointers (&x, p.*, pointer params), [N]T fixed arrays + .len -- existing IR only.
+	./$(COMPILER) test/test_zig_structs.zig /tmp/test_zig_structs26
+	test "$$(/tmp/test_zig_structs26)" = "$$(printf 'dist2 25\nq 10 4\nsquares sum 30 len 5\nv 42\nsum 31')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.

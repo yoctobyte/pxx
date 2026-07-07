@@ -2,12 +2,41 @@
 prio: 45  # auto
 ---
 
-# Zig frontend — skeleton landed; full language stays PARKED
+# Zig frontend — skeleton + structs/pointers landed; full language stays PARKED
 
 - **Type:** feature — umbrella (spans Track A + Track B)
-- **Status:** backlog — sub-ticket 1 (skeleton) DONE 2026-07-06 (Track Z);
-  deeper sub-tickets stay parked per the esoteric-probe cap
+- **Status:** backlog — sub-tickets 1 (skeleton, 2026-07-06) and 2
+  (structs-and-pointers, 2026-07-07) DONE (Track Z); deeper sub-tickets
+  (#3 optionals/error-unions onward) stay parked — they need the shared
+  tagged-union/slice primitives (Track A tickets)
 - **Owner:** —
+
+## Sub-ticket 2 landed (2026-07-07, Track Z — user-directed scaffolding pass)
+
+**zig-structs-and-pointers** done, purely frontend-side as the gap map
+predicted (zparser.inc + test + Makefile only; zero shared-internals edits):
+
+- **Structs:** top-level `const Name = struct { f: T, ... };` (scalar fields)
+  registered via the same AddUClass/AddUField prescan rparser.inc uses;
+  `var s: Name = undefined;`, field read/write `s.f`, struct-literal init
+  `var s = Name{ .f = expr, ... };` lowered to per-field AN_ASSIGNs (the
+  Rust no-construct-node shape).
+- **Pointers:** `*T` / `*const T` to scalars — `&x` (AN_ADDR, plain vars
+  only), `p.*` read + assignment target (AN_DEREF), pointer locals
+  (annotated or inferred from `&x` via the AN_ADDR operand's symbol) and
+  pointer fn params (8-byte scalar in the same SysV register slots;
+  pointee recorded through LastTypePointer* → AllocParam).
+- **Arrays:** `var a: [N]T = undefined;` (AllocArray, 0-based), `a[i]`
+  read/write (AN_INDEX), `a.len` folded to an AN_INT_LIT constant.
+- Statement-level postfix lvalues (`s.f = e;` / `a[i] = e;` / `p.* = e;`)
+  parse as expression-then-`=` (plain `=` only; compound stays
+  plain-variable-only). Postfix is single-level by construction (fields
+  are scalar, so chains cannot arise).
+
+Test `test/test_zig_structs.zig` wired into `make test`. **Probe verdict:
+again no shared-internals bug** — record/pointer/array lowering worked
+first try; self-host fixedpoint byte-identical. Cross-target matrix
+offloaded to Track T per the watcher protocol.
 
 ## Skeleton landed (2026-07-06, Track Z)
 
