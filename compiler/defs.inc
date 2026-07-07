@@ -1070,6 +1070,7 @@ var
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
   ProcRetProcSig   : array[0..MAX_PROCS-1] of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
+  CProcHasLocalDef : array[0..MAX_PROCS-1] of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
   ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
   ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
   ProcParamRecId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }

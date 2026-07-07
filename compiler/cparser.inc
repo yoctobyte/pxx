@@ -5290,7 +5290,8 @@ begin
       auto-pulled Pascal unit (pxxcio's __pxx_write/__pxx_read) supplied the
       definition, so the C `extern` is just a forward view of it — keep it
       internal, not a dynamic libc import. }
-    if (not (CProgramMode and not CHeaderMode)) and (Procs[procIdx].BodyAddr < 0) then
+    if (not (CProgramMode and not CHeaderMode)) and (Procs[procIdx].BodyAddr < 0) and
+       (not CProcHasLocalDef[procIdx]) then
     begin
       ProcExternal[procIdx] := True;
       if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
@@ -5309,7 +5310,14 @@ begin
       mark it internal now so a caller compiled earlier emits a fixup (internal)
       call, not an external one. In true header-import mode bodies stay external. }
     if CProgramMode then
-      ProcExternal[procIdx] := False
+    begin
+      { Record that a real in-TU definition exists so a later redundant prototype
+        (a guardless header re-included by sibling .c files, e.g. zlib's gzguts.h)
+        cannot flip it back to external — which would make the pass-2 forward call
+        a dynamic import instead of an internal fixup. }
+      ProcExternal[procIdx] := False;
+      CProcHasLocalDef[procIdx] := True;
+    end
     else
     begin
       ProcExternal[procIdx] := True;
@@ -5322,6 +5330,7 @@ begin
   
   { Otherwise, it has a body! }
   ProcExternal[procIdx] := False;
+  CProcHasLocalDef[procIdx] := True;
   Procs[procIdx].BodyAddr := CodeLen;
   
   { Save scope }

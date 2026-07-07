@@ -785,6 +785,8 @@ test-core: $(COMPILER)
 	/tmp/cfnptr_variadic_call_b17026; test "$$?" = "42"
 	./$(COMPILER) test/cparen_fnname_call_b171.c /tmp/cparen_fnname_call_b17126
 	/tmp/cparen_fnname_call_b17126; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Itest/creinc_b172 test/creinc_proto_reinclude_b172.c /tmp/creinc_proto_reinclude_b17226
+	/tmp/creinc_proto_reinclude_b17226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
