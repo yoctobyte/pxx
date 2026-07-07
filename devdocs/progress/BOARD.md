@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (100)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -122,6 +122,8 @@ _none_
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
+| feature-track-t-agent | A | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
+| feature-track-t-watcher | A | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -692,6 +694,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
+- [p 70] [A] feature-track-t-watcher (unblocks 1)
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [C] feature-c-cross-target-feature-coverage
@@ -793,4 +796,5 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **1** — bug-c-init-brace-elision-nested
+- **1** — feature-track-t-watcher
 - **1** — task-sqlite-libc-free-runtime-bringup
