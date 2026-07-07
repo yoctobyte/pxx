@@ -39,6 +39,27 @@ Tier selection explicit (`make test TIER=quick|limited|full`), never inferred,
 so an agent states what it verified. BOARD/commit messages should name the
 tier that gated the change.
 
+## Design decision (user, 2026-07-07): a real MANAGER, in Python
+Not a pile of Makefile -j hacks: one `tools/testmgr.py` that OWNS the run.
+- Reads a declarative job list (job = compile cmd + run cmd + expected rc/
+  output + tier tags + cost class). Start by GENERATING it from the existing
+  Makefile targets rather than rewriting them, so serial `make test` stays
+  the reference implementation and the manager is an alternative front end.
+- ADAPTIVE scheduling: sample cpu load + available memory (/proc/stat,
+  /proc/meminfo) each tick; launch more jobs while headroom, back off when
+  tight. No fixed -j: a Pi 1 self-tunes to 1, a 32-core box saturates.
+- Job classes with distinct budgets/weights: pascal26 compile (~1GB vm, cpu
+  bound), tiny run (ms), qemu cross run (slow, cpu bound), corpus compile
+  (lua/sqlite/tcc — long). The sampler decides WHICH class fits current
+  headroom, not just how many.
+- Safety: process-group per job (setsid) so kill is total; calibrated
+  timeouts (scale from a probe job at startup); global deadline; memory
+  watchdog kills newest job first on pressure; SIGINT = clean teardown of
+  everything, no orphan qemu/pascal26.
+- Deterministic report: fixed-order summary, per-job log files, first
+  failure quoted; exit code = gate verdict. Tier selection as before
+  (quick/limited/full).
+
 ## Resource governor (must-have, not nice-to-have)
 Unmanaged -j WILL take the box down: each pascal26 maps a ~316MB BSS; add
 qemu-user cross runners and 16 jobs swap-storm a 16GB machine. Rules:
