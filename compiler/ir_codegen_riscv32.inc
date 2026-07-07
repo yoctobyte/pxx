@@ -760,6 +760,23 @@ begin
             EmitStoreVarRISCV32(IRA[node]);
           Exit;
         end;
+        { C double->int: a float RHS into an integer slot truncates via the
+          softfloat kernel (riscv32 has no hardware FP in the value model), not a
+          raw bit-copy. __pxx_d2i64 is non-saturating; the low word is the 32-bit
+          result. Mirrors the x86-64/i386/aarch64/arm32 cvttsd2si. }
+        if CProgramMode and (not IsFloatRISCV32(Syms[IRA[node]].TypeKind)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitNode64RISCV32(IRB[node]);                     { a0:a1 = double bits }
+          procIdx := FindProc('__pxx_d2i64');
+          if procIdx < 0 then Error('compiler error: __pxx_d2i64 not found (uses softfloat?)');
+          EmitCallProc(procIdx);                            { a0:a1 = truncated int64 }
+          if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
+            EmitStoreVar64RISCV32(IRA[node])
+          else
+            EmitStoreVarRISCV32(IRA[node]);
+          Exit;
+        end;
         if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
         begin
           EmitNode64RISCV32(IRB[node]);

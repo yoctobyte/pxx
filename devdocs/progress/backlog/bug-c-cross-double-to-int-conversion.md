@@ -35,3 +35,14 @@ REMAINING: i386 IR_STORE_MEM (field/element `s.i = 3.7`) + i386 C-call arg path
 (`charfunc(99.0)`), then the ARM/riscv32 backends (aarch64 fcvtzs; arm32/riscv32
 via the existing __pxx_d2i / softfloat kernels — see v180). Each per-backend,
 gated by its qemu suite.
+
+
+## STORE_SYM done on ALL 5 targets 2026-07-07
+double->int on an integer assignment (`int x=3.7; char c=65.0; long l=9.9` ->
+3/65/9) now works on x86-64 (cvttsd2si) + i386 (SSE2 cvttsd2si) + aarch64
+(fmov+fcvtzs) + arm32 (VFP vcvt.s32.f64, long=32-bit) + riscv32 (softfloat
+__pxx_d2i64, low word). Each verified under its qemu suite; all make-test +
+test-<arch> green. REMAINING (lower priority): the IR_STORE_MEM (field/element
+`s.i = 3.7`) and C-call arg (`intfunc(99.0)`) paths on the 4 cross backends —
+mirror the same conversion at those sites. The assignment case (by far the most
+common) is complete cross-target.
