@@ -60,3 +60,10 @@ Still open for 00089/00124:
   struct-ptr return in ParseCSubroutine).
 - 00124: full inline declarator `int (*f1(int,int))(int,int)` (compiles, runs 85).
 Each is a further ParseCSubroutine / postfix-call refinement — focused session.
+
+## 00124 finding 2026-07-07
+00124's inline declarator `int (*f1(int,int))(int,int)` PARSES (compiles) — the
+remaining issue is the nested double-indirect call `(*(*p)(0,2))(2,2)` mis-lowers
+(runs 85, want 0). So both remaining cases are fn-pointer CODEGEN, not parser:
+00089 = fnptr-field call on a call result (SIGSEGV); 00124 = chained
+deref+indirect-call value. Deep codegen, focused session.
