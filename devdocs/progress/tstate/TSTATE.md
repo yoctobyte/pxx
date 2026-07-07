@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall |
 |------|-------------|------|---------|------|
-| borg | `ca8dade233b9` | 2026-07-07T18:35:36Z | RED | 134.4s |
+| borg | `a745af691baa` | 2026-07-07T18:39:22Z | RED | 138.8s |
 
 ## Open regressions
 - **test-aarch64#94** (borg): bad `ca8dade233b9`, last good `unknown`, 1 commit(s) in range
