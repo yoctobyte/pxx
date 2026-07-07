@@ -46,6 +46,8 @@
 /* libc-free byte sink: write `n` bytes of `buf` to fd. Provided by the platform
    (posix syscall / ESP-IDF) the same way Pascal's RTL IO is. */
 extern long __pxx_write(int fd, const void *buf, unsigned long n);
+extern void *__pxx_malloc(long n);
+extern void __pxx_free(void *p);
 extern long __pxx_read(int fd, void *buf, unsigned long n);
 extern int __pxx_open(const char *path, int flags, int mode);
 extern int __pxx_close(int fd);
@@ -395,15 +397,25 @@ int sprintf(char *s, const char *fmt, ...) {
 
 /* ---- stream output (rides __pxx_write) ------------------------------------ */
 
-/* Render into a fixed stack buffer then push to the fd in one write. lua's
-   lines fit comfortably; a >1023-byte single printf truncates (acceptable —
-   lua never emits one). */
+/* Render into a fixed stack buffer then push to the fd in one write; a line
+   that does not fit re-renders into a heap buffer sized from the returned
+   need (tcc dumps multi-KB preprocessed buffers through one printf). */
 static int __crtl_vfdprintf(int fd, const char *fmt, va_list ap) {
   char buf[1024];
-  int n = __crtl_vformat(buf, sizeof(buf), fmt, ap);
-  int w = n;
-  if (w > (int)sizeof(buf) - 1) w = (int)sizeof(buf) - 1;
-  __pxx_write(fd, buf, (unsigned long)w);
+  va_list ap2;
+  int n;
+  va_copy(ap2, ap);
+  n = __crtl_vformat(buf, sizeof(buf), fmt, ap2);
+  va_end(ap2);
+  if (n <= (int)sizeof(buf) - 1)
+    __pxx_write(fd, buf, (unsigned long)n);
+  else {
+    char *p = (char *)__pxx_malloc((long)n + 1);
+    if (!p) { __pxx_write(fd, buf, sizeof(buf) - 1); return n; }
+    __crtl_vformat(p, (size_t)n + 1, fmt, ap);
+    __pxx_write(fd, p, (unsigned long)n);
+    __pxx_free(p);
+  }
   return n;
 }
 
