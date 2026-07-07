@@ -69,3 +69,12 @@ tcc uses long-double float parsing. Track B: add ldexpl (+ likely other *l
 long-double math: strtold, etc.) to lib/crtl, or stub if long double is mapped to
 double. File as a Track B crtl ticket. The cfront cascade is now hitting crtl
 breadth gaps interleaved with parse bugs.
+
+
+## Blocker 4 (2026-07-07): libtcc.c:14377 — codegen ICE IR_UNSUPPORTED
+After the long-double aliases, parse advances to `:14377: Unsupported linear node
+in IR codegen! Kind=10 node=47` (Kind 10 = IR_UNSUPPORTED). A C construct lowers
+to IR_UNSUPPORTED — a C->IR lowering gap (Track C/A), deeper than the parse fixes.
+Reduce: bisect libtcc.c around that token region to the construct, minimal repro,
+file a Track C/A ticket. (Progress so far: tcc parse went 10545 -> 11810 -> 12370
+-> 14377 via 3 cfront fixes + crtl aliases.)

@@ -26,3 +26,11 @@ parse; correctness of tcc's emitted float constants is a later check.
 
 ## Gate
 tcc libtcc.c advances past :12370; a small long-double-math test compiles/links.
+
+
+## RESOLVED 2026-07-07 (Track B) — long double == double, thin aliases
+Confirmed pxx maps `long double` to `double` (sizeof both 8, 3.5L round-trips).
+tcc needs only `ldexpl` + `strtold`; added as double-forwarding aliases:
+lib/crtl/include/math.h + src/math.c `ldexpl(x,e){return ldexp(x,e);}`;
+stdlib.h + src/stdlib.c `strtold(s,e){return strtod(s,e);}`. Verified
+(ldexpl(1.5,3)=12, strtold parses 2.5). lua still green. tcc advances past :12370.

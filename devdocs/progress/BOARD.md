@@ -28,13 +28,12 @@ _none_
 
 _none_
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-cross-double-to-int-conversion | C | 45 | bug | C double→int conversion missing on cross backends (i386/arm32/aarch64/riscv32) | — |
-| bug-c-crtl-long-double-math | B | 45 | bug | C crtl: long-double math (ldexpl, ...) missing — blocks tcc | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
@@ -173,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (494)
+## done (495)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -208,6 +207,7 @@ _none_
 | bug-c-const-eval-bitwise-not | C | 50 | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-create-trigger-huge-alloc-oom | A | 50 | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
 | bug-c-crtl-fopen-missing | B | 50 | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
+| bug-c-crtl-long-double-math | B | 45 | bug | C crtl: long-double math (ldexpl, ...) missing — blocks tcc | — |
 | bug-c-crtl-missing-getpid | B | 50 | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
@@ -735,7 +735,6 @@ _none_
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
 - [p 50] [C] feature-c-corpus-tcc
 - [p 45] [C] bug-c-cross-double-to-int-conversion
-- [p 45] [B] bug-c-crtl-long-double-math
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-designated-init-compound-literals
 - [p 45] [C] feature-c-gtk3-header-final-wiring

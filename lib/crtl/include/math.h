@@ -32,6 +32,8 @@ extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);
 extern double ldexp(double x, int e);
+/* long double == double in pxx, so the `l` variants are thin aliases. */
+extern double ldexpl(double x, int e);
 extern double modf(double x, double *iptr);
 extern double hypot(double x, double y);
 extern double copysign(double x, double y);

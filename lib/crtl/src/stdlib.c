@@ -162,3 +162,6 @@ void qsort(void *base, size_t nmemb, size_t size, __crtl_cmpfn cmp) {
    A real clock bridge (PAL monotonic) is a follow-up. */
 typedef long __crtl_time_t;
 __crtl_time_t time(__crtl_time_t *t) { if (t) *t = 0; return 0; }
+
+/* long double == double in pxx: strtold forwards to strtod. */
+double strtold(const char *s, char **end) { return strtod(s, end); }

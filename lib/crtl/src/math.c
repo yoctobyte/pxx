@@ -83,3 +83,6 @@ double modf(double x, double *ip) {
   *ip = i;
   return x - i;
 }
+
+/* long double == double in pxx: ldexpl forwards to ldexp. */
+double ldexpl(double x, int e) { return ldexp(x, e); }

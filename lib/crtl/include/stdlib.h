@@ -19,6 +19,8 @@ long atol(const char *s);
 long long atoll(const char *s);
 double atof(const char *s);
 double strtod(const char *s, char **end);
+/* long double == double in pxx: strtold aliases strtod. */
+double strtold(const char *s, char **end);
 long strtol(const char *s, char **end, int base);
 unsigned long strtoul(const char *s, char **end, int base);
 long long strtoll(const char *s, char **end, int base);
