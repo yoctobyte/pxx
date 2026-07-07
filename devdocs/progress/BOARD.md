@@ -29,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (101)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ _none_
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
+| bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -705,6 +706,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 60] [B] bug-crtl-printf-g-double-roundtrip
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-runtime-library
