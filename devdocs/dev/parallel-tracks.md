@@ -7,6 +7,11 @@ public documentation against that same baseline, and C grows the C-language
 frontend. (C grew on an isolated branch until it merged at v80; all tracks now
 work on `master`.)
 
+Testing breadth is offloaded to **Track T** (continuous watcher + agentic
+test manager) — see `devdocs/dev/track-t.md` for the deploy one-liner, the
+"confirm native, offload the matrix" protocol, and the `twatch --status`
+liveness rule every track uses before relying on the offload.
+
 The user runs **several Claude agents at once** against this repo — one per
 track. Most sessions are one track. **The track letter is a stable ID; always
 say it with its name** (e.g. "Track C (C frontend)"). The letters were chosen so
