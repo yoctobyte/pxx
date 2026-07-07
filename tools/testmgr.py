@@ -57,9 +57,15 @@ TIERS = {
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
-        "test-lua", "test-cjson", "test-zlib", "test-sqlite-threads",
+        "test-lua", "test-cjson", "test-zlib",
+        "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
+        "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
     ],
 }
+
+# The conformance battery (~220 programs behind one script) is a wall-time
+# pole as a single job: fan it out with the script's --shard support.
+CONFORMANCE_SHARDS = 6
 
 # ---------------------------------------------------------- cost classes ---
 # est_mem: bytes we expect the job to occupy at peak (pascal26 maps a large
@@ -178,7 +184,16 @@ def split_jobs(target, lines):
 def generate(tier):
     jobs = []
     for tgt in TIERS[tier]:
-        jobs.extend(split_jobs(tgt, make_dry_run(tgt)))
+        for job in split_jobs(tgt, make_dry_run(tgt)):
+            if job.cls == "conformance" and CONFORMANCE_SHARDS > 1:
+                for i in range(CONFORMANCE_SHARDS):
+                    lines = [ln + " --shard %d/%d" % (i, CONFORMANCE_SHARDS)
+                             for ln in job.lines]
+                    shard = Job(tgt, i, lines)
+                    shard.name = "%s#shard%d/%d" % (tgt, i, CONFORMANCE_SHARDS)
+                    jobs.append(shard)
+            else:
+                jobs.append(job)
     return jobs
 
 
@@ -207,7 +222,11 @@ class Manager:
         self.scale = scale
         self.logdir = logdir
         self.running = []
-        self.queue = [j for j in jobs]
+        # launch longest-expected jobs first: the critical path (corpus,
+        # conformance shards, selfhost chains) must start at t=0, not after
+        # 600 unit jobs have churned through.  Report order stays generation
+        # order — this only affects launch order.
+        self.queue = sorted(jobs, key=lambda j: -CLASSES[j.cls]["timeout"])
         self.nproc = os.cpu_count() or 1
         self.hard_cap = 1 if args.serial else (
             args.jobs or min(self.nproc,
@@ -440,6 +459,8 @@ def main():
         return 0
 
     scale = calibrate()
+    # propagate to child scripts with their own inner `timeout` calls
+    os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
     logdir = tempfile.mkdtemp(prefix="testmgr-")
     mgr = Manager(jobs, args, scale, logdir)
     print("testmgr: tier=%s jobs=%d cap=%d scale=%.2f logs=%s"

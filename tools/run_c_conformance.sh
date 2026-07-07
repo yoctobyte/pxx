@@ -11,17 +11,26 @@
 # CI only). Skips are EXPLICIT: test/c-conformance/pxx.skip lists one test per
 # line as "NNN.c<TAB>reason"; anything not passing and not listed = FAIL.
 #
-# Usage: tools/run_c_conformance.sh [compiler] [suite-dir]
+# Usage: tools/run_c_conformance.sh [compiler] [suite-dir] [--shard I/N]
 #   compiler  default compiler/pascal26
 #   suite-dir default library_candidates/c-testsuite/tests/single-exec
+#   --shard I/N  run only tests with (index mod N) == I (0-based); lets a
+#                parallel harness (tools/testmgr.py) fan the battery out.
 set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 CC="${1:-$ROOT/compiler/pascal26}"
 SUITE="${2:-$ROOT/library_candidates/c-testsuite/tests/single-exec}"
+SHARD_I=0; SHARD_N=1
+case "${3:-}" in
+  --shard)  SHARD_I="${4%%/*}"; SHARD_N="${4##*/}" ;;
+  --shard=*) v="${3#--shard=}"; SHARD_I="${v%%/*}"; SHARD_N="${v##*/}" ;;
+esac
 SKIPLIST="$ROOT/test/c-conformance/pxx.skip"
 WORK="${TMPDIR:-/tmp}/pxx_c_conformance.$$"
-TIMEOUT_S=10
+# per-program run budget; stretched by testmgr's calibration factor so weak
+# hardware doesn't false-timeout (TESTMGR_TIME_SCALE, default 1)
+TIMEOUT_S="$(awk -v s="${TESTMGR_TIME_SCALE:-1}" 'BEGIN { t=10*s; printf "%d", (t<10 ? 10 : t) }')"
 
 if [ ! -f "$SUITE/00001.c" ]; then
   echo "test-c-conformance: SKIP — no suite at $SUITE (run tools/install_lib_candidates.sh c-testsuite)"
@@ -31,10 +40,12 @@ fi
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
-pass=0; fail=0; skip=0; failed=""
+pass=0; fail=0; skip=0; failed=""; idx=-1
 
 for src in "$SUITE"/*.c; do
   name="$(basename "$src")"
+  idx=$((idx+1))
+  [ $((idx % SHARD_N)) = "$SHARD_I" ] || continue
 
   # explicit skip-list (tab- or space-separated: name reason)
   if [ -f "$SKIPLIST" ]; then

@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (101)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -99,7 +99,6 @@ _none_
 | feature-optimization-levels | A | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -169,7 +168,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (499)
+## done (500)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -596,6 +595,7 @@ _none_
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
+| feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
@@ -692,7 +692,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
-- [p 80] [A] feature-parallel-test-harness
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [C] feature-c-cross-target-feature-coverage

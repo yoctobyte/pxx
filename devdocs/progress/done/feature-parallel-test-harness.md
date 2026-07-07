@@ -86,3 +86,30 @@ byte-identical gate risk, poor cost/benefit while self-build is ~7s).
 `make test PAR=N` green and equal in verdict to serial run on the same tree;
 serial path byte-identical to today; one injected hang (sleep-loop test)
 fails cleanly with the timeout message.
+
+## Resolution (2026-07-07, fable-ac)
+Landed `tools/testmgr.py` (Python 3, stdlib only):
+- job list GENERATED from Makefile targets via `make -n` (serial make stays
+  reference); recipe lines grouped compile+check, consecutive-compile groups
+  atomic (golden comparisons); backslash-continued blocks kept whole; make's
+  per-line exit semantics emulated exactly (no set -e across lines).
+- adaptive scheduler: /proc/stat idle + /proc/meminfo MemAvailable per 0.5s
+  tick; cap = min(nproc, mem-headroom/job); longest-expected jobs launch first.
+- cost classes unit/qemu/selfhost/corpus/conformance; timeouts scaled by a
+  startup probe compile; scale exported as TESTMGR_TIME_SCALE so scripts with
+  inner `timeout` calls (conformance, sqlite) stretch on weak hardware too.
+- safety: setsid per job + killpg (TERM window then KILL), memory watchdog
+  (kills newest, requeues once), global deadline, SIGINT total teardown,
+  xvfb exclusive-resource lock (two xvfb-run race on one display).
+- tiers quick/limited/full; deterministic fixed-order report; exit = verdict.
+- dissected wall-time poles: run_c_conformance.sh grew --shard I/N (6 shards);
+  monolithic test-sqlite-threads split into per-arch subtargets calling
+  tools/run_sqlite_thread_test.sh (serial aggregate target unchanged).
+
+Proof: quick 11/11 in 3.6s; limited 691/691 in 3m40; full 1051/1051 GREEN in
+5m13 vs >10min serial (serial reference run exceeded a 10-minute cap while
+still mid-gate). Injected sleep-loop job killed by per-job timeout, no orphan
+processes, SIGINT/deadline teardown verified.
+
+## Log
+- 2026-07-07 — resolved, commit bddb40c5.
