@@ -28,6 +28,29 @@ compiler changes, the compiler binary stays single-threaded and deterministic.
 4. **Deterministic reporting:** collect per-job logs, print in fixed order at
    the end so output diffs stay stable; first failure quoted verbatim.
 
+## Scope tiers (user-set, 2026-07-07)
+Parallelism is only half of it — CHOOSE what to test per iteration:
+- `make test-quick` (exists) / **regressions-native**: bXXX + core at the
+  native target only — the inner-loop tier while iterating on one bug.
+- **limited**: + conformance + self-host fixedpoint, still native-only.
+- **full**: everything incl. cross targets + corpus (lua/zlib/sqlite/tcc) —
+  pre-push tier.
+Tier selection explicit (`make test TIER=quick|limited|full`), never inferred,
+so an agent states what it verified. BOARD/commit messages should name the
+tier that gated the change.
+
+## Resource governor (must-have, not nice-to-have)
+Unmanaged -j WILL take the box down: each pascal26 maps a ~316MB BSS; add
+qemu-user cross runners and 16 jobs swap-storm a 16GB machine. Rules:
+- concurrency cap = min(nproc, free_mem / 1GB-ish per-job estimate), never
+  more; single knob to force PAR=1.
+- per-job `timeout` (calibrated at gate start — see weak-hardware note) AND a
+  global gate deadline; on breach, kill the whole process group, not just the
+  front process.
+- jobs run `nice -n 10` so an interactive session stays responsive.
+- fail-fast option for the inner loop (first red kills the run), keep-going
+  for the full tier (collect all reds).
+
 ## Non-goals
 Threading inside the compiler (parked — global-state refactor, self-host
 byte-identical gate risk, poor cost/benefit while self-build is ~7s).
