@@ -2,14 +2,7 @@
 
 | host | last tested | date | verdict | wall |
 |------|-------------|------|---------|------|
-| borg | `adb6c0880d7c` | 2026-07-07T19:03:22Z | GREEN | 263.6s |
+| borg | `87ce0f60a0df` | 2026-07-07T19:17:12Z | RED | 283.9s |
 
 ## Open regressions
-- **test-core#261** (borg): bad `ca8dade233b9`, last good `unknown`, 1 commit(s) in range
 - **test-cjson#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-lua#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-sqlite-threads-aarch64#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-sqlite-threads-arm32#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-sqlite-threads-i386#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-sqlite-threads-x86_64#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
-- **test-zlib#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
