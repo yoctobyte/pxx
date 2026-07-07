@@ -32,3 +32,15 @@ proper case-as-label rework (per below) done carefully with incremental
 self-host checks, not a quick relax of the brace requirement. 00143 (Duff's)
 separately: OUTPUT already matches expected but exit code is 1 (a control-flow /
 final-return issue, not the copy loop) — investigate that independently.
+
+
+## Triage 2026-07-07
+Confirmed the parser rejects a non-compound switch body outright: `switch(x) case
+0: ;` errors "unexpected token" at the `case` after `switch(x)` (expects `{`).
+This is the switch-as-labels rework, not a narrow accept — pxx lowers switch as a
+structured case-list, but C treats case/default as LABELS on arbitrarily nested
+statements with computed-goto dispatch (Duff's device 00143 puts case labels
+inside a do-while). Needs: (1) accept any statement as the switch body, (2) a
+scan that collects case/default labels from the nested body and emits a dispatch
+jump-table/if-chain to those labels, (3) fall-through by label ordering. Focused
+rework (peer of bug-c-init-brace-elision-nested). Parked.
