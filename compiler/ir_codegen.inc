@@ -1875,12 +1875,26 @@ begin
           begin
             if i >= MAX_CALL_ARGS then Error('cdecl indirect call: too many arguments');
             argNodeArr[i] := IRA[argNode];
-            { Self (i < IRC, injected for a method ptr) is a pointer -> int class. }
-            if (i >= IRC[node]) and TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) then
+            { Self (i < IRC, injected for a method ptr) is a pointer -> int class.
+              A variadic arg (index past the declared params) has no Params[] slot,
+              so classify it by its own IR type — reading Params[] there would be
+              out of bounds. C default-argument-promotion carries variadic floats
+              as double, so no single-precision narrowing applies to them. }
+            if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) then
+            begin
+              if TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) then
+              begin argIsSse[i] := True; Inc(sseIdx); end
+              else begin argIsSse[i] := False; Inc(intIdx); end;
+            end
+            else if (i >= IRC[node]) and TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) then
             begin argIsSse[i] := True; Inc(sseIdx); end
             else begin argIsSse[i] := False; Inc(intIdx); end;
             argNode := IRB[argNode]; Inc(i);
           end;
+          { Actual argument count — for a variadic callee this exceeds
+            ParamCount+IRC (the extra `...` args), so use the walked count, not
+            the declared-parameter count, or the trailing args are dropped. }
+          nArgs := i;
           if intIdx > 6 then Error('cdecl indirect call: more than 6 integer args not supported yet');
           if sseIdx > 8 then Error('cdecl indirect call: more than 8 float args not supported yet');
           IREmitNode(IRA[node]); EmitB($50);       { push callee (deepest) }
@@ -1894,7 +1908,8 @@ begin
             begin
               EmitB($58);                          { pop rax }
               EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + sseIdx * 8); { movq xmm[n], rax }
-              if (i >= IRC[node]) and (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
+              if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) and
+                 (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
                 begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + sseIdx * 9); end; { cvtsd2ss xmm,xmm }
               Inc(sseIdx);
             end
