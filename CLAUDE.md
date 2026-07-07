@@ -192,7 +192,11 @@ codebase: it is free to improve/refactor/optimize Track T sources (testmgr,
 twatch, report format, tier composition) on its own initiative — no ticket or
 approval needed, self-optimization is part of the job. Gate for T tooling
 changes = `tools/testmgr.py --tier full` green — and test the tooling itself
-with QUICK tiers + a scratch bare repo, never long runs.
+with QUICK tiers + a scratch bare repo, never long runs. Track T pushes CODE
+too (its own tooling), not just tstate — those commits belong to lane T and
+follow the push-your-own-lane rule: T touches `tools/testmgr.py` /
+`tools/twatch*` / `tstate/**` and nothing else; a compiler or test-target gap
+it hits → ticket for the owning track.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
