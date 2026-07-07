@@ -44,3 +44,19 @@ Probed the fnptr-typedef (`typedef int (*fty)(void)`) in several positions:
 So it's a cluster of fnptr-typedef declarator gaps (function-definition body,
 global-var decl) beyond the original 00089/00124, all rooted in how a tyPointer +
 CTypeProcSig "callable" type flows through the def/global paths. Focused session.
+
+## Progress 2026-07-07 — two sub-fixes landed; remaining gaps pinned
+Resolved parts of the cluster (both gated, self-host green):
+- fn-pointer TYPEDEF global `fty gp = &z;` — commit a386edce (register callable +
+  bind init).
+- `go()()` — calling the result of a function that returns a function pointer —
+  commit cfebdbbb (new ProcRetProcSig + CNodeProcSig AN_CALL case).
+Still open for 00089/00124:
+- `get()->f()` — calling a fn-pointer FIELD on a call RESULT SIGSEGVs (the field
+  fnptr call on a non-lvalue call result).
+- 00089's exact form `struct S *(*fty)()` (empty params, struct-ptr return): go
+  is reported "undeclared" at the call — its registration differs from the simple
+  `int (*fty)(void)` form that now works (likely the empty `()` param list or the
+  struct-ptr return in ParseCSubroutine).
+- 00124: full inline declarator `int (*f1(int,int))(int,int)` (compiles, runs 85).
+Each is a further ParseCSubroutine / postfix-call refinement — focused session.
