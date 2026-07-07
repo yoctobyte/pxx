@@ -119,10 +119,16 @@ class Clone:
 # ---------------------------------------------------------------- testing --
 def run_gate(clone, tier, job_glob=None):
     """Run the CLONE's testmgr (self-versioned with the tested tree)."""
-    # fresh clone has no compiler binary: seed from the committed stable
-    if not os.path.exists(os.path.join(clone.path, "compiler/pascal26")):
+    # fresh clone has no compiler binary: seed from the committed stable.
+    # CRITICAL: backdate the seeded binary — its copy-time mtime would beat
+    # every source file and make would never self-host HEAD's compiler, so
+    # the whole gate would silently test HEAD sources with the PINNED binary
+    # (55 false reds on the first live deploy, 2026-07-07).
+    comp = os.path.join(clone.path, "compiler/pascal26")
+    if not os.path.exists(comp):
         subprocess.run(["make", "--no-print-directory", "seed-from-stable"],
                        cwd=clone.path, check=True)
+        os.utime(comp, (0, 0))
     rep_path = os.path.join(clone.path, ".twatch-report.json")
     if os.path.exists(rep_path):
         os.unlink(rep_path)
