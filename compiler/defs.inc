@@ -1069,6 +1069,7 @@ var
   ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  ProcRetProcSig   : array[0..MAX_PROCS-1] of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
   ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
   ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
   ProcParamRecId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }

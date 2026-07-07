@@ -3886,6 +3886,7 @@ begin
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
+  ProcRetProcSig[ProcCount]    := -1;
   ProcInline[ProcCount]        := False;
   InlineBodyRoot[ProcCount]    := -1;
   InlineParamCnt[ProcCount]    := 0;

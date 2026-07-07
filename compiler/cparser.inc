@@ -1352,6 +1352,11 @@ begin
   callee := inner;
   if ASTKind[inner] = AN_IDENT then
     Result := SymProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_CALL then
+    { `go()(args)` — the callee is the RESULT of a call whose return type is a
+      function pointer; that fn's return signature makes the second `()` an
+      indirect call. }
+    Result := ProcRetProcSig[ASTIVal[inner]]
   else if (ASTKind[inner] = AN_INDEX) and (ASTKind[ASTLeft[inner]] = AN_IDENT) then
     { `arr[i](args)` — call through an element of a function-pointer array; the
       array sym carries the per-element call signature in SymElemProcSig. }
@@ -5000,7 +5005,7 @@ var
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
-  retPtrElemTk, retPtrElemRec, retRecId: Integer;
+  retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   ptypes: array[0..31] of TTypeKind;
   pnames: array[0..31] of AnsiString;
   pdepths: array[0..31] of Integer;
@@ -5018,6 +5023,11 @@ begin
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
   retType := ParseCDeclType;
+  { A function whose RETURN type is itself a function pointer (`fty go(void)`,
+    fty a fn-ptr typedef) carries the returned pointer's call signature, so
+    `go()(args)` lowers as an indirect call. Captured now, before param parsing
+    clobbers CTypeProcSig. }
+  retProcSig := CTypeProcSig;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
     on a typed-pointer result resolve the element. }
   retPtrElemTk := Ord(tyUnknown);
@@ -5244,6 +5254,7 @@ begin
     ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
 
   { If it is just a declaration (ends with ';'), we are done! }
