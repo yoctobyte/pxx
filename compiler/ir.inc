@@ -848,7 +848,15 @@ begin
     begin
       baseAddr := IRLowerAST(baseNode);
       indexNode := IRLowerAST(ASTRight[node]);
-      Result := IRAppend(IR_INDEX, baseAddr, indexNode, -7, 1, Ord(tyChar));
+      { IR_INDEX addresses base + (index - lo): the literal's value points at the
+        frozen [len8][data] blob, so data[0] is at base+8. Pascal is 1-based
+        (s[1] -> data[0], lo=-7); C is 0-based ("lit"[0] -> data[0], lo=-8).
+        Without the C offset, "1.3.1"[0] read base+7 (the length word's high
+        byte, 0) instead of '1'. }
+      if CProgramMode then
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, -8, 1, Ord(tyChar))
+      else
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, -7, 1, Ord(tyChar));
       Exit;
     end;
     baseAddr := IRLowerAddress(baseNode);

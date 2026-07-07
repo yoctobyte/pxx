@@ -730,6 +730,15 @@ var recId, inner, depth, baseTk: Integer; fieldName: AnsiString;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
+  { A string literal is a `char[]`, so indexing/dereferencing it yields a char —
+    the rvalue load must be a single byte. Defaulting to tyInteger read 4 bytes,
+    so `int c = "abc"[0]` came back with the adjacent chars in the high bits
+    (c != 'a' though c & 0xFF was right). }
+  if ASTKind[node] = AN_STR_LIT then
+  begin
+    Result := Ord(tyChar);
+    Exit;
+  end;
   if ASTKind[node] = AN_ADDR then
   begin
     { `*(&x)` — the deref of an address-of yields x's own type. Without this the
