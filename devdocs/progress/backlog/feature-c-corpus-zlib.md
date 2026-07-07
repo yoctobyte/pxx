@@ -105,3 +105,16 @@ the DEFLATE Z_FULL_FLUSH output (deflate.c/trees.c flush path), not inflate.
 Also re-check for further gzguts/other private-macro collisions in deflate.c
 (none found for inflate enum, but deflate has its own constants). Then
 inflate-with-dictionary (blocked behind sync).
+
+
+### inflateSync -3 isolated to deflate Z_FULL_FLUSH (2026-07-07)
+Direct probe: our `deflate(strm, Z_FULL_FLUSH)` on "hello" emits 17 bytes with NO
+`00 00 FF FF` sync marker, so inflateSync's syncsearch never finds have==4 →
+Z_DATA_ERROR. syncsearch and inflateSync are correct; the bug is DEFLATE's
+full-flush path not emitting the empty stored block / sync marker (deflate.c
+deflate() flush switch + _tr_stored_block/_tr_align in trees.c). Not inflate, not
+a COPY-style macro leak (checked: only COPY collided with the inflate enum).
+Focused deflate-internals session: verify the flush-level switch recognizes
+Z_FULL_FLUSH (=3; note Z_RLE strategy is also 3 — different namespace, shouldn't
+matter) and that _tr_stored_block writes the 4-byte marker. inflate-with-
+dictionary is blocked behind this. zlib now 6/8 lines (was parse-blocked).
