@@ -131,5 +131,9 @@ bit-buffer primitives used by _tr_stored_block: `send_bits` (3-bit block header)
 `bi_windup` (byte align + flush bit buffer), `put_short` (LEN/NLEN). Suspect a
 codegen issue in the bit-accumulator (s->bi_buf/s->bi_valid ush arithmetic) or a
 macro (send_bits/put_short are macros). Focused trees.c session; verify each
-primitive with a standalone bit-write test vs gcc. This also likely affects any
-Huffman output correctness beyond the flush marker.
+primitive with a standalone bit-write test vs gcc. NOTE: Huffman blocks WORK
+(uncompress/inflate pass), so the fault is specifically the STORED-block path —
+_tr_stored_block's data copy AND the empty-block marker (deflate("hello") chose a
+stored block: output shows the 00 05 00 fa ff header but the 'hello' data bytes
+are missing/zeroed, then no clean 00 00 ff ff marker). Start at _tr_stored_block
++ deflate_stored, not the Huffman coders.
