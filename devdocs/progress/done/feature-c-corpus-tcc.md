@@ -181,3 +181,38 @@ b185/b186/b187.
 ld_add_file magic check "!<arch>\n") misbehaves in the pxx build — suspect
 crtl fread/fseek on the .a or another miscompile in its header walk. After
 that: `tcc -run`, then the self-compile benchmark (anchors above).
+
+## MILESTONE: tcc self-compiles under pxx — chains converge byte-identical (2026-07-07, fable-ac)
+Four compiler primitives fixed (b189-b192, commit 116230b1):
+1. b189 — local aggregate `{0}`/partial init never zero-filled the remainder
+   (C99 6.7.8p21). `struct scope f = {0}` → garbage cl.s → goto-cleanup crash.
+2. b190 — `&floatField` kept the pointee's float tk; C float→int-param
+   truncation cvttsd2si'd the ADDRESS (write_ldouble got s=0).
+3. b191 — struct `int nb, *lv;`: starred later declarator over non-pointer
+   base → pointee unknown → 8-byte loads of int elements → sym_versions[2^32]
+   + wrong glibc symbol versions (stdin@GLIBC_2.3).
+4. b192 — narrow int casts were retag-only; `c == (char)c` (tcc's imm8-fit
+   check) true for 0x80 → `cmp $0x80` encoded as sign-extended imm8 →
+   miscompiled everything tcc built. Now truncate + re-extend (C 6.3.1.3).
+
+Result chain (method: gdb bt → TU line via --dump-cpp → minimal repro vs gcc
+→ fix ONE primitive → bXXX test):
+- tcc-by-pxx self-compiles tcc.c: rc=0; its output (gen2) is a WORKING
+  compiler (mini.c → exit 42).
+- gen3 == gen4 byte-identical (pxx-lineage fixedpoint).
+- **g2 == p2 byte-identical**: the gcc-lineage and pxx-lineage self-compile
+  chains CONVERGE to the same binary.
+- Known residual: gen2-level 52-byte diff (g1 vs p1) from the host
+  long-double model (pxx `long double` = 8 bytes, gcc = 80-bit x87) —
+  affects one .data.ro constant + layout, functionally nil (both gen2s
+  produce identical gen3). Goes away only if pxx grows 80-bit long double.
+
+Benchmarks (2026-07-07, 8-core box, watcher active — background load):
+- tcc-by-gcc self-compile: 0.168s
+- tcc-by-pxx self-compile: 0.156s  ← generated-code quality on par
+- pxx compiling tcc.c: 57.2s under load (prior quiet-box anchor: 27.9s)
+Verify recipe: g1==tcc_ref(tcc.c); p1==tcc_pxx(tcc.c); gN+1 = gN(tcc.c);
+cmp g2 p2.
+
+## Log
+- 2026-07-07 — resolved, commit 116230b1.
