@@ -152,6 +152,21 @@
    "new_red": [],
    "sha": "d1e08f22507497abecedfe755af12dbeaa1a164a",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-07T19:03:22Z",
+   "fixed": [],
+   "new_red": [
+    "test-cjson#00",
+    "test-lua#00",
+    "test-sqlite-threads-aarch64#00",
+    "test-sqlite-threads-arm32#00",
+    "test-sqlite-threads-i386#00",
+    "test-sqlite-threads-x86_64#00",
+    "test-zlib#00"
+   ],
+   "sha": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -392,7 +407,7 @@
   "test-c-conformance#shard3/6": "pass",
   "test-c-conformance#shard4/6": "pass",
   "test-c-conformance#shard5/6": "pass",
-  "test-cjson#00": "pass",
+  "test-cjson#00": "skip",
   "test-core#00": "pass",
   "test-core#01": "pass",
   "test-core#02": "pass",
@@ -581,7 +596,7 @@
   "test-core#259": "pass",
   "test-core#26": "pass",
   "test-core#260": "pass",
-  "test-core#261": "fail",
+  "test-core#261": "skip",
   "test-core#262": "pass",
   "test-core#263": "pass",
   "test-core#264": "pass",
@@ -1155,7 +1170,7 @@
   "test-i386#97": "pass",
   "test-i386#98": "pass",
   "test-i386#99": "pass",
-  "test-lua#00": "pass",
+  "test-lua#00": "skip",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1187,10 +1202,10 @@
   "test-smoke#09": "pass",
   "test-smoke#10": "pass",
   "test-smoke#11": "pass",
-  "test-sqlite-threads-aarch64#00": "pass",
-  "test-sqlite-threads-arm32#00": "pass",
-  "test-sqlite-threads-i386#00": "pass",
-  "test-sqlite-threads-x86_64#00": "pass",
+  "test-sqlite-threads-aarch64#00": "skip",
+  "test-sqlite-threads-arm32#00": "skip",
+  "test-sqlite-threads-i386#00": "skip",
+  "test-sqlite-threads-x86_64#00": "skip",
   "test-threads#00": "pass",
   "test-threads#01": "pass",
   "test-threads#02": "pass",
@@ -1206,14 +1221,14 @@
   "test-threads#12": "pass",
   "test-threads#13": "pass",
   "test-threads#14": "pass",
-  "test-zlib#00": "pass"
+  "test-zlib#00": "skip"
  },
  "last": {
-  "date": "2026-07-07T18:57:32Z",
-  "sha": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+  "date": "2026-07-07T19:03:22Z",
+  "sha": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
   "tier": "full",
-  "verdict": "RED",
-  "wall": 189.7
+  "verdict": "GREEN",
+  "wall": 263.6
  },
  "open_regressions": [
   {
@@ -1223,6 +1238,76 @@
    "opened": "2026-07-07T18:35:36Z",
    "range": [
     "ca8dade233b917117af2093db68bc5f00f15c0b0"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-cjson#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-lua#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-sqlite-threads-aarch64#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-sqlite-threads-arm32#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-sqlite-threads-i386#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-sqlite-threads-x86_64#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+   ]
+  },
+  {
+   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
+   "job": "test-zlib#00",
+   "opened": "2026-07-07T19:03:22Z",
+   "range": [
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
+    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
    ]
   }
  ]
