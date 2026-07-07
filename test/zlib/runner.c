@@ -20,6 +20,13 @@
 #include "adler32.c"
 #include "crc32.c"
 #include "zutil.c"
+/* zutil.c pulls gzguts.h, whose private `#define COPY 1` never gets #undef'd.
+   In this single-TU unity build it would macro-replace inflate.h's `COPY` enum
+   constant (16195) with 1 -> inflate() corrupts state->mode and returns
+   Z_STREAM_ERROR under byte-at-a-time buffers. Real zlib compiles each .c
+   separately so never sees the leak. Drop the macro before inflate.c; gzguts.h
+   is guardless, so the gz*.c files below re-define COPY for their own use. */
+#undef COPY
 #include "inftrees.c"
 #include "inffast.c"
 #include "inflate.c"
