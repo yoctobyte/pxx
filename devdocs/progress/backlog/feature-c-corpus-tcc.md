@@ -93,6 +93,8 @@ After the multi-declarator-global fix (b180), parse advances to
 a MACRO from <elf.h> (`#define ELF64_ST_VISIBILITY(o) ((o)&0x3)`). tcc uses its own
 elf.h; pxx either doesn't find/parse it or the macro isn't defined in the TU, so
 the call looks like an undeclared function. Check tcc's elf.h include + whether
-pxx's cpreproc picked up the ELF*_ST_* function-like macros; likely a header/
-include-path or macro-parse issue (Track C cpreproc, or provide elf.h). Progress:
+pxx's cpreproc picked up the ELF*_ST_* function-like macros; IS bug-c-preproc-paste-rescan (NOT a new bug): `ELF64_ST_VISIBILITY` comes from
+`ELFW(ST_VISIBILITY)(x)` where `ELFW(type)=ELF##64##_##type` (tcc.h:397) — the
+paste result must rescan and consume the trailing `(x)`. So tcc's next blocker is
+the parked paste-rescan rework (prio raised to 60). Progress:
 tcc parse 10545 -> 11810 -> 12370 -> 14377 -> 14395 (4 cfront fixes + crtl aliases).
