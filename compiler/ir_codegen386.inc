@@ -1237,6 +1237,11 @@ begin
           Exit;
         end;
         IREmitNode386(IRB[node]);
+        { C double->int: a float RHS (in xmm0) stored into an integer slot must
+          truncate (cvttsd2si), not reinterpret whatever is in eax. Mirrors the
+          x86-64 IR_STORE_SYM fix; C-mode only. }
+        if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end;   { cvttsd2si eax, xmm0 }
         sz := TypeSize(tk);
         if Syms[si].Kind = skGlobal then
         begin

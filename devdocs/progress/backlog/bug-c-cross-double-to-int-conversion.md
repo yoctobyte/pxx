@@ -23,3 +23,15 @@ to 32-bit where needed. C-mode only.
 ## Gate
 A C float→int conversion test (mirror test/cfloat_conv_b176.c) byte-identical on
 all cross targets; then fold into make test-lua-cross / relevant cross suite.
+
+
+## Progress 2026-07-07 — i386 STORE_SYM done (SSE2 cvttsd2si)
+i386 has SSE2, so it mirrors x86-64 directly. Added the double->int truncation in
+i386 IR_STORE_SYM (ir_codegen386.inc): after the value is emitted (a float RHS
+lands in xmm0), `cvttsd2si eax, xmm0` before the integer store. C-mode only.
+Verified: `int x=3.7; char c=65.0; long l=9.9` -> 3 65 9 under qemu-i386; x86-64
+unchanged; make test self-host byte-identical; test-i386 all-green.
+REMAINING: i386 IR_STORE_MEM (field/element `s.i = 3.7`) + i386 C-call arg path
+(`charfunc(99.0)`), then the ARM/riscv32 backends (aarch64 fcvtzs; arm32/riscv32
+via the existing __pxx_d2i / softfloat kernels — see v180). Each per-backend,
+gated by its qemu suite.
