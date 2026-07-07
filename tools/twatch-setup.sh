@@ -77,7 +77,7 @@ else
 fi
 
 say "-- corpus trees (gitignored; jobs self-skip when absent) --"
-for t in lua sqlite zlib c-testsuite tcc cjson; do
+for t in lua sqlite zlib c-testsuite tcc cjson tiny-regex-c; do
   if [ -d "library_candidates/$t" ]; then
     say "  ok       library_candidates/$t"
   else

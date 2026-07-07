@@ -169,7 +169,10 @@ def save_state(clone, host, st):
 
 
 def diff_jobs(prev_jobs, report):
-    now = {j["name"]: j["status"] for j in report["jobs"]}
+    # "skip" (corpus tree absent on this box) is pass-equivalent: the job is
+    # not applicable here, and mapping it to pass closes any open regression
+    now = {j["name"]: ("pass" if j["status"] == "skip" else j["status"])
+           for j in report["jobs"]}
     new_red = sorted(n for n, s in now.items()
                      if s != "pass" and prev_jobs.get(n, "pass") == "pass")
     fixed = sorted(n for n, s in now.items()
@@ -202,7 +205,8 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
             lines.append("## %s" % title)
             lines += ["- %s" % n for n in names]
             lines.append("")
-    first = next((j for j in report["jobs"] if j["status"] != "pass"), None)
+    first = next((j for j in report["jobs"]
+                  if j["status"] not in ("pass", "skip")), None)
     if first:
         lines.append("## first failure: %s (%s)" % (first["name"], first["status"]))
         lines.append("repro: `tools/testmgr.py --tier %s --job '%s'` at %s"
@@ -316,7 +320,7 @@ def bisect_step(clone, host, st, tier):
         clone_head_back(clone)
         if report is None:
             return False
-        red = any(j["status"] != "pass" for j in report["jobs"])
+        red = any(j["status"] not in ("pass", "skip") for j in report["jobs"])
         i = rng.index(mid)
         if red:
             reg["range"] = rng[:i + 1]

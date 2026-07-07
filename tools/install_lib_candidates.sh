@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -37,6 +37,9 @@ ZLIB_URL="https://github.com/madler/zlib"
 ZLIB_COMMIT="51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf"   # v1.3.1 release tag
 TCC_URL="https://github.com/TinyCC/tinycc"
 TCC_COMMIT="a338258d309c888bde96b2d1f206299231a54ddf"   # mob, 2026-07 snapshot
+
+CJSON_URL="https://github.com/DaveGamble/cJSON"
+CJSON_COMMIT="acc76239bee01d8e9c858ae2cab296704e52d916"   # v1.7.18 tag
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -116,6 +119,24 @@ Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, neve
 License: see LICENSE (Unlicense / public-domain-style).
 EOF
   say "tiny-regex-c -> $DEST/tiny-regex-c"
+}
+
+fetch_cjson() {
+  if present cjson; then say "cjson present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$CJSON_URL" .cjson-tmp "$CJSON_COMMIT" cJSON.c cJSON.h LICENSE
+  rm -rf "$DEST/cjson"; mkdir -p "$DEST/cjson/src"
+  cp -a "$DEST/.cjson-tmp/cJSON.c" "$DEST/.cjson-tmp/cJSON.h" "$DEST/cjson/src/"
+  cp -a "$DEST/.cjson-tmp/LICENSE" "$DEST/cjson/LICENSE" 2>/dev/null || true
+  rm -rf "$DEST/.cjson-tmp"
+  cat > "$DEST/cjson/PROVENANCE.md" <<EOF
+# cJSON Candidate
+Upstream: ${CJSON_URL}
+Commit: ${CJSON_COMMIT} (v1.7.18)
+Paths: cJSON.c, cJSON.h -> src/ (Makefile CJSON_SRC layout), LICENSE
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE (MIT).
+EOF
+  say "cjson -> $DEST/cjson"
 }
 
 fetch_freebsd_regex() {
@@ -218,15 +239,16 @@ mkdir -p "$DEST"
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson ;;
     lua)           fetch_lua ;;
+    cjson)         fetch_cjson ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;
     c-testsuite)   fetch_c_testsuite ;;
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc)" ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

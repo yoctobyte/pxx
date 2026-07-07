@@ -85,6 +85,9 @@ PROBE_REF = 0.35                # seconds: hello.pas compile on reference box
 TICK = 0.5
 
 COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
+# corpus trees under library_candidates/ are gitignored scratch; a box that
+# hasn't fetched them must SKIP the jobs that reference them, not fail them
+CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
 
 
 class Job:
@@ -100,7 +103,7 @@ class Job:
         self.proc = None
         self.t0 = self.t1 = None
         self.timeout = None       # set after calibration
-        self.status = "queued"    # queued|running|pass|fail|timeout|skipped
+        self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         self.logpath = None
         self.requeued = False
 
@@ -457,6 +460,17 @@ def main():
             sys.exit("testmgr: no jobs match --job %r" % args.job)
         for j in jobs:      # deps may have been filtered out: drop them
             j.deps = [d for d in j.deps if d in jobs]
+
+    # self-skip jobs whose corpus tree is absent (twatch-setup contract:
+    # "corpus jobs self-skip"); recipes with their own guard never get here
+    for j in jobs:
+        missing = sorted({m for m in CORPUS_RE.findall("\n".join(j.lines))
+                          if not os.path.isdir(
+                              os.path.join(REPO, "library_candidates", m))})
+        if missing:
+            j.status = "skip"
+    for j in jobs:
+        j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:
         hang = Job("injected-hang", 0, ["while :; do :; done"])
         hang.cls = "unit"
@@ -475,9 +489,13 @@ def main():
     # propagate to child scripts with their own inner `timeout` calls
     os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
     logdir = tempfile.mkdtemp(prefix="testmgr-")
-    mgr = Manager(jobs, args, scale, logdir)
-    print("testmgr: tier=%s jobs=%d cap=%d scale=%.2f logs=%s"
-          % (args.tier, len(jobs), mgr.hard_cap, scale, logdir), flush=True)
+    run_jobs = [j for j in jobs if j.status != "skip"]
+    mgr = Manager(run_jobs, args, scale, logdir)
+    nskip = len(jobs) - len(run_jobs)
+    print("testmgr: tier=%s jobs=%d%s cap=%d scale=%.2f logs=%s"
+          % (args.tier, len(run_jobs),
+             " skip=%d(corpus-absent)" % nskip if nskip else "",
+             mgr.hard_cap, scale, logdir), flush=True)
     t0 = time.monotonic()
     rc = mgr.run()
     wall = time.monotonic() - t0
@@ -491,7 +509,8 @@ def main():
         if j.status in ("fail", "timeout") and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
-    print("  %d/%d pass" % (npass, len(jobs)))
+    print("  %d/%d pass%s" % (npass, len(jobs) - nskip,
+                              ", %d skip (corpus absent)" % nskip if nskip else ""))
     if first_fail:
         print("\n-- first failure: %s (%s) --" % (first_fail.name, first_fail.status))
         print("-- commands --")
