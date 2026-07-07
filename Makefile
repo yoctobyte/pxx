@@ -779,6 +779,8 @@ test-core: $(COMPILER)
 	/tmp/cfnptr_call_result_b16726; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstruct_fnptr_field_addressof_b168.c /tmp/cstruct_fnptr_field_addressof_b16826
 	/tmp/cstruct_fnptr_field_addressof_b16826; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_string_arg_b169.c /tmp/cfnptr_string_arg_b16926
+	/tmp/cfnptr_string_arg_b16926; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
