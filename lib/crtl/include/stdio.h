@@ -49,6 +49,8 @@ int getchar(void);
 int ungetc(int c, FILE *stream);
 char *fgets(char *s, int n, FILE *stream);
 FILE *fopen(const char *path, const char *mode);
+FILE *fdopen(int fd, const char *mode);
+int fileno(FILE *stream);
 FILE *freopen(const char *path, const char *mode, FILE *stream);
 FILE *tmpfile(void);
 char *tmpnam(char *s);

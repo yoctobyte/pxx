@@ -581,6 +581,26 @@ FILE *fopen(const char *path, const char *mode) {
   return f;
 }
 
+/* fdopen: wrap an already-open descriptor; mode only validated (the fd's
+   own open flags govern I/O). tcc writes its output ELF via fdopen(fd,"wb"). */
+FILE *fdopen(int fd, const char *mode) {
+  int flags;
+  FILE *f;
+  if (fd < 0 || __crtl_mode_flags(mode, &flags) < 0) { errno = EINVAL; return 0; }
+  f = __crtl_alloc_file();
+  if (!f) { errno = ENOMEM; return 0; }
+  f->fd = fd;
+  f->err = 0;
+  f->eof = 0;
+  f->unget = -1;
+  return f;
+}
+
+int fileno(FILE *stream) {
+  if (!stream) { errno = EINVAL; return -1; }
+  return stream->fd;
+}
+
 FILE *freopen(const char *path, const char *mode, FILE *stream) {
   int flags, fd;
   if (!stream) { errno = EINVAL; return 0; }

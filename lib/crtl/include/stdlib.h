@@ -33,6 +33,7 @@ int rand(void);
 void srand(unsigned int seed);
 
 char *getenv(const char *name);
+char *realpath(const char *path, char *resolved);
 int system(const char *command);
 
 void qsort(void *base, size_t nmemb, size_t size, int (*cmp)(const void *, const void *));

@@ -20,3 +20,11 @@ int munmap(void *addr, size_t length) {
   (void)addr; (void)length;
   return 0;
 }
+
+/* No-op success: pairs with the stub mmap above (nothing is ever really
+   mapped). tcc's protect_pages calls it; real exec-page support needs the
+   PAL-backed mmap first. */
+int mprotect(void *addr, size_t length, int prot) {
+  (void)addr; (void)length; (void)prot;
+  return 0;
+}

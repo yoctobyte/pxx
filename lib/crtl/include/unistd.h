@@ -17,6 +17,9 @@ ssize_t write(int fd, const void *buf, size_t count);
 off_t lseek(int fd, off_t offset, int whence);
 int fsync(int fd);
 int getpid(void);
+char *getcwd(char *buf, size_t size);
+int unlink(const char *path);
+int execvp(const char *file, char *const argv[]);
 long sysconf(int name);
 
 #endif

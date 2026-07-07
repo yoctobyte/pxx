@@ -10,6 +10,8 @@
  */
 
 #include <stddef.h>
+#include <string.h>
+#include <stdlib.h>
 
 extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
@@ -55,6 +57,20 @@ int atoi(const char *s) {
   if (*s == '-') { sign = -1; s++; } else if (*s == '+') s++;
   while (*s >= '0' && *s <= '9') { v = v * 10 + (*s - '0'); s++; }
   return v * sign;
+}
+
+/* No symlink/./.. resolution — identity copy (absolute input assumed). Enough
+   for tcc's include-path canonicalisation; a real walk needs readlink. */
+char *realpath(const char *path, char *resolved) {
+  size_t n;
+  if (!path) return 0;
+  n = strlen(path);
+  if (!resolved) {
+    resolved = (char *)malloc(n + 1);
+    if (!resolved) return 0;
+  }
+  memcpy(resolved, path, n + 1);
+  return resolved;
 }
 
 long atol(const char *s) {
