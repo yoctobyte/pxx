@@ -1010,7 +1010,26 @@ begin
       if CurTok.Kind = tkIdent then
       begin
         si := FindSym(CurTok.SVal);
-        if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
+        { `sizeof(*s.field)` / `sizeof(*s->field)` — deref of a pointer-typed
+          struct field yields the field's POINTEE size, not the pointer size.
+          Without this `CLEAR_HASH`'s `(hash_size-1)*sizeof(*s->head)` (head a
+          `Pos*`) used 8 instead of 2 and zmemzero'd ~4x too much, wiping the
+          deflate flush marker. tkDot covers both `.` and `->`. }
+        if (si >= 0) and (Tokens[TokPos].Kind = tkDot) and
+           (Tokens[TokPos + 1].Kind = tkIdent) then
+        begin
+          fieldName := GetTokenStrFromRaw(Tokens[TokPos + 1].SOffset, Tokens[TokPos + 1].SLen);
+          recId := REC_NONE;
+          if Syms[si].TypeKind = tyPointer then recId := Syms[si].PtrElemRec
+          else if Syms[si].TypeKind = tyRecord then recId := Syms[si].RecName;
+          if (recId <> REC_NONE) and (RecFieldType(recId, fieldName) = tyPointer) then
+          begin
+            elemTk := RecFieldPtrElemTk(recId, fieldName);
+            if elemTk = tyRecord then sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
+            else sz := TypeSize(elemTk);
+          end;
+        end
+        else if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         begin
           if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
           else sz := TypeSize(Syms[si].PtrElemTk);
