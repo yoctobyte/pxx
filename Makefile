@@ -815,6 +815,8 @@ test-core: $(COMPILER)
 	/tmp/cglobal_multi_declarator_b18026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstrtok_b181.c /tmp/cstrtok_b18126
 	/tmp/cstrtok_b18126; test "$$?" = "42"
+	./$(COMPILER) test/cpaste_rescan_call_b182.c /tmp/cpaste_rescan_call_b18226
+	/tmp/cpaste_rescan_call_b18226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

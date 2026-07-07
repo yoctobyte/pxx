@@ -17,7 +17,6 @@
 00149.c	file-scope compound literal SIGSEGV — feature-c-compound-literals
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
 00200.c	left-shift result type = promoted left operand — bug-c-expr-result-type-model
-00201.c	## paste then rescan as macro call — bug-c-preproc-paste-rescan
 00202.c	## paste edge cases (empty arg, operator paste) — bug-c-preproc-paste-rescan
 00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
 00205.c	brace-elided array-of-struct init wrong values — bug-c-init-designated-and-nested

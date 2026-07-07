@@ -867,10 +867,70 @@ begin
   if (fm >= 0) and CPMFunction[fm] then Result := fm;
 end;
 
+{ True iff s (after trimming trailing whitespace) ends in an identifier that
+  names a FUNCTION macro; returns its index in mi. Used for the C99 6.10.3.4
+  rescan where a macro's fully-expanded output ends in a function-like macro
+  name and the call's '(...)' follows in the source, e.g. CAT(A,B)(x) or tcc's
+  ELFW(ST_VISIBILITY)(sym->st_other). }
+function CPStrTailFuncMacro(const s: AnsiString; var mi: Integer): Boolean;
+var e, a: Integer;
+begin
+  Result := False;
+  e := Length(s);
+  while (e >= 1) and (s[e] in [' ', #9]) do Dec(e);
+  if (e < 1) or (not CPIsIdentChar(s[e])) then Exit;
+  a := e;
+  while (a > 1) and CPIsIdentChar(s[a - 1]) do Dec(a);
+  if not CPIsIdentStart(s[a]) then Exit;
+  mi := CPFindMacro(s, a, e);
+  if (mi >= 0) and CPMFunction[mi] then Result := True;
+end;
+
+{ src[start] must be '('. Returns the index just past the matching ')',
+  honoring nesting and skipping string/char literals; 0 if unbalanced. }
+function CPBalancedGroupEnd(const src: AnsiString; start, last: Integer): Integer;
+var q, depth: Integer;
+    quote: Char;
+begin
+  Result := 0;
+  q := start;
+  depth := 0;
+  while q <= last do
+  begin
+    if (src[q] = '"') or (src[q] = '''') then
+    begin
+      quote := src[q];
+      Inc(q);
+      while (q <= last) and (src[q] <> quote) do
+      begin
+        if (src[q] = '\') and (q < last) then Inc(q);
+        Inc(q);
+      end;
+      Inc(q);
+    end
+    else
+    begin
+      if src[q] = '(' then Inc(depth)
+      else if src[q] = ')' then
+      begin
+        Dec(depth);
+        if depth = 0 then
+        begin
+          Result := q + 1;
+          Exit;
+        end;
+      end;
+      Inc(q);
+    end;
+  end;
+end;
+
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
   p, a, b, mi, q, depth, argc, argBase, ai, innerMi: Integer;
+  q2, grpEnd, tailMi: Integer;
+  expanded, combined: AnsiString;
   quote: Char;
   quotedDone: Boolean;
 begin
@@ -986,12 +1046,35 @@ begin
           begin
             CPActiveMacros[CPActiveMacroCount] := mi;
             Inc(CPActiveMacroCount);
-            
+
             CPSetTempStrLength(level, 0);
             CPExpandFunctionForLevel(mi, src, argc, level);
-            CPExpandRangeForLevel(level, dst);
-            
+            expanded := '';
+            CPExpandRangeForLevel(level, expanded);
+
             Dec(CPActiveMacroCount);
+            { C99 6.10.3.4 rescan across the expansion boundary: if the FULLY
+              expanded output ends in a function-like macro name and the next
+              source token is '(', the trailing '(...)' belongs to that macro —
+              splice and re-expand (CAT(A,B)(x) -> AB(x) -> 42; tcc's ELFW).
+              mi is popped above so the trailing rescan is not blue-painted by
+              the macro that produced the name. }
+            q2 := q;
+            if (q2 <= last) and (src[q2] = ')') then Inc(q2);
+            while (q2 <= last) and (src[q2] in [' ', #9]) do Inc(q2);
+            grpEnd := 0;
+            if (q2 <= last) and (src[q2] = '(') and
+               CPStrTailFuncMacro(expanded, tailMi) and
+               (not CPMacroIsActive(tailMi)) then
+              grpEnd := CPBalancedGroupEnd(src, q2, last);
+            if grpEnd > 0 then
+            begin
+              combined := expanded + Copy(src, q2, grpEnd - q2);
+              CPExpandRange(combined, 1, Length(combined), level + 1, dst);
+              q := grpEnd - 1; { at the group's ')'; consumed below }
+            end
+            else
+              dst := dst + expanded;
           end;
           
           if (q <= last) and (src[q] = ')') then Inc(q);
