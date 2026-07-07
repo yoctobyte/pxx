@@ -46,3 +46,22 @@ test-<arch> green. REMAINING (lower priority): the IR_STORE_MEM (field/element
 `s.i = 3.7`) and C-call arg (`intfunc(99.0)`) paths on the 4 cross backends —
 mirror the same conversion at those sites. The assignment case (by far the most
 common) is complete cross-target.
+
+
+## STORE_SYM + STORE_MEM done + permanently gated on all 5 targets (2026-07-07)
+Both store paths (assignment `int x=3.7` and field/element `s.i=3.7`,
+`a[i]=3.7`) now truncate correctly on x86-64/i386/aarch64/arm32/riscv32, each via
+the target's native path (cvttsd2si / fcvtzs / VFP vcvt.s32.f64 / softfloat
+__pxx_d2i64). Permanently gated: test/ccross_double_to_int.c (STORE_SYM +
+STORE_MEM + array element) wired into test-i386/aarch64/arm32/riscv32; b176 covers
+x86-64. All suites green.
+
+## REMAINING: C-call arg path (lower priority)
+`intfunc(99.0)` — passing a float value to an INTEGER parameter — is not yet
+converted on the 4 cross backends (x86-64 is done). This needs the double->int
+truncation inserted into each backend's C-call argument marshalling (per-ABI:
+i386 all-stack; aarch64 x0-x7; arm32 r0-r3+VFP; riscv32 a0-a7+softfloat), where a
+float argument lands in an integer parameter slot. Rare construct (real C usually
+passes an int or an explicit cast), so lower priority than the two store paths.
+Same conversion primitives as above; mirror the x86-64 IR_CALL arg-push fix.
+Test: extend ccross_double_to_int.c with an `intfunc(99.0)` case once landed.
