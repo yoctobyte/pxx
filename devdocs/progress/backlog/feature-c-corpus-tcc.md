@@ -160,3 +160,24 @@ Runtime arc, not parse. Suspects, in order:
   (crtl/PAL/softfloat) from source per invocation — others link prebuilt libs.
 - Target benchmark once tcc runs: tcc-by-pxx vs tcc-by-gcc SELF-COMPILE time
   (measures generated-code quality, not compile speed).
+
+## MILESTONE 2026-07-07 (session 2, later): pxx-built tcc COMPILES C
+Two deep miscompiles found via tcc's TOK_GET macro (token stream = int*
+walked through int** and `*(&p)`):
+- ir.inc IRPointerStride: no AN_DEREF case — `++*(p)` (p T**) and `*(&x)`
+  stepped 1 BYTE. Every function-macro expansion read misaligned tokens
+  (first as segfault in sym_link via garbage v; after block-scope fix, as
+  silent bad tokens 0x5000005 / "got '(null)'").
+- cparser CNodePointeeTk: no AN_DEREF case — `**(&mp)` loaded 8 bytes;
+  comparisons saw garbage high half; printf %d truncated it away (heisenbug).
+Also en route: C block scope (b186) after tcc's struct_decl shadow clobbered
+symbols; blue-paint markers (b185); >1KB printf; label-owns-statement.
+RESULT: `tcc -E` matches gcc-built tcc byte-for-byte; `tcc -c` emits an ELF
+object BYTE-IDENTICAL to gcc-built tcc's for the same input. Regressions
+b185/b186/b187.
+
+## NEXT WALL: linking — "error: invalid archive" on libtcc1.a AND
+/usr/lib/.../libc_nonshared.a. tcc's archive loader (tcc_load_archive /
+ld_add_file magic check "!<arch>\n") misbehaves in the pxx build — suspect
+crtl fread/fseek on the .a or another miscompile in its header walk. After
+that: `tcc -run`, then the self-compile benchmark (anchors above).
