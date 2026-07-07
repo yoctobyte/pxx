@@ -98,3 +98,55 @@ pxx's cpreproc picked up the ELF*_ST_* function-like macros; IS bug-c-preproc-pa
 paste result must rescan and consume the trailing `(x)`. So tcc's next blocker is
 the parked paste-rescan rework (prio raised to 60). Progress:
 tcc parse 10545 -> 11810 -> 12370 -> 14377 -> 14395 (4 cfront fixes + crtl aliases).
+
+## MILESTONE 2026-07-07 (session 2): tcc COMPILES, LINKS, and RUNS `-v`
+After paste-rescan landed (bug-c-preproc-paste-rescan done), one session cleared
+blockers 6..N in a cascade; `compiler/pascal26 -Ilibrary_candidates/tcc
+library_candidates/tcc/tcc.c out` now produces a 1.75MB binary that prints
+`tcc version 0.9.28rc (x86_64 Linux)`. Fixes, in order hit:
+
+cfront (cparser.inc, regression b184 covers all):
+- :22215 `sizeof ((Stab_Sym*)0)->n_value` — postfix `->field`/`.field` after a
+  parenthesized sizeof operand belongs to the operand (C 6.5.3).
+- :29062 `TCCSem static rt_sem;` — storage class / qualifier AFTER the type name
+  (static/extern/inline/volatile/register/restrict/_Noreturn accepted anywhere in
+  the specifier run).
+- :29139 `(tcc_enter_state(s1),_tcc_error_noabort)("...")` — comma expr yields
+  the callee; CNodeProcSig recurses into AN_COMMA's right arm, callee stays the
+  whole comma node so left-arm side effects run (AN_CALL_IND evaluates it).
+- :29181 `int (*prog_main)(int,...), ret;` — sibling declarators after an inline
+  fn-ptr declarator (fall through into the multi-declarator loop; sibling base =
+  the fn-ptr's return specifier).
+- :29232 `__pxx_setjmp(&(_tcc_setjmp(...)))` — `&(pointer-valued call)` (only our
+  setjmp macro can produce it) yields the call value = glibc array-decay
+  semantics. NOTE: proper fix is array typedefs (jmp_buf as `long[16]`) — typedef
+  array dimension is LOST today (sizeof=8 not 128); file separately.
+- :29264 `} while (++p, f);` — do-while condition is a full C expression
+  (ParseCCommaExpr).
+
+cpreproc.inc:
+- `#undef` now kills ALL stacked entries of a name (repeated `#define _tcc_error
+  use_tcc_error_noabort` from tcc.h's per-file re-include survived one tombstone
+  and renamed the real `_tcc_error` DEFINITION → "undefined symbol: _tcc_error").
+
+crtl/PAL (Track B files):
+- getcwd: full chain — SYS_getcwd in all 5 posix arch tables + PalBackendGetcwd
+  (+ ESP stub) + PalGetcwd + __pxx_getcwd + unistd.h/unistd.c veneer.
+- unlink (rides __pxx_remove), fdopen + fileno (stdio), mprotect (no-op stub next
+  to the stub mmap), realpath (identity copy, no symlink walk), execvp
+  (link-only stub, ENOENT), assert.c (__pxx_assert_fail had NO impl anywhere),
+  signal.h grown a POSIX surface (sigset_t/siginfo_t/stack_t/struct sigaction +
+  sigemptyset/sigaddset/sigprocmask/sigaction/sigaltstack — bit-ops real,
+  registration stubs) + crtl-own sys/ucontext.h (x86-64 glibc gregs layout;
+  stops the /usr/include host-header leak).
+
+## NEXT WALL: tcc -v works; `tcc_bin -c hello.c` SEGFAULTS
+Runtime arc, not parse. Suspects, in order:
+1. mmap/mprotect are stubs (mmap returns MAP_FAILED) — tcc_relocate needs real
+   anonymous exec mappings. PAL has SYS_mmap already; bridge it (Track B) and
+   make mprotect real.
+2. struct jmp_buf passed BY VALUE where tcc treats jmp_buf as array→pointer
+   (main_jb into _tcc_setjmp) — needs the array-typedef fix.
+3. environ is referenced (`char **envp = environ;`) — resolved how? verify.
+4. Any of the ~30 fresh crtl paths (fdopen etc.) or a genuine miscompile —
+   instrument with the zlib printf-diff method once 1-3 are clean.
