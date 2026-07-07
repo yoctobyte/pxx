@@ -26,3 +26,15 @@ Drop 00201.c/00202.c from test/c-conformance/pxx.skip; runner green.
 
 ## Triage note (2026-07-06)
 Hard: needs macro RESCAN across the expansion boundary. `CAT(A,B)` pastes to the identifier `AB`, and the `(x)` that follows in the *source* must then be consumed so `AB(x)` expands. This is the same rescan machinery as CPObjectAliasFuncMacro but for a paste result feeding a following source arg-list — a rescan-loop rework in CPExpandRange, not a patch. Also 00202 needs empty-arg paste (`a##<empty>`) + pasting onto operators without forming `++`. Defer to a focused session.
+
+
+## Triage 2026-07-07
+The leveled expander (CPExpandRangeForLevel/CPExpandFunctionForLevel in
+cpreproc.inc) does not rescan a function-macro's OUTPUT combined with trailing
+SOURCE tokens. 00201 `CAT(A,B)(x)`: CAT(A,B) expands to token `AB`, then the
+following `(x)` from source must re-scan `AB(x)` as a fresh function-macro call
+(→ CAT(x,y) → xy → 42). "A macro expands to a function-like macro name that then
+eats following tokens" is one of the hardest cpp corners — needs the expander to
+feed its output back through scanning WITH the remaining input, not expand-in-
+isolation. 00202 adds empty-arg paste (`P(jim,)`→`jim##<empty>`) and operator
+paste that must NOT fuse (`60 + +3` ≠ `60 ++ 3`). Focused cpreproc rework. Parked.
