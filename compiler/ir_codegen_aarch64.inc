@@ -953,6 +953,14 @@ begin
           { int value into a float slot: convert (bits stay in x0) }
           EmitI32($9E620000);                     { scvtf d0, x0 }
           EmitI32($9E660000);                     { fmov x0, d0 }
+        end
+        else if CProgramMode and (not TypeIsFloat(Syms[IRA[node]].TypeKind)) and
+                TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          { C double->int: float RHS (bits in x0) into an integer slot truncates
+            (fcvtzs). Mirrors the x86-64/i386 cvttsd2si. }
+          EmitI32($9E670000);                     { fmov d0, x0 }
+          EmitI32($9E780000);                     { fcvtzs x0, d0 }
         end;
         EmitStoreVarA64(IRA[node]);
       end;
