@@ -2310,6 +2310,13 @@ begin
         IREmitNodeAarch64(IRA[node]); { address -> x0 }
         InLValueWrite := savedLValueWrite;
         EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
+        { C double->int: a float RHS (bits in x1) into an integer field/element
+          truncates (fcvtzs). Mirrors IR_STORE_SYM. }
+        if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitI32($9E670020);         { fmov d0, x1 }
+          EmitI32($9E780001);         { fcvtzs x1, d0 }
+        end;
         sz := TypeSize(tk);
         if sz = 1 then EmitI32($39000001)      { strb w1, [x0] }
         else if sz = 2 then EmitI32($79000001) { strh w1, [x0] }

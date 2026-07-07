@@ -3195,7 +3195,11 @@ begin
           EmitB($89); EmitB($50); EmitB($04);        { mov [eax+4], edx }
           Exit;
         end;
-        IREmitNode386(IRB[node]);                    { value -> eax }
+        IREmitNode386(IRB[node]);                    { value -> eax (or xmm0 if float) }
+        { C double->int: a float RHS (in xmm0) into an integer field/element
+          truncates (cvttsd2si) before the store. Mirrors IR_STORE_SYM. }
+        if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end;   { cvttsd2si eax, xmm0 }
         EmitB($50);                                  { push eax }
         savedLValueWrite := InLValueWrite;
         InLValueWrite := True;

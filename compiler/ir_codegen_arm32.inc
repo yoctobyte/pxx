@@ -2671,7 +2671,15 @@ begin
           EmitI32($E5802004);          { str r2, [r0, #4] }
           Exit;
         end;
-        IREmitNodeArm32(IRB[node]); { value -> r0 }
+        IREmitNodeArm32(IRB[node]); { value -> r0 (or d0 if float) }
+        { C double->int: a float RHS (in d0) into an integer field/element
+          truncates (VFP vcvt.s32.f64) before the store. Mirrors IR_STORE_SYM. }
+        if CProgramMode and (not TypeIsFloat(tk)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitI32($EEBD0BC0);       { vcvt.s32.f64 s0, d0 (trunc) }
+          EmitI32($EE100A10);       { vmov r0, s0 }
+        end;
         EmitI32($E92D0001);         { push {r0} }
         savedLValueWrite := InLValueWrite;
         InLValueWrite := True;

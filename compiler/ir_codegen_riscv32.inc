@@ -970,6 +970,29 @@ begin
           rv32_sw(reg_t1, reg_a0, 4);
           Exit;
         end;
+        { C double->int: a float RHS into an integer field/element evaluates the
+          double (a0:a1) and truncates via softfloat __pxx_d2i64 before the store.
+          Mirrors IR_STORE_SYM. }
+        if CProgramMode and (not IsFloatRISCV32(tk)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitNode64RISCV32(IRB[node]);             { a0:a1 = double bits }
+          procIdx := FindProc('__pxx_d2i64');
+          if procIdx < 0 then Error('compiler error: __pxx_d2i64 not found (uses softfloat?)');
+          EmitCallProc(procIdx);                    { a0 = truncated int (low word) }
+          rv32_addi(reg_sp, reg_sp, -4);
+          rv32_sw(reg_a0, reg_sp, 0);
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeRISCV32(IRA[node]);
+          InLValueWrite := savedLVW;
+          rv32_lw(reg_a1, reg_sp, 0);
+          rv32_addi(reg_sp, reg_sp, 4);
+          if sz = 1 then rv32_sb(reg_a1, reg_a0, 0)
+          else if sz = 2 then rv32_sh(reg_a1, reg_a0, 0)
+          else rv32_sw(reg_a1, reg_a0, 0);
+          Exit;
+        end;
         IREmitNodeRISCV32(IRB[node]);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
