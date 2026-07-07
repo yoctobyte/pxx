@@ -28,11 +28,12 @@ _none_
 
 _none_
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-builtin-va-copy | C | 50 | bug | C: __builtin_va_copy not supported (blocks tcc libtcc.c) | — |
 | bug-c-cross-double-to-int-conversion | C | 45 | bug | C double→int conversion missing on cross backends (i386/arm32/aarch64/riscv32) | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
@@ -730,6 +731,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [C] bug-c-builtin-va-copy
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
 - [p 50] [C] feature-c-corpus-tcc
 - [p 45] [C] bug-c-cross-double-to-int-conversion
