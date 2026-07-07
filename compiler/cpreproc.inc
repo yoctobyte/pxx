@@ -775,6 +775,24 @@ begin
         SetLength(dst, Length(dst) - 1);
       p := p + 2;
       while (p <= last) and (CPrepChars[p] in [' ', #9]) do Inc(p);
+      { Right operand is a parameter with an EMPTY argument (C99 placemarker):
+        `a ## <empty>` yields just `a`, and the NEXT body token must stay a
+        SEPARATE token — emit a space so `A ## B+` with B empty gives `+ +`,
+        not `++` (00202). A following `##` re-trims the space, so paste
+        chains like `a##b##c` with an empty middle stay glued. }
+      if (p <= last) and CPIsIdentStart(CPrepChars[p]) then
+      begin
+        a := p;
+        q := p;
+        while (q <= last) and CPIsIdentChar(CPrepChars[q]) do Inc(q);
+        ai := CPParamIndex(mi, a, q - a);
+        if (ai >= 0) and (ai < argCount) and
+           (CPArgStart[argBase + ai] > CPArgEnd[argBase + ai]) then
+        begin
+          AppendChar(dst, ' ');
+          p := q;
+        end;
+      end;
       Continue;
     end;
     { Stringize `#param` -> a string literal of the parameter's RAW (unexpanded)
