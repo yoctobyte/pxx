@@ -22,6 +22,8 @@ char *strstr(const char *haystack, const char *needle);
 char *strpbrk(const char *s, const char *accept);
 size_t strspn(const char *s, const char *accept);
 size_t strcspn(const char *s, const char *reject);
+char *strtok(char *s, const char *delim);
+char *strtok_r(char *s, const char *delim, char **saveptr);
 int strcoll(const char *a, const char *b);
 size_t strxfrm(char *dest, const char *src, size_t n);
 void *memchr(const void *s, int c, size_t n);

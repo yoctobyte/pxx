@@ -249,3 +249,24 @@ char *strerror(int errnum)
     (void)errnum;
     return "error";
 }
+
+/* strtok_r: reentrant tokenizer. Skips leading delimiters, terminates the token
+   with NUL, and advances *saveptr past it. NULL `s` continues from *saveptr.
+   Built on strspn/strcspn (delimiter-set skip/scan). */
+char *strtok_r(char *s, const char *delim, char **saveptr) {
+  char *tok;
+  if (s == 0) s = *saveptr;
+  s += strspn(s, delim);          /* skip leading delimiters */
+  if (*s == 0) { *saveptr = s; return 0; }
+  tok = s;
+  s += strcspn(s, delim);         /* scan to next delimiter (or end) */
+  if (*s != 0) { *s = 0; s++; }   /* terminate token, step past delimiter */
+  *saveptr = s;
+  return tok;
+}
+
+/* strtok: classic non-reentrant tokenizer over a static save-pointer. */
+static char *__pxx_strtok_save;
+char *strtok(char *s, const char *delim) {
+  return strtok_r(s, delim, &__pxx_strtok_save);
+}

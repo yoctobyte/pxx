@@ -54,3 +54,12 @@ prints `[hello][world][foo]`.
 - 2026-07-02 — Filed by Track B while probing `string.h` coverage; rest of
   `string.h` (strcpy/strcmp/strstr/etc.) and `qsort`/`snprintf` all verified
   correct in the same session. No code touched — test/repro only.
+
+
+## RESOLVED 2026-07-07 (Track B)
+Implemented strtok + strtok_r in lib/crtl/src/string.c (decls in string.h),
+built on the existing strspn/strcspn: strtok_r skips leading delimiters,
+NUL-terminates the token in place, advances the save-pointer; strtok wraps it
+over a static save-pointer. Standard semantics (empty fields between adjacent
+delimiters skipped; NULL first arg continues). Regression b181 (comma/space/
+adjacent-delimiter tokenizing + in-place NUL). make test + lua green.

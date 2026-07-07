@@ -803,6 +803,8 @@ test-core: $(COMPILER)
 	/tmp/csizeof_unparen_field_b17926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_multi_declarator_b180.c /tmp/cglobal_multi_declarator_b18026
 	/tmp/cglobal_multi_declarator_b18026; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstrtok_b181.c /tmp/cstrtok_b18126
+	/tmp/cstrtok_b18126; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

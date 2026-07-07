@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (104)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,7 +67,6 @@ _none_
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-demo-chess | B | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
@@ -172,7 +171,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (495)
+## done (496)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -489,6 +488,7 @@ _none_
 | feature-cross-selfhost-i386 | A | 50 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-cross-streaming-lfm | A | 50 | feature | Component streaming + LFM loading on the cross targets | — |
 | feature-cross-target-feature-parity | A | 50 | feature | Cross-target language-feature parity (Intel + ARM) | — |
+| feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-declaration-prescan | A | 50 | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
 | feature-default-params-on-methods | A | 50 | feature | Default parameter values on class/interface methods (works on free routines) | — |
@@ -706,7 +706,6 @@ _none_
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-runtime-library
 - [p 60] [A] feature-cdecl-indirect-cross-targets
-- [p 60] [B] feature-crtl-strtok-missing
 - [p 60] [B] feature-dns-resolver-library
 - [p 60] [A] feature-esoteric-frontend-probes
 - [p 60] [A] feature-float-exception-mask-control
