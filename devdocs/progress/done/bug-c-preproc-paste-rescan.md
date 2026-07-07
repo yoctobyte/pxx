@@ -167,3 +167,6 @@ test + drop 00202 from skip.
 00201 (+ ideally 00202) pass and dropped from pxx.skip; tcc libtcc.c parse past
 :14395; regressions bXXX green; make test self-host byte-identical; zlib/lua/
 sqlite unchanged.
+
+## Log
+- 2026-07-07 — resolved, commit a3e5c9f7.
