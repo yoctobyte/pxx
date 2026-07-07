@@ -242,12 +242,16 @@ rules below are for that shared `master` checkout:
   zero. The shared `Makefile` is fenced per track.
 - **`git pull --rebase` before you push**, and push promptly after committing —
   the other agent may have pushed in between. Resolve in your own files.
-- **Push freely when stable; you don't need to ask.** History is reversible, so a
-  push of a green, lane-gated state is always safe. The bar is: your lane's gate
-  passes (A = `make test` + self-host byte-identical; B = `make lib-test` /
-  `demos`) and nothing half-finished is committed. Do NOT push a known-broken or
-  mid-refactor tree, and never sweep the *other* agent's uncommitted in-flight
-  work into your push — push only what you committed (`git commit -- <paths>`).
+- **Push OFTEN; you don't need to ask.** Since Track T (see
+  `devdocs/dev/track-t.md`), the full matrix runs offloaded against
+  origin/master — unpushed work is untested work. The bar per push: native
+  confirm (`tools/testmgr.py --tier quick` + self-host fixedpoint for compiler
+  changes) and nothing half-finished committed; Track T catches the breadth
+  and reports per-SHA. Only when `twatch --status` says T is down does the old
+  bar return (your lane's full gate before risky pushes). Do NOT push a
+  known-broken or mid-refactor tree, and never sweep the *other* agent's
+  uncommitted in-flight work into your push — push only what you committed
+  (`git commit -- <paths>`).
 - **`git log --oneline -5` at session start** to see what the other track just
   landed (e.g. a new stable `vN`, a freshly closed ticket).
 - **`BOARD.md` never conflicts.** It is generated from the ticket files and both
@@ -326,7 +330,9 @@ costing real time.
 `make stabilize-fast` = the everyday iteration pin: a curated smoke subset
 (`test-smoke`, regression-prone surfaces + the full self-host byte-identity
 chain) instead of the full suite, then the same recording step. ~18s wall.
-POLICY: fine for iteration; run full `make stabilize` before pushing a batch
-of work, for milestone pins, releases, and anything touching
-codegen/ABI/ELF. `make pin` blesses whichever was recorded last, as before.
+POLICY: fine for iteration. Full `make stabilize` is for PINS, not pushes —
+milestone pins, releases, anything touching codegen/ABI/ELF that will move
+`pinned`. Ordinary pushes are gated by the native confirm + Track T offload
+(see the push norm above), not by stabilize. `make pin` blesses whichever
+was recorded last, as before.
 New features append a case to `test-smoke` AND their full-suite test.

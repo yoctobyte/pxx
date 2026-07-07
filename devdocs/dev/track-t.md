@@ -48,6 +48,17 @@ Notes:
 - Knobs: `--tier`, `--host`, `--interval`, `--debounce` (repo-quiet window
   before testing a burst), `--once` (cron style), `--no-bisect`.
 
+### Corpus trees: whose job
+`library_candidates/` (lua/sqlite/zlib/c-testsuite/tcc/cjson) is gitignored;
+absent trees make corpus jobs SKIP (reported green) — silent coverage loss.
+- **Non-agentic watcher box:** MANUAL — the user runs
+  `tools/install_lib_candidates.sh all` (or `twatch-setup.sh --fetch-corpus`)
+  at deploy time and after new corpora land.
+- **Agentic Track T:** the agent's duty. On each session it checks its
+  watcher clones for missing corpus trees and runs
+  `tools/install_lib_candidates.sh all` — SKIPped corpus jobs in tstate are a
+  finding to fix, not a green to accept.
+
 ## Dev-track protocol ("confirm native, offload the matrix")
 
 After a change (also in CLAUDE.md workflow norms):

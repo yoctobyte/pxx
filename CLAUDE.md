@@ -223,13 +223,15 @@ destabilizing work behind a flag or incrementally, never a long-lived branch.
   sync, do **not** push, commit, or rebase another track's branch or in-flight
   work — not even a clean fast-forward of a sibling's commit. That track pushes
   its own.
-- **Push freely when the tree is stable** — green where it matters (your lane's
-  gate: A `make test` + self-host; B `make lib-test`/`demos`; C C-tests +
-  self-host + cross; D snippets compile), no half-finished edit committed.
-  History is reversible, so a stable push is always safe; you do NOT need to ask
-  each time. The old "never push without ok" rule is retired. Still: don't push a
-  known-broken or mid-refactor state, and don't push another agent's in-flight
-  uncommitted work — only what you committed.
+- **Push OFTEN — pushing is the default, not a milestone.** Track T only sees
+  what lands on origin/master, so unpushed work is untested work: commit each
+  logical unit and push it after the native confirm (quick + self-host — see
+  "confirm native, offload the matrix" above). When `twatch --status` says T
+  is down, the bar rises to your lane's full gate for risky changes (A `make
+  test` + self-host; B `make lib-test`/`demos`; C C-tests + self-host + cross;
+  D snippets compile). You never need to ask before pushing. Still: don't push
+  a known-broken or mid-refactor state, and don't push another agent's
+  in-flight uncommitted work — only what you committed.
 - **Self-serve queue:** `tools/progress.sh next --track <X>` prints the single
   top ticket to grab (and why); `ready --track <X>` is the whole ranked queue.
   Ranking = one human `prio:` (0-100, frontmatter, unset=50) propagated down

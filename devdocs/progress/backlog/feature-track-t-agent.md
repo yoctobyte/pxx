@@ -22,7 +22,12 @@ reliable; the agent adds judgment:
    single-job bisect (testmgr --job) rather than waiting for idle backfill.
 4. **Escalation policy:** core-job red older than a day → mark ticket
    urgent + propose the revert in the ticket body.
-5. **Owns the Track T codebase** long-term: testmgr.py, twatch.py, report
+5. **Corpus completeness (user, 2026-07-07):** absent `library_candidates/`
+   trees make corpus jobs SKIP — silent coverage loss. The agent keeps its
+   watcher clones complete (`tools/install_lib_candidates.sh all`); a
+   SKIPping corpus job in tstate is a finding, not a green. On non-agentic
+   boxes this stays a manual/user step (devdocs/dev/track-t.md).
+6. **Owns the Track T codebase** long-term: testmgr.py, twatch.py, report
    format, tier composition (e.g. promote new corpus targets into full),
    calibration constants. SELF-DIRECTED (user, 2026-07-07): the T agent is
    free to improve/refactor/optimize Track T sources on its own initiative —
