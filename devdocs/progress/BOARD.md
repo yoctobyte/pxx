@@ -99,7 +99,7 @@ _none_
 | feature-optimization-levels | A | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
-| feature-parallel-test-harness | A | 45 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
+| feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -692,6 +692,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] bug-c-init-brace-elision-nested (unblocks 1)
+- [p 80] [A] feature-parallel-test-harness
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [C] feature-c-cross-target-feature-coverage
@@ -762,7 +763,6 @@ _none_
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [B] feature-pal-esp-posix-fd-semantics
 - [p 45] [A] feature-parallel-processing
-- [p 45] [A] feature-parallel-test-harness
 - [p 45] [A] feature-r-frontend-parked
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
