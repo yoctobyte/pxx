@@ -1123,6 +1123,15 @@ begin
           Exit;
         end;
         IREmitNodeArm32(IRB[node]);
+        { C double->int: a float RHS (in d0) stored to an integer slot truncates
+          via VFP vcvt.s32.f64 (arm32 `long` is 32-bit, so 32-bit convert suffices)
+          instead of storing raw bits from r0. Mirrors x86-64/i386/aarch64. }
+        if CProgramMode and (not TypeIsFloat(tk)) and
+           TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          EmitI32($EEBD0BC0);                       { vcvt.s32.f64 s0, d0 (trunc) }
+          EmitI32($EE100A10);                       { vmov r0, s0 }
+        end;
         EmitStoreVarArm32(IRA[node]);
       end;
 
