@@ -3895,6 +3895,12 @@ begin
               if (ei < arrLen) and (fldI < UClsFCount[recId - REC_UCLASS_BASE]) then
               begin
                 fTk := UFldTk[recBase + fldI];
+                { `&func` in a fn-pointer field == `func`: peel the `&` so the
+                  function-name branch binds it (only for a proc name). }
+                if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and
+                   (Tokens[TokPos].Kind = tkIdent) and
+                   (FindProc(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen)) >= 0) then
+                  Next;
                 if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
                    (PendingInitCount < MAX_PENDING_INITS) then
                 begin
@@ -4073,6 +4079,14 @@ begin
           if fldI < UClsFCount[recId - REC_UCLASS_BASE] then
           begin
             fTk := UFldTk[recBase + fldI];
+            { `&func` in a fn-pointer field == `func` (address-of a function is the
+              fn-pointer value): peel the `&` so the function-name branch binds
+              it. Only when the name is a proc, so a data `&globalvar` is left to
+              its own branch. }
+            if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and
+               (Tokens[TokPos].Kind = tkIdent) and
+               (FindProc(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen)) >= 0) then
+              Next;
             if CurTok.Kind = tkBegin then
               CSkipCInitElement
             else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
