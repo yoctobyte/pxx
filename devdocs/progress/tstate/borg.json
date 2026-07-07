@@ -69,6 +69,68 @@
    "new_red": [],
    "sha": "a745af691baa5be69b43318789cce2f594bfb26b",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-07T18:43:56Z",
+   "fixed": [
+    "test-aarch64#94",
+    "test-arm32#103",
+    "test-core#151",
+    "test-core#152",
+    "test-core#153",
+    "test-core#154",
+    "test-core#155",
+    "test-core#156",
+    "test-core#157",
+    "test-core#158",
+    "test-core#159",
+    "test-core#160",
+    "test-core#161",
+    "test-core#163",
+    "test-core#164",
+    "test-core#165",
+    "test-core#166",
+    "test-core#167",
+    "test-core#168",
+    "test-core#169",
+    "test-core#170",
+    "test-core#171",
+    "test-core#172",
+    "test-core#173",
+    "test-core#174",
+    "test-core#175",
+    "test-core#176",
+    "test-core#177",
+    "test-core#178",
+    "test-core#179",
+    "test-core#180",
+    "test-core#182",
+    "test-core#183",
+    "test-core#184",
+    "test-core#185",
+    "test-core#186",
+    "test-core#187",
+    "test-core#188",
+    "test-core#213",
+    "test-core#219",
+    "test-core#220",
+    "test-core#260",
+    "test-core#28",
+    "test-core#29",
+    "test-core#30",
+    "test-core#31",
+    "test-core#32",
+    "test-core#33",
+    "test-core#34",
+    "test-core#35",
+    "test-core#78",
+    "test-core#85",
+    "test-i386#103",
+    "test-riscv32#02"
+   ],
+   "new_red": [],
+   "sha": "b24e47f052e1c59dd56522e3e4916afed43b7eff",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -171,7 +233,7 @@
   "test-aarch64#91": "pass",
   "test-aarch64#92": "pass",
   "test-aarch64#93": "pass",
-  "test-aarch64#94": "fail",
+  "test-aarch64#94": "pass",
   "test-aarch64#95": "pass",
   "test-aarch64#96": "pass",
   "test-aarch64#97": "pass",
@@ -191,7 +253,7 @@
   "test-arm32#100": "pass",
   "test-arm32#101": "pass",
   "test-arm32#102": "pass",
-  "test-arm32#103": "fail",
+  "test-arm32#103": "pass",
   "test-arm32#104": "pass",
   "test-arm32#105": "pass",
   "test-arm32#106": "pass",
@@ -377,47 +439,47 @@
   "test-core#149": "pass",
   "test-core#15": "pass",
   "test-core#150": "pass",
-  "test-core#151": "fail",
-  "test-core#152": "fail",
-  "test-core#153": "fail",
-  "test-core#154": "fail",
-  "test-core#155": "fail",
-  "test-core#156": "fail",
-  "test-core#157": "fail",
-  "test-core#158": "fail",
-  "test-core#159": "fail",
+  "test-core#151": "pass",
+  "test-core#152": "pass",
+  "test-core#153": "pass",
+  "test-core#154": "pass",
+  "test-core#155": "pass",
+  "test-core#156": "pass",
+  "test-core#157": "pass",
+  "test-core#158": "pass",
+  "test-core#159": "pass",
   "test-core#16": "pass",
-  "test-core#160": "fail",
-  "test-core#161": "fail",
+  "test-core#160": "pass",
+  "test-core#161": "pass",
   "test-core#162": "pass",
-  "test-core#163": "fail",
-  "test-core#164": "fail",
-  "test-core#165": "fail",
-  "test-core#166": "fail",
-  "test-core#167": "fail",
-  "test-core#168": "fail",
-  "test-core#169": "fail",
+  "test-core#163": "pass",
+  "test-core#164": "pass",
+  "test-core#165": "pass",
+  "test-core#166": "pass",
+  "test-core#167": "pass",
+  "test-core#168": "pass",
+  "test-core#169": "pass",
   "test-core#17": "pass",
-  "test-core#170": "fail",
-  "test-core#171": "fail",
-  "test-core#172": "fail",
-  "test-core#173": "fail",
-  "test-core#174": "fail",
-  "test-core#175": "fail",
-  "test-core#176": "fail",
-  "test-core#177": "fail",
-  "test-core#178": "fail",
-  "test-core#179": "fail",
+  "test-core#170": "pass",
+  "test-core#171": "pass",
+  "test-core#172": "pass",
+  "test-core#173": "pass",
+  "test-core#174": "pass",
+  "test-core#175": "pass",
+  "test-core#176": "pass",
+  "test-core#177": "pass",
+  "test-core#178": "pass",
+  "test-core#179": "pass",
   "test-core#18": "pass",
-  "test-core#180": "fail",
+  "test-core#180": "pass",
   "test-core#181": "pass",
-  "test-core#182": "fail",
-  "test-core#183": "fail",
-  "test-core#184": "fail",
-  "test-core#185": "fail",
-  "test-core#186": "fail",
-  "test-core#187": "fail",
-  "test-core#188": "fail",
+  "test-core#182": "pass",
+  "test-core#183": "pass",
+  "test-core#184": "pass",
+  "test-core#185": "pass",
+  "test-core#186": "pass",
+  "test-core#187": "pass",
+  "test-core#188": "pass",
   "test-core#189": "pass",
   "test-core#19": "pass",
   "test-core#190": "pass",
@@ -445,15 +507,15 @@
   "test-core#210": "pass",
   "test-core#211": "pass",
   "test-core#212": "pass",
-  "test-core#213": "fail",
+  "test-core#213": "pass",
   "test-core#214": "pass",
   "test-core#215": "pass",
   "test-core#216": "pass",
   "test-core#217": "pass",
   "test-core#218": "pass",
-  "test-core#219": "fail",
+  "test-core#219": "pass",
   "test-core#22": "pass",
-  "test-core#220": "fail",
+  "test-core#220": "pass",
   "test-core#221": "pass",
   "test-core#222": "pass",
   "test-core#223": "pass",
@@ -497,7 +559,7 @@
   "test-core#258": "pass",
   "test-core#259": "pass",
   "test-core#26": "pass",
-  "test-core#260": "fail",
+  "test-core#260": "pass",
   "test-core#261": "fail",
   "test-core#262": "pass",
   "test-core#263": "pass",
@@ -518,7 +580,7 @@
   "test-core#277": "pass",
   "test-core#278": "pass",
   "test-core#279": "pass",
-  "test-core#28": "fail",
+  "test-core#28": "pass",
   "test-core#280": "pass",
   "test-core#281": "pass",
   "test-core#282": "pass",
@@ -529,7 +591,7 @@
   "test-core#287": "pass",
   "test-core#288": "pass",
   "test-core#289": "pass",
-  "test-core#29": "fail",
+  "test-core#29": "pass",
   "test-core#290": "pass",
   "test-core#291": "pass",
   "test-core#292": "pass",
@@ -540,7 +602,7 @@
   "test-core#297": "pass",
   "test-core#298": "pass",
   "test-core#299": "pass",
-  "test-core#30": "fail",
+  "test-core#30": "pass",
   "test-core#300": "pass",
   "test-core#301": "pass",
   "test-core#302": "pass",
@@ -551,7 +613,7 @@
   "test-core#307": "pass",
   "test-core#308": "pass",
   "test-core#309": "pass",
-  "test-core#31": "fail",
+  "test-core#31": "pass",
   "test-core#310": "pass",
   "test-core#311": "pass",
   "test-core#312": "pass",
@@ -562,7 +624,7 @@
   "test-core#317": "pass",
   "test-core#318": "pass",
   "test-core#319": "pass",
-  "test-core#32": "fail",
+  "test-core#32": "pass",
   "test-core#320": "pass",
   "test-core#321": "pass",
   "test-core#322": "pass",
@@ -573,7 +635,7 @@
   "test-core#327": "pass",
   "test-core#328": "pass",
   "test-core#329": "pass",
-  "test-core#33": "fail",
+  "test-core#33": "pass",
   "test-core#330": "pass",
   "test-core#331": "pass",
   "test-core#332": "pass",
@@ -584,7 +646,7 @@
   "test-core#337": "pass",
   "test-core#338": "pass",
   "test-core#339": "pass",
-  "test-core#34": "fail",
+  "test-core#34": "pass",
   "test-core#340": "pass",
   "test-core#341": "pass",
   "test-core#342": "pass",
@@ -595,7 +657,7 @@
   "test-core#347": "pass",
   "test-core#348": "pass",
   "test-core#349": "pass",
-  "test-core#35": "fail",
+  "test-core#35": "pass",
   "test-core#350": "pass",
   "test-core#351": "pass",
   "test-core#352": "pass",
@@ -934,14 +996,14 @@
   "test-core#75": "pass",
   "test-core#76": "pass",
   "test-core#77": "pass",
-  "test-core#78": "fail",
+  "test-core#78": "pass",
   "test-core#79": "pass",
   "test-core#80": "pass",
   "test-core#81": "pass",
   "test-core#82": "pass",
   "test-core#83": "pass",
   "test-core#84": "pass",
-  "test-core#85": "fail",
+  "test-core#85": "pass",
   "test-core#86": "pass",
   "test-core#87": "pass",
   "test-core#88": "pass",
@@ -975,7 +1037,7 @@
   "test-i386#100": "pass",
   "test-i386#101": "pass",
   "test-i386#102": "pass",
-  "test-i386#103": "fail",
+  "test-i386#103": "pass",
   "test-i386#104": "pass",
   "test-i386#105": "pass",
   "test-i386#106": "pass",
@@ -1075,7 +1137,7 @@
   "test-lua#00": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
-  "test-riscv32#02": "fail",
+  "test-riscv32#02": "pass",
   "test-riscv32#03": "pass",
   "test-riscv32#04": "pass",
   "test-riscv32#05": "pass",
@@ -1126,503 +1188,17 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-07T18:39:22Z",
-  "sha": "a745af691baa5be69b43318789cce2f594bfb26b",
+  "date": "2026-07-07T18:43:56Z",
+  "sha": "b24e47f052e1c59dd56522e3e4916afed43b7eff",
   "tier": "full",
   "verdict": "RED",
-  "wall": 138.8
+  "wall": 177.6
  },
  "open_regressions": [
   {
    "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
    "good": null,
-   "job": "test-aarch64#94",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-arm32#103",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#151",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#152",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#153",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#154",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#155",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#156",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#157",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#158",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#159",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#160",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#161",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#163",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#164",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#165",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#166",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#167",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#168",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#169",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#170",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#171",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#172",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#173",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#174",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#175",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#176",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#177",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#178",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#179",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#180",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#182",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#183",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#184",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#185",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#186",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#187",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#188",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#213",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#219",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#220",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#260",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
    "job": "test-core#261",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#28",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#29",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#30",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#31",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#32",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#33",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#34",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#35",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#78",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-core#85",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-i386#103",
-   "opened": "2026-07-07T18:35:36Z",
-   "range": [
-    "ca8dade233b917117af2093db68bc5f00f15c0b0"
-   ]
-  },
-  {
-   "bad": "ca8dade233b917117af2093db68bc5f00f15c0b0",
-   "good": null,
-   "job": "test-riscv32#02",
    "opened": "2026-07-07T18:35:36Z",
    "range": [
     "ca8dade233b917117af2093db68bc5f00f15c0b0"
