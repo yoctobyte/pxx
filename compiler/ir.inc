@@ -4441,7 +4441,28 @@ begin
       begin
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        { Same auto const char* marshalling the direct AN_CALL path applies: a
+          frozen string literal handed to a Pointer param (or a variadic slot)
+          needs the +8 length-prefix skip so the callee sees char data, not the
+          Pascal length word. A managed string is already a char pointer, so it
+          passes as-is. Without this, `p("literal")` through a `char*` function
+          pointer passed the length prefix and the callee printed nothing. }
+        if (not isRefArg) and (cpi >= 0) and
+           (IntToTypeKind(IRTk[value]) = tyString) and
+           (((pathIdx < Procs[cpi].ParamCount) and
+             (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
+            (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
+        begin
+          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+          value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+        end
+        else if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
+        else
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;

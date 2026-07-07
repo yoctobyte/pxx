@@ -81,3 +81,19 @@ the same mechanism the direct CALL uses — currently the address paths leave it
 Fix: make the external-proc address paths (global-init proc-address PendingInit +
 IR_PROCADDR) go through RegisterExternal + a patched DynCall slot like the call
 path. Deep linking/codegen, focused session.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A)
+Root cause was NOT the proc address. Verified `int(*p)(const char*)=puts` stores
+the CORRECT address (`p==puts==0x41d388`, printf %p) — direct call and address
+both fine. The blank output came from the string-literal ARGUMENT: `AN_CALL_IND`
+lowering (ir.inc) never applied the char* (+8) length-prefix skip that the direct
+`AN_CALL` path applies to a frozen string literal handed to a `char*` param. So
+`p("hello")` passed the Pascal length word, and the callee printed nothing. Int
+args worked (isolated with `putchar` fnptr → "AB", `puts` fnptr → blank).
+
+Fix (ir.inc, AN_CALL_IND arg loop): mirror the direct-call marshalling — string
+literal → tyPointer param (or variadic slot) gets IR_BINOP(+8); managed string →
+pointer param passes as-is. C-mode only; Pascal self-build byte-identical.
+Gate: make test (self-host byte-identical) + c-conformance 194/0 + lua + sqlite
+threads all green.

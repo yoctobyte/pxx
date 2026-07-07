@@ -28,13 +28,12 @@ _none_
 
 _none_
 
-## backlog (108)
+## backlog (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
-| bug-c-external-func-address-indirect-call | A | 50→55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-float-single-precision | C | 55 | bug | C float (single precision): arithmetic rounding + implicit arg conversions wrong | — |
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | bug-c-external-func-address-indirect-call |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
@@ -176,7 +175,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (487)
+## done (488)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -214,6 +213,7 @@ _none_
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-external-func-address-indirect-call | A | 50→55 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-external-function-address-dlsym-sqlite | C | 50 | bug | C: address of external libc function used as function pointer | — |
 | bug-c-field-of-call-result | C | 50 | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | 50 | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
@@ -715,10 +715,10 @@ _none_
 - [p 60] [R] feature-rust-macro-rules
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 55] [A] bug-c-external-func-address-indirect-call (unblocks 1)
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [C] bug-c-float-single-precision
+- [p 55] [C] bug-c-fnptr-to-crtl-variadic
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-preproc-paste-rescan
 - [p 55] [C] bug-c-ptrdiff-of-addr-elem
@@ -793,7 +793,6 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — bug-c-external-func-address-indirect-call
 - **1** — bug-c-gzgetc-fnlike-macro-call
 - **1** — bug-c-init-brace-elision-nested
 - **1** — task-sqlite-libc-free-runtime-bringup
