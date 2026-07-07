@@ -74,13 +74,16 @@ class Clone:
         # refuse to watch a working dev checkout: we do detached checkouts of
         # arbitrary SHAs — running that under an active agent/dev tree would
         # yank files out from under them.  A watcher clone stays pristine.
-        # tracked changes only (-uno): untracked scratch (e.g. our own report
-        # file, corpus trees) is harmless — detached checkouts don't touch it
-        dirty = sh(["git", "status", "--porcelain", "-uno"], cwd=path)
+        dirty = self.dirty()
         if dirty:
             sys.exit("twatch: %s has uncommitted changes — this looks like a "
                      "dev checkout, not a dedicated watcher clone. Refusing.\n%s"
                      % (path, dirty[:500]))
+
+    def dirty(self):
+        """Tracked changes only (-uno): untracked scratch (our own report
+        file, corpus trees) is harmless — detached checkouts don't touch it."""
+        return sh(["git", "status", "--porcelain", "-uno"], cwd=self.path)
 
     def fetch(self):
         sh(["git", "fetch", "--quiet", "origin"], cwd=self.path)
@@ -450,21 +453,49 @@ def main():
                   args.remote, args.branch)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
 
+    errors = 0
     while not STOP:
-        clone.fetch()
-        st = load_state(clone, host)
-        head = clone.remote_head()
-        tested = (st["last"] or {}).get("sha")
-        if head != tested:
-            head = debounce(clone, args.debounce)
-            if not STOP:
-                test_sha(clone, host, st, head, args.tier)
-        elif not args.no_bisect:
-            st = load_state(clone, host)
-            if not bisect_step(clone, host, st, args.tier):
+        try:
+            # re-check every cycle: an agent editing this checkout mid-run
+            # must PAUSE the watcher, not feed it dirty sources (2026-07-07:
+            # a dev edit leaked into a run, then killed the daemon on publish)
+            dirty = clone.dirty()
+            if dirty:
+                print("twatch: clone dirty — pausing this cycle (commit or "
+                      "stash to resume):\n%s" % dirty[:500], flush=True)
                 if args.once:
-                    print("twatch: up to date (%s), nothing to do" % head[:12],
-                          flush=True)
+                    return 1
+                time.sleep(int(args.interval))
+                continue
+            clone.fetch()
+            st = load_state(clone, host)
+            head = clone.remote_head()
+            tested = (st["last"] or {}).get("sha")
+            if head != tested:
+                head = debounce(clone, args.debounce)
+                if not STOP:
+                    test_sha(clone, host, st, head, args.tier)
+            elif not args.no_bisect:
+                st = load_state(clone, host)
+                if not bisect_step(clone, host, st, args.tier):
+                    if args.once:
+                        print("twatch: up to date (%s), nothing to do" % head[:12],
+                              flush=True)
+            errors = 0
+        except (RuntimeError, subprocess.SubprocessError, OSError) as e:
+            # transient git/network/infra failure must not kill the daemon;
+            # persistent failure (10 straight) should, loudly
+            errors += 1
+            print("twatch: cycle failed (%d/10): %s" % (errors, e), flush=True)
+            try:
+                clone_head_back(clone)   # crash mid-test leaves HEAD detached
+            except (RuntimeError, subprocess.SubprocessError, OSError):
+                pass
+            if errors >= 10:
+                print("twatch: 10 consecutive failures — giving up", flush=True)
+                return 1
+            if args.once:
+                return 1
         if args.once:
             break
         for _ in range(int(args.interval)):

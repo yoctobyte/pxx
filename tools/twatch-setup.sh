@@ -6,10 +6,11 @@
 # what's missing (with apt hints). Read-only by default; --fetch-corpus
 # additionally pulls the gitignored third-party trees.
 #
-# Deploy one-liner on a fresh box:
-#   git clone git@github.com:yoctobyte/pxx.git ~/trackt \
-#     && ~/trackt/tools/twatch-setup.sh --fetch-corpus \
-#     && nohup ~/trackt/tools/twatch.py --clone ~/trackt >> ~/trackt.log 2>&1 &
+# Deploy one-liner on a fresh box (the clone dir is the watcher's OWN —
+# never a dev/agent checkout; twatch pauses on any tracked local change):
+#   git clone git@github.com:yoctobyte/pxx.git ~/trackt-watch \
+#     && ~/trackt-watch/tools/twatch-setup.sh --fetch-corpus \
+#     && nohup ~/trackt-watch/tools/twatch.py --clone ~/trackt-watch >> ~/trackt-watch.log 2>&1 &
 #
 # Exit 0 = full tier capable; 1 = something missing (message says what, and
 # which reduced tier still works).
