@@ -4,7 +4,7 @@ blocked-by: [feature-track-t-watcher]
 ---
 # Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase
 
-- **Type:** feature (test infra / agent workflow). Track A initially; becomes Track T.
+- **Type:** feature (test infra / agent workflow). Track T (test infra).
 - **Opened:** 2026-07-07, from the Track T design discussion (user-approved).
 
 ## Concept

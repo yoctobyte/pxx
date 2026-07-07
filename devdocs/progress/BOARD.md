@@ -122,7 +122,7 @@ _none_
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
-| feature-track-t-agent | A | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
+| feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -253,7 +253,7 @@ _none_
 | bug-c-sqlite-undefined-symbol-memsetdefault | C | 50 | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
-| bug-c-static-local-initializer-reruns-every-call | A/C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
+| bug-c-static-local-initializer-reruns-every-call | A+C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
@@ -426,7 +426,7 @@ _none_
 | chore-asmtext-per-platform-split | A | 50 | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-fast-pin-tiered-tests | A | 50 | chore | Fast pin: tiered test suite + stabilize-fast (target: pin in ~20s) | — |
 | chore-qemu-test-env | A | 50 | chore | QEMU cross-target test environment | — |
-| chore-repin-c-stdio-pal-bridge | A/C | 50 | chore | Re-pin stable for C stdio/socket PAL bridge | — |
+| chore-repin-c-stdio-pal-bridge | A+C | 50 | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
@@ -644,7 +644,7 @@ _none_
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
-| feature-track-t-watcher | A | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
+| feature-track-t-watcher | T | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 | feature-transcendental-math | A | 50 | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
@@ -652,7 +652,7 @@ _none_
 | feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |
-| feature-uses-alias-as | ACA | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
+| feature-uses-alias-as | P | 50 | feature | Support namespace aliasing in uses clauses (`uses 'name' as alias`) | — |
 | feature-value-bearing-expressions-for-c | A | 50 | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-warn-oversized-stack-frame | A | 50 | feature | Warn on oversized stack locals / stack frames | — |
 | feature-xtensa-asm-emitter | A | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
@@ -719,7 +719,7 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [R] feature-rust-macro-rules
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
-- [p 60] [A] feature-track-t-agent
+- [p 60] [T] feature-track-t-agent
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model

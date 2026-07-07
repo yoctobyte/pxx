@@ -3,7 +3,7 @@ prio: 70  # dev-speed lever: kills the 10+min full gate from the dev inner loop
 ---
 # Track T face 1: standalone test watcher (twatch) — continuous offloaded gate
 
-- **Type:** feature (test infra). Track A (tools; no compiler changes).
+- **Type:** feature (test infra). Track T (test infra; tools only, no compiler changes).
 - **Opened:** 2026-07-07, from the Track T design discussion (user-approved).
 
 ## Concept (user, 2026-07-07)

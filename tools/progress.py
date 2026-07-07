@@ -58,8 +58,17 @@ def strip_quotes(value: str) -> str:
 def normalize_track(value: str) -> str:
     t = value.upper()
     t = t.replace("TRACK", "")
-    t = re.sub(r"[^ABCDR+/]", "", t)
-    t = t.replace("A/B", "A+B").replace("B/A", "A+B")
+    # full track names people actually write on Track: lines
+    for name, letter in (("PASCAL", "P"), ("RUST", "R"), ("ZIG", "Z"),
+                         ("DOCS", "D"), ("TESTING", "T")):
+        if name in t:
+            return letter
+    t = re.sub(r"[^ABCDPRTZ+/]", "", t)
+    t = t.replace("/", "+")
+    # strict: only clean single-letter combos survive; anything else (e.g.
+    # letter-soup from a prose value) falls through to the Type-line detection
+    if not re.fullmatch(r"[ABCDPRTZ](\+[ABCDPRTZ])*", t):
+        return ""
     return t
 
 
@@ -182,6 +191,11 @@ class Ticket:
         )
         if re.search(r"\bTrack[ -]?R\b", decl, re.I):
             return "R"
+        # Track T (testing infra: testmgr/twatch/tstate) — same decl-line-only
+        # rule as R: prose mentions of Track T don't retag a ticket.
+        if re.search(r"\bTrack[ -]?T\b", decl, re.I) or \
+                self.slug.startswith("feature-track-t-"):
+            return "T"
         # The whole Rust-frontend effort surfaces as Track R on the board, even
         # though individual sub-tickets carry a Track A (compiler internals) or
         # Track B (rust RTL shims) file-ownership tag for collision-avoidance —
@@ -203,6 +217,8 @@ class Ticket:
         line = first_bullet_value(self.text, "Type")
         if re.search(r"\bTrack[ -]?A/B\b|\bTrack[ -]?B/A\b", line, re.I):
             return "A+B"
+        if re.search(r"\bTrack[ -]?T\b", line, re.I):
+            return "T"
         if re.search(r"\bTrack[ -]?C\b", line, re.I):
             return "C"
         if re.search(r"\bTrack[ -]?D\b", line, re.I):
@@ -875,13 +891,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|R]\n"
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|P|R|T|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> <commit>",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D", "R"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "P", "R", "T", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
