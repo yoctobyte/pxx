@@ -305,6 +305,20 @@ def clone_head_back(clone):
     sh(["git", "checkout", "--quiet", clone.branch], cwd=clone.path)
 
 
+# A commit that only touches tickets/docs/tstate cannot change a test verdict,
+# so it needs no gate run.  Without this filter the watcher full-tiers its own
+# tstate commits forever: every publish moves the head it then retests
+# (observed 2026-07-07: one ~300s full tier every ~5 min on an idle repo).
+NOTEST_PREFIXES = ("devdocs/", "docs/")
+
+
+def needs_test(repo, sha):
+    out = sh(["git", "diff-tree", "--no-commit-id", "--name-only", "-r",
+              "-m", "--first-parent", sha], cwd=repo)
+    files = [f for f in out.splitlines() if f]
+    return any(not f.startswith(NOTEST_PREFIXES) for f in files)
+
+
 def bisect_step(clone, host, st, tier):
     """Idle work: narrow one open regression range by testing its midpoint
     with ONLY the failing job."""
@@ -389,6 +403,8 @@ def status(repo, grace_min):
         if sha in tested:
             newest_tested = (sha, int(ct))
             break
+        if not needs_test(repo, sha):
+            continue        # tickets/docs/tstate-only: no gate run owed
         if now - int(ct) > grace_min * 60:
             untested_old = (sha, int(ct))
             break
@@ -454,6 +470,7 @@ def main():
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
 
     errors = 0
+    notest_logged = None
     while not STOP:
         try:
             # re-check every cycle: an agent editing this checkout mid-run
@@ -471,7 +488,16 @@ def main():
             st = load_state(clone, host)
             head = clone.remote_head()
             tested = (st["last"] or {}).get("sha")
+            do_test = False
             if head != tested:
+                pending = clone.commits_between(tested, head) if tested else [head]
+                do_test = not tested or any(needs_test(clone.path, c)
+                                            for c in pending)
+                if not do_test and head != notest_logged:
+                    print("twatch: %s..%s is docs/tstate-only — no gate needed"
+                          % ((tested or "")[:12], head[:12]), flush=True)
+                    notest_logged = head
+            if do_test:
                 head = debounce(clone, args.debounce)
                 if not STOP:
                     test_sha(clone, host, st, head, args.tier)
