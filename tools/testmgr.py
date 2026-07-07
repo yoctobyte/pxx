@@ -25,6 +25,8 @@ Usage:
 """
 
 import argparse
+import fnmatch
+import json
 import os
 import re
 import shlex
@@ -438,12 +440,23 @@ def main():
     ap.add_argument("--deadline", type=float, default=3600,
                     help="global wall-clock budget, seconds (default 3600)")
     ap.add_argument("--list", action="store_true", help="print job table and exit")
+    ap.add_argument("--job", metavar="GLOB",
+                    help="run only jobs whose name matches (fnmatch); "
+                         "lets a watcher bisect one failing job in isolation")
+    ap.add_argument("--report-json", metavar="PATH",
+                    help="write machine-readable per-job results (twatch)")
     ap.add_argument("--inject-hang", action="store_true",
                     help="add a sleep-loop job to prove hang handling")
     args = ap.parse_args()
 
     build_compiler()
     jobs = generate(args.tier)
+    if args.job:
+        jobs = [j for j in jobs if fnmatch.fnmatch(j.name, args.job)]
+        if not jobs:
+            sys.exit("testmgr: no jobs match --job %r" % args.job)
+        for j in jobs:      # deps may have been filtered out: drop them
+            j.deps = [d for d in j.deps if d in jobs]
     if args.inject_hang:
         hang = Job("injected-hang", 0, ["while :; do :; done"])
         hang.cls = "unit"
@@ -490,6 +503,15 @@ def main():
                 sys.stdout.write(f.read())
     print("\ntestmgr: %s" % ("GREEN" if rc == 0 else
                              "INTERRUPTED" if rc == 130 else "RED"))
+    if args.report_json:
+        rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
+               "verdict": "GREEN" if rc == 0 else "RED",
+               "jobs": [{"name": j.name, "cls": j.cls, "status": j.status,
+                         "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
+                         "log": j.logpath}
+                        for j in jobs]}
+        with open(args.report_json, "w") as f:
+            json.dump(rep, f, indent=1)
     return rc
 
 
