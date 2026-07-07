@@ -24,7 +24,11 @@ reliable; the agent adds judgment:
    urgent + propose the revert in the ticket body.
 5. **Owns the Track T codebase** long-term: testmgr.py, twatch.py, report
    format, tier composition (e.g. promote new corpus targets into full),
-   calibration constants. Improvements land under Track T's own gate.
+   calibration constants. SELF-DIRECTED (user, 2026-07-07): the T agent is
+   free to improve/refactor/optimize Track T sources on its own initiative —
+   no ticket or approval required; improvements land under Track T's own
+   gate (testmgr full green; tooling tested with quick tiers + scratch bare
+   repo, never long runs).
 
 ## Authority (user-set, 2026-07-07)
 - Watcher identity: writes ONLY devdocs/progress/tstate/**.

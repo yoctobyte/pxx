@@ -187,10 +187,12 @@ flag or incrementally, never a long-lived branch.
 ### Track T in one line
 Own the test infra: `tools/testmgr.py`, `tools/twatch.py`,
 `devdocs/progress/tstate/**`. Face 1 (watcher daemon) writes ONLY `tstate/`;
-face 2 (agent, supervised or cron) files regression tickets and maintains the
-T codebase itself. Gate for T tooling changes = `tools/testmgr.py --tier full`
-green — and test the tooling itself with QUICK tiers + a scratch bare repo,
-never long runs.
+face 2 (agent, supervised or cron) files regression tickets and OWNS the T
+codebase: it is free to improve/refactor/optimize Track T sources (testmgr,
+twatch, report format, tier composition) on its own initiative — no ticket or
+approval needed, self-optimization is part of the job. Gate for T tooling
+changes = `tools/testmgr.py --tier full` green — and test the tooling itself
+with QUICK tiers + a scratch bare repo, never long runs.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
