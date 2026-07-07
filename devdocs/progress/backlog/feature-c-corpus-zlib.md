@@ -118,3 +118,18 @@ Focused deflate-internals session: verify the flush-level switch recognizes
 Z_FULL_FLUSH (=3; note Z_RLE strategy is also 3 — different namespace, shouldn't
 matter) and that _tr_stored_block writes the 4-byte marker. inflate-with-
 dictionary is blocked behind this. zlib now 6/8 lines (was parse-blocked).
+
+
+### Pinpointed to trees.c bit-buffer (2026-07-07)
+Instrumented deflate: it DOES reach the FULL_FLUSH marker branch (bstate=block_done,
+flush=3) and calls `_tr_stored_block(s,0,0,0)` which writes 5 bytes to pending —
+but the bytes are wrong. deflate("hello",Z_FULL_FLUSH) emits:
+`78 9c 00 05 00 fa ff 05 00 00 00 00 00 00 00 00 00` (17 bytes). Expected a clean
+stored "hello" block + a `00 00 00 ff ff` empty-block marker; instead the data/
+marker region is corrupt (no `00 00 ff ff` anywhere). So the bug is in trees.c's
+bit-buffer primitives used by _tr_stored_block: `send_bits` (3-bit block header),
+`bi_windup` (byte align + flush bit buffer), `put_short` (LEN/NLEN). Suspect a
+codegen issue in the bit-accumulator (s->bi_buf/s->bi_valid ush arithmetic) or a
+macro (send_bits/put_short are macros). Focused trees.c session; verify each
+primitive with a standalone bit-write test vs gcc. This also likely affects any
+Huffman output correctness beyond the flush marker.
