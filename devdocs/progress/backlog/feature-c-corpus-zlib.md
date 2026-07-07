@@ -51,3 +51,20 @@ LINKS the runner. `make test-zlib` next blocker: runtime
 into the runner (a zlib .c TU missing from the build set, or an internal symbol
 not emitted). Next: find which zlib TU defines gz_error (gzlib.c) and why the
 runner build omits it; then re-diff vs the gcc oracle (8 lines expected).
+
+
+## 2026-07-07 — 4/8 output lines now match (was parse-blocked)
+Fixed a cascade of general string-literal-decay + linkage bugs, each advancing
+the runner (all landed on master with regressions b171-b174, self-host
+byte-identical, c-conformance 195/0):
+- `(gzgetc)(g)` paren-function-name call (bug-c-gzgetc-fnlike-macro-call)
+- gz_error dynamic-import (guardless gzguts.h re-externalized a defined fn)
+- `return "literal"` not char*-decayed (zlibVersion check)
+- `"literal"[i]` 0-based single-byte indexing (uncompress/inflateInit version)
+Runner now passes: version line, uncompress(), gzread(), gzgets().
+NEXT BLOCKER: `inflate error: -2` (Z_STREAM_ERROR) at inflate()/large_inflate/
+inflateSync/inflate-with-dictionary. Z_STREAM_ERROR from inflate = bad state/
+stream params — deeper (inflate's windowBits/state machine, likely a struct
+layout or function-table issue, not another string decay). Isolate: minimal
+inflateInit2+inflate of the fixed 'hello' stream vs gcc; instrument inflate()'s
+early Z_STREAM_ERROR guards (strm/state NULL, window size).
