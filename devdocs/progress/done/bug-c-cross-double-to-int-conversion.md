@@ -65,3 +65,18 @@ float argument lands in an integer parameter slot. Rare construct (real C usuall
 passes an int or an explicit cast), so lower priority than the two store paths.
 Same conversion primitives as above; mirror the x86-64 IR_CALL arg-push fix.
 Test: extend ccross_double_to_int.c with an `intfunc(99.0)` case once landed.
+
+
+## RESOLVED 2026-07-07 — CALL-arg done backend-agnostically; ticket complete
+The C-call arg path is fixed in ONE shared place instead of ~20 per-ABI sites: in
+IRLowerCallArg (ir.inc), a float argument to a named INTEGER parameter spills to a
+hidden integer local, whose IR_STORE_SYM reuses the per-target double->int
+conversion already landed (cvttsd2si / fcvtzs / VFP vcvt / softfloat __pxx_d2i64),
+then passes that local. Covers direct/indirect/variadic-named/virtual calls on all
+5 targets with no per-backend arg-marshalling changes; variadic slots keep the
+double (C default promotion). `takes_int(99.9)==99`, `takes_int(-5.9)==-5`,
+`takes_char(67.0)=='C'` on x86-64/i386/aarch64/arm32/riscv32. Gate:
+ccross_double_to_int.c now covers STORE_SYM + STORE_MEM + CALL, wired into all 4
+cross suites; make test self-host byte-identical; c-conformance 198/0; lua green.
+All three double->int paths (assignment, field/element store, call arg) now
+correct on all 5 targets. DONE.

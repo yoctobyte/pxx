@@ -3,6 +3,8 @@
    __pxx_d2i64). Covers assignment (STORE_SYM) and field store (STORE_MEM).
    Exit 42 iff all truncations are correct. */
 struct S { int i; char c; int arr[3]; };
+static int takes_int(int a){ return a; }
+static char takes_char(char a){ return a; }
 int main(void){
   int x = 3.7;        /* STORE_SYM -> 3 */
   int n = -3.7;       /* -> -3 (truncate toward zero) */
@@ -19,5 +21,8 @@ int main(void){
   if (s.i != 7) return 5;
   if (s.c != 'B') return 6;
   if (s.arr[1] != 12) return 7;
+  if (takes_int(99.9) != 99) return 8;      /* CALL: float arg -> int param */
+  if (takes_int(-5.9) != -5) return 9;
+  if (takes_char(67.0) != 'C') return 10;
   return 42;
 }

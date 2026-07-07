@@ -1280,6 +1280,28 @@ var argTk: TTypeKind;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
 begin
+  { C double->int argument coercion: a float argument passed to a named INTEGER
+    parameter is truncated. Do it backend-agnostically by spilling the float to a
+    hidden integer local — its IR_STORE_SYM reuses the double->int conversion
+    already implemented on every target (cvttsd2si / fcvtzs / VFP vcvt / softfloat)
+    — then passing that local. This covers all call paths (direct/indirect/
+    variadic-named/virtual) on all backends without touching per-ABI arg
+    marshalling. Variadic slots (pathIdx >= ParamCount) have no param and keep the
+    double (C default promotion). }
+  if CProgramMode and (not isRefArg) and (cpi >= 0) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (not TypeIsFloat(Procs[cpi].Params[pathIdx].TypeKind)) and
+     TypeIsOrdinal(Procs[cpi].Params[pathIdx].TypeKind) and
+     TypeIsFloat(IntToTypeKind(ASTTk[argAST])) then
+  begin
+    tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
+    value := IRLowerAST(argAST);
+    IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0,
+             Ord(Procs[cpi].Params[pathIdx].TypeKind));
+    Result := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0,
+                       Ord(Procs[cpi].Params[pathIdx].TypeKind));
+    Exit;
+  end;
   { A frozen-string concatenation used as a call argument builds its result in a
     272-byte buffer carved off the stack (`sub rsp, 272`, no restore), leaving the
     pointer at rsp. In a multi-argument call (a method's implicit Self plus the
