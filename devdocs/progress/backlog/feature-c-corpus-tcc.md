@@ -59,3 +59,13 @@ After va_copy landed, parse advances to `:11810: unexpected token` near
 `sizeof file  filename` — a sizeof/declarator corner (looks like `sizeof(<type>)`
 where the operand tokenizes oddly, or an array-of-struct member). Reduce to a
 minimal repro and file as its own Track C ticket; then continue the cascade.
+
+
+## Blocker 3 (2026-07-07): libtcc.c:12370 — ldexpl (crtl/library gap)
+After the unparenthesized-sizeof-field fix (b179), parse advances to
+`:12370: call to undeclared function: ldexpl`. This is a LIBRARY gap, not a
+cfront parse bug: `ldexpl` (ldexp for long double) is missing from lib/crtl math.
+tcc uses long-double float parsing. Track B: add ldexpl (+ likely other *l
+long-double math: strtold, etc.) to lib/crtl, or stub if long double is mapped to
+double. File as a Track B crtl ticket. The cfront cascade is now hitting crtl
+breadth gaps interleaved with parse bugs.

@@ -1188,7 +1188,35 @@ begin
   else if CurTok.Kind = tkIdent then
   begin
     si := FindSym(CurTok.SVal);
-    if si >= 0 then
+    Next;   { consume the base identifier }
+    { Unparenthesized `sizeof s.field` / `sizeof p->field` (C 6.5.3): resolve the
+      field's size, including array members (`sizeof file->filename` where
+      filename is `char[1024]` — tcc's tccpp.c). tkDot covers both `.` and `->`.
+      Without this only the base ident was consumed and `->field` dangled. }
+    if (si >= 0) and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      Next;   { consume '.' / '->' }
+      fieldName := CurTok.SVal;
+      recId := REC_NONE;
+      if Syms[si].TypeKind = tyPointer then recId := Syms[si].PtrElemRec
+      else if Syms[si].TypeKind = tyRecord then recId := Syms[si].RecName;
+      if recId <> REC_NONE then
+      begin
+        if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+        begin
+          arrLen := RecFieldArrLen(recId, fieldName);
+          elemTk := RecFieldType(recId, fieldName);
+          if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
+          else sz := arrLen * TypeSize(elemTk);
+        end
+        else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
+        else if RecFieldType(recId, fieldName) = tyRecord then
+          sz := RecSize(RecFieldRecId(recId, fieldName))
+        else sz := TypeSize(RecFieldType(recId, fieldName));
+      end;
+      Next;   { consume the field name }
+    end
+    else if si >= 0 then
     begin
       if Syms[si].IsArray then
       begin
@@ -1200,7 +1228,6 @@ begin
       else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
       else sz := TypeSize(Syms[si].TypeKind);
     end;
-    Next;
   end
   else
   begin
