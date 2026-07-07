@@ -46,6 +46,11 @@ COMPILER = os.environ.get("TESTMGR_COMPILER", "compiler/pascal26")
 # test` = test-core test-threads test-asm test-debug-g lib-fpc-clean.
 TIERS = {
     "quick": ["test-quick"],
+    "native": [            # fast watcher verdict: all native, no qemu/
+        "test-smoke",      # corpus/conformance — cross runs in the full
+        "test-core", "test-threads", "test-asm", "test-debug-g",   # backfill
+        "lib-fpc-clean",
+    ],
     "limited": [
         "test-smoke",          # test-quick + self-host byte-identity chain
         "test-core", "test-threads", "test-asm", "test-debug-g",
@@ -84,6 +89,56 @@ MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 PROBE_REF = 0.35                # seconds: hello.pas compile on reference box
 TICK = 0.5
 
+# ------------------------------------------------------- learned metrics ---
+# Per-job EWMA of duration (calibration-normalized), peak session RSS and cpu
+# cores actually used, learned across runs on THIS box (host-specific, so
+# gitignored).  Replaces the coarse per-class guesses for admission, launch
+# order and hang detection once a job has been seen enough times.
+METRICS_PATH = os.path.join(REPO, ".testmgr", "metrics.json")
+METRICS_MIN_RUNS = 2            # trust a job's metrics from its Nth pass
+METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
+
+
+def load_metrics():
+    try:
+        with open(METRICS_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_metrics(m):
+    os.makedirs(os.path.dirname(METRICS_PATH), exist_ok=True)
+    tmp = METRICS_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(m, f, indent=1, sort_keys=True)
+    os.replace(tmp, METRICS_PATH)
+
+
+def sample_sessions(sids):
+    """One /proc sweep: {session id: (rss_bytes, cpu_seconds)} for the given
+    session leaders.  cpu includes reaped children (cutime/cstime) plus live
+    members, so a job's cores-used = cpu_seconds / wall."""
+    agg = {s: [0, 0.0] for s in sids}
+    hz = os.sysconf("SC_CLK_TCK")
+    page = os.sysconf("SC_PAGE_SIZE")
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open("/proc/%s/stat" % pid) as f:
+                st = f.read()
+        except OSError:
+            continue
+        rest = st[st.rindex(")") + 2:].split()   # fields after comm
+        sid = int(rest[3])
+        if sid not in agg:
+            continue
+        agg[sid][0] += int(rest[21]) * page                    # rss
+        agg[sid][1] += (int(rest[11]) + int(rest[12]) +        # utime+stime
+                        int(rest[13]) + int(rest[14])) / hz    # +children
+    return agg
+
 COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
 # corpus trees under library_candidates/ are gitignored scratch; a box that
 # hasn't fetched them must SKIP the jobs that reference them, not fail them
@@ -106,6 +161,11 @@ class Job:
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         self.logpath = None
         self.requeued = False
+        self.est_mem = CLASSES[self.cls]["est_mem"]   # refined from metrics
+        self.exp_dur = None       # learned expected duration (scaled secs)
+        self.exp_cores = 1.0      # learned cpu cores actually used
+        self.peak_rss = 0         # observed this run (session-wide)
+        self.cpu_sec = 0.0        # observed this run (incl. reaped children)
 
     def script(self):
         # Emulate make exactly: each logical recipe line is judged by ITS
@@ -227,22 +287,38 @@ class Manager:
         self.scale = scale
         self.logdir = logdir
         self.running = []
+        self.nproc = os.cpu_count() or 1
+        self.metrics = load_metrics()
+        for j in jobs:
+            cls_to = CLASSES[j.cls]["timeout"]
+            m = self.metrics.get(j.name)
+            if m and m.get("n", 0) >= METRICS_MIN_RUNS:
+                j.exp_dur = m["dur"] * scale
+                j.exp_cores = min(float(self.nproc), max(0.1, m.get("cpu", 1.0)))
+                j.est_mem = max(64 << 20, int(m["mem"] * 1.4))
+                # hang detection: a job far past its OWN expected duration is
+                # killed long before the coarse class timeout would fire; the
+                # class/4 floor absorbs environment shifts (corpus trees
+                # appearing turns a 2s skip into a 100s real run)
+                if j.timeout is None:
+                    j.timeout = min(cls_to * scale,
+                                    max(45.0, j.exp_dur * 10 + 15,
+                                        cls_to * scale / 4))
+            if j.timeout is None:
+                j.timeout = cls_to * scale
         # launch longest-expected jobs first: the critical path (corpus,
         # conformance shards, selfhost chains) must start at t=0, not after
         # 600 unit jobs have churned through.  Report order stays generation
         # order — this only affects launch order.
-        self.queue = sorted(jobs, key=lambda j: -CLASSES[j.cls]["timeout"])
-        self.nproc = os.cpu_count() or 1
-        self.hard_cap = 1 if args.serial else (
-            args.jobs or min(self.nproc,
-                             max(1, (mem_available() - MEM_FLOOR) // (800 << 20))))
+        self.queue = sorted(jobs, key=lambda j: -(j.exp_dur if j.exp_dur
+                                                  else CLASSES[j.cls]["timeout"]))
+        # cores/mem-aware admission does the real throttling; the cap is just
+        # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
+        self.hard_cap = 1 if args.serial else (args.jobs or self.nproc * 2)
         self.prev_cpu = cpu_times()
         self.idle_frac = 1.0
         self.interrupted = False
         self.deadline = time.monotonic() + args.deadline
-        for j in jobs:
-            if j.timeout is None:
-                j.timeout = CLASSES[j.cls]["timeout"] * scale
 
     # -- lifecycle -----------------------------------------------------
     def launch(self, job):
@@ -278,6 +354,8 @@ class Manager:
                 job.status = "pass" if rc == 0 else "fail"
                 self.running.remove(job)
                 done.append(job)
+                if job.status == "pass":
+                    self.learn(job)
             elif now - job.t0 > job.timeout:
                 self.kill_group(job)
                 job.proc.wait()
@@ -293,6 +371,29 @@ class Manager:
         if total > ptotal:
             self.idle_frac = (idle - pidle) / (total - ptotal)
         self.prev_cpu = (idle, total)
+        if self.running:      # per-job session RSS / cpu (metrics learning)
+            agg = sample_sessions({j.proc.pid for j in self.running})
+            for j in self.running:
+                rss, cpu = agg.get(j.proc.pid, (0, 0.0))
+                j.peak_rss = max(j.peak_rss, rss)
+                j.cpu_sec = max(j.cpu_sec, cpu)
+
+    def learn(self, job):
+        """EWMA the passing run into the per-box metrics store."""
+        dur = max(0.05, (job.t1 - job.t0) / self.scale)
+        cores = 1.0 if (job.t1 - job.t0) < 0.75 or job.cpu_sec <= 0 \
+            else min(float(self.nproc), job.cpu_sec / (job.t1 - job.t0))
+        mem = job.peak_rss if job.peak_rss > 0 else (32 << 20)
+        m = self.metrics.get(job.name)
+        if not m:
+            self.metrics[job.name] = {"dur": round(dur, 2), "mem": mem,
+                                      "cpu": round(cores, 2), "n": 1}
+            return
+        a = METRICS_ALPHA
+        m["dur"] = round((1 - a) * m["dur"] + a * dur, 2)
+        m["mem"] = int((1 - a) * m["mem"] + a * mem)
+        m["cpu"] = round((1 - a) * m.get("cpu", 1.0) + a * cores, 2)
+        m["n"] = m.get("n", 0) + 1
 
     def admit_ok(self, job, now):
         if len(self.running) >= self.hard_cap:
@@ -301,11 +402,16 @@ class Manager:
             return False
         if self.running and self.idle_frac < 0.10:
             return False
+        # don't oversubscribe cpu with jobs KNOWN to be compute-hungry —
+        # io/qemu-idle jobs (cores < 1) pack denser and keep the box busy
+        if (sum(j.exp_cores for j in self.running) + job.exp_cores
+                > self.nproc + 1):
+            return False
         # charge est_mem for jobs too young for their RSS to show up yet
-        uncharged = sum(CLASSES[j.cls]["est_mem"]
+        uncharged = sum(j.est_mem
                         for j in self.running if now - j.t0 < 5.0)
         avail = mem_available() - uncharged
-        return avail - CLASSES[job.cls]["est_mem"] > MEM_FLOOR
+        return avail - job.est_mem > MEM_FLOOR
 
     def deps_ready(self, job):
         for d in job.deps:
@@ -499,13 +605,20 @@ def main():
     t0 = time.monotonic()
     rc = mgr.run()
     wall = time.monotonic() - t0
+    save_metrics(mgr.metrics)
 
     # ---- deterministic fixed-order report ----
     print("\n== testmgr report (tier %s, %.1fs wall) ==" % (args.tier, wall))
     first_fail = None
+    slow = []
     for j in jobs:                       # generation order == report order
         dur = (j.t1 - j.t0) if j.t0 and j.t1 else 0.0
-        print("  %-8s %-32s %-12s %6.1fs" % (j.status.upper(), j.name, j.cls, dur))
+        note = ""
+        if j.exp_dur and j.status == "pass" and dur > max(5.0, j.exp_dur * 4):
+            note = "  SLOW (expected %.1fs)" % j.exp_dur
+            slow.append(j.name)
+        print("  %-8s %-32s %-12s %6.1fs%s" %
+              (j.status.upper(), j.name, j.cls, dur, note))
         if j.status in ("fail", "timeout") and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
@@ -525,8 +638,10 @@ def main():
     if args.report_json:
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
                "verdict": "GREEN" if rc == 0 else "RED",
+               "slow": slow,
                "jobs": [{"name": j.name, "cls": j.cls, "status": j.status,
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
+                         "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
                          "log": j.logpath}
                         for j in jobs]}
         with open(args.report_json, "w") as f:
