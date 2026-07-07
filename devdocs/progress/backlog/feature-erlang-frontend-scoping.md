@@ -5,7 +5,7 @@ prio: 65  # auto
 # Erlang frontend — scoping only
 
 - **Type:** feature — scoping ticket (Track A, once picked up)
-- **Status:** backlog — scoping only, no code, not greenlit
+- **Status:** backlog — skeleton probe DONE 2026-07-07; full-language scoping unchanged
 - **Owner:** —
 - **Opened:** 2026-07-05 (user decision — prioritized ahead of [[feature-zig-frontend]] (parked))
 - **Priority:** unranked
@@ -159,3 +159,35 @@ doc, same bar as the original Rust/Zig umbrellas before work started.
   downward — refcounting (already built for strings/dynarrays) plausibly
   suffices since Erlang term data is acyclic by construction, so the scheduler,
   not per-process GC, is now the single open unknown.
+
+## Skeleton probe done (2026-07-07, Track Z session)
+
+The esoteric-probe pass (NOT the full-language scoping, which stands
+unchanged below/above): `compiler/elexer.inc` + `compiler/eparser.inc`
+(new), `isErl` + `.erl` dispatch in compiler.pas, one-line var in defs.inc.
+
+**The probe shape, and why it mattered:** multi-clause functions with
+pattern dispatch — `fact(0) -> 1; fact(N) -> N * fact(N-1).` compiles to
+ONE proc whose body chains per-clause conditions (literal patterns =
+equality tests on the parameter, variable patterns = clause-local binds,
+`when` guards ANDed on, fall-off-the-end = loud runtime function_clause
+error + halt 1). Dispatch-on-argument-value is an AST shape no other
+frontend generates. Verdict: **shared AST/IR handled it cleanly** —
+fact/fib recursion, 4-clause guard dispatch, div/rem all correct
+first run once two frontend-local bugs were fixed:
+- used `Procs[].NumParams` (exists, never set) instead of `.ParamCount`
+  — silently read garbage; arity checks failed. Field-name trap.
+- per-clause SymRollbackTo truncated syms the function's single
+  CompileAST still referenced → 'invalid IR symbol reference in
+  store_sym'. IR validates symIdx against live SymCount; rollback must
+  wait for function end. Good loud error, easy fix.
+
+Subset: module/export attributes swallowed, integer-only arithmetic
+(+ - * div rem; / errors, pointing at div), == /= < =< > >=,
+single-assignment enforced (rebinding = compile error), calls ≤4 params,
+io:format with ~p/~w/~B and trailing ~n. No processes/messages/atoms/
+tuples/lists — the full-language scoping below remains the ticket's
+actual subject.
+
+Probe closed per the umbrella (acceptance (b)); scoping ticket itself
+stays open/parked as before — moved back to backlog.

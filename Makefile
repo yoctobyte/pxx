@@ -466,6 +466,11 @@ test-core: $(COMPILER)
 	# out-char/out-number). Prints Hi\n40\n2\n36.
 	./$(COMPILER) test/test_ws_skeleton.ws /tmp/test_ws_skeleton26
 	test "$$(/tmp/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
+	# Erlang frontend skeleton (esoteric probe on feature-erlang-frontend-scoping):
+	# multi-clause pattern dispatch (literals + variable binds + when guards),
+	# recursion, single-assignment, io:format ~p placeholders.
+	./$(COMPILER) test/test_erlang_skeleton.erl /tmp/test_erlang_skeleton26
+	test "$$(/tmp/test_erlang_skeleton26)" = "$$(printf 'fact(5) is 120\nfib(10) is 55\nclassify: 1 2 3 4\ndiv gives 5 rem 1')"
 	# Algol 60 frontend skeleton (feature-esoteric-algol, esoteric probe -- the
 	# kinship test: Pascal's direct ancestor): declarations, :=, if/then/else,
 	# while, for..step..until (incl. negative step), begin/end, out* I/O.

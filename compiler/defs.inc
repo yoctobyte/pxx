@@ -1957,7 +1957,7 @@ const
   MAX_WS_STACK = 64;   { Whitespace frontend compile-time expression stack }
 
 var
-  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol: Boolean;
+  isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol, isErl: Boolean;
 
   { Whitespace frontend state (wparser.inc) — here rather than in the
     include because a var section that late in the chain trips the
