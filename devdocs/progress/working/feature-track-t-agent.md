@@ -51,3 +51,23 @@ reliable; the agent adds judgment:
 ## Non-goals
 Fixing compiler regressions itself (files tickets for the owning track);
 replacing the dev-side quick gate.
+
+## Progress log
+- **2026-07-07 (fable-trackT, session 1):**
+  - Triaged tstate red test-core#261: watcher box lacked the gitignored
+    tiny-regex corpus. testmgr now self-skips jobs referencing absent
+    `library_candidates/<tree>` (status `skip`, pass-equivalent to twatch);
+    twatch-setup checks tiny-regex-c; installer gained the missing cjson
+    fetcher. (c4630097)
+  - Live-daemon incident: watcher shared its clone with this dev checkout,
+    ingested uncommitted edits, died on publish. Hardened twatch (per-cycle
+    dirty pause, survivable cycle errors, loud death after 10 straight
+    failures) and redeployed in a dedicated clone `~/trackt-watch` on borg
+    with full corpus fetched. (304c0739)
+  - First corpus-covered run caught a real bug: filed
+    bug-crtl-printf-g-double-roundtrip (scanf floats store raw bits; %1.17g
+    misrounds — verified minimal repros vs glibc). Also filed
+    bug-cpp-include-not-found-diagnostic-path (Track A, diagnostic quality).
+  - Perf: watcher no longer full-tiers docs/tstate-only commits (it was
+    retesting its own publishes every ~5 min forever); --status applies the
+    same exemption. (cc95bbf8)
