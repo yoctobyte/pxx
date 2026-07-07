@@ -1,5 +1,5 @@
 ---
-prio: 45
+prio: 80  # raised 2026-07-07: full gate ~10min serial, run many times per session — biggest agent-throughput lever
 ---
 # Parallel test harness — OS-level, opt-in, safe on weak hardware
 
