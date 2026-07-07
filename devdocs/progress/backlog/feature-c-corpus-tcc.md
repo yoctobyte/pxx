@@ -52,3 +52,10 @@ each compiler bug it surfaces as its own Track C/A ticket with a minimal repro.
 - NO runner/oracle yet: next is test/tcc/runner.c (unity include of the core .c)
   + make test-tcc (gcc oracle: tcc compiling a hello.c). Watch for unity macro
   leaks (#undef as needed, cf. zlib COPY).
+
+
+## Blocker 2 (2026-07-07): libtcc.c:11810
+After va_copy landed, parse advances to `:11810: unexpected token` near
+`sizeof file  filename` — a sizeof/declarator corner (looks like `sizeof(<type>)`
+where the operand tokenizes oddly, or an array-of-struct member). Reduce to a
+minimal repro and file as its own Track C ticket; then continue the cascade.

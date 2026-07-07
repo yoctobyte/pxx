@@ -26,3 +26,13 @@ the same args via a copied list) + verify vs gcc.
 ## Gate
 `__builtin_va_copy` compiles; tcc libtcc.c parse advances past :10545 to surface
 the next blocker. Regression test green; self-host byte-identical.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A)
+Added a `__builtin_va_copy(dest, src)` branch in ParseCPrimary next to va_end.
+va_list is `__pxx_va_elem[1]` (24-byte control block), so lower to a record copy:
+build AN_ASSIGN of two record-typed AN_DEREFs over CVaListAddr(dest)/CVaListAddr(src)
+(carrying the elem rec via ASTIVal), which the record path emits as IR_COPY_REC.
+Regression b178 (two va_arg walks of the same args through a copied list → each
+sees 1,2,3). tcc libtcc.c parse advances past :10545. self-host byte-identical;
+c-conformance 198/0.

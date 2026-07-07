@@ -519,6 +519,26 @@ begin
         Next; apNode := ParseCExpr; Expect(tkRParen, ')');
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyInteger);
         Result := node; Exit;
+      end
+      else if (name = '__builtin_va_copy') and (CurTok.Kind = tkLParen) then
+      begin
+        { __builtin_va_copy(dest, src) duplicates a va_list's traversal state.
+          va_list is `__pxx_va_elem[1]` (a 24-byte control block), so copy that
+          record from &src[0] to &dest[0]. Build an assignment of two record-typed
+          derefs; the record-copy path emits IR_COPY_REC of the full struct. }
+        Next;
+        apNode := ParseCExpr; Eat(tkComma);   { dest }
+        valNode := ParseCExpr;                 { src }
+        Expect(tkRParen, ')');
+        addrNode := CVaListAddr(apNode);       { &dest[0], ASTIVal = elem rec }
+        a2 := CVaListAddr(valNode);            { &src[0] }
+        a3 := AllocNode(AN_DEREF); ASTLeft[a3] := addrNode;
+        ASTTk[a3] := Ord(tyRecord); ASTIVal[a3] := ASTIVal[addrNode];
+        a4 := AllocNode(AN_DEREF); ASTLeft[a4] := a2;
+        ASTTk[a4] := Ord(tyRecord); ASTIVal[a4] := ASTIVal[a2];
+        node := AllocNode(AN_ASSIGN); ASTLeft[node] := a3; ASTRight[node] := a4;
+        ASTTk[node] := Ord(tyRecord);
+        Result := node; Exit;
       end;
       if CurTok.Kind = tkLParen then
       begin

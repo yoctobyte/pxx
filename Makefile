@@ -797,6 +797,8 @@ test-core: $(COMPILER)
 	/tmp/cfloat_conv_b17626; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c /tmp/csizeof_deref_field_b17726
 	/tmp/csizeof_deref_field_b17726; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbuiltin_va_copy_b178.c /tmp/cbuiltin_va_copy_b17826
+	/tmp/cbuiltin_va_copy_b17826; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
