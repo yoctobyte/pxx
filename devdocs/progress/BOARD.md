@@ -29,11 +29,12 @@ _none_
 
 _none_
 
-## backlog (101)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
@@ -787,6 +788,7 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 30] [C] bug-c-comment-terminator-greedy
 - [p 30] [A] bug-cpp-include-not-found-diagnostic-path
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
