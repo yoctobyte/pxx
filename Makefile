@@ -793,6 +793,8 @@ test-core: $(COMPILER)
 	/tmp/cstrlit_index_b17426; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cptrdiff_addr_elem_b175.c /tmp/cptrdiff_addr_elem_b17526
 	/tmp/cptrdiff_addr_elem_b17526; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c /tmp/cfloat_conv_b17626
+	/tmp/cfloat_conv_b17626; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

@@ -39,3 +39,22 @@ promotion) in ir.inc call-arg lowering — did NOT fix it (reverted), so the loa
 the same class (char/int/float default arg promotions). Needs tracing the exact
 IR value for a variadic float operand (LOAD_SYM widening) vs the (double)-cast
 path. Track A (ir.inc / codegen), focused session.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A) — x86-64
+Two distinct bugs, both in ir_codegen.inc SysV paths:
+- 00174: a `float` through `...` was narrowed to single (cvtsd2ss) at the variadic
+  call site, but C default argument promotion widens float->double. Guard the
+  narrowing to NAMED single params only (i < ParamCount) → printf("%f", floatvar)
+  now prints the right value (stored single bits were always correct; only the
+  vararg promotion was wrong).
+- 00175: double->integer conversion was entirely missing in C mode — a double
+  assigned/passed to an int/char/long target bit-copied the raw double bits
+  (`int x=3.7`→garbage, `long l=9.9`→raw bits, `charfunc(99.0)`→0). Added
+  cvttsd2si truncation, mirroring the existing int->float cvtsi2sd, in
+  IR_STORE_SYM, IR_STORE_MEM, and both IR_CALL arg-push loops (gated: float value
+  into a non-SSE/integer slot; variadic floats stay double). C-mode only; Pascal
+  rejects implicit float->int at parse, self-host byte-identical.
+Both dropped from pxx.skip → c-conformance 198/0. Regression b176. make test +
+lua green. FOLLOW-UP: cross backends (i386/arm32/aarch64/riscv32) still lack the
+C double->int conversion; file if a cross float test needs it.
