@@ -150,3 +150,13 @@ Runtime arc, not parse. Suspects, in order:
 3. environ is referenced (`char **envp = environ;`) — resolved how? verify.
 4. Any of the ~30 fresh crtl paths (fdopen etc.) or a genuine miscompile —
    instrument with the zlib printf-diff method once 1-3 are clean.
+
+## Benchmark anchors (2026-07-07, same unity TU, this machine)
+- tcc self-compile: 0.09s (and SELF-HOSTS: gen2->gen3 byte-identical, so a
+  pxx-built tcc has a hard correctness fixpoint to hit)
+- gcc -O0: 1.4s · gcc -O2: 8.1s · pxx: 27.9s (10.4s of that = cpreproc alone;
+  Pascal path compiles 88k lines in 6.8s, so the C FRONT END is the cost)
+- note: pxx also assembles+links AND compiles the whole libc-free runtime
+  (crtl/PAL/softfloat) from source per invocation — others link prebuilt libs.
+- Target benchmark once tcc runs: tcc-by-pxx vs tcc-by-gcc SELF-COMPILE time
+  (measures generated-code quality, not compile speed).
