@@ -81,6 +81,7 @@ function __pxx_fsync(fd: Integer): Integer;
 function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
 function __pxx_getpid: Integer;
+function __pxx_getcwd(buf: PChar; size: Integer): Integer;
 function __pxx_nanosleep(sec, nsec: Int64): Integer;
 function __pxx_utimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 { fills two Int64 out-slots the C gettimeofday veneer narrows into struct timeval }
@@ -334,6 +335,12 @@ end;
 function __pxx_getpid: Integer;
 begin
   Result := PalGetpid;
+end;
+
+{ Returns path length incl. NUL, or -errno (PAL passes the raw syscall result). }
+function __pxx_getcwd(buf: PChar; size: Integer): Integer;
+begin
+  Result := PalGetcwd(buf, size);
 end;
 
 function __pxx_nanosleep(sec, nsec: Int64): Integer;

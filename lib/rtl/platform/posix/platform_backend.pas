@@ -31,6 +31,7 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendGetpid: Integer;
+function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
@@ -86,6 +87,7 @@ const
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
   SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
+  SYS_getcwd = 79;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -99,6 +101,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
+  SYS_getcwd = 183;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -111,6 +114,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_getcwd = 17;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -123,6 +127,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
+  SYS_getcwd = 183;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -139,6 +144,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
+  SYS_getcwd = 17;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -401,6 +407,12 @@ end;
 function PalBackendGetpid: Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_getpid, 0, 0, 0, 0, 0, 0));
+end;
+
+{ Returns the path length INCLUDING the trailing NUL, or -errno. }
+function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_getcwd, Int64(buf), size, 0, 0, 0, 0));
 end;
 
 function PalBackendNanosleep(sec, nsec: Int64): Integer;

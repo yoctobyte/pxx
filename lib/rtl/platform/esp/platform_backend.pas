@@ -31,6 +31,7 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendGetpid: Integer;
+function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
@@ -417,6 +418,11 @@ end;
 function PalBackendGetpid: Integer;
 begin
   Result := 1;
+end;
+
+function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendNanosleep(sec, nsec: Int64): Integer;

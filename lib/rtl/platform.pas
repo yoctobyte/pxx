@@ -91,6 +91,7 @@ function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
 function PalGetpid: Integer;
+function PalGetcwd(buf: PChar; size: Integer): Integer;
 function PalNanosleep(sec, nsec: Int64): Integer;
 function PalRealtime(var sec, nsec: Int64): Integer;
 function PalUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
@@ -257,6 +258,11 @@ end;
 function PalGetpid: Integer;
 begin
   Result := PalBackendGetpid;
+end;
+
+function PalGetcwd(buf: PChar; size: Integer): Integer;
+begin
+  Result := PalBackendGetcwd(buf, size);
 end;
 
 function PalNanosleep(sec, nsec: Int64): Integer;
