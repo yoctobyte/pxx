@@ -38,6 +38,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 TSTATE_REL = "devdocs/progress/tstate"
@@ -73,7 +74,9 @@ class Clone:
         # refuse to watch a working dev checkout: we do detached checkouts of
         # arbitrary SHAs — running that under an active agent/dev tree would
         # yank files out from under them.  A watcher clone stays pristine.
-        dirty = sh(["git", "status", "--porcelain"], cwd=path)
+        # tracked changes only (-uno): untracked scratch (e.g. our own report
+        # file, corpus trees) is harmless — detached checkouts don't touch it
+        dirty = sh(["git", "status", "--porcelain", "-uno"], cwd=path)
         if dirty:
             sys.exit("twatch: %s has uncommitted changes — this looks like a "
                      "dev checkout, not a dedicated watcher clone. Refusing.\n%s"
@@ -129,7 +132,8 @@ def run_gate(clone, tier, job_glob=None):
         subprocess.run(["make", "--no-print-directory", "seed-from-stable"],
                        cwd=clone.path, check=True)
         os.utime(comp, (0, 0))
-    rep_path = os.path.join(clone.path, ".twatch-report.json")
+    rep_path = os.path.join(tempfile.gettempdir(),
+                            "twatch-report-%d.json" % os.getpid())
     if os.path.exists(rep_path):
         os.unlink(rep_path)
     cmd = [sys.executable, os.path.join(clone.path, "tools/testmgr.py"),
