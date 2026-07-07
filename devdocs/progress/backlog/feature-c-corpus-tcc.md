@@ -76,5 +76,12 @@ After the long-double aliases, parse advances to `:14377: Unsupported linear nod
 in IR codegen! Kind=10 node=47` (Kind 10 = IR_UNSUPPORTED). A C construct lowers
 to IR_UNSUPPORTED — a C->IR lowering gap (Track C/A), deeper than the parse fixes.
 Reduce: bisect libtcc.c around that token region to the construct, minimal repro,
-file a Track C/A ticket. (Progress so far: tcc parse went 10545 -> 11810 -> 12370
--> 14377 via 3 cfront fixes + crtl aliases.)
+file a Track C/A ticket. CLUE: the IR_UNSUPPORTED node has IRA=1 (=AN_INT_LIT),
+IRB=-1, IRC=-1, IRIVal=0 — i.e. a childless integer-literal 0 reached codegen as
+unsupported, which is odd (int literals always lower). Suspect a synthesized/
+placeholder node from an unmodelled construct (tccgen.c IS in libtcc.c's TU and
+uses computed goto `&&label` / `goto *` — a GCC extension pxx doesn't lower;
+check if that's what emits the stray node). Needs instrumentation: print the
+AST/IR node origin, or bisect the source region. (Progress: tcc parse went 10545
+-> 11810 -> 12370 -> 14377 via 3 cfront fixes + crtl aliases; now at a codegen
+lowering gap.)
