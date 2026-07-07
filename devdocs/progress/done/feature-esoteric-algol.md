@@ -5,7 +5,7 @@ prio: 45  # auto
 # Esoteric probe: Algol (60)
 
 - **Type:** feature — esoteric-frontend-probe
-- **Status:** backlog
+- **Status:** done (2026-07-07) — skeleton landed, kinship confirmed, probe closed
 - **Umbrella:** [[feature-esoteric-frontend-probes]]
 - **Opened:** 2026-07-05
 
@@ -74,3 +74,33 @@ probe successfully, per the umbrella's inverted-success-criteria rule.
   when the user pointed out Algol/Fortran/Lisp/COBOL (1957-59) as candidates;
   Algol specifically promoted to its own ticket as a sharper kinship test
   than Ada (direct ancestor, not a sibling).
+
+## Probe done (2026-07-07, Track Z session)
+
+Skeleton landed: `compiler/glexer.inc` + `compiler/gparser.inc` (new),
+`isAlgol` + `.alg` dispatch in compiler.pas, one-line var in defs.inc.
+Ada-parser structure, rparser node helpers.
+
+**Landed subset:** single top-level `begin <decls> <stmts> end` block,
+`integer/real/Boolean a, b;` declarations (declare-before-use enforced,
+per Algol), `:=` assignment, `if/then/else` with single-statement or
+compound branches, `while ... do`, `for v := lo step s until hi do`
+(inclusive, constant integer step incl. negative; the general for-list is
+cut), nested `begin/end` compounds, `comment ... ;` comments, and
+`outinteger/outreal/outstring(channel, value)` I/O (channel ignored, one
+writeln per call). Call-by-name, procedures and `own` are loud errors per
+the ticket's non-goals. Test: test/test_algol_skeleton.alg in make test.
+
+**Kinship verdict: holds.** The shared AST/IR lowered Pascal's direct
+ancestor cleanly — no Pascal-specific assumption surfaced. The one
+bring-up bug was frontend-local and educational: RSeqAppend assumes its
+head is a seq CHAIN, but Algol's `do <statement>` body is a raw statement
+node, and appending the loop increment directly walked ASTRight into the
+statement's own expression tree — corrupting it and producing an
+infinite loop (no crash, no error: the increment just vanished).
+Fourth frontend, fourth variant of "helper contract easy to misuse
+silently"; noted here like Fortran's ARG-decimals edge — if a helper
+hardening pass ever happens on Track A, RSeqAppend guarding against
+non-seq heads belongs on the list.
+
+Acceptance (b) met. Closed at skeleton depth.

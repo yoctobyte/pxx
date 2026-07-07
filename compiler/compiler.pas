@@ -51,6 +51,7 @@ uses asmcore_base, asmcore_x64;
 {$include zlexer.inc}
 {$include llexer.inc}
 {$include flexer.inc}
+{$include glexer.inc}
 {$include emit.inc}
 procedure AsmB(b: Integer); forward;
 procedure AsmI16(v: Int64); forward;
@@ -98,6 +99,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include lparser.inc}
 {$include wparser.inc}
 {$include fparser.inc}
+{$include gparser.inc}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -549,6 +551,7 @@ begin
   isLol := (n >= 4) and (inFile[n] = 'l') and (inFile[n-1] = 'o') and (inFile[n-2] = 'l') and (inFile[n-3] = '.');
   isWs := (n >= 3) and (inFile[n] = 's') and (inFile[n-1] = 'w') and (inFile[n-2] = '.');
   isF90 := (n >= 5) and (inFile[n] = '0') and (inFile[n-1] = '9') and (inFile[n-2] = 'f') and (inFile[n-3] = '.');
+  isAlgol := (n >= 5) and (inFile[n] = 'g') and (inFile[n-1] = 'l') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
@@ -584,7 +587,7 @@ begin
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -713,6 +716,14 @@ begin
     Next;
     ParseFProgram;
   end
+  else if isAlgol then
+  begin
+    GLexAll;
+    MainProgramTokCount := TokCount;
+    TokPos := 0;
+    Next;
+    ParseGProgram;
+  end
   else
   begin
     LexAll;
@@ -721,7 +732,7 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) then
+  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;

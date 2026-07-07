@@ -466,6 +466,11 @@ test-core: $(COMPILER)
 	# out-char/out-number). Prints Hi\n40\n2\n36.
 	./$(COMPILER) test/test_ws_skeleton.ws /tmp/test_ws_skeleton26
 	test "$$(/tmp/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
+	# Algol 60 frontend skeleton (feature-esoteric-algol, esoteric probe -- the
+	# kinship test: Pascal's direct ancestor): declarations, :=, if/then/else,
+	# while, for..step..until (incl. negative step), begin/end, out* I/O.
+	./$(COMPILER) test/test_algol_skeleton.alg /tmp/test_algol_skeleton26
+	test "$$(/tmp/test_algol_skeleton26)" = "$$(printf '55\n30\n 1.0500000000000000E+001\nkinship holds\n40')"
 	# Fortran frontend skeleton (feature-esoteric-fortran, esoteric probe): implicit
 	# first-letter typing (I-N int / else REAL->double), DO with step (incl. negative),
 	# IF/ELSE, PRINT * with correct double formatting (ARG decimals sentinel -1).

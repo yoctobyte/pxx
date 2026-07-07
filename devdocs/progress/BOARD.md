@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (102)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -80,7 +80,6 @@ _none_
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-erlang-frontend-scoping | A | 65 | feature | Erlang frontend — scoping only | — |
 | feature-esoteric-ada | A | 65 | feature | Esoteric probe: Ada | — |
-| feature-esoteric-algol | A | 45 | feature | Esoteric probe: Algol (60) | — |
 | feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
 | feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
@@ -170,7 +169,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (497)
+## done (498)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -529,6 +528,7 @@ _none_
 | feature-empty-class-shorthand | A | 50 | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | 50 | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | 50 | feature | `Eof` (standard input) not recognized | — |
+| feature-esoteric-algol | A | 45 | feature | Esoteric probe: Algol (60) | — |
 | feature-esoteric-fortran | A | 45 | feature | Esoteric probe: Fortran | — |
 | feature-esoteric-lolcode | A | 45 | feature | Esoteric probe: LOLCODE | — |
 | feature-esoteric-whitespace | A | 45 | feature | Esoteric probe: Whitespace | — |
@@ -751,7 +751,6 @@ _none_
 - [p 45] [B] feature-embed-dwscript-rtti
 - [p 45] [B] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce
-- [p 45] [A] feature-esoteric-algol
 - [p 45] [A] feature-esoteric-cobol
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling
