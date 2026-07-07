@@ -3713,6 +3713,16 @@ begin
   end;
   while True do
   begin
+    { A subsequent declarator carries its OWN pointer stars: `T *a, *b, *c`.
+      ParseCDeclType consumed the base + the first declarator's stars, so the
+      first iteration sees the bare name; later iterations (after the comma) land
+      on the `*` of `*b`. Consume those stars so `*b` is read as a declarator
+      rather than seen as a non-ident and dropped — a dropped global then folds
+      every later use to a bare 0, and assigning to it (`loop_scope = NULL`) hits
+      IRLowerAddress(int-literal) -> "Unsupported linear node" (tcc tccgen.c).
+      The stars keep the base pointer depth (uniform declarators, the common case
+      and all of tcc's `Sym *a, *b`). }
+    while CurTok.Kind = tkStar do Next;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
     { Global array dimension(s). Pointer arrays with string-literal initializers
