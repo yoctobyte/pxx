@@ -90,12 +90,12 @@ class Clone:
         """Commit ONLY tstate files onto the branch tip and push, with
         rebase-retry so parallel watcher hosts don't fight."""
         sh(["git", "checkout", "--quiet", self.branch], cwd=self.path)
-        sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
-           cwd=self.path)
         sh(["git", "add", "--", TSTATE_REL], cwd=self.path)
         if not sh(["git", "status", "--porcelain", "--", TSTATE_REL], cwd=self.path):
             return
         sh(["git", "commit", "--quiet", "-m", message, "--", TSTATE_REL],
+           cwd=self.path)
+        sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
            cwd=self.path)
         for attempt in range(5):
             try:
@@ -111,6 +111,10 @@ class Clone:
 # ---------------------------------------------------------------- testing --
 def run_gate(clone, tier, job_glob=None):
     """Run the CLONE's testmgr (self-versioned with the tested tree)."""
+    # fresh clone has no compiler binary: seed from the committed stable
+    if not os.path.exists(os.path.join(clone.path, "compiler/pascal26")):
+        subprocess.run(["make", "--no-print-directory", "seed-from-stable"],
+                       cwd=clone.path, check=True)
     rep_path = os.path.join(clone.path, ".twatch-report.json")
     if os.path.exists(rep_path):
         os.unlink(rep_path)

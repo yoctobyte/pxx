@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -17,7 +17,6 @@ _none_
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
 | feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
-| feature-track-t-watcher | A | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 
 ## unfinished (1)
 
@@ -170,7 +169,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (500)
+## done (501)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -645,6 +644,7 @@ _none_
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
+| feature-track-t-watcher | A | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 | feature-transcendental-math | A | 50 | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
@@ -719,6 +719,7 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [R] feature-rust-macro-rules
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
+- [p 60] [A] feature-track-t-agent
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model
@@ -795,5 +796,4 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **1** — bug-c-init-brace-elision-nested
-- **1** — feature-track-t-watcher
 - **1** — task-sqlite-libc-free-runtime-bringup

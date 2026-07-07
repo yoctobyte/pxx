@@ -78,6 +78,18 @@ frontend)"). **At session start, infer your track from the request:**
   Rust→IR lowering, `lib/rrtl` (as it lands), Rust tests. Live work in
   `devdocs/progress/working/feature-rust-*`. Same rule as C/Z: own your frontend
   files; shared-internals change → **file a Track A ticket**. Works on `master`.
+- **Track T — testing infra (watcher + agentic test manager).** Owns
+  `tools/testmgr.py`, `tools/twatch.py`, `devdocs/progress/tstate/**` and the
+  report format. Face 1 = the standalone twatch daemon (any box, its own
+  dedicated clone, publishes sparse per-SHA regression reports to `tstate/`
+  ONLY — that's the watcher identity's whole write scope). Face 2 = an agent
+  (supervised session or cron) that consumes tstate, files/updates regression
+  tickets like any track agent, and maintains the Track T codebase itself.
+  Once a watcher is live, dev tracks may gate pushes on `testmgr --tier
+  quick` + self-host fixedpoint; the full matrix runs offloaded, so master
+  MAY carry cross-target reds for hours — tstate is the truth, and a
+  core-job red older than a day is a revert candidate. Gate for T's own
+  tooling changes = `tools/testmgr.py --tier full` green.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.

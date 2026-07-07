@@ -67,3 +67,24 @@ or ALL in parallel):
 ## Non-goals here
 Ticket crafting, analysis, testmgr maintenance by an agent — that is
 feature-track-t-agent (face 2), blocked by this.
+
+## Resolution (2026-07-07, fable-ac)
+Landed `tools/twatch.py` + testmgr integration (`--job GLOB` bisect
+primitive, `--report-json`). Verified against a scratch bare "central" repo
+(quick tier only per user norm — no long runs to test tooling):
+- fresh clone self-seeds compiler via `make seed-from-stable`;
+- GREEN run publishes only <host>.json + TSTATE.md (sparse: no report file);
+- deliberately-broken commit → RED report naming exact SHA, parent-tested
+  SHA, NEW-RED job `test-quick#04`, verbatim log, one-line repro
+  (`testmgr --tier quick --job 'test-quick#04'`);
+- revert → FIXED recorded, open regression closed;
+- publish commits touch ONLY devdocs/progress/tstate/**, rebase-retry push
+  (multi-host safe); SIGINT exits clean, no orphans.
+- CLAUDE.md gained the Track T lane definition (incl. relaxed dev push gate
+  once a watcher is live).
+Full-tier unattended soak over a real working session = first live
+deployment task; the deliberately-broken-commit gate is scripted above and
+repeatable.
+
+## Log
+- 2026-07-07 — resolved, commit HEAD.
