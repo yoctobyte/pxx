@@ -81,3 +81,27 @@ goto-driven resume. Likely a pxx codegen issue in inflate.c's large single
 function (local caching of state fields, or a goto/label save), not a frontend
 string bug. Next: instrument inflate()'s mode switch to log where mode goes
 invalid on the 2nd/3rd call; compare state->hold/bits save-restore vs gcc.
+
+
+## 2026-07-07 — 6/8 lines; inflate WORKS (COPY macro leak fixed)
+The inflate -2 was NOT a codegen bug: zutil.c includes gzguts.h, whose private
+`#define COPY 1` is never #undef'd, and in pxx's single-TU unity build it
+macro-replaced inflate.h's `COPY` enum constant (16195) with 1 → inflate()
+corrupted state->mode after a STORED block and returned Z_STREAM_ERROR under
+byte-at-a-time buffers. Real zlib compiles each .c separately so never sees it.
+Fixed in test/zlib/runner.c: `#undef COPY` before inflate.c (gzguts.h is
+guardless so gz*.c re-define it). Diagnosis method: bisected mode via printf at
+inf_leave → mode went 16193(STORED)→1 at `state->mode = COPY`; PROBE showed
+`#ifdef COPY` true = a leaked macro; only COPY collides (gzguts vs inflate enum).
+GENERAL LESSON: pxx's no-linker unity C build leaks every private macro across
+all files; a porter must #undef colliding names (or pxx would need per-file macro
+scoping — big preproc change). Now passes version/uncompress/gzread/gzgets/
+inflate/large_inflate.
+
+NEXT BLOCKER: `inflateSync error: -3` (Z_DATA_ERROR). inflateSync returns -3 when
+the 00 00 FF FF flush marker isn't found (state->have != 4). syncsearch is
+correct; the marker comes from test_flush's `deflate(Z_FULL_FLUSH)` — so suspect
+the DEFLATE Z_FULL_FLUSH output (deflate.c/trees.c flush path), not inflate.
+Also re-check for further gzguts/other private-macro collisions in deflate.c
+(none found for inflate enum, but deflate has its own constants). Then
+inflate-with-dictionary (blocked behind sync).
