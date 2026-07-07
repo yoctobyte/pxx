@@ -48,3 +48,28 @@ which must RESCAN and apply to the trailing `(...)`. Same core as 00201
 from pxx.skip. Raises the value of the paste-rescan rework — the macro output must
 be fed back through scanning together with the remaining input, and a pasted
 identifier that names a function-like macro must expand with the following args.
+
+
+## Attempt 2026-07-07 — naive splice REGRESSES (reverted); fire-condition too broad
+Tried a targeted splice in CPExpandRange (cpreproc.inc): after
+CPExpandFunctionForLevel, if the level's temp output ENDS in a function-like macro
+name and the next source token is `(`, append that `(...)` to the temp before the
+rescan. RESULT: the single-level case works (`ELFW(ST_VISIBILITY)(7)`=3, tcc's
+blocker), but it REGRESSED the gate — `make test` segfault, c-conformance 198->196,
+lua fail. Reverted (gate restored to 198/0). Two concrete lessons for the real fix:
+1. FIRE-CONDITION TOO BROAD: "temp ends in a func-macro name + next char is `(`"
+   also matches legitimate cases where that trailing name is NOT being called
+   (e.g. a macro passed as an object, or the `(` belongs to the surrounding
+   expression), so it wrongly consumed the following `(...)` and corrupted
+   expansion. Must only splice when the pasted/expanded name is genuinely in
+   call position per C rescan rules, and must respect blue-paint.
+2. MULTI-LEVEL: 00201 `CAT(A,B)(x)` still failed — CAT->CAT2->AB emerges the
+   func-macro name only AFTER a nested rescan, so a check on CAT's IMMEDIATE temp
+   ("CAT2(A,B)") misses it. The check must run on the FULLY-expanded output, i.e.
+   capture the rescan result into a temp, test its tail, splice, and re-expand —
+   not the per-level temp before rescan.
+So the correct fix restructures the expand→rescan flow to (a) capture the full
+expansion, (b) narrowly detect a trailing function-like macro in call position vs
+the following source `(`, (c) splice + re-expand once. Focused cpreproc session
+with the full gate as the guard (it does catch the regressions). Backup of the
+attempt was discarded; re-derive from these notes.
