@@ -70,6 +70,14 @@ class Clone:
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             print("twatch: cloning %s -> %s" % (remote, path), flush=True)
             sh(["git", "clone", remote, path], cwd=".", capture=False)
+        # refuse to watch a working dev checkout: we do detached checkouts of
+        # arbitrary SHAs — running that under an active agent/dev tree would
+        # yank files out from under them.  A watcher clone stays pristine.
+        dirty = sh(["git", "status", "--porcelain"], cwd=path)
+        if dirty:
+            sys.exit("twatch: %s has uncommitted changes — this looks like a "
+                     "dev checkout, not a dedicated watcher clone. Refusing.\n%s"
+                     % (path, dirty[:500]))
 
     def fetch(self):
         sh(["git", "fetch", "--quiet", "origin"], cwd=self.path)
