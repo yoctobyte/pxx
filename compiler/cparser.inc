@@ -759,30 +759,15 @@ begin
     Result := Ord(tyChar);
     Exit;
   end;
-  if ASTKind[node] = AN_DEREF then
+  if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_ADDR) then
   begin
-    { Pointee of an already-deref'd value: `**(&mp)` — the inner `*(&mp)` IS
-      mp, so the outer load's width is mp's pointee (int), not tyInteger's
-      default vs a stale pointer width. `**p` with p a T** reads T. Without
-      these the outer deref of tcc's TOK_GET `**(p)` loaded 8 bytes and every
-      token comparison saw garbage in the high half. }
-    inner := ASTLeft[node];
-    if (inner >= 0) and (ASTKind[inner] = AN_ADDR) then
-    begin
-      Result := CNodePointeeTk(ASTLeft[inner]);   { *(&x) is x }
-      Exit;
-    end;
-    if (inner >= 0) and (ASTKind[inner] = AN_IDENT) and
-       (Syms[ASTIVal[inner]].TypeKind = tyPointer) and
-       (SymPtrDepth[ASTIVal[inner]] >= 2) then
-    begin
-      if SymPtrDepth[ASTIVal[inner]] > 2 then
-        Result := Ord(tyPointer)
-      else
-        Result := SymPtrBaseTk[ASTIVal[inner]];
-      Exit;
-    end;
-    Result := Ord(tyInteger);
+    { `**(&mp)` — the inner `*(&mp)` IS mp, so the outer load's width is mp's
+      own pointee. Without this the outer deref of tcc's TOK_GET `**(p)`
+      (p substituted as &macro_ptr) loaded 8 bytes and every token comparison
+      saw garbage in the high half. Any other AN_DEREF operand falls through
+      to the depth-aware case below. }
+    Result := CNodePointeeTk(ASTLeft[ASTLeft[node]]);
     Exit;
   end;
   if ASTKind[node] = AN_ADDR then
@@ -1283,6 +1268,15 @@ begin
       else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
       else sz := TypeSize(Syms[si].TypeKind);
     end;
+  end
+  else if CurTok.Kind = tkString then
+  begin
+    { Unparenthesized `sizeof "lit"` — the char-array size (decoded length +
+      NUL), same as the parenthesized case above. tcc's ld path does
+      `sizeof ARMAG - 1` (ARMAG = "!<arch>\n"): the pointer-size default gave
+      7 instead of 8 and every archive-member read was off by one. }
+    sz := Tokens[TokPos - 1].SLen + 1;
+    Next;
   end
   else
   begin
