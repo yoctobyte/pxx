@@ -202,6 +202,7 @@ begin
     begin
       case Source[SrcPos] of
         ' ', #9, #13: Inc(SrcPos);
+        #1: Inc(SrcPos);   { preprocessor blue-paint marker — not a token }
         #10: begin Inc(SrcLine); Inc(SrcPos); end;
         '/':
         begin

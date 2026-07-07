@@ -3233,7 +3233,7 @@ begin
 end;
 
 function ParseCStatementAST: Integer;
-var node, exprNode: Integer;
+var node, exprNode, seq, seq2, blk: Integer;
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
@@ -3349,6 +3349,23 @@ begin
     ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
     ASTSLen[node] := Tokens[TokPos - 1].SLen;
     Next; Next;    { consume ident and colon }
+    { C 6.8.1: a label PREFIXES a statement — they are ONE statement. Returning
+      the label alone detached the following statement from an enclosing
+      unbraced if: tcc's `if (t0 == TOK_PPJOIN) bad_twosharp: tcc_error(...)`
+      ran the error unconditionally. (A label directly before a closing brace
+      stays bare — GCC-extension form.) }
+    if (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) then
+    begin
+      { Parse the statement BEFORE allocating the seq nodes: the recursive
+        parse grows the AST arrays, so an `ASTLeft[new] := ParseC...` store
+        can land in a stale (reallocated-away) array. }
+      exprNode := ParseCStatementAST();   { () — bare name would read Result }
+      seq2 := AllocNode(AN_SEQ); ASTLeft[seq2] := exprNode; ASTRight[seq2] := -1;
+      seq := AllocNode(AN_SEQ); ASTLeft[seq] := node; ASTRight[seq] := seq2;
+      blk := AllocNode(AN_BLOCK); ASTLeft[blk] := seq;
+      Result := blk;
+      Exit;
+    end;
     Result := node;
     Exit;
   end;

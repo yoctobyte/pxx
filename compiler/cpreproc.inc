@@ -819,6 +819,7 @@ begin
           AppendChar(dst, '"');
           for k := CPArgStart[argBase + ai] to CPArgEnd[argBase + ai] do
           begin
+            if src[k] = #1 then Continue;   { strip paint markers }
             if (src[k] = '"') or (src[k] = '\') then AppendChar(dst, '\');
             AppendChar(dst, src[k]);
           end;
@@ -906,6 +907,7 @@ begin
   a := e;
   while (a > 1) and CPIsIdentChar(s[a - 1]) do Dec(a);
   if not CPIsIdentStart(s[a]) then Exit;
+  if (a > 1) and (s[a - 1] = #1) then Exit;   { blue-painted — not a callee }
   mi := CPFindMacro(s, a, e);
   if (mi >= 0) and CPMFunction[mi] then Result := True;
 end;
@@ -984,6 +986,21 @@ begin
         if not quotedDone then Inc(p);
       end;
     end
+    else if src[p] = #1 then
+    begin
+      { Blue-paint marker: the identifier that follows was produced by its own
+        macro's expansion (C 6.10.3.4 non-replacement) — copy verbatim, never
+        re-expand. Without this, `#define x s1->x` re-expands on every rescan
+        of an enclosing macro's output (tcc's section shorthands gave
+        `s1->s1->x`). The marker survives rescans; the C lexer skips it. }
+      AppendChar(dst, src[p]);
+      Inc(p);
+      while (p <= last) and CPIsIdentChar(src[p]) do
+      begin
+        AppendChar(dst, src[p]);
+        Inc(p);
+      end;
+    end
     else if CPIsIdentStart(src[p]) then
     begin
       a := p;
@@ -1008,7 +1025,10 @@ begin
       else if not CPMFunction[mi] then
       begin
         if CPMacroIsActive(mi) then
-          CPAppendRange(dst, src, a, b)
+        begin
+          AppendChar(dst, #1);   { paint: never re-expand on later rescans }
+          CPAppendRange(dst, src, a, b);
+        end
         else
         begin
           CPActiveMacros[CPActiveMacroCount] := mi;
@@ -1065,7 +1085,10 @@ begin
           end;
 
           if CPMacroIsActive(mi) then
-            CPAppendRange(dst, src, a, q)
+          begin
+            AppendChar(dst, #1);   { paint the name; args copy as-is }
+            CPAppendRange(dst, src, a, q);
+          end
           else
           begin
             CPActiveMacros[CPActiveMacroCount] := mi;

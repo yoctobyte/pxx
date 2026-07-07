@@ -821,6 +821,8 @@ test-core: $(COMPILER)
 	/tmp/cpaste_empty_arg_b18326; test "$$?" = "42"
 	./$(COMPILER) test/ctcc_parse_batch_b184.c /tmp/ctcc_parse_batch_b18426
 	/tmp/ctcc_parse_batch_b18426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ctcc_batch2_b185.c /tmp/ctcc_batch2_b18526
+	/tmp/ctcc_batch2_b18526 > /dev/null; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
