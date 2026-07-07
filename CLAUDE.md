@@ -184,6 +184,14 @@ backend → **file a Track A ticket**, don't edit under R. Gate = Rust tests gre
 self-host byte-identical + cross. Land only green; destabilizing work behind a
 flag or incrementally, never a long-lived branch.
 
+### Track T in one line
+Own the test infra: `tools/testmgr.py`, `tools/twatch.py`,
+`devdocs/progress/tstate/**`. Face 1 (watcher daemon) writes ONLY `tstate/`;
+face 2 (agent, supervised or cron) files regression tickets and maintains the
+T codebase itself. Gate for T tooling changes = `tools/testmgr.py --tier full`
+green — and test the tooling itself with QUICK tiers + a scratch bare repo,
+never long runs.
+
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
 Zig tests) on `master`. **Shared compiler internals stay A's** — a new AST node /
@@ -195,7 +203,19 @@ destabilizing work behind a flag or incrementally, never a long-lived branch.
 ## Workflow norms (all tracks)
 - **All tracks work directly on `master`** (no worktrees/clones). Commit in small
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
-  worktree is retired.)
+  worktree is retired. Exception: Track T's watcher daemon runs in its own
+  dedicated clone — it's infra, not a dev agent.)
+- **Confirm native, offload the matrix.** After a change, ALWAYS confirm it
+  works natively yourself: `tools/testmgr.py --tier quick` plus self-host
+  fixedpoint for compiler changes (≈40s). The breadth — cross targets, corpus,
+  regressions elsewhere — is Track T's job *when a watcher is up*. Check with
+  `tools/twatch.py --status` (no network, no ping: reads `tstate/` vs git
+  history; a commit older than the grace window that nobody tested = T down).
+  Exit 0 → push after the native confirm; regressions come back asynchronously
+  as tstate reports/tickets tied to your exact SHA. Exit 1 → T is down/absent:
+  the old rules apply — run your lane's full gate (`tools/testmgr.py --tier
+  full`, or `--tier limited` + the targets your change touches) before pushing
+  anything risky.
 - `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
 - **Push only your own lane.** Each track pushes the commits it made. During a
   sync, do **not** push, commit, or rebase another track's branch or in-flight

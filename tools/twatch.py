@@ -331,9 +331,74 @@ def debounce(clone, secs, cap=300):
     return head
 
 
+# ---------------------------------------------------------------- status ---
+def status(repo, grace_min):
+    """Is Track T covering this repo?  No ping, no network: a watcher is
+    considered UP iff every commit older than the grace window is tested by
+    some host (a quiet watcher on a quiet repo is indistinguishable from a
+    dead one — and it doesn't matter).  Exit 0 = offload to T; 1 = T is
+    down/absent, run your own full gate."""
+    tdir = os.path.join(repo, TSTATE_REL)
+    tested = set()
+    hosts = []
+    if os.path.isdir(tdir):
+        for fn in os.listdir(tdir):
+            if not fn.endswith(".json"):
+                continue
+            with open(os.path.join(tdir, fn)) as f:
+                st = json.load(f)
+            hosts.append(st)
+            if st.get("last"):
+                tested.add(st["last"]["sha"])
+            tested.update(h["sha"] for h in st.get("history", []))
+    if not hosts:
+        print("tstate: DOWN — no watcher state in %s (run your own full gate)"
+              % TSTATE_REL)
+        return 1
+    out = sh(["git", "log", "--format=%H %ct", "-n", "200"], cwd=repo)
+    now = time.time()
+    untested_old = None
+    newest_tested = None
+    for ln in out.splitlines():
+        sha, ct = ln.split()
+        if sha in tested:
+            newest_tested = (sha, int(ct))
+            break
+        if now - int(ct) > grace_min * 60:
+            untested_old = (sha, int(ct))
+            break
+    for st in hosts:
+        last = st.get("last") or {}
+        print("tstate: host %-12s last %s %s (%s)" %
+              (st["host"], (last.get("sha") or "")[:12],
+               last.get("verdict", "never"), last.get("date", "")))
+        for r in st.get("open_regressions", []):
+            print("tstate:   open regression: %s bad=%s (%d in range)"
+                  % (r["job"], r["bad"][:12], len(r.get("range", []))))
+    if untested_old:
+        age = int((now - untested_old[1]) / 60)
+        print("tstate: DOWN — %s untested for %d min (> %d min grace); "
+              "run your own full gate" % (untested_old[0][:12], age, grace_min))
+        return 1
+    if newest_tested:
+        print("tstate: UP — commits through %s tested; offload the matrix to T"
+              % newest_tested[0][:12])
+    else:
+        print("tstate: UP — only fresh commits pending (within %d min grace)"
+              % grace_min)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--clone", required=True, help="dedicated clone dir (created if --remote)")
+    ap.add_argument("--clone", help="dedicated clone dir (created if --remote); "
+                                    "required except for --status")
+    ap.add_argument("--status", action="store_true",
+                    help="report watcher liveness from tstate vs git history "
+                         "(run in any checkout; exit 0 = T up, 1 = run own gate)")
+    ap.add_argument("--grace", type=float, default=45,
+                    help="--status: minutes a commit may sit untested before "
+                         "T counts as down (default 45)")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default="master")
     ap.add_argument("--tier", default="full", choices=["quick", "limited", "full"])
@@ -345,6 +410,13 @@ def main():
                     help="single iteration (cron / smoke test)")
     ap.add_argument("--no-bisect", action="store_true")
     args = ap.parse_args()
+
+    if args.status:
+        repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
+            else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return status(repo, args.grace)
+    if not args.clone:
+        ap.error("--clone is required (except with --status)")
 
     def stop(*_):
         global STOP
