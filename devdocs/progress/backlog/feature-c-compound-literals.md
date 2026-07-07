@@ -22,3 +22,12 @@ of brace list producing garbage pointer.
 
 ## Gate
 Drop 00149.c/00150.c/00216.c from test/c-conformance/pxx.skip; runner green.
+
+## Triage 2026-07-07
+Not implemented in any position: `(struct S){1,2}` as a local/inline expression
+-> CERR "expected C expression" (parsed as a cast, then the `{` derails); the
+file-scope `&(struct S){...}` parses but SIGSEGVs. Needs: (1) ParseCPrimary/cast
+path to disambiguate `(type){...}` (compound literal) from `(type)expr` (cast);
+(2) materialize an anonymous object — static storage at file scope, automatic at
+block scope — initialize it (reuse the braced-init machinery), and yield its
+value / address. Multi-part feature, focused session.
