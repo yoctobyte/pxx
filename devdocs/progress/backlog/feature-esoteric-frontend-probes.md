@@ -105,3 +105,26 @@ criteria, stated up front so nobody chases scope later:
   ideas (Zig, Erlang, LOLCODE, Whitespace, plus new candidates Ada/Fortran/
   COBOL) not as feature requests but as a deliberate, capped bug-finding
   technique. New ticket category "esoteric-frontend-probe" established.
+
+## Status sweep (2026-07-07, Track Z session — two days, six probes closed)
+
+| Candidate | Status | Outcome |
+| --- | --- | --- |
+| Ada | done (2026-07-05, earlier session) | clean pass; 2 frontend-local bugs |
+| Zig | done (2026-07-06) | clean pass; `/`-must-be-tkDiv lesson (rparser has the same latent hazard) |
+| LOLCODE | done (2026-07-06) | clean pass; paramless-recursion pitfall struck again |
+| Whitespace | done (2026-07-06) | **found + filed [[bug-impl-prescan-late-include-var-section]]** (Track A); also proved a tokenless frontend works |
+| Fortran | done (2026-07-06) | clean pass; documented the AN_ARG decimals-sentinel sharp edge (0 = zero decimals, -1 = none) |
+| Algol | done (2026-07-07) | **kinship holds** — the IR lowers its own ancestor cleanly; RSeqAppend raw-head sharp edge documented |
+| Erlang (skeleton) | done (2026-07-07) | pattern-dispatch shape handled cleanly; NumParams-vs-ParamCount field trap; scoping ticket unchanged in backlog |
+| COBOL | open | relaxed to interpreter-scope (see ticket); the one remaining candidate, a bigger unit of work |
+
+Aggregate verdict after seven shapes: the shared AST→IR→x86-64 pipeline has
+taken every grammar family thrown at it (Pascal-kin, C-kin, dynamic-ish,
+tokenless stack machine, implicit-typing, pattern-dispatch) without a single
+shared CODEGEN bug. What the probes actually surface, consistently, is
+(a) frontend-API sharp edges (ARG formatting sentinels, RSeqAppend head
+contract, unset-field traps) and (b) one real prescan bug. That is exactly
+the differential-testing value the category was created for; the marginal
+value of further grammar-shape diversity is now low. COBOL stays available
+as opportunistic; nothing else queued.
