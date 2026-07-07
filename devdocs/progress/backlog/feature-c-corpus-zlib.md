@@ -68,3 +68,16 @@ stream params — deeper (inflate's windowBits/state machine, likely a struct
 layout or function-table issue, not another string decay). Isolate: minimal
 inflateInit2+inflate of the fixed 'hello' stream vs gcc; instrument inflate()'s
 early Z_STREAM_ERROR guards (strm/state NULL, window size).
+
+
+### inflate -2 sharpened (2026-07-07)
+Isolated with a minimal deflate+inflate harness: inflateInit=0 (state non-null),
+then inflate returns Z_STREAM_ERROR (-2) MID-STREAM at total_in=7 under the
+byte-at-a-time buffers (avail_in=avail_out=1). uncompress() works because it
+inflates in ONE call and never suspends; test_inflate forces suspend/resume every
+byte. So the bug is in inflate's multi-call SUSPEND/RESUME path — the LOAD/RESTORE
+of state->{hold,bits,next,put,have,left} across calls and the NEEDBITS/PULLBYTE
+goto-driven resume. Likely a pxx codegen issue in inflate.c's large single
+function (local caching of state fields, or a goto/label save), not a frontend
+string bug. Next: instrument inflate()'s mode switch to log where mode goes
+invalid on the 2nd/3rd call; compare state->hold/bits save-restore vs gcc.
