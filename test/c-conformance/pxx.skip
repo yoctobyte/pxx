@@ -5,7 +5,6 @@
 # tickets: bug-c-ptrdiff-of-addr-elem, bug-c-string-literal-binop-decay,
 # feature-c-crtl-bind-hand-declared-prototypes).
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
-00037.c	ptrdiff of &x[i] wrong stride — bug-c-ptrdiff-of-addr-elem
 00050.c	anonymous union inside braced init — bug-c-init-designated-and-nested
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device
 00089.c	function returning typedef fnptr type — bug-c-function-returning-fnptr-declarator

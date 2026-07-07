@@ -42,3 +42,15 @@ leaving the global-init-address path's IRPointerStride(AN_ADDR) untouched — OR
 the global-init path must stop routing through IRPointerStride. Find where the
 `&wide[204]` global initializer calls IRPointerStride and split the two. Track A
 (shared ir.inc), focused session. b133 is in test-core, so the gate guards it.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A)
+IRPointerStride had no AN_ADDR branch, so `&x[1] - &x[0]` used stride 1 (byte
+diff, = sizeof(int)) instead of 1. Added an AN_ADDR case: for `&arr[i]` the
+pointee is arr's element, so the stride is the INDEXED BASE's own stride — derived
+by recursing IRPointerStride on ASTLeft[AN_INDEX], NOT from the AN_INDEX node's
+ASTTk (the prior attempt's approach, which regressed `&wide[204]` where wide is a
+`const u16*`). Recursing on the base handles both array and pointer bases
+uniformly. Other &-forms keep the size-1 default. 00037 matches, b133 stays green,
+dropped from pxx.skip -> c-conformance 196/0. Regression b175. self-host
+byte-identical.

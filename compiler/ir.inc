@@ -1132,6 +1132,19 @@ begin
   begin
     Result := IRPointerStride(ASTLeft[node]);
     Exit;
+  end
+  else if ASTKind[node] = AN_ADDR then
+  begin
+    { `&arr[i]` is a pointer to arr's element, so its ptrdiff stride is the
+      element size — which is exactly the indexed base's own stride. Derive it by
+      recursing on the base rather than reading the AN_INDEX node's ASTTk (that
+      was unreliable and regressed `&wide[204]` where wide is a `const u16*`).
+      Other &-forms have no array element and keep the size-1 default. }
+    if ASTKind[ASTLeft[node]] = AN_INDEX then
+    begin
+      Result := IRPointerStride(ASTLeft[ASTLeft[node]]);
+      Exit;
+    end;
   end;
   if elemTk = tyRecord then
     Result := RecSize(recId)

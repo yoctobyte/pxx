@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-preproc-paste-rescan | C | 55 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
-| bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -173,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (490)
+## done (491)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -240,6 +239,7 @@ _none_
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
 | bug-c-preprocessor-defined-expression-sqlite | C | 50 | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
+| bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
 | bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
@@ -720,7 +720,6 @@ _none_
 - [p 55] [C] bug-c-float-single-precision
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-preproc-paste-rescan
-- [p 55] [C] bug-c-ptrdiff-of-addr-elem
 - [p 55] [C] bug-c-switch-nonblock-and-duffs-device
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
