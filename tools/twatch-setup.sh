@@ -101,6 +101,6 @@ if [ "$cross_ok" = 1 ]; then
 else
   say "READY for --tier limited only (install qemu-user for full)"
 fi
-say "start:  nohup $ROOT/tools/twatch.py --clone $ROOT >> \$HOME/trackt.log 2>&1 &"
+say "start:  nohup $ROOT/tools/twatch.py --clone $ROOT >> $ROOT.log 2>&1 &"
 say "status: $ROOT/tools/twatch.py --status"
 exit 0
