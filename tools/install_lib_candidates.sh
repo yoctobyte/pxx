@@ -49,7 +49,7 @@ die() { printf '%s\n' "error: $*" >&2; exit 1; }
 # Refuse to run unless library_candidates/ is ignored — keeps fetched source out
 # of the repo. git check-ignore exits 0 when the path IS ignored.
 guard_ignored() {
-  if ! git -C "$ROOT" check-ignore -q "$DEST"; then
+  if ! git -C "$ROOT" check-ignore -q "$DEST/"; then
     die "library_candidates/ is NOT gitignored — refusing to fetch (would risk committing third-party source). Add 'library_candidates/' to .gitignore first."
   fi
 }
