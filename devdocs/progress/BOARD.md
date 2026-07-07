@@ -39,7 +39,6 @@ _none_
 | bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
-| bug-c-preproc-paste-rescan | C | 60 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -100,6 +99,7 @@ _none_
 | feature-optimization-levels | A | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-parallel-test-harness | A | 45 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -169,7 +169,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (498)
+## done (499)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -239,6 +239,7 @@ _none_
 | bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-preproc-paste-rescan | C | 60 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-preprocessor-defined-expression-sqlite | C | 50 | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
@@ -701,7 +702,6 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
-- [p 60] [C] bug-c-preproc-paste-rescan
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-runtime-library
@@ -762,6 +762,7 @@ _none_
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [B] feature-pal-esp-posix-fd-semantics
 - [p 45] [A] feature-parallel-processing
+- [p 45] [A] feature-parallel-test-harness
 - [p 45] [A] feature-r-frontend-parked
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
