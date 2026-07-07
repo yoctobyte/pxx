@@ -137,3 +137,21 @@ _tr_stored_block's data copy AND the empty-block marker (deflate("hello") chose 
 stored block: output shows the 00 05 00 fa ff header but the 'hello' data bytes
 are missing/zeroed, then no clean 00 00 ff ff marker). Start at _tr_stored_block
 + deflate_stored, not the Huffman coders.
+
+
+## RESOLVED 2026-07-07 (Track A+C, sole-A) — zlib byte-identical to gcc
+`make test-zlib` PASSES: the pxx-built libc-free runner (all of zlib compiled as
+one TU) produces output byte-identical to the gcc oracle for every example.c test
+(version, uncompress, gzread, gzgets, inflate, large_inflate, inflateSync, inflate
+-with-dictionary). Reached by a cascade of general cfront fixes this session (each
+with a regression, all self-host byte-identical, c-conformance 194→198):
+- (gzgetc)(g) paren-function-name call (b171)
+- gz_error guardless-header re-externalize (b172)
+- return "literal" char* decay (b173)
+- "literal"[i] 0-based byte index (b174)
+- runner #undef COPY (gzguts.h macro leak in the unity build) — test fix
+- FINAL: sizeof(*s->field) = pointee size not 8 (b177) — CLEAR_HASH over-zeroed
+  pending_buf and wiped the deflate flush marker → inflateSync -3.
+Diagnosis chain: test-zlib diff → each line one bug → minimal repro → isolate to a
+compiler primitive. zlib is the first real-world multi-file C project compiling +
+running byte-identical under pxx. Next corpus target: tcc.
