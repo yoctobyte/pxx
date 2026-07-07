@@ -182,6 +182,13 @@
    "new_red": [],
    "sha": "87ce0f60a0df9d6272073d19b41d70f92e466be8",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-07T19:23:52Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "235806f42bf5c7382217933989964d00fff7eaa3",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1239,11 +1246,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-07T19:17:12Z",
-  "sha": "87ce0f60a0df9d6272073d19b41d70f92e466be8",
+  "date": "2026-07-07T19:23:52Z",
+  "sha": "235806f42bf5c7382217933989964d00fff7eaa3",
   "tier": "full",
   "verdict": "RED",
-  "wall": 283.9
+  "wall": 312.3
  },
  "open_regressions": [
   {
