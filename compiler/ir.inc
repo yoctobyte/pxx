@@ -3994,6 +3994,17 @@ begin
         if ASTLeft[node] <> -1 then
         begin
           value := IRLowerAST(ASTLeft[node]);
+          { A C function returning `char*` (any pointer) that returns a string
+            literal must yield the char data at Offset+8, not the frozen string's
+            length prefix — the same +8 decay the call-argument and assign paths
+            apply. Without it `const char *ver(void){ return "1.3.1"; }` returns a
+            pointer at the length byte, so ver()[0] is 5 not '1' (zlib's version
+            check). C-mode only; Pascal self-build unaffected. }
+          if CProgramMode and (ASTKind[ASTLeft[node]] = AN_STR_LIT) and
+             (CurProc >= 0) and (Procs[CurProc].RetType = tyPointer) then
+            value := IRAppend(IR_BINOP, value,
+                              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                              Ord(tkPlus), 0, Ord(tyPointer));
           if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
           begin
             varIdx := Procs[CurProc].RetSymIdx;
