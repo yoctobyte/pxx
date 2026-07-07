@@ -41,3 +41,13 @@ blocked-by: [bug-c-gzgetc-fnlike-macro-call]
 Both blockers fixed → `make test-zlib`: pxx runner output byte-identical to the
 gcc oracle, exit 0. Then graduate to a fuller vector set (minigzip round-trip)
 and cross targets. Bonus: cross-check against the Pascal zlib in lib-test.
+
+
+## 2026-07-07 progress — parse cleared, now a link-stage symbol gap
+gzgetc function-like-macro parse blocker RESOLVED (bug-c-gzgetc-fnlike-macro-call:
+`(name)(args)` paren-function-name call). zlib example.c now parses, compiles and
+LINKS the runner. `make test-zlib` next blocker: runtime
+`undefined symbol: gz_error` — a zlib-internal function not being compiled/linked
+into the runner (a zlib .c TU missing from the build set, or an internal symbol
+not emitted). Next: find which zlib TU defines gz_error (gzlib.c) and why the
+runner build omits it; then re-diff vs the gcc oracle (8 lines expected).
