@@ -1261,13 +1261,12 @@
  },
  "open_regressions": [
   {
-   "bad": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
+   "bad": "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
    "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
    "job": "test-cjson#00",
    "opened": "2026-07-07T19:03:22Z",
    "range": [
-    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
-    "adb6c0880d7c946f1451772fc9bbc21842675fb9"
+    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30"
    ]
   }
  ]

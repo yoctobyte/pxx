@@ -5,4 +5,4 @@
 | borg | `8d7cd2664ff4` | 2026-07-07T19:29:59Z | RED | 308.8s |
 
 ## Open regressions
-- **test-cjson#00** (borg): bad `adb6c0880d7c`, last good `d1e08f225074`, 2 commit(s) in range
+- **test-cjson#00** (borg): bad `ea8fc44a77bf`, last good `d1e08f225074`, 1 commit(s) in range
