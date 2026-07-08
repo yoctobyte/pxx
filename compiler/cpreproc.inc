@@ -31,6 +31,40 @@ begin
   for i := 1 to Length(b) do AppendChar(dst, b[i]);
 end;
 
+{ Amortized append to the main preprocessor output CPrepOut. CPrepOut holds
+  geometric spare capacity (physical Length); CPrepOutLen is the live byte count.
+  Ensures the per-char SetLength(len+1) O(n^2) reallocation storm is replaced by
+  doubling growth — one realloc per ~log2(n) appends. CPreprocess trims CPrepOut
+  back to CPrepOutLen before handing it out. }
+procedure CPrepOutEnsure(extra: NativeInt);
+var need, cap: NativeInt;
+begin
+  need := CPrepOutLen + extra;
+  cap := Length(CPrepOut);
+  if need <= cap then Exit;
+  if cap < 256 then cap := 256;
+  while cap < need do cap := cap * 2;
+  SetLength(CPrepOut, cap);
+end;
+
+procedure CPrepOutAppendStr(const s: AnsiString);
+var i, n: NativeInt;
+begin
+  n := Length(s);
+  if n <= 0 then Exit;
+  CPrepOutEnsure(n);
+  for i := 1 to n do
+    CPrepOut[CPrepOutLen + i] := s[i];
+  CPrepOutLen := CPrepOutLen + n;
+end;
+
+procedure CPrepOutAppendCh(c: Char);
+begin
+  CPrepOutEnsure(1);
+  CPrepOut[CPrepOutLen + 1] := c;
+  CPrepOutLen := CPrepOutLen + 1;
+end;
+
 function CPStoreRange(const src: AnsiString; a, b: Integer): Integer;
 var i: Integer;
 begin
@@ -2022,8 +2056,10 @@ begin
         begin
           if CPActive then
           begin
-            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);
-            AppendChar(CPrepOut, #10);
+            SetLength(CPrepLineExp, 0);
+            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+            CPrepOutAppendStr(CPrepLineExp);
+            CPrepOutAppendCh(#10);
           end;
           CPDirective(cont, q, Length(cont), depth, baseDir);
           emitted := True;
@@ -2042,14 +2078,18 @@ begin
         CPDirective(CPrepLine, p, Length(CPrepLine), depth, baseDir)
       else if CPActive then
       begin
-        CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);
-        AppendChar(CPrepOut, #10);
+        SetLength(CPrepLineExp, 0);
+        CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+        CPrepOutAppendStr(CPrepLineExp);
+        CPrepOutAppendCh(#10);
       end;
     end
     else if CPActive then
     begin
-      CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);
-      AppendChar(CPrepOut, #10);
+      SetLength(CPrepLineExp, 0);
+      CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
+      CPrepOutAppendStr(CPrepLineExp);
+      CPrepOutAppendCh(#10);
     end;
   end;
 end;
@@ -2057,6 +2097,7 @@ end;
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
 begin
   SetLength(CPrepOut, 0);
+  CPrepOutLen := 0;
   CPrepCharLen := 0;
   CPMCount := 0;
   CPPCount := 0;
@@ -2082,5 +2123,6 @@ begin
   CPAddLiteral('__STDC__', '01');
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
+  SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }
   src := CPrepOut;
 end;

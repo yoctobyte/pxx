@@ -1416,6 +1416,13 @@ var
 
   { C preprocessor state. Macro text is pooled to avoid string-array BSS cost. }
   CPrepOut      : AnsiString;
+  { Amortized-growth bookkeeping for CPrepOut: CPrepOut carries geometric spare
+    capacity (its physical Length), CPrepOutLen is the logical byte count. Without
+    this, appending each output char via SetLength(len+1) reallocated+copied the
+    whole (multi-MB) output per char — O(n^2), 33s to preprocess the GTK2 headers
+    (perf-gtk-system-header-parse). CPrepLineExp is the per-line expansion scratch. }
+  CPrepOutLen   : NativeInt;
+  CPrepLineExp  : AnsiString;
   CPrepLine     : AnsiString;
   CPrepPath     : AnsiString;
   CPrepInclude0 : AnsiString;
