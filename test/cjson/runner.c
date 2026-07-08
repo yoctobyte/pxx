@@ -2,8 +2,10 @@
  * Amalgamates crtl + cJSON from library_candidates/cjson/src (gitignored 3rd-party
  * scratch) and round-trips a JSON document: read the file at PXX_CJSON_INPUT,
  * cJSON_Parse it, then cJSON_PrintUnformatted the result back to stdout. The
- * Makefile copies each test/cjson/*.json case to that fixed path (C argv is not
- * wired yet) and diffs stdout against the committed *.expected oracle.
+ * input document path is argv[1] (the Makefile passes each test/cjson/*.json case
+ * directly); it falls back to the legacy fixed PXX_CJSON_INPUT when run with no
+ * arg. Passing the path avoids a shared /tmp input file that races when the suite
+ * runs under parallel test execution. Output diffed against the *.expected oracle.
  *
  * The round-trip is the free oracle: parse + canonical re-serialize exercises the
  * parser, object/array structs, heap (malloc/realloc/free), string handling, and
@@ -31,8 +33,9 @@ static void err(const char *s){ __pxx_write(2, s, slen(s)); }
 
 static char input[PXX_CJSON_MAX];
 
-int main(void) {
-  FILE *f = fopen(PXX_CJSON_INPUT, "rb");
+int main(int argc, char **argv) {
+  const char *inpath = (argc > 1) ? argv[1] : PXX_CJSON_INPUT;
+  FILE *f = fopen(inpath, "rb");
   size_t n;
   cJSON *root;
   char *printed;

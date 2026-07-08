@@ -1,7 +1,9 @@
 /* pxx lua test-suite runner (used by `make test-lua`, NOT the base gate).
  * Amalgamates crtl + the lua core/lib from library_candidates/lua/src (gitignored
- * 3rd-party scratch) and runs the lua program at PXX_LUA_SCRIPT. C argv is not
- * wired yet, so the Makefile copies each case to that fixed path. The suite
+ * 3rd-party scratch) and runs the lua program whose path is argv[1] (the Makefile
+ * passes each test/lua/*.lua case directly), falling back to the legacy fixed
+ * PXX_LUA_SCRIPT when run with no arg. Passing the path avoids a shared /tmp input
+ * file that races under parallel test execution. The suite
  * stays distinct from `make test` so the base gate carries no 3rd-party
  * dependency; test-lua skips gracefully when the lua tree is absent.
  * Diagnostic markers some lua sources emit go to stderr (fd 2); the suite checks
@@ -51,11 +53,12 @@ extern long __pxx_write(int, const void *, unsigned long);
 static unsigned long slen(const char *s){ unsigned long n=0; while(s[n]) n++; return n; }
 static void emit(const char *s){ __pxx_write(2, s, slen(s)); }
 
-int main(void) {
+int main(int argc, char **argv) {
+  const char *inpath = (argc > 1) ? argv[1] : PXX_LUA_SCRIPT;
   lua_State *L;
   L = luaL_newstate();
   luaL_openlibs(L);
-  if (luaL_loadfile(L, PXX_LUA_SCRIPT) != 0) {
+  if (luaL_loadfile(L, inpath) != 0) {
     emit("LOAD-ERR "); { const char *e=lua_tostring(L,-1); if(e) emit(e); } emit("\n"); return 4;
   }
   if (lua_pcall(L, 0, 0, 0) != 0) {

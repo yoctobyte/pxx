@@ -3088,16 +3088,16 @@ test-lua: $(COMPILER)
 	  exit 0; \
 	fi; \
 	echo "compiling lua runner ..."; \
-	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(LUA_SRC) test/lua/runner.c /tmp/pxx_lua_runner || exit 1; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(LUA_SRC) test/lua/runner.c "$$wd/runner" || exit 1; \
 	fail=0; for p in test/lua/*.lua; do \
 	  exp="$${p%.lua}.expected"; \
-	  cp "$$p" /tmp/pxx_lua_input.lua; \
-	  /tmp/pxx_lua_runner 2>/dev/null > /tmp/pxx_lua_got.txt; \
-	  if diff -u "$$exp" /tmp/pxx_lua_got.txt > /tmp/pxx_lua_diff.txt; then \
+	  "$$wd/runner" "$$p" 2>/dev/null > "$$wd/got.txt"; \
+	  if diff -u "$$exp" "$$wd/got.txt" > "$$wd/diff.txt"; then \
 	    echo "test-lua: PASS $$(basename $$p)"; \
 	  else \
 	    echo "test-lua: FAIL $$(basename $$p)"; \
-	    head -12 /tmp/pxx_lua_diff.txt; \
+	    head -12 "$$wd/diff.txt"; \
 	    fail=1; \
 	  fi; \
 	done; \
@@ -3174,16 +3174,16 @@ test-cjson: $(COMPILER)
 	  exit 0; \
 	fi; \
 	echo "compiling cJSON runner ..."; \
-	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(CJSON_SRC) test/cjson/runner.c /tmp/pxx_cjson_runner || exit 1; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(CJSON_SRC) test/cjson/runner.c "$$wd/runner" || exit 1; \
 	fail=0; for p in test/cjson/*.json; do \
 	  exp="$${p%.json}.expected"; \
-	  cp "$$p" /tmp/pxx_cjson_input.json; \
-	  /tmp/pxx_cjson_runner 2>/dev/null > /tmp/pxx_cjson_got.txt; \
-	  if diff -u "$$exp" /tmp/pxx_cjson_got.txt > /tmp/pxx_cjson_diff.txt; then \
+	  "$$wd/runner" "$$p" 2>/dev/null > "$$wd/got.txt"; \
+	  if diff -u "$$exp" "$$wd/got.txt" > "$$wd/diff.txt"; then \
 	    echo "test-cjson: PASS $$(basename $$p)"; \
 	  else \
 	    echo "test-cjson: FAIL $$(basename $$p)"; \
-	    head -12 /tmp/pxx_cjson_diff.txt; \
+	    head -12 "$$wd/diff.txt"; \
 	    fail=1; \
 	  fi; \
 	done; \
