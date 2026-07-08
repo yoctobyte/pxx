@@ -1413,7 +1413,7 @@ end;
 
 procedure CPReadLine(const src: AnsiString; var pos: Integer;
   var inComment: Boolean; var line: AnsiString);
-var inString, inChar, done: Boolean; c: Char;
+var inString, inChar, done: Boolean; c: Char; wln, wk: Integer;
 begin
   SetLength(line, 0);
   inString := False;
@@ -1429,6 +1429,16 @@ begin
         inComment := False;
         Inc(pos); Inc(pos);
         AppendChar(line, ' ');
+      end
+      else if (c = '/') and (pos < Length(src)) and (src[pos + 1] = '*') then
+      begin
+        { -Wcomment (gcc/clang): a `/*` inside a block comment is a likely
+          mistake — C comments do not nest, so it is ignored. Warn at the
+          physical line (counted up to here; only on the rare hit). }
+        wln := 1;
+        for wk := 1 to pos - 1 do if src[wk] = #10 then Inc(wln);
+        writeln('pascal26:', wln, ': warning: "/*" within comment');
+        Inc(pos); Inc(pos);
       end
       else
       begin

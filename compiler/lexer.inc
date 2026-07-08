@@ -1557,7 +1557,7 @@ begin
 end;
 
 procedure SkipSpace;
-var commentDepth: Integer; cDone: Boolean;
+var commentDepth: Integer; cDone: Boolean; openLine: Integer;
 begin
   if DebugTrace then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
   while SrcPos <= Length(Source) do
@@ -1666,6 +1666,7 @@ begin
             { Brace comment. With NestedComments on, an inner open-brace raises
               the depth so the matching close-brace ends the right level; off
               (default) keeps the historic flat scan ending at the first one. }
+            openLine := SrcLine;
             commentDepth := 1;
             while (SrcPos <= Length(Source)) and (commentDepth > 0) do
             begin
@@ -1681,11 +1682,20 @@ begin
               else if Source[SrcPos] = '}' then Dec(commentDepth);
               Inc(SrcPos);
             end;
+            { Standard diagnostic: a brace comment that never closes (a lone
+              open-brace in the prose shifted the nesting counter) is reported at
+              its OPEN line, not left to cascade into a bogus token downstream. }
+            if commentDepth > 0 then
+            begin
+              writeln('pascal26:', openLine, ': error: unterminated comment');
+              Halt(1);
+            end;
           end;
         end;
         '(':
           if (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '*') then
           begin
+            openLine := SrcLine;
             Inc(SrcPos, 2);
             { Paren-star comment. Nests under NestedComments. Must fall through
               to the outer loop when it ends (not Exit) so code on the same line
@@ -1703,6 +1713,11 @@ begin
                 Inc(SrcPos);
               end;
             end;
+            if commentDepth > 0 then
+            begin
+              writeln('pascal26:', openLine, ': error: unterminated comment');
+              Halt(1);
+            end;
           end
           else Exit;
         '/':
@@ -1712,6 +1727,7 @@ begin
           begin
             { C-style slash-star comment, enabled by CStyleComments. Does not
               nest, matching C. }
+            openLine := SrcLine;
             Inc(SrcPos, 2);
             cDone := False;
             while (SrcPos+1 <= Length(Source)) and not cDone do
@@ -1723,6 +1739,11 @@ begin
                 if Source[SrcPos] = #10 then Inc(SrcLine);
                 Inc(SrcPos);
               end;
+            end;
+            if not cDone then
+            begin
+              writeln('pascal26:', openLine, ': error: unterminated comment');
+              Halt(1);
             end;
           end
           else Exit;
