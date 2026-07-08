@@ -28,3 +28,6 @@ it subsumes their cursors.
 ## Gate
 00050/00091/00205 exit 0 + correct `sizeof`; drop from
 `test/c-conformance/pxx.skip`; regression tests; `make test` + self-host.
+
+## Log
+- 2026-07-08 — resolved, commit e0f9f5e4.

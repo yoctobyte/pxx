@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -30,7 +29,7 @@ _none_
 
 _none_
 
-## backlog (102)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -40,6 +39,7 @@ _none_
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
+| bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -172,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (502)
+## done (503)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -228,6 +228,7 @@ _none_
 | bug-c-gzgetc-fnlike-macro-call | C | 50 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-init-array-designators | C | 50→90 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
+| bug-c-init-brace-elision-nested | C | 50→90 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-struct-designators | C | 50→90 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
@@ -697,6 +698,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 90] [C] bug-c-init-designated-and-nested
 - [p 70] [C] bug-c-printf-without-stdio-include-varargs
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [C] feature-c-cross-target-feature-coverage
@@ -789,6 +791,7 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 40] [C] bug-c-multidim-ordinal-global-init
 - [p 30] [C] bug-c-comment-terminator-greedy
 - [p 30] [A] bug-cpp-include-not-found-diagnostic-path
 - [p 30] [A] bug-impl-prescan-late-include-var-section
@@ -800,5 +803,4 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — bug-c-init-brace-elision-nested
 - **1** — task-sqlite-libc-free-runtime-bringup
