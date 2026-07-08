@@ -312,6 +312,19 @@
    "sha": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-08T18:08:58Z",
+   "fixed": [],
+   "new_red": [
+    "test-cjson#00",
+    "test-core#599",
+    "test-core#601",
+    "test-lua#00"
+   ],
+   "sha": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -552,7 +565,7 @@
   "test-c-conformance#shard3/6": "pass",
   "test-c-conformance#shard4/6": "pass",
   "test-c-conformance#shard5/6": "pass",
-  "test-cjson#00": "pass",
+  "test-cjson#00": "fail",
   "test-core#00": "pass",
   "test-core#01": "pass",
   "test-core#02": "pass",
@@ -1112,10 +1125,10 @@
   "test-core#596": "pass",
   "test-core#597": "pass",
   "test-core#598": "pass",
-  "test-core#599": "pass",
+  "test-core#599": "timeout",
   "test-core#60": "pass",
   "test-core#600": "pass",
-  "test-core#601": "pass",
+  "test-core#601": "timeout",
   "test-core#602": "pass",
   "test-core#603": "pass",
   "test-core#604": "pass",
@@ -1343,7 +1356,7 @@
   "test-i386#97": "pass",
   "test-i386#98": "pass",
   "test-i386#99": "pass",
-  "test-lua#00": "pass",
+  "test-lua#00": "fail",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1397,18 +1410,47 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T18:02:53Z",
+  "date": "2026-07-08T18:08:58Z",
   "sha": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 161.0
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 344.7
  },
  "last_full": {
-  "date": "2026-07-08T17:46:37Z",
-  "sha": "ec8873e77455d9d3629f8e55f2a3ec8bb1f0b3c5",
+  "date": "2026-07-08T18:08:58Z",
+  "sha": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
   "tier": "full",
-  "verdict": "GREEN",
-  "wall": 495.4
+  "verdict": "RED",
+  "wall": 344.7
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "job": "test-cjson#00",
+   "opened": "2026-07-08T18:08:58Z",
+   "range": []
+  },
+  {
+   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "job": "test-core#599",
+   "opened": "2026-07-08T18:08:58Z",
+   "range": []
+  },
+  {
+   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "job": "test-core#601",
+   "opened": "2026-07-08T18:08:58Z",
+   "range": []
+  },
+  {
+   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "job": "test-lua#00",
+   "opened": "2026-07-08T18:08:58Z",
+   "range": []
+  }
+ ]
 }
