@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -20,31 +19,37 @@ _none_
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (1)
+## unfinished (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 
 ## blocked (0)
 
 _none_
 
-## backlog (103)
+## backlog (109)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
+| bug-c-crtl-missing-net-headers-enet | C | 45 | bug | crtl: missing <netinet/tcp.h>, <netdb.h>, <poll.h> — ENet falls back to host headers | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
+| bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
+| bug-c-inline-fnptr-param-call | C | 55 | bug | C: calling through an INLINE fn-pointer parameter — "call to undeclared function" | — |
+| bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
 | bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
+| bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -90,6 +95,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
+| feature-game-library-candidate-suite | B | 50 | feature |  | — |
 | feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -704,6 +710,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 65] [A] bug-c-tag-redef-misfiles-field-selfref-segv
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
@@ -712,6 +719,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 60] [C] bug-c-float-single-return-zero
 - [p 60] [B] bug-crtl-printf-g-double-roundtrip
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
@@ -730,6 +738,8 @@ _none_
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [A] bug-c-float-vararg-promotion-32bit
+- [p 55] [C] bug-c-inline-fnptr-param-call
+- [p 55] [C] bug-c-local-nested-aggregate-init
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-switch-nonblock-and-duffs-device
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -742,6 +752,8 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
+- [p 50] [B] feature-game-library-candidate-suite
+- [p 45] [C] bug-c-crtl-missing-net-headers-enet
 - [p 45] [A] bug-c-i386-enum-const-return-00120
 - [p 45] [A] bug-c-i386-indirect-variadic-fnptr-00189
 - [p 45] [D] doc-licensing-split-mpl-zlib
