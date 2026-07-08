@@ -173,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (523)
+## done (524)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -330,6 +330,7 @@ _none_
 | bug-forin-qualified-set-member-source | A | 50 | bug | `for-in` over a qualified set member source fails | — |
 | bug-forward-class-decl-with-later-base-loses-fields | A | 50 | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | 50 | bug | FPC bootstrap no longer compiles compiler source | — |
+| bug-fpc-seed-drift-forward-semicolon-enumtype | A | 45 | bug | FPC seed drift: compiler no longer FPC-compiles (3 spots) | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | 50 | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | 50 | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | bug-frozen-string-length-pointer-deref-cross | A | 50 | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |

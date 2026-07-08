@@ -54,3 +54,6 @@ Gates (all green): `fpc -O2 -Tlinux -Px86_64 compiler/compiler.pas` builds
 clean; `make fpc-check` — the FPC-built compiler compiles compiler.pas to a
 binary BYTE-IDENTICAL to the self-hosted `compiler/pascal26` (cmp clean); self-
 host byte-identical; make test. `make bootstrap` (FPC cold-start) works again.
+
+## Log
+- 2026-07-08 — resolved, commit 197899d3.
