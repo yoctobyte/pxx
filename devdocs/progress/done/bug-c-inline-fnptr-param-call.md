@@ -27,3 +27,6 @@ signature (SymProcSig) the way the typedef path does.
 stb probe `test/gamelib/stb_sprintf_probe.c` compiles+passes; the crtl qsort
 typedef workaround can be dropped; regression bXXX; c-conformance + corpus
 green + self-host.
+
+## Log
+- 2026-07-08 — resolved, commit 0c2a3329.
