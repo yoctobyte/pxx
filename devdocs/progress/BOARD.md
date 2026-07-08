@@ -60,7 +60,7 @@ _none_
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
-| feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
 | feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
 | feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
@@ -173,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (507)
+## done (508)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -464,7 +464,8 @@ _none_
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | C | 50→60 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
+| feature-c-runtime-library | C | 60 | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-source-frontend | C | 50 | feature | C source frontend — compile C function bodies (statements + expressions) | — |
 | feature-c-system-libs-granular-opt-out | C | 50 | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
@@ -714,7 +715,6 @@ _none_
 - [p 60] [B] bug-crtl-printf-g-double-roundtrip
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
-- [p 60] [C] feature-c-runtime-library
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [B] feature-dns-resolver-library
 - [p 60] [A] feature-esoteric-frontend-probes
@@ -797,6 +797,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [C] bug-c-multidim-ordinal-global-init
+- [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [C] bug-c-comment-terminator-greedy
 - [p 30] [A] bug-cpp-include-not-found-diagnostic-path

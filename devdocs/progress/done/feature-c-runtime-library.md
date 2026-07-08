@@ -6,13 +6,13 @@ prio: 60  # auto
 
 - **Type:** feature (C frontend / RTL — legitimately Track B library work
   originally; reassigned to C now that C owns `lib/crtl` and the C runtime)
-- **Status:** backlog (unblocked 2026-06-29)
+- **Status:** done
 - **Unblocked 2026-06-29 (board cleanup):** the blocker
   `feature-c-source-frontend` is now done. `lib/crtl/{include,src}` substrate
   exists (math/stdio/string/stdlib/socket/ctype/locale) and the autopull link
   model is live. Remaining work is open-ended runtime build-out, not blocked.
 - **Track:** C (C frontend)
-- **Owner:** — (lock released; last worked by Codex)
+- **Owner:** fable-c
 - **Opened:** 2026-06-20
 - **Blocked-by:** feature-c-source-frontend
 - **Relation:** supports `feature-c-source-frontend`,
@@ -145,3 +145,4 @@ This needs a deliberate compiler/library namespace decision before accepted
 - 2026-06-22 — State audit on Track B: moved `unfinished/` → `blocked/`
   because this ticket's remaining acceptance requires
   `feature-c-source-frontend` (Track A). No Track B code change needed.
+- 2026-07-08 — resolved, commit d3342735.
