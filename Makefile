@@ -975,6 +975,10 @@ test-core: $(COMPILER)
 	# (struct member / typedef / global) is consumed and its enumerators registered.
 	./$(COMPILER) test/cenum_in_struct_b194.c /tmp/cenum_in_struct_b19426
 	/tmp/cenum_in_struct_b19426; test "$$?" = "42"
+	# bug-c-sqlite-suite-runtime-segfault: address of a single/double lvalue is an
+	# IR_LEA (pointer value); C float->int truncation must not corrupt it.
+	./$(COMPILER) test/cfloat_lea_ptr_b195.c /tmp/cfloat_lea_ptr_b19526
+	/tmp/cfloat_lea_ptr_b19526; test "$$?" = "142"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

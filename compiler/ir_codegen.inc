@@ -2173,10 +2173,15 @@ begin
             else
               begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, rax }
           end
-          else if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          else if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]]))
+                  and (IRKind[IRB[node]] <> IR_LEA) then
           begin
             { C double->int conversion: a float RHS into an integer slot truncates
-              (cvttsd2si), not a bit-copy of the double bits. C-mode only. }
+              (cvttsd2si), not a bit-copy of the double bits. C-mode only.
+              Exclude IR_LEA: an address node is sometimes tagged with its
+              element type (e.g. tySingle for `float *`), but the value in rax is
+              a POINTER, not double bits — truncating it corrupts the pointer
+              (crashed sqlite3AtoF: `float`-elem LEA stored into a pointer var). }
             EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
             EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0); { cvttsd2si rax, xmm0 }
           end;
@@ -2648,7 +2653,8 @@ begin
             field/element must TRUNCATE (cvttsd2si), not bit-copy the double bits.
             C-mode only (Pascal rejects implicit float->int at parse). }
           if CProgramMode and (not TypeIsFloat(tk)) and
-             TypeIsFloat(IntToTypeKind(IRTk[valueNode])) then
+             TypeIsFloat(IntToTypeKind(IRTk[valueNode])) and
+             (IRKind[valueNode] <> IR_LEA) then
           begin
             EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C9); { movq xmm1, rcx }
             EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9); { cvttsd2si rcx, xmm1 }
@@ -3391,7 +3397,8 @@ begin
                   slot, not SSE) truncates double->int (cvttsd2si). Variadic floats
                   land in SSE (argIsSse) and stay double, so this skips them. }
                 if CProgramMode and (not argIsSse[i]) and
-                   TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) then
+                   TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) and
+                   (IRKind[argNodeArr[i]] <> IR_LEA) then
                 begin
                   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
                   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0); { cvttsd2si rax, xmm0 }
@@ -3417,7 +3424,8 @@ begin
                   IREmitNode(argNodeArr[i]);
                 { C float->integer-parameter truncation (see the stack-arg loop). }
                 if CProgramMode and (not argIsSse[i]) and
-                   TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) then
+                   TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) and
+                   (IRKind[argNodeArr[i]] <> IR_LEA) then
                 begin
                   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
                   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0); { cvttsd2si rax, xmm0 }

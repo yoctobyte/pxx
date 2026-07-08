@@ -37,3 +37,35 @@ bug-c-comment-terminator-greedy. Bisect between the v185 green state and HEAD.
 ## Gate
 test/csqlite_suite.c runs and is byte-identical to the same-version gcc oracle
 again; make test + self-host byte-identical.
+
+## RESOLVED 2026-07-08 (fable-abc, Track A/C) — IR_LEA float→int truncation misfire
+
+Bisected (via building each commit's compiler source with the current
+backward-compatible binary, since FPC can no longer seed HEAD directly): first
+bad commit **4fec149a** ("C float variadic promotion + double->int conversion"),
+which added `cvttsd2si` float→int truncation in C mode at three codegen sites
+(IR_STORE_SYM, IR_STORE_MEM, both IR_CALL arg-push loops).
+
+Root cause: taking the address of a single/float-typed lvalue yields an IR_LEA
+node tagged with its ELEMENT type (tySingle), not tyPointer. When that address
+was stored into a pointer variable, the STORE_SYM truncation
+(`TypeIsFloat(IRTk[value])`, dest not float) fired on the POINTER value —
+`movq xmm0,rax; cvttsd2si rax,xmm0` truncated the address to a small int,
+corrupting the pointer. sqlite3AtoF then crashed on the first `*z` byte-load.
+Reduced to `sqlite3AtoF("100.5")` → SIGSEGV; instrumentation showed
+dest=tyPointer, value=IR_LEA tagged tySingle.
+
+Fix (compiler/ir_codegen.inc): exclude IR_LEA values from the C float→int
+truncation at all four sites (`and (IRKind[<value>] <> IR_LEA)`). An address
+node is never a float number regardless of its element-type tag. The genuine
+00174/00175 float conversions are untouched.
+
+Gates (all green): reduced sqlite3AtoF repro rc=0; FULL test/csqlite_suite.c
+BYTE-IDENTICAL vs same-version gcc oracle (61 lines); regression
+test/cfloat_lea_ptr_b195.c in test-core; cfloat_conv_b176 + c-testsuite
+00174/00175 still pass; test-c-conformance 204/0/16; make test; self-host
+byte-identical; test-lua green.
+
+Filed separately (independent pre-existing bug found while writing the
+regression test): [[bug-c-double-ptr-deref-narrow-to-single]] —
+`(float)*doubleptr` narrows to 0 when a single is live.
