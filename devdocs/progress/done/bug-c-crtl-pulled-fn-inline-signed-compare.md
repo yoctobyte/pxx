@@ -32,3 +32,6 @@ normally-declared function (which works).
 ## Gate
 `getaddrinfo(...) >= 0` inline evaluates signed; a focused repro; c-conformance
 + corpus green.
+
+## Log
+- 2026-07-08 — resolved, commit f94264b6.
