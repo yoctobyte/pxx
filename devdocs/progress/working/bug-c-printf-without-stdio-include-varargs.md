@@ -5,7 +5,7 @@ prio: 70  # auto
 # C: printf without #include <stdio.h> silently drops output / formatting
 
 - **Type:** bug (C frontend / crtl binding) — Track C
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-02, found during bug-max-proc-params-32-selfmiscompile
   (verified identical on pinned v152 — pre-existing).
 
