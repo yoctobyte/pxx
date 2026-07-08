@@ -11,6 +11,7 @@
   See devdocs/progress/backlog/bug-fpc-seed-helper-ordering-after-lua-c-frontend.md }
 
 function TypeSize(tk: TTypeKind): Integer; forward;
+function GenMakeSeq(stmt, next: Integer): Integer; forward;
 function CNodeDecaysToPointer(node: Integer): Boolean; forward;
 function IRLowerAddress(node: Integer): Integer; forward;
 function IRNodePointerBase(node: Integer): Boolean; forward;

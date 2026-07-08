@@ -829,7 +829,9 @@ procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
   classIdx, elemSize, lo, hi, itemNode, p1, p2: Integer;
-  vaNvw, vaK, vaO1, vaO2, vaTk: Integer;
+  vaNvw, vaK, vaO1, vaO2: Integer;
+  vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
+                       enum/int boundary is satisfied (pxx erases it; FPC does not). }
   vaFwd: Boolean;
   vaOrder: array[0..127] of Integer;
   sVal: AnsiString;

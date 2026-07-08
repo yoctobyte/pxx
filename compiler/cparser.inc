@@ -2920,7 +2920,7 @@ begin
           while ASTRight[seq] <> -1 do seq := ASTRight[seq];
           tail := seq;
         end;
-      end
+      end;
       { Unconsumed initializer (record-element array, or non-brace): balanced skip. }
       if CurTok.Kind = tkAssign then
       begin
