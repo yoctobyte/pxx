@@ -20,3 +20,6 @@ path (self-host risk), not a bounded init patch:
    local + global).
 Parked (claim released) — needs a focused declarator-path session. Unblocks
 cglm (`vec4 csCoords[8]`, vec4 = float[4]).
+
+## Log
+- 2026-07-08 — resolved, commit a826f40a.
