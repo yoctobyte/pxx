@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -177,7 +176,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (515)
+## done (516)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -250,6 +249,7 @@ _none_
 | bug-c-math-round-undefined-symbol | A+B | 50 | bug | C `math.h` `round()`/`trunc()` — undefined symbol at link (compiles clean, fails at load) | — |
 | bug-c-missing-lp64-predefines | C | 55 | bug | C predefined macros: __LP64__ / _LP64 (and arch predefines) missing | — |
 | bug-c-multidim-array-field-partial-row | A | 50 | bug | C: 2D array struct field — partial-index row decay broken | — |
+| bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-nested-anon-union-struct | C | 50 | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |

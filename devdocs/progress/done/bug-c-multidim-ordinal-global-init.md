@@ -30,3 +30,6 @@ the sym's dim metadata — the walker already handles nested/elided dims via
 ## Gate
 `int a[2][3]` global (nested + flat elided inits) reads correct values on
 x86-64; `make test` + self-host; check corpus for users.
+
+## Log
+- 2026-07-08 — resolved, commit 0db36672.
