@@ -457,6 +457,9 @@ test-core: $(COMPILER)
 	# legality filtering. Perft exact through depth 3 (no EP/castle before ply 4).
 	./$(COMPILER) test/test_rust_chess_perft.rs /tmp/test_rust_chess_perft26
 	test "$$(/tmp/test_rust_chess_perft26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
+	# Rust tuple structs (single struct until bug-uclass-field-window-stale-base lands)
+	./$(COMPILER) test/test_rust_tuple_struct.rs /tmp/test_rust_tuple26
+	test "$$(/tmp/test_rust_tuple26)" = "$$(printf 'a 300 b 44')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb /tmp/test_ada_skeleton26

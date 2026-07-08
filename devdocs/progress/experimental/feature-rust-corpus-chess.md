@@ -97,4 +97,14 @@ pure swallowing/trivia, cheap and high-leverage.
   the Result alias). Next rungs toward the REAL engine sources: tuple
   structs, associated fns + Self, Option, struct array fields, static
   tables, intrinsic u64 methods.
+- 2026-07-09 — tuple structs landed (declaration/prescan, `Name(args)`
+  let-constructor, `.0` field access) — and their FIRST multi-struct test
+  found a shared symtab bug: UClass field windows go stale under
+  shells-then-fields registration (any 2+ field-bearing structs; latent
+  for named structs since the skeleton). Filed as Track A ticket
+  [[bug-uclass-field-window-stale-base]] with root cause + one-line fix,
+  NOT worked around (experimental-frontends rule). That ticket now BLOCKS
+  every multi-struct rung of this ladder (chess.rs declares ~6 structs);
+  unblocked rungs continue meanwhile (associated fns/Self, Option,
+  intrinsics, statics).
 

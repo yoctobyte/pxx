@@ -576,6 +576,21 @@ begin
         Result := node;
         Exit;
       end;
+      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkInteger) then
+      begin
+        { tuple-struct field access `s.0` — the digits are the field name }
+        Next;
+        name := RIntToStr(CurTok.IVal);
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := node;
+        ASTSOffset[fieldNode] := RStoredName(name);
+        ASTSLen[fieldNode] := Length(name);
+        ASTTk[fieldNode] := Ord(RecFieldType(Syms[symIdx].RecName, name));
+        node := fieldNode;
+        Next;
+        Result := node;
+        Exit;
+      end;
       if CurTok.Kind = tkDot then
       begin
         Next;
@@ -1173,6 +1188,39 @@ begin
     Result := seq;
     Exit;
   end;
+  { tuple-struct literal RHS: `Name(expr, ...)` — per-field stores, same
+    no-construct-node shape as the named-field literal below }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) and
+     (FindUClass(CurTok.SVal) >= 0) then
+  begin
+    ci := FindUClass(CurTok.SVal);
+    if not REnumCi[ci] then
+    begin
+      Next;
+      Expect(tkLParen, '(');
+      LastTypeRecId := REC_UCLASS_BASE + ci;
+      symIdx := AllocVar(name, tyRecord);
+      identNode := RMakeIdent(symIdx);
+      seq := -1; k := 0;
+      repeat
+        valNode := RParseExpr;
+        mangled := RIntToStr(k);
+        fieldNode := AllocNode(AN_FIELD);
+        ASTLeft[fieldNode] := identNode;
+        ASTSOffset[fieldNode] := RStoredName(mangled);
+        ASTSLen[fieldNode] := Length(mangled);
+        ASTTk[fieldNode] := Ord(RecFieldType(REC_UCLASS_BASE + ci, mangled));
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := fieldNode;
+        ASTRight[assignNode] := valNode;
+        seq := RSeqAppend(seq, assignNode);
+        Inc(k);
+      until not Eat(tkComma);
+      Expect(tkRParen, ')');
+      Result := seq;
+      Exit;
+    end;
+  end;
   { struct literal RHS: `Type { field: expr, ... }` }
   if (CurTok.Kind = tkIdent) and (FindUClass(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind = tkBegin) then
   begin
@@ -1740,12 +1788,38 @@ begin
 end;
 
 procedure RRegisterStructFields;
-var i, j, ci, curOff, sz, align, nameTokIdx: Integer; tk: TTypeKind;
+var i, j, ci, curOff, sz, align, nameTokIdx, k: Integer; tk: TTypeKind;
+    mangled: AnsiString;
 begin
   i := 0;
   while i < MainProgramTokCount - 2 do
   begin
-    if (Tokens[i].Kind = tkRecord) and (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkBegin) then
+    if (Tokens[i].Kind = tkRecord) and (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      { tuple struct `struct Name(T, T, ...);` — fields named "0", "1", …
+        (accessed as name.0), same layout math as named fields. }
+      ci := FindUClass(GetTokenStr(i + 1));
+      UClsIsRecord[ci] := True;
+      curOff := 0; align := 1; k := 0;
+      j := i + 3;
+      while Tokens[j].Kind <> tkRParen do
+      begin
+        if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type in tuple struct ' + GetTokenStr(i + 1));
+        tk := RTypeKindFromName(GetTokenStr(j), True);
+        Inc(j);
+        sz := TypeSize(tk);
+        if TypeAlign(tk) > align then align := TypeAlign(tk);
+        curOff := AlignTo(curOff, TypeAlign(tk));
+        mangled := RIntToStr(k);
+        AddUField(ci, RStoredName(mangled), Length(mangled), curOff, Ord(tk), LastTypeRecId);
+        Inc(curOff, sz);
+        Inc(k);
+        if Tokens[j].Kind = tkComma then Inc(j);
+      end;
+      UClsAlign[ci] := align;
+      UClsSize_[ci] := AlignTo(curOff, align);
+    end
+    else if (Tokens[i].Kind = tkRecord) and (Tokens[i + 1].Kind = tkIdent) and (Tokens[i + 2].Kind = tkBegin) then
     begin
       ci := FindUClass(GetTokenStr(i + 1));
       UClsIsRecord[ci] := True;
@@ -2153,6 +2227,15 @@ begin
   Next; { struct }
   if CurTok.Kind <> tkIdent then Error('Rust: expected struct name');
   Next;
+  if CurTok.Kind = tkLParen then
+  begin
+    { tuple struct `struct Name(T, ...);` — fields registered in the
+      prescan; consume through the trailing semicolon. }
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRParen, ')');
+    Expect(tkSemicolon, ';');
+    Exit;
+  end;
   Expect(tkBegin, '{');
   { fields were already registered by RRegisterStructFields; nothing left to
     compile for a plain value-type struct declaration. }
