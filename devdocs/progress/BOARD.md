@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -178,7 +177,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (513)
+## done (514)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -273,6 +272,7 @@ _none_
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
+| bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
 | bug-c-ternary-middle-comma | C | 50 | bug | C: ternary middle arm rejects comma expression | — |
 | bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |

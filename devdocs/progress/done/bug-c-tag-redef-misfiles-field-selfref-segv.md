@@ -42,3 +42,6 @@ recurse without bound.
 ## Gate
 ENet unity compiles (or errors cleanly); a minimal tag-redefinition repro; no
 compiler crash; self-host byte-identical.
+
+## Log
+- 2026-07-08 — resolved, commit f9fe98f8.
