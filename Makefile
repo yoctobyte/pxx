@@ -874,6 +874,9 @@ test-core: $(COMPILER)
 	# b200 (bug-c-expr-result-type-model / 00104): hex/octal constant unsigned type ladder
 	./$(COMPILER) test/chex_constant_unsigned_type_b200.c /tmp/chex_constant_unsigned_type_b20026
 	/tmp/chex_constant_unsigned_type_b20026; test "$$?" = "42"
+	# b201 (bug-crtl-printf-g-double-roundtrip): va_arg(T*) pointee width (scanf float)
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cva_arg_pointer_pointee_b201.c /tmp/cva_arg_pointer_pointee_b20126
+	/tmp/cva_arg_pointer_pointee_b20126; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi

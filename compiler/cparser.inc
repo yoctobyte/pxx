@@ -366,10 +366,33 @@ end;
 { A primary: integer/char/string literal, parenthesised expr, identifier
   (constant -> folded literal; variable -> AN_IDENT; name followed by `(` ->
   call with an AN_ARG chain). }
+{ Thread the pointee type of a `va_arg(ap, T*)` result onto the node so a
+  subsequent `*result` deref (or index) knows it points at T. Reuses the
+  pointer-cast alias mechanism: an AN_PTR_CAST carrying an alias whose ElemTk /
+  PtrBaseTk are T's, exactly like `(T*)expr`. Scalar `va_arg(ap, T)` (depth 0)
+  is returned unchanged — it already reads the value at the right width. }
+function CVaArgThreadPointee(node, ptrDepth, elemTk, elemRec, baseTk, baseRec: Integer): Integer;
+var castNode: Integer;
+begin
+  Result := node;
+  if ptrDepth <= 0 then Exit;
+  RegisterPtrAlias(0, 0, elemTk, elemRec, 0, 0);
+  AliasPtrDepth[AliasCount-1] := ptrDepth;
+  AliasPtrBaseTk[AliasCount-1] := baseTk;
+  AliasPtrBaseRec[AliasCount-1] := baseRec;
+  castNode := AllocNode(AN_PTR_CAST);
+  ASTLeft[castNode] := node;
+  ASTRight[castNode] := -1;
+  ASTIVal[castNode] := AliasCount - 1;
+  ASTTk[castNode] := Ord(tyPointer);
+  Result := castNode;
+end;
+
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
     vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
+    vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
     vt: TTypeKind;
     name: AnsiString;
 begin
@@ -464,6 +487,15 @@ begin
         Next;
         apNode := ParseCExpr; Eat(tkComma);
         vt := ParseCDeclType;
+        { Capture the pointee BEFORE collapsing `T*` to a bare Pointer: a
+          `va_arg(ap, T*)` result must remember it points at T, else a later
+          `*va_arg(...) = v` deref defaults to int and truncates a wider store
+          (e.g. sscanf's `*va_arg(ap,double*) = strtod(...)` wrote int bits ->
+          4.94e-322 for 100.125). The pointee is threaded onto the result via a
+          PTR_CAST alias below. }
+        vaPtrDepth := CTypePtrDepth;
+        vaElemTk := CTypeElemTk; vaElemRec := CTypeElemRec;
+        vaBaseTk := CTypePtrBaseTk; vaBaseRec := CTypePtrBaseRec;
         if CTypePtrDepth > 0 then vt := tyPointer;
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);
@@ -484,6 +516,7 @@ begin
           callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
           node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
+          node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
           Result := node; Exit;
         end;
         if TargetArch <> TARGET_X86_64 then
@@ -498,6 +531,7 @@ begin
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
         node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
+        node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
         Result := node; Exit;
       end
       else if (name = '__builtin_va_start') and (CurTok.Kind = tkLParen) then
