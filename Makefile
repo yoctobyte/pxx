@@ -987,6 +987,10 @@ test-core: $(COMPILER)
 	# must emit their element values (were skipped -> read as zero).
 	./$(COMPILER) test/cfloat_global_array_init_b197.c /tmp/cfloat_global_array_init_b19726
 	/tmp/cfloat_global_array_init_b19726; test "$$?" = "42"
+	# bug-c-shift-result-type-battery-00200: shift result type = promoted LEFT
+	# operand (C99 6.5.7p3); a wide/unsigned count must not change the signedness.
+	./$(COMPILER) test/cshift_result_type_b198.c /tmp/cshift_result_type_b19826
+	/tmp/cshift_result_type_b19826; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

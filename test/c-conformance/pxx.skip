@@ -13,7 +13,6 @@
 00143.c	Duff's device (case in nested do-while) — bug-c-switch-nonblock-and-duffs-device
 00149.c	file-scope compound literal SIGSEGV — feature-c-compound-literals
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
-00200.c	shift result type = promoted left operand (battery) — bug-c-shift-result-type-battery-00200
 00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
 00207.c	VLA char test[argc] + label in if body — feature-c-vla-and-label-in-if
 00213.c	statement expressions ({...}) with labels — feature-c-statement-expressions

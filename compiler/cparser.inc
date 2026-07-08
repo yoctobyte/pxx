@@ -45,12 +45,22 @@ procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 
 { Result type of a binary node: comparisons/logical -> Boolean; otherwise widen
   to Int64 if either operand is Int64, else Integer. }
+function CIntegerPromoteTk(tk: TTypeKind): TTypeKind; forward;
+
 function CBinResultTk(opTok, l, r: Integer): Integer;
 begin
   if (opTok = Ord(tkEq)) or (opTok = Ord(tkNeq)) or (opTok = Ord(tkLt)) or
      (opTok = Ord(tkLe)) or (opTok = Ord(tkGt)) or (opTok = Ord(tkGe)) or
      (opTok = Ord(tkAnd)) or (opTok = Ord(tkOr)) then
     Result := Ord(tyBoolean)
+  else if (opTok = Ord(tkShl)) or (opTok = Ord(tkShr)) then
+    { C99 6.5.7p3: the integer promotions run on each operand and the RESULT
+      TYPE is that of the promoted LEFT operand — the right (shift count) type is
+      irrelevant. Using the usual-arithmetic-conversions below (which reads BOTH
+      operands) wrongly let a wide/unsigned shift COUNT infect the result, e.g.
+      `(short)1 << (unsigned long)1` came out unsigned instead of signed int
+      (c-testsuite 00200). }
+    Result := Ord(CIntegerPromoteTk(IntToTypeKind(ASTTk[l])))
   else if TypeIsFloat(IntToTypeKind(ASTTk[l])) or TypeIsFloat(IntToTypeKind(ASTTk[r])) then
   begin
     { Float arithmetic (`d+1`, `a*b`, …): the result is float, NOT integer —
