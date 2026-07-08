@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (103)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
-| bug-c-sizeof-widening-cast-expr | C | 40 | bug | C: `sizeof((long)expr)` returns 4, not 8 — widening-cast expression keeps operand width | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-typedef-array-element-init | A | 50 | bug |  | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
@@ -174,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (522)
+## done (523)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -265,6 +264,7 @@ _none_
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-c-sizeof-expr-no-parens | C | 55 | bug | C `sizeof expr` without parentheses fails to parse | — |
 | bug-c-sizeof-string-literal | C | 50 | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
+| bug-c-sizeof-widening-cast-expr | C | 40 | bug | C: `sizeof((long)expr)` returns 4, not 8 — widening-cast expression keeps operand width | — |
 | bug-c-sqlite-offsetof-style-field-address-array-bound | C | 50 | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-c-sqlite-sql-exec-schema-argv-pointer | C | 50 | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | C | 50 | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
@@ -810,7 +810,6 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
-- [p 40] [C] bug-c-sizeof-widening-cast-expr
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-c-crtl-pulled-fn-inline-signed-compare

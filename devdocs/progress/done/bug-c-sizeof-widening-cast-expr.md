@@ -53,3 +53,6 @@ expressions matches gcc; comparison/`!` stay 4; regression
 test/csizeof_cast_expr_b199.c in test-core; c-conformance 205/0/15; sqlite suite
 byte-identical (sizeof drives corpus buffer math — no regression); make test;
 self-host byte-identical; test-lua green.
+
+## Log
+- 2026-07-08 — resolved, commit 5062bdd9.
