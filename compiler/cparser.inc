@@ -4308,6 +4308,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
+    clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
@@ -5022,6 +5023,60 @@ begin
             end;
           end;
         end;
+      end
+      else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
+              (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Pointer global to the address of a file-scope COMPOUND LITERAL:
+          `struct S *s = &(struct S){ ... };` (C99 6.5.2.5 — at file scope the
+          literal is an anonymous object with static storage duration). Allocate
+          an anonymous static object of the literal's record type, initialise it
+          through the deferred aggregate walker (the same path a named struct
+          global uses), and bind p to its address (Elem = -2 address-of-sym).
+          The anon name is keyed by the brace token position so both driver
+          passes dedup to a single object, exactly like a named global's
+          FindSym. A non-record literal / missing brace falls to the skip. }
+        Next;                              { consume '&' }
+        Next;                              { consume '(' }
+        clRecTk := ParseCDeclType;         { the compound-literal type }
+        clRecId := CTypeBaseRec;
+        if CurTok.Kind = tkRParen then Next;
+        if (clRecTk = tyRecord) and (clRecId >= REC_UCLASS_BASE) and
+           (CurTok.Kind = tkBegin) and UClsIsRecord[clRecId - REC_UCLASS_BASE] and
+           (UClsFCount[clRecId - REC_UCLASS_BASE] >= 1) then
+        begin
+          anonName := '$cl$' + MangleSuffix(TokPos);   { brace-token-keyed }
+          anonIdx := FindSym(anonName);
+          if anonIdx < 0 then
+          begin
+            LastTypeRecId := clRecId;
+            anonIdx := AllocVar(anonName, tyRecord);
+          end;
+          if CAggInitCount < MAX_C_AGG_INITS then
+          begin
+            CAggInitSym[CAggInitCount] := anonIdx;
+            CAggInitTok[CAggInitCount] := TokPos - 1;   { the opening brace }
+            CAggInitRec[CAggInitCount] := clRecId;
+            CAggInitLen[CAggInitCount] := 1;
+            CAggInitIsArr[CAggInitCount] := False;
+            Inc(CAggInitCount);
+          end;
+          SkipBraceBlock;
+          if PendingInitCount < MAX_PENDING_INITS then
+          begin
+            PendingInitSym[PendingInitCount]    := idx;
+            PendingInitElem[PendingInitCount]   := -2;   { address-of-sym }
+            PendingInitFOff[PendingInitCount]   := -1;
+            PendingInitFLen[PendingInitCount]   := 0;
+            PendingInitVal[PendingInitCount]    := anonIdx;
+            PendingInitValAux[PendingInitCount] := 0;
+            PendingInitTk[PendingInitCount]     := Ord(tyPointer);
+            Inc(PendingInitCount);
+          end;
+        end
+        else
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
