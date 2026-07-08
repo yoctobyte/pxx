@@ -27,7 +27,7 @@ _none_
 
 _none_
 
-## backlog (86)
+## backlog (87)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -112,8 +112,9 @@ _none_
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
-| regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
+| regression-test-core-602 | T | 70 | regression | regression: test-core#602 red at 4dfde8f92cb4 (auto-filed by twatch) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -173,7 +174,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (538)
+## done (540)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -699,12 +700,14 @@ _none_
 | feature-xtensa-class-instantiation | A | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
 | feature-xtensa-windowed-abi | A | 50 | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
+| flaky-corpus-runner-shared-tmp-path | C | 55 | flaky | flaky: cJSON / lua corpus runners race on a shared /tmp input path under parallel testing | — |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
 | lib-intToStr-missing | B | 50 | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | 50 | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | 50 | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 | meta-track-b-compiler-wishlist | B | 50 | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
+| regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
@@ -734,8 +737,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 75] [C] regression-cfront-stmt-expr-25c1dded
 - [p 70] [T] regression-test-core-600
+- [p 70] [T] regression-test-core-602
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
@@ -810,6 +813,7 @@ _none_
 - [p 45] [B] feature-writeln-as-library
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] meta-multithreading
+- [p 45] [A] perf-gtk-system-header-parse
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision

@@ -34,3 +34,6 @@ ticket). Not a compiler bug — a shared-mutable-file race in the harness.
 ## Gate
 `make test-cjson` + `make test-lua` green, and the two suites pass when run under
 `tools/testmgr.py` parallel full-tier without input-file cross-contamination.
+
+## Log
+- 2026-07-08 — resolved, commit dbdc0c2c.
