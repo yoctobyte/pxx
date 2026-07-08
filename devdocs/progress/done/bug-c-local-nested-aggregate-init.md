@@ -33,3 +33,6 @@ cglm (header-only math — the whole probe battery), and any C code with
 ## Gate
 test/gamelib/cglm_probe.c compiles+passes (42); c-conformance + corpus green;
 self-host byte-identical.
+
+## Log
+- 2026-07-08 — resolved, commit ba5113a7.
