@@ -887,6 +887,10 @@ test-core: $(COMPILER)
 	# (bug-c-crtl-pulled-fn-inline-signed-compare): sign-extend the 32-bit result
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_external_int_signed_compare.c /tmp/ccrtl_external_int_signed_compare26
 	/tmp/ccrtl_external_int_signed_compare26; test "$$?" = "42"
+	# array typedef `typedef float vec4[4]` folds its dim into a decl
+	# (bug-c-typedef-array-element-init): vec4 v -> float[4], vec4 arr[N] -> [N][4]
+	./$(COMPILER) test/carray_typedef_element_init.c /tmp/carray_typedef_element_init26
+	/tmp/carray_typedef_element_init26; test "$$?" = "42"
 	# b203 (bug-c-multidim-ordinal-global-init): multidim ordinal global array init
 	./$(COMPILER) test/cmultidim_ordinal_global_b203.c /tmp/cmultidim_ordinal_global_b20326
 	/tmp/cmultidim_ordinal_global_b20326; test "$$?" = "42"

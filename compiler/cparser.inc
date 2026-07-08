@@ -2074,6 +2074,7 @@ begin
     CTypedefRec[idx] := rec;
     CTypedefProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
+    CTypedefArrLen[idx] := -1;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -2092,6 +2093,7 @@ begin
   CTypedefRec[CTypedefCount] := rec;
   CTypedefProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
+  CTypedefArrLen[CTypedefCount] := -1;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -2184,6 +2186,7 @@ begin
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdIsFnType := False;
   CTypeProcSig := -1;
+  CTypeTypedefArrLen := -1;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
@@ -2259,6 +2262,7 @@ begin
               tdElemRec := CTypedefRec[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
+              CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length, else -1 }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -2612,11 +2616,12 @@ var baseTk, declTk, scalarTk: TTypeKind;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
-    dimCount, dimVal, flatLen, di: Integer;
+    dimCount, dimVal, flatLen, di, tdArrLen: Integer;
     arrElems: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
   { Capture the pointer element type/record now — ParseCExpr below must not
     clobber the CType* globals (it does not run ParseCDeclType). }
   elemTkOrd := CTypeElemTk;
@@ -2725,7 +2730,7 @@ begin
       if CurTok.Kind = tkComma then begin Next; Continue; end;
       Break;
     end;
-    if CurTok.Kind = tkLBrack then
+    if (CurTok.Kind = tkLBrack) or (tdArrLen >= 1) then
     begin
       { fixed array  T name[N][M]...  — dimensions are constant expressions.
         Storage is flattened row-major for >=2 dimensions and tagged with
@@ -2741,6 +2746,14 @@ begin
         Expect(tkRBrack, ']');
         if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
         dimSpan[dimCount] := dimVal;
+        Inc(dimCount);
+      end;
+      { Array typedef inherent dim folds UNDER any declarator-applied dims:
+        `v4 r` -> [4]; `v4 rows[2]` -> [2][4] (bug-c-typedef-array-element-init). }
+      if tdArrLen >= 1 then
+      begin
+        if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
+        dimSpan[dimCount] := tdArrLen;
         Inc(dimCount);
       end;
       if dimCount = 1 then
@@ -4264,13 +4277,14 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     recId, initSymIdx, procIdx, initOff, di: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
-    dimVal, flatLen, mdi: Integer;
+    dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
+  tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
   { Inline function-pointer (array) global `ret (*name[N])(params) [= {..}];`
     (sqlite's sqlite3BuiltinExtensions[]). ParseCDeclType already consumed the
     whole declarator — the name into CTypeFnPtrName and any `[..]` into
@@ -4466,6 +4480,15 @@ begin
       if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := dimVal;
       Inc(dimCount);
       if dimCount = 1 then arrLen := dimVal;
+    end;
+    { Array typedef inherent dim folds UNDER any declarator dims: `v4 g` -> [4],
+      `v4 gs[2]` -> [2][4] (bug-c-typedef-array-element-init). }
+    if tdArrLen >= 1 then
+    begin
+      wasArr := True;
+      if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := tdArrLen;
+      Inc(dimCount);
+      if dimCount = 1 then arrLen := tdArrLen;
     end;
     if dimCount >= 2 then
     begin
@@ -7804,6 +7827,18 @@ begin
     end
     else
       AddCTypedef(nm, tk);
+    { Array typedef `typedef ELEM name[N]` — record the inherent single dimension
+      so a decl `name v` / `name v[k]` folds it in (bug-c-typedef-array-element-init;
+      cglm `typedef float vec4[4]`). Only a single constant `[N]` is modelled;
+      a multi-dim or unsized typedef array leaves it scalar (unchanged behavior). }
+    if (tk <> tyRecord) and (tk <> tyPointer) and (CurTok.Kind = tkLBrack) and
+       (Tokens[TokPos].Kind <> tkRBrack) then
+    begin
+      Next;                              { consume '[' }
+      ci := FindCTypedef(nm);
+      if ci >= 0 then CTypedefArrLen[ci] := CEvalConstExpr;
+      if CurTok.Kind = tkRBrack then Next;
+    end;
   end;
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
   Eat(tkSemicolon);
