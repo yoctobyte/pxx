@@ -234,6 +234,7 @@ begin
            else CurTok.Kind := tkDot;
          end;
     ':': CurTok.Kind := tkColon;
+    '?': CurTok.Kind := tkQuestion;
     '&': CurTok.Kind := tkAmp;
     '|': CurTok.Kind := tkPipe;
     '!': begin

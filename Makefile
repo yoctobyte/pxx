@@ -460,6 +460,12 @@ test-core: $(COMPILER)
 	# *T pointers (&x, p.*, pointer params), [N]T fixed arrays + .len -- existing IR only.
 	./$(COMPILER) test/test_zig_structs.zig /tmp/test_zig_structs26
 	test "$$(/tmp/test_zig_structs26)" = "$$(printf 'dist2 25\nq 10 4\nsquares sum 30 len 5\nv 42\nsum 31')"
+	# Zig frontend theoretic-completion pass: switch (if-chain), defer/errdefer
+	# (reverse replay at exits), optionals ?T (null/if-capture/orelse/.?), error
+	# unions !T (global-slot errno convention: return error.X/try/catch/catch |e|),
+	# minimal slices (a[lo..hi], s[i] rw, s.len) -- all parse-time desugar, no new IR.
+	./$(COMPILER) test/test_zig_advanced.zig /tmp/test_zig_advanced26
+	test "$$(/tmp/test_zig_advanced26)" = "$$(printf 'c0 100 c1 200 c2 200 c9 300\nok 3 bad -1\nt1 7 t2 -2\nunderflow caught 2\nalways\nr1 10\nalways\ncleanup\nr2 -1\nnone\nsome 42\norelse 42 unwrap 42\norelse2 7\nslices 60999\nend\nmain done')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.
