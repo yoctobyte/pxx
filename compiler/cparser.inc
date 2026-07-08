@@ -3,6 +3,7 @@
 
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
+function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
@@ -470,6 +471,16 @@ begin
     tkLParen:
     begin
       Next;
+      { GNU statement expression: a paren immediately followed by an opening
+        brace. Parse the block; its value is the last statement when that
+        statement is an expression (else void). Used in kernel/tcc-style code
+        (00214's __builtin_expect scaffolding). }
+      if CurTok.Kind = tkBegin then
+      begin
+        Result := ParseCStmtExprAST;
+        Expect(tkRParen, ')');
+        Exit;
+      end;
       Result := ParseCExpr;
       { Parenthesized comma EXPRESSION `(a, b, c)` — evaluate each for side
         effects, yield the last. lua uses `((void)l, expr)` pervasively (api_check
@@ -3577,6 +3588,92 @@ begin
       end;
     end;
   Result := blockNode;
+end;
+
+{ GNU statement expression (CurTok at the opening brace). Parses the brace block
+  like ParseCBlockAST but yields a VALUE: the last statement, when it is an
+  expression, becomes the result; earlier statements run for their side effects.
+  If the last statement is structural (if/loop/decl) the value is void (0).
+  Modelled as AN_COMMA(block-of-earlier-stmts, value-expr) — the comma lowering
+  runs the block then yields the value. }
+function CNodeIsStatementKind(node: Integer): Boolean;
+begin
+  Result := (node < 0) or
+    (ASTKind[node] = AN_IF) or (ASTKind[node] = AN_WHILE) or
+    (ASTKind[node] = AN_FOR) or (ASTKind[node] = AN_REPEAT) or
+    (ASTKind[node] = AN_BLOCK) or (ASTKind[node] = AN_SEQ) or
+    (ASTKind[node] = AN_EXIT) or (ASTKind[node] = AN_BREAK) or
+    (ASTKind[node] = AN_CONTINUE) or (ASTKind[node] = AN_LABEL) or
+    (ASTKind[node] = AN_GOTO) or (ASTKind[node] = AN_SWITCH) or
+    (ASTKind[node] = AN_CASE) or (ASTKind[node] = AN_DEFAULT);
+end;
+
+function ParseCStmtExprAST: Integer;
+var blockNode, seqNode, stmtNode, lastSeq, scopeMark, si, hh, hj: Integer;
+    prevStmt, valNode, comma: Integer;
+begin
+  Expect(tkBegin, '{');
+  scopeMark := SymCount;
+  blockNode := AllocNode(AN_BLOCK);
+  lastSeq := -1;
+  prevStmt := -1;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    stmtNode := ParseCStatementAST;
+    if stmtNode <> -1 then
+    begin
+      { flush the PREVIOUS statement into the side-effect block; the newest one
+        is held back as the candidate value. }
+      if prevStmt <> -1 then
+      begin
+        seqNode := AllocNode(AN_SEQ);
+        ASTLeft[seqNode] := prevStmt;
+        if lastSeq = -1 then ASTLeft[blockNode] := seqNode
+        else ASTRight[lastSeq] := seqNode;
+        lastSeq := seqNode;
+      end;
+      prevStmt := stmtNode;
+    end;
+  end;
+  Expect(tkEnd, '}');
+  { last statement decides the value: an expression yields it; a structural
+    statement makes the whole thing void — push it into the block too. }
+  if CNodeIsStatementKind(prevStmt) then
+  begin
+    if prevStmt <> -1 then
+    begin
+      seqNode := AllocNode(AN_SEQ);
+      ASTLeft[seqNode] := prevStmt;
+      if lastSeq = -1 then ASTLeft[blockNode] := seqNode
+      else ASTRight[lastSeq] := seqNode;
+      lastSeq := seqNode;
+    end;
+    valNode := AllocNode(AN_INT_LIT);
+    ASTIVal[valNode] := 0; ASTTk[valNode] := Ord(tyInteger);
+  end
+  else
+    valNode := prevStmt;
+  { End of block scope: unhook this block's locals from their hash chains (same
+    teardown as ParseCBlockAST). AST nodes hold sym INDICES, which stay valid, so
+    a value expression referencing a block local still lowers correctly. }
+  for si := SymCount - 1 downto scopeMark do
+    if (Syms[si].Kind = skLocal) and (Syms[si].Name <> '') then
+    begin
+      hh := SymNameFoldHash(Syms[si].Name);
+      if SymHashHead[hh] = si then
+        SymHashHead[hh] := SymHashPrev[si]
+      else
+      begin
+        hj := SymHashHead[hh];
+        while (hj >= 0) and (SymHashPrev[hj] <> si) do hj := SymHashPrev[hj];
+        if hj >= 0 then SymHashPrev[hj] := SymHashPrev[si];
+      end;
+    end;
+  comma := AllocNode(AN_COMMA);
+  ASTLeft[comma] := blockNode;
+  ASTRight[comma] := valNode;
+  ASTTk[comma] := ASTTk[valNode];
+  Result := comma;
 end;
 
 { C `switch (sel) { ... case CONST: ... default: ... }`. The body is parsed like
