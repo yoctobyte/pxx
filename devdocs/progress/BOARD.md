@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (99)
+## backlog (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-typedef-array-element-init | A | 50 | bug |  | — |
-| bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -170,7 +169,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (527)
+## done (528)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -309,6 +308,7 @@ _none_
 | bug-const-string-index-miscompiles | A | 50 | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
 | bug-consteval-named-type-cast | A | 50 | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
+| bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
 | bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
@@ -811,7 +811,6 @@ _none_
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-c-crtl-pulled-fn-inline-signed-compare
-- [p 30] [A] bug-cpp-include-not-found-diagnostic-path
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 28] [C] bug-c-goto-shadowing-00129

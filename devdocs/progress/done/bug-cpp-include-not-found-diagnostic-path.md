@@ -35,3 +35,6 @@ boxes with a different llvm major and may deserve its own probe/fallback.
 ## Non-goals
 Fixing test-core#261 itself — that was a watcher-box corpus gap; testmgr now
 self-skips corpus jobs when `library_candidates/<tree>` is absent.
+
+## Log
+- 2026-07-08 — resolved, commit a8a75188.
