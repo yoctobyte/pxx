@@ -31,13 +31,12 @@ _none_
 
 _none_
 
-## backlog (96)
+## backlog (94)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | A | 50 | bug |  | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
-| bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-multidim-float-brace-init | C | 35 | bug | C: a 2-D (multi-dim) brace initializer of a FLOAT element array zero-fills | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -57,7 +56,6 @@ _none_
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
-| feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
 | feature-callconv-register-args | A | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
@@ -167,7 +165,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (531)
+## done (533)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -228,6 +226,7 @@ _none_
 | bug-c-function-returning-function-pointer-prototype-sqlite | C | 50 | bug | C: function returning function pointer prototype not registered | — |
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
+| bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
@@ -486,6 +485,7 @@ _none_
 | feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
+| feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
 | feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
 | feature-class-is-as | A | 50 | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
@@ -761,7 +761,6 @@ _none_
 - [p 45] [C] feature-c-designated-init-compound-literals
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [C] feature-c-statement-expressions
-- [p 45] [C] feature-c-vla-and-label-in-if
 - [p 45] [A] feature-callconv-register-args
 - [p 45] [A] feature-cross-frontend-interop-contract
 - [p 45] [B] feature-crtl-implement-libc-assumptions
@@ -813,7 +812,6 @@ _none_
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
-- [p 28] [C] bug-c-goto-shadowing-00129
 - [p 28] [C] feature-c-generic-selection
 - [p 25] [C] idea-c-realworld-test-targets
 

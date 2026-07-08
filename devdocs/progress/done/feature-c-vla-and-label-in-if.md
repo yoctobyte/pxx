@@ -49,3 +49,6 @@ braceless if works, const-sized arrays fold). Output is off by ONE extra "boom!"
 with the `argc--` loop counter (a VLA-on-stack / counter aliasing off-by-one).
 So the ONLY remaining piece is true VLA semantics; everything else in 00207
 passes. Still skipped pending VLA.
+
+## Log
+- 2026-07-08 — resolved, commit 2572fc82.
