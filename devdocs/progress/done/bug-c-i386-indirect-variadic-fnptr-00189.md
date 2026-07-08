@@ -22,3 +22,6 @@ must marshal the variadic frame the same way the direct variadic call does
 ## Gate
 00189 passes under `tools/run_c_conformance.sh --target i386`; drop its line
 from `test/c-conformance/pxx.skip.i386`.
+
+## Log
+- 2026-07-08 — resolved, commit f8e4ecfd.
