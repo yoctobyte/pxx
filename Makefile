@@ -856,6 +856,9 @@ test-core: $(COMPILER)
 	# b196 (bug-crtl-strtod-precision-cjson-floats): exact strtod + %g round-trip
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_strtod_g_roundtrip_b196.c /tmp/ccrtl_strtod_g_roundtrip_b19626
 	/tmp/ccrtl_strtod_g_roundtrip_b19626; test "$$?" = "42"
+	# crtl arpa/inet.h IPv4 conversion (feature-game-library-candidate-suite / ENet surface)
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_inet_smoke.c /tmp/crtl_inet_smoke26
+	/tmp/crtl_inet_smoke26; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

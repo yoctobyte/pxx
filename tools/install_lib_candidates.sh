@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson|stb|cglm|enet] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -40,6 +40,15 @@ TCC_COMMIT="a338258d309c888bde96b2d1f206299231a54ddf"   # mob, 2026-07 snapshot
 
 CJSON_URL="https://github.com/DaveGamble/cJSON"
 CJSON_COMMIT="acc76239bee01d8e9c858ae2cab296704e52d916"   # v1.7.18 tag
+
+STB_URL="https://github.com/nothings/stb"
+STB_COMMIT="31c1ad37456438565541f4919958214b6e762fb4"   # master, 2026-07 snapshot
+
+CGLM_URL="https://github.com/recp/cglm"
+CGLM_COMMIT="46f46e5dcb84bc5bfcc07675f026077272704f0c"   # master, 2026-07 snapshot
+
+ENET_URL="https://github.com/lsalzman/enet"
+ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snapshot
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -238,10 +247,55 @@ mkdir -p "$DEST"
 
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
+fetch_stb() {
+  if present stb; then say "stb present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$STB_URL" stb "$STB_COMMIT"
+  cat > "$DEST/stb/PROVENANCE.md" <<EOF
+# stb Candidate (single-header C libraries)
+Upstream: ${STB_URL}
+Commit: ${STB_COMMIT}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT / public domain dual (see LICENSE in headers).
+First probe: game-library ladder (feature-game-library-candidate-suite).
+EOF
+  say "stb -> $DEST/stb"
+}
+
+fetch_cglm() {
+  if present cglm; then say "cglm present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$CGLM_URL" cglm "$CGLM_COMMIT"
+  cat > "$DEST/cglm/PROVENANCE.md" <<EOF
+# cglm Candidate (header-only C graphics math)
+Upstream: ${CGLM_URL}
+Commit: ${CGLM_COMMIT}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT.
+First probe: game-library ladder (feature-game-library-candidate-suite).
+EOF
+  say "cglm -> $DEST/cglm"
+}
+
+fetch_enet() {
+  if present enet; then say "enet present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$ENET_URL" enet "$ENET_COMMIT"
+  cat > "$DEST/enet/PROVENANCE.md" <<EOF
+# ENet Candidate (reliable-UDP networking C library)
+Upstream: ${ENET_URL}
+Commit: ${ENET_COMMIT}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT.
+First probe: game-library ladder (feature-game-library-candidate-suite).
+EOF
+  say "enet -> $DEST/enet"
+}
+
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
+    stb)           fetch_stb ;;
+    cglm)          fetch_cglm ;;
+    enet)          fetch_enet ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;

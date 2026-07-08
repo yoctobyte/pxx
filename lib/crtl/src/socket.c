@@ -174,3 +174,64 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   __crtl_fill_sockaddr_in(addr, addrlen, host, port);
   return 0;
 }
+
+/* ---- textual IPv4 conversion (arpa/inet.h) -------------------------------- */
+/* Pure string<->uint32 parsing — no resolver, no allocation. Added for the
+   ENet candidate (game-library ladder); AF_INET only, matching the rest of
+   this IPv4-only socket layer. */
+
+int inet_aton(const char *s, struct in_addr *out) {
+  unsigned long parts[4];
+  int np = 0;
+  if (!s || !out) return 0;
+  for (;;) {
+    unsigned long v = 0;
+    int any = 0;
+    while (*s >= '0' && *s <= '9') { v = v * 10UL + (unsigned long)(*s - '0'); s++; any = 1; if (v > 255UL) return 0; }
+    if (!any || np >= 4) return 0;
+    parts[np++] = v;
+    if (*s == '.') { s++; continue; }
+    break;
+  }
+  if (*s != 0 || np != 4) return 0;
+  out->s_addr = htonl((uint32_t)((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]));
+  return 1;
+}
+
+in_addr_t inet_addr(const char *s) {
+  struct in_addr a;
+  if (!inet_aton(s, &a)) return 0xFFFFFFFFU;   /* INADDR_NONE */
+  return a.s_addr;
+}
+
+int inet_pton(int af, const char *src, void *dst) {
+  if (af != 2 /* AF_INET */) return -1;
+  return inet_aton(src, (struct in_addr *)dst) ? 1 : 0;
+}
+
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
+  uint32_t v;
+  int i, n = 0, o;
+  char tmp[16];
+  if (af != 2 /* AF_INET */ || !src || !dst) return 0;
+  v = ntohl(((const struct in_addr *)src)->s_addr);
+  for (i = 3; i >= 0; i--) {
+    o = (int)((v >> (i * 8)) & 0xFF);
+    if (o >= 100) tmp[n++] = (char)('0' + o / 100);
+    if (o >= 10)  tmp[n++] = (char)('0' + (o / 10) % 10);
+    tmp[n++] = (char)('0' + o % 10);
+    if (i > 0) tmp[n++] = '.';
+  }
+  if ((socklen_t)(n + 1) > size) return 0;
+  for (i = 0; i < n; i++) dst[i] = tmp[i];
+  dst[n] = 0;
+  return dst;
+}
+
+/* No resolver in the libc-free runtime: gethostby* report not-found. Numeric
+   addresses go through inet_aton/inet_pton above (ENet tries those first). */
+struct hostent;
+struct hostent *gethostbyname(const char *name) { (void)name; return 0; }
+struct hostent *gethostbyaddr(const void *addr, socklen_t len, int type) {
+  (void)addr; (void)len; (void)type; return 0;
+}
