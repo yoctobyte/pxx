@@ -5,8 +5,8 @@ prio: 65  # auto
 # C frontend + lua — cross-target / ESP feature coverage
 
 - **Type:** feature (test coverage) — Track C (+ A for any backend gap found)
-- **Status:** backlog (in progress — entry layer fixed 2026-06-29)
-- **Owner:** unassigned
+- **Status:** working
+- **Owner:** fable-c
 - **Opened:** 2026-06-27
 
 ## 2026-06-29 — empirical cross-C test + first layer fixed

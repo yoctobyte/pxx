@@ -34,6 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
+.PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
@@ -3108,6 +3109,22 @@ test-cjson: $(COMPILER)
 # ticket-referenced line per test; anything else failing = regression, exit 1.
 test-c-conformance: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER)
+
+# C cross-conformance matrix (feature-c-cross-target-feature-coverage): the
+# same 220-program battery compiled --target=<arch> and run under QEMU
+# (tools/run_target.sh). Per-target backend gaps are EXPLICIT in
+# test/c-conformance/pxx.skip.<arch> (one ticket-referenced line each), on top
+# of the base pxx.skip; anything else failing = cross regression, exit 1.
+test-c-conformance-i386: $(COMPILER)
+	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target i386
+test-c-conformance-aarch64: $(COMPILER)
+	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target aarch64
+test-c-conformance-arm32: $(COMPILER)
+	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target arm32
+test-c-conformance-riscv32: $(COMPILER)
+	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target riscv32
+test-c-conformance-cross: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32
+	@echo "test-c-conformance-cross: all targets green"
 
 # Track C gate bundle: the base gate (test-core self-host + C unit tests) PLUS
 # the c-testsuite conformance battery. Run this before pushing a C-frontend
