@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (97)
+## backlog (96)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -58,7 +58,6 @@ _none_
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-statement-expressions | C | 45 | feature | C GNU statement expressions ({ ... }) + __builtin_expect | — |
 | feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
-| feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
 | feature-callconv-register-args | A | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
@@ -168,7 +167,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (530)
+## done (531)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -487,6 +486,7 @@ _none_
 | feature-c-unsigned-semantics-suite-resweep | A | 50 | feature | Re-sweep the whole C suite for remaining unsigned-semantics gaps | — |
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
+| feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
 | feature-class-is-as | A | 50 | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-class-variables | A | 50 | feature | feature: class variables (`class var`) | — |
@@ -815,7 +815,6 @@ _none_
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 28] [C] bug-c-goto-shadowing-00129
 - [p 28] [C] feature-c-generic-selection
-- [p 28] [C] feature-c-wide-string-literals
 - [p 25] [C] idea-c-realworld-test-targets
 
 ## Leverage (tickets each one unblocks)

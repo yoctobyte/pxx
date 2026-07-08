@@ -30,3 +30,6 @@ Foundations present: `wchar_t` = `int` (4-byte) in lib/crtl/include/wchar.h, and
    `char buf[]="lit"` per-element init path but 4-byte).
 Multi-subsystem; ~60-80 lines across two files with UTF-8 edge cases. Focused
 session. (00220's chars are all BMP, so 1-3 byte UTF-8 -> <=U+FFFF.)
+
+## Log
+- 2026-07-08 — resolved, commit 658d284c.
