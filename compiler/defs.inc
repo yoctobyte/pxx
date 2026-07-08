@@ -25,6 +25,7 @@ const
   MAX_ASM_OBJ_CALLFIX = 4096;   { .asm frontend -c: extern calls needing an R_X86_64_PLT32 relocation }
   MAX_ASM_GLOBALS = 64;         { .asm frontend: distinct `global <label>` declarations }
   MAX_CPREP_MACROS = 32768;
+  CPREP_MACRO_HASH_SIZE = 16384;   { power of two; ~half-full at MAX macros }
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
@@ -1465,6 +1466,13 @@ var
   CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
   CPMVariadic   : array[0..MAX_CPREP_MACROS-1] of Boolean;   { `...` / __VA_ARGS__ }
   CPMCount      : Integer;
+  { Macro-name hash index: without it CPFindMacro linear-scanned all CPMCount
+    entries per lookup, so preprocessing a header that defines thousands of macros
+    (GTK/glib) and expands ~1M identifiers was O(identifiers * macros). Chain is
+    newest-first (redefine stacks, newest wins); #undef only tombstones NameLen so
+    chains never need unlinking (a dead entry fails the name-equality check). }
+  CPMHashHead   : array[0..CPREP_MACRO_HASH_SIZE-1] of Integer;
+  CPMHashNext   : array[0..MAX_CPREP_MACROS-1] of Integer;
   { #pragma push_macro/pop_macro stack: each push snapshots the active macro
     index for a name; pop appends a fresh macro entry cloning that snapshot. }
   CPPushNameOff : array[0..255] of Integer;

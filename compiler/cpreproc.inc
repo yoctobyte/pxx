@@ -127,28 +127,69 @@ begin
   Result := True;
 end;
 
+{ Macro-name hash (case-sensitive, over the raw name bytes). Two entry points —
+  one hashing a source-string range, one hashing the CPrepChars pool — use the
+  identical mix so a name hashes the same whether looked up from source text or
+  from its stored pool copy. Mask every step to stay in [0, SIZE). }
+function CPHashRangeSrc(const src: AnsiString; a, b: Integer): Integer;
+var i, h: Integer;
+begin
+  h := 0;
+  for i := a to b do
+    h := (h * 31 + Ord(src[i])) and (CPREP_MACRO_HASH_SIZE - 1);
+  Result := h;
+end;
+
+function CPHashRangePool(off, len: Integer): Integer;
+var i, h: Integer;
+begin
+  h := 0;
+  for i := 0 to len - 1 do
+    h := (h * 31 + Ord(CPrepChars[off + i])) and (CPREP_MACRO_HASH_SIZE - 1);
+  Result := h;
+end;
+
+{ Link macro mi onto its name bucket, newest-first (call right after its
+  CPMNameOff/CPMNameLen are set). }
+procedure CPHashAddMacro(mi: Integer);
+var bucket: Integer;
+begin
+  bucket := CPHashRangePool(CPMNameOff[mi], CPMNameLen[mi]);
+  CPMHashNext[mi] := CPMHashHead[bucket];
+  CPMHashHead[bucket] := mi;
+end;
+
 function CPFindMacro(const src: AnsiString; a, b: Integer): Integer;
 var i: Integer;
 begin
   Result := -1;
-  for i := CPMCount - 1 downto 0 do
+  i := CPMHashHead[CPHashRangeSrc(src, a, b)];
+  while i >= 0 do
+  begin
     if CPPoolEquals(CPMNameOff[i], CPMNameLen[i], src, a, b) then
     begin
-      Result := i;
+      Result := i;    { newest-first chain → first live match wins; a tombstoned
+                        entry (NameLen=-1) fails the length check and is skipped }
       Exit;
     end;
+    i := CPMHashNext[i];
+  end;
 end;
 
 function CPFindMacroPool(off, len: Integer): Integer;
 var i: Integer;
 begin
   Result := -1;
-  for i := CPMCount - 1 downto 0 do
+  i := CPMHashHead[CPHashRangePool(off, len)];
+  while i >= 0 do
+  begin
     if CPPoolNameEquals(CPMNameOff[i], CPMNameLen[i], off, len) then
     begin
       Result := i;
       Exit;
     end;
+    i := CPMHashNext[i];
+  end;
 end;
 
 function CPMacroDefined(const src: AnsiString; a, b: Integer): Boolean;
@@ -170,6 +211,7 @@ begin
   CPMVariadic[mi] := False;
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
+  CPHashAddMacro(mi);
 end;
 
 procedure CPDefine(const line: AnsiString; p, last: Integer);
@@ -186,6 +228,7 @@ begin
   Inc(CPMCount);
   CPMNameOff[mi] := CPStoreRange(line, nameStart, nameEnd);
   CPMNameLen[mi] := nameEnd - nameStart + 1;
+  CPHashAddMacro(mi);
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
   CPMFunction[mi] := False;
@@ -278,6 +321,7 @@ begin
   ni := CPMCount; Inc(CPMCount);
   CPMNameOff[ni]    := CPStoreRange(line, nameA, nameB);
   CPMNameLen[ni]    := nameB - nameA + 1;
+  CPHashAddMacro(ni);
   CPMValueOff[ni]   := CPMValueOff[mi];
   CPMValueLen[ni]   := CPMValueLen[mi];
   CPMFunction[ni]   := CPMFunction[mi];
@@ -2095,11 +2139,13 @@ begin
 end;
 
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
+var i: Integer;
 begin
   SetLength(CPrepOut, 0);
   CPrepOutLen := 0;
   CPrepCharLen := 0;
   CPMCount := 0;
+  for i := 0 to CPREP_MACRO_HASH_SIZE - 1 do CPMHashHead[i] := -1;
   CPPCount := 0;
   CPCondCount := 0;
   CPActiveMacroCount := 0;
