@@ -218,6 +218,16 @@
    "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-08T16:06:41Z",
+   "fixed": [
+    "test-cjson#00"
+   ],
+   "new_red": [],
+   "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -458,7 +468,7 @@
   "test-c-conformance#shard3/6": "pass",
   "test-c-conformance#shard4/6": "pass",
   "test-c-conformance#shard5/6": "pass",
-  "test-cjson#00": "fail",
+  "test-cjson#00": "pass",
   "test-core#00": "pass",
   "test-core#01": "pass",
   "test-core#02": "pass",
@@ -1302,21 +1312,18 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T15:59:55Z",
+  "date": "2026-07-08T16:06:41Z",
   "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 172.3
+  "wall": 396.7
  },
- "open_regressions": [
-  {
-   "bad": "ea8fc44a77bf6e3eafd26a0406876ad392f51d30",
-   "good": "d1e08f22507497abecedfe755af12dbeaa1a164a",
-   "job": "test-cjson#00",
-   "opened": "2026-07-07T19:03:22Z",
-   "range": [
-    "ea8fc44a77bf6e3eafd26a0406876ad392f51d30"
-   ]
-  }
- ]
+ "last_full": {
+  "date": "2026-07-08T16:06:41Z",
+  "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
+  "tier": "full",
+  "verdict": "GREEN",
+  "wall": 396.7
+ },
+ "open_regressions": []
 }

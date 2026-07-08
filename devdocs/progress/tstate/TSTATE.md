@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `524cd8cbb9b6` | 2026-07-08T15:59:55Z | GREEN (native) | 172.3s | ``  |
+| borg | `524cd8cbb9b6` | 2026-07-08T16:06:41Z | GREEN (full) | 396.7s | `524cd8cbb9b6` GREEN |
 
 ## Open regressions
-- **test-cjson#00** (borg): bad `ea8fc44a77bf`, last good `d1e08f225074`, 1 commit(s) in range
+- none
