@@ -971,6 +971,10 @@ test-core: $(COMPILER)
 	# its first `*/` must be rejected at top level (gcc parity), not silently skipped.
 	! ./$(COMPILER) test/cstray_toplevel_reject_b193.c /tmp/cstray_toplevel_reject_b19326 > /tmp/cstray_toplevel_reject_b193.log 2>&1
 	grep -q "stray token at top level" /tmp/cstray_toplevel_reject_b193.log
+	# bug-c-anon-struct-nested-enum-global: inline `enum {...}` in type position
+	# (struct member / typedef / global) is consumed and its enumerators registered.
+	./$(COMPILER) test/cenum_in_struct_b194.c /tmp/cenum_in_struct_b19426
+	/tmp/cenum_in_struct_b19426; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

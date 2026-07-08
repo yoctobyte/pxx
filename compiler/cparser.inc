@@ -15,6 +15,7 @@ function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
                              isArr: Boolean): Integer; forward;
 procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
+procedure ParseCEnumBody; forward;
 procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsBareEnumDecl: Boolean; forward;
@@ -2226,6 +2227,12 @@ begin
           begin
             Next;
             if CurTok.Kind = tkIdent then Next;   { tag — enum value is just an int }
+            { An inline enum body in type position (`enum [Tag] { A, B } x;`,
+              e.g. a struct member or a typedef/global var) must be consumed here
+              and its enumerators registered — otherwise the `{...}` is left for
+              the declarator reader (stray-token error / desync) and A/B fold to
+              0 as unknown idents. The enum type itself is just int. }
+            if CurTok.Kind = tkBegin then ParseCEnumBody;
             base := tyInt32; sawBase := True;
           end
           else
