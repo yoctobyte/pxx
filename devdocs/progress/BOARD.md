@@ -31,12 +31,12 @@ _none_
 
 _none_
 
-## backlog (105)
+## backlog (106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | A | 50 | bug |  | — |
-| bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
+| bug-c-anon-struct-nested-enum-global | C | 30 | bug | C: anonymous struct global var with a NESTED anonymous enum member drops the declarator | — |
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
@@ -45,6 +45,7 @@ _none_
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
+| bug-c-sqlite-suite-runtime-segfault | A | 60 | bug | C sqlite feature suite (test/csqlite_suite.c) SIGSEGVs at runtime on master HEAD | — |
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-typedef-array-element-init | A | 50 | bug |  | — |
@@ -176,7 +177,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (516)
+## done (517)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -207,6 +208,7 @@ _none_
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
 | bug-c-cast-as-call-arg-parse-error | C | 50 | bug | C: cast expression as call argument fails to parse | — |
 | bug-c-chained-pointer-index-loses-base-type | C | 50 | bug | C chained pointer indexing loses base type | — |
+| bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
 | bug-c-const-cast-in-array-dim | C | 50 | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | 50 | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-create-trigger-huge-alloc-oom | A | 50 | bug | CREATE TRIGGER → spurious "out of memory" (huge bad-size alloc) | — |
@@ -723,6 +725,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 60] [A] bug-c-sqlite-suite-runtime-segfault
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-cdecl-indirect-cross-targets
@@ -810,7 +813,7 @@ _none_
 - [p 40] [C] bug-c-stb-sprintf-float-empty
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
-- [p 30] [C] bug-c-comment-terminator-greedy
+- [p 30] [C] bug-c-anon-struct-nested-enum-global
 - [p 30] [A] bug-c-crtl-pulled-fn-inline-signed-compare
 - [p 30] [A] bug-cpp-include-not-found-diagnostic-path
 - [p 30] [A] bug-impl-prescan-late-include-var-section

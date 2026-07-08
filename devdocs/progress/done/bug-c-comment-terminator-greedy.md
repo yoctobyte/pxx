@@ -78,3 +78,6 @@ NOTE (not my change): test/csqlite_suite.c currently SIGSEGVs at runtime on
 master HEAD — verified pre-existing (the pre-change compiler produces a
 byte-identical, equally-segfaulting binary), so this change is codegen-neutral
 for sqlite. Flagged separately.
+
+## Log
+- 2026-07-08 — resolved, commit a1b3dcab.
