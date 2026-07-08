@@ -24,3 +24,6 @@ POLLOUT, poll() over the PAL select/poll bridge). Also missing impls surfaced:
 ## Gate
 ENet unity compiles against crtl only (no host header fallback); enet_probe
 links + runs (after the tag-redef segv is fixed too).
+
+## Log
+- 2026-07-08 — resolved, commit a69678dd.
