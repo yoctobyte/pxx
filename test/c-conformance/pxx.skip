@@ -7,11 +7,9 @@
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device
 00124.c	fn returning fnptr full declarator miscompiles — bug-c-function-returning-fnptr-declarator
-00129.c	goto over decls + #define s s shadowing — bug-c-goto-shadowing-00129
 00130.c	pointer-to-array declarator char (*p)[4] — bug-c-pointer-to-array-declarator
 00143.c	Duff's device (case in nested do-while) — bug-c-switch-nonblock-and-duffs-device
 00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
-00207.c	VLA char test[argc] + label in if body — feature-c-vla-and-label-in-if
 00213.c	statement expressions ({...}) with labels — feature-c-statement-expressions
 00214.c	statement expressions + __builtin_expect — feature-c-statement-expressions
 00216.c	empty structs + compound-literal initializers — feature-c-compound-literals
