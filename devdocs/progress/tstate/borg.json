@@ -244,6 +244,14 @@
    "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-08T16:42:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b2dfa3e0026babd64bc7c80b73160ece6f096efe",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1329,11 +1337,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T16:16:01Z",
-  "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
-  "tier": "full",
+  "date": "2026-07-08T16:42:47Z",
+  "sha": "b2dfa3e0026babd64bc7c80b73160ece6f096efe",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 317.8
+  "wall": 141.0
  },
  "last_full": {
   "date": "2026-07-08T16:16:01Z",
