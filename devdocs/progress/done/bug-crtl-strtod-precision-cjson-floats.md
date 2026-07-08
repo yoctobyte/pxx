@@ -37,3 +37,6 @@ few digits is cheap (integer mantissa + exact power-of-two/five split).
 ## Gate
 test-cjson green (tstate confirms), tcc .data.ro residual re-checked,
 lua/zlib/sqlite stay green, bXXX repro test.
+
+## Log
+- 2026-07-08 — resolved, commit d3342735.

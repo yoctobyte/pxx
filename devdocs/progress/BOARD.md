@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -174,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (506)
+## done (507)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -297,6 +296,7 @@ _none_
 | bug-consteval-named-type-cast | A | 50 | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
 | bug-downcast-inherited-property-wrong-offset | A | 50 | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | bug-dynarray-concat-silent-miscompile | A | 50 | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
 | bug-dynarray-in-record-corrupt | A | 50 | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
