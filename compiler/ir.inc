@@ -1329,6 +1329,26 @@ begin
                        Ord(Procs[cpi].Params[pathIdx].TypeKind));
     Exit;
   end;
+  { C default argument promotion (C99 6.5.2.2p6): a `float` passed through the
+    `...` of a variadic call must widen to `double`. Floats live in a register at
+    double natural width, so on x86-64/aarch64 the xmm/vector value already
+    marshals as 8 bytes and printf reads it fine; but the 32-bit variadic paths
+    (i386/arm32/riscv32) slot a tySingle-tagged arg as 4 bytes, so printf reads a
+    half-filled double (0.000000). Spill the single to a hidden tyDouble local and
+    reload: the store-to-double slot keeps the value double-wide (dest-type
+    conversion, same mechanism as a float<->float cast), so every backend then
+    marshals a full 8-byte double. Variadic slot = pathIdx >= ParamCount.
+    bug-c-float-vararg-promotion-32bit. }
+  if CProgramMode and (not isRefArg) and (cpi >= 0) and ProcVariadic[cpi] and
+     (pathIdx >= Procs[cpi].ParamCount) and
+     (IntToTypeKind(ASTTk[argAST]) = tySingle) then
+  begin
+    tmpSym := AllocVar('', tyDouble);
+    value := IRLowerAST(argAST);
+    IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyDouble));
+    Result := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(tyDouble));
+    Exit;
+  end;
   { A frozen-string concatenation used as a call argument builds its result in a
     272-byte buffer carved off the stack (`sub rsp, 272`, no restore), leaving the
     pointer at rsp. In a multi-argument call (a method's implicit Self plus the
