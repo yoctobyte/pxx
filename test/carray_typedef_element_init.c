@@ -25,5 +25,8 @@ int main(void)
     a[2] = 7.0f; b[2] = 9.0f;
     if (a[2] != 7.0f || b[2] != 9.0f) return 4;
 
+    vec4 rows[2] = {{1,2,3,4},{5,6,7,8}};    /* 2-D float brace init (local) */
+    if (rows[0][0] != 1.0f || rows[1][3] != 8.0f) return 5;
+
     return 42;
 }

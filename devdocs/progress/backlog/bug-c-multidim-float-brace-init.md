@@ -30,6 +30,22 @@ types (the per-element `ParseCExpr` + flattened index stores already handle
 floats — it is only the `TypeIsOrdinal` guard blocking entry). Mirror in the
 global decl path if it has the same gate.
 
+## LOCAL case fixed 2026-07-08 (a-agent) — GLOBAL remains
+The block-scope path is fixed: the `dimCount >= 2` brace gate in
+`ParseCLocalDeclAST` now accepts `TypeIsFloat(declTk)` too, so
+`float m[2][4] = {{..},{..}}` and `vec4 rows[2] = {{..},{..}}` read back correct
+locally (guard: test/carray_typedef_element_init.c). Committed with the
+array-typedef feature.
+
+STILL OPEN — **file-scope (global)** 2-D float brace init:
+```c
+float gm[2][4] = {{1,2,3,4},{5,6,7,8}};   /* reads 0 0 0 */
+```
+The global init in `ParseCGlobalVarDecl` emits to the data section via a
+different value-collection path (arrOffs/arrKind, ~cparser.inc:4514+) that does
+not cover a multi-dim FLOAT brace group. Fix there mirrors the local relax but
+must emit float bit patterns into the global data blob.
+
 ## Gate
-`float m[2][4] = {{...},{...}}` and the `vec4 rows[2]` typedef form read back
-correct values; a focused repro; c-conformance + corpus green.
+`float gm[2][4] = {{...},{...}}` at file scope reads back correct; a focused
+repro; c-conformance + corpus green.

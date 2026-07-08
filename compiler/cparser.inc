@@ -2787,7 +2787,7 @@ begin
         recArrInitCount := CBraceTopLevelInitCountAt(TokPos);
       if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (dimCount >= 2) and
-         (declTk <> tyPointer) and TypeIsOrdinal(declTk) then
+         (declTk <> tyPointer) and (TypeIsOrdinal(declTk) or TypeIsFloat(declTk)) then
       begin
         Next; Next;   { consume the assign then the open brace }
         brDepth := 1;
