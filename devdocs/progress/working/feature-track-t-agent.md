@@ -71,3 +71,21 @@ replacing the dev-side quick gate.
   - Perf: watcher no longer full-tiers docs/tstate-only commits (it was
     retesting its own publishes every ~5 min forever); --status applies the
     same exemption. (cc95bbf8)
+- **2026-07-08 (fable-trackT, session 1 cont.):**
+  - Learned-metrics scheduler in testmgr (per-box EWMA duration/RSS/cores;
+    measured-mem packing, cores-sum cap, ~10x-expected hang timeouts, SLOW
+    flags) and two-phase watcher (fast `native` verdict minutes after a
+    push, full matrix backfills when idle, testable pushes preempt).
+    (da954e2f)
+  - One-stop launcher `./trackt` (status/start/stop/watch/run/setup/config/
+    log/web), live.json + watch.json contracts, uncapped runs ndjson,
+    optional Flask UI, deterministic stub auto-tickets (config-gated).
+    (d4bf91ba)
+  - Caught + fixed concurrent-gate corruption: two testmgr runs raced on
+    the Makefile's fixed /tmp names (false self-host byte-diff). testmgr
+    now rewrites /tmp/ into a private per-run scratch; Makefile-level
+    $(TESTTMP) filed as chore-makefile-testtmp-parameterize (Track A).
+  - Both regression tickets from 2026-07-07 (include-diagnostic, crtl float)
+    were resolved by dev tracks from the tickets alone — face-2 gate's
+    "repro quality" criterion met twice.
+  - Open: LLM enrichment of stub tickets (tier 2) — config key reserved.
