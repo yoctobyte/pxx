@@ -6,6 +6,41 @@ prio: 55  # auto
 - **Type:** bug (cparser declarators). Track C.
 - **Found:** 2026-07-06 c-testsuite run.
 
+## Status 2026-07-08 (cfront-agent) — 00089 already GREEN; 00124 root-caused, parked
+- **00089 now passes** (compiles + runs exit 0; not in `pxx.skip`). Landed by the
+  earlier fnptr-typedef work. Only **00124** remains skipped.
+- **00124 isolated to a single missing link.** Reductions from the test:
+  - `(*f1(0,2))(2,2)` (call f1 directly, then call its returned fnptr) → **0 (correct)**.
+    So f1's return type + calling-a-returned-fnptr already work.
+  - `int (*g)(int,int) = (*p)(0,2); return g(2,2);` (store the intermediate in a
+    typed var) → **0 (correct)**. So the runtime VALUE `(*p)(0,2)` returns is right.
+  - `(*(*p)(0,2))(2,2)` and `(*p(0,2))(2,2)` (call the result **inline**) → **85 (wrong)**.
+  Conclusion: only the *inline chain-call through a fn-pointer variable whose pointee
+  returns a fn-pointer* is broken — the returned fnptr's call signature is lost.
+- **Precise cause.** `CNodeProcSig` (cparser.inc ~1650) resolves a chained callee's
+  signature. It has an `AN_CALL` arm (`go()()` — direct call returning fnptr, uses
+  `ProcRetProcSig[ASTIVal[inner]]`) but **no `AN_CALL_IND` arm**, so `(*p)(…)( … )`
+  falls through to sig -1 → the second call is emitted with the wrong ABI.
+  Adding the `AN_CALL_IND` arm is necessary but **not sufficient**: instrumented
+  `ProcRetProcSig[<p's sig proc>] = -1`. The variable declarator
+  `int (* (*p)(int,int))(int,int)` is parsed via the `fnRetIsFunc` path (line 2399+,
+  designed for the fn-*definition* `f1`); it registers `fpSig` (line 2543) with
+  return type `int` and never records that p's pointee RETURNS a fn-pointer, so
+  `ProcRetProcSig[fpSig]` is never set.
+- **Two-part fix (next session):**
+  1. `CNodeProcSig`: add `else if ASTKind[inner] = AN_CALL_IND then Result :=
+     ProcRetProcSig[ASTIVal[inner]]` (mirror the `AN_CALL` arm; `ASTIVal` of an
+     `AN_CALL_IND` is the callee signature-proc index).
+  2. In the fn-pointer declarator (cparser.inc ~2399–2568), when the pointee's
+     RETURN type is itself a fn-pointer (nested `(* (*name)(…))(…)`), thread the
+     inner fnptr signature onto `ProcRetProcSig[fpSig]`. The inner sig is available
+     from the return-type parse; the `fnRetIsFunc` reuse currently discards it for
+     the variable case.
+  Both edits are in `cparser.inc` (Track C). **Self-host-fragile** — the switch-body
+  attempt (sibling ticket) showed parse restructures in this file can desync the
+  seed; verify with incremental self-host fixedpoint after each edit.
+- Parked to `unfinished/` (claimed, root-caused, not landed — no code change on master).
+
 ## Failing tests
 - 00089: `typedef struct S *(*fty)(); fty go() {...}` — definition with typedef'd
   fnptr return type apparently not registered: caller gets "call to undeclared
