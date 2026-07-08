@@ -202,6 +202,9 @@ type
   end;
 
 var
+  { current `impl TypeName` context — lets `Self` resolve in method
+    bodies/signatures (empty outside an impl block) }
+  RCurImplType: AnsiString;
   RTraits: array[0..R_MAX_TRAITS-1] of AnsiString;
   RTraitCount: Integer;
   RImpls: array[0..R_MAX_IMPLS-1] of TRImpl;
@@ -359,6 +362,11 @@ end;
 function RTypeKindFromName(const name: AnsiString; allowStruct: Boolean): TTypeKind;
 var ci: Integer;
 begin
+  if (name = 'Self') and (RCurImplType <> '') then
+  begin
+    Result := RTypeKindFromName(RCurImplType, allowStruct);
+    Exit;
+  end;
   LastTypeRecId := REC_NONE;
   if name = 'i8' then begin Result := tyInt8; Exit; end;
   if name = 'u8' then begin Result := tyUInt8; Exit; end;
@@ -469,6 +477,34 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal; Next;
+      { `Type::fn(args)` / `Self::fn(args)` — associated-fn call on the
+        mangled proc name (enum paths stay let-initializer-only) }
+      if (CurTok.Kind = tkPathSep) and (Tokens[TokPos].Kind = tkIdent) and
+         (Tokens[TokPos + 1].Kind = tkLParen) then
+      begin
+        if (name = 'Self') and (RCurImplType <> '') then name := RCurImplType;
+        Next; { :: }
+        name := name + '::' + CurTok.SVal;
+        procIdx := FindProc(name);
+        if procIdx < 0 then Error('Rust: no associated fn ' + name);
+        Next; { fn name }
+        Next; { ( }
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := procIdx;
+        ASTTk[node] := Ord(Procs[procIdx].RetType);
+        lastArg := -1;
+        if CurTok.Kind <> tkRParen then
+          repeat
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := RParseExpr;
+            ASTRight[argNode] := -1;
+            if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
+            lastArg := argNode;
+          until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        Result := node;
+        Exit;
+      end;
       if CurTok.Kind = tkLParen then
       begin
         procIdx := FindProc(name);
@@ -2061,7 +2097,7 @@ end;
   ParamSize; no new codegen needed for field access through it). An
   `impl Trait for Type` additionally records (TypeCi, TraitName) in RImpls. }
 procedure RRegisterImpls;
-var i, j, ci, nparams, procIdx: Integer;
+var i, j, ci, nparams, procIdx, selfBase: Integer;
     typeName, traitName, methodName, fullName: AnsiString;
     pnamesFull: array[0..3] of AnsiString; ptypesFull: array[0..3] of TTypeKind;
     retType: TTypeKind; hasTrait: Boolean;
@@ -2085,6 +2121,7 @@ begin
       typeName := GetTokenStr(j);
       ci := FindUClass(typeName);
       if ci < 0 then Error('Rust: impl for unknown type ' + typeName);
+      RCurImplType := typeName; { `Self` in signatures resolves to this }
       Inc(j);
       if Tokens[j].Kind <> tkBegin then Error('Rust: expected { after impl ' + typeName);
       if hasTrait then
@@ -2103,23 +2140,31 @@ begin
         methodName := GetTokenStr(j); Inc(j);
         if Tokens[j].Kind <> tkLParen then Error('Rust: expected ( after method name ' + methodName);
         Inc(j);
-        if Tokens[j].Kind = tkAmp then Inc(j);
-        if (Tokens[j].Kind <> tkIdent) or (GetTokenStr(j) <> 'self') then
-          Error('Rust: expected self as the first parameter of ' + methodName + ' (skeleton: no static/associated fns)');
-        Inc(j);
-        if Tokens[j].Kind = tkComma then Inc(j);
-        pnamesFull[0] := 'self'; ptypesFull[0] := tyRecord;
+        { methods take self (by address); ASSOCIATED fns (no self) register
+          too — called as Type::name(args), plain procs with mangled names }
+        selfBase := 0;
+        if (Tokens[j].Kind = tkAmp) or
+           ((Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self')) then
+        begin
+          if Tokens[j].Kind = tkAmp then Inc(j);
+          if (Tokens[j].Kind <> tkIdent) or (GetTokenStr(j) <> 'self') then
+            Error('Rust: expected self after & in ' + methodName);
+          Inc(j);
+          if Tokens[j].Kind = tkComma then Inc(j);
+          pnamesFull[0] := 'self'; ptypesFull[0] := tyRecord;
+          selfBase := 1;
+        end;
         nparams := 0;
         while Tokens[j].Kind <> tkRParen do
         begin
           if Tokens[j].Kind = tkMut then Inc(j);
-          if nparams >= 3 then Error('Rust: too many parameters (skeleton limit is 3 + self)');
+          if nparams + selfBase >= 4 then Error('Rust: too many parameters in ' + methodName + ' (skeleton limit is 4 incl. self)');
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + methodName);
-          pnamesFull[nparams + 1] := GetTokenStr(j); Inc(j);
+          pnamesFull[nparams + selfBase] := GetTokenStr(j); Inc(j);
           if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
           Inc(j);
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
-          ptypesFull[nparams + 1] := RTypeKindFromName(GetTokenStr(j), False);
+          ptypesFull[nparams + selfBase] := RTypeKindFromName(GetTokenStr(j), False);
           Inc(j);
           Inc(nparams);
           if Tokens[j].Kind = tkComma then Inc(j);
@@ -2134,13 +2179,14 @@ begin
           Inc(j);
         end;
         fullName := typeName + '::' + methodName;
-        procIdx := RegisterProc(fullName, True, retType, nparams + 1, pnamesFull, ptypesFull);
+        procIdx := RegisterProc(fullName, True, retType, nparams + selfBase, pnamesFull, ptypesFull);
         { RegisterProc always defaults Params[].IsRef to False — self is
           always passed by address (see the file-header note), so this must
           be set explicitly or the caller passes self by raw value while the
           callee's AllocParam(isRef=True) dereferences it as a pointer,
           reading garbage / segfaulting (found via testing, not by inspection). }
-        Procs[procIdx].Params[0].IsRef := True;
+        if selfBase = 1 then
+          Procs[procIdx].Params[0].IsRef := True;
         if Tokens[j].Kind <> tkBegin then Error('Rust: expected { for method body of ' + fullName);
         Inc(j);
         nparams := 1; { reuse as brace depth counter from here }
@@ -2152,6 +2198,7 @@ begin
         end;
         Inc(j); { consume the method's closing brace }
       end;
+      RCurImplType := '';
     end;
     Inc(i);
   end;
@@ -2316,8 +2363,8 @@ end;
   but with `self` prepended as an implicit, always-by-reference param 0. }
 procedure RParseTopLevelImpl;
 var typeName, traitName, fname, pname, fullName: AnsiString;
-    ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
-    pnames: array[0..2] of AnsiString; ptypes: array[0..2] of TTypeKind;
+    ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode, selfBase: Integer;
+    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
 begin
   Next; { impl }
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
@@ -2328,6 +2375,7 @@ begin
   if CurTok.Kind <> tkIdent then Error('Rust: expected type name after impl');
   typeName := CurTok.SVal;
   ci := FindUClass(typeName);
+  RCurImplType := typeName; { `Self` resolves to this until the block ends }
   Next;
   Expect(tkBegin, '{');
   while CurTok.Kind <> tkEnd do
@@ -2340,16 +2388,21 @@ begin
     procIdx := FindProc(fullName);
     if procIdx < 0 then Error('Rust: internal error — signature prescan missed ' + fullName);
     Expect(tkLParen, '(');
-    if CurTok.Kind = tkAmp then Next;
-    if (CurTok.Kind <> tkIdent) or (CurTok.SVal <> 'self') then
-      Error('Rust: expected self as the first parameter of ' + fullName);
-    Next;
-    Eat(tkComma);
+    selfBase := 0;
+    if (CurTok.Kind = tkAmp) or ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'self')) then
+    begin
+      if CurTok.Kind = tkAmp then Next;
+      if (CurTok.Kind <> tkIdent) or (CurTok.SVal <> 'self') then
+        Error('Rust: expected self after & in ' + fullName);
+      Next;
+      Eat(tkComma);
+      selfBase := 1;
+    end;
     nparams := 0;
     while CurTok.Kind <> tkRParen do
     begin
       if CurTok.Kind = tkMut then Next;
-      if nparams >= 3 then Error('Rust: too many parameters (skeleton limit is 3 + self)');
+      if nparams + selfBase >= 4 then Error('Rust: too many parameters (skeleton limit is 4 incl. self)');
       if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
       pname := CurTok.SVal; Next;
       Expect(tkColon, ':');
@@ -2372,20 +2425,24 @@ begin
     FrameSize := 0; CurProc := procIdx;
     Procs[procIdx].BodyAddr := CodeLen;
     Procs[procIdx].ScopeBase := SymCount;
-    LastTypeRecId := REC_UCLASS_BASE + ci;
-    idx := AllocParam('self', tyRecord, True, False);
-    Procs[procIdx].Params[0].SymIdx := idx;
+    if selfBase = 1 then
+    begin
+      LastTypeRecId := REC_UCLASS_BASE + ci;
+      idx := AllocParam('self', tyRecord, True, False);
+      Procs[procIdx].Params[0].SymIdx := idx;
+    end;
     for i := 0 to nparams - 1 do
     begin
+      LastTypeRecId := REC_NONE;
       idx := AllocParam(pnames[i], ptypes[i], False, False);
-      Procs[procIdx].Params[i + 1].SymIdx := idx;
+      Procs[procIdx].Params[i + selfBase].SymIdx := idx;
     end;
     idx := AllocVar('Result', Procs[procIdx].RetType);
     Procs[procIdx].RetSymIdx := idx;
 
     patchPos := EmitProcPrologue;
     Procs[procIdx].FramePatch := patchPos;
-    for i := 0 to nparams do { 0 = self, 1..nparams = real params }
+    for i := 0 to nparams + selfBase - 1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       if ParamSize(idx) = 8 then EmitB($48);
@@ -2411,6 +2468,7 @@ begin
     CurProc := -1;
   end;
   Expect(tkEnd, '}');
+  RCurImplType := '';
 end;
 
 procedure RParseTopLevelFn;

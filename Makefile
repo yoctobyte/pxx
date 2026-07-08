@@ -460,6 +460,9 @@ test-core: $(COMPILER)
 	# Rust tuple structs (single struct until bug-uclass-field-window-stale-base lands)
 	./$(COMPILER) test/test_rust_tuple_struct.rs /tmp/test_rust_tuple26
 	test "$$(/tmp/test_rust_tuple26)" = "$$(printf 'a 300 b 44')"
+	# Rust associated fns + Self (Type::fn / Self::fn call paths, mixed with methods)
+	./$(COMPILER) test/test_rust_assoc_fns.rs /tmp/test_rust_assoc26
+	test "$$(/tmp/test_rust_assoc26)" = "$$(printf 'v 42 comb 75')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb /tmp/test_ada_skeleton26
