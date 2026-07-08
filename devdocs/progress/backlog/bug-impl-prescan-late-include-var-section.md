@@ -39,3 +39,23 @@ Low (workaround = declare frontend state in defs.inc, which is arguably
 cleaner anyway and matches where C-frontend state lives). Filed for
 correctness: "declared later" should not fire for a declaration that is
 lexically first.
+
+## Reproduced + localized 2026-07-08 (A+C session) — still parked (self-host risk)
+Confirmed the repro (moved the `WsPos/WsStk/WsSp/WsStmtList/WsDone` var block
+from defs.inc back to the top of wparser.inc):
+`pascal26:80186: error: undefined variable — it is a global declared later,
+declare it before use (WsPos)`.
+
+The check that fires is `HiddenByDeclOrder` (symtab.inc:1655): a global is hidden
+when `SymDeclTok[i] > CurBodyHdrTok`. Both are set from `TokPos`
+(SymDeclTok at symtab.inc:1842; CurBodyHdrTok at parser.inc:15364, the routine
+body header). For a var section at the TOP of an include with its functions
+BELOW, SymDeclTok[WsPos] should be < the functions' CurBodyHdrTok — so the true
+bug is that the late-include var section's recorded TokPos lands ABOVE the
+using-body header. Suspect the two-pass prescan (PreScanPass + the pass2 TokPos
+save/restore around parser.inc:16996-17102): the var block is likely (re)registered
+in a pass where TokPos has already advanced past the bodies, or the include's
+tokens aren't ordered monotonically vs the proc headers during prescan. Fix is in
+that prescan token-ordering — shared parser internals, self-host risk — so left
+parked behind the defs.inc workaround. Next picker: instrument SymDeclTok[WsPos]
+and CurBodyHdrTok at the failing lookup to see the exact inversion.
