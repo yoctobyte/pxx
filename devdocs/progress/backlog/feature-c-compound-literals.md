@@ -73,3 +73,19 @@ from pxx.skip.
 - BLOCK-SCOPE compound literals `(T){...}` as an inline expression (the ParseCUnary
   cast-branch hook, ~1447) — still unimplemented; needed for tcc/zlib-style code,
   no conformance test isolates it yet.
+
+## Assessment 2026-07-08 (cfront-agent) — released; remaining work is deep, needs the factor-out
+Confirmed the remaining two pieces are NOT bounded wire-ups:
+- **Block-scope `(T){...}`**: the file-scope fix reused `CAggInit`/`CEmitDeferredCAggInits`,
+  but that is a DEFERRED mechanism — it records (sym, brace-token-pos) and replays the
+  init at `main` for globals/statics. A block-scope compound literal must init an
+  AUTOMATIC local INLINE at the expression point, which needs the inline local
+  brace-init path (`ParseCLocalDeclAST` ~2760-2920) as a callable
+  `CParseBraceInitInto(lvalue)` helper. That factor-out is the bulk and is
+  self-host-fragile (touches the shared init walker). No conformance test isolates
+  block-scope CL yet.
+- **00216**: errors at parse level ("stray token at top level: sys_ni") on range
+  designators `[a...b]` / flex arrays / unnamed members — belongs with
+  [[bug-c-init-designated-and-nested]], not the CL path.
+Both want a dedicated focused session (extract the brace-init helper first). Released
+back to backlog unclaimed; 00149/00150 stay fixed.
