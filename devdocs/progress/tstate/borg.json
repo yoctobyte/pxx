@@ -440,6 +440,20 @@
    "sha": "3615126067aa26b2971d0b332abcfcd83f87edbd",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-08T19:43:43Z",
+   "fixed": [
+    "test-cjson#00",
+    "test-lua#00"
+   ],
+   "new_red": [
+    "test-core#602",
+    "test-core#603"
+   ],
+   "sha": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -680,7 +694,7 @@
   "test-c-conformance#shard3/6": "pass",
   "test-c-conformance#shard4/6": "pass",
   "test-c-conformance#shard5/6": "pass",
-  "test-cjson#00": "fail",
+  "test-cjson#00": "pass",
   "test-core#00": "pass",
   "test-core#01": "pass",
   "test-core#02": "pass",
@@ -1244,8 +1258,8 @@
   "test-core#60": "pass",
   "test-core#600": "pass",
   "test-core#601": "pass",
-  "test-core#602": "pass",
-  "test-core#603": "pass",
+  "test-core#602": "timeout",
+  "test-core#603": "timeout",
   "test-core#604": "pass",
   "test-core#605": "pass",
   "test-core#606": "pass",
@@ -1474,7 +1488,7 @@
   "test-i386#97": "pass",
   "test-i386#98": "pass",
   "test-i386#99": "pass",
-  "test-lua#00": "fail",
+  "test-lua#00": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1528,32 +1542,32 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T19:38:05Z",
+  "date": "2026-07-08T19:43:43Z",
   "sha": "3615126067aa26b2971d0b332abcfcd83f87edbd",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 122.8
- },
- "last_full": {
-  "date": "2026-07-08T19:13:02Z",
-  "sha": "4dfde8f92cb45a5bd516ca85578957791f1cfb49",
   "tier": "full",
   "verdict": "RED",
-  "wall": 323.5
+  "wall": 316.4
+ },
+ "last_full": {
+  "date": "2026-07-08T19:43:43Z",
+  "sha": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 316.4
  },
  "open_regressions": [
   {
-   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
-   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
-   "job": "test-cjson#00",
-   "opened": "2026-07-08T18:08:58Z",
+   "bad": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+   "good": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+   "job": "test-core#602",
+   "opened": "2026-07-08T19:43:43Z",
    "range": []
   },
   {
-   "bad": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
-   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
-   "job": "test-lua#00",
-   "opened": "2026-07-08T18:08:58Z",
+   "bad": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+   "good": "3615126067aa26b2971d0b332abcfcd83f87edbd",
+   "job": "test-core#603",
+   "opened": "2026-07-08T19:43:43Z",
    "range": []
   }
  ]

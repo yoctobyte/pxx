@@ -2,8 +2,8 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `3615126067aa` | 2026-07-08T19:38:05Z | GREEN (native) | 122.8s | `4dfde8f92cb4` RED |
+| borg | `3615126067aa` | 2026-07-08T19:43:43Z | RED (full) | 316.4s | `3615126067aa` RED |
 
 ## Open regressions
-- **test-cjson#00** (borg): bad `25c1ddedcccb`, last good `25c1ddedcccb`, 0 commit(s) in range
-- **test-lua#00** (borg): bad `25c1ddedcccb`, last good `25c1ddedcccb`, 0 commit(s) in range
+- **test-core#602** (borg): bad `3615126067aa`, last good `3615126067aa`, 0 commit(s) in range
+- **test-core#603** (borg): bad `3615126067aa`, last good `3615126067aa`, 0 commit(s) in range
