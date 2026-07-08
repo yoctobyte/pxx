@@ -47,3 +47,6 @@ printf("%1.17g\n", 100.125);                       // 100.12499999999999
 
 ## Gate
 `make test-cjson` green (all 5 fixtures) with the corpus tree present.
+
+## Log
+- 2026-07-08 — resolved, commit 3e6f57f5.
