@@ -5,7 +5,7 @@ prio: 60  # auto
 # Rust frontend — `match` pattern-bind + generalized tagged union
 
 - **Type:** feature — Track A (Track R)
-- **Status:** working
+- **Status:** done
 - **Owner:** Claude (~/frank2, branch `feature/rust-frontend-skeleton`)
 - **Opened:** 2026-07-03
 - **Umbrella:** [[feature-rust-frontend]] — sub-ticket 2/12. Depends on
@@ -101,3 +101,4 @@ that crate's shape needs the general union, not `tyVariant`.
   the rationale. Stays `working/`; sub-ticket 4 is next.
 - 2026-07-04 — [[bug-selfhost-multifn-ifelse-miscompile]] fixed; the
   self-host caveat in the log above no longer applies.
+- 2026-07-08 — resolved, commit ea9baa58.

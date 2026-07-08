@@ -117,7 +117,7 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (16)
+## experimental (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -127,11 +127,8 @@ _none_
 | feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
 | feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
 | feature-rust-dyn-trait-dispatch | R | 45 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
-| feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-macro-rules | R | 60 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
-| feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-rust-misc-semantics | R | 45 | feature | Rust frontend — integer overflow mode + format-string parser | — |
 | feature-rust-rtl-concurrency | R | 45 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
 | feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
@@ -173,7 +170,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (534)
+## done (537)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -654,6 +651,9 @@ _none_
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-rtti-layout-table | A | 50 | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
+| feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
+| feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-rv32-asm-emitter | A | 50 | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
 | feature-sat-solver-library | B | 50 | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-setlength-var-array-param-abi | A | 50 | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |

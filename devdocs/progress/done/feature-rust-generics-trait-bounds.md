@@ -5,7 +5,7 @@ prio: 65  # auto
 # Rust frontend — generics with trait bounds
 
 - **Type:** feature — Track A (Track R)
-- **Status:** working
+- **Status:** done
 - **Owner:** Claude (~/frank2, branch `feature/rust-frontend-skeleton`)
 - **Opened:** 2026-07-03
 - **Umbrella:** [[feature-rust-frontend]] — sub-ticket 3/12. Depends on
@@ -117,3 +117,4 @@ code (`shakmaty` alone: 123 generic functions, 63 `impl<T>` blocks, 57
 - 2026-07-04 — merged to `master` (fast-forward, `a71356c`) alongside
   sub-tickets 1-2. Unofficial/unsupported — see sub-ticket 1's log for the
   rationale. Stays `working/`; sub-ticket 4 is next.
+- 2026-07-08 — resolved, commit a71356c3.

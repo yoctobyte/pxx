@@ -39,5 +39,10 @@ RTL-side bodies backing the builtin-macro intrinsics parsed by
   during the abort — consistent with the non-goal above).
 
 ## Log
+- 2026-07-09 — println!/print! landed on master (ports-back pass, commit
+  bbd15a52) as parser intrinsics over the shared write machinery — no
+  RTL involved. format!/vec!/assert!/panic! remain open (need string
+  values / dynarrays / halt wiring respectively).
+
 - 2026-07-03 — split from [[feature-rust-frontend]] umbrella at ticket-craft
   time. No code written yet.

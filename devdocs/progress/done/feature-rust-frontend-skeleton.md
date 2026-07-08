@@ -5,7 +5,7 @@ prio: 60  # auto
 # Rust frontend — lexer/parser skeleton + entry point
 
 - **Type:** feature — Track A (working name: **Track R**, Rust frontend)
-- **Status:** working
+- **Status:** done
 - **Owner:** Claude (~/frank2, branch `feature/rust-frontend-skeleton`)
 - **Opened:** 2026-07-03
 - **Umbrella:** [[feature-rust-frontend]] — sub-ticket 1/12, gates all others.
@@ -90,3 +90,4 @@ Scope for the *skeleton* specifically (deliberately small — this ticket is
   parenthesis-less self-recursive call in `RParseIf` — see that ticket's
   log). The self-host caveat above no longer applies: the self-hosted
   compiler now agrees with the FPC-built one on this ticket's tests.
+- 2026-07-08 — resolved, commit c7117072.

@@ -39,5 +39,15 @@ heap-owning/refcounted — a slice borrows into someone else's storage
 - Bounds check fires on out-of-range index outside `unsafe`.
 
 ## Log
+- 2026-07-09 — MINIMAL subset landed on master (Track R ports-back pass,
+  commit bbd15a52), WITHOUT the shared tySlice machinery this ticket
+  scopes: `&a[lo..hi]` over fixed arrays as an auto-registered
+  __ptr+__len UClass (the Zig frontend's representation), `s[i]`
+  read/write via raw i64 pointer math + AN_DEREF, `s.len()`. Locals
+  only — no slice params/returns, no &str, no re-slicing. The full
+  ticket (a real non-owning view type through the ABI) remains open and
+  is exactly the AST/IR-work upscale case experimental/README.md
+  describes.
+
 - 2026-07-03 — split from [[feature-rust-frontend]] umbrella at ticket-craft
   time. No code written yet.

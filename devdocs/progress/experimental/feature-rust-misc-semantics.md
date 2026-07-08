@@ -52,5 +52,11 @@ designed this yet in this codebase. Feeds:
   codegen).
 
 ## Log
+- 2026-07-09 — the format-string half landed on master (ports-back pass,
+  commit bbd15a52): `{}`/`{:...}` placeholder splitting behind
+  println!/print!, lowered onto AN_WRITE/AN_WRITELN (the Zig frontend's
+  splitter shape). `{{ }}` escapes and the integer-overflow mode remain
+  open.
+
 - 2026-07-03 — split from [[feature-rust-frontend]] umbrella at ticket-craft
   time. No code written yet.
