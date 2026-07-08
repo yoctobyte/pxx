@@ -50,8 +50,9 @@ WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
 CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
-                 "autoticket": False,  # stub regression tickets (face 1)
-                 "web": False, "web_port": 8377}
+                 "autoticket": True,   # stub regression tickets (face 1)
+                 "web": True, "web_port": 8377}   # everything ON by default;
+                                       # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
 
 
@@ -187,11 +188,19 @@ def run_gate(clone, tier, job_glob=None, abort_check=None):
         cmd += ["--job", job_glob]
     proc = subprocess.Popen(cmd, cwd=clone.path, start_new_session=True)
     last_check = time.monotonic()
+    wp = os.path.join(clone.path, WATCH_REL)
     while proc.poll() is None:
         time.sleep(1)
-        if abort_check and time.monotonic() - last_check >= 30:
+        if time.monotonic() - last_check >= 30:
             last_check = time.monotonic()
-            if abort_check():
+            try:                       # keep the heartbeat fresh mid-run
+                with open(wp) as f:
+                    w = json.load(f)
+                w["ts"] = time.time()
+                write_json_atomic(wp, w)
+            except (OSError, ValueError):
+                pass
+            if abort_check and abort_check():
                 print("twatch: aborting %s run (new work preempts it)" % tier,
                       flush=True)
                 try:

@@ -8,7 +8,9 @@ log tail, web UI.  Everything is a thin frontend over the state files the
 engine publishes (.testmgr/live.json, .testmgr/watch.json,
 devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
 
-  trackt                 status; attaches to the live view if a run is active
+  trackt                 ONE STOP: starts daemon + web UI if not running
+                         (opt out: --no-daemon / --no-web / --no-attach),
+                         prints the local URL, shows status, attaches live
   trackt start|stop|restart|status
   trackt watch           live progress (Ctrl-C detaches, daemon keeps going)
   trackt run [tier]      manual testmgr run in THIS checkout (default quick)
@@ -102,6 +104,49 @@ def fmt_age(ts):
         else "%dh" % (s // 3600)
 
 
+def cmd_up(clone, a):
+    """Default command: bring everything up FOREGROUND, opt out via flags.
+    Ctrl-C / exit stops what we started — running on in the background needs
+    explicit permission (the prompt, or `trackt start`)."""
+    if not os.path.isdir(clone):
+        print("no watcher clone at %s — running setup" % clone)
+        if cmd_setup(clone, fetch_corpus=False):
+            return 1
+    preexisting, _ = daemon_pid(clone)
+    if not a.no_daemon and not preexisting:
+        if cmd_start(clone, a.remote):
+            return 1
+    conf = twatch.load_conf(clone)
+    if not a.no_web and conf.get("web", True):
+        if not web_pid(clone):
+            start_web(clone, conf)
+        else:
+            print("web UI: http://127.0.0.1:%s" % conf["web_port"])
+    cmd_status(clone, attach_ok=False)
+    if a.no_attach or not ISATTY:
+        return 0
+    try:
+        watch_loop(clone)
+        return 0
+    except KeyboardInterrupt:
+        print()
+        # daemon we just started: default STOP.  Daemon that was already
+        # running in the background (someone said `trackt start` before):
+        # default KEEP — attaching must not kill standing coverage by
+        # accident.
+        default_keep = bool(preexisting)
+        try:
+            ans = input("keep daemon + web running in background? [%s] "
+                        % ("Y/n" if default_keep else "y/N")).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            ans = ""
+        keep = (ans or ("y" if default_keep else "n")).startswith("y")
+        if keep:
+            print("left running — `trackt stop` when done.")
+            return 0
+        return cmd_stop(clone)
+
+
 def cmd_status(clone, attach_ok=True):
     conf = twatch.load_conf(clone)
     pid, w = daemon_pid(clone)
@@ -161,25 +206,31 @@ def render_live(clone, w, live, last_reds):
     return set(reds) | set(last_reds)
 
 
-def cmd_watch(clone):
-    print("%s  live view — Ctrl-C detaches (daemon keeps running)%s" % (DIM, OFF))
+def watch_loop(clone):
+    print("%s  live view — Ctrl-C to leave (you'll be asked about the daemon)%s"
+          % (DIM, OFF))
     seen = set()
+    while True:
+        pid, w = daemon_pid(clone)
+        live = read_json(os.path.join(clone, ".testmgr", "live.json"))
+        if not pid:
+            print("\n  daemon not running.")
+            return 1
+        seen = render_live(clone, w, live, seen)
+        time.sleep(1)
+
+
+def cmd_watch(clone):
+    """Explicit `trackt watch`: view only — Ctrl-C detaches, never stops."""
     try:
-        while True:
-            pid, w = daemon_pid(clone)
-            live = read_json(os.path.join(clone, ".testmgr", "live.json"))
-            if not pid:
-                print("\n  daemon not running.")
-                return 1
-            seen = render_live(clone, w, live, seen)
-            time.sleep(1)
+        return watch_loop(clone)
     except KeyboardInterrupt:
         print("\n  detached — daemon keeps running (trackt stop to stop it).")
         return 0
 
 
 # ------------------------------------------------------------- lifecycle ---
-def cmd_start(clone, remote=None):
+def cmd_start(clone, remote=None, web=True):
     if not os.path.isdir(clone):
         if not remote:
             print("no clone at %s — trackt setup, or: trackt start --remote <url>"
@@ -313,19 +364,27 @@ def main():
     ap = argparse.ArgumentParser(
         prog="trackt", description=__doc__.splitlines()[0],
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    ap.add_argument("cmd", nargs="?", default="status",
-                    choices=["status", "start", "stop", "restart", "watch",
-                             "run", "setup", "config", "log", "web"])
+    ap.add_argument("cmd", nargs="?", default="up",
+                    choices=["up", "status", "start", "stop", "restart",
+                             "watch", "run", "setup", "config", "log", "web"])
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
     ap.add_argument("--fetch-corpus", action="store_true",
                     help="setup: also fetch gitignored corpus trees")
+    ap.add_argument("--no-web", action="store_true", help="up: skip web UI")
+    ap.add_argument("--no-daemon", action="store_true",
+                    help="up: don't start the daemon")
+    ap.add_argument("--no-attach", action="store_true",
+                    help="up: print status and return (implies daemon may "
+                         "keep running — you asked not to supervise it)")
     a = ap.parse_args()
     clone = clone_dir(a.clone)
 
+    if a.cmd == "up":
+        return cmd_up(clone, a)
     if a.cmd == "status":
-        return cmd_status(clone)
+        return cmd_status(clone, attach_ok=False)
     if a.cmd == "start":
         return cmd_start(clone, a.remote)
     if a.cmd == "stop":
