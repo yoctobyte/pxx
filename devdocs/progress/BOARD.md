@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-inline-fnptr-param-call | C | 55 | bug | C: calling through an INLINE fn-pointer parameter — "call to undeclared function" | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -30,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (108)
+## backlog (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +44,6 @@ _none_
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
-| bug-c-inline-fnptr-param-call | C | 55 | bug | C: calling through an INLINE fn-pointer parameter — "call to undeclared function" | — |
 | bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
 | bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
@@ -737,7 +737,6 @@ _none_
 - [p 55] [C] bug-c-abi-battery-00204
 - [p 55] [C] bug-c-expr-result-type-model
 - [p 55] [A] bug-c-float-vararg-promotion-32bit
-- [p 55] [C] bug-c-inline-fnptr-param-call
 - [p 55] [C] bug-c-local-nested-aggregate-init
 - [p 55] [C] bug-c-pointer-to-array-declarator
 - [p 55] [C] bug-c-switch-nonblock-and-duffs-device
