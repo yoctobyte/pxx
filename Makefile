@@ -967,6 +967,10 @@ test-core: $(COMPILER)
 	/tmp/cternary_struct_value_b14126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_literal_precise_b142.c /tmp/cfloat_literal_precise_b14226
 	/tmp/cfloat_literal_precise_b14226; test "$$?" = "42"
+	# bug-c-comment-terminator-greedy: stray tokens after a comment that ends at
+	# its first `*/` must be rejected at top level (gcc parity), not silently skipped.
+	! ./$(COMPILER) test/cstray_toplevel_reject_b193.c /tmp/cstray_toplevel_reject_b19326 > /tmp/cstray_toplevel_reject_b193.log 2>&1
+	grep -q "stray token at top level" /tmp/cstray_toplevel_reject_b193.log
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

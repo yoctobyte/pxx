@@ -5297,10 +5297,38 @@ begin
   Result := CLexAppend(synth);
 end;
 
+{ True for identifiers that may legitimately appear at the top level without
+  being a type/typedef the dispatch already recognizes — storage-class and
+  function specifiers pxx does not model as type tokens but tolerates by
+  skipping (extern/static/... were silently skipped before this check existed),
+  plus assertion/attribute keywords whose bodies the old `else Next` swallowed.
+  Everything NOT in this set that is a bare identifier at top level is stray. }
+function CIsTopLevelSkipIdent(const s: AnsiString): Boolean;
+begin
+  Result :=
+    (s = 'extern') or (s = 'static') or (s = 'register') or (s = 'auto') or
+    (s = 'inline') or (s = '__inline') or (s = '__inline__') or
+    (s = '_Noreturn') or (s = '_Thread_local') or (s = '__thread') or
+    (s = '__extension__') or (s = 'restrict') or (s = '__restrict') or
+    (s = '__restrict__') or (s = '_Static_assert') or (s = '_Alignas') or
+    (s = '__attribute__') or (s = '__attribute') or (s = 'asm') or
+    (s = '__asm__') or (s = '__asm');
+end;
+
 procedure ParseCProgram;
-var firstIdx, callPatch, mainIdx, rvHi, rvLo, crtlStart: Integer;
+var firstIdx, callPatch, mainIdx, rvHi, rvLo, crtlStart, userTokEnd: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+
+  { Token count of the USER program, captured before any unit pull. The pulls
+    below (pxxcio/crtl via CLexAppend) merge their tokens into one stream after
+    the user program with the user EOF stripped, so pass 1/2 walk straight into
+    them; the top-level dispatch tolerates those appended (already-compiled)
+    unit tokens via `else Next`. A stray/undeclared token in the USER region
+    (index < userTokEnd) is a real error (gcc rejects it) — errors only there.
+    -1: the user EOF sits at index TokCount-1 and CLexAppend overwrites that
+    slot with the first pulled token, so the appended region starts there. }
+  userTokEnd := TokCount - 1;
 
   { Program entry stub (the ELF entry at code offset 0): save the initial stack
     pointer, hand C `main(argc, argv)` the Linux initial stack ([argc][argv0]...),
@@ -5443,6 +5471,14 @@ begin
       if CTopLevelIsFunc then ParseCSubroutine
       else ParseCGlobalVarDecl;
     end
+    else if (CurTok.Kind = tkSemicolon) or ((TokPos - 1) >= userTokEnd) then
+      Next  { stray top-level `;` (empty decl, legal C), or an appended pulled-unit token }
+    else if (CurTok.Kind = tkIdent) and not CIsTopLevelSkipIdent(CurTok.SVal) then
+      { An unknown identifier at top level is not a declaration — gcc rejects it
+        (e.g. code accidentally exposed by a comment ending early). Storage-class
+        / specifier keywords (extern, static, inline, ...) still fall through to
+        the skip below, as does stray punctuation, preserving prior leniency. }
+      Error('stray token at top level (not a declaration): ''' + CurTok.SVal + '''')
     else
       Next;
   end;
