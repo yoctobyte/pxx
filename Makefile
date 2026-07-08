@@ -843,6 +843,12 @@ test-core: $(COMPILER)
 	/tmp/ccomma_star_declarator_b19126; test "$$?" = "42"
 	./$(COMPILER) test/cnarrow_cast_extend_b192.c /tmp/cnarrow_cast_extend_b19226
 	/tmp/cnarrow_cast_extend_b19226; test "$$?" = "42"
+	# b193-b194 (bug-c-init-brace-elision-nested): recursive global aggregate
+	# init walker (elision/nested/anon-union/designators), sizeof(arr->field)
+	./$(COMPILER) test/cinit_elision_nested_b193.c /tmp/cinit_elision_nested_b19326
+	/tmp/cinit_elision_nested_b19326; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_arrow_array_field_b194.c /tmp/csizeof_arrow_array_field_b19426
+	/tmp/csizeof_arrow_array_field_b19426; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

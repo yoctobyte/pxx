@@ -1102,7 +1102,13 @@ begin
           fieldName := GetTokenStrFromRaw(Tokens[TokPos + 1].SOffset, Tokens[TokPos + 1].SLen);
           recId := REC_NONE;
           if Syms[si].TypeKind = tyPointer then recId := Syms[si].PtrElemRec
-          else if Syms[si].TypeKind = tyRecord then recId := Syms[si].RecName;
+          else if Syms[si].TypeKind = tyRecord then
+          begin
+            { an ARRAY of records keeps the element record in ElemRecName
+              (RecName is unset) — `arr->field` / `arr[i].field` sizing }
+            if Syms[si].IsArray then recId := Syms[si].ElemRecName
+            else recId := Syms[si].RecName;
+          end;
           if (recId <> REC_NONE) and (RecFieldType(recId, fieldName) = tyPointer) then
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
@@ -1144,7 +1150,13 @@ begin
             if Syms[si].TypeKind = tyPointer then
               recId := Syms[si].PtrElemRec
             else if Syms[si].TypeKind = tyRecord then
-              recId := Syms[si].RecName;
+            begin
+              { an ARRAY of records keeps the element record in ElemRecName
+                (RecName is unset) — `arr->field` sizing, c-testsuite 00205's
+                `sizeof(cases->c)/sizeof(cases->c[0])` }
+              if Syms[si].IsArray then recId := Syms[si].ElemRecName
+              else recId := Syms[si].RecName;
+            end;
             if recId <> REC_NONE then
             begin
               if Tokens[TokPos].Kind = tkLBrack then
@@ -3771,6 +3783,440 @@ begin
   end;
 end;
 
+{ ===== Recursive C aggregate-initializer walker (C99 6.7.8) =====
+  Replaces the one-level global struct / struct-array init recorders with a
+  recursive walk over the TARGET TYPE TREE with brace-elision semantics: an
+  open brace descends into (and bounds) the subaggregate it sits on; a flat
+  run of initializers keeps filling leaves left-to-right across nested
+  subaggregates (c-testsuite 00050/00091/00205). Two modes share the walk:
+    emit=False  COUNT mode at declaration time — touches no AST/symbols; used
+                to size an unsized `T x[] = {...}` by the number of top-level
+                elements consumed under elision (nine PT elements out of a
+                63-scalar flat list, not 63).
+    emit=True   EMIT mode at `main` compile time (the C analogue of
+                CompilePendingGlobalInits): re-seeks the recorded token
+                position and re-parses, emitting one assignment per leaf via
+                the ordinary ParseCExpr + CompileAST path — so casts, enum
+                consts, bare fn names, string literals and &globals all lower
+                through the machinery function bodies already use.
+  The current leaf's access path (array-index / field frames) lives in
+  CInitPath*; each leaf rebuilds its target AST chain from the path, because
+  AST nodes are transient (ASTNodeCount resets after every CompileAST).
+  Positional advance skips fields that overlap the bytes just consumed, which
+  covers unions AND promoted anonymous-union members (all at one offset)
+  without needing a union flag; bitfields advance one by one (they share
+  offsets by design). Globals are BSS-zeroed, so unreached tails need no
+  explicit zero-fill. }
+const
+  MAX_CINIT_PATH  = 32;
+  MAX_C_AGG_INITS = 512;
+var
+  CInitPathKind: array[0..MAX_CINIT_PATH-1] of Integer;  { 0 = array index, 1 = field }
+  CInitPathVal:  array[0..MAX_CINIT_PATH-1] of Integer;  { flat elem index | UFld pool idx }
+  CInitPathTk:   array[0..MAX_CINIT_PATH-1] of Integer;  { ASTTk for the frame's node }
+  CInitPathDepth: Integer;
+  CAggCurSym: Integer;                                   { target symbol in EMIT mode }
+  CAggInitCount: Integer;
+  CAggInitSym: array[0..MAX_C_AGG_INITS-1] of Integer;
+  CAggInitTok: array[0..MAX_C_AGG_INITS-1] of Integer;   { token index of the opening brace }
+  CAggInitRec: array[0..MAX_C_AGG_INITS-1] of Integer;
+  CAggInitLen: array[0..MAX_C_AGG_INITS-1] of Integer;   { array length (elements) }
+  CAggInitIsArr: array[0..MAX_C_AGG_INITS-1] of Boolean;
+
+procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean); forward;
+procedure CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel, nDims,
+                         count, baseFlat, elemsBelow: Integer;
+                         braced, emit: Boolean; var consumed: Integer); forward;
+
+procedure CInitPathPush(kind, val, tkOrd: Integer);
+begin
+  if CInitPathDepth >= MAX_CINIT_PATH then Error('C initializer nesting too deep');
+  CInitPathKind[CInitPathDepth] := kind;
+  CInitPathVal[CInitPathDepth]  := val;
+  CInitPathTk[CInitPathDepth]   := tkOrd;
+  Inc(CInitPathDepth);
+end;
+
+{ Byte size of a field, for the overlap-skip positional advance. }
+function CInitFieldSize(fi: Integer): Integer;
+var es: Integer;
+begin
+  if UFldBitWidth[fi] > 0 then
+  begin
+    Result := UFldBitBytes[fi];
+    if Result < 1 then Result := 1;
+    Exit;
+  end;
+  if UFldTk[fi] = Ord(tyRecord) then es := RecSize(UFldRec_[fi])
+  else if UFldTk[fi] = Ord(tyPointer) then es := TARGET_PTR_SIZE
+  else es := TypeSize(IntToTypeKind(UFldTk[fi]));
+  if UFldIsArray[fi] then Result := es * UFldArrLen[fi] else Result := es;
+end;
+
+function CInitDimSpanAt(symIdx, fldIdx, level: Integer): Integer;
+begin
+  if fldIdx >= 0 then Result := UFldArrDimSpan[fldIdx * MAX_ARR_DIMS + level]
+  else if symIdx >= 0 then Result := SymArrDimSpan[symIdx * MAX_ARR_DIMS + level]
+  else Result := 1;
+end;
+
+{ Rebuild the leaf's assignment target from the path: IDENT wrapped by
+  AN_INDEX (flat element index) / AN_FIELD (name span from the UFld pool)
+  frames — the same node shapes body expressions produce, so the existing
+  lowering resolves offsets/strides identically. }
+function CInitBuildTarget: Integer;
+var node, d, lit, n2: Integer;
+begin
+  node := AllocNode(AN_IDENT);
+  ASTIVal[node] := CAggCurSym;
+  ASTTk[node] := Ord(Syms[CAggCurSym].TypeKind);
+  for d := 0 to CInitPathDepth - 1 do
+  begin
+    if CInitPathKind[d] = 0 then
+    begin
+      lit := AllocNode(AN_INT_LIT);
+      ASTIVal[lit] := CInitPathVal[d];
+      ASTTk[lit] := Ord(tyInteger);
+      n2 := AllocNode(AN_INDEX);
+      ASTLeft[n2] := node; ASTRight[n2] := lit;
+      ASTTk[n2] := CInitPathTk[d];
+    end
+    else
+    begin
+      n2 := AllocNode(AN_FIELD);
+      ASTLeft[n2] := node;
+      ASTSOffset[n2] := UFldNOff[CInitPathVal[d]];
+      ASTSLen[n2] := UFldNLen[CInitPathVal[d]];
+      ASTTk[n2] := CInitPathTk[d];
+    end;
+    node := n2;
+  end;
+  Result := node;
+end;
+
+{ COUNT-mode scalar skip: to the next comma / close-brace at paren depth 0. }
+procedure CInitSkipScalar;
+var pd: Integer;
+begin
+  pd := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if (pd = 0) and (CurTok.Kind in [tkComma, tkEnd, tkSemicolon]) then Exit;
+    if (CurTok.Kind = tkLParen) or (CurTok.Kind = tkLBrack) then Inc(pd)
+    else if (CurTok.Kind = tkRParen) or (CurTok.Kind = tkRBrack) then Dec(pd);
+    Next;
+  end;
+end;
+
+{ One scalar leaf. The path already addresses it. }
+procedure CInitLeaf(tkOrd: Integer; emit: Boolean);
+var target, e, asn: Integer;
+begin
+  if CurTok.Kind = tkBegin then
+  begin
+    { braced scalar `{ expr }` (C99 6.7.8p11) }
+    Next;
+    CInitLeaf(tkOrd, emit);
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+    begin
+      CSkipCInitElement;
+      if not Eat(tkComma) then Break;
+    end;
+    Eat(tkEnd);
+    Exit;
+  end;
+  if emit then
+  begin
+    target := CInitBuildTarget;
+    e := ParseCExpr;
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := target; ASTRight[asn] := e;
+    ASTTk[asn] := tkOrd;
+    CompileAST(asn);
+    ASTNodeCount := 0;
+  end
+  else
+    CInitSkipScalar;
+end;
+
+{ char-array member from a string literal (adjacent literals concatenate).
+  Path already holds the member's field frame; the tail stays BSS-zero, so no
+  explicit NUL store is needed. }
+procedure CInitFillCharArray(elemTkOrd, capacity: Integer; emit: Boolean);
+var ei, k, sOff, sLen, target, lit, asn: Integer;
+begin
+  ei := 0;
+  while CurTok.Kind = tkString do
+  begin
+    sOff := Tokens[TokPos - 1].SOffset;
+    sLen := Tokens[TokPos - 1].SLen;
+    for k := 0 to sLen - 1 do
+    begin
+      if emit and ((capacity < 0) or (ei < capacity)) then
+      begin
+        CInitPathPush(0, ei, elemTkOrd);
+        target := CInitBuildTarget;
+        Dec(CInitPathDepth);
+        lit := AllocNode(AN_INT_LIT);
+        ASTIVal[lit] := Ord(TokChars[sOff + k]);
+        ASTTk[lit] := elemTkOrd;
+        asn := AllocNode(AN_ASSIGN);
+        ASTLeft[asn] := target; ASTRight[asn] := lit;
+        ASTTk[asn] := elemTkOrd;
+        CompileAST(asn);
+        ASTNodeCount := 0;
+      end;
+      Inc(ei);
+    end;
+    Next;
+  end;
+end;
+
+{ One record member: descend aggregates (braced = bounded, unbraced = elided
+  flat fill), else a scalar leaf. }
+procedure CInitWalkMember(fi: Integer; emit: Boolean);
+var ndims, span0, eb, cons, ci2: Integer;
+begin
+  if UFldIsArray[fi] and (UFldDynDepth[fi] = 0) then
+  begin
+    CInitPathPush(1, fi, UFldTk[fi]);
+    if (CurTok.Kind = tkString) and (TypeSize(IntToTypeKind(UFldTk[fi])) = 1) then
+      CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit)
+    else if (CurTok.Kind = tkBegin) and (Tokens[TokPos].Kind = tkString) and
+            (TypeSize(IntToTypeKind(UFldTk[fi])) = 1) then
+    begin
+      Next;
+      CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit);
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        CSkipCInitElement;
+        if not Eat(tkComma) then Break;
+      end;
+      Eat(tkEnd);
+    end
+    else
+    begin
+      ndims := UFldArrNDims[fi];
+      if ndims < 2 then
+      begin
+        ndims := 1;
+        span0 := UFldArrLen[fi];
+        eb := 1;
+      end
+      else
+      begin
+        span0 := UFldArrDimSpan[fi * MAX_ARR_DIMS + 0];
+        if span0 < 1 then span0 := 1;
+        eb := UFldArrLen[fi] div span0;
+        if eb < 1 then eb := 1;
+      end;
+      cons := 0;
+      if CurTok.Kind = tkBegin then
+      begin
+        Next;
+        CInitWalkArray(UFldTk[fi], UFldRec_[fi], -1, fi, 0, ndims, span0, 0, eb,
+                       True, emit, cons);
+        Eat(tkEnd);
+      end
+      else
+        CInitWalkArray(UFldTk[fi], UFldRec_[fi], -1, fi, 0, ndims, span0, 0, eb,
+                       False, emit, cons);
+    end;
+    Dec(CInitPathDepth);
+  end
+  else if (UFldTk[fi] = Ord(tyRecord)) and (UFldRec_[fi] >= REC_UCLASS_BASE) and
+          (UFldBitWidth[fi] = 0) then
+  begin
+    ci2 := UFldRec_[fi] - REC_UCLASS_BASE;
+    CInitPathPush(1, fi, UFldTk[fi]);
+    if CurTok.Kind = tkBegin then
+    begin
+      Next;
+      CInitWalkRecord(ci2, True, emit);
+      Eat(tkEnd);
+    end
+    else
+      CInitWalkRecord(ci2, False, emit);
+    Dec(CInitPathDepth);
+  end
+  else
+  begin
+    CInitPathPush(1, fi, UFldTk[fi]);
+    CInitLeaf(UFldTk[fi], emit);
+    Dec(CInitPathDepth);
+  end;
+end;
+
+procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean);
+var base, n, fldI, fi, fEnd, di: Integer;
+begin
+  base := UClsFBase[ci];
+  n := UClsFCount[ci];
+  fldI := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkEnd then Break;
+    if (not braced) and (CurTok.Kind = tkSemicolon) then Break;
+    if braced and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      { `.name =` field designator repositions the cursor (C 6.7.8). }
+      Next;
+      di := FindUField(ci, CurTok.SVal);
+      if di >= 0 then fldI := di - base;
+      Next;
+      if CurTok.Kind = tkAssign then Next;
+    end;
+    if fldI >= n then
+    begin
+      if braced then
+      begin
+        CSkipCInitElement;
+        if not Eat(tkComma) then Break;
+        Continue;
+      end
+      else Break;
+    end;
+    fi := base + fldI;
+    CInitWalkMember(fi, emit);
+    { positional advance: skip union / promoted-anonymous-union siblings that
+      overlap the bytes just consumed; bitfields advance one by one. }
+    if UFldBitWidth[fi] > 0 then
+      Inc(fldI)
+    else
+    begin
+      fEnd := UFldOff_[fi] + CInitFieldSize(fi);
+      Inc(fldI);
+      while (fldI < n) and (UFldOff_[base + fldI] < fEnd) and
+            (UFldBitWidth[base + fldI] = 0) do
+        Inc(fldI);
+    end;
+    if CurTok.Kind = tkComma then
+    begin
+      { unbraced (elided) and full: leave the comma for the parent walker }
+      if (not braced) and (fldI >= n) then Break;
+      Next;
+    end
+    else Break;
+  end;
+end;
+
+procedure CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel, nDims,
+                         count, baseFlat, elemsBelow: Integer;
+                         braced, emit: Boolean; var consumed: Integer);
+var i, spanN, ebN, subCons: Integer;
+begin
+  i := 0;
+  consumed := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkEnd then Break;
+    if (not braced) and (CurTok.Kind = tkSemicolon) then Break;
+    if braced and (CurTok.Kind = tkLBrack) then
+    begin
+      { `[k] =` element designator repositions the index (C 6.7.8). }
+      Next;
+      i := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+      if CurTok.Kind = tkAssign then Next;
+      if i < 0 then i := 0;
+    end;
+    if (count >= 0) and (i >= count) then
+    begin
+      if braced then
+      begin
+        CSkipCInitElement;
+        if not Eat(tkComma) then Break;
+        Continue;
+      end
+      else Break;
+    end;
+    if dimLevel < nDims - 1 then
+    begin
+      spanN := CInitDimSpanAt(symIdx, fldIdx, dimLevel + 1);
+      if spanN < 1 then spanN := 1;
+      ebN := elemsBelow div spanN;
+      if ebN < 1 then ebN := 1;
+      if CurTok.Kind = tkBegin then
+      begin
+        Next;
+        CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel + 1, nDims,
+                       spanN, baseFlat + i * elemsBelow, ebN, True, emit, subCons);
+        Eat(tkEnd);
+      end
+      else
+        CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel + 1, nDims,
+                       spanN, baseFlat + i * elemsBelow, ebN, False, emit, subCons);
+    end
+    else if (elemTkOrd = Ord(tyRecord)) and (elemRec >= REC_UCLASS_BASE) then
+    begin
+      CInitPathPush(0, baseFlat + i, elemTkOrd);
+      if CurTok.Kind = tkBegin then
+      begin
+        Next;
+        CInitWalkRecord(elemRec - REC_UCLASS_BASE, True, emit);
+        Eat(tkEnd);
+      end
+      else
+        CInitWalkRecord(elemRec - REC_UCLASS_BASE, False, emit);
+      Dec(CInitPathDepth);
+    end
+    else
+    begin
+      CInitPathPush(0, baseFlat + i, elemTkOrd);
+      CInitLeaf(elemTkOrd, emit);
+      Dec(CInitPathDepth);
+    end;
+    Inc(i);
+    if i > consumed then consumed := i;
+    if CurTok.Kind = tkComma then
+    begin
+      if (not braced) and (count >= 0) and (i >= count) then Break;
+      Next;
+    end
+    else Break;
+  end;
+end;
+
+{ COUNT mode over a record-array initializer: how many top-level elements the
+  list holds under brace elision. openIdx = token index of the opening brace.
+  Restores the parse position. }
+function CInitCountRecordArrayAt(openIdx, recId: Integer): Integer;
+var savedIdx, cons: Integer;
+begin
+  savedIdx := TokPos - 1;
+  TokPos := openIdx; Next;   { CurTok = the opening brace }
+  Next;                      { first token inside }
+  CInitPathDepth := 0;
+  cons := 0;
+  CInitWalkArray(Ord(tyRecord), recId, -1, -1, 0, 1, -1, 0, 1, True, False, cons);
+  Result := cons;
+  TokPos := savedIdx; Next;
+end;
+
+{ EMIT mode: run every deferred aggregate initializer, at the start of `main`
+  (called right after CompilePendingGlobalInits). Restores the parse position. }
+procedure CEmitDeferredCAggInits;
+var i, savedIdx, cons: Integer;
+begin
+  if CAggInitCount = 0 then Exit;
+  savedIdx := TokPos - 1;
+  for i := 0 to CAggInitCount - 1 do
+  begin
+    TokPos := CAggInitTok[i]; Next;   { CurTok = the opening brace }
+    Next;                             { first token inside }
+    CAggCurSym := CAggInitSym[i];
+    CInitPathDepth := 0;
+    cons := 0;
+    if CAggInitIsArr[i] then
+      CInitWalkArray(Ord(Syms[CAggInitSym[i]].TypeKind), CAggInitRec[i],
+                     CAggInitSym[i], -1, 0, 1, CAggInitLen[i], 0, 1,
+                     True, True, cons)
+    else
+      CInitWalkRecord(CAggInitRec[i] - REC_UCLASS_BASE, True, True);
+  end;
+  TokPos := savedIdx; Next;
+end;
+
 { A top-level global variable definition: <type> name (, name)* ;
   Allocated as zero-initialised BSS (CurProc<0 => skGlobal). Increment-1 scope:
   the slot is reserved and any initialiser is skipped (C zero-inits globals; a
@@ -4075,7 +4521,13 @@ begin
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
                 (baseTk = tyRecord) then
         begin
-          flatInitCount := CBraceTopLevelInitCountAt(TokPos);
+          { unsized `T x[] = {...}`: size by elements consumed under brace
+            elision (a flat 63-scalar list of 7-leaf structs = 9 elements),
+            not by top-level commas. }
+          if recId >= REC_UCLASS_BASE then
+            flatInitCount := CInitCountRecordArrayAt(TokPos, recId)
+          else
+            flatInitCount := CBraceTopLevelInitCountAt(TokPos);
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
         end
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkString) and
@@ -4201,368 +4653,37 @@ begin
          (idx >= 0) and (recBase >= 0) and
          (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
       begin
-        Next;   { consume the outer opening brace }
-        ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        { Array-of-struct global initializer: defer to the recursive
+          brace-elision walker, replayed at `main` compile time by
+          CEmitDeferredCAggInits — handles nested braces, elided flat lists,
+          designators, anonymous unions and nested subarrays. }
+        if CAggInitCount < MAX_C_AGG_INITS then
         begin
-          { `[k] = {...}` array-element designator repositions the outer index. }
-          if CurTok.Kind = tkLBrack then
-          begin
-            Next;                                     { '[' }
-            ei := CEvalConstExpr;
-            Expect(tkRBrack, ']');
-            if CurTok.Kind = tkAssign then Next;      { '=' }
-          end;
-          if CurTok.Kind = tkBegin then
-          begin
-            Next;   { consume element opening brace }
-            fldI := 0;
-            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-            begin
-              if (ei < arrLen) and (fldI < UClsFCount[recId - REC_UCLASS_BASE]) then
-              begin
-                fTk := UFldTk[recBase + fldI];
-                { `&func` in a fn-pointer field == `func`: peel the `&` so the
-                  function-name branch binds it (only for a proc name). }
-                if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and
-                   (Tokens[TokPos].Kind = tkIdent) and
-                   (FindProc(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen)) >= 0) then
-                  Next;
-                if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
-                   (PendingInitCount < MAX_PENDING_INITS) then
-                begin
-                  PendingInitSym[PendingInitCount]  := idx;
-                  PendingInitElem[PendingInitCount] := ei;
-                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                  PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
-                  PendingInitValAux[PendingInitCount] := Tokens[TokPos - 1].SLen;
-                  PendingInitTk[PendingInitCount]   := fTk;
-                  PendingInitKind[PendingInitCount] := 1;
-                  Inc(PendingInitCount);
-                  Next;
-                  while CurTok.Kind = tkString do
-                  begin
-                    PendingInitValAux[PendingInitCount - 1] :=
-                      PendingInitValAux[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
-                    Next;
-                  end;
-                end
-                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkIdent) then
-                begin
-                  procIdx := FindProc(CurTok.SVal);
-                  if procIdx >= 0 then
-                  begin
-                    if PendingInitCount < MAX_PENDING_INITS then
-                    begin
-                      PendingInitSym[PendingInitCount]  := idx;
-                      PendingInitElem[PendingInitCount] := ei;
-                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                      PendingInitVal[PendingInitCount]  := procIdx;
-                      PendingInitValAux[PendingInitCount] := 0;
-                      PendingInitTk[PendingInitCount]   := fTk;
-                      PendingInitKind[PendingInitCount] := 2;
-                      Inc(PendingInitCount);
-                    end;
-                    Next;
-                  end
-                  else if CurTok.SVal = 'NULL' then
-                  begin
-                    if PendingInitCount < MAX_PENDING_INITS then
-                    begin
-                      PendingInitSym[PendingInitCount]  := idx;
-                      PendingInitElem[PendingInitCount] := ei;
-                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                      PendingInitVal[PendingInitCount]  := 0;
-                      PendingInitValAux[PendingInitCount] := 0;
-                      PendingInitTk[PendingInitCount]   := fTk;
-                      PendingInitKind[PendingInitCount] := 0;
-                      Inc(PendingInitCount);
-                    end;
-                    Next;
-                  end
-                  else
-                  begin
-                    initSymIdx := FindSym(CurTok.SVal);
-                    if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
-                    begin
-                      PendingInitSym[PendingInitCount]  := idx;
-                      PendingInitElem[PendingInitCount] := ei;
-                      PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                      PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                      PendingInitVal[PendingInitCount]  := initSymIdx;
-                      PendingInitValAux[PendingInitCount] := 0;
-                      PendingInitTk[PendingInitCount]   := fTk;
-                      PendingInitKind[PendingInitCount] := 4;
-                      Inc(PendingInitCount);
-                    end;
-                    Next;
-                  end;
-                end
-                else if (fTk = Ord(tyPointer)) and CConsumeCastProcInit(procIdx) then
-                begin
-                  if PendingInitCount < MAX_PENDING_INITS then
-                  begin
-                    PendingInitSym[PendingInitCount]  := idx;
-                    PendingInitElem[PendingInitCount] := ei;
-                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                    PendingInitVal[PendingInitCount]  := procIdx;
-                    PendingInitValAux[PendingInitCount] := 0;
-                    PendingInitTk[PendingInitCount]   := fTk;
-                    PendingInitKind[PendingInitCount] := 2;
-                    Inc(PendingInitCount);
-                  end;
-                end
-                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) then
-                begin
-                  Next; { consume '&' }
-                  initSymIdx := FindSym(CurTok.SVal);
-                  if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
-                  begin
-                    PendingInitSym[PendingInitCount]  := idx;
-                    PendingInitElem[PendingInitCount] := ei;
-                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                    PendingInitVal[PendingInitCount]  := initSymIdx;
-                    PendingInitValAux[PendingInitCount] := 0;
-                    PendingInitTk[PendingInitCount]   := fTk;
-                    PendingInitKind[PendingInitCount] := 4;
-                    Inc(PendingInitCount);
-                  end;
-                  Next; { consume target ident }
-                end
-                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkInteger) then
-                begin
-                  if PendingInitCount < MAX_PENDING_INITS then
-                  begin
-                    PendingInitSym[PendingInitCount]  := idx;
-                    PendingInitElem[PendingInitCount] := ei;
-                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                    PendingInitVal[PendingInitCount]  := CurTok.IVal;
-                    PendingInitValAux[PendingInitCount] := 0;
-                    PendingInitTk[PendingInitCount]   := fTk;
-                    PendingInitKind[PendingInitCount] := 0;
-                    Inc(PendingInitCount);
-                  end;
-                  Next;
-                end
-                else if TypeIsOrdinal(IntToTypeKind(fTk)) and (CurTok.Kind <> tkBegin) then
-                begin
-                  initV := CEvalConstExpr;
-                  if (CurTok.Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
-                  begin
-                    PendingInitSym[PendingInitCount]  := idx;
-                    PendingInitElem[PendingInitCount] := ei;
-                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                    PendingInitVal[PendingInitCount]  := initV;
-                    PendingInitValAux[PendingInitCount] := 0;
-                    PendingInitTk[PendingInitCount]   := fTk;
-                    PendingInitKind[PendingInitCount] := 0;
-                    Inc(PendingInitCount);
-                  end
-                  else
-                    CSkipCInitElement;
-                end
-                else
-                  CSkipCInitElement;
-              end
-              else
-                CSkipCInitElement;
-              Inc(fldI);
-              Eat(tkComma);
-            end;
-            Eat(tkEnd);
-          end
-          else
-            CSkipCInitElement;
-          Inc(ei);
-          Eat(tkComma);
+          CAggInitSym[CAggInitCount] := idx;
+          CAggInitTok[CAggInitCount] := TokPos - 1;
+          CAggInitRec[CAggInitCount] := recId;
+          CAggInitLen[CAggInitCount] := arrLen;
+          CAggInitIsArr[CAggInitCount] := True;
+          Inc(CAggInitCount);
         end;
-        Eat(tkEnd);
+        SkipBraceBlock;
       end
       else if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
          (idx >= 0) and (recBase >= 0) and
          (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
       begin
-        Next;   { consume the opening brace }
-        fldI := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        { Non-array struct/union global initializer: same deferred recursive
+          walker (see above). }
+        if CAggInitCount < MAX_C_AGG_INITS then
         begin
-          { struct field designator `.name =` repositions the field cursor
-            (C 6.7.8) — `{ .b = 2, .a = 1 }` writes a=1,b=2, not by order. }
-          if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
-          begin
-            Next;                                        { '.' }
-            di := FindUField(recId - REC_UCLASS_BASE, CurTok.SVal);
-            if di >= 0 then fldI := di - recBase;
-            Next;                                        { field name }
-            if CurTok.Kind = tkAssign then Next;         { '=' }
-          end;
-          if fldI < UClsFCount[recId - REC_UCLASS_BASE] then
-          begin
-            fTk := UFldTk[recBase + fldI];
-            { `&func` in a fn-pointer field == `func` (address-of a function is the
-              fn-pointer value): peel the `&` so the function-name branch binds
-              it. Only when the name is a proc, so a data `&globalvar` is left to
-              its own branch. }
-            if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and
-               (Tokens[TokPos].Kind = tkIdent) and
-               (FindProc(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen)) >= 0) then
-              Next;
-            if CurTok.Kind = tkBegin then
-              CSkipCInitElement
-            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
-                    (PendingInitCount < MAX_PENDING_INITS) then
-            begin
-              PendingInitSym[PendingInitCount]  := idx;
-              PendingInitElem[PendingInitCount] := -1;
-              PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-              PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-              PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
-              PendingInitValAux[PendingInitCount] := Tokens[TokPos - 1].SLen;
-              PendingInitTk[PendingInitCount]   := fTk;
-              PendingInitKind[PendingInitCount] := 1;
-              Inc(PendingInitCount);
-              Next;
-              while CurTok.Kind = tkString do
-              begin
-                PendingInitValAux[PendingInitCount - 1] :=
-                  PendingInitValAux[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
-                Next;
-              end;
-            end
-            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkIdent) then
-            begin
-              procIdx := FindProc(CurTok.SVal);
-              if procIdx >= 0 then
-              begin
-                if PendingInitCount < MAX_PENDING_INITS then
-                begin
-                  PendingInitSym[PendingInitCount]  := idx;
-                  PendingInitElem[PendingInitCount] := -1;
-                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                  PendingInitVal[PendingInitCount]  := procIdx;
-                  PendingInitValAux[PendingInitCount] := 0;
-                  PendingInitTk[PendingInitCount]   := fTk;
-                  PendingInitKind[PendingInitCount] := 2;
-                  Inc(PendingInitCount);
-                end;
-                Next;
-              end
-              else if CurTok.SVal = 'NULL' then
-              begin
-                if PendingInitCount < MAX_PENDING_INITS then
-                begin
-                  PendingInitSym[PendingInitCount]  := idx;
-                  PendingInitElem[PendingInitCount] := -1;
-                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                  PendingInitVal[PendingInitCount]  := 0;
-                  PendingInitValAux[PendingInitCount] := 0;
-                  PendingInitTk[PendingInitCount]   := fTk;
-                  PendingInitKind[PendingInitCount] := 0;
-                  Inc(PendingInitCount);
-                end;
-                Next;
-              end
-              else
-              begin
-                initSymIdx := FindSym(CurTok.SVal);
-                if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
-                begin
-                  PendingInitSym[PendingInitCount]  := idx;
-                  PendingInitElem[PendingInitCount] := -1;
-                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                  PendingInitVal[PendingInitCount]  := initSymIdx;
-                  PendingInitValAux[PendingInitCount] := 0;
-                  PendingInitTk[PendingInitCount]   := fTk;
-                  PendingInitKind[PendingInitCount] := 4;
-                  Inc(PendingInitCount);
-                end;
-                Next;
-              end;
-            end
-            else if (fTk = Ord(tyPointer)) and CConsumeCastProcInit(procIdx) then
-            begin
-              if PendingInitCount < MAX_PENDING_INITS then
-              begin
-                PendingInitSym[PendingInitCount]  := idx;
-                PendingInitElem[PendingInitCount] := -1;
-                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                PendingInitVal[PendingInitCount]  := procIdx;
-                PendingInitValAux[PendingInitCount] := 0;
-                PendingInitTk[PendingInitCount]   := fTk;
-                PendingInitKind[PendingInitCount] := 2;
-                Inc(PendingInitCount);
-              end;
-            end
-            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) then
-            begin
-              Next; { consume '&' }
-              initSymIdx := FindSym(CurTok.SVal);
-              if (initSymIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
-              begin
-                PendingInitSym[PendingInitCount]  := idx;
-                PendingInitElem[PendingInitCount] := -1;
-                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                PendingInitVal[PendingInitCount]  := initSymIdx;
-                PendingInitValAux[PendingInitCount] := 0;
-                PendingInitTk[PendingInitCount]   := fTk;
-                PendingInitKind[PendingInitCount] := 4;
-                Inc(PendingInitCount);
-              end;
-              Next; { consume target ident }
-            end
-            else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkInteger) then
-            begin
-              if PendingInitCount < MAX_PENDING_INITS then
-              begin
-                PendingInitSym[PendingInitCount]  := idx;
-                PendingInitElem[PendingInitCount] := -1;
-                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
-                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                PendingInitVal[PendingInitCount]  := CurTok.IVal;
-                PendingInitValAux[PendingInitCount] := 0;
-                PendingInitTk[PendingInitCount]   := fTk;
-                PendingInitKind[PendingInitCount] := 0;
-                Inc(PendingInitCount);
-              end;
-              Next;
-            end
-            else if TypeIsOrdinal(IntToTypeKind(fTk)) then
-            begin
-              initV := CEvalConstExpr;
-              if (CurTok.Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
-              begin
-                PendingInitSym[PendingInitCount]  := idx;
-                PendingInitElem[PendingInitCount] := -1;
-                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];  { field NAME ref }
-                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-                PendingInitVal[PendingInitCount]  := initV;
-                PendingInitTk[PendingInitCount]   := fTk;
-                Inc(PendingInitCount);
-              end
-              else
-                CSkipCInitElement;
-            end
-            else
-              CSkipCInitElement;
-          end
-          else
-            CSkipCInitElement;   { overflow field: skip without materialising }
-          Inc(fldI);
-          Eat(tkComma);
+          CAggInitSym[CAggInitCount] := idx;
+          CAggInitTok[CAggInitCount] := TokPos - 1;
+          CAggInitRec[CAggInitCount] := recId;
+          CAggInitLen[CAggInitCount] := 1;
+          CAggInitIsArr[CAggInitCount] := False;
+          Inc(CAggInitCount);
         end;
-        Eat(tkEnd);
+        SkipBraceBlock;
       end
       else if CurTok.Kind = tkBegin then
       begin
@@ -5233,6 +5354,7 @@ begin
 
   firstIdx := TokPos - 1;
   CProgramMode := True;
+  CAggInitCount := 0;
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
@@ -6223,7 +6345,11 @@ begin
   { Constant global initializers (struct/union brace inits recorded as PendingInit
     during pass 1) run once at the start of `main`, before user code — the C
     analogue of the Pascal program's pre-body CompilePendingGlobalInits. }
-  if name = 'main' then CompilePendingGlobalInits;
+  if name = 'main' then
+  begin
+    CompilePendingGlobalInits;
+    CEmitDeferredCAggInits;
+  end;
 
   { Parse & Compile Body }
   node := ParseCBlockAST;
