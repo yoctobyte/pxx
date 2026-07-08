@@ -12,6 +12,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <poll.h>
 
 extern int __pxx_socket(int domain, int kind, int proto);
 extern int __pxx_setsockopt(int fd, int level, int optname, void *val, int len);
@@ -230,8 +232,75 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
 
 /* No resolver in the libc-free runtime: gethostby* report not-found. Numeric
    addresses go through inet_aton/inet_pton above (ENet tries those first). */
-struct hostent;
 struct hostent *gethostbyname(const char *name) { (void)name; return 0; }
 struct hostent *gethostbyaddr(const void *addr, socklen_t len, int type) {
   (void)addr; (void)len; (void)type; return 0;
+}
+
+/* getaddrinfo: numeric-host only (no DNS). Callers that pass a dotted-quad
+   `node` still resolve; a hostname reports EAI_NONAME. Kept minimal — a real
+   resolver is the DNS-library track. */
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res) {
+  (void)service; (void)hints;
+  if (res) *res = 0;
+  (void)node;
+  return -2; /* EAI_NONAME — no resolver; numeric paths use inet_pton directly */
+}
+void freeaddrinfo(struct addrinfo *res) { (void)res; }
+const char *gai_strerror(int errcode) { (void)errcode; return "resolver unavailable"; }
+
+/* sendmsg/recvmsg: scatter/gather over the PAL's single-buffer send/recv.
+   The PAL has no native iovec syscall, so concatenate: sendmsg walks the iovec
+   and sends each fragment in order; recvmsg fills each fragment in turn. Good
+   for the stream/datagram uses ENet and friends make (a small iovec of a
+   header + payload); msg_name (address) and control data are ignored (crtl is
+   connected-socket / IPv4-only at this layer). */
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  ssize_t total = 0, r;
+  size_t k;
+  if (!msg) return -1;
+  for (k = 0; k < msg->msg_iovlen; k++) {
+    struct iovec *v = &msg->msg_iov[k];
+    if (v->iov_len == 0) continue;
+    r = send(sockfd, v->iov_base, v->iov_len, flags);
+    if (r < 0) return total > 0 ? total : r;
+    total += r;
+    if ((size_t)r < v->iov_len) break;   /* short write: stop, report progress */
+  }
+  return total;
+}
+
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  ssize_t total = 0, r;
+  size_t k;
+  if (!msg) return -1;
+  for (k = 0; k < msg->msg_iovlen; k++) {
+    struct iovec *v = &msg->msg_iov[k];
+    if (v->iov_len == 0) continue;
+    r = recv(sockfd, v->iov_base, v->iov_len, flags);
+    if (r < 0) return total > 0 ? total : r;
+    total += r;
+    if ((size_t)r < v->iov_len) break;   /* short read: no more data queued */
+  }
+  msg->msg_flags = 0;
+  return total;
+}
+
+/* poll: the PAL has no readiness primitive yet, so this is a minimal
+   optimistic stub — it reports every requested fd as ready for the events the
+   caller asked about (POLLIN|POLLOUT), which lets a blocking-socket event loop
+   proceed (the following blocking send/recv is what actually waits). A real
+   readiness poll is a PAL feature (feature-dns-resolver-library / a PAL poll
+   ticket); until then non-blocking callers must not rely on this to gate. */
+int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
+  nfds_t i;
+  int ready = 0;
+  (void)timeout;
+  if (!fds) return 0;
+  for (i = 0; i < nfds; i++) {
+    fds[i].revents = (short)(fds[i].events & (POLLIN | POLLOUT));
+    if (fds[i].revents) ready++;
+  }
+  return ready;
 }

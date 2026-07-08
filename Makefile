@@ -880,6 +880,9 @@ test-core: $(COMPILER)
 	# b202 (bug-c-tag-redef-misfiles-field-selfref-segv): struct-tag redefinition no crash
 	./$(COMPILER) test/ctag_redef_no_selfref_crash_b202.c /tmp/ctag_redef_no_selfref_crash_b20226
 	/tmp/ctag_redef_no_selfref_crash_b20226; test "$$?" = "42"
+	# crtl networking header surface (bug-c-crtl-missing-net-headers-enet / ENet)
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_net_headers_smoke.c /tmp/crtl_net_headers_smoke26
+	/tmp/crtl_net_headers_smoke26; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
