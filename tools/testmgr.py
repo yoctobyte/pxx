@@ -115,6 +115,21 @@ def save_metrics(m):
     os.replace(tmp, METRICS_PATH)
 
 
+LIVE_PATH = os.path.join(REPO, ".testmgr", "live.json")
+# default work-weights for jobs with no learned duration yet, per class —
+# used only for the progress estimate, never for scheduling
+CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
+                "corpus": 45.0, "conformance": 90.0}
+
+
+def write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
 def sample_sessions(sids):
     """One /proc sweep: {session id: (rss_bytes, cpu_seconds)} for the given
     session leaders.  cpu includes reaped children (cutime/cstime) plus live
@@ -144,6 +159,11 @@ COMPILE_RE = re.compile(r"^\.?/?" + re.escape(COMPILER) + r"\b")
 # hasn't fetched them must SKIP the jobs that reference them, not fail them
 CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
 
+# private per-run substitute for the recipes' literal /tmp/ paths (see
+# Job.script); created in main(), world-unreadable is not needed — /tmp
+# hygiene only, the OS reaps it
+RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
+
 
 class Job:
     def __init__(self, target, index, lines):
@@ -171,11 +191,20 @@ class Job:
         # Emulate make exactly: each logical recipe line is judged by ITS
         # overall exit status (last command) — no `set -e`, which would abort
         # mid-line on intermediate nonzero rc (`bin; test "$?" = "20"`).
+        #
+        # All literal /tmp/ paths are rewritten into this run's PRIVATE
+        # scratch dir: recipe temp names are fixed (/tmp/pascal26-next, ...),
+        # so two testmgr runs on one box — a dev gate and the watcher, say —
+        # would interleave in each other's self-host chains and corrupt both
+        # (observed 2026-07-08: fixedpoint byte-diff with a clean tree).
+        # Rewrite happens ONLY here at execution; job.lines stays verbatim
+        # for reports, and a human running the printed repro in plain /tmp
+        # is fine — they're not racing themselves.
         parts = ["cd %s || exit 1" % shlex.quote(REPO)]
         for ln in self.lines:
             if ln.strip().startswith("#"):
                 continue                      # recipe comment: shell no-op
-            parts.append("{\n%s\n} || exit $?" % ln)
+            parts.append("{\n%s\n} || exit $?" % ln.replace("/tmp/", RUN_TMP + "/"))
         return "\n".join(parts) + "\n"
 
 
@@ -378,6 +407,32 @@ class Manager:
                 j.peak_rss = max(j.peak_rss, rss)
                 j.cpu_sec = max(j.cpu_sec, cpu)
 
+    def job_weight(self, job):
+        return job.exp_dur or CLASS_WEIGHT[job.cls]
+
+    def write_live(self, wall_t0):
+        """Progress contract for frontends (./trackt, web): weighted % from
+        learned expected durations — done/total job counts alone lie when one
+        conformance shard outweighs a thousand unit compiles."""
+        total_w = sum(self.job_weight(j) for j in self.jobs) or 1.0
+        done_w = sum(self.job_weight(j) for j in self.jobs
+                     if j.status in ("pass", "fail", "timeout", "skipped"))
+        run_w = sum(min(time.monotonic() - j.t0, self.job_weight(j))
+                    for j in self.running if j.t0)
+        pct = min(99.0, 100.0 * (done_w + run_w) / total_w)
+        red = [j.name for j in self.jobs if j.status in ("fail", "timeout")]
+        elapsed = time.monotonic() - wall_t0
+        write_json_atomic(LIVE_PATH, {
+            "ts": time.time(), "tier": self.args.tier, "pct": round(pct, 1),
+            "done": self.done_count(), "total": len(self.jobs),
+            "elapsed": round(elapsed, 1),
+            "eta": round(elapsed * (100 - pct) / pct, 1) if pct > 1 else None,
+            "running": [{"name": j.name,
+                         "elapsed": round(time.monotonic() - j.t0, 1),
+                         "exp": round(self.job_weight(j), 1)}
+                        for j in sorted(self.running, key=lambda j: j.t0)],
+            "red": red})
+
     def learn(self, job):
         """EWMA the passing run into the per-box metrics store."""
         dur = max(0.05, (job.t1 - job.t0) / self.scale)
@@ -457,6 +512,8 @@ class Manager:
         signal.signal(signal.SIGINT, self._sigint)
         signal.signal(signal.SIGTERM, self._sigint)
         failed = False
+        self._wall_t0 = time.monotonic()
+        self._last_live = 0.0
         while self.queue or self.running:
             if self.interrupted:
                 print("\ntestmgr: SIGINT — tearing down all jobs", flush=True)
@@ -490,6 +547,9 @@ class Manager:
             self.sample()
             self.watchdog()
             now = time.monotonic()
+            if now - self._last_live >= 1.0:
+                self._last_live = now
+                self.write_live(self._wall_t0)
             launched = 0
             for job in list(self.queue):
                 if launched >= self.hard_cap:   # sampler reacts next tick
@@ -524,7 +584,7 @@ def calibrate():
     hardware never gets false timeouts."""
     t0 = time.monotonic()
     r = subprocess.run([os.path.join(REPO, COMPILER), "test/hello.pas",
-                        "/tmp/testmgr_probe26"], cwd=REPO,
+                        os.path.join(RUN_TMP, "testmgr_probe26")], cwd=REPO,
                        capture_output=True)
     dt = time.monotonic() - t0
     if r.returncode != 0:
@@ -591,9 +651,11 @@ def main():
         print("total: %d jobs" % len(jobs))
         return 0
 
+    os.makedirs(RUN_TMP, exist_ok=True)
     scale = calibrate()
     # propagate to child scripts with their own inner `timeout` calls
     os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
+    os.environ["TESTMGR_TMP"] = RUN_TMP     # for tool scripts' own scratch
     logdir = tempfile.mkdtemp(prefix="testmgr-")
     run_jobs = [j for j in jobs if j.status != "skip"]
     mgr = Manager(run_jobs, args, scale, logdir)
@@ -606,6 +668,13 @@ def main():
     rc = mgr.run()
     wall = time.monotonic() - t0
     save_metrics(mgr.metrics)
+    write_json_atomic(LIVE_PATH, {
+        "ts": time.time(), "tier": args.tier, "pct": 100.0,
+        "done": mgr.done_count(), "total": len(mgr.jobs),
+        "elapsed": round(wall, 1), "eta": 0, "running": [],
+        "red": [j.name for j in jobs if j.status in ("fail", "timeout")],
+        "verdict": "GREEN" if rc == 0 else
+                   "INTERRUPTED" if rc == 130 else "RED"})
 
     # ---- deterministic fixed-order report ----
     print("\n== testmgr report (tier %s, %.1fs wall) ==" % (args.tier, wall))

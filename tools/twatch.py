@@ -46,6 +46,39 @@ import tempfile
 import time
 
 TSTATE_REL = "devdocs/progress/tstate"
+WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
+CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
+CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
+                 "debounce": 20, "no_bisect": False,
+                 "autoticket": False,  # stub regression tickets (face 1)
+                 "web": False, "web_port": 8377}
+CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
+
+
+def write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
+def load_conf(clone_path):
+    try:
+        with open(os.path.join(clone_path, CONF_NAME)) as f:
+            user = json.load(f)
+    except (OSError, ValueError):
+        user = {}
+    conf = dict(CONF_DEFAULTS)
+    conf.update({k: v for k, v in user.items() if k in CONF_DEFAULTS or
+                 k.startswith("anthropic")})
+    return conf
+
+
+def set_phase(clone, host, phase, **kw):
+    d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase}
+    d.update(kw)
+    write_json_atomic(os.path.join(clone.path, WATCH_REL), d)
 HISTORY_CAP = 50
 STOP = False
 
@@ -104,14 +137,15 @@ class Clone:
                  cwd=self.path)
         return out.splitlines() if out else []
 
-    def publish(self, message):
-        """Commit ONLY tstate files onto the branch tip and push, with
-        rebase-retry so parallel watcher hosts don't fight."""
+    def publish(self, message, paths=None):
+        """Commit ONLY the given paths (default: tstate) onto the branch tip
+        and push, with rebase-retry so parallel watcher hosts don't fight."""
+        paths = list(paths or [TSTATE_REL])
         sh(["git", "checkout", "--quiet", self.branch], cwd=self.path)
-        sh(["git", "add", "--", TSTATE_REL], cwd=self.path)
-        if not sh(["git", "status", "--porcelain", "--", TSTATE_REL], cwd=self.path):
+        sh(["git", "add", "--"] + paths, cwd=self.path)
+        if not sh(["git", "status", "--porcelain", "--"] + paths, cwd=self.path):
             return
-        sh(["git", "commit", "--quiet", "-m", message, "--", TSTATE_REL],
+        sh(["git", "commit", "--quiet", "-m", message, "--"] + paths,
            cwd=self.path)
         sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
            cwd=self.path)
@@ -289,6 +323,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     and don't flap NEW-RED on the next full run."""
     print("twatch: testing %s (%s%s)" % (sha[:12], tier,
                                          "" if full else ", fast"), flush=True)
+    set_phase(clone, host, "testing", sha=sha, tier=tier, fast=not full)
     clone.checkout(sha)
     report, rc = run_gate(clone, tier, abort_check=abort_check)
     clone_head_back(clone)
@@ -328,6 +363,15 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                        "verdict": report["verdict"], "tier": report["tier"],
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
     save_state(clone, host, st)
+    # uncapped run archive (host.json history is capped): one ndjson line per
+    # run — the web UI's history/regression-frequency source
+    with open(os.path.join(clone.path, TSTATE_REL,
+                           "runs-%s.ndjson" % host), "a") as f:
+        f.write(json.dumps({"sha": sha, "date": st["last"]["date"],
+                            "tier": report["tier"], "full": full,
+                            "verdict": report["verdict"],
+                            "wall": report["wall"], "new_red": new_red,
+                            "fixed": fixed}, sort_keys=True) + "\n")
     regen_index(clone)
     msg = "tstate(%s): %s %s (%s)" % (host, sha[:12], report["verdict"],
                                       report["tier"])
@@ -336,9 +380,68 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     if fixed:
         msg += " FIXED:" + ",".join(fixed[:5])
     clone.publish(msg)
+    if new_red and CONF.get("autoticket"):
+        file_stub_tickets(clone, host, st, sha, new_red, report)
     print("twatch: %s %s%s" % (sha[:12], report["verdict"],
                                " report=" + rel if rel else ""), flush=True)
     return True
+
+
+PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
+                    "blocked", "done", "rejected")
+
+
+def file_stub_tickets(clone, host, st, sha, new_red, report):
+    """Face-1 auto-ticket: deterministic stub per NEW-RED job — repro command,
+    range, log tail.  No analysis (that's face 2); slug = job name, so a job
+    never gets a second ticket while one exists in any bucket."""
+    filed = []
+    for job in new_red:
+        slug = "regression-" + re.sub(r"[^a-z0-9]+", "-", job.lower()).strip("-")
+        pdir = os.path.join(clone.path, "devdocs/progress")
+        if any(os.path.exists(os.path.join(pdir, b, slug + ".md"))
+               for b in PROGRESS_BUCKETS):
+            continue
+        j = next((x for x in report["jobs"] if x["name"] == job), {})
+        tail = ""
+        if j.get("log") and os.path.exists(j["log"]):
+            with open(j["log"], errors="replace") as f:
+                tail = f.read()[-2000:]
+        reg = next((r for r in st["open_regressions"] if r["job"] == job), {})
+        rel = os.path.join("devdocs/progress/backlog", slug + ".md")
+        with open(os.path.join(clone.path, rel), "w") as f:
+            f.write("""---
+prio: 70
+---
+
+# regression: %s red at %s (auto-filed by twatch)
+
+- **Type:** regression (auto-filed by Track T watcher, host %s). Untriaged.
+- **Found:** %s
+
+## Repro
+`tools/testmgr.py --tier %s --job '%s'` at %s
+
+## Range
+bad `%s`, last good `%s`, %d commit(s) in range — the watcher narrows this
+by idle bisect; check tstate/TSTATE.md for the current range.
+
+## Log tail
+```
+%s
+```
+
+*Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
+takes it from the repro line.*
+""" % (job, sha[:12], host, utcnow(), report["tier"], job, sha,
+                (reg.get("bad") or sha)[:12], (reg.get("good") or "unknown")[:12],
+                len(reg.get("range", [])), tail))
+        filed.append(rel)
+    if filed:
+        clone.publish("tstate-ticket(%s): %s" %
+                      (host, ", ".join(os.path.basename(p) for p in filed)),
+                      paths=filed)
+        print("twatch: auto-filed %d stub ticket(s)" % len(filed), flush=True)
 
 
 def clone_head_back(clone):
@@ -486,9 +589,9 @@ def main():
                          "T counts as down (default 45)")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
     ap.add_argument("--branch", default="master")
-    ap.add_argument("--tier", default="full",
+    ap.add_argument("--tier", default=None,
                     choices=["quick", "native", "limited", "full"])
-    ap.add_argument("--fast-tier", default="native",
+    ap.add_argument("--fast-tier", default=None,
                     choices=["quick", "native", "limited", "full", "none"],
                     help="two-phase testing: a new push gets this fast verdict "
                          "immediately, then the full --tier backfills while "
@@ -496,8 +599,8 @@ def main():
                          "'none' or same as --tier = single-phase (default "
                          "native)")
     ap.add_argument("--host", default=socket.gethostname().split(".")[0])
-    ap.add_argument("--interval", type=float, default=60, help="poll seconds")
-    ap.add_argument("--debounce", type=float, default=20,
+    ap.add_argument("--interval", type=float, default=None, help="poll seconds")
+    ap.add_argument("--debounce", type=float, default=None,
                     help="repo must be quiet this long before testing")
     ap.add_argument("--once", action="store_true",
                     help="single iteration (cron / smoke test)")
@@ -521,11 +624,28 @@ def main():
                   args.remote, args.branch)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
 
+    # config file fills in whatever the CLI didn't say (CLI wins); interval /
+    # autoticket / no_bisect reload every cycle so ./trackt config applies to
+    # a running daemon without a restart
+    conf = load_conf(clone.path)
+    CONF.update(conf)
+    if args.tier is None:
+        args.tier = conf["tier"]
+    if args.fast_tier is None:
+        args.fast_tier = conf["fast_tier"]
+    if args.interval is None:
+        args.interval = conf["interval"]
+    if args.debounce is None:
+        args.debounce = conf["debounce"]
+    if not args.no_bisect:
+        args.no_bisect = conf["no_bisect"]
+
     errors = 0
     notest_logged = None
     while not STOP:
         did_work = False
         try:
+            CONF.update(load_conf(clone.path))   # autoticket etc. apply live
             # re-check every cycle: an agent editing this checkout mid-run
             # must PAUSE the watcher, not feed it dirty sources (2026-07-07:
             # a dev edit leaked into a run, then killed the daemon on publish)
@@ -587,10 +707,13 @@ def main():
                 did_work = True
             elif not args.no_bisect:
                 st = load_state(clone, host)
+                set_phase(clone, host, "bisect-check", head=head[:12])
                 if not bisect_step(clone, host, st, args.tier):
                     if args.once:
                         print("twatch: up to date (%s), nothing to do" % head[:12],
                               flush=True)
+            if not did_work:
+                set_phase(clone, host, "idle", head=head[:12])
             errors = 0
         except (RuntimeError, subprocess.SubprocessError, OSError) as e:
             # transient git/network/infra failure must not kill the daemon;
@@ -614,6 +737,7 @@ def main():
             if STOP:
                 break
             time.sleep(1)
+    set_phase(clone, host, "stopped")
     print("twatch: bye", flush=True)
     return 0
 

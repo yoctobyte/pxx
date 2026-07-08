@@ -1,8 +1,9 @@
 # Track T — offloaded continuous testing (watcher + agentic test manager)
 
 Status: face 1 (watcher) landed 2026-07-07 (`feature-track-t-watcher`);
-face 2 (agent) is backlog `feature-track-t-agent`. Design discussion +
-decisions: user, 2026-07-07.
+face 2 (agent) live since 2026-07-07 (`feature-track-t-agent`, in working/).
+One-stop launcher `./trackt` + two-phase watcher + learned-metrics scheduler
++ web UI landed 2026-07-08. Design discussion + decisions: user, 2026-07-07/08.
 
 ## Why
 
@@ -20,18 +21,26 @@ regress any target. Track T makes testing a PERMANENT BACKGROUND PROCESS:
 
 | tool | job |
 |------|-----|
-| `tools/testmgr.py` | adaptive parallel test runner (tiers quick/limited/full, resource-aware scheduling, calibrated timeouts, process-group kill). The gate itself. |
-| `tools/twatch.py` | face 1: dumb, reliable watcher daemon. Fetch → debounce → run testmgr on new HEAD → publish sparse per-SHA reports. No AI. |
+| `./trackt` (`tools/trackt.py`) | **the one-stop launcher**: status, daemon start/stop/restart, live progress view, manual runs, box setup + git-access check, config, log tail, web UI. Thin frontend over the state files below. |
+| `tools/testmgr.py` | adaptive parallel test runner (tiers quick/native/limited/full). Learns per-job metrics on each box (`.testmgr/metrics.json`: duration/RSS/cores EWMA) and schedules by them: measured-mem packing, cores-sum cap, per-job hang timeouts (~10x expected), SLOW flags. Writes `.testmgr/live.json` progress each second (weighted % from expected durations). |
+| `tools/twatch.py` | face 1: dumb, reliable watcher daemon. Two-phase: fast verdict at `fast_tier` (default `native`) minutes after a push; full matrix backfills while idle and is aborted+discarded when a testable push arrives. Skips docs/tstate-only commits. Publishes tstate; heartbeats `.testmgr/watch.json`; optional deterministic stub tickets (`autoticket`). |
 | `tools/twatch-setup.sh` | box readiness check (+ `--fetch-corpus`). Prints what's missing with apt hints and the start command. |
-| `devdocs/progress/tstate/` | published state: `<host>.json` (rolling state), `reports/*.md` (only when something CHANGED or RED), `TSTATE.md` (index). |
+| `tools/twatch_web.py` | optional read-only Flask UI (spawned by `trackt`): live run, history from `tstate/runs-<host>.ndjson`, regression frequency, report browser. Loopback-only by default. |
+| `devdocs/progress/tstate/` | published state: `<host>.json` (rolling state), `runs-<host>.ndjson` (uncapped run archive), `reports/*.md` (only when something CHANGED or RED), `TSTATE.md` (index). |
 
-## Deploy a watcher box (one-liner)
+Config lives in `<clone>/twatch.conf` (JSON; `trackt config` edits it —
+tier/fast_tier/interval/debounce/no_bisect/autoticket/web/web_port;
+interval/autoticket/no_bisect apply to a running daemon, the rest on restart).
+
+## Deploy a watcher box
 
 ```sh
-git clone git@github.com:yoctobyte/pxx.git ~/trackt \
-  && ~/trackt/tools/twatch-setup.sh --fetch-corpus \
-  && nohup ~/trackt/tools/twatch.py --clone ~/trackt >> ~/trackt.log 2>&1 &
+git clone git@github.com:yoctobyte/pxx.git ~/trackt-watch \
+  && ~/trackt-watch/trackt setup --fetch-corpus \
+  && ~/trackt-watch/trackt start
 ```
+(`trackt setup` also verifies git fetch/push access. Equivalent low-level
+one-liner lives in the `twatch-setup.sh` header.)
 
 Notes:
 - The box needs an ssh key with **write** access (the watcher pushes tstate).
