@@ -991,6 +991,10 @@ test-core: $(COMPILER)
 	# operand (C99 6.5.7p3); a wide/unsigned count must not change the signedness.
 	./$(COMPILER) test/cshift_result_type_b198.c /tmp/cshift_result_type_b19826
 	/tmp/cshift_result_type_b19826; test "$$?" = "42"
+	# bug-c-sizeof-widening-cast-expr: sizeof of a general expr must use the
+	# operand's own type size (long->8, char->1), not a flat 4.
+	./$(COMPILER) test/csizeof_cast_expr_b199.c /tmp/csizeof_cast_expr_b19926
+	/tmp/csizeof_cast_expr_b19926; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

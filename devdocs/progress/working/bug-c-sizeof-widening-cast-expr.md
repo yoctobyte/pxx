@@ -34,3 +34,22 @@ using `sizeof((long)e)` / `sizeof((size_t)e)` for buffer math would under-size.
 ## Gate
 sizeof of a widening cast expression matches gcc for long/long long/unsigned
 long; c-conformance + corpus stay green; regression test.
+
+## RESOLVED 2026-07-08 (fable-abc, Track A/C) — general-expr sizeof hardcoded 4
+
+Root cause: ParseCSizeof's general-expression fallback (the path for operands the
+special cases don't consume, e.g. a cast `(long)1`) ended with `else sz := 4` —
+a flat 4 for EVERY non-record/pointer/float type. So `sizeof((long)1)` = 4 (not
+8), and short/char/long long expressions were all 4 too. C sizeof does not
+promote its operand; the size is the operand's own type.
+
+Fix (compiler/cparser.inc ParseCSizeof): after the float branch, size tyBoolean
+as 4 (C `!`/comparisons yield int) and every other ORDINAL via TypeSize(tk)
+(long->8, short->2, char->1); the flat-4 fallback stays only for genuinely
+unknown types.
+
+Gates (all green): sizeof of long/long long/unsigned long/char/short/int cast
+expressions matches gcc; comparison/`!` stay 4; regression
+test/csizeof_cast_expr_b199.c in test-core; c-conformance 205/0/15; sqlite suite
+byte-identical (sizeof drives corpus buffer math — no regression); make test;
+self-host byte-identical; test-lua green.

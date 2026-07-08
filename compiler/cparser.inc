@@ -1303,6 +1303,8 @@ begin
       if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
       else if tk = tyPointer then sz := TARGET_PTR_SIZE
       else if TypeIsFloat(tk) then sz := TypeSize(tk)
+      else if tk = tyBoolean then sz := 4   { C `!`/comparisons yield int }
+      else if TypeIsOrdinal(tk) then sz := TypeSize(tk)  { long->8, short->2, char->1; NOT a flat 4 }
       else sz := 4;
     end;
     { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
