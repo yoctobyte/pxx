@@ -21,3 +21,9 @@ by idle bisect; check tstate/TSTATE.md for the current range.
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved 2026-07-08 (cfront-agent) — gtk preproc timeout, fixed
+`test-core#603` is a gtk header unit that TIMEOUT'd on the C-preprocessor O(n²)
+(same family as #599/#601/#602). Passes at HEAD (0.5s after the amortized-CPrepOut
+fix `d531804e`). Verified `testmgr --tier full --job test-core#603 --serial`.
+- 2026-07-08 — resolved, commit d531804e.
