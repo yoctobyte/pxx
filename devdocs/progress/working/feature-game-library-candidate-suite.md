@@ -5,9 +5,9 @@ prio: 60  # auto
 # Game and engine library candidate suite
 
 - **Type:** feature / investigation (library-suite discovery + compiler test workloads)
-- **Status:** backlog
+- **Status:** working
 - **Track:** B+C
-- **Owner:** — (Track B drives Pascal/library discovery; Track C owns C-source frontend gaps; Track A bugs get split out when surfaced)
+- **Owner:** fable-c
 - **Opened:** 2026-06-28
 - **Relation:** expands [[feature-c-source-frontend]], [[feature-c-regex-library-devtest]], [[feature-synapse-compile-check]], and [[feature-embed-pascal-script]] with game/engine-shaped workloads. Candidate catalog: [[game-library-candidates]].
 
