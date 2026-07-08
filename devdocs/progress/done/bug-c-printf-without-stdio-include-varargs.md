@@ -5,7 +5,7 @@ prio: 70  # auto
 # C: printf without #include <stdio.h> silently drops output / formatting
 
 - **Type:** bug (C frontend / crtl binding) — Track C
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-02, found during bug-max-proc-params-32-selfmiscompile
   (verified identical on pinned v152 — pre-existing).
 
@@ -94,3 +94,6 @@ literally (`x=%d`): an implicit C89 declaration gives printf a non-variadic
 int() signature, so the varargs are dropped at the call site. Remaining work =
 when an undeclared call names a known crtl function, bind the correct (variadic)
 crtl prototype at the call site, not an implicit int(). Separate fix.
+
+## Log
+- 2026-07-08 — resolved, commit 0bc25817.
