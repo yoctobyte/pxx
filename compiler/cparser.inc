@@ -2451,30 +2451,6 @@ begin
   end;
 end;
 
-function ParseCPrintfAST: Integer;
-var node, argNode, strNode: Integer;
-begin
-  Next; { skip 'printf' }
-  Expect(tkLParen, '(');
-  node := AllocNode(AN_WRITE);
-  if CurTok.Kind = tkString then
-  begin
-    strNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[strNode] := Tokens[TokPos - 1].SOffset;
-    ASTSLen[strNode] := Tokens[TokPos - 1].SLen;
-    ASTTk[strNode] := Ord(tyString);
-    Next;
-    argNode := AllocNode(AN_ARG);
-    ASTLeft[argNode] := strNode;
-    ASTLeft[node] := argNode;
-  end;
-  { skip any remaining args }
-  while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
-  Expect(tkRParen, ')');
-  Eat(tkSemicolon);
-  Result := node;
-end;
-
 function CAllocDeclVar(const name: AnsiString; tk: TTypeKind): Integer;
 var savedCurProc: Integer;
 begin
@@ -3495,18 +3471,6 @@ begin
   begin
     Next; Eat(tkSemicolon);
     Result := AllocNode(AN_CONTINUE);
-    Exit;
-  end;
-
-  { printf(...) as a statement. Prefer a REAL printf if one is linked (the crtl
-    stdio veneer over the PAL byte sink — full format engine); only when no
-    printf proc is defined does the literal-only AN_WRITE stub apply (a bare C
-    program with no crtl: at least the format string still prints). Letting it
-    fall through to the expression path makes `name(args)` resolve via FindProc
-    to the veneer. }
-  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') and (FindProc('printf') < 0) then
-  begin
-    Result := ParseCPrintfAST;
     Exit;
   end;
 
@@ -5197,7 +5161,7 @@ end;
 function CPullCrtlForPrototypes: Integer;
 var
   i: Integer;
-  hdr, synth: AnsiString;
+  hdr, nm, synth: AnsiString;
   wantStdio, wantStdlib, wantString, wantCtype, wantMath: Boolean;
 begin
   Result := -1;
@@ -5214,6 +5178,33 @@ begin
       else if hdr = 'ctype.h' then wantCtype := True
       else if hdr = 'math.h' then wantMath := True;
     end;
+  { IMPLICIT (undeclared) calls — C89 style with neither an include nor a hand
+    prototype: `printf("x=%d\n", x)` with no declaration at all. Pass 1 never
+    sees a prototype (bodies are skipped), so the ProcExternal sweep above
+    misses these; the call then bound an implicit non-variadic int() and
+    dropped the varargs (printed the format string literally). Scan the token
+    stream for `name(` where name is a known crtl function with no registered
+    proc, and pull its header like a hand prototype would — the pass-1 rerun
+    over the pulled region registers the real variadic signature before any
+    body compiles. A user DEFINITION of the same name anywhere in the TU was
+    registered by pass 1, so FindProc filters it out here. }
+  for i := 0 to TokCount - 2 do
+  begin
+    if wantStdio and wantStdlib and wantString and wantCtype and wantMath then Break;
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLParen) then
+    begin
+      nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      hdr := CCrtlHeaderForName(nm);          { cheap reject before FindProc }
+      if (hdr <> '') and (FindProc(nm) < 0) then
+      begin
+        if hdr = 'stdio.h' then wantStdio := True
+        else if hdr = 'stdlib.h' then wantStdlib := True
+        else if hdr = 'string.h' then wantString := True
+        else if hdr = 'ctype.h' then wantCtype := True
+        else if hdr = 'math.h' then wantMath := True;
+      end;
+    end;
+  end;
   synth := '';
   if wantStdio then AppendString(synth, '#include <stdio.h>'#10);
   if wantStdlib then AppendString(synth, '#include <stdlib.h>'#10);
