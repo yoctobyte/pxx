@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-sqlite-suite-runtime-segfault | A | 60 | bug | C sqlite feature suite (test/csqlite_suite.c) SIGSEGVs at runtime on master HEAD | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -32,12 +31,13 @@ _none_
 
 _none_
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | A | 50 | bug |  | — |
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
+| bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
@@ -176,7 +176,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (518)
+## done (519)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -268,6 +268,7 @@ _none_
 | bug-c-sqlite-offsetof-style-field-address-array-bound | C | 50 | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-c-sqlite-sql-exec-schema-argv-pointer | C | 50 | bug | C: sqlite SQL exec crashes in schema callback argv string path | — |
 | bug-c-sqlite-sql-exec-schema-parse-corrupt | C | 50 | bug | C: sqlite SQL exec reports corrupt sqlite_master during schema parse | — |
+| bug-c-sqlite-suite-runtime-segfault | A | 60 | bug | C sqlite feature suite (test/csqlite_suite.c) SIGSEGVs at runtime on master HEAD | — |
 | bug-c-sqlite-undefined-symbol-memsetdefault | C | 50 | bug | C: sqlite runtime undefined symbol `sqlite3MemSetDefault` | — |
 | bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
@@ -755,6 +756,7 @@ _none_
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
 - [p 50] [A] bug-c-typedef-array-element-init
 - [p 50] [B] feature-game-library-candidate-suite
+- [p 45] [A] bug-c-double-ptr-deref-narrow-to-single
 - [p 45] [A] bug-c-i386-enum-const-return-00120
 - [p 45] [A] bug-c-i386-indirect-variadic-fnptr-00189
 - [p 45] [A] bug-c-shift-result-type-battery-00200

@@ -69,3 +69,6 @@ byte-identical; test-lua green.
 Filed separately (independent pre-existing bug found while writing the
 regression test): [[bug-c-double-ptr-deref-narrow-to-single]] —
 `(float)*doubleptr` narrows to 0 when a single is live.
+
+## Log
+- 2026-07-08 — resolved, commit a3769a5f.
