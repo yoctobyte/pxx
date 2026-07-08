@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -20,10 +19,11 @@ _none_
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (2)
+## unfinished (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-abi-battery-00204 | C | 55→50 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 
@@ -31,10 +31,11 @@ _none_
 
 _none_
 
-## backlog (107)
+## backlog (108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-abi-battery-00204 | A | 50 | bug |  | — |
 | bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
 | bug-c-crtl-missing-net-headers-enet | C | 45 | bug | crtl: missing <netinet/tcp.h>, <netdb.h>, <poll.h> — ENet falls back to host headers | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
@@ -749,6 +750,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] bug-c-abi-battery-00204
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 45] [C] bug-c-crtl-missing-net-headers-enet
