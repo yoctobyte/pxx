@@ -10,6 +10,9 @@ function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
 procedure CSkipCInitElement; forward;
+function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
+                             nDims, dim0, elemsBelow: Integer;
+                             isArr: Boolean): Integer; forward;
 procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
 procedure ParseCStructDecl; forward;
@@ -2835,76 +2838,22 @@ begin
       if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (scalarRec >= REC_UCLASS_BASE) then
       begin
-        Next; Next;   { consume the assign then the outer opening brace }
-        recBase := UClsFBase[scalarRec - REC_UCLASS_BASE];
-        ei := 0;
-        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        { Local array-of-record initializer — recursive brace-elision walker
+          (chain mode): each element's fields (incl. nested subarrays / structs,
+          00091-style) materialise, not just the one-level flat scalars. Zero
+          the whole array first (C99 6.7.8p21), then splice the walker's stores. }
+        Next;   { consume the assign; CurTok = the outer opening brace }
+        seq := CMakeZeroLocal(idx, declTk);
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+        seq := CInitLocalAggregate(idx, Ord(tyRecord), scalarRec, arrLen, 1, arrLen, 1, True);
+        if seq <> -1 then
         begin
-          if CurTok.Kind = tkBegin then
-          begin
-            Next;   { consume element opening brace }
-            fldI := 0;
-            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-            begin
-              if (ei < arrLen) and (fldI < UClsFCount[scalarRec - REC_UCLASS_BASE]) then
-              begin
-                if CurTok.Kind = tkBegin then
-                  CSkipCInitElement
-                else
-                begin
-                  fTk := UFldTk[recBase + fldI];
-                  initExpr := ParseCExpr;
-                  if fTk = tyRecord then
-                    { record-typed field: a flat scalar initializer here is
-                      brace-elision territory (p90 ticket); dropping the store
-                      is safe for the zero case since the whole aggregate was
-                      just zero-filled, while storing a scalar into a record
-                      slot miscompiled (stack stomp). }
-                  else if CurTok.Kind in [tkComma, tkEnd] then
-                  begin
-                    idn := AllocNode(AN_IDENT);
-                    ASTIVal[idn] := idx;
-                    ASTTk[idn] := Ord(declTk);
-                    idxLit := AllocNode(AN_INT_LIT);
-                    ASTIVal[idxLit] := ei;
-                    ASTTk[idxLit] := Ord(tyInteger);
-                    inode := AllocNode(AN_INDEX);
-                    ASTLeft[inode] := idn;
-                    ASTRight[inode] := idxLit;
-                    ASTTk[inode] := Ord(declTk);
-                    fieldNode := AllocNode(AN_FIELD);
-                    ASTLeft[fieldNode] := inode;
-                    ASTSOffset[fieldNode] := UFldNOff[recBase + fldI];
-                    ASTSLen[fieldNode] := UFldNLen[recBase + fldI];
-                    ASTTk[fieldNode] := fTk;
-                    asn := AllocNode(AN_ASSIGN);
-                    ASTLeft[asn] := fieldNode;
-                    ASTRight[asn] := initExpr;
-                    ASTTk[asn] := fTk;
-                    seq := AllocNode(AN_SEQ);
-                    ASTLeft[seq] := asn;
-                    ASTRight[seq] := -1;
-                    if head = -1 then head := seq else ASTRight[tail] := seq;
-                    tail := seq;
-                  end
-                  else
-                    CSkipCInitElement;
-                end;
-              end
-              else
-                CSkipCInitElement;
-              Inc(fldI);
-              Eat(tkComma);
-            end;
-            Eat(tkEnd);
-          end
-          else
-            CSkipCInitElement;
-          Inc(ei);
-          Eat(tkComma);
+          if head = -1 then head := seq else ASTRight[tail] := seq;
+          while ASTRight[seq] <> -1 do seq := ASTRight[seq];
+          tail := seq;
         end;
-        Eat(tkEnd);
-      end;
+      end
       { Unconsumed initializer (record-element array, or non-brace): balanced skip. }
       if CurTok.Kind = tkAssign then
       begin
@@ -2946,76 +2895,20 @@ begin
         begin
           if (declTk = tyRecord) and (scalarRec >= REC_UCLASS_BASE) then
           begin
-            { Non-array local record initializer. SQLite's
-              `static const sqlite3_mem_methods defaultMethods = { fn, ... }`
-              needs these fields materialised before the record is copied into
-              sqlite3GlobalConfig; skipping the aggregate left function-pointer
-              fields as stack garbage. Nested aggregate fields are still skipped
-              conservatively. }
-            Next;   { consume the opening brace }
-            { C99 6.7.8p21: zero the whole record first; the listed field
-              stores then overwrite their slots. `= { 0 }` and partial lists
-              leave no stack garbage in the tail (tcc b189). }
+            { Non-array local record initializer — the recursive brace-elision
+              walker (chain mode) handles nested/anonymous aggregates, elided
+              flat lists, and `.field` designators. C99 6.7.8p21: zero the whole
+              record first, then the walker's stores overwrite their slots. }
             seq := CMakeZeroLocal(idx, declTk);
             if head = -1 then head := seq else ASTRight[tail] := seq;
             tail := seq;
-            recBase := UClsFBase[scalarRec - REC_UCLASS_BASE];
-            fldI := 0;
-            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+            seq := CInitLocalAggregate(idx, Ord(declTk), scalarRec, 1, 1, 1, 1, False);
+            if seq <> -1 then
             begin
-              { struct field designator `.name =` repositions the cursor (C 6.7.8). }
-              if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
-              begin
-                Next;                                    { '.' }
-                di := FindUField(scalarRec - REC_UCLASS_BASE, CurTok.SVal);
-                if di >= 0 then fldI := di - recBase;
-                Next;                                    { field name }
-                if CurTok.Kind = tkAssign then Next;     { '=' }
-              end;
-              if fldI < UClsFCount[scalarRec - REC_UCLASS_BASE] then
-              begin
-                if CurTok.Kind = tkBegin then
-                  CSkipCInitElement
-                else
-                begin
-                  fTk := UFldTk[recBase + fldI];
-                  initExpr := ParseCExpr;
-                  if fTk = tyRecord then
-                    { record-typed field: a flat scalar initializer here is
-                      brace-elision territory (p90 ticket); dropping the store
-                      is safe for the zero case since the whole aggregate was
-                      just zero-filled, while storing a scalar into a record
-                      slot miscompiled (stack stomp). }
-                  else if CurTok.Kind in [tkComma, tkEnd] then
-                  begin
-                    idn := AllocNode(AN_IDENT);
-                    ASTIVal[idn] := idx;
-                    ASTTk[idn] := Ord(declTk);
-                    fieldNode := AllocNode(AN_FIELD);
-                    ASTLeft[fieldNode] := idn;
-                    ASTSOffset[fieldNode] := UFldNOff[recBase + fldI];
-                    ASTSLen[fieldNode] := UFldNLen[recBase + fldI];
-                    ASTTk[fieldNode] := fTk;
-                    asn := AllocNode(AN_ASSIGN);
-                    ASTLeft[asn] := fieldNode;
-                    ASTRight[asn] := initExpr;
-                    ASTTk[asn] := fTk;
-                    seq := AllocNode(AN_SEQ);
-                    ASTLeft[seq] := asn;
-                    ASTRight[seq] := -1;
-                    if head = -1 then head := seq else ASTRight[tail] := seq;
-                    tail := seq;
-                  end
-                  else
-                    CSkipCInitElement;
-                end;
-              end
-              else
-                CSkipCInitElement;
-              Inc(fldI);
-              Eat(tkComma);
+              if head = -1 then head := seq else ASTRight[tail] := seq;
+              while ASTRight[seq] <> -1 do seq := ASTRight[seq];   { advance to chain tail }
+              tail := seq;
             end;
-            Eat(tkEnd);
             initExpr := -1;
           end
           else
@@ -3796,6 +3689,12 @@ var
   CInitPathTk:   array[0..MAX_CINIT_PATH-1] of Integer;  { ASTTk for the frame's node }
   CInitPathDepth: Integer;
   CAggCurSym: Integer;                                   { target symbol in EMIT mode }
+  { LOCAL emit-to-chain mode: instead of CompileAST-ing each leaf immediately
+    (global path, run at main), append AN_SEQ(assign) nodes onto a chain the
+    local declaration returns as part of its block AST — so a local aggregate
+    initializer compiles in declaration order with the rest of the body. }
+  CInitChainMode: Boolean;
+  CInitChainHead, CInitChainTail: Integer;
   CAggInitCount: Integer;
   CAggInitSym: array[0..MAX_C_AGG_INITS-1] of Integer;
   CAggInitTok: array[0..MAX_C_AGG_INITS-1] of Integer;   { token index of the opening brace }
@@ -3888,6 +3787,27 @@ begin
   end;
 end;
 
+{ Emit a completed leaf assignment: either compile it now (global path, at
+  main) or append it to the local declaration's AST chain. In chain mode the
+  AST nodes must persist, so ASTNodeCount is NOT reset. }
+procedure CInitEmitAssign(asn: Integer);
+var seq: Integer;
+begin
+  if CInitChainMode then
+  begin
+    seq := AllocNode(AN_SEQ);
+    ASTLeft[seq] := asn; ASTRight[seq] := -1;
+    if CInitChainHead = -1 then CInitChainHead := seq
+    else ASTRight[CInitChainTail] := seq;
+    CInitChainTail := seq;
+  end
+  else
+  begin
+    CompileAST(asn);
+    ASTNodeCount := 0;
+  end;
+end;
+
 { One scalar leaf. The path already addresses it. }
 procedure CInitLeaf(tkOrd: Integer; emit: Boolean);
 var target, e, asn: Integer;
@@ -3912,8 +3832,7 @@ begin
     asn := AllocNode(AN_ASSIGN);
     ASTLeft[asn] := target; ASTRight[asn] := e;
     ASTTk[asn] := tkOrd;
-    CompileAST(asn);
-    ASTNodeCount := 0;
+    CInitEmitAssign(asn);
   end
   else
     CInitSkipScalar;
@@ -3943,8 +3862,7 @@ begin
         asn := AllocNode(AN_ASSIGN);
         ASTLeft[asn] := target; ASTRight[asn] := lit;
         ASTTk[asn] := elemTkOrd;
-        CompileAST(asn);
-        ASTNodeCount := 0;
+        CInitEmitAssign(asn);
       end;
       Inc(ei);
     end;
@@ -4195,6 +4113,39 @@ begin
       CInitWalkRecord(CAggInitRec[i] - REC_UCLASS_BASE, True, True);
   end;
   TokPos := savedIdx; Next;
+end;
+
+{ LOCAL aggregate initializer via the recursive brace-elision walker, built
+  into an AST chain the caller splices into the declaration's block (so it
+  runs in declaration order). CurTok must be at the opening brace; on return
+  it is just past the matching close. Returns the head AN_SEQ (or -1). isArr =
+  the local is an array (walk elements); else walk record fields. elemRecId /
+  elemTkOrd describe the array element (or the record id when not isArr).
+  nDims/dim0/elemsBelow give the array's shape (1 dim => dim0 = length). }
+function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
+                             nDims, dim0, elemsBelow: Integer;
+                             isArr: Boolean): Integer;
+var savedMode, savedHead, savedTail, savedDepth, cons: Integer;
+begin
+  savedMode := Ord(CInitChainMode);
+  savedHead := CInitChainHead; savedTail := CInitChainTail;
+  savedDepth := CInitPathDepth;
+  CInitChainMode := True;
+  CInitChainHead := -1; CInitChainTail := -1;
+  CAggCurSym := symIdx;
+  CInitPathDepth := 0;
+  cons := 0;
+  Next;   { consume the opening brace; CurTok = first token inside }
+  if isArr then
+    CInitWalkArray(elemTkOrd, elemRecId, symIdx, -1, 0, nDims, dim0, 0,
+                   elemsBelow, True, True, cons)
+  else
+    CInitWalkRecord(elemRecId - REC_UCLASS_BASE, True, True);
+  Eat(tkEnd);
+  Result := CInitChainHead;
+  CInitChainMode := savedMode <> 0;
+  CInitChainHead := savedHead; CInitChainTail := savedTail;
+  CInitPathDepth := savedDepth;
 end;
 
 { A top-level global variable definition: <type> name (, name)* ;

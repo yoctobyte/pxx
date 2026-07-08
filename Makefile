@@ -868,6 +868,9 @@ test-core: $(COMPILER)
 	# b198 (bug-c-inline-fnptr-param-call): function-TYPE typedef call idiom
 	./$(COMPILER) test/cfntype_typedef_call_b198.c /tmp/cfntype_typedef_call_b19826
 	/tmp/cfntype_typedef_call_b19826; test "$$?" = "42"
+	# b199 (bug-c-local-nested-aggregate-init): local recursive brace-elision walker
+	./$(COMPILER) test/clocal_nested_aggregate_init_b199.c /tmp/clocal_nested_aggregate_init_b19926
+	/tmp/clocal_nested_aggregate_init_b19926; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
