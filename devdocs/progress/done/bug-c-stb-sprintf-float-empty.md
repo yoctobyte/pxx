@@ -50,3 +50,6 @@ gcc; stb_sprintf_probe extended with the float subset (still exit 42);
 regression test/cfloat_global_array_init_b197.c in test-core; c-conformance
 204/0/16; sqlite suite byte-identical; make test; self-host byte-identical;
 test-lua green.
+
+## Log
+- 2026-07-08 — resolved, commit d33dfe11.

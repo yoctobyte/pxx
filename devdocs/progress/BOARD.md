@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (104)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +44,6 @@ _none_
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
-| bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-typedef-array-element-init | A | 50 | bug |  | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
@@ -175,7 +174,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (520)
+## done (521)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -273,6 +272,7 @@ _none_
 | bug-c-sqlite-unsupported-ternary-ir | C | 50 | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-static-init-cast-and-int-to-double | C | 90 | bug | C static initializers: cast-expression and int→double conversion silently produce 0 | — |
 | bug-c-static-local-initializer-reruns-every-call | A+C | 50 | bug | C `static` local with an initializer re-runs the initializer every call | — |
+| bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
@@ -810,7 +810,6 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
-- [p 40] [C] bug-c-stb-sprintf-float-empty
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-c-crtl-pulled-fn-inline-signed-compare
