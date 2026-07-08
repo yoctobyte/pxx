@@ -1300,12 +1300,17 @@ begin
   end;
 end;
 
-function RecordHasManagedFields(recId: Integer): Boolean;
+function RecordHasManagedFieldsDepth(recId, depth: Integer): Boolean;
 { Class/object references are deliberately unmanaged. Only recurse through
-  fixed-size user records and compiler-managed value fields. }
+  fixed-size user records and compiler-managed value fields. The depth cap is a
+  robustness backstop: a malformed record that (transitively) contains ITSELF
+  by value — which a valid C program can't produce, but a struct-tag
+  redefinition bug once did — would otherwise recurse without bound and crash
+  the compiler. Past the cap, treat as unmanaged rather than fault. }
 var ci, base, cnt, i: Integer;
 begin
   Result := False;
+  if depth > 64 then Exit;
   if recId < REC_UCLASS_BASE then Exit;
   ci := recId - REC_UCLASS_BASE;
   if not UClsIsRecord[ci] then Exit;
@@ -1319,10 +1324,15 @@ begin
       retained on record copy, and released on finalization. }
     if UFldIsArray[base + i] and (UFldArrLen[base + i] = -1) then
       begin Result := True; Exit; end;
-    if (UFldTk[base + i] = Ord(tyRecord)) and
-       RecordHasManagedFields(UFldRec_[base + i]) then
+    if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
+       RecordHasManagedFieldsDepth(UFldRec_[base + i], depth + 1) then
       begin Result := True; Exit; end;
   end;
+end;
+
+function RecordHasManagedFields(recId: Integer): Boolean;
+begin
+  Result := RecordHasManagedFieldsDepth(recId, 0);
 end;
 
 { ===== Central type-query helpers ===== }

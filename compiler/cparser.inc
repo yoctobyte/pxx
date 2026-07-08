@@ -7705,7 +7705,16 @@ begin
       begin
         UClsNOff[ci] := tagOff; UClsNLen[ci] := tagLen;  { name the record by its tag }
       end;
-      if (UFldCount < MAX_UFIELD - 128) and CStructBodyIsSimple(TokPos - 1) then
+      if hasTag and UClsIsRecord[ci] and (UClsFCount[ci] > 0) then
+        { REDEFINITION of an already-laid-out tag (C forbids it in one scope; it
+          arises when a host header leaks in and redefines a crtl-defined struct
+          — e.g. `struct in_addr` from both crtl and a host netinet include).
+          Re-running ParseCStructInto on the populated record re-lays its field
+          base and misfiles a following struct's member into the old range,
+          producing a self-referential record that hangs RecordHasManagedFields
+          (SIGSEGV). Keep the first definition; skip the duplicate body. }
+        SkipBraceBlock
+      else if (UFldCount < MAX_UFIELD - 128) and CStructBodyIsSimple(TokPos - 1) then
         ParseCStructInto(ci, isUnion)
       else
         SkipBraceBlock;   { opaque: keep the tag, drop the layout }
