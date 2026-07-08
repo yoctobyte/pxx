@@ -43,3 +43,6 @@ designators reset), brace-elision descent, size inference = max index + 1.
 
 ## Gate
 Remove the 9 lines from test/c-conformance/pxx.skip; tools/run_c_conformance.sh green.
+
+## Log
+- 2026-07-08 — resolved, commit e0f9f5e4.
