@@ -3497,6 +3497,18 @@ begin
               if Procs[procIdx].RetType = tySingle then
                 begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end; { cvtss2sd xmm0, xmm0 }
               EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+            end
+            else if ProcExternal[procIdx] and TypeSigned(Procs[procIdx].RetType) and
+                    (TypeSize(Procs[procIdx].RetType) = 4) then
+            begin
+              { SysV: a 32-bit `int` return only defines EAX; the upper 32 bits of
+                RAX are undefined. The value model treats results as full 64-bit,
+                so a negative int (e.g. getaddrinfo's -2) used directly in a signed
+                64-bit compare read as a large positive without this sign-extend.
+                Stored-to-int first, the tyInt32 load already sign-extends — this
+                fixes the INLINE case (bug-c-crtl-pulled-fn-inline-signed-compare).
+                Only external calls need it: an internal pxx body leaves full RAX. }
+              EmitB($48); EmitB($98);                    { cdqe: sign-extend eax -> rax }
             end;
           end
           else

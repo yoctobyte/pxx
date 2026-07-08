@@ -883,6 +883,10 @@ test-core: $(COMPILER)
 	# crtl networking header surface (bug-c-crtl-missing-net-headers-enet / ENet)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_net_headers_smoke.c /tmp/crtl_net_headers_smoke26
 	/tmp/crtl_net_headers_smoke26; test "$$?" = "42"
+	# external crtl int returned negative, used inline in a signed compare
+	# (bug-c-crtl-pulled-fn-inline-signed-compare): sign-extend the 32-bit result
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_external_int_signed_compare.c /tmp/ccrtl_external_int_signed_compare26
+	/tmp/ccrtl_external_int_signed_compare26; test "$$?" = "42"
 	# b203 (bug-c-multidim-ordinal-global-init): multidim ordinal global array init
 	./$(COMPILER) test/cmultidim_ordinal_global_b203.c /tmp/cmultidim_ordinal_global_b20326
 	/tmp/cmultidim_ordinal_global_b20326; test "$$?" = "42"
