@@ -871,6 +871,9 @@ test-core: $(COMPILER)
 	# b199 (bug-c-local-nested-aggregate-init): local recursive brace-elision walker
 	./$(COMPILER) test/clocal_nested_aggregate_init_b199.c /tmp/clocal_nested_aggregate_init_b19926
 	/tmp/clocal_nested_aggregate_init_b19926; test "$$?" = "42"
+	# b200 (bug-c-expr-result-type-model / 00104): hex/octal constant unsigned type ladder
+	./$(COMPILER) test/chex_constant_unsigned_type_b200.c /tmp/chex_constant_unsigned_type_b20026
+	/tmp/chex_constant_unsigned_type_b20026; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi

@@ -386,6 +386,20 @@ begin
           ASTTk[node] := Ord(tyUInt32)
         else
           ASTTk[node] := Ord(tyUInt64)
+      else if (CAttrFlags[TokPos - 1] and 8) <> 0 then
+        { HEX / OCTAL unsuffixed constant (C99 6.4.4.1): the type ladder runs
+          int -> unsigned int -> long -> unsigned long, so a value that overflows
+          int but fits unsigned int is UNSIGNED int (not long). `0xffffffff`
+          is unsigned int (4294967295), and `int -1 != 0xffffffff` is FALSE after
+          usual arithmetic conversions. Decimals below skip the unsigned rungs. }
+        if (CurTok.IVal >= 0) and (CurTok.IVal <= 2147483647) then
+          ASTTk[node] := Ord(tyInteger)
+        else if (CurTok.IVal >= 0) and (CurTok.IVal <= $FFFFFFFF) then
+          ASTTk[node] := Ord(tyUInt32)
+        else if (CurTok.IVal >= 0) then
+          ASTTk[node] := Ord(tyInt64)      { fits signed 64 (IVal is Int64) -> long }
+        else
+          ASTTk[node] := Ord(tyUInt64)     { negative-as-Int64 = overflowed to the top rung }
       else if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
         ASTTk[node] := Ord(tyInt64)
       else

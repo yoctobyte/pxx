@@ -1503,6 +1503,7 @@ var
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
+  CLexHexOctal : Boolean; { last C integer literal was hex or octal (radix<>10) — C types these through the unsigned rungs of the constant ladder, decimals do not }
   { Declaration-order gating for program/unit GLOBAL VARIABLES (declare-before-use,
     FPC-parity). The whole-program pre-scan registers every global before any body
     compiles, which otherwise lets a routine bind a global declared textually below

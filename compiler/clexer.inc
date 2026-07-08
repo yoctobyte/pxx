@@ -268,6 +268,7 @@ begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
   CLexUnsignedSuffix := False;
+  CLexHexOctal := False;
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
 
@@ -330,6 +331,7 @@ begin
        ((Source[SrcPos] = 'x') or (Source[SrcPos] = 'X')) then
     begin
       Inc(SrcPos); n := 0; done := False;
+      CLexHexOctal := True;
       while (SrcPos <= Length(Source)) and not done do
       begin
         c := Source[SrcPos];
@@ -342,6 +344,7 @@ begin
       { C octal: a leading 0 followed by digits is base 8 (e.g. 0100 = 64, as in
         the O_* fcntl flags). The leading 0 was already consumed above. }
       n := 0;
+      if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7']) then CLexHexOctal := True;
       while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7']) do
         begin n := n * 8 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end;
@@ -582,6 +585,7 @@ begin
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
     if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
+    if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;
@@ -644,6 +648,7 @@ begin
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
     if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
+    if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
     CAttrAligned := False;

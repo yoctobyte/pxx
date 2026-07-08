@@ -7,14 +7,13 @@
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device
 00089.c	function returning typedef fnptr type — bug-c-function-returning-fnptr-declarator
-00104.c	~int vs 0xffffffff hex-const typing — bug-c-expr-result-type-model
 00124.c	fn returning fnptr full declarator miscompiles — bug-c-function-returning-fnptr-declarator
 00129.c	goto over decls + #define s s shadowing — bug-c-goto-shadowing-00129
 00130.c	pointer-to-array declarator char (*p)[4] — bug-c-pointer-to-array-declarator
 00143.c	Duff's device (case in nested do-while) — bug-c-switch-nonblock-and-duffs-device
 00149.c	file-scope compound literal SIGSEGV — feature-c-compound-literals
 00150.c	file-scope compound literal nested SIGSEGV — feature-c-compound-literals
-00200.c	left-shift result type = promoted left operand — bug-c-expr-result-type-model
+00200.c	shift result type = promoted left operand (battery) — bug-c-shift-result-type-battery-00200
 00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
 00207.c	VLA char test[argc] + label in if body — feature-c-vla-and-label-in-if
 00213.c	statement expressions ({...}) with labels — feature-c-statement-expressions
