@@ -38,3 +38,6 @@ register, or the narrowing convert is dropped.
 float-math variants (fabsf/sqrtf/sinf/cosf/floorf/ceilf/fminf/fmaxf/fmin/fmax/
 modff — staged this session, reverted) with a smoke; c-conformance 00174/00175
 family re-checked; self-host byte-identical.
+
+## Log
+- 2026-07-08 — resolved, commit e601151e.
