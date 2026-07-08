@@ -20,5 +20,9 @@ int main(void) {
        STBSP_SPRINTFCB callback (the fn-type-typedef mechanism under test). */
     stbsp_sprintf(buf, "%d.%d.%d.%d", 192, 168, 1, 42);
     if (strcmp(buf, "192.168.1.42")) { printf("GOT [%s]\n", buf); return 2; }
+    /* float subset (bug-c-stb-sprintf-float-empty): stb's powten double tables
+       are file-scope double arrays; the %f/%g engine needs them initialized. */
+    stbsp_sprintf(buf, "%f|%.2f|%g|%e", 3.5, 42.25, 0.001, 12345.678);
+    if (strcmp(buf, "3.500000|42.25|0.001|1.234568e+04")) { printf("GOT [%s]\n", buf); return 3; }
     return 42;
 }

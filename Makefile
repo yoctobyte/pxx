@@ -983,6 +983,10 @@ test-core: $(COMPILER)
 	# must convert, not reinterpret the load width.
 	./$(COMPILER) test/cfloat_cast_deref_b196.c /tmp/cfloat_cast_deref_b19626
 	/tmp/cfloat_cast_deref_b19626; test "$$?" = "42"
+	# bug-c-stb-sprintf-float-empty: file-scope float/double array initializers
+	# must emit their element values (were skipped -> read as zero).
+	./$(COMPILER) test/cfloat_global_array_init_b197.c /tmp/cfloat_global_array_init_b19726
+	/tmp/cfloat_global_array_init_b19726; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

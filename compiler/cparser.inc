@@ -3544,7 +3544,7 @@ end;
   pre-main crash). So only a flat all-integer struct is materialised; anything
   richer zero-inits + balanced skips. Non-consuming (scans Tokens from the inner
   token). }
-function CBraceFlatIntInitCountAt(openIdx: Integer): Integer;
+function CBraceFlatIntInitCountAt(openIdx: Integer; allowFloat: Boolean): Integer;
 var j, depth, ei, maxSeen: Integer; sawValue: Boolean;
 begin
   { Returns the element COUNT of a flat integer brace init = max index + 1,
@@ -3600,6 +3600,11 @@ begin
           CEvalConstExpr, so anything it can fold is fine here; tkBegin (nested
           aggregate) and tkString (pointer-array) still bail to their own paths. }
         if depth = 1 then sawValue := True;
+      tkFloat:
+        { A float literal element — only for a FLOAT array init (allowFloat);
+          for an integer array it bails to the skip path (invalid C anyway). }
+        if allowFloat then begin if depth = 1 then sawValue := True; end
+        else begin Result := -1; Exit; end;
       tkString: begin Result := -1; Exit; end;     { string init -> pointer path }
     else
       begin Result := -1; Exit; end;
@@ -3612,7 +3617,12 @@ end;
 
 function CBraceIsFlatIntInit: Boolean;
 begin
-  Result := CBraceFlatIntInitCountAt(TokPos - 1) >= 0;
+  Result := CBraceFlatIntInitCountAt(TokPos - 1, False) >= 0;
+end;
+
+function CBraceIsFlatFloatInit: Boolean;
+begin
+  Result := CBraceFlatIntInitCountAt(TokPos - 1, True) >= 0;
 end;
 
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer;
@@ -4536,7 +4546,7 @@ begin
                 (baseTk <> tyRecord) and (baseTk <> tyPointer) and
                 TypeIsOrdinal(baseTk) then
         begin
-          flatInitCount := CBraceFlatIntInitCountAt(TokPos);
+          flatInitCount := CBraceFlatIntInitCountAt(TokPos, False);
           if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
         end
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
@@ -4694,6 +4704,65 @@ begin
             PendingInitFLen[PendingInitCount] := 0;
             PendingInitVal[PendingInitCount]  := initV;
             PendingInitTk[PendingInitCount]   := Ord(baseTk);
+            Inc(PendingInitCount);
+          end;
+          Inc(ei);
+          Eat(tkComma);
+        end;
+        Eat(tkEnd);
+      end
+      else if (CurTok.Kind = tkBegin) and wasArr and TypeIsFloat(baseTk) and
+         (idx >= 0) and CBraceIsFlatFloatInit then
+      begin
+        { Flat FLOAT array global `double t[3] = {1.5, 2.5, 3.5}` (also `float`,
+          `[k]=` designators, and integer elements like `{0, 1}` into a double
+          array). The ordinal flat path above rejects tyDouble/tySingle, so
+          without this the whole initializer was skipped and the array read as
+          zero (bug-c-stb-sprintf-float-empty: stb's powten double tables). Emit
+          one float PendingInit (Kind=3, IEEE-754 double bits) per element,
+          mirroring the scalar-float-global path; the assign lowering narrows a
+          tySingle slot. }
+        Next;   { consume the opening brace }
+        ei := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkLBrack then
+          begin
+            Next;                                     { '[' }
+            ei := CEvalConstExpr;
+            Expect(tkRBrack, ']');
+            if CurTok.Kind = tkAssign then Next;      { '=' }
+          end;
+          negFloat := False;
+          if CurTok.Kind = tkMinus then begin negFloat := True; Next; end
+          else if CurTok.Kind = tkPlus then Next;
+          if CurTok.Kind = tkFloat then
+          begin
+            initV := CurTok.IVal;                     { IEEE-754 double bits }
+            if negFloat then
+            begin
+              signMask := 1; signMask := signMask shl 63;
+              initV := initV xor signMask;
+            end;
+            Next;
+          end
+          else
+          begin
+            { integer (or const-expr) element assigned to a float array: fold and
+              reinterpret the integer VALUE as double bits. }
+            initV := CEvalConstExpr;
+            if negFloat then initV := -initV;
+            dvv := initV; Move(dvv, initV, 8);
+          end;
+          if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+          begin
+            PendingInitSym[PendingInitCount]  := idx;
+            PendingInitElem[PendingInitCount] := ei;
+            PendingInitFOff[PendingInitCount] := -1;
+            PendingInitFLen[PendingInitCount] := 0;
+            PendingInitVal[PendingInitCount]  := initV;
+            PendingInitTk[PendingInitCount]   := Ord(baseTk);
+            PendingInitKind[PendingInitCount] := 3;
             Inc(PendingInitCount);
           end;
           Inc(ei);
