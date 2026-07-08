@@ -82,3 +82,19 @@ pure swallowing/trivia, cheap and high-leverage.
   impl fns), search.rs on cross-module Move (stage 3 unity), attacks.rs
   on const-fn array builders (stage 2/adapt), uci.rs on Arc (adapt).
   Regressions green (rust tests, quick tier, fixedpoint).
+- 2026-07-09 — **PERFT MILESTONE: 20 / 400 / 8902 exact** (same session).
+  test/test_rust_chess_perft.rs — a C-style port of the movegen core in
+  the pxx subset (mailbox board + move lists as &[i64] slices through
+  fns via the record ABI; no structs/Option/ArrayVec; no EP/castle/
+  promotion, which first matter at ply >= 4). Wired into make test;
+  runs in ~20ms. Enablers landed this session: bit-op expression layer +
+  as-casts + compound assigns; &/&mut borrow no-ops; &[T]/&mut [T]
+  slice parameters (prescan + body); Rust integer `/` -> tkDiv. That
+  last one CASHED IN the Zig probe's prophecy: rparser mapped `/` to
+  tkSlash (Pascal real division), latent because no Rust test ever
+  divided — rank_of's sq/8 returned the bit pattern of 1.0. Also fixed
+  a second latent paramless-recursion bug (RParseUnary self-call read
+  the Result alias). Next rungs toward the REAL engine sources: tuple
+  structs, associated fns + Self, Option, struct array fields, static
+  tables, intrinsic u64 methods.
+

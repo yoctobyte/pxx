@@ -452,6 +452,11 @@ test-core: $(COMPILER)
 	# (s[i] rw, s.len()), for-in ranges (../..=) -- existing IR only.
 	./$(COMPILER) test/test_rust_advanced.rs /tmp/test_rust_advanced26
 	test "$$(/tmp/test_rust_advanced26)" = "$$(printf 'total 610\na3 9 s0 1 s1 4 slen 2\np 3 4\ncircle 75')"
+	# Rust chess-corpus milestone (feature-rust-corpus-chess): C-style port of the
+	# nextlevel engine's movegen core -- slices through fns, bitless mailbox, full
+	# legality filtering. Perft exact through depth 3 (no EP/castle before ply 4).
+	./$(COMPILER) test/test_rust_chess_perft.rs /tmp/test_rust_chess_perft26
+	test "$$(/tmp/test_rust_chess_perft26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
 	# Ada frontend skeleton (feature-esoteric-ada): for-range accumulate, if/elsif/else,
 	# while, bare loop + exit-when, Put_Line -- all lowering onto existing shared IR.
 	./$(COMPILER) test/test_ada_skeleton.adb /tmp/test_ada_skeleton26

@@ -631,6 +631,16 @@ end;
 function RParseUnary: Integer;
 var node: Integer;
 begin
+  if CurTok.Kind = tkAmp then
+  begin
+    { `&x` / `&mut x` in argument/expression position is a no-op: record
+      and slice values already travel by address through the record ABI.
+      (Slice CREATION `&a[lo..hi]` is handled in RParseLet, before this.) }
+    Next;
+    if CurTok.Kind = tkMut then Next;
+    Result := RParseUnary();
+    Exit;
+  end;
   if CurTok.Kind = tkMinus then
   begin
     Next;
@@ -699,14 +709,24 @@ begin
 end;
 
 function RParseMul: Integer;
-var left, right, node: Integer; opTk: TTokenKind;
+var left, right, node: Integer; opTk: TTokenKind; rt: TTypeKind;
 begin
   left := RParseAs;
   while CurTok.Kind in [tkStar, tkSlash, tkMod] do
   begin
     opTk := CurTok.Kind; Next;
     right := RParseAs;
-    node := RBinOp(opTk, left, right, RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    rt := RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]));
+    { Rust integer / is TRUNCATING division; the shared tkSlash BINOP is
+      Pascal's REAL division (double bits reinterpreted as int64 =
+      garbage). The Zig frontend hit this on its first run and left a
+      note pointing HERE (feature-zig-frontend probe verdict) — the
+      chess-corpus perft finally cashed it in: rank_of's sq/8 returned
+      4607182418800017409 (the bit pattern of 1.0). Integer operands
+      lower to tkDiv; float operands keep tkSlash. }
+    if (opTk = tkSlash) and (rt <> tyDouble) and (rt <> tySingle) then
+      opTk := tkDiv;
+    node := RBinOp(opTk, left, right, rt);
     left := node;
   end;
   Result := left;
@@ -1633,7 +1653,11 @@ begin
       tkPlusEq:  rhsNode := RBinOp(tkPlus,  RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       tkMinusEq: rhsNode := RBinOp(tkMinus, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       tkStarEq:  rhsNode := RBinOp(tkStar,  RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
-      tkSlashEq: rhsNode := RBinOp(tkSlash, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkSlashEq:
+        if (Syms[symIdx].TypeKind = tyDouble) or (Syms[symIdx].TypeKind = tySingle) then
+          rhsNode := RBinOp(tkSlash, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind)
+        else
+          rhsNode := RBinOp(tkDiv, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       tkAmpEq:   rhsNode := RBinOp(tkAnd,   RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       tkPipeEq:  rhsNode := RBinOp(tkOr,    RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       tkXorEq:   rhsNode := RBinOp(tkXor,   RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
@@ -1872,12 +1896,33 @@ begin
     pnames[nparams] := GetTokenStr(j); Inc(j);
     if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
     Inc(j);
-    if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
-    { struct/enum params allowed (always passed by address, same as self —
-      see RParseTopLevelFn/RRegisterImpls); struct RETURN values stay out of
-      scope, so the return type below still passes allowStruct=False. }
-    ptypes[nparams] := RTypeKindFromName(GetTokenStr(j), True);
-    Inc(j);
+    { `&`/`&mut` prefixes are dropped (records/slices pass by address via
+      the record ABI anyway); `&[T]` / `&mut [T]` is the borrowed-slice
+      view type (the auto-registered __ptr+__len UClass). }
+    if Tokens[j].Kind = tkAmp then
+    begin
+      Inc(j);
+      if Tokens[j].Kind = tkMut then Inc(j);
+    end;
+    if Tokens[j].Kind = tkLBrack then
+    begin
+      Inc(j);
+      if Tokens[j].Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
+      RSliceClassFor(RTypeKindFromName(GetTokenStr(j), False));
+      ptypes[nparams] := tyRecord;
+      Inc(j);
+      if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in &[T] parameter');
+      Inc(j);
+    end
+    else
+    begin
+      if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter type');
+      { struct/enum params allowed (always passed by address, same as self —
+        see RParseTopLevelFn/RRegisterImpls); struct RETURN values stay out of
+        scope, so the return type below still passes allowStruct=False. }
+      ptypes[nparams] := RTypeKindFromName(GetTokenStr(j), True);
+      Inc(j);
+    end;
     Inc(nparams);
     if Tokens[j].Kind = tkComma then Inc(j);
   end;
@@ -2308,14 +2353,33 @@ begin
     if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
     pname := CurTok.SVal; Next;
     Expect(tkColon, ':');
-    if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
-    { struct/enum params allowed (see RRegisterFnSignatureAt); RTypeKindFromName
-      sets LastTypeRecId as a side effect, which the NEXT param's lookup would
-      clobber before we get to AllocParam below — capture it per-param now. }
-    ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
-    precids[nparams] := LastTypeRecId;
-    pnames[nparams] := pname;
-    Next;
+    if CurTok.Kind = tkAmp then
+    begin
+      Next;
+      if CurTok.Kind = tkMut then Next;
+    end;
+    if CurTok.Kind = tkLBrack then
+    begin
+      { &[T] / &mut [T] borrowed-slice parameter }
+      Next;
+      if CurTok.Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
+      ptypes[nparams] := tyRecord;
+      precids[nparams] := REC_UCLASS_BASE + RSliceClassFor(RTypeKindFromName(CurTok.SVal, False));
+      pnames[nparams] := pname;
+      Next;
+      Expect(tkRBrack, ']');
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then Error('Rust: expected parameter type');
+      { struct/enum params allowed (see RRegisterFnSignatureAt); RTypeKindFromName
+        sets LastTypeRecId as a side effect, which the NEXT param's lookup would
+        clobber before we get to AllocParam below — capture it per-param now. }
+      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
+      precids[nparams] := LastTypeRecId;
+      pnames[nparams] := pname;
+      Next;
+    end;
     Inc(nparams);
     if not Eat(tkComma) then Break;
   end;
