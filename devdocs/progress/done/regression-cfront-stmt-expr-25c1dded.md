@@ -101,3 +101,6 @@ tools/testmgr.py --tier full --job 'test-core#599'    # ~85s (unit norm 0.5s)
 ## Gate
 GTK header tests back to seconds; test-cjson/test-lua green with corpus
 present; statement-expression feature tests still green.
+
+## Log
+- 2026-07-08 — resolved, commit b9d47c65.
