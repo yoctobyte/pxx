@@ -4142,7 +4142,7 @@ end;
 { EMIT mode: run every deferred aggregate initializer, at the start of `main`
   (called right after CompilePendingGlobalInits). Restores the parse position. }
 procedure CEmitDeferredCAggInits;
-var i, savedIdx, cons: Integer;
+var i, savedIdx, cons, ndims, span0, eb, edi: Integer;
 begin
   if CAggInitCount = 0 then Exit;
   savedIdx := TokPos - 1;
@@ -4154,9 +4154,29 @@ begin
     CInitPathDepth := 0;
     cons := 0;
     if CAggInitIsArr[i] then
+    begin
+      { A multidimensional array carries its shape in SymArrNDims/DimSpan; pass
+        the real dim count + dim0 span + elements-below so the walker
+        distributes nested (or elided) braces per dimension. A 1-D array reads
+        nDims=1, elemsBelow=1 (the CAggInitLen path). }
+      ndims := SymArrNDims[CAggInitSym[i]];
+      if ndims < 2 then
+      begin
+        ndims := 1; span0 := CAggInitLen[i]; eb := 1;
+      end
+      else
+      begin
+        span0 := SymArrDimSpan[CAggInitSym[i] * MAX_ARR_DIMS + 0];
+        if span0 < 1 then span0 := 1;
+        eb := 1;
+        for edi := 1 to ndims - 1 do
+          eb := eb * SymArrDimSpan[CAggInitSym[i] * MAX_ARR_DIMS + edi];
+        if eb < 1 then eb := 1;
+      end;
       CInitWalkArray(Ord(Syms[CAggInitSym[i]].TypeKind), CAggInitRec[i],
-                     CAggInitSym[i], -1, 0, 1, CAggInitLen[i], 0, 1,
-                     True, True, cons)
+                     CAggInitSym[i], -1, 0, ndims, span0, 0, eb,
+                     True, True, cons);
+    end
     else
       CInitWalkRecord(CAggInitRec[i] - REC_UCLASS_BASE, True, True);
   end;
@@ -4206,8 +4226,10 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     recId, initSymIdx, procIdx, initOff, di: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
+    dimVal, flatLen, mdi: Integer;
     initStr: AnsiString;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
+    dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
@@ -4395,24 +4417,37 @@ begin
     while CurTok.Kind = tkLBrack do
     begin
       wasArr := True;
-      Inc(dimCount);
       Next;
-      if dimCount = 1 then
+      { capture EVERY dimension (was: only dim 1, rest token-skipped) so a
+        multidimensional ordinal global `int a[2][3]` sizes to the product and
+        records its shape for the init walker. An unsized leading `[]` stays -1
+        (sized from the initializer). }
+      if CurTok.Kind = tkRBrack then dimVal := -1
+      else dimVal := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+      if dimCount < MAX_ARR_DIMS then dimSpan[dimCount] := dimVal;
+      Inc(dimCount);
+      if dimCount = 1 then arrLen := dimVal;
+    end;
+    if dimCount >= 2 then
+    begin
+      { An unsized leading dim `T a[][N]..` sizes from the initializer: the
+        outer count = number of top-level init groups (each fills one
+        inner-dims block). Inner dims must be explicit (C requires it). }
+      if (dimSpan[0] = -1) and (CurTok.Kind = tkAssign) and
+         (Tokens[TokPos].Kind = tkBegin) then
       begin
-        if CurTok.Kind = tkRBrack then arrLen := -1
-        else arrLen := CEvalConstExpr;
-        Expect(tkRBrack, ']');
-      end
-      else
-      begin
-        depth := 1;
-        while (depth > 0) and (CurTok.Kind <> tkEOF) do
-        begin
-          if CurTok.Kind = tkLBrack then Inc(depth)
-          else if CurTok.Kind = tkRBrack then Dec(depth);
-          Next;
-        end;
+        mdi := CBraceTopLevelInitCountAt(TokPos);
+        if mdi > 0 then dimSpan[0] := mdi else dimSpan[0] := 1;
       end;
+      { flat length = product of the dims (each >= 1 for sizing) }
+      flatLen := 1;
+      for mdi := 0 to dimCount - 1 do
+      begin
+        if dimSpan[mdi] < 1 then dimSpan[mdi] := 1;
+        flatLen := flatLen * dimSpan[mdi];
+      end;
+      arrLen := flatLen;
     end;
     nArrElems := 0;
     if (CurTok.Kind = tkAssign) and wasArr and (baseTk = tyPointer) and
@@ -4545,6 +4580,17 @@ begin
       else
         idx := AllocVar(name, baseTk);
     end;
+    { Record a multidimensional array's shape so `a[i][j]` strides correctly and
+      the init walker distributes nested braces per dimension. }
+    if (idx >= 0) and wasArr and (dimCount >= 2) then
+    begin
+      SymArrNDims[idx] := dimCount;
+      for mdi := 0 to dimCount - 1 do
+      begin
+        SymArrDimLo[idx * MAX_ARR_DIMS + mdi]   := 0;
+        SymArrDimSpan[idx * MAX_ARR_DIMS + mdi] := dimSpan[mdi];
+      end;
+    end;
     if (idx >= 0) and (baseTk = tyPointer) then
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(CTypeElemTk);
@@ -4595,7 +4641,27 @@ begin
       recBase := -1;
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
-      if (CurTok.Kind = tkBegin) and wasArr and (baseTk <> tyRecord) and
+      if (CurTok.Kind = tkBegin) and wasArr and (dimCount >= 2) and
+         (baseTk <> tyRecord) and (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
+         (idx >= 0) then
+      begin
+        { MULTIDIMENSIONAL ordinal global `int a[2][3] = {{1,2,3},{4,5,6}}`
+          (and brace-elided `{1,2,3,4,5,6}`): the flat-int path below rejects
+          nested braces, so route through the recursive brace-elision walker,
+          replayed at main by CEmitDeferredCAggInits with the sym's dim shape.
+          Globals are BSS-zeroed, so unlisted tail elements stay 0. }
+        if CAggInitCount < MAX_C_AGG_INITS then
+        begin
+          CAggInitSym[CAggInitCount] := idx;
+          CAggInitTok[CAggInitCount] := TokPos - 1;   { the opening brace }
+          CAggInitRec[CAggInitCount] := REC_NONE;
+          CAggInitLen[CAggInitCount] := SymArrDimSpan[idx * MAX_ARR_DIMS + 0];
+          CAggInitIsArr[CAggInitCount] := True;
+          Inc(CAggInitCount);
+        end;
+        SkipBraceBlock;
+      end
+      else if (CurTok.Kind = tkBegin) and wasArr and (baseTk <> tyRecord) and
          (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
          (idx >= 0) and CBraceIsFlatIntInit then
       begin
