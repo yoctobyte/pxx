@@ -360,6 +360,10 @@ function RTypeKindFromName(const name: AnsiString; allowStruct: Boolean): TTypeK
 var ci: Integer;
 begin
   LastTypeRecId := REC_NONE;
+  if name = 'i8' then begin Result := tyInt8; Exit; end;
+  if name = 'u8' then begin Result := tyUInt8; Exit; end;
+  if name = 'i16' then begin Result := tyInt16; Exit; end;
+  if name = 'u16' then begin Result := tyUInt16; Exit; end;
   if name = 'i32' then begin Result := tyInteger; Exit; end;
   if name = 'i64' then begin Result := tyInt64; Exit; end;
   if name = 'u32' then begin Result := tyUInt32; Exit; end;
@@ -1234,6 +1238,103 @@ begin
     end;
   end;
   Result := chain;
+end;
+
+{ Stage-0 corpus trivia (feature-rust-corpus-chess): compact the token
+  stream in place, dropping top-level items this frontend treats as
+  no-ops BEFORE any prescan runs (single choke point for all passes):
+  - `use ...;`            (module imports — unity-build route instead)
+  - `[pub] type X = ...;` (aliases — uses of the alias error later)
+  - `pub` / `pub(...)`    (visibility — dropped everywhere at depth 0)
+  Brace depth guards against touching identically-named idents inside
+  function bodies. }
+procedure RStripTopItems;
+var src, dst, depth: Integer;
+begin
+  src := 0; dst := 0; depth := 0;
+  while Tokens[src].Kind <> tkEOF do
+  begin
+    if Tokens[src].Kind = tkBegin then Inc(depth)
+    else if Tokens[src].Kind = tkEnd then Dec(depth);
+    if (depth = 0) and (Tokens[src].Kind = tkIdent) and
+       ((GetTokenStr(src) = 'use') or (GetTokenStr(src) = 'mod')) then
+    begin
+      while (Tokens[src].Kind <> tkSemicolon) and (Tokens[src].Kind <> tkEOF) do Inc(src);
+      if Tokens[src].Kind = tkSemicolon then Inc(src);
+      Continue;
+    end;
+    if (depth = 0) and (Tokens[src].Kind = tkIdent) and (GetTokenStr(src) = 'type') then
+    begin
+      while (Tokens[src].Kind <> tkSemicolon) and (Tokens[src].Kind <> tkEOF) do Inc(src);
+      if Tokens[src].Kind = tkSemicolon then Inc(src);
+      Continue;
+    end;
+    { `pub` dropped at ANY depth — item visibility at depth 0, field
+      visibility inside struct bodies. A user variable literally named
+      `pub` would vanish too; that is not legal Rust anyway. }
+    if (Tokens[src].Kind = tkIdent) and (GetTokenStr(src) = 'pub') then
+    begin
+      Inc(src);
+      if Tokens[src].Kind = tkLParen then
+      begin
+        while (Tokens[src].Kind <> tkRParen) and (Tokens[src].Kind <> tkEOF) do Inc(src);
+        Inc(src); { ) }
+      end;
+      Continue;
+    end;
+    Tokens[dst] := Tokens[src];
+    Inc(src); Inc(dst);
+  end;
+  Tokens[dst] := Tokens[src]; { EOF }
+  TokCount := dst + 1;
+  MainProgramTokCount := TokCount;
+end;
+
+{ `const NAME: T = value;` at top level — scalar integer/bool constants
+  registered via AddConst (folded at use sites through the existing
+  skConst path). Array constants `const X: [T; N] = [...]` are SKIPPED
+  whole for now (stage 2 of the chess-corpus ladder needs them as
+  initialized globals; uses error until then). }
+procedure RParseTopLevelConst;
+var name: AnsiString; tk: TTypeKind; v: Int64; neg: Boolean; depth: Integer;
+begin
+  Next; { const }
+  if CurTok.Kind <> tkIdent then Error('Rust: expected constant name after const');
+  name := CurTok.SVal;
+  Next;
+  Expect(tkColon, ':');
+  if CurTok.Kind = tkLBrack then
+  begin
+    { array constant — swallow the whole item (semicolons occur INSIDE
+      the brackets: [T; N] and [v; N], so track bracket depth) }
+    depth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLBrack then Inc(depth)
+      else if CurTok.Kind = tkRBrack then Dec(depth)
+      else if (CurTok.Kind = tkSemicolon) and (depth = 0) then Break;
+      Next;
+    end;
+    Expect(tkSemicolon, ';');
+    Exit;
+  end;
+  if CurTok.Kind <> tkIdent then Error('Rust: expected type in const ' + name);
+  tk := RTypeKindFromName(CurTok.SVal, False);
+  Next;
+  Expect(tkAssign, '=');
+  neg := False;
+  if CurTok.Kind = tkMinus then begin neg := True; Next; end;
+  if CurTok.Kind = tkTrue then begin v := 1; Next; end
+  else if CurTok.Kind = tkFalse then begin v := 0; Next; end
+  else if CurTok.Kind = tkInteger then begin v := CurTok.IVal; Next; end
+  else
+  begin
+    Error('Rust: const ' + name + ' needs a literal value (skeleton)');
+    v := 0;
+  end;
+  if neg then v := -v;
+  AddConst(name, tk, v);
+  Expect(tkSemicolon, ';');
 end;
 
 { `for i in lo..hi { }` (exclusive) / `for i in lo..=hi { }` (inclusive) —
@@ -2229,9 +2330,16 @@ begin
 
   REnumVariantCount := 0;
   RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;
+  RStripTopItems;
+  TokPos := 0;
+  Next;
+  { shells -> enums -> struct fields: a struct field may be enum-typed
+    (Piece { color: Color }), so enums must exist before field
+    registration; an enum payload referencing a struct still resolves
+    against the shell. }
   RRegisterStructShells;
-  RRegisterStructFields;
   RRegisterEnums;
+  RRegisterStructFields;
   RRegisterTraits;
   RRegisterImpls;
   RRegisterGenericFuncs;
@@ -2246,9 +2354,10 @@ begin
     else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then RParseTopLevelEnum
     else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'trait') then RParseTopLevelTrait
     else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'impl') then RParseTopLevelImpl
+    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'const') then RParseTopLevelConst
     else if (CurTok.Kind = tkFn) and (Tokens[TokPos + 1].Kind = tkLt) then RSkipGenericFnDecl
     else if CurTok.Kind = tkFn then RParseTopLevelFn
-    else Error('Rust: expected fn, struct, enum, trait or impl at top level');
+    else Error('Rust: expected fn, struct, enum, trait, impl or const at top level');
   end;
 
   ApplyCallFixups;

@@ -81,6 +81,29 @@ begin
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
 
+  { `#[...]` / `#![...]` attributes — swallowed whole at the lexer level
+    (derive/inline/cfg are all no-ops for this frontend). Only square
+    brackets are depth-counted; a `]` inside an attribute's string
+    literal would end the swallow early — none of the corpus does that. }
+  if c = '#' then
+  begin
+    Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '!') then Inc(SrcPos);
+    if (SrcPos > Length(Source)) or (Source[SrcPos] <> '[') then
+      Error('Rust: expected [ after # (attribute)');
+    Inc(SrcPos);
+    n := 1;
+    while (SrcPos <= Length(Source)) and (n > 0) do
+    begin
+      if Source[SrcPos] = '[' then Inc(n)
+      else if Source[SrcPos] = ']' then Dec(n)
+      else if Source[SrcPos] = #10 then Inc(SrcLine);
+      Inc(SrcPos);
+    end;
+    RLexOne();
+    Exit;
+  end;
+
   { Lifetimes ('a) vs char literals ('a') vs plain quoted char ('\n'):
     a lifetime is a lone `'` followed by an identifier NOT closed by another
     `'`. Parsed as a token shape only — never enforced (see the umbrella's

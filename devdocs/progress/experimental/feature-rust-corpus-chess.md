@@ -71,3 +71,14 @@ pure swallowing/trivia, cheap and high-leverage.
 
 ## Log
 - 2026-07-09 — filed with baseline probe results; stage 0 unstarted.
+- 2026-07-09 — **stage 0 DONE** (same session): #[...]/#![...] attributes
+  swallowed in rlexer; RStripTopItems compacts the token stream before
+  every prescan (use/mod items, [pub] type aliases, `pub` at any depth);
+  top-level scalar `const NAME: T = lit;` registered via AddConst, const
+  arrays swallowed whole; i8/i16/u8/u16 added to the type map; prescan
+  order fixed to shells -> enums -> struct fields (enum-typed struct
+  fields resolve now). Probe after: every module fails on a REAL ladder
+  gap — chess.rs on Option (stage 2), eval.rs on associated fns (no-self
+  impl fns), search.rs on cross-module Move (stage 3 unity), attacks.rs
+  on const-fn array builders (stage 2/adapt), uci.rs on Arc (adapt).
+  Regressions green (rust tests, quick tier, fixedpoint).
