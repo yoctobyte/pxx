@@ -1460,13 +1460,10 @@
   },
   {
    "bad": "e0ccfaebfe91a2f4a5bc36affde447ee5373e3c1",
-   "good": "25c1ddedcccbbd4140be7b3f3342eb6775405224",
+   "good": "78a6dbc11ddd4a50a0577a725daaf73cd262f2d6",
    "job": "test-core#600",
    "opened": "2026-07-08T18:16:24Z",
    "range": [
-    "9241bb1ae354fd0bfa554b0b35ebfbf14321bda8",
-    "21474e206a763383d2aa1cdd144d08e018170726",
-    "78a6dbc11ddd4a50a0577a725daaf73cd262f2d6",
     "a7ee36e7dc9fd10d9e744f6837c6e536b44ed423",
     "1c38ad5a131bda2504c2dc204b1faef675c548f5",
     "35ed47914516da27a1677e419d6fbf1eab6bf664",
