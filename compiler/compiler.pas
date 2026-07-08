@@ -42,6 +42,7 @@ uses asmcore_base, asmcore_x64;
 {$endif}
 
 {$include defs.inc}
+{$include zdefs.inc}
 {$include lexer.inc}
 {$include clexer.inc}
 {$include blexer.inc}

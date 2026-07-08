@@ -90,18 +90,7 @@ function ZSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString):
   first argument, no inference. NOT comptime evaluation: no comptime
   values, no comptime control flow, no builtins — type parameters only,
   and only as the FIRST parameter. }
-const
-  Z_MAX_GENERIC_FNS = 64;
-
-type
-  TZGenericFunc = record
-    Name, ParamName: AnsiString;
-    TokStart, TokCnt: Integer;
-  end;
-
-var
-  ZGenericFns: array[0..Z_MAX_GENERIC_FNS-1] of TZGenericFunc;
-  ZGenericFnCount: Integer;
+{ (state lives in zdefs.inc — see the prescan-bug note there) }
 
 function ZFindGenericFn(const name: AnsiString): Integer;
 var i: Integer;
@@ -176,10 +165,7 @@ end;
   DEVIATION (documented): registration is lexical, not dynamic — a defer
   written inside a conditional block still replays at every exit, and
   defers are fn-scoped, not block-scoped. Probe-skeleton semantics. }
-var
-  ZDeferNode: array[0..31] of Integer;
-  ZDeferIsErr: array[0..31] of Boolean;
-  ZDeferCount: Integer;
+{ (state lives in zdefs.inc — see the prescan-bug note there) }
 
 function ZAppendDefers(seq: Integer; errPath: Boolean): Integer;
 var i: Integer;
@@ -244,12 +230,7 @@ end;
   whole var-decl initializer or a whole statement, not nested inside
   expressions; a defer body that itself calls an erroring function will
   clobber a pending error slot. }
-var
-  ZOptCi: array[0..MAX_UCLASS-1] of Boolean;
-  ZErrName: array[0..255] of AnsiString;
-  ZErrCount: Integer;
-  ZErrSlotSym: Integer;
-  ZProcErrs: array[0..MAX_PROCS-1] of Boolean;
+{ (state lives in zdefs.inc — see the prescan-bug note there) }
 
 function ZTypeNameOf(tk: TTypeKind): AnsiString;
 begin
@@ -301,9 +282,7 @@ end;
   C frontend's partial-index decay uses — and works as an assign target;
   `s.len` reads __len. No slice params/returns, no slice-of-slice, no
   re-slicing, no bounds checks. }
-var
-  ZSliceCi: array[0..MAX_UCLASS-1] of Boolean;
-  ZSliceElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
+{ (state lives in zdefs.inc — see the prescan-bug note there) }
 
 function ZSliceClassFor(elemTk: TTypeKind): Integer;
 var name: AnsiString; ci: Integer;

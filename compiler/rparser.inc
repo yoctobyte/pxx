@@ -89,6 +89,11 @@ var
   REnumVariants: array[0..R_MAX_VARIANTS-1] of TREnumVariant;
   REnumVariantCount: Integer;
   REnumCi: array[0..MAX_UCLASS-1] of Boolean;
+  { borrowed slices &a[lo..hi] (feature-rust-borrowed-slice-type, minimal):
+    which UClasses are auto-registered __ptr+__len views + their element
+    type — the Zig frontend's slice representation ported back. }
+  RSliceCi: array[0..MAX_UCLASS-1] of Boolean;
+  RSliceElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
 
 function RStoredName(const s: AnsiString): Integer;
 var i: Integer;
@@ -203,6 +208,72 @@ var
   RImplCount: Integer;
   RGenericFuncs: array[0..R_MAX_GENERIC_FUNCS-1] of TRGenericFunc;
   RGenericFuncCount: Integer;
+
+function RScalarTypeName(tk: TTypeKind): AnsiString;
+begin
+  case tk of
+    tyInteger: Result := 'i32';
+    tyInt64: Result := 'i64';
+    tyUInt32: Result := 'u32';
+    tyUInt64: Result := 'u64';
+    tyNativeInt: Result := 'isize';
+    tyNativeUInt: Result := 'usize';
+    tySingle: Result := 'f32';
+    tyDouble: Result := 'f64';
+    tyBoolean: Result := 'bool';
+    tyChar: Result := 'char';
+    else Result := '?';
+  end;
+end;
+
+{ One auto-registered UClass per slice element type ("&[i64]"): __ptr (raw
+  element address as i64 @0) + __len (i64 @8) — 16 bytes. }
+function RSliceClassFor(elemTk: TTypeKind): Integer;
+var name: AnsiString; ci: Integer;
+begin
+  name := '&[' + RScalarTypeName(elemTk) + ']';
+  ci := FindUClass(name);
+  if ci < 0 then
+  begin
+    ci := AddUClass(RStoredName(name), Length(name));
+    UClsIsRecord[ci] := True;
+    AddUField(ci, RStoredName('__ptr'), 5, 0, Ord(tyInt64), REC_NONE);
+    AddUField(ci, RStoredName('__len'), 5, 8, Ord(tyInt64), REC_NONE);
+    UClsAlign[ci] := 8;
+    UClsSize_[ci] := 16;
+    RSliceCi[ci] := True;
+    RSliceElemTk[ci] := elemTk;
+  end;
+  Result := ci;
+end;
+
+function RIsSliceSym(symIdx: Integer): Boolean;
+begin
+  Result := (Syms[symIdx].TypeKind = tyRecord) and
+            (Syms[symIdx].RecName >= REC_UCLASS_BASE) and
+            RSliceCi[Syms[symIdx].RecName - REC_UCLASS_BASE];
+end;
+
+{ True when the bracket run starting at Tokens[k] (a `[`) contains a
+  top-level `..` — slice range, not an index. }
+function RBrackHasDotDotAt(k: Integer): Boolean;
+var depth: Integer;
+begin
+  Result := False;
+  depth := 1;
+  Inc(k);
+  while (depth > 0) and (Tokens[k].Kind <> tkEOF) do
+  begin
+    if Tokens[k].Kind = tkLBrack then Inc(depth)
+    else if Tokens[k].Kind = tkRBrack then Dec(depth)
+    else if (Tokens[k].Kind = tkDotDot) and (depth = 1) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
 
 function RFindTrait(const name: AnsiString): Integer;
 var i: Integer;
@@ -442,6 +513,65 @@ begin
       symIdx := FindSym(name);
       if symIdx < 0 then Error('Rust: undefined variable ' + name);
       node := RMakeIdent(symIdx);
+      if (CurTok.Kind = tkLBrack) and RIsSliceSym(symIdx) then
+      begin
+        { s[i] — AN_DEREF(__ptr + i*elemsize), raw i64 pointer math (the
+          Zig frontend's slice-index shape ported back). }
+        Next;
+        fieldNode := RParseExpr;
+        Expect(tkRBrack, ']');
+        ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+        gfi := AllocNode(AN_INT_LIT);
+        ASTIVal[gfi] := TypeSize(RSliceElemTk[ci]);
+        ASTTk[gfi] := Ord(tyInt64);
+        argNode := AllocNode(AN_FIELD);
+        ASTLeft[argNode] := node;
+        ASTSOffset[argNode] := RStoredName('__ptr'); ASTSLen[argNode] := 5;
+        ASTTk[argNode] := Ord(tyInt64);
+        lastArg := AllocNode(AN_DEREF);
+        ASTLeft[lastArg] := RBinOp(tkPlus, argNode,
+          RBinOp(tkStar, fieldNode, gfi, tyInt64), tyInt64);
+        ASTTk[lastArg] := Ord(RSliceElemTk[ci]);
+        Result := lastArg;
+        Exit;
+      end;
+      if (CurTok.Kind = tkLBrack) and Syms[symIdx].IsArray then
+      begin
+        { a[i] — plain fixed-array indexing }
+        Next;
+        fieldNode := RParseExpr;
+        Expect(tkRBrack, ']');
+        node := AllocNode(AN_INDEX);
+        ASTLeft[node] := RMakeIdent(symIdx);
+        ASTRight[node] := fieldNode;
+        ASTTk[node] := Ord(Syms[symIdx].ElemType);
+        Result := node;
+        Exit;
+      end;
+      { a.len() / s.len() — array length constant / slice __len field }
+      if (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
+         (GetTokenStr(TokPos) = 'len') and (Tokens[TokPos + 1].Kind = tkLParen) and
+         (Syms[symIdx].IsArray or RIsSliceSym(symIdx)) then
+      begin
+        Next; Next; Next; { . len ( }
+        Expect(tkRParen, ')');
+        if Syms[symIdx].IsArray then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := Syms[symIdx].ArrLen;
+          ASTTk[node] := Ord(tyInt64);
+        end
+        else
+        begin
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := node;
+          ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
+          ASTTk[fieldNode] := Ord(tyInt64);
+          node := fieldNode;
+        end;
+        Result := node;
+        Exit;
+      end;
       if CurTok.Kind = tkDot then
       begin
         Next;
@@ -657,33 +787,178 @@ end;
 function RParseLet: Integer;
 var name, typeName, variantName, fname, mangled: AnsiString;
     symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
-    annotTk: TTypeKind; hasType, qualified: Boolean;
-    identNode, fieldNode, valNode, assignNode, seq: Integer;
+    annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
+    identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
 begin
   Next; { let }
   if CurTok.Kind = tkMut then Next;
   if CurTok.Kind <> tkIdent then Error('Rust: expected variable name after let');
   name := CurTok.SVal; Next;
   hasType := False; annotTk := tyUnknown; structCi := -1;
+  isArr := False; arrElemTk := tyUnknown; arrLen := 0;
   if CurTok.Kind = tkColon then
   begin
     Next;
-    if CurTok.Kind <> tkIdent then Error('Rust: expected type after :');
-    typeName := CurTok.SVal;
-    structCi := FindUClass(typeName);
-    annotTk := RTypeKindFromName(typeName, True);
-    Next;
+    if CurTok.Kind = tkLBrack then
+    begin
+      { `[T; N]` fixed-array annotation }
+      Next;
+      if CurTok.Kind <> tkIdent then Error('Rust: expected element type in [T; N]');
+      arrElemTk := RTypeKindFromName(CurTok.SVal, False);
+      Next;
+      Expect(tkSemicolon, ';');
+      if CurTok.Kind <> tkInteger then Error('Rust: array length must be an integer literal (skeleton)');
+      arrLen := CurTok.IVal;
+      if arrLen <= 0 then Error('Rust: array length must be positive');
+      Next;
+      Expect(tkRBrack, ']');
+      isArr := True;
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then Error('Rust: expected type after :');
+      typeName := CurTok.SVal;
+      structCi := FindUClass(typeName);
+      annotTk := RTypeKindFromName(typeName, True);
+      Next;
+    end;
     hasType := True;
   end;
   if CurTok.Kind <> tkAssign then
   begin
     if not hasType then Error('Rust: let without initializer needs a type annotation');
+    if isArr then
+    begin
+      AllocArray(name, arrElemTk, 0, arrLen - 1);
+      Result := -1;
+      Exit;
+    end;
     if annotTk = tyRecord then LastTypeRecId := REC_UCLASS_BASE + structCi;
     symIdx := AllocVar(name, annotTk);
     Result := -1;
     Exit;
   end;
   Next; { = }
+  { array literal RHS: `[v; N]` repeat form or `[a, b, c]` list, unrolled
+    to one AN_INDEX store per element (no whole-array construct node —
+    the same per-slot shape struct literals use). Repeat form deviation:
+    the element expression is re-evaluated per slot. }
+  if (isArr and (CurTok.Kind = tkLBrack)) or
+     ((not hasType) and (CurTok.Kind = tkLBrack) and not RBrackHasDotDotAt(TokPos - 1)) then
+  begin
+    Next; { [ }
+    valNode := RParseExpr;
+    if not isArr then
+    begin
+      arrElemTk := IntToTypeKind(ASTTk[valNode]);
+      if arrElemTk = tyInteger then arrElemTk := tyInt64;
+    end;
+    if CurTok.Kind = tkSemicolon then
+    begin
+      { [v; N] repeat }
+      Next;
+      if CurTok.Kind <> tkInteger then Error('Rust: repeat count must be an integer literal');
+      k := CurTok.IVal;
+      Next;
+      Expect(tkRBrack, ']');
+      if isArr and (k <> arrLen) then Error('Rust: repeat count does not match the [T; N] annotation');
+      arrLen := k;
+      symIdx := AllocArray(name, arrElemTk, 0, arrLen - 1);
+      seq := -1;
+      for k := 0 to arrLen - 1 do
+      begin
+        tagNode := AllocNode(AN_INT_LIT); ASTIVal[tagNode] := k; ASTTk[tagNode] := Ord(tyInt64);
+        fieldNode := AllocNode(AN_INDEX);
+        ASTLeft[fieldNode] := RMakeIdent(symIdx);
+        ASTRight[fieldNode] := tagNode;
+        ASTTk[fieldNode] := Ord(arrElemTk);
+        assignNode := AllocNode(AN_ASSIGN);
+        ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+        seq := RSeqAppend(seq, assignNode);
+      end;
+      Result := seq;
+      Exit;
+    end;
+    { [a, b, c] list }
+    symIdx := -1; seq := -1; k := 0;
+    repeat
+      if symIdx < 0 then
+      begin
+        { length unknown until parsed — but AllocArray needs it up front;
+          count ahead over the tokens (list elements are expressions, so
+          count top-level commas in the bracket run). }
+        ci := TokPos - 1; ci2 := 1; vi := 1; { vi = depth, ci2 = count }
+        while (vi > 0) and (Tokens[ci].Kind <> tkEOF) do
+        begin
+          if Tokens[ci].Kind in [tkLBrack, tkLParen] then Inc(vi)
+          else if Tokens[ci].Kind in [tkRBrack, tkRParen] then Dec(vi)
+          else if (Tokens[ci].Kind = tkComma) and (vi = 1) then Inc(ci2);
+          Inc(ci);
+        end;
+        if isArr and (ci2 <> arrLen) then Error('Rust: list length does not match the [T; N] annotation');
+        arrLen := ci2;
+        symIdx := AllocArray(name, arrElemTk, 0, arrLen - 1);
+      end;
+      tagNode := AllocNode(AN_INT_LIT); ASTIVal[tagNode] := k; ASTTk[tagNode] := Ord(tyInt64);
+      fieldNode := AllocNode(AN_INDEX);
+      ASTLeft[fieldNode] := RMakeIdent(symIdx);
+      ASTRight[fieldNode] := tagNode;
+      ASTTk[fieldNode] := Ord(arrElemTk);
+      assignNode := AllocNode(AN_ASSIGN);
+      ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+      seq := RSeqAppend(seq, assignNode);
+      Inc(k);
+      if not Eat(tkComma) then Break;
+      valNode := RParseExpr;
+    until False;
+    Expect(tkRBrack, ']');
+    Result := seq;
+    Exit;
+  end;
+  { borrowed slice RHS: `&arr[lo..hi]` — __ptr := &arr[lo], __len := hi-lo
+    (the Zig frontend's slice-creation shape ported back) }
+  if (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
+     (Tokens[TokPos + 1].Kind = tkLBrack) and RBrackHasDotDotAt(TokPos + 1) then
+  begin
+    Next; { & }
+    symIdx := FindSym(CurTok.SVal);
+    if (symIdx < 0) or not Syms[symIdx].IsArray then
+      Error('Rust: slicing needs a fixed-array variable (skeleton)');
+    arrElemTk := Syms[symIdx].ElemType;
+    Next;
+    Expect(tkLBrack, '[');
+    loNode := RParseExpr;
+    Expect(tkDotDot, '..');
+    hiNode := RParseExpr;
+    Expect(tkRBrack, ']');
+    ci := RSliceClassFor(arrElemTk);
+    fieldNode := AllocNode(AN_INDEX);
+    ASTLeft[fieldNode] := RMakeIdent(symIdx);
+    ASTRight[fieldNode] := loNode;
+    ASTTk[fieldNode] := Ord(arrElemTk);
+    valNode := AllocNode(AN_ADDR);
+    ASTLeft[valNode] := fieldNode;
+    ASTTk[valNode] := Ord(tyPointer);
+    LastTypeRecId := REC_UCLASS_BASE + ci;
+    symIdx := AllocVar(name, tyRecord);
+    identNode := RMakeIdent(symIdx);
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := identNode;
+    ASTSOffset[fieldNode] := RStoredName('__ptr'); ASTSLen[fieldNode] := 5;
+    ASTTk[fieldNode] := Ord(tyInt64);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode; ASTRight[assignNode] := valNode;
+    seq := RSeqAppend(-1, assignNode);
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := identNode;
+    ASTSOffset[fieldNode] := RStoredName('__len'); ASTSLen[fieldNode] := 5;
+    ASTTk[fieldNode] := Ord(tyInt64);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode;
+    ASTRight[assignNode] := RBinOp(tkMinus, hiNode, loNode, tyInt64);
+    Result := RSeqAppend(seq, assignNode);
+    Exit;
+  end;
   { enum literal RHS: bare `Variant(...)`/`Variant { .. }`/`Variant`, or
     qualified `Enum::Variant(...)`. Checked before the plain-struct-literal
     branch below since both start with a tkIdent. }
@@ -961,6 +1236,139 @@ begin
   Result := chain;
 end;
 
+{ `for i in lo..hi { }` (exclusive) / `for i in lo..=hi { }` (inclusive) —
+  desugars to i := lo; while i </<= hi { body; i := i + 1 }, the same
+  AN_ASSIGN/AN_WHILE shape the Zig frontend's range for uses. The loop
+  variable is a fresh i64 local (no iterator protocol, ranges only). }
+function RParseFor: Integer;
+var vname: AnsiString;
+    symIdx, loNode, hiNode, bodyNode, initNode, condNode, incNode, oneNode, whileNode: Integer;
+    inclusive: Boolean;
+begin
+  Next; { for }
+  if CurTok.Kind <> tkIdent then Error('Rust: expected loop variable after for');
+  vname := CurTok.SVal;
+  Next;
+  if not ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'in')) then
+    Error('Rust: expected `in` after the for loop variable');
+  Next;
+  loNode := RParseExpr;
+  inclusive := (CurTok.Kind = tkDotDotEq);
+  if not inclusive and (CurTok.Kind <> tkDotDot) then
+    Error('Rust: for supports integer ranges only (lo..hi / lo..=hi, skeleton)');
+  Next;
+  hiNode := RParseExpr;
+
+  symIdx := AllocVar(vname, tyInt64);
+
+  Expect(tkBegin, '{');
+  bodyNode := RParseBlock;
+  Expect(tkEnd, '}');
+
+  initNode := AllocNode(AN_ASSIGN);
+  ASTLeft[initNode] := RMakeIdent(symIdx);
+  ASTRight[initNode] := loNode;
+
+  if inclusive then
+    condNode := RBinOp(tkLe, RMakeIdent(symIdx), hiNode, tyBoolean)
+  else
+    condNode := RBinOp(tkLt, RMakeIdent(symIdx), hiNode, tyBoolean);
+
+  oneNode := AllocNode(AN_INT_LIT);
+  ASTIVal[oneNode] := 1;
+  ASTTk[oneNode] := Ord(tyInteger);
+  incNode := AllocNode(AN_ASSIGN);
+  ASTLeft[incNode] := RMakeIdent(symIdx);
+  ASTRight[incNode] := RBinOp(tkPlus, RMakeIdent(symIdx), oneNode, tyInt64);
+  bodyNode := RSeqAppend(bodyNode, incNode);
+
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := condNode;
+  ASTRight[whileNode] := bodyNode;
+
+  Result := RSeqAppend(RSeqAppend(-1, initNode), whileNode);
+end;
+
+{ `println!("fmt {} ...", args);` / `print!(...)` — the Zig frontend's
+  std.debug.print splitter ported back (feature-rust-misc-semantics #9 +
+  feature-rust-rtl-macros-io #12, the format-output subset): literal fmt
+  segments become AN_STR_LIT nodes pointing straight into the fmt token's
+  already-decoded TokChars bytes, each {...} placeholder ({}, {:?}, ...)
+  consumes the next argument, everything chains as one AN_ARG list under
+  a single AN_WRITE / AN_WRITELN. {{ }} escapes are not handled. }
+function RParsePrintln(isLn: Boolean): Integer;
+var fmtOff, fmtLen, i, segStart: Integer;
+    node, lastArg, argNode, litNode: Integer;
+    argExprs: array[0..7] of Integer;
+    argCount, argUsed: Integer;
+
+  procedure AddArg(exprNode: Integer);
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := exprNode;
+    ASTRight[argNode] := -1;
+    if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+  end;
+
+  procedure AddSegment(off, len: Integer);
+  begin
+    if len <= 0 then Exit;
+    litNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[litNode] := off;
+    ASTSLen[litNode] := len;
+    ASTTk[litNode] := Ord(tyString);
+    AddArg(litNode);
+  end;
+
+begin
+  Next; { println / print }
+  Next; { ! }
+  Expect(tkLParen, '(');
+  if CurTok.Kind <> tkString then Error('Rust: println!/print! need a string literal format');
+  fmtOff := Tokens[TokPos - 1].SOffset;
+  fmtLen := Tokens[TokPos - 1].SLen;
+  Next;
+
+  argCount := 0;
+  while Eat(tkComma) do
+  begin
+    if argCount > 7 then Error('Rust: println! supports at most 8 arguments (skeleton)');
+    argExprs[argCount] := RParseExpr;
+    Inc(argCount);
+  end;
+  Expect(tkRParen, ')');
+
+  node := AllocNode(AN_WRITE);
+  if isLn then ASTKind[node] := AN_WRITELN;
+  ASTLeft[node] := -1;
+  lastArg := -1;
+  argUsed := 0;
+
+  segStart := 0;
+  i := 0;
+  while i < fmtLen do
+  begin
+    if TokChars[fmtOff + i] = '{' then
+    begin
+      AddSegment(fmtOff + segStart, i - segStart);
+      while (i < fmtLen) and (TokChars[fmtOff + i] <> '}') do Inc(i);
+      if i >= fmtLen then Error('Rust: unterminated {} placeholder in format string');
+      Inc(i); { step past the closing brace }
+      segStart := i;
+      if argUsed >= argCount then Error('Rust: more {} placeholders than arguments');
+      AddArg(argExprs[argUsed]);
+      Inc(argUsed);
+    end
+    else
+      Inc(i);
+  end;
+  AddSegment(fmtOff + segStart, fmtLen - segStart);
+  if argUsed < argCount then Error('Rust: more arguments than {} placeholders');
+
+  Result := node;
+end;
+
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
 begin
@@ -968,6 +1376,7 @@ begin
     tkIf: begin Result := RParseIf; Exit; end;
     tkWhile: begin Result := RParseWhile; Exit; end;
     tkLoop: begin Result := RParseLoop; Exit; end;
+    tkFor: begin Result := RParseFor; Exit; end;
     tkBegin: begin Next; Result := RParseBlock; Expect(tkEnd, '}'); Exit; end;
     tkSemicolon: begin Next; Result := -1; Exit; end;
     tkLet: begin Result := RParseLet; Expect(tkSemicolon, ';'); Exit; end;
@@ -985,6 +1394,15 @@ begin
   end;
 
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'match') then begin Result := RParseMatch; Exit; end;
+
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLogNot) and
+     (Tokens[TokPos + 1].Kind = tkLParen) and
+     ((CurTok.SVal = 'println') or (CurTok.SVal = 'print')) then
+  begin
+    Result := RParsePrintln(CurTok.SVal = 'println');
+    Expect(tkSemicolon, ';');
+    Exit;
+  end;
 
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkAssign) then
   begin
@@ -1026,6 +1444,17 @@ begin
   end;
 
   Result := RParseExpr;
+  { `a[i] = e;` / `s[i] = e;` — indexed stores parse as an expression
+    followed by `=` (AN_INDEX / slice AN_DEREF are valid assign targets). }
+  if (CurTok.Kind = tkAssign) and
+     ((ASTKind[Result] = AN_INDEX) or (ASTKind[Result] = AN_DEREF)) then
+  begin
+    Next;
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := Result;
+    ASTRight[node] := RParseExpr;
+    Result := node;
+  end;
   Expect(tkSemicolon, ';');
 end;
 

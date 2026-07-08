@@ -5,7 +5,16 @@ prio: 60  # auto
 # Rust frontend — umbrella
 
 - **Type:** feature — umbrella (spans Track A + Track B) — working name **Track R**
-- **Status:** working — sub-tickets 1-3/12 landed on `master`, unofficial/unsupported
+- **Status:** experimental — sub-tickets 1-3/12 landed on `master`; plus the
+  2026-07-09 "ports-back" pass (Track R): the Zig frontend's parse-time
+  desugars ported back — println!/print! via the format splitter (#9+#12
+  output subset), `[T; N]` fixed arrays (repeat/list literals, indexing,
+  `.len()`), borrowed slices `&a[lo..hi]` (#8 minimal: __ptr+__len UClass,
+  `s[i]` read/write, `s.len()`), and `for i in lo..hi / lo..=hi` range
+  loops. Test: test/test_rust_advanced.rs in make test. Still parked as a
+  full-language effort; remaining sub-tickets (#4 dyn dispatch, #5
+  drop/move, #6 derive, #7 macro_rules, #10-12 full RTL) need shared
+  machinery or real engines — upscale per experimental/README.md only
 - **Owner:** Claude (~/frank2)
 - **Opened:** 2026-07-03 (design discussion — see `devdocs/developer/historic/rust-frontend.md`)
 - **Priority:** unranked — this is a scoping ticket, not a greenlit build

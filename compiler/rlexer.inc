@@ -15,6 +15,7 @@ begin
     3: begin
       if s = 'let' then Result := tkLet;
       if s = 'mut' then Result := tkMut;
+      if s = 'for' then Result := tkFor;
     end;
     4: begin
       if s = 'else' then Result := tkElse;
