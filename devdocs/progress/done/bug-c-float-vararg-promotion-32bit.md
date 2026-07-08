@@ -38,3 +38,6 @@ the x86-64 path does via xmm.
 00174 + 00175 pass under `tools/run_c_conformance.sh --target {i386,arm32,riscv32}`;
 drop their lines from `test/c-conformance/pxx.skip.{i386,arm32,riscv32}`;
 existing variadic guards stay green; self-host byte-identical.
+
+## Log
+- 2026-07-08 — resolved, commit 648dfd5b.
