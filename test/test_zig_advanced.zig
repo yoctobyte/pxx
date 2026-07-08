@@ -43,6 +43,13 @@ fn classify(n: i64) i64 {
     return -1;
 }
 
+fn max(comptime T: type, a: T, b: T) T {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
 fn sum_slice_demo() i64 {
     var a: [6]i64 = undefined;
     for (0..6) |i| {
@@ -94,6 +101,8 @@ pub fn main() void {
     std.debug.print("orelse2 {}\n", .{opt orelse 7});
 
     std.debug.print("slices {}\n", .{sum_slice_demo()});
+
+    std.debug.print("gen {} {} {}\n", .{ max(i64, 3, 9), max(i32, 7, 2), max(i64, 100, 50) });
 
     defer std.debug.print("main done\n", .{});
     std.debug.print("end\n", .{});

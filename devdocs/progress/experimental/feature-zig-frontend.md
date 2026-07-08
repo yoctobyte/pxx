@@ -50,9 +50,21 @@ recording: the paramless-recursion pitfall (bare `ZParseStatement` reads
 the Result alias instead of recursing) bit AGAIN inside the defer
 dispatch — third frontend it has bitten; see frank2-paramless-name-semantics.
 
+## Sub-ticket #6 landed too (2026-07-09, type-param subset)
+
+After the user pointed out Pascal generics were mostly parser-side, #6
+followed the same route: `fn f(comptime T: type, ...)` monomorphized by
+token-buffer substitution (rparser's RSpecializeGenericFn ported as
+ZSpecializeGenericFn — Zig is easier: the type arrives explicitly as the
+first call argument, no inference). Mangled `f$i64` specializations,
+cached; comptime param dropped from the copy; mid-stream jmp bracketing
+reused; two Zig-specific hazards handled (caller's defer stash and
+CurProc/FrameSize saved around the nested compile). Explicitly NOT a
+comptime VM: no comptime values, control flow, or builtins.
+
 **What remains is exactly the non-frontend work** (parked, would upscale to
 Track A only on its own merits per experimental/README.md):
-- comptime / generics (#6) — needs the monomorphization engine wired up.
+- a real comptime VM (#6's full form) — values/control-flow/builtins.
 - record-ABI shapes — optional/struct/slice params and returns.
 - std breadth (#8, lib/zrtl) — Track B, on demand.
 - real tySlice / tagged-union primitives — shared with the Rust tickets

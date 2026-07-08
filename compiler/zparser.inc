@@ -46,11 +46,15 @@
   - error unions `!T` (errno-style global __zig_err slot, caller-clears
     convention; `return error.X`, `try`, `catch v`, `catch |e| {}`),
   - minimal slices (auto-registered __ptr+__len UClass; `a[lo..hi]`,
-    `s[i]` read/write via raw pointer math, `s.len`).
-  What remains is exactly the non-frontend work: comptime/generics (a
-  monomorphization engine), record-ABI-dependent shapes (optional/struct/
-  slice params and returns), and std breadth — all parked per the umbrella
-  ticket; they need shared machinery, not more zparser.
+    `s[i]` read/write via raw pointer math, `s.len`),
+  - comptime-generics, type-param subset: `fn f(comptime T: type, ...)`
+    monomorphized by token-buffer substitution per explicit call-site type
+    (`f(i64, x)`), mangled + cached — rparser.inc's RSpecializeGenericFn
+    ported (see ZSpecializeGenericFn). NOT comptime evaluation.
+  What remains is exactly the non-frontend work: a real comptime VM
+  (values, control flow, builtins), record-ABI-dependent shapes (optional/
+  struct/slice params and returns), and std breadth — all parked per the
+  umbrella ticket; they need shared machinery, not more zparser.
 
   Known semantic deviations, accepted for a probe skeleton:
   - `continue` inside a `while ... : (expr)` loop skips the continue
@@ -73,6 +77,48 @@ function ZParseExpr: Integer; forward;
 function ZParseBlock: Integer; forward;
 function ZParseStatement: Integer; forward;
 function ZParseIf: Integer; forward;
+function ZSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer; forward;
+
+{ ===== comptime-generics (sub-ticket #6, type-param subset) =====
+  `fn f(comptime T: type, ...)` monomorphized by token-buffer substitution
+  — the SAME mechanism Pascal's generics and rparser.inc's
+  RSpecializeGenericFn use, ported: the fn's tokens are remembered at
+  prescan, each call site `f(i64, args...)` copies them with T replaced by
+  the concrete type name (and the comptime param dropped), then compiles
+  the copy as an ordinary fn under a mangled name (`f$i64`), cached per
+  type. Zig is easier than Rust here: the type arrives explicitly as the
+  first argument, no inference. NOT comptime evaluation: no comptime
+  values, no comptime control flow, no builtins — type parameters only,
+  and only as the FIRST parameter. }
+const
+  Z_MAX_GENERIC_FNS = 64;
+
+type
+  TZGenericFunc = record
+    Name, ParamName: AnsiString;
+    TokStart, TokCnt: Integer;
+  end;
+
+var
+  ZGenericFns: array[0..Z_MAX_GENERIC_FNS-1] of TZGenericFunc;
+  ZGenericFnCount: Integer;
+
+function ZFindGenericFn(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to ZGenericFnCount - 1 do
+    if ZGenericFns[i].Name = name then begin Result := i; Exit; end;
+end;
+
+{ True when the fn signature starting at Tokens[i] (tkFn) opens with a
+  `comptime` first parameter — i.e. it is a generic template, not an
+  ordinary fn. }
+function ZFnIsGenericAt(i: Integer): Boolean;
+begin
+  Result := (Tokens[i + 2].Kind = tkLParen) and
+            (Tokens[i + 3].Kind = tkIdent) and (GetTokenStr(i + 3) = 'comptime');
+end;
 
 { Zig type name -> TTypeKind. Sets LastTypeRecId when the name is a known
   struct (the AllocVar/AddUField convention every frontend uses to pass a
@@ -359,8 +405,8 @@ begin
 end;
 
 function ZParsePrimary: Integer;
-var node, symIdx, procIdx, argNode, lastArg, idxNode, postNode, fTokIdx: Integer;
-    name: AnsiString;
+var node, symIdx, procIdx, argNode, lastArg, idxNode, postNode, fTokIdx, gfi: Integer;
+    name, typeName: AnsiString;
 begin
   case CurTok.Kind of
     tkInteger:
@@ -409,7 +455,35 @@ begin
       if CurTok.Kind = tkLParen then
       begin
         procIdx := FindProc(name);
-        if procIdx < 0 then Error('Zig: call to undefined function ' + name);
+        if procIdx < 0 then
+        begin
+          { generic call `f(i64, args...)` — the explicit type argument
+            selects/creates the specialization, then drops out of the
+            emitted argument list. }
+          gfi := ZFindGenericFn(name);
+          if gfi < 0 then Error('Zig: call to undefined function ' + name);
+          Next; { ( }
+          if CurTok.Kind <> tkIdent then
+            Error('Zig: generic fn ' + name + ' needs a type name as its first argument');
+          typeName := CurTok.SVal;
+          Next;
+          procIdx := ZSpecializeGenericFn(gfi, typeName);
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTTk[node] := Ord(Procs[procIdx].RetType);
+          lastArg := -1;
+          if Eat(tkComma) then
+            repeat
+              argNode := AllocNode(AN_ARG);
+              ASTLeft[argNode] := ZParseExpr;
+              ASTRight[argNode] := -1;
+              if lastArg < 0 then ASTLeft[node] := argNode else ASTRight[lastArg] := argNode;
+              lastArg := argNode;
+            until not Eat(tkComma);
+          Expect(tkRParen, ')');
+          Result := node;
+          Exit;
+        end;
         Next;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
@@ -1596,7 +1670,8 @@ begin
   begin
     if Tokens[i].Kind = tkBegin then Inc(depth)
     else if Tokens[i].Kind = tkEnd then Dec(depth)
-    else if (depth = 0) and (Tokens[i].Kind = tkFn) and (Tokens[i + 1].Kind = tkIdent) then
+    else if (depth = 0) and (Tokens[i].Kind = tkFn) and (Tokens[i + 1].Kind = tkIdent) and
+            not ZFnIsGenericAt(i) then
       ZRegisterFnSignatureAt(i, mainIsVoid);
     Inc(i);
   end;
@@ -1693,6 +1768,136 @@ begin
   CurProc := -1;
 end;
 
+{ Registers every top-level `fn name(comptime T: type, ...)` template:
+  records name, type-param name and the fn's whole token span for
+  ZSpecializeGenericFn to copy-and-substitute per call site. }
+procedure ZRegisterGenericFns;
+var i, j, depth, gfi: Integer;
+begin
+  i := 0;
+  while Tokens[i].Kind <> tkEOF do
+  begin
+    if (Tokens[i].Kind = tkFn) and (Tokens[i + 1].Kind = tkIdent) and ZFnIsGenericAt(i) then
+    begin
+      if ZGenericFnCount >= Z_MAX_GENERIC_FNS then Error('Zig: too many generic functions (skeleton limit 64)');
+      gfi := ZGenericFnCount; Inc(ZGenericFnCount);
+      ZGenericFns[gfi].Name := GetTokenStr(i + 1);
+      if Tokens[i + 4].Kind <> tkIdent then
+        Error('Zig: expected type parameter name after comptime in ' + ZGenericFns[gfi].Name);
+      ZGenericFns[gfi].ParamName := GetTokenStr(i + 4);
+      if (Tokens[i + 5].Kind <> tkColon) or (Tokens[i + 6].Kind <> tkIdent) or
+         (GetTokenStr(i + 6) <> 'type') then
+        Error('Zig: only `comptime T: type` (first parameter) is supported by the skeleton in ' + ZGenericFns[gfi].Name);
+      j := i + 7;
+      while (Tokens[j].Kind <> tkBegin) and (Tokens[j].Kind <> tkEOF) do Inc(j);
+      if Tokens[j].Kind = tkEOF then Error('Zig: missing body for generic fn ' + ZGenericFns[gfi].Name);
+      depth := 1; Inc(j);
+      while (depth > 0) and (Tokens[j].Kind <> tkEOF) do
+      begin
+        if Tokens[j].Kind = tkBegin then Inc(depth)
+        else if Tokens[j].Kind = tkEnd then Dec(depth);
+        Inc(j);
+      end;
+      if depth > 0 then Error('Zig: unterminated body in generic fn ' + ZGenericFns[gfi].Name);
+      ZGenericFns[gfi].TokStart := i;
+      ZGenericFns[gfi].TokCnt := j - i;
+      i := j;
+    end
+    else
+      Inc(i);
+  end;
+end;
+
+{ Copies the template's tokens with the fn name manged to `name$T`, the
+  `comptime T: type[,]` parameter DROPPED (the copy must be an ordinary
+  fn) and every T ident replaced by the concrete type name, registers the
+  copy's signature, then compiles it in place — bracketed by a jmp because
+  specialization triggers mid-expression inside the CALLER's body and the
+  copy's code would otherwise land in the caller's instruction stream
+  (rparser.inc found that segfault the hard way; same fix). The caller's
+  CurProc/FrameSize and defer stash are saved around the nested
+  ZParseTopLevelFn — both are per-fn globals the nested parse clobbers. }
+function ZSpecializeGenericFn(gfi: Integer; const concreteTypeName: AnsiString): Integer;
+var mangledName: AnsiString;
+    procIdx, i, k, srcIdx, startTok, concreteOff, concreteLen, jmpPatch: Integer;
+    skipLo, skipHi: Integer;
+    savedTokPos, savedCurProc, savedFrameSize, savedDC: Integer;
+    savedCurTok: TToken;
+    savedDeferNode: array[0..31] of Integer;
+    savedDeferIsErr: array[0..31] of Boolean;
+    dummyMainIsVoid: Boolean;
+begin
+  mangledName := ZGenericFns[gfi].Name + '$' + concreteTypeName;
+  procIdx := FindProc(mangledName);
+  if procIdx >= 0 then begin Result := procIdx; Exit; end;
+
+  concreteOff := RStoredName(concreteTypeName);
+  concreteLen := Length(concreteTypeName);
+  { the comptime param: tokens TokStart+3..+6 (`comptime T : type`), plus
+    the separating comma when more parameters follow }
+  skipLo := ZGenericFns[gfi].TokStart + 3;
+  skipHi := ZGenericFns[gfi].TokStart + 6;
+  if Tokens[ZGenericFns[gfi].TokStart + 7].Kind = tkComma then
+    skipHi := ZGenericFns[gfi].TokStart + 7;
+
+  startTok := TokCount;
+  for i := 0 to ZGenericFns[gfi].TokCnt - 1 do
+  begin
+    srcIdx := ZGenericFns[gfi].TokStart + i;
+    if (srcIdx >= skipLo) and (srcIdx <= skipHi) then Continue;
+    if TokCount >= MAX_TOKENS then Error('Zig: token buffer overflow specializing ' + ZGenericFns[gfi].Name);
+    Tokens[TokCount] := Tokens[srcIdx];
+    if srcIdx = ZGenericFns[gfi].TokStart + 1 then
+    begin
+      Tokens[TokCount].SOffset := RStoredName(mangledName);
+      Tokens[TokCount].SLen := Length(mangledName);
+    end
+    else if (Tokens[srcIdx].Kind = tkIdent) and
+            (GetTokenStr(srcIdx) = ZGenericFns[gfi].ParamName) then
+    begin
+      Tokens[TokCount].SOffset := concreteOff;
+      Tokens[TokCount].SLen := concreteLen;
+    end;
+    Inc(TokCount);
+  end;
+
+  dummyMainIsVoid := False;
+  ZRegisterFnSignatureAt(startTok, dummyMainIsVoid);
+
+  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);   { skip over the copy's code }
+
+  savedTokPos := TokPos;
+  savedCurTok := CurTok;
+  savedCurProc := CurProc;
+  savedFrameSize := FrameSize;
+  savedDC := ZDeferCount;
+  for k := 0 to savedDC - 1 do
+  begin
+    savedDeferNode[k] := ZDeferNode[k];
+    savedDeferIsErr[k] := ZDeferIsErr[k];
+  end;
+
+  TokPos := startTok;
+  Next; { load the copy's 'fn' token }
+  ZParseTopLevelFn;
+
+  TokPos := savedTokPos;
+  CurTok := savedCurTok;
+  CurProc := savedCurProc;
+  FrameSize := savedFrameSize;
+  ZDeferCount := savedDC;
+  for k := 0 to savedDC - 1 do
+  begin
+    ZDeferNode[k] := savedDeferNode[k];
+    ZDeferIsErr[k] := savedDeferIsErr[k];
+  end;
+
+  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+
+  Result := FindProc(mangledName);
+  if Result < 0 then Error('Zig: internal error specializing ' + ZGenericFns[gfi].Name);
+end;
+
 procedure ParseZigProgram;
 var callPatch, mainIdx, structDepth: Integer;
     mainIsVoid: Boolean;
@@ -1706,7 +1911,9 @@ begin
     8 bytes, and the prescan needs it before any body parses. }
   LastTypeRecId := REC_NONE;
   ZErrSlotSym := AllocVar('__zig_err', tyInt64);
+  ZGenericFnCount := 0;
   ZRegisterStructs;
+  ZRegisterGenericFns;
   ZRegisterFnSignatures(mainIsVoid);
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('Zig: no fn main() found');
@@ -1759,6 +1966,21 @@ begin
         Next;
       end;
       Expect(tkSemicolon, ';');
+    end
+    { generic template — buffered by the prescan, compiled per call site;
+      skip its tokens here (it cannot compile as-is: T is not a type yet). }
+    else if (CurTok.Kind = tkFn) and ZFnIsGenericAt(TokPos - 1) then
+    begin
+      while (CurTok.Kind <> tkBegin) and (CurTok.Kind <> tkEOF) do Next;
+      Expect(tkBegin, '{');
+      structDepth := 1;
+      while structDepth > 0 do
+      begin
+        if CurTok.Kind = tkEOF then Error('Zig: unterminated generic fn body');
+        if CurTok.Kind = tkBegin then Inc(structDepth)
+        else if CurTok.Kind = tkEnd then Dec(structDepth);
+        Next;
+      end;
     end
     else if CurTok.Kind = tkFn then ZParseTopLevelFn
     else Error('Zig: expected fn (or pub fn) at top level');
