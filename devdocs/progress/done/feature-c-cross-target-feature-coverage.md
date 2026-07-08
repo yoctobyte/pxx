@@ -5,7 +5,7 @@ prio: 65  # auto
 # C frontend + lua — cross-target / ESP feature coverage
 
 - **Type:** feature (test coverage) — Track C (+ A for any backend gap found)
-- **Status:** working
+- **Status:** done
 - **Owner:** fable-c
 - **Opened:** 2026-06-27
 
@@ -133,3 +133,4 @@ float, windowed/Call0 ABI) diverge.
 
 - 2026-06-27 - Filed while wrapping the FPC-seed fix. C/lua proven on x86-64
   only; cross + ESP coverage is an open gap. Park behind the sqlite push.
+- 2026-07-08 — resolved, commit b385a381.
