@@ -118,13 +118,14 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (14)
+## experimental (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
+| feature-rust-corpus-chess | R | 0 | feature | Rust corpus: the own-written chess engine as Track R's real-world target | — |
 | feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
 | feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
 | feature-rust-dyn-trait-dispatch | R | 45 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |

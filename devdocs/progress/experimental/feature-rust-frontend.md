@@ -19,6 +19,14 @@ prio: 60  # auto
 - **Opened:** 2026-07-03 (design discussion — see `devdocs/developer/historic/rust-frontend.md`)
 - **Priority:** unranked — this is a scoping ticket, not a greenlit build
 
+## North star (2026-07-09): the own-written chess engine
+
+Track R now has a real-world target: [[feature-rust-corpus-chess]] —
+the user's ~6k-line idiomatic chess engine, with perft as a differential
+oracle against cargo. The remaining sub-tickets below stay X-tagged, but
+that ticket orders them by what the engine actually needs (stage plan
+there); pick work from its ladder, not from spec-completeness.
+
 ## Motivation
 
 Add a Rust-syntax frontend (4th, after Pascal/Nil-Python/C) lowering to the
