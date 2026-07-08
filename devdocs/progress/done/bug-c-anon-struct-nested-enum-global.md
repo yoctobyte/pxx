@@ -41,3 +41,6 @@ the trailing declarator normally.
 ## Gate
 Drop 00120.c from test/c-conformance/pxx.skip; runner green; make test +
 self-host byte-identical.
+
+## Log
+- 2026-07-08 — resolved, commit 42477beb.
