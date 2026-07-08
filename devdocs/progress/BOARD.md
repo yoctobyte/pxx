@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -30,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (109)
+## backlog (108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -38,7 +39,6 @@ _none_
 | bug-c-comment-terminator-greedy | C | 30 | bug | C lexer: block comment possibly not terminated at the FIRST `*/` | — |
 | bug-c-crtl-missing-net-headers-enet | C | 45 | bug | crtl: missing <netinet/tcp.h>, <netdb.h>, <poll.h> — ENet falls back to host headers | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
-| bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
@@ -719,7 +719,6 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
-- [p 60] [C] bug-c-float-single-return-zero
 - [p 60] [B] bug-crtl-printf-g-double-roundtrip
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
