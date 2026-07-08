@@ -30,6 +30,7 @@ STATUSES = [
     "unfinished",
     "blocked",
     "backlog",
+    "experimental",
     "rainy-day",
     "done-followup",
     "done",

@@ -2,14 +2,61 @@
 prio: 45  # auto
 ---
 
-# Zig frontend — skeleton + structs/pointers landed; full language stays PARKED
+# Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental
 
 - **Type:** feature — umbrella (spans Track A + Track B)
-- **Status:** backlog — sub-tickets 1 (skeleton, 2026-07-06) and 2
-  (structs-and-pointers, 2026-07-07) DONE (Track Z); deeper sub-tickets
-  (#3 optionals/error-unions onward) stay parked — they need the shared
-  tagged-union/slice primitives (Track A tickets)
+- **Status:** experimental — everything reachable by pure parse-time
+  desugaring onto the existing IR is DONE and tested (2026-07-08); what
+  remains needs shared machinery (see below) and is low-prio by the
+  experimental-frontends rule (experimental/README.md)
 - **Owner:** —
+
+## Theoretic completion (2026-07-08, Track Z — user-directed)
+
+Sub-tickets 3/4/5/7 landed in one pass, still zero shared-internals edits
+(zparser.inc + one lexer char + test + Makefile). The trick throughout:
+every "missing primitive" was faked with vocabulary the IR already has —
+the same UClass tag+payload shape the Rust skeleton's enums pioneered:
+
+- **#7 switch** — hidden scrutinee temp + AN_IF chain (arm value lists OR
+  together; blocks / expressions / `return` arms; `else`). No ranges.
+- **#5 defer/errdefer** — fn-level parse-time stash, replayed in reverse
+  at every exit; normal exits replay defer, error exits errdefer+defer.
+  Return value evaluates into a hidden temp BEFORE the replay (Zig order).
+  Deviation: registration is lexical, fn-scoped.
+- **#3 optionals `?T`** — auto-registered UClass ("?i64") with __has/__val;
+  `null`, assignment, `if (x) |v|` capture (fresh local + prepended field
+  read, the Rust match-bind trick), `orelse` (AN_TERNARY), `.?` unwrap.
+  Locals only.
+- **#3 error unions `!T`** — errno-style global `__zig_err` slot with a
+  caller-clears convention; error names auto-register (codes from 1);
+  `return error.X` (defers replay first, slot set after), `try f()`
+  (statement or whole var-init; propagates via errdefer+defer replay +
+  exit), `f() catch v` / `catch |e| { }`, `error.X` as a comparable value.
+  Scalar payloads ride the normal return register.
+- **#4 slices (minimal)** — auto-registered UClass ("[]i64") with
+  __ptr/__len; `a[lo..hi]` (AN_ADDR over AN_INDEX for the base address),
+  `s[i]` read/write via raw i64 pointer math + AN_DEREF (the C frontend's
+  decay trick), `s.len`. Initializer-position slicing of fixed arrays only.
+
+Test `test/test_zig_advanced.zig` (switch/defer/errdefer/optionals/error
+propagation/slices in one program) wired into `make test`. Gate: all three
+Zig tests green, testmgr quick 11/11, self-host fixedpoint byte-identical.
+
+**Probe verdict: still no shared-internals bug** — AN_TERNARY, AN_DEREF on
+computed addresses, AN_ADDR over AN_INDEX, deep nested AN_SEQ/AN_IF chains
+from desugaring all worked as documented. One self-inflicted lesson worth
+recording: the paramless-recursion pitfall (bare `ZParseStatement` reads
+the Result alias instead of recursing) bit AGAIN inside the defer
+dispatch — third frontend it has bitten; see frank2-paramless-name-semantics.
+
+**What remains is exactly the non-frontend work** (parked, would upscale to
+Track A only on its own merits per experimental/README.md):
+- comptime / generics (#6) — needs the monomorphization engine wired up.
+- record-ABI shapes — optional/struct/slice params and returns.
+- std breadth (#8, lib/zrtl) — Track B, on demand.
+- real tySlice / tagged-union primitives — shared with the Rust tickets
+  ([[feature-rust-borrowed-slice-type]], [[feature-rust-match-enum-payload]]).
 
 ## Sub-ticket 2 landed (2026-07-07, Track Z — user-directed scaffolding pass)
 

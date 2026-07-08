@@ -8,15 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
-| feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
-| feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
-| feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
-| feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (3)
@@ -31,7 +27,7 @@ _none_
 
 _none_
 
-## backlog (95)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -102,15 +98,6 @@ _none_
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
-| feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
-| feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
-| feature-rust-dyn-trait-dispatch | R | 45 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
-| feature-rust-macro-rules | R | 60 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
-| feature-rust-misc-semantics | R | 45 | feature | Rust frontend — integer overflow mode + format-string parser | — |
-| feature-rust-rtl-concurrency | R | 45 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
-| feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
-| feature-rust-rtl-macros-io | R | 45 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
 | feature-selfhost-guard-ir-unsupported | A | 60 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
@@ -123,13 +110,31 @@ _none_
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| feature-zig-frontend | B | 45 | feature | Zig frontend — skeleton + structs/pointers landed; full language stays PARKED | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
+
+## experimental (14)
+
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
+| feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
+| feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
+| feature-rust-dyn-trait-dispatch | R | 45 | feature | Rust frontend — `dyn Trait` dispatch for arbitrary types | — |
+| feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
+| feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
+| feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
+| feature-rust-macro-rules | R | 60 | feature | Rust frontend — `macro_rules!` (scope-cut: builtins first) | — |
+| feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
+| feature-rust-misc-semantics | R | 45 | feature | Rust frontend — integer overflow mode + format-string parser | — |
+| feature-rust-rtl-concurrency | R | 45 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
+| feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
+| feature-rust-rtl-macros-io | R | 45 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
 ## rainy-day (20)
 
@@ -741,7 +746,6 @@ _none_
 - [p 60] [A] feature-opt-store-reload-elimination
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
-- [p 60] [R] feature-rust-macro-rules
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [C] bug-c-pointer-to-array-declarator
@@ -791,21 +795,12 @@ _none_
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
-- [p 45] [R] feature-rust-borrowed-slice-type
-- [p 45] [R] feature-rust-derive-macros
-- [p 45] [R] feature-rust-drop-move-tracking
-- [p 45] [R] feature-rust-dyn-trait-dispatch
-- [p 45] [R] feature-rust-misc-semantics
-- [p 45] [R] feature-rust-rtl-concurrency
-- [p 45] [R] feature-rust-rtl-core-types
-- [p 45] [R] feature-rust-rtl-macros-io
 - [p 45] [B] feature-synapse-compile-check
 - [p 45] [T] feature-testmgr-enroll-c-cross-conformance
 - [p 45] [B] feature-tls-system-trust-store
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [B] feature-writeln-as-library
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
-- [p 45] [B] feature-zig-frontend
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
