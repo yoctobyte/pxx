@@ -44,3 +44,23 @@ inside a do-while). Needs: (1) accept any statement as the switch body, (2) a
 scan that collects case/default labels from the nested body and emits a dispatch
 jump-table/if-chain to those labels, (3) fall-through by label ordering. Focused
 rework (peer of bug-c-init-brace-elision-nested). Parked.
+
+## Attempt 2 2026-07-08 (a-agent) — non-compound body works, but destabilizes self-host
+Implemented the 00051 half cleanly at the C level: ParseCSwitchAST now accepts a
+non-`{` body — when the token after `)` is not `{`, parse statements until one is
+not a bare AN_CASE/AN_DEFAULT marker (those don't attach their labelled statement
+in the fallthrough model, so the body = the marker(s) + the one real statement).
+No braces in the added comments (the earlier "unexpected character" was a
+nested-comment brace imbalance, avoided here).
+
+BUT self-host no longer reaches a ONE-STEP fixedpoint: clean master builds
+byte-identical in one step; with this change `make all`'s build≠verify (differ at
+byte 97), and it only converges on the SECOND iteration (v2==v3, sizes 4.70M vs
+4.67M). The change is C-frontend-only yet perturbs how the compiler reproduces
+its own (Pascal) binary — the classic codegen-reseed / address-sensitive
+convergence. Reverted rather than reseed: a rare idiom (00051) isn't worth
+shipping a change that breaks the one-step self-host gate from the current stable.
+Next attempt must land it WITH a reseed step (make stabilize→pin) and confirm the
+two-step convergence is truly deterministic, or find why restructuring this
+C-only function shifts Pascal codegen. 00143 (Duff's) still separate
+(output-matches / exit-1 control-flow bug).
