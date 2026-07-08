@@ -19,4 +19,3 @@
 00214.c	statement expressions + __builtin_expect — feature-c-statement-expressions
 00216.c	empty structs + compound-literal initializers — feature-c-compound-literals
 00219.c	_Generic selection — feature-c-generic-selection
-00220.c	wchar_t L"..." wide string literals — feature-c-wide-string-literals

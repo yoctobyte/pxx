@@ -2617,6 +2617,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
+    wcp, wb0, wb1, wb2, wnb, wsoff, wslen: Integer;
     arrElems: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
@@ -2853,16 +2854,44 @@ begin
         Next;   { consume '='; CurTok is now the string, i.e. Tokens[TokPos-1] }
         while (CurTok.Kind = tkString) do
         begin
+          wsoff := Tokens[TokPos - 1].SOffset;
+          wslen := Tokens[TokPos - 1].SLen;
           ei := 0;
-          while ei < Tokens[TokPos - 1].SLen do
+          while ei < wslen do
           begin
             if nArrElems > 255 then begin nArrElems := -1; Break; end;
-            idxLit := AllocNode(AN_INT_LIT);
-            ASTIVal[idxLit] := Ord(TokChars[Tokens[TokPos - 1].SOffset + ei]);
-            ASTTk[idxLit] := Ord(tyChar);
-            arrElems[nArrElems] := idxLit;
-            Inc(nArrElems);
-            Inc(ei);
+            if Tokens[TokPos - 1].IVal = 1 then
+            begin
+              { wide string L"..." — UTF-8 decode the source bytes to one wchar_t
+                (int) codepoint per element (00220). }
+              wb0 := Ord(TokChars[wsoff + ei]) and 255;
+              if wb0 < $80 then begin wcp := wb0; wnb := 1; end
+              else if (wb0 and $E0) = $C0 then begin wcp := wb0 and $1F; wnb := 2; end
+              else if (wb0 and $F0) = $E0 then begin wcp := wb0 and $0F; wnb := 3; end
+              else begin wcp := wb0 and $07; wnb := 4; end;
+              wb1 := 1;
+              while (wb1 < wnb) and (ei + wb1 < wslen) do
+              begin
+                wb2 := Ord(TokChars[wsoff + ei + wb1]) and 255;
+                wcp := (wcp shl 6) or (wb2 and $3F);
+                Inc(wb1);
+              end;
+              Inc(ei, wnb);
+              idxLit := AllocNode(AN_INT_LIT);
+              ASTIVal[idxLit] := wcp;
+              ASTTk[idxLit] := Ord(tyInteger);
+              arrElems[nArrElems] := idxLit;
+              Inc(nArrElems);
+            end
+            else
+            begin
+              idxLit := AllocNode(AN_INT_LIT);
+              ASTIVal[idxLit] := Ord(TokChars[wsoff + ei]);
+              ASTTk[idxLit] := Ord(tyChar);
+              arrElems[nArrElems] := idxLit;
+              Inc(nArrElems);
+              Inc(ei);
+            end;
           end;
           if nArrElems < 0 then Break;
           Next;

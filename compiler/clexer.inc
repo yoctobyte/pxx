@@ -262,7 +262,7 @@ var
 {$endif}
   s: AnsiString;
   n: Int64;
-  done: Boolean;
+  done, wide: Boolean;
   numStart, valEnd: Integer;
 begin
   CSkipSpace;
@@ -271,6 +271,18 @@ begin
   CLexHexOctal := False;
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
+
+  { Wide string/char prefix `L"..."` / `L'...'` — consume the `L`, then lex the
+    literal normally (raw UTF-8 bytes into SVal); CurTok.IVal := 1 marks it wide
+    so the array-init path decodes UTF-8 -> wchar_t codepoints (00220). }
+  wide := False;
+  if (c = 'L') and (SrcPos < Length(Source)) and
+     ((Source[SrcPos+1] = '"') or (Source[SrcPos+1] = '''')) then
+  begin
+    wide := True;
+    Inc(SrcPos);                { consume 'L' -> SrcPos at the quote }
+    c := Source[SrcPos];
+  end;
 
   if c in ['a'..'z','A'..'Z','_'] then
   begin
@@ -419,7 +431,9 @@ begin
       end;
     end;
     if SrcPos <= Length(Source) then Inc(SrcPos);
-    CurTok.Kind := tkString; CurTok.SVal := s; Exit;
+    CurTok.Kind := tkString; CurTok.SVal := s;
+    if wide then CurTok.IVal := 1;   { wide string L"..." — decoded at parse time }
+    Exit;
   end;
 
   if c = '''' then

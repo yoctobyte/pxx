@@ -891,6 +891,10 @@ test-core: $(COMPILER)
 	# (bug-c-typedef-array-element-init): vec4 v -> float[4], vec4 arr[N] -> [N][4]
 	./$(COMPILER) test/carray_typedef_element_init.c /tmp/carray_typedef_element_init26
 	/tmp/carray_typedef_element_init26; test "$$?" = "42"
+	# wide string literals L"..." decode UTF-8 -> wchar_t codepoints
+	# (feature-c-wide-string-literals, c-testsuite 00220)
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cwide_string_literal.c /tmp/cwide_string_literal26
+	/tmp/cwide_string_literal26; test "$$?" = "42"
 	# b203 (bug-c-multidim-ordinal-global-init): multidim ordinal global array init
 	./$(COMPILER) test/cmultidim_ordinal_global_b203.c /tmp/cmultidim_ordinal_global_b20326
 	/tmp/cmultidim_ordinal_global_b20326; test "$$?" = "42"
