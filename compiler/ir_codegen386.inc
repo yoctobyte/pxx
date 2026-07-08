@@ -2746,13 +2746,35 @@ begin
           and reached via `call eax`. Args are marshalled by the SIGNATURE proc's
           param types — critically a 64-bit (int64) or double by-value param is 8
           bytes, not 4; pushing it as 4 shifts every following arg's stack slot
-          in the callee (sqlite's VFS xRead/xWrite take an sqlite_int64 offset). }
+          in the callee (sqlite's VFS xRead/xWrite take an sqlite_int64 offset).
+          A VARIADIC signature (fnptr = &fprintf, 00189) needs the same vaFwd
+          arg-order reversal + variadic-tail 8-byte widening the direct IR_CALL
+          path applies, otherwise the callee reads the format arg from the wrong
+          stack slot and segfaults. }
         procIdx := Integer(IRIVal[node]);            { signature proc index }
-        argBytes := 0;
-        nArgs := 0;
+        vaNvw := 0;
         argNode := IRB[node];
         while argNode <> -1 do
         begin
+          if vaNvw > 127 then Error('target i386: too many call arguments');
+          vaOrder[vaNvw] := argNode; Inc(vaNvw); argNode := IRB[argNode];
+        end;
+        vaFwd := (procIdx >= 0) and ProcVariadic[procIdx];
+        if vaFwd then
+        begin
+          vaO1 := 0; vaO2 := vaNvw - 1;
+          while vaO1 < vaO2 do
+          begin
+            i := vaOrder[vaO1]; vaOrder[vaO1] := vaOrder[vaO2]; vaOrder[vaO2] := i;
+            Inc(vaO1); Dec(vaO2);
+          end;
+        end;
+        argBytes := 0;
+        vaK := 0;
+        if vaNvw > 0 then argNode := vaOrder[0] else argNode := -1;
+        while argNode <> -1 do
+        begin
+          if vaFwd then nArgs := vaNvw - 1 - vaK else nArgs := vaK;
           IREmitNode386(IRA[argNode]);
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
@@ -2791,13 +2813,30 @@ begin
             EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movss [esp], xmm0 }
             Inc(argBytes, 4);
           end
+          else if (procIdx >= 0) and (nArgs >= Procs[procIdx].ParamCount) and
+                  (Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) or
+                   (IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble)) then
+          begin
+            { variadic tail 64-bit arg (int64/uint64 in edx:eax, double in xmm0):
+              push both dwords, lo at the lower address (mirrors direct IR_CALL). }
+            if IntToTypeKind(IRTk[IRA[argNode]]) = tyDouble then
+            begin
+              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
+              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+            end
+            else
+            begin
+              EmitB($52);                            { push edx (hi) }
+              EmitB($50);                            { push eax (lo) }
+            end;
+            Inc(argBytes, 8);
+          end
           else
           begin
             EmitB($50);                              { push eax }
             Inc(argBytes, 4);
           end;
-          Inc(nArgs);
-          argNode := IRB[argNode];
+          Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
         EmitB($FF); EmitB($D0);                      { call eax }

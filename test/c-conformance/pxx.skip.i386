@@ -1,1 +1,0 @@
-00189.c	indirect call through variadic fn pointer segfaults on i386 — bug-c-i386-indirect-variadic-fnptr-00189

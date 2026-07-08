@@ -2176,7 +2176,7 @@ var
   fnRetPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   fnRetPDepths, fnRetPBaseTk, fnRetPBaseRec, fnRetPElemTk, fnRetPElemRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   fnRetPRecId, fnRetPProcSig: array[0..MAX_PROC_PARAMS-1] of Integer;
-  fnRetIsFunc: Boolean;
+  fnRetIsFunc, fpVariadic: Boolean;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
@@ -2465,6 +2465,7 @@ begin
     until (depth = 0) or (CurTok.Kind = tkEOF);
     { second group `(params)` — capture param types to build a call signature }
     fpNParams := 0;
+    fpVariadic := False;
     if CurTok.Kind = tkLParen then
     begin
       Next;                           { consume the parameter-list '(' }
@@ -2488,7 +2489,14 @@ begin
           if CurTok.Kind = tkIdent then Next;  { optional parameter name }
         end
         else
-          Next;                       { e.g. `...` varargs marker }
+        begin
+          { `...` varargs marker (lexes to three tkDot) — record it so the fn-ptr
+            signature is marked variadic; the indirect-call marshalling then
+            applies C default-argument promotion + the correct cdecl arg order
+            (bug-c-i386-indirect-variadic-fnptr-00189). }
+          if CurTok.Kind = tkDot then fpVariadic := True;
+          Next;
+        end;
         Eat(tkComma);
       end;
       Eat(tkRParen);
@@ -2502,6 +2510,7 @@ begin
     fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
     Procs[fpSig].BodyAddr := -1;
     ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
+    ProcVariadic[fpSig] := fpVariadic; { `...` in the fn-ptr signature }
     CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
     { A function pointer is a non-void pointer VALUE. The inner signature parse
       (e.g. `void (*x)(void)`'s `void` return / `(void)` params) leaves the
