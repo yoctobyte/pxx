@@ -288,9 +288,13 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
     }
 
     /* length modifiers — parsed for source compatibility (all read as long-or-
-       smaller through the GP save area on this ABI). */
+       smaller through the GP save area on this ABI). `L` (long double) is
+       accepted and treated as double: pxx models long double AS double, and a
+       double is what the varargs slot carries — so %Lf/%Le/%Lg format like
+       %f/%e/%g (c-testsuite 00204). */
     int lng = 0;
-    while (fmt[i] == 'l' || fmt[i] == 'h' || fmt[i] == 'z' || fmt[i] == 'j' || fmt[i] == 't') {
+    while (fmt[i] == 'l' || fmt[i] == 'h' || fmt[i] == 'z' || fmt[i] == 'j' ||
+           fmt[i] == 't' || fmt[i] == 'L') {
       if (fmt[i] == 'l') lng++;
       i++;
     }
