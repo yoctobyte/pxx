@@ -25,3 +25,6 @@ what the i386 codegen does with that symbol class.
 ## Gate
 00120 passes under `tools/run_c_conformance.sh --target i386`; drop its line
 from `test/c-conformance/pxx.skip.i386`.
+
+## Log
+- 2026-07-08 — resolved, commit 8fa1acd3.

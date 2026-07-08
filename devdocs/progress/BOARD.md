@@ -31,7 +31,7 @@ _none_
 
 _none_
 
-## backlog (101)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
-| bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -172,7 +171,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (525)
+## done (526)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -234,6 +233,7 @@ _none_
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
+| bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-init-array-designators | C | 50 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
 | bug-c-init-brace-elision-nested | C | 50 | bug | C brace elision + nested/anonymous-member aggregate initializers | — |
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
@@ -757,7 +757,6 @@ _none_
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
 - [p 50] [A] bug-c-typedef-array-element-init
 - [p 50] [B] feature-game-library-candidate-suite
-- [p 45] [A] bug-c-i386-enum-const-return-00120
 - [p 45] [A] bug-c-i386-indirect-variadic-fnptr-00189
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-designated-init-compound-literals
