@@ -50,3 +50,6 @@ Discovered alongside (independent, out of scope, filed):
 [[bug-c-sizeof-widening-cast-expr]] — `sizeof((long)1)` returns 4 not 8. 00200
 only checks INTERNAL consistency (PTYPE(X)==PTYPE(X<<count)), so a uniformly
 under-sized long balances and does not surface it.
+
+## Log
+- 2026-07-08 — resolved, commit ca169afa.
