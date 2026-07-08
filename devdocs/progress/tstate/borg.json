@@ -210,6 +210,14 @@
    "new_red": [],
    "sha": "116230b14c47cd09bf81fdda0ddcce7c8c70f465",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-08T15:59:55Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1068,8 +1076,30 @@
   "test-core#649": "pass",
   "test-core#65": "pass",
   "test-core#650": "pass",
+  "test-core#651": "pass",
+  "test-core#652": "pass",
+  "test-core#653": "pass",
+  "test-core#654": "pass",
+  "test-core#655": "pass",
+  "test-core#656": "pass",
+  "test-core#657": "pass",
+  "test-core#658": "pass",
+  "test-core#659": "pass",
   "test-core#66": "pass",
+  "test-core#660": "pass",
+  "test-core#661": "pass",
+  "test-core#662": "pass",
+  "test-core#663": "pass",
+  "test-core#664": "pass",
+  "test-core#665": "pass",
+  "test-core#666": "pass",
+  "test-core#667": "pass",
+  "test-core#668": "pass",
+  "test-core#669": "pass",
   "test-core#67": "pass",
+  "test-core#670": "pass",
+  "test-core#671": "pass",
+  "test-core#672": "pass",
   "test-core#68": "pass",
   "test-core#69": "pass",
   "test-core#70": "pass",
@@ -1272,11 +1302,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-07T20:03:09Z",
-  "sha": "116230b14c47cd09bf81fdda0ddcce7c8c70f465",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 365.8
+  "date": "2026-07-08T15:59:55Z",
+  "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
+  "tier": "native",
+  "verdict": "GREEN",
+  "wall": 172.3
  },
  "open_regressions": [
   {
