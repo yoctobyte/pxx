@@ -23,12 +23,14 @@
 set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-CC="${1:-$ROOT/compiler/pascal26}"
-SUITE="${2:-$ROOT/library_candidates/c-testsuite/tests/single-exec}"
+CC="$ROOT/compiler/pascal26"
+SUITE="$ROOT/library_candidates/c-testsuite/tests/single-exec"
 SHARD_I=0; SHARD_N=1
 TARGET=""
-[ $# -gt 0 ] && shift
-[ $# -gt 0 ] && shift
+# positional compiler / suite-dir, each optional and only consumed when the
+# next arg is not an --option (testmgr calls `<compiler> --shard I/N`)
+case "${1:-}" in ''|--*) ;; *) CC="$1"; shift ;; esac
+case "${1:-}" in ''|--*) ;; *) SUITE="$1"; shift ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
     --shard)   SHARD_I="${2%%/*}"; SHARD_N="${2##*/}"; shift ;;

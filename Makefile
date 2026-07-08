@@ -853,6 +853,9 @@ test-core: $(COMPILER)
 	# b195 (bug-c-printf-without-stdio-include-varargs): implicit printf binds crtl
 	./$(COMPILER) test/cimplicit_printf_varargs_b195.c /tmp/cimplicit_printf_varargs_b19526
 	test "$$(/tmp/cimplicit_printf_varargs_b19526; test $$? = 42 && echo RC42)" = "$$(printf 'x=42 y=ok\nRC42')"
+	# b196 (bug-crtl-strtod-precision-cjson-floats): exact strtod + %g round-trip
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/ccrtl_strtod_g_roundtrip_b196.c /tmp/ccrtl_strtod_g_roundtrip_b19626
+	/tmp/ccrtl_strtod_g_roundtrip_b19626; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

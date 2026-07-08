@@ -108,33 +108,71 @@ unsigned long strtoul(const char *s, char **end, int base) {
   return (unsigned long)strtol(s, end, base);
 }
 
+/* 10^k for 0 <= k <= 22: every value is exactly representable in a double,
+   and each step's product is too, so repeated multiplication stays EXACT
+   (no table needed — a static double array would also trip the C global
+   float-array init gap). */
+static double __crtl_pow10e(int k) {
+  double f = 1.0;
+  while (k > 0) { f = f * 10.0; k--; }
+  return f;
+}
+
 /* strtod: parse [sign] digits [. digits] [ (e|E) [sign] digits ]. No hex floats,
-   no inf/nan literals (lua's lexer handles those itself before calling). */
+   no inf/nan literals (lua's lexer handles those itself before calling).
+
+   Precision: the old implementation accumulated the fraction as
+   digit * 0.1^k — 0.1 is inexact, so short exact values drifted by 1 ulp
+   ("0.0625" parsed to 0.062500000000000008; cJSON round-trips went red and a
+   tcc-by-pxx rodata constant differed from gcc). Now the mantissa is read as
+   one integer and scaled by an exact power of ten (Clinger's fast path): for
+   mantissa < 2^53 and |decimal exponent| <= 22 — every literal in the
+   corpora — the single multiply/divide is correctly rounded, matching glibc
+   bit-for-bit. Longer mantissas keep collecting into the integer (rounded
+   once at bit 53+) and larger exponents scale in exact 1e22 chunks; those
+   can be 1 ulp off, same class as before but strictly no worse. */
 double strtod(const char *s, char **end) {
   const char *p = s;
-  double v = 0.0, sign = 1.0;
-  int any = 0;
+  double v, sign = 1.0;
+  unsigned long long mant = 0;
+  int any = 0, dexp = 0;
   if (!p) { if (end) *end = (char *)s; return 0.0; }
   while (*p == ' ' || *p == '\t' || *p == '\n') p++;
   if (*p == '-') { sign = -1.0; p++; } else if (*p == '+') p++;
-  while (*p >= '0' && *p <= '9') { v = v * 10.0 + (double)(*p - '0'); p++; any = 1; }
+  while (*p >= '0' && *p <= '9') {
+    if (mant < 1000000000000000000ULL) mant = mant * 10ULL + (unsigned long long)(*p - '0');
+    else dexp++;                    /* >19 digits: keep magnitude, drop digit */
+    p++; any = 1;
+  }
   if (*p == '.') {
-    double scale = 0.1;
     p++;
-    while (*p >= '0' && *p <= '9') { v = v + (double)(*p - '0') * scale; scale = scale * 0.1; p++; any = 1; }
+    while (*p >= '0' && *p <= '9') {
+      if (mant < 1000000000000000000ULL) {
+        mant = mant * 10ULL + (unsigned long long)(*p - '0');
+        dexp--;
+      }                             /* excess fraction digits: truncate */
+      p++; any = 1;
+    }
   }
   if (any && (*p == 'e' || *p == 'E')) {
     int esign = 1, e = 0;
     const char *ep = p + 1;
     if (*ep == '-') { esign = -1; ep++; } else if (*ep == '+') ep++;
     if (*ep >= '0' && *ep <= '9') {
-      while (*ep >= '0' && *ep <= '9') { e = e * 10 + (*ep - '0'); ep++; }
+      while (*ep >= '0' && *ep <= '9') {
+        if (e < 100000) e = e * 10 + (*ep - '0');
+        ep++;
+      }
       p = ep;
-      double f = 1.0, ten = 10.0;
-      int n = e;
-      while (n > 0) { f = f * ten; n--; }
-      if (esign < 0) v = v / f; else v = v * f;
+      if (esign < 0) dexp -= e; else dexp += e;
     }
+  }
+  v = (double)mant;
+  if (v != 0.0) {
+    while (dexp > 22)  { v = v * 1e22; dexp -= 22; }   /* 1e22 exact */
+    while (dexp < -22) { v = v / 1e22; dexp += 22; }
+    if (dexp > 0) v = v * __crtl_pow10e(dexp);
+    else if (dexp < 0) v = v / __crtl_pow10e(-dexp);
   }
   if (end) *end = (char *)(any ? p : s);
   return sign * v;

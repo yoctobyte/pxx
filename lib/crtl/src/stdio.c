@@ -150,14 +150,32 @@ static int __crtl_ftoa(char *out, double v, int prec) {
   return n;
 }
 
+/* 10^k for 0 <= k <= 22, exact (see the strtod note in stdlib.c: repeated
+   multiplication by 10.0 stays exact up to 1e22, and a static double table
+   would trip the C global float-array init gap). */
+static double __crtl_p10(int k) {
+  double f = 1.0;
+  while (k > 0) { f = f * 10.0; k--; }
+  return f;
+}
+
 /* IEEE double -> 'g' notation: `prec` significant digits, shortest of %e/%f with
    trailing zeros stripped (the C %g rules lua's "%.14g" relies on). Returns the
-   length written. */
+   length written.
+
+   Digit extraction is integer-based: the old repeated /10 normalisation
+   accumulated rounding drift, so exact values leaked long tails
+   ("100.125" printed as 100.12499999999999 at %1.15g — the cJSON red).
+   Now: find the decimal exponent by COMPARING against exact powers of ten
+   (the value itself is never mutated), scale once by an exact power into an
+   integer mantissa of `prec` digits (one correctly-rounded op for the whole
+   normal range), and expand that integer. */
 static int __crtl_gtoa(char *out, double v, int prec, int upper, int force_exp) {
   int n = 0, i, e, neg = 0, dotpos;
   double a;
   char digits[40];
-  int nd;
+  int nd, eprec, k;
+  unsigned long long D, lim;
   if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
   if (prec <= 0) prec = 1;
   if (v < 0.0) { neg = 1; a = -v; } else a = v;
@@ -166,27 +184,34 @@ static int __crtl_gtoa(char *out, double v, int prec, int upper, int force_exp) 
     out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
     return n;
   }
-  /* decimal exponent e = floor(log10(a)) by scaling (no libm) */
+  /* extraction precision capped so the mantissa fits unsigned long long
+     (10^18 < 2^63); positions beyond it pad with zeros */
+  eprec = prec; if (eprec > 18) eprec = 18;
   e = 0;
   if (a != 0.0) {
-    while (a >= 10.0) { a = a / 10.0; e++; }
-    while (a <  1.0) { a = a * 10.0; e--; }
+    /* bring a into [1, 1e22) with exact-chunk steps (each one rounded op;
+       only reached outside the double's comfortable middle range) */
+    while (a >= 1e22) { a = a / 1e22; e += 22; }
+    while (a < 1.0)   { a = a * 1e22; e -= 22; }
+    /* k = floor(log10(a)) by comparison against EXACT powers — a unchanged */
+    k = 0;
+    while (k < 21 && a >= __crtl_p10(k + 1)) k++;
+    e += k;
+    /* D = round(a scaled to eprec digits): one exact-power multiply or
+       divide, correctly rounded */
+    if (k + 1 >= eprec) D = (unsigned long long)(a / __crtl_p10(k + 1 - eprec) + 0.5);
+    else                D = (unsigned long long)(a * __crtl_p10(eprec - 1 - k) + 0.5);
+    /* rounding may carry into an extra digit (9.99 -> 10.0) */
+    lim = 1ULL; for (i = 0; i < eprec; i++) lim = lim * 10ULL;
+    if (D >= lim) { D = D / 10ULL; e++; }
+  } else
+    D = 0;
+  /* expand D (eprec digits, MSB first), pad to prec with zeros */
+  for (i = eprec - 1; i >= 0; i--) {
+    digits[i] = (char)('0' + (int)(D % 10ULL));
+    D = D / 10ULL;
   }
-  /* a is now in [1,10); round at the last significant digit before extraction
-     (add half a ULP at position prec-1), re-normalising if it carries to >=10.
-     This both rounds (gcc parity) and absorbs the 0.999999 scaling drift. */
-  {
-    double ru = 0.5;
-    for (i = 1; i < prec; i++) ru = ru / 10.0;
-    a = a + ru;
-    if (a >= 10.0) { a = a / 10.0; e++; }
-  }
-  for (i = 0; i < prec; i++) {
-    int d = (int)a;
-    if (d > 9) d = 9; if (d < 0) d = 0;
-    digits[i] = (char)('0' + d);
-    a = (a - (double)d) * 10.0;
-  }
+  for (i = eprec; i < prec; i++) digits[i] = '0';
   nd = prec;
   if (neg) out[n++] = '-';
   if (force_exp || e < -4 || e >= prec) {
