@@ -1,2 +1,1 @@
-00120.c	enum const in anonymous-struct member returns garbage on i386 — bug-c-i386-enum-const-return-00120
 00189.c	indirect call through variadic fn pointer segfaults on i386 — bug-c-i386-indirect-variadic-fnptr-00189
