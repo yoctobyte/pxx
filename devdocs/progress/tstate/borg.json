@@ -1460,11 +1460,10 @@
   },
   {
    "bad": "e0ccfaebfe91a2f4a5bc36affde447ee5373e3c1",
-   "good": "1c38ad5a131bda2504c2dc204b1faef675c548f5",
+   "good": "35ed47914516da27a1677e419d6fbf1eab6bf664",
    "job": "test-core#600",
    "opened": "2026-07-08T18:16:24Z",
    "range": [
-    "35ed47914516da27a1677e419d6fbf1eab6bf664",
     "e0ccfaebfe91a2f4a5bc36affde447ee5373e3c1"
    ]
   }
