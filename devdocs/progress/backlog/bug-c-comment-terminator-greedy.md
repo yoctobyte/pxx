@@ -25,3 +25,22 @@ handling (Pascal-side `{$...}` nesting default) leaked into the C scanner.
 
 ## Gate
 Repro errors under pxx; c-conformance + corpus stay green; bXXX test.
+
+## 2026-07-08 (fable-c) — premise CORRECTED: the comment scanner is fine
+Traced with `--dump-cpp`: the preprocessor (cpreproc.inc ~1425) AND the clexer
+block-comment scanner (clexer.inc ~213) both correctly END the comment at the
+FIRST `*/`. For the repro, the preprocessed output is exactly
+`   stray tokens here */` followed by `int main...` — i.e. the comment ended at
+`void*/` as C requires. So the comment handling is NOT greedy.
+
+The real divergence is the **C parser silently skipping unknown TOP-LEVEL
+tokens**: ParseCProgram's pass loops end with `else Next`, so `stray`, `tokens`,
+`here`, `*`, `/` are each skipped one at a time with no error, and the file
+compiles. gcc errors on the stray tokens; pxx tolerates them.
+
+This is a deliberate leniency (tolerate unmodelled top-level constructs —
+pragmas, attributes, macro leftovers). Making the top level strict risks
+rejecting valid corpus, so it's a design decision, not a lexer patch — and
+low value (real C rarely has `*/`-in-comment followed by stray tokens). Retitle
+as a top-level-strictness question if pursued; the comment-scanner angle is
+closed.
