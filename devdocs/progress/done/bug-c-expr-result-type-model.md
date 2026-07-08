@@ -29,3 +29,6 @@ Sweep note: same model feeds sizeof, so check sizeof-of-expression paths after f
 - 00104: `~x == 0xffffffff` — C types a hex constant that overflows int as *unsigned int*; usual arithmetic conversions then make the int/unsigned compare equal. pxx types 0xffffffff as int64 -> unequal. Needs the C integer-constant type ladder (dec vs hex, int->unsigned->long) + conversion rules.
 - 00200: `X << T` result type = promoted LEFT operand (a macro battery probing sign/size via sizeof((M)+0)).
 - Also: an ident-starting sizeof expr `sizeof(a<b)` still sizes by the first ident (char=1) not the int result; same integer-type-model work.
+
+## Log
+- 2026-07-08 — resolved, commit d513ca8f.

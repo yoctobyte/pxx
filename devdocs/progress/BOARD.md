@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-frontend | R | 60 | feature | Rust frontend — umbrella | — |
@@ -31,7 +30,7 @@ _none_
 
 _none_
 
-## backlog (107)
+## backlog (108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +44,7 @@ _none_
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
+| bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
@@ -178,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (511)
+## done (512)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -219,6 +219,7 @@ _none_
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-external-func-address-indirect-call | A | 50 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-external-function-address-dlsym-sqlite | C | 50 | bug | C: address of external libc function used as function pointer | — |
 | bug-c-field-of-call-result | C | 50 | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
@@ -754,6 +755,7 @@ _none_
 - [p 45] [C] bug-c-crtl-missing-net-headers-enet
 - [p 45] [A] bug-c-i386-enum-const-return-00120
 - [p 45] [A] bug-c-i386-indirect-variadic-fnptr-00189
+- [p 45] [A] bug-c-shift-result-type-battery-00200
 - [p 45] [C] bug-c-typedef-array-element-init
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-designated-init-compound-literals
