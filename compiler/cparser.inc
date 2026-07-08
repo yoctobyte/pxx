@@ -927,7 +927,7 @@ begin
     else if RecFieldType(recId, fieldName) = tyPointer then
       Result := Ord(RecFieldPtrElemTk(recId, fieldName));
   end
-  else if ASTKind[node] = AN_CALL then
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) then
   begin
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then
@@ -1018,8 +1018,9 @@ begin
   else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
     { pointer arithmetic / `p++` keeps a pointer type (CMakeBinop / CMakeIncDec) }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
-  else if ASTKind[node] = AN_CALL then
-    { a function returning a pointer — `f()->field` must deref the result }
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) then
+    { a (direct or indirect) function returning a pointer — `f()->field` /
+      `p()->field` must deref the result, not treat it as an embedded record }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if ASTKind[node] = AN_PTR_CAST then
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
@@ -1094,7 +1095,7 @@ begin
     Result := ASTSOffset[node]      { pointer-arith binop carries the elem rec }
   else if ASTKind[node] = AN_TERNARY then
     Result := ASTSOffset[node]
-  else if ASTKind[node] = AN_CALL then
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) then
   begin
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then
@@ -2172,6 +2173,7 @@ var
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
   fpNParams, fpSig, fnRetNParams, pi: Integer;
+  fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   fpPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   fnRetPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -2377,6 +2379,12 @@ begin
   begin
     fpRet := Result;                  { return type parsed above (before the '(') }
     if isVoid then fpRet := tyInteger;
+    { Capture the return type's pointed-at kind/record BEFORE the param recursion
+      (which resets the CType* globals) so a struct-pointer-returning callback
+      `struct S *(*fty)()` records that its result points at S — the indirect
+      call result then resolves `p()->field` (bug-c-function-returning-fnptr). }
+    fpRetElemTk := CTypeElemTk;
+    fpRetElemRec := CTypeElemRec;
     Result := tyPointer;
     CTypeIsVoid := False;
     fpName := '';
@@ -2516,6 +2524,13 @@ begin
     ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
     ProcVariadic[fpSig] := fpVariadic; { `...` in the fn-ptr signature }
     CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
+    { A struct-pointer return (`struct S *(*)()`) carries its pointed-at record on
+      the signature so an indirect call's result resolves field access. }
+    if (fpRet = tyPointer) and (fpRetElemRec >= REC_UCLASS_BASE) then
+    begin
+      ProcRetPtrElemTk[fpSig] := fpRetElemTk;
+      ProcRetPtrElemRec[fpSig] := fpRetElemRec;
+    end;
     { A function pointer is a non-void pointer VALUE. The inner signature parse
       (e.g. `void (*x)(void)`'s `void` return / `(void)` params) leaves the
       global CTypeIsVoid set, which made an enclosing param list treat the whole
@@ -7704,6 +7719,37 @@ end;
   Function-pointer typedefs `ret (*Name)(args)` are registered as Pointer AND
   carry a signature Procs[] entry (CTypedefProcSig) so a value of the type is
   callable through AN_CALL_IND with C-ABI marshalling. }
+{ Lookahead (non-consuming) from the current `struct`/`union` token: does this
+  typedef's declarator start with a function-pointer group `(*name)(...)` after
+  the aggregate specifier + any stars? `typedef struct S *(*fty)();` must route
+  through the general ParseCDeclType path (which handles a struct/union RETURN
+  type on a fn-pointer typedef), not the simple `typedef struct Tag *Name;`
+  fast-path below — that fast-path assumes a plain declarator name and, finding
+  `(` instead, would register nothing and leave the typedef undefined. }
+function CTypedefAggFnPtrDeclarator: Boolean;
+var j, depth: Integer;
+begin
+  Result := False;
+  j := TokPos - 1;                 { the 'struct' / 'union' token }
+  Inc(j);                          { skip the struct/union keyword }
+  if (j < TokCount) and (Tokens[j].Kind = tkIdent) then Inc(j);   { optional tag }
+  if (j < TokCount) and (Tokens[j].Kind = tkBegin) then
+  begin                            { skip a balanced { ... } body }
+    depth := 0;
+    while j < TokCount do
+    begin
+      if Tokens[j].Kind = tkBegin then Inc(depth)
+      else if Tokens[j].Kind = tkEnd then
+      begin Dec(depth); if depth = 0 then begin Inc(j); Break; end; end;
+      Inc(j);
+    end;
+  end;
+  while (j < TokCount) and ((Tokens[j].Kind = tkStar) or (Tokens[j].Kind = tkConst)) do
+    Inc(j);
+  Result := (j + 1 < TokCount) and (Tokens[j].Kind = tkLParen) and
+            (Tokens[j + 1].Kind = tkStar);
+end;
+
 procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
@@ -7714,8 +7760,9 @@ var tk: TTypeKind; nm, tagName: AnsiString;
 begin
   Next; { consume 'typedef' }
 
-  isAggregate := (CurTok.Kind = tkRecord) or
-                 ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'));
+  isAggregate := ((CurTok.Kind = tkRecord) or
+                  ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
+                 not CTypedefAggFnPtrDeclarator;
   if isAggregate then
   begin
     isUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');

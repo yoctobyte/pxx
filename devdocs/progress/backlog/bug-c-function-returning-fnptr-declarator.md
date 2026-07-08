@@ -90,3 +90,28 @@ did not help and was reverted). So the last of 00089/00124 is fn-pointer call
 CODEGEN: (a) go()() (call-of-call-result) returning a struct pointer, (b) 00124's
 `(*(*p)(0,2))(2,2)` chain. Deep backend work — focused session. The three parser-
 level sub-fixes (typedef global, go()() parse, &func struct field) are landed.
+
+## Progress 2026-07-08 (a-agent) — 00089 FIXED, 00124 remains
+Root cause of 00089 was three-fold, all around a fn-pointer typedef whose RETURN
+type is a struct pointer (`typedef struct S *(*fty)();`):
+1. **ParseCTypedef routing** — the leading `struct` sent it down the aggregate
+   fast-path (`typedef struct Tag *Name;`), which finds `(` instead of a plain
+   name and registers NOTHING → `fty` stayed undefined ("stray token"). Added
+   `CTypedefAggFnPtrDeclarator` lookahead: a struct/union typedef whose declarator
+   is `(*name)(...)` now routes through the general ParseCDeclType path.
+2. **Signature lost its result record** — the `$cfnptr` sig registered at the
+   fn-ptr declarator never set ProcRetPtrElemTk/Rec, so an indirect call's result
+   had no pointed-at record. Now captured before the param recursion and set on
+   the sig.
+3. **`p()->field` IR gap** — `CNodeIsPointer` had no AN_CALL_IND case, so the
+   arrow never wrapped the call result in AN_DEREF and built `AN_FIELD(AN_CALL_IND)`
+   → IRLowerAddress hit IR_UNSUPPORTED. Added AN_CALL_IND to CNodeIsPointer and to
+   both node-record resolvers (CNodePtrElemTk/Rec).
+
+00089 green. Conformance 209 pass / 0 fail / 11 skip. Self-host byte-identical,
+quick tier + lua/core green. Dropped 00089 from pxx.skip.
+
+**Remaining (ticket stays open):** 00124 — `int (*f1(int,int))(int,int)` (a
+FUNCTION returning a fnptr, full inline declarator) still compiles but exits 85:
+the double-indirect call `(*(*p)(0,2))(2,2)` returns garbage. Separate from the
+typedef-fnptr-return path above — a fn-returning-fnptr codegen/declarator bug.

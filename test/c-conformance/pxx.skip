@@ -6,7 +6,6 @@
 # feature-c-crtl-bind-hand-declared-prototypes).
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
 00051.c	switch with non-compound body — bug-c-switch-nonblock-and-duffs-device
-00089.c	function returning typedef fnptr type — bug-c-function-returning-fnptr-declarator
 00124.c	fn returning fnptr full declarator miscompiles — bug-c-function-returning-fnptr-declarator
 00129.c	goto over decls + #define s s shadowing — bug-c-goto-shadowing-00129
 00130.c	pointer-to-array declarator char (*p)[4] — bug-c-pointer-to-array-declarator
