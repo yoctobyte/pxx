@@ -113,3 +113,18 @@ wrappers + a `.skip` script, nothing more.
 
 Steps 2 (zlib) and 3 (tcc) are separate sessions — do not start them unless
 step 1 lands early and all gates are green.
+
+## Cross-target skip lists CLEARED 2026-07-08 (A+C session)
+All three 32-bit per-target skip lists (pxx.skip.{i386,arm32,riscv32}) are now
+EMPTY — every c-testsuite test that passes on x86-64 also passes cross. Fixed
+this session:
+- **00174/00175** float→double default-arg promotion for variadic args on
+  32-bit softfloat targets (648dfd5b).
+- **00120** enum-const-in-anon-struct return on i386 (fixed by 197899d3, enforced).
+- **00189** variadic call through a function pointer (`&fprintf`) — fnptr type
+  signature now carries ProcVariadic + i386 IR_CALL_IND mirrors the direct
+  variadic marshalling (f8e4ecfd).
+Base (x86-64) skip list still has 15 entries — all genuine deep language
+features (compound literals, statement-exprs, _Generic, VLA, wide strings, Duff's
+device, fnptr-returning declarators, pointer-to-array, HFA-float ABI 00204,
+pathological goto-shadowing). Each is its own focused-session ticket.
