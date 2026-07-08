@@ -39,3 +39,24 @@ xmm that cvtsd2ss reads, or the single's xmm setup overwrites it.
 ## Gate
 The three isolation cases above all print 42.25; make test + self-host
 byte-identical; c-conformance + sqlite suite stay green.
+
+## RESOLVED 2026-07-08 (fable-abc, Track A/C) — AN_PTR_CAST retagged the load width
+
+Root cause: a float-class cast of a pointer dereference (`(float)*doubleptr` /
+`(double)*floatptr`) lowered through AN_PTR_CAST (ir.inc ~3223), whose fall-
+through `IRTk[Result] := ASTTk[node]` retags the operand node IN PLACE. When the
+operand is a memory LOAD, that flips its width: an 8-byte double load became a
+4-byte single load (and vice-versa), reading garbage (observed 0.0). Non-deref
+operands (a BINOP/register value) only carry double bits, so the retag was
+harmless there — which is why `(float)(d+0.0)` worked and the bug looked
+"single-live dependent" (a red herring; `(float)*dp` fails with no single live).
+
+Fix: don't reinterpret a float<->float cast. In pxx's model a float value lives
+as double bits in a register at the operand load's NATURAL width, and a store to
+a single/double slot narrows/keeps by DEST type — so leave the operand node
+untouched (only ordinal casts retag). float<->int casts never reach here (routed
+to the -203 Trunc / -206 Int intrinsics upstream).
+
+Gates (all green): the isolation cases print 42.25 / 100.5; regression
+test/cfloat_cast_deref_b196.c in test-core; test-c-conformance 204/0/16; sqlite
+suite BYTE-IDENTICAL vs gcc; make test; self-host byte-identical; test-lua green.

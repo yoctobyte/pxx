@@ -979,6 +979,10 @@ test-core: $(COMPILER)
 	# IR_LEA (pointer value); C float->int truncation must not corrupt it.
 	./$(COMPILER) test/cfloat_lea_ptr_b195.c /tmp/cfloat_lea_ptr_b19526
 	/tmp/cfloat_lea_ptr_b19526; test "$$?" = "142"
+	# bug-c-double-ptr-deref-narrow-to-single: (float)*doubleptr / (double)*floatptr
+	# must convert, not reinterpret the load width.
+	./$(COMPILER) test/cfloat_cast_deref_b196.c /tmp/cfloat_cast_deref_b19626
+	/tmp/cfloat_cast_deref_b19626; test "$$?" = "42"
 	./$(COMPILER) test/cnested_pointer_b94.c /tmp/cnested_pointer_b9426
 	/tmp/cnested_pointer_b9426 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_struct_member.c /tmp/cfnptr_struct_member26

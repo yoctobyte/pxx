@@ -3220,8 +3220,18 @@ begin
               Result := IRAppend(IR_BINOP, Result, right, Ord(tkMinus), 0, ASTTk[node]);
             end;
           end
+          else if not TypeIsFloat(castTk) then
+            IRTk[Result] := ASTTk[node]
           else
-            IRTk[Result] := ASTTk[node];
+            { float<->float cast, e.g. `(float)*doubleptr` / `(double)*floatptr`.
+              A reinterpret would be WRONG here: retagging the operand node in
+              place changes a memory LOAD's width (8<->4 bytes) and reads garbage
+              (bug-c-double-ptr-deref-narrow-to-single). The value already lives
+              as double bits in a register at the operand's natural width, and a
+              store to a single/double slot narrows/keeps by DEST type — so leave
+              the operand untouched. (A float<->int cast never reaches here: it is
+              routed to the -203 Trunc / -206 Int intrinsics above.) }
+            ;
         end;
       end;
     end;
