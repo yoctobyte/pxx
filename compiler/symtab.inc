@@ -5177,6 +5177,19 @@ begin
         truncate (and sign-extend) the pointer. }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov rax, [rbp+off] }
     end
+    else if (CurProc >= 0) and ProcCdecl[CurProc] and
+            (Syms[retSymIdx].TypeKind = tySingle) and
+            (Syms[retSymIdx].Kind = skLocal) then
+    begin
+      { cdecl (C) function returning `float`: SysV returns a SINGLE in xmm0, and
+        the cdecl call site widens it (cvtss2sd) into the double value model. So
+        the callee must leave a RAW single in xmm0 — NOT the double that
+        EmitLoadVar produces (movss + cvtss2sd). Emitting the widened double let
+        the caller's cvtss2sd reinterpret double bits as single => garbage (~0);
+        double returns were fine because neither side converts. Load the single
+        with no widen and no rax bridge (the cdecl caller reads xmm0, not rax). }
+      EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { movss xmm0, [rbp+off] }
+    end
     else
     begin
       EmitLoadVar(retSymIdx);

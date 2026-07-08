@@ -86,3 +86,36 @@ double modf(double x, double *ip) {
 
 /* long double == double in pxx: ldexpl forwards to ldexp. */
 double ldexpl(double x, int e) { return ldexp(x, e); }
+
+/* ---- float (single) variants — C99 <math.h> f-suffix family ------------- */
+/* Graphics/game C (cglm etc.) calls these; pxx computes in double and narrows
+   on return (correct within float precision — no separate single kernels).
+   Relies on the cdecl float-return ABI fix (bug-c-float-single-return-zero). */
+float fabsf(float x)  { return (float)fabs((double)x); }
+float sqrtf(float x)  { return (float)sqrt((double)x); }
+float sinf(float x)   { return (float)sin((double)x); }
+float cosf(float x)   { return (float)cos((double)x); }
+float tanf(float x)   { return (float)tan((double)x); }
+float asinf(float x)  { return (float)asin((double)x); }
+float acosf(float x)  { return (float)acos((double)x); }
+float atanf(float x)  { return (float)atan((double)x); }
+float atan2f(float y, float x) { return (float)atan2((double)y, (double)x); }
+float floorf(float x) { return (float)floor((double)x); }
+float ceilf(float x)  { return (float)ceil((double)x); }
+float fmodf(float x, float y)  { return (float)fmod((double)x, (double)y); }
+float powf(float b, float e)   { return (float)pow((double)b, (double)e); }
+float expf(float x)   { return (float)exp((double)x); }
+float logf(float x)   { return (float)log((double)x); }
+float log2f(float x)  { return (float)(log((double)x) / 0.6931471805599453); }
+float truncf(float x) { return (float)trunc((double)x); }
+float roundf(float x) { return (float)round((double)x); }
+float fminf(float a, float b) { return a < b ? a : b; }
+float fmaxf(float a, float b) { return a > b ? a : b; }
+double fmin(double a, double b) { return a < b ? a : b; }
+double fmax(double a, double b) { return a > b ? a : b; }
+float modff(float x, float *ip) {
+  double di, r;
+  r = modf((double)x, &di);
+  *ip = (float)di;
+  return (float)r;
+}

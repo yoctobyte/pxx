@@ -859,6 +859,12 @@ test-core: $(COMPILER)
 	# crtl arpa/inet.h IPv4 conversion (feature-game-library-candidate-suite / ENet surface)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_inet_smoke.c /tmp/crtl_inet_smoke26
 	/tmp/crtl_inet_smoke26; test "$$?" = "42"
+	# b197 (bug-c-float-single-return-zero): cdecl float(single) return ABI
+	./$(COMPILER) test/cfloat_single_return_b197.c /tmp/cfloat_single_return_b19726
+	/tmp/cfloat_single_return_b19726; test "$$?" = "42"
+	# crtl single-precision <math.h> f-family (feature-game-library-candidate-suite / cglm surface)
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_mathf_smoke.c /tmp/crtl_mathf_smoke26
+	/tmp/crtl_mathf_smoke26; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

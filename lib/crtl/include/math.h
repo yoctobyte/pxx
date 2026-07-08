@@ -42,6 +42,31 @@ extern double nextafter(double x, double y);
 extern int isnan(double x);
 extern int isinf(double x);
 
+/* float (single) variants (C99) + fmin/fmax — see src/math.c */
+extern float fabsf(float x);
+extern float sqrtf(float x);
+extern float sinf(float x);
+extern float cosf(float x);
+extern float tanf(float x);
+extern float asinf(float x);
+extern float acosf(float x);
+extern float atanf(float x);
+extern float atan2f(float y, float x);
+extern float floorf(float x);
+extern float ceilf(float x);
+extern float fmodf(float x, float y);
+extern float powf(float b, float e);
+extern float expf(float x);
+extern float logf(float x);
+extern float log2f(float x);
+extern float truncf(float x);
+extern float roundf(float x);
+extern float fminf(float a, float b);
+extern float fmaxf(float a, float b);
+extern double fmin(double a, double b);
+extern double fmax(double a, double b);
+extern float modff(float x, float *ip);
+
 /* HUGE_VAL: positive double overflow value used by lua for range checks. */
 #define HUGE_VAL (1e308 * 10.0)
 #define INFINITY (1e308 * 10.0)
