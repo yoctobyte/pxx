@@ -193,12 +193,8 @@ static void __crtl_swap(char *a, char *b, size_t n) {
   for (i = 0; i < n; i++) { char t = a[i]; a[i] = b[i]; b[i] = t; }
 }
 
-/* typedef'd compare pointer — an INLINE `int (*cmp)(...)` param does not yet
-   capture its signature in the C frontend, so calling it errors "undeclared
-   function". The typedef form does (see cfnptr). */
-typedef int (*__crtl_cmpfn)(const void *, const void *);
-
-void qsort(void *base, size_t nmemb, size_t size, __crtl_cmpfn cmp) {
+void qsort(void *base, size_t nmemb, size_t size,
+           int (*cmp)(const void *, const void *)) {
   char *a = (char *)base;
   size_t i, j;
   for (i = 1; i < nmemb; i++) {

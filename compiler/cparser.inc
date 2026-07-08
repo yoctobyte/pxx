@@ -2009,6 +2009,7 @@ begin
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
     CTypedefProcSig[idx] := -1;
+    CTypedefIsFnType[idx] := False;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -2026,6 +2027,7 @@ begin
   CTypedefElemTk[CTypedefCount] := elemTk;
   CTypedefRec[CTypedefCount] := rec;
   CTypedefProcSig[CTypedefCount] := -1;
+  CTypedefIsFnType[CTypedefCount] := False;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -2097,6 +2099,7 @@ end;
 function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
+  tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
@@ -2115,6 +2118,7 @@ begin
   sawBase := False; isTypedef := False; isAggBase := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
+  tdIsFnType := False;
   CTypeProcSig := -1;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
@@ -2184,6 +2188,7 @@ begin
               tdElemTk := CTypedefElemTk[tdIdx];
               tdElemRec := CTypedefRec[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
+              tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -2246,6 +2251,17 @@ begin
   begin
     CTypeElemTk := tdElemTk;
     CTypeElemRec := tdElemRec;
+  end;
+  { Function-TYPE typedef `typedef R N(args)` used as `N *p`: the star is the
+    C function-to-pointer DECAY, not an extra indirection — `N *p` is the
+    callable pointer, same as a fn-pointer typedef's `N p`. Absorb one star,
+    keep Result=Pointer + the call signature; any further stars then indirect
+    normally through the block below. }
+  if tdIsFnType and (CurTok.Kind = tkStar) then
+  begin
+    Next;                         { consume the decay star }
+    while CurTok.Kind = tkConst do Next;
+    Result := tyPointer;          { CTypeProcSig stays set: directly callable }
   end;
   if CurTok.Kind = tkStar then
   begin
@@ -7387,6 +7403,9 @@ procedure ParseCTypedef;
 var tk: TTypeKind; nm, tagName: AnsiString;
     isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
+    ftRet, ftPType: TTypeKind; ftNParams, ftSig: Integer;
+    ftPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+    ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
 begin
   Next; { consume 'typedef' }
 
@@ -7515,6 +7534,53 @@ begin
   if (CTypeFnPtrName <> '') and (CTypeProcSig >= 0) then
   begin
     AddCTypedefFnPtr(CTypeFnPtrName, CTypeProcSig);
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
+  { Function-TYPE typedef `typedef RET NAME(params);` (a function type, NO
+    pointer star) — stb_sprintf's `typedef char *STBSP_SPRINTFCB(...)` idiom,
+    used as `STBSP_SPRINTFCB *callback`. ParseCDeclType returned the plain RET
+    and left NAME (an ident) with `(` following. Register NAME as a
+    fn-pointer-style typedef (Pointer + call signature) so `NAME *cb` / `NAME cb`
+    are callable through AN_CALL_IND, exactly like `typedef RET (*NAME)(params)`
+    — in every use we support a C function type and a pointer-to-function decay
+    to the same callable value. }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    nm := CurTok.SVal;
+    Next;                              { consume NAME -> CurTok is '(' }
+    ftRet := tk;
+    if CTypeIsVoid then ftRet := tyInteger;
+    ftNParams := 0;
+    Next;                              { consume the parameter-list '(' }
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+    begin
+      if IsCTypeTok then
+      begin
+        ftPType := ParseCDeclType();   { parens required: see the fn-ptr note above }
+        if CTypeIsVoid then
+          { (void) — no parameter }
+        else if ftNParams < MAX_PROC_PARAMS then
+        begin
+          ftPTypes[ftNParams] := ftPType;
+          ftPNames[ftNParams] := 'a';
+          Inc(ftNParams);
+        end;
+        if CurTok.Kind = tkIdent then Next;   { optional parameter name }
+      end
+      else
+        Next;                          { `...` varargs marker }
+      Eat(tkComma);
+    end;
+    Eat(tkRParen);
+    ftSig := RegisterProc('$cfntype', True, ftRet, ftNParams, ftPNames, ftPTypes);
+    Procs[ftSig].BodyAddr := -1;
+    ProcCdecl[ftSig] := True;          { C ABI (System V) for the indirect call }
+    CTypeIsVoid := False;
+    AddCTypedefFnPtr(nm, ftSig);
+    ci := FindCTypedef(nm);
+    if ci >= 0 then CTypedefIsFnType[ci] := True;   { `*` decays, not indirects }
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;

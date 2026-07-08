@@ -865,6 +865,12 @@ test-core: $(COMPILER)
 	# crtl single-precision <math.h> f-family (feature-game-library-candidate-suite / cglm surface)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/gamelib/crtl_mathf_smoke.c /tmp/crtl_mathf_smoke26
 	/tmp/crtl_mathf_smoke26; test "$$?" = "42"
+	# b198 (bug-c-inline-fnptr-param-call): function-TYPE typedef call idiom
+	./$(COMPILER) test/cfntype_typedef_call_b198.c /tmp/cfntype_typedef_call_b19826
+	/tmp/cfntype_typedef_call_b19826; test "$$?" = "42"
+	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
+	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
+	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
 	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426

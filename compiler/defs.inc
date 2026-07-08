@@ -1117,6 +1117,7 @@ var
   CTypedefElemTk : array[0..MAX_CTYPEDEF-1] of Integer; { pointer typedef: pointed-at TTypeKind ordinal }
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
   CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
+  CTypedefIsFnType : array[0..MAX_CTYPEDEF-1] of Boolean; { True for a function-TYPE typedef `typedef R N(args);` (vs a fn-POINTER typedef): a following `*` in a declarator DECAYS (pointer-to-function) rather than adding a level, so `N *p` is the callable, matching C function/pointer-to-function equivalence }
   { Open-addressed name->index hash for O(1) FindCTypedef. Stores idx+1 so the
     zero-initialised state means "empty" (no -1 fill needed). Size is a power of
     two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }
