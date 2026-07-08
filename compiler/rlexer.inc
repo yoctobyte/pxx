@@ -297,11 +297,17 @@ begin
          end;
     '&': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then begin Inc(SrcPos); CurTok.Kind := tkAnd; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkAmpEq; end
            else CurTok.Kind := tkAmp;
          end;
     '|': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '|') then begin Inc(SrcPos); CurTok.Kind := tkOr; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkPipeEq; end
            else CurTok.Kind := tkPipe;
+         end;
+    '^': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkXorEq; end
+           else CurTok.Kind := tkCaret;
          end;
     '!': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
@@ -316,11 +322,25 @@ begin
     '<': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkLe; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '<') then
+           begin
+             Inc(SrcPos);
+             if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+               begin Inc(SrcPos); CurTok.Kind := tkShlEq; end
+             else CurTok.Kind := tkShl;
+           end
            else CurTok.Kind := tkLt;
          end;
     '>': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkGe; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '>') then
+           begin
+             Inc(SrcPos);
+             if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+               begin Inc(SrcPos); CurTok.Kind := tkShrEq; end
+             else CurTok.Kind := tkShr;
+           end
            else CurTok.Kind := tkGt;
          end;
     else CurTok.Kind := tkIdent; { unknown punctuation — parser reports it }

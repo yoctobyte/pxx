@@ -635,7 +635,10 @@ begin
   begin
     Next;
     node := AllocNode(AN_NEG);
-    ASTLeft[node] := RParseUnary;
+    { Parens force a real recursive call — a bare name here read the
+      implicit Result alias instead (frank2-paramless-name-semantics;
+      latent since the skeleton, caught in the bitops pass). }
+    ASTLeft[node] := RParseUnary();
     ASTTk[node] := ASTTk[ASTLeft[node]];
     Result := node;
     Exit;
@@ -644,22 +647,65 @@ begin
   begin
     Next;
     node := AllocNode(AN_NOT);
-    ASTLeft[node] := RParseUnary;
-    ASTTk[node] := Ord(tyBoolean);
+    ASTLeft[node] := RParseUnary();
+    { Rust `!` is logical on bool, BITWISE on integers — same duality as
+      the shared IR's Pascal `not`, so tag by operand type. }
+    if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyBoolean then
+      ASTTk[node] := Ord(tyBoolean)
+    else
+      ASTTk[node] := ASTTk[ASTLeft[node]];
     Result := node;
     Exit;
   end;
   Result := RParsePrimary;
 end;
 
+{ `expr as T` — numeric cast (binds tighter than * per Rust). v1: retag
+  the node's static type; narrowing to an UNSIGNED target additionally
+  masks the value (u8/u16/u32), so mailbox-byte style round-trips are
+  exact. Narrowing to signed targets just retags (no sign-extension
+  fixup) — documented corpus deviation. }
+function RParseAs: Integer;
+var left, maskNode: Integer; tk: TTypeKind;
+begin
+  left := RParseUnary;
+  while (CurTok.Kind = tkIdent) and (CurTok.SVal = 'as') do
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Rust: expected type after as');
+    tk := RTypeKindFromName(CurTok.SVal, False);
+    Next;
+    case tk of
+      tyUInt8:
+      begin
+        maskNode := AllocNode(AN_INT_LIT); ASTIVal[maskNode] := 255; ASTTk[maskNode] := Ord(tyInt64);
+        left := RBinOp(tkAnd, left, maskNode, tk);
+      end;
+      tyUInt16:
+      begin
+        maskNode := AllocNode(AN_INT_LIT); ASTIVal[maskNode] := 65535; ASTTk[maskNode] := Ord(tyInt64);
+        left := RBinOp(tkAnd, left, maskNode, tk);
+      end;
+      tyUInt32:
+      begin
+        maskNode := AllocNode(AN_INT_LIT); ASTIVal[maskNode] := $FFFFFFFF; ASTTk[maskNode] := Ord(tyInt64);
+        left := RBinOp(tkAnd, left, maskNode, tk);
+      end;
+      else
+        ASTTk[left] := Ord(tk);
+    end;
+  end;
+  Result := left;
+end;
+
 function RParseMul: Integer;
 var left, right, node: Integer; opTk: TTokenKind;
 begin
-  left := RParseUnary;
+  left := RParseAs;
   while CurTok.Kind in [tkStar, tkSlash, tkMod] do
   begin
     opTk := CurTok.Kind; Next;
-    right := RParseUnary;
+    right := RParseAs;
     node := RBinOp(opTk, left, right, RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
     left := node;
   end;
@@ -680,14 +726,78 @@ begin
   Result := left;
 end;
 
-function RParseCmp: Integer;
+{ Rust precedence: << >> bind tighter than &, then ^, then |, then the
+  comparisons. tkAnd/tkOr/tkXor are the shared IR's Pascal-style ops —
+  bitwise when the operands are integers. }
+function RParseShift: Integer;
 var left, right, node: Integer; opTk: TTokenKind;
 begin
   left := RParseAdd;
-  if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+  while CurTok.Kind in [tkShl, tkShr] do
   begin
     opTk := CurTok.Kind; Next;
     right := RParseAdd;
+    { Rust >> is arithmetic on signed, logical on unsigned — the same
+      split cparser encodes: tkShr = arithmetic-sar sentinel, tkIdent =
+      the logical-shr sentinel Pascal's own shr uses. }
+    if (opTk = tkShr) and not TypeSigned(IntToTypeKind(ASTTk[left])) then
+      opTk := tkIdent;
+    node := RBinOp(opTk, left, right, IntToTypeKind(ASTTk[left]));
+    left := node;
+  end;
+  Result := left;
+end;
+
+function RParseBitAnd: Integer;
+var left, right, node: Integer;
+begin
+  left := RParseShift;
+  while CurTok.Kind = tkAmp do
+  begin
+    Next;
+    right := RParseShift;
+    node := RBinOp(tkAnd, left, right, RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  Result := left;
+end;
+
+function RParseBitXor: Integer;
+var left, right, node: Integer;
+begin
+  left := RParseBitAnd;
+  while CurTok.Kind = tkCaret do
+  begin
+    Next;
+    right := RParseBitAnd;
+    node := RBinOp(tkXor, left, right, RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  Result := left;
+end;
+
+function RParseBitOr: Integer;
+var left, right, node: Integer;
+begin
+  left := RParseBitXor;
+  while CurTok.Kind = tkPipe do
+  begin
+    Next;
+    right := RParseBitXor;
+    node := RBinOp(tkOr, left, right, RWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  Result := left;
+end;
+
+function RParseCmp: Integer;
+var left, right, node: Integer; opTk: TTokenKind;
+begin
+  left := RParseBitOr;
+  if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+  begin
+    opTk := CurTok.Kind; Next;
+    right := RParseBitOr;
     node := RBinOp(opTk, left, right, tyBoolean);
     left := node;
   end;
@@ -1472,6 +1582,7 @@ end;
 
 function RParseStatement: Integer;
 var name, fname: AnsiString; symIdx, node, rhsNode, lhsNode, baseNode, fieldNode, fTokIdx: Integer;
+    opTk: TTokenKind;
 begin
   case CurTok.Kind of
     tkIf: begin Result := RParseIf; Exit; end;
@@ -1505,13 +1616,35 @@ begin
     Exit;
   end;
 
-  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkAssign) then
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind in
+      [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq,
+       tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq]) then
   begin
     name := CurTok.SVal;
     symIdx := FindSym(name);
     if symIdx < 0 then Error('Rust: assignment to undefined variable ' + name);
-    Next; Expect(tkAssign, '=');
+    Next;
+    opTk := CurTok.Kind;
+    Next;
     rhsNode := RParseExpr;
+    { compound forms desugar to name = name op expr (bit ops land on the
+      shared Pascal-style tkAnd/tkOr/tkXor/tkShl/tkShr BINOPs) }
+    case opTk of
+      tkPlusEq:  rhsNode := RBinOp(tkPlus,  RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkMinusEq: rhsNode := RBinOp(tkMinus, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkStarEq:  rhsNode := RBinOp(tkStar,  RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkSlashEq: rhsNode := RBinOp(tkSlash, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkAmpEq:   rhsNode := RBinOp(tkAnd,   RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkPipeEq:  rhsNode := RBinOp(tkOr,    RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkXorEq:   rhsNode := RBinOp(tkXor,   RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkShlEq:   rhsNode := RBinOp(tkShl,   RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      tkShrEq:
+        if TypeSigned(Syms[symIdx].TypeKind) then
+          rhsNode := RBinOp(tkShr, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind)
+        else
+          rhsNode := RBinOp(tkIdent, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+      else ;
+    end;
     lhsNode := RMakeIdent(symIdx);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode; ASTRight[node] := rhsNode;
