@@ -8,4 +8,4 @@
 - **test-cjson#00** (borg): bad `25c1ddedcccb`, last good `25c1ddedcccb`, 0 commit(s) in range
 - **test-core#601** (borg): bad `25c1ddedcccb`, last good `25c1ddedcccb`, 0 commit(s) in range
 - **test-lua#00** (borg): bad `25c1ddedcccb`, last good `25c1ddedcccb`, 0 commit(s) in range
-- **test-core#600** (borg): bad `e0ccfaebfe91`, last good `78a6dbc11ddd`, 4 commit(s) in range
+- **test-core#600** (borg): bad `e0ccfaebfe91`, last good `1c38ad5a131b`, 2 commit(s) in range
