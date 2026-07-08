@@ -27,7 +27,7 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (86)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,6 +47,7 @@ _none_
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
+| feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
@@ -117,7 +118,7 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (13)
+## experimental (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -133,6 +134,7 @@ _none_
 | feature-rust-rtl-concurrency | R | 45 | feature | Rust frontend RTL — thread / atomics / mpsc shims | — |
 | feature-rust-rtl-core-types | R | 45 | feature | Rust frontend RTL — `Option<T>` / `Result<T,E>` / `Box<T>` / `Vec<T>` | — |
 | feature-rust-rtl-macros-io | R | 45 | feature | Rust frontend RTL — `println!`/`format!`/`vec!`/`assert!`/`panic!` runtime | — |
+| feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
 ## rainy-day (20)
@@ -170,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (537)
+## done (538)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -496,6 +498,7 @@ _none_
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-class-variables | A | 50 | feature | feature: class variables (`class var`) | — |
 | feature-classes-tlist-notify-hook | B | 50 | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
+| feature-comment-diagnostics-standards | C | 45 | feature | Comment diagnostics to de-facto standard: unterminated-comment error (Pascal) + -Wcomment (C) | — |
 | feature-compiler-search-path-pcl | A | 50 | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | A | 50 | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | B | 50 | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
@@ -766,6 +769,7 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [A] bug-c-abi-battery-00204
 - [p 50] [C] bug-c-function-returning-fnptr-declarator
+- [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
