@@ -236,6 +236,14 @@
    "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-08T16:16:01Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1321,18 +1329,18 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T16:10:24Z",
+  "date": "2026-07-08T16:16:01Z",
   "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 121.4
- },
- "last_full": {
-  "date": "2026-07-08T16:06:41Z",
-  "sha": "524cd8cbb9b6564e3a23e81dc44b7170e9dc6b9e",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 396.7
+  "wall": 317.8
+ },
+ "last_full": {
+  "date": "2026-07-08T16:16:01Z",
+  "sha": "db3115470d636e91b75124c81f0b5e3d72b46502",
+  "tier": "full",
+  "verdict": "GREEN",
+  "wall": 317.8
  },
  "open_regressions": []
 }
