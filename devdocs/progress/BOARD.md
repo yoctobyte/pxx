@@ -27,7 +27,7 @@ _none_
 
 _none_
 
-## backlog (86)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -84,7 +84,6 @@ _none_
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | A | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | A | 60 | feature | Inline routine expansion (`inline;`) | — |
-| feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
@@ -93,7 +92,6 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
-| feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
@@ -114,14 +112,17 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
 | task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (14)
+## experimental (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
+| feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
 | feature-rust-derive-macros | R | 45 | feature | Rust frontend — derive-macro codegen | — |
 | feature-rust-drop-move-tracking | R | 45 | feature | Rust frontend — Drop-on-scope-exit + move tracking | — |
@@ -172,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (533)
+## done (534)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -704,6 +705,7 @@ _none_
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | 50 | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
+| tooling-nested-comment-brace-selfhost-guard | A | 40 | tooling | Nested-comment brace hazard in compiler source — investigation + lint guard | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | 50 | track | C frontend — shared-IR touch points that belong to Track A | — |
 | track-a-c-stdio-needs-pascal-import-and-data-relocs | A | 50 | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
 | track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | 50 | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
@@ -729,6 +731,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 75] [C] regression-cfront-stmt-expr-25c1dded
+- [p 70] [T] regression-test-core-600
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
@@ -787,13 +790,11 @@ _none_
 - [p 45] [A] feature-fuzzer-idle-scheduling
 - [p 45] [B] feature-ilja-tui
 - [p 45] [A] feature-inline-nonleaf-and-branch-locals
-- [p 45] [A] feature-js-frontend-parked
 - [p 45] [B] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [B] feature-pal-esp-posix-fd-semantics
 - [p 45] [A] feature-parallel-processing
-- [p 45] [A] feature-r-frontend-parked
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
