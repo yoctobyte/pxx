@@ -1,5 +1,11 @@
 # experimental/ — optional frontends, permanently out of the queue
 
+**This folder IS "Track X"** (2026-07-09, user decision): X is a tag, not a
+lane — a track marked X (today: R Rust, Z Zig; also the wasm/js/r-lang
+parked frontends here) keeps its own letter, files and gate, but its
+tickets live here and never rank. "You're on Track R" still means the
+Rust lane; the X just says optional/never-a-prio.
+
 Created 2026-07-08 (user decision, Track Z session). Holds every ticket for
 the **experimental frontends — Zig and Rust** — which stay *totally
 experimental and optional*:

@@ -24,6 +24,13 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   agents run at once and must not fight over the same file.
 - **Don't invent new letters.** No Track L for libraries, no "LC" for C
   libraries. The set below is deliberately small; resist splitting it finer.
+- **X is a TAG, not a lane: experimental.** Tracks R (Rust) and Z (Zig) are
+  also X — their tickets live in `devdocs/progress/experimental/` (never
+  ranked by `next`/`ready`; see that folder's README for the upscale rule).
+  An X-tagged track keeps its own letter, files, and gate; X only says
+  "optional, never a prio, pick up on user request or for fun". Reserved,
+  unstaffed letter: **J** = JavaScript (currently routed through Track C —
+  the QuickJS corpus ticket — so J may never need staffing).
 
 Two axes cut the repo, and the tracks follow them:
 
