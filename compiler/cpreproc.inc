@@ -1701,7 +1701,7 @@ end;
 
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
-var a, b, k: Integer; hdrResolved: AnsiString;
+var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
 begin
   if depth >= MAX_CPREP_INCLUDES then Error('C include nesting overflow');
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
@@ -1849,8 +1849,25 @@ begin
     end;  { native (x86_64) system-fallback block }
     if CPIncludeLength(depth) = 0 then
     begin
-      ErrorIdent := CPrepPath;
-      Error('C include file not found');
+      { Report the requested NAME and the search list, not the last dir probed
+        (which pointed triage at the wrong place — bug-cpp-include-not-found-
+        diagnostic-path). }
+      incName := '';
+      for k := a to p - 1 do incName := incName + line[k];
+      searchList := '';
+      if baseDir <> '' then searchList := baseDir;
+      for k := 0 to CIncludeDirCount - 1 do
+      begin
+        if searchList <> '' then searchList := searchList + ', ';
+        searchList := searchList + CIncludeDirs[k];
+      end;
+      if (TargetArch = TARGET_X86_64) and (not NoStdInc) then
+      begin
+        if searchList <> '' then searchList := searchList + ', ';
+        searchList := searchList + '<host system dirs>';
+      end;
+      ErrorIdent := 'searched: ' + searchList;
+      Error('C include file not found: "' + incName + '"');
     end;
     if DebugTrace then writeln('C preprocessor: include ', CPrepPath);
     hdrResolved := CPrepPath;   { capture before CPProcessInclude / the auto-pull mutate CPrepPath }
