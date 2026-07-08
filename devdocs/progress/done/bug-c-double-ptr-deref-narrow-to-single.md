@@ -60,3 +60,6 @@ to the -203 Trunc / -206 Int intrinsics upstream).
 Gates (all green): the isolation cases print 42.25 / 100.5; regression
 test/cfloat_cast_deref_b196.c in test-core; test-c-conformance 204/0/16; sqlite
 suite BYTE-IDENTICAL vs gcc; make test; self-host byte-identical; test-lua green.
+
+## Log
+- 2026-07-08 — resolved, commit 6d874c33.
