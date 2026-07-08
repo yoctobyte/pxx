@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `5dc95ea253cf` | 2026-07-08T17:34:27Z | RED (full) | 367.0s | `5dc95ea253cf` RED |
+| borg | `ec8873e77455` | 2026-07-08T17:38:14Z | GREEN (native) | 138.1s | `5dc95ea253cf` RED |
 
 ## Open regressions
-- **test-core#601** (borg): bad `5dc95ea253cf`, last good `5dc95ea253cf`, 0 commit(s) in range
+- none

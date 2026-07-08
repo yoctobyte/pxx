@@ -278,6 +278,16 @@
    "sha": "5dc95ea253cf321c27a05ca3cadd10659c11ace8",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-08T17:38:14Z",
+   "fixed": [
+    "test-core#601"
+   ],
+   "new_red": [],
+   "sha": "ec8873e77455d9d3629f8e55f2a3ec8bb1f0b3c5",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1081,7 +1091,7 @@
   "test-core#599": "pass",
   "test-core#60": "pass",
   "test-core#600": "pass",
-  "test-core#601": "timeout",
+  "test-core#601": "pass",
   "test-core#602": "pass",
   "test-core#603": "pass",
   "test-core#604": "pass",
@@ -1363,11 +1373,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-08T17:34:27Z",
-  "sha": "5dc95ea253cf321c27a05ca3cadd10659c11ace8",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 367.0
+  "date": "2026-07-08T17:38:14Z",
+  "sha": "ec8873e77455d9d3629f8e55f2a3ec8bb1f0b3c5",
+  "tier": "native",
+  "verdict": "GREEN",
+  "wall": 138.1
  },
  "last_full": {
   "date": "2026-07-08T17:34:27Z",
@@ -1376,13 +1386,5 @@
   "verdict": "RED",
   "wall": 367.0
  },
- "open_regressions": [
-  {
-   "bad": "5dc95ea253cf321c27a05ca3cadd10659c11ace8",
-   "good": "5dc95ea253cf321c27a05ca3cadd10659c11ace8",
-   "job": "test-core#601",
-   "opened": "2026-07-08T17:34:27Z",
-   "range": []
-  }
- ]
+ "open_regressions": []
 }
