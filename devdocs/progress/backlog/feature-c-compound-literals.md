@@ -115,6 +115,27 @@ Order to finish: (2)+(3) global paths, (4) nested designators, then (5) compound
 literals (biggest + riskiest). (1) is committed. Remaining pieces parked in
 backlog — each a focused, self-host-verified change.
 
+### Block-scope compound-literal ATTEMPT 2026-07-09 — parser-comma approach FAILS at IR lowering
+Tried the obvious block-scope impl in `ParseCUnary`'s cast branch: on `(recTk){`
+materialise `tmpSym := AllocVar('',tyRecord)` (LastTypeRecId=recId), zero via
+`CMakeZeroLocal`, init via `CInitLocalAggregate` (chain mode), then splice the
+zero+element-store AN_ASSIGNs and a terminal AN_IDENT into a right-nested AN_COMMA
+so the whole thing is one expression yielding the object. Compiles + self-hosts,
+but at RUNTIME:
+- by-value use `sum((struct P){3,4})` → **SIGSEGV** (the record temp reached via
+  the comma isn't materialised/copied correctly by IRLowerCallArg's record path).
+- `&(struct P){...}` → **"Unsupported linear node in IR codegen"** (address-of an
+  AN_COMMA is not lowerable).
+So the AST-comma trick is the wrong layer: a record temp that must be
+statement-initialised then used as an lvalue/by-value can't ride inside an
+expression this IR expects. The right fix is IR-level materialisation — either
+(a) a dedicated AN_COMPOUND_LITERAL node that IRLowerAST lowers to "emit the
+init statements into the current block, yield the temp's address/lvalue", or
+(b) hoist the init like IRLowerCallArg already does for frozen-string-concat args
+(spill to a hidden local, pass its address). (b) only covers the call-arg
+position; (a) is general. Reverted; tree stays at v181. This remains the
+self-host-fragile keystone and the last 00216 blocker.
+
 ## Assessment 2026-07-08 (cfront-agent) — released; remaining work is deep, needs the factor-out
 Confirmed the remaining two pieces are NOT bounded wire-ups:
 - **Block-scope `(T){...}`**: the file-scope fix reused `CAggInit`/`CEmitDeferredCAggInits`,
