@@ -6,9 +6,10 @@ prio: 55
 
 - **Type:** feature (C frontend validation) — Track A/C.
 - **Status:** backlog — planned 2026-07-09. Do AFTER [[feature-c-corpus-chess]].
-  **COMPILES END-TO-END 2026-07-09** (pinned v191). Four bring-up walls cleared; now
-  blocked on a **runtime** segfault in the first JS eval — see
-  [[bug-c-duktape-runtime-segfault-eval]].
+  **COMPILES + RUNS JS 2026-07-09** (pinned v192). Four bring-up walls + the runtime
+  segfault (32-bit pointer truncation, commit b30ccf88) all fixed. duktape now runs:
+  integers/strings/arrays/JSON/closures/regex/recursion all correct. Remaining: JS number
+  formatting is wrong (doubles scaled ~5^13) — [[bug-c-duktape-double-formatting]].
 - **Parent:** [[feature-c-corpus-expansion]] (was roadmap item #5, promoted after tcc).
 
 ## Why Duktape
@@ -85,7 +86,7 @@ against gcc byte-for-byte early, it hides subtle float bugs.
   (Also hardened the unchecked `TokChars` pool writes → [[feature-c-compiler-dynarrays]].)
 
 **RESULT:** duktape 2.7.0 compiles + links + heap-inits under pxx (pinned v191). Blocked on
-a **runtime** segfault in the first `duk_peval_string` — [[bug-c-duktape-runtime-segfault-eval]]
+a **runtime** segfault in the first `duk_peval_string` — [[bug-c-duktape-double-formatting]]
 (setjmp/longjmp shim prime suspect). `make test-duktape` NOT wired yet (won't land a red
 gate until the smoke runs green).
 
@@ -93,4 +94,4 @@ Regressions for the cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
 `test/cpreproc_stdc_version_predefine_b228.c`, `test/cpreproc_macro_comment_continuation_b229.c`
 (all exit 42, wired into test-core).
 
-[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[bug-c-duktape-runtime-segfault-eval]] · [[feature-c-compiler-dynarrays]] · [[feature-c-cmdline-define-flag]]
+[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[bug-c-duktape-double-formatting]] · [[feature-c-compiler-dynarrays]] · [[feature-c-cmdline-define-flag]]
