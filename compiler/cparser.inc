@@ -8297,7 +8297,9 @@ begin
           Next;
           dimVal := 1;
           if CurTok.Kind <> tkRBrack then
-            dimVal := CEvalConstExpr;
+            dimVal := CEvalConstExpr
+          else
+            dimVal := 0;   { flexible array member `T x[]` (C99 6.7.2.1): 0-size, excluded from sizeof; still addressable }
           arrLen := arrLen * dimVal;
           Eat(tkRBrack);
           isArr := True;
@@ -8449,7 +8451,9 @@ begin
           Next;
           dimVal := 1;
           if CurTok.Kind <> tkRBrack then
-            dimVal := CEvalConstExpr;
+            dimVal := CEvalConstExpr
+          else
+            dimVal := 0;   { flexible array member `T x[]` (C99 6.7.2.1): 0-size, excluded from sizeof; still addressable }
           arrLen := arrLen * dimVal;
           Eat(tkRBrack);
           isArr := True;
