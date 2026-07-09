@@ -27,6 +27,24 @@ is context-dependent and NOT yet minimized.
 - **duk_tval layout**: pxx computes `sizeof(duk_tval)=16`, `offsetof(v)=8`, pointer
   members = 8 bytes, and `tv->v.heaphdr` load/store, `*dst=*src` 16-byte copy, function
   pointers in the union — ALL correct in isolation (tested against gcc).
+- **Fixed-table overflow (the all-in-RAM caps)**: instrumented — duktape does NOT hit
+  MAX_UCLASS (peak < 1900 of 2048), MAX_UFIELD, the CTag/CTypedef pools, nor the
+  opaque-struct fallback (0 structs went opaque, 0 cap degradations). So it is NOT the
+  [[feature-c-compiler-dynarrays]] class.
+- **Isolated reproductions that ALL compile+run correctly under pxx** (do not retry):
+  comma expression yielding a pointer `(assert, tv->v.hobject)`; the FULL
+  `DUK_GET_HOBJECT_POSIDX` chain `(assert, ((duk_hthread*)thr)->valstack_bottom + idx)->v.hobject`
+  assigned to a `duk_compiler_func` pointer field; `duk_tval_decref` + valstack loop;
+  indexed `arr[i].v.member`; pointer-returning functions; incomplete/forward-declared
+  pointee types. **The trigger requires duktape's full accumulated type context** — some
+  earlier type definition in the 100k-line TU perturbs the resolution of this one access.
+
+## Likely vicinity
+`duk__init_func_valstack_slots` (duktape.c ~69716), run first thing in
+`duk_pcompile_string`: it does `func->h_consts = DUK_GET_HOBJECT_POSIDX(thr, entry_top+1)`
+(and h_funcs/h_decls/…) — a `duk_hobject *` from the value stack stored into a
+`duk_compiler_func` pointer field. The corrupted value later drives a
+`duk_heaphdr_decref`-shaped helper (reads `h->h_refcount` at offset 0) → the crash.
 
 ## Evidence (the smoking gun)
 gdb on the `-g` build (`duk_split.c` minimal: heap → safe_call(rc=0) → pcompile "1" → crash):
@@ -43,23 +61,28 @@ gdb on the `-g` build (`duk_split.c` minimal: heap → safe_call(rc=0) → pcomp
   `int`-vs-`pointer` width mistake in codegen for one specific access.
 
 ## Where to dig next (fresh session)
-1. **Identify the exact function/access.** No symbols in the pxx binary and its `-g`
-   line table flattens everything into `duk_split.c` line numbers (offset ~8k vs
-   duktape.c physical, non-linear because #if-removed blocks collapse — calibration is
-   unreliable). Better: build the **gcc** oracle with `-g` and break at the value-stack
-   pop/decref during `duk_pcompile_string(ctx,"1")` to name the caller chain
-   (`duk_heaphdr_decref` is `DUK_ALWAYS_INLINE` — break its callers: `duk_tval_decref` /
-   the `duk_set_top` / valstack unwind path). Then read that exact C access and see which
-   `tv->v.<member>` / pointer expression pxx lowers to a 4-byte offset-0 load.
-2. **Instrument pxx codegen.** Add a temporary log in the C field-access / load-width path
-   (the code that chose `movslq`/4-byte for this field) and compile duktape — print the
-   field name/type whenever a union pointer-member resolves to a 4-byte or offset-0 load.
-   That pinpoints the mis-resolution directly.
-3. **Suspected class:** union member resolution where `duk_tval.v` has both a
-   `duk_small_int_t i` (4-byte signed) member and pointer members — pxx may pick the wrong
-   member type/offset only under duktape's full type context (all isolated repros with the
-   same union picked the right member). Also check pointer-returning functions whose return
-   type pxx might resolve to `int` (would truncate the stored pointer at its origin).
+The bug does NOT reproduce in isolation, so the two productive attacks are:
+
+1. **IR-level codegen instrumentation (most direct).** The truncation is a 4-byte store +
+   `movslq` (sign-extending 32-bit) load of a value whose type is a pointer. Instrument the
+   C→IR lowering / ir_codegen_x64 field-access path to log, during the duktape compile,
+   every field load/store where the resolved element type is 4 bytes but the field's source
+   type is a pointer (or: every `movslq` emitted for a pointer-typed access). Grep the log
+   for the value-stack/`h_consts` access → the exact mis-typed field, then fix the type
+   resolution.
+
+2. **Type-definition bisection.** Since isolated repros of the access all pass, an EARLIER
+   type definition in the full TU corrupts this one's resolution. Build a reduced TU: the
+   faithful `DUK_GET_HOBJECT_POSIDX`/`duk__init_func_valstack_slots` repro (already OK on
+   its own) + progressively more of duktape's real type definitions prepended, until the
+   pointer truncates. The type that flips it is the culprit (candidate: a struct/typedef
+   that shares a name or aliases `duk_tval`/`duk_hobject`/`v`, mis-registering the field
+   table; or a type whose registration mis-sizes a shared record entry).
+
+Line-mapping caveat: the pxx binary has no symbol table, and its `-g` DWARF flattens the
+unity into `duk_split.c` line numbers (offset ~8k vs duktape.c physical, non-linear because
+#if-removed blocks collapse — calibration unreliable). Use the **gcc** oracle (full symbols)
+to name functions; use pxx only for the codegen log.
 
 ## Symptom
 The duktape amalgamation now compiles, links (libc-free crtl), and creates a heap:
