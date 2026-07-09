@@ -128,3 +128,26 @@ Base (x86-64) skip list still has 15 entries — all genuine deep language
 features (compound literals, statement-exprs, _Generic, VLA, wide strings, Duff's
 device, fnptr-returning declarators, pointer-to-array, HFA-float ABI 00204,
 pathological goto-shadowing). Each is its own focused-session ticket.
+
+## Skip list burned down to 3 — 2026-07-09 (cfront-agent, A+B+C)
+x86-64 conformance now **217 pass / 0 fail / 3 skip** (was 213 at session start,
+172 baseline). Cleared this session, each with a regression test + self-host
+byte-identical:
+- 00124 fn returning fn-pointer (bug-c-function-returning-fnptr-declarator)
+- 00130 pointer-to-array `char (*p)[4]` (bug-c-pointer-to-array-declarator)
+- 00051 + 00143 switch non-compound body + Duff's device
+  (bug-c-switch-nonblock-and-duffs-device)
+- 00213 GNU dead-code-suppression torture (feature-c-statement-expressions —
+  fell out of the switch-as-labels rework)
+Plus non-conformance: multidim-float global brace init, UClass field-window fix.
+
+**Only 3 skips remain, all deep multi-session features:**
+- **00204** HFA float-aggregate ABI — SysV eightbyte classification (INTEGER vs
+  SSE per 8-byte chunk), XMM arg regs + struct return in xmm0(:xmm1). Pure Track A
+  codegen, no parse fragility. (unfinished/bug-c-abi-battery-00204)
+- **00216** designated-init cluster — GNU range designators `[a ... b]=`, flex-array
+  members, anonymous/unnamed struct/union members, empty structs. Parse-heavy,
+  self-host-fragile; needs the brace-init factor-out. (feature-c-compound-literals
+  / bug-c-init-designated-and-nested)
+- **00219** C11 `_Generic` — needs a richer C type model (const-qual, pointer-const,
+  integer-width distinctions). Largest, lowest prio. (feature-c-generic-selection)
