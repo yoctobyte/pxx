@@ -5,6 +5,5 @@
 # tickets: bug-c-ptrdiff-of-addr-elem, bug-c-string-literal-binop-decay,
 # feature-c-crtl-bind-hand-declared-prototypes).
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
-00204.c	aarch64-style ABI battery (structs by value, HFA, varargs) — bug-c-abi-battery-00204
 00216.c	empty structs + compound-literal initializers — feature-c-compound-literals
 00219.c	_Generic selection — feature-c-generic-selection

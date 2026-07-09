@@ -175,3 +175,4 @@
 2026-07-04T20:16:55Z  v175  7bf4ebd91854fb77af05fcd5c4a6140afeb830cfa39dadd0a8c52c54bfb25ae5  e8aa9a993521701692dad07389efe73bb401c38d  docs(ticket): close bug-downcast-inherited-property-wrong-offset
 2026-07-05T20:04:39Z  v176  7e78318fc3d9490e8500082e1eaff89f91bd4880bea691dea3ef0e8caee5597d  a9338bf86bc4d682e35bced78407005a33f49840  docs(ticket): i386 coroutines.lua FIXED (longjmp arg-order); all 3 cross targets lua 6/6 (18/18)
 2026-07-06T16:17:15Z  v177  bfd05f67a26c677a184bc3ace66056d12a695d715f8126c173ef7ca9abc07580  9a88d948cde58c2be047947d868d26cd5c3e24e1  fix(ir,symtab,lexer): struct-valued ternary + float-literal rounding
+2026-07-09T07:35:26Z  v178  453f95409f1663dd4e2ed2403840a2af7d4a0c3552c89de62396bf1a63bc0b21  02b3dc113caa81f051337ac5c9d74c960e5effe5  docs(00204): add copy-paste kickoff prompt for variadic-struct session

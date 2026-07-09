@@ -405,6 +405,7 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
     vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
     vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
+    vaRecId, ptrNode: Integer;
     vt: TTypeKind;
     name: AnsiString;
 begin
@@ -518,6 +519,15 @@ begin
         vaPtrDepth := CTypePtrDepth;
         vaElemTk := CTypeElemTk; vaElemRec := CTypeElemRec;
         vaBaseTk := CTypePtrBaseTk; vaBaseRec := CTypePtrBaseRec;
+        { A struct passed by value through `...` is marshalled by the C caller ABI
+          as a POINTER to a private copy (IRLowerCallArg: CProgramMode records are
+          always copied to a temp and passed by address, one GP/word slot). So a
+          `va_arg(ap, struct T)` consumes ONE pointer slot (never ceil(RecSize/8)
+          eightbytes), and must deref TWICE: load the pointer out of the slot, then
+          read the record it points at. Capture the record id (from the base type,
+          before the pointer-suffix collapse) so ResolveNodeRec sizes the copy. }
+        vaRecId := REC_NONE;
+        if (vt = tyRecord) and (CTypePtrDepth = 0) then vaRecId := CTypeBaseRec;
         if CTypePtrDepth > 0 then vt := tyPointer;
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);
@@ -532,13 +542,27 @@ begin
           { 32-bit cross: 4-byte word slots; a 64-bit arg spans two. The helper is
             size-driven — pass the arg's byte size so it steps by 4 or 8. }
           helper := FindProc('__pxx_va_arg_cross32');
-          a3 := AllocNode(AN_INT_LIT); ASTIVal[a3] := TypeSize(vt); ASTTk[a3] := Ord(tyInteger);
+          a3 := AllocNode(AN_INT_LIT);
+          { A struct arg occupies one pointer-width slot (see the by-pointer note
+            above), so the walk steps by TARGET_PTR_SIZE, not the struct's size. }
+          if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
+          else ASTIVal[a3] := TypeSize(vt);
+          ASTTk[a3] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
           a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[a2] := -1; ASTRight[argNode] := a2;
           callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
-          node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
-          node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
+          if vaRecId <> REC_NONE then
+          begin
+            ptrNode := AllocNode(AN_DEREF); ASTLeft[ptrNode] := callNode; ASTTk[ptrNode] := Ord(tyPointer);
+            node := AllocNode(AN_DEREF); ASTLeft[node] := ptrNode; ASTTk[node] := Ord(tyRecord);
+            ASTIVal[node] := vaRecId;
+          end
+          else
+          begin
+            node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
+            node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
+          end;
           Result := node; Exit;
         end;
         if TargetArch <> TARGET_X86_64 then
@@ -552,6 +576,15 @@ begin
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode; ASTRight[argNode] := -1;
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+        if vaRecId <> REC_NONE then
+        begin
+          { struct-by-value variadic arg: the GP slot holds a POINTER to the
+            caller's copy — load it (first deref), then read the record (second). }
+          ptrNode := AllocNode(AN_DEREF); ASTLeft[ptrNode] := callNode; ASTTk[ptrNode] := Ord(tyPointer);
+          node := AllocNode(AN_DEREF); ASTLeft[node] := ptrNode; ASTTk[node] := Ord(tyRecord);
+          ASTIVal[node] := vaRecId;
+          Result := node; Exit;
+        end;
         node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
         node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
         Result := node; Exit;

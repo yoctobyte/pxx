@@ -15,11 +15,10 @@ _none_
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (3)
+## unfinished (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 
@@ -166,7 +165,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (551)
+## done (552)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -188,6 +187,7 @@ _none_
 | bug-builtin-val-miscompiles | A | 50 | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | 50 | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-byvalue-record-managed-field-aliases-caller | A | 50 | bug | By-value record param with a managed field aliases the caller (mutations leak) | — |
+| bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-anon-struct-nested-enum-global | C | 30 | bug | C: anonymous struct global var with a NESTED anonymous enum member drops the declarator | — |
