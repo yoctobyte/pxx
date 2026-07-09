@@ -97,10 +97,13 @@ critical. Precise map (minimal repros each confirmed):
    (wasArr set) and `&func` element prefixes accepted; the branch already emits
    arrKind=3 proc-address PendingInits (Kind=2 → AN_PROCADDR). gcc-verified,
    test/cfnptr_typedef_array_b214.c → exit 42, 219/0/1.
-   **STILL TODO for 00216's `table[3]`**: `[k]=` designators + `[lo ... hi]` range
-   in THIS array scanner (5062+) with per-element target-index tracking — mirror
-   the local-array arrElemIdx[] work. 00216's reloc table is
-   `{[0 ... 2]=&sys_ni, [0]=sys_one, [1]=sys_two, [2]=sys_three}`.
+   **Designators + ranges in the fn-ptr scanner DONE 2026-07-09** (v185): the
+   scanner tracks a per-element target index (arrTgt[]) and replicates a range's
+   proc across `[lo ... hi]`; later single `[k]=` designators override earlier
+   range slots (PendingInit last-wins). The exact 00216 reloc table
+   `{[0 ... 2]=&sni, [0]=one, [1]=two, [2]=three}` now materialises correctly
+   (prints one/two/three). gcc-verified, test/cfnptr_range_table_b215.c → exit 42.
+   **Piece 3 COMPLETE.**
 4. **Nested designators `.a.j = v`** — **DONE 2026-07-09**: after `.name`
    positions to a field, a continuation `.sub`/`[i]` now descends the full chain
    via `CInitDesignatedDescend` (pushes path frames, inits the designated leaf or

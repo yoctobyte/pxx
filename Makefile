@@ -1011,6 +1011,8 @@ test-core: $(COMPILER)
 	/tmp/cnested_designator_b21326; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_typedef_array_b214.c /tmp/cfnptr_typedef_array_b21426
 	/tmp/cfnptr_typedef_array_b21426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_range_table_b215.c /tmp/cfnptr_range_table_b21526
+	/tmp/cfnptr_range_table_b21526; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

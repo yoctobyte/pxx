@@ -5025,7 +5025,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
-    arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
+    arrOffs, arrLens, arrKind, arrSym, arrTgt: array[0..255] of Integer;
+    fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;
@@ -5072,9 +5073,27 @@ begin
     if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
     begin
       Next; Next;                        { consume assign and opening brace }
+      fnCurTgt := 0; fnHadDesig := False;
       while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        { `[k] =` / `[lo ... hi] =` element designators (C 6.7.8 / GNU range) —
+          the reloc-table shape `{[0 ... 2]=&sys_ni, [0]=one, ...}` (00216). }
+        fnRangeHi := -1;
+        if CurTok.Kind = tkLBrack then
+        begin
+          fnHadDesig := True;
+          Next;
+          fnCurTgt := CEvalConstExpr;
+          if CurTok.Kind = tkDot then
+          begin
+            Next; if CurTok.Kind = tkDot then Next; if CurTok.Kind = tkDot then Next;
+            fnRangeHi := CEvalConstExpr;
+          end;
+          Expect(tkRBrack, ']');
+          if CurTok.Kind = tkAssign then Next;
+          if fnCurTgt < 0 then fnCurTgt := 0;
+        end;
         if CurTok.Kind = tkAmp then Next;   { `&func` == `func` for a fn pointer }
         if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
         begin
@@ -5105,7 +5124,21 @@ begin
           arrKind[nArrElems] := 1; arrSym[nArrElems] := 0;
           CSkipCInitElement;
         end;
+        arrTgt[nArrElems] := fnCurTgt;
         Inc(nArrElems);
+        if fnRangeHi >= fnCurTgt then
+        begin
+          { range: replicate the one proc/value across [fnCurTgt .. fnRangeHi] }
+          while (fnCurTgt < fnRangeHi) and (nArrElems <= 255) do
+          begin
+            Inc(fnCurTgt);
+            arrKind[nArrElems] := arrKind[nArrElems - 1];
+            arrSym[nArrElems]  := arrSym[nArrElems - 1];
+            arrTgt[nArrElems]  := fnCurTgt;
+            Inc(nArrElems);
+          end;
+        end;
+        Inc(fnCurTgt);
         if CurTok.Kind = tkComma then begin Next; Continue; end;
         Break;
       end;
@@ -5139,12 +5172,20 @@ begin
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     end;
     arrLen := CTypeFnPtrArrLen;
+    { With `[k]=` / range designators the array is sized to the highest index
+      touched, not the element count. }
+    fnMaxTgt := -1;
+    if fnHadDesig then
+      for ei := 0 to nArrElems - 1 do
+        if arrTgt[ei] > fnMaxTgt then fnMaxTgt := arrTgt[ei];
     if wasArr then
     begin
       if arrLen < 1 then
       begin
-        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+        if fnHadDesig and (fnMaxTgt >= 0) then arrLen := fnMaxTgt + 1
+        else if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
       end
+      else if fnHadDesig and (fnMaxTgt + 1 > arrLen) then arrLen := fnMaxTgt + 1
       else if nArrElems > arrLen then arrLen := nArrElems;
     end;
     idx := FindSym(name);
@@ -5178,8 +5219,9 @@ begin
       if (idx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
       begin
         PendingInitSym[PendingInitCount]  := idx;
-        if wasArr then PendingInitElem[PendingInitCount] := ei
-        else PendingInitElem[PendingInitCount] := -1;
+        if not wasArr then PendingInitElem[PendingInitCount] := -1
+        else if fnHadDesig then PendingInitElem[PendingInitCount] := arrTgt[ei]
+        else PendingInitElem[PendingInitCount] := ei;
         PendingInitFLen[PendingInitCount] := 0;
         PendingInitTk[PendingInitCount]   := Ord(tyPointer);
         if arrKind[ei] = 3 then
