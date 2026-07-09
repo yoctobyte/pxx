@@ -74,6 +74,50 @@ from pxx.skip.
   cast-branch hook, ~1447) — still unimplemented; needed for tcc/zlib-style code,
   no conformance test isolates it yet.
 
+## 2026-07-09 (A+B+C agent) — COMPOUND LITERALS COMPLETE; 00216 blocked by TWO pre-existing NON-CL bugs
+
+Inline compound literals `(T)` + braced init are now fully implemented and pinned
+(the AN_COMPOUND_LITERAL node from the ATTEMPT note, re-applied + all 3 gaps closed).
+Each gcc-verified (exit 42) + self-host byte-identical + regression test in test-core:
+- **base** (b216): flat block-scope — by-value arg, `&(T){..}`+`->`, struct-init RHS,
+  designated `(T){.c=5,.a=1}`. New node defs.inc=81; ParseCUnary cast-branch hook →
+  `CParseCompoundLiteralRec`; IRLowerAST/IRLowerAddress emit init chain then IR_LEA
+  temp; IsASTLValue + ResolveNodeRec recognise it.
+- **gap A** (b217): postfix `(T){..}.f` / `->` / `[i]` — split `ParseCPostfixTail(node)`
+  so the CL node flows through the postfix tail.
+- **gap B** (b218): whole-record-VALUE initializer elements (compound literal, struct
+  lvalue `ls`, `*ptr`, `->field`, `(struct S)` cast) — were SILENTLY miscompiled by
+  descending into subfields. Fixed via a non-consuming type peek
+  (`CInitPeekElemTk` / `CInitElemIsWholeRecord`) → copy wholesale (IR_COPY_REC).
+  Also fixed two shared-state leaks the nested CL exposed: `CInitLocalAggregate`
+  now saves/restores `CAggCurSym`; `CInitPeekElemTk` snapshots/restores the shared
+  `CInitPath*` frames the speculative parse would clobber.
+- **gap C** (b219): file-scope CL in a global array `struct W g[]={((struct W){f}),f}`
+  — works for free once the node exists (the global array walker's emit-mode leaf
+  uses ParseCExpr). Was "expected C expression" on v185; exit 42 now.
+
+Conformance held at 219/0/1 (no regression). **feature-c-designated-init-compound-
+literals' compound-literal acceptance is satisfied** by this work.
+
+### 00216 is NOT yet green — it needs TWO further, PRE-EXISTING, non-CL features
+Retested with the CL work in: 00216 no longer desyncs at global_wrap, but still fails.
+Both remaining blockers reproduce on the PINNED v185 binary (i.e. they predate and
+are unrelated to compound literals):
+1. **Anonymous struct/union member braced-designated init** (`-fms-extensions`):
+   `union UV {struct {u8 a,b;}; struct S s;}; union UV g = {{.b=7,.a=8}};` →
+   "expected C expression". The anon struct's fields are PROMOTED flat into the union,
+   so the walker treats the union's field[0] as scalar `a`, sees the inner brace as a
+   braced-scalar, and chokes on the `.b` designator. Needs the walker to treat a
+   promoted anonymous aggregate as one member for a matching inner brace.
+   (Positional `{{6,5}}` and union-level promoted designators `{.b=8,.a=7}` already work.)
+2. **Cumulative parser desync** (brace/state imbalance detected at EOF as "stray token
+   at top level" with empty SVal): appears only when NEARLY ALL of 00216's functions
+   are present together (each subset — tcwr, table+multi, SE+zeroinit, foo — compiles
+   fine alone or in pairs; the full set desyncs by one). Not a fixed-array cap (only
+   15 types; caps are 2048+). A pre-existing accumulation bug in the two-pass driver.
+→ Filed as separate tickets; 00216 stays on pxx.skip until both land. See
+[[bug-c-anonymous-member-designated-init]] and [[bug-c-fullfile-cumulative-parser-desync]].
+
 ## 2026-07-09 STATUS — 00216 is 4/5 done; ONLY inline compound literals remain (v185)
 Pieces 1-4 + piece 3's designators all landed and pinned (v180→v185), each
 gcc-verified + self-host byte-identical + regression test in test-core. The single

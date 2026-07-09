@@ -17,6 +17,14 @@ prio: 65  # auto
   bug-c-string-literal-binop-decay, bug-c-ptrdiff-of-addr-elem — the last
   because the draft regressed test-core b133. Next inside step 1: burn down
   the skip list ticket by ticket; then step 2 (zlib).
+- **2026-07-09 — conformance at 219/220 pass, 1 skip (only 00216).** Compound
+  literals landed (RECORD form: base + postfix + nested/whole-value + file-scope
+  global array; [[feature-c-compound-literals]]), clearing 00216's compound-literal
+  blocker. 00216 is NOT yet green: two further PRE-EXISTING, non-CL bugs remain —
+  anonymous struct/union member braced-designated init
+  ([[bug-c-anonymous-member-designated-init]]) and a full-file cumulative parser
+  desync ([[bug-c-fullfile-cumulative-parser-desync]]). Step 1 completes (220/220)
+  when both land and 00216 drops from pxx.skip.
 - **Context:** corpus today = lua 5.4 + sqlite 3.46, both green and byte-identical
   to same-version gcc oracles on all targets. Recorded lesson (v185): big feature
   suites hide whole feature classes behind green CRUD — breadth beats depth.

@@ -71,3 +71,11 @@ this ticket is specifically the three designator/compound-literal forms above.
   self-host-fragile keystone tracked in [[feature-c-compound-literals]] (also the
   last blocker for c-testsuite 00216). Designated-init acceptance met; compound-
   literal acceptance still open.
+- 2026-07-09 (A+B+C) — **RECORD compound literals DONE** (base + postfix + nested/
+  whole-value + file-scope-global-array; AN_COMPOUND_LITERAL node, defs.inc=81).
+  `sum((struct Point){3,4})` → 7, gcc-verified, tests b216-b219, self-host byte-
+  identical, conformance 219/0/1. Full detail in [[feature-c-compound-literals]].
+  **Remaining for this ticket: ARRAY compound literals `(int[]){1,2,3}`** — a
+  distinct path (array-type cast `(int[])` isn't recognised by ParseCDeclType/
+  CIsCastAhead; needs an array temp, not a record temp). No conformance test
+  isolates it; 00216 does not use it. Record-CL acceptance met; array-CL open.

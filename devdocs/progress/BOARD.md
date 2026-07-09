@@ -26,10 +26,12 @@ _none_
 
 _none_
 
-## backlog (78)
+## backlog (80)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-anonymous-member-designated-init | C | 40 | bug | C anonymous struct/union member braced-designated init (`-fms-extensions`) | — |
+| bug-c-fullfile-cumulative-parser-desync | C | 40 | bug | C: cumulative parser desync ("stray token at top level") on large multi-function files | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -811,6 +813,8 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 40] [C] bug-c-anonymous-member-designated-init
+- [p 40] [C] bug-c-fullfile-cumulative-parser-desync
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section
