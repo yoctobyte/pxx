@@ -201,7 +201,7 @@ begin
     else
     begin
       case Source[SrcPos] of
-        ' ', #9, #13: Inc(SrcPos);
+        ' ', #9, #11, #12, #13: Inc(SrcPos);   { C6.4 whitespace incl. vtab #11 / form-feed #12 }
         #1: Inc(SrcPos);   { preprocessor blue-paint marker — not a token }
         #10: begin Inc(SrcLine); Inc(SrcPos); end;
         '/':
