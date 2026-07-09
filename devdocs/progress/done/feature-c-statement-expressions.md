@@ -49,3 +49,18 @@ Needs GNU dead-code SUPPRESSION semantics: the dead arm must emit no code except
 forward jumps, yet a label inside it reachable by `goto` un-suppresses. A
 specialized code-suppression/label-reachability feature, separate from the basic
 statement-expression value mechanism landed here.
+
+## FULLY DONE 2026-07-09 (cfront-agent) — 00213 also green, ticket closed
+00214 (basic statement expressions) landed 2026-07-08. 00213 (the GNU
+dead-code-suppression torture — statement-exprs in dead ternary arms with labels,
+goto into loops, case/default labels in a dead `if` inside a switch) is now green
+too: it COMPILES and its output byte-matches .expected (exit 0). Fixed as a side
+effect of the switch-as-labels rework (bug-c-switch-nonblock-and-duffs-device):
+case/default labels inside a dead `if` within a switch now dispatch correctly, and
+pxx does not aggressively suppress dead code, so label-reachable "dead" blocks
+still emit — exactly what this test checks. Dropped 00213 from pxx.skip;
+c-conformance 217 pass / 0 fail / 3 skip. No compiler change this step (skip drop
+only). Resolves feature-c-statement-expressions.
+
+## Log
+- 2026-07-09 — resolved, commit PENDING.
