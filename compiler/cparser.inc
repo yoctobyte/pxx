@@ -4697,6 +4697,48 @@ begin
   end;
 end;
 
+{ Descend a nested designator chain (`.a.j`, `.a.b.c`, and a terminal `[i]`) onto
+  the current subobject whose path frames are already pushed, then initialise the
+  designated leaf/subobject. Handles the record.record.scalar shape used by C99
+  sub-level designators (c-testsuite 00216 test_zero_init `.a.j = 5`). }
+procedure CInitDesignatedDescend(tkOrd, recId: Integer; emit: Boolean);
+var sfi, ix: Integer;
+begin
+  if (CurTok.Kind = tkDot) and (recId >= REC_UCLASS_BASE) then
+  begin
+    Next;                                   { '.' }
+    sfi := FindUField(recId - REC_UCLASS_BASE, CurTok.SVal);
+    Next;                                   { sub-field name }
+    if sfi >= 0 then
+    begin
+      CInitPathPush(1, sfi, UFldTk[sfi]);
+      CInitDesignatedDescend(UFldTk[sfi], UFldRec_[sfi], emit);
+      Dec(CInitPathDepth);
+    end
+    else if CurTok.Kind = tkAssign then
+    begin Next; CInitLeaf(tkOrd, emit); end;
+  end
+  else if CurTok.Kind = tkLBrack then
+  begin
+    Next; ix := CEvalConstExpr; Expect(tkRBrack, ']');
+    CInitPathPush(0, ix, tkOrd);
+    CInitDesignatedDescend(tkOrd, recId, emit);   { scalar-array element keeps tkOrd }
+    Dec(CInitPathDepth);
+  end
+  else
+  begin
+    if CurTok.Kind = tkAssign then Next;
+    if (tkOrd = Ord(tyRecord)) and (recId >= REC_UCLASS_BASE) and (CurTok.Kind = tkBegin) then
+    begin
+      Next;
+      CInitWalkRecord(recId - REC_UCLASS_BASE, True, emit);
+      Eat(tkEnd);
+    end
+    else
+      CInitLeaf(tkOrd, emit);
+  end;
+end;
+
 procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean);
 var base, n, fldI, fi, fEnd, di: Integer;
 begin
@@ -4709,11 +4751,30 @@ begin
     if (not braced) and (CurTok.Kind = tkSemicolon) then Break;
     if braced and (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) then
     begin
-      { `.name =` field designator repositions the cursor (C 6.7.8). }
+      { `.name =` field designator repositions the cursor (C 6.7.8). A
+        continuation `.sub` / `[i]` is a NESTED designator into this field. }
       Next;
       di := FindUField(ci, CurTok.SVal);
       if di >= 0 then fldI := di - base;
       Next;
+      if ((CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack)) and (fldI < n) then
+      begin
+        fi := base + fldI;
+        CInitPathPush(1, fi, UFldTk[fi]);
+        CInitDesignatedDescend(UFldTk[fi], UFldRec_[fi], emit);
+        Dec(CInitPathDepth);
+        { positional advance past the designated field, then continue the list }
+        if UFldBitWidth[fi] > 0 then Inc(fldI)
+        else
+        begin
+          fEnd := UFldOff_[fi] + CInitFieldSize(fi);
+          Inc(fldI);
+          while (fldI < n) and (UFldOff_[base + fldI] < fEnd) and
+                (UFldBitWidth[base + fldI] = 0) do Inc(fldI);
+        end;
+        if CurTok.Kind = tkComma then begin Next; Continue; end
+        else Break;
+      end;
       if CurTok.Kind = tkAssign then Next;
     end;
     if fldI >= n then

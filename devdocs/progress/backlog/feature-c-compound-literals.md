@@ -96,11 +96,12 @@ critical. Precise map (minimal repros each confirmed):
    fn-ptr arrays (`fptr t[N]`) may not reach that scanner. TODO: emit arrKind=3 as
    a proc-address PendingInit (FOff=-4 style) + range support here for the
    `[0...2]=&sys_ni` reloc table.
-4. **Nested designators `.a.j = v`** — walker (`CInitWalkRecord` ~4649) handles ONE
-   `.name` level then positional; a continuation `.j`/`[i]` in an UNBRACED sub-agg
-   isn't processed (designator handling is gated on `braced`). TODO: decouple
-   designator-processing from brace-bounding, navigate the full chain pushing path
-   frames. (`struct SEB b={.a.j=5}`.)
+4. **Nested designators `.a.j = v`** — **DONE 2026-07-09**: after `.name`
+   positions to a field, a continuation `.sub`/`[i]` now descends the full chain
+   via `CInitDesignatedDescend` (pushes path frames, inits the designated leaf or
+   braced subobject), then resumes positionally. Handles record.record.scalar
+   (`.a.j`), 3-level (`.b.c.y`), reordered, local + global. gcc-verified,
+   test/cnested_designator_b213.c → exit 42, self-host byte-identical, 219/0/1.
 5. **Inline compound literals `(T){...}` as expressions** — `ParseCUnary` cast
    branch (~1719): after `castTk=ParseCDeclType; Expect(')')`, a following `{` is a
    compound literal, today it recurses into ParseCUnary and derails. The blocker is
