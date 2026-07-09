@@ -520,6 +520,17 @@ procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);
 var fi, k, src, dst: Integer;
 begin
   if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
+  { Empty window re-base: AddUClass stamps UClsFBase at CLASS-CREATION time, so a
+    frontend that creates struct SHELLS up front then fills fields later (rparser's
+    two-pass, so a field type can reference another struct) leaves every empty
+    class pointing at the then-current tail. The first field of a NON-first shell
+    would append at the live tail while UClsFBase still holds a stale earlier index
+    — the window then overlaps an earlier class's fields (bug-uclass-field-window-
+    stale-base: two field-bearing structs, second reads the first's slot). Re-anchor
+    an empty window to the tail before appending. Safe vs the two special cases
+    below: both the anonymous-record relocation and the C parser's manual re-anchor
+    only fire for FCount>0; an empty window carries no data to move. }
+  if UClsFCount[ci] = 0 then UClsFBase[ci] := UFldCount;
   { The field window [UClsFBase[ci] .. +UClsFCount[ci]) must stay contiguous
     (FindUField/RecordHasManagedFields walk it as a range). A nested anonymous
     record type parsed mid-record (feature-anonymous-record-type) mints its

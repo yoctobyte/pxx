@@ -6,7 +6,7 @@ prio: 60
 - **Type:** bug (Track A — symtab.inc, AddUClass/AddUField contract)
 - **Opened:** 2026-07-09 (found by the Rust chess-corpus tuple-struct rung —
   filed instead of worked around per the experimental-frontends rule)
-- **Status:** backlog — BLOCKS the multi-struct rungs of
+- **Status:** done
   [[feature-rust-corpus-chess]] (any program with 2+ field-bearing structs
   registered shells-first)
 
@@ -74,3 +74,30 @@ Repro prints 300/44; make test green; self-host fixedpoint byte-identical
 (the Pascal frontend registers fields immediately per-class, so the
 compiler's own records never hit the empty-window rebase — expected
 byte-identical, but that IS the gate).
+
+## FIXED 2026-07-09 (cfront-agent, combined A+B+C) — ticket closed
+Applied the proposed one-line guard in AddUField (symtab.inc): before appending,
+`if UClsFCount[ci] = 0 then UClsFBase[ci] := UFldCount;` re-anchors an EMPTY field
+window to the current tail. This corrects the shells-then-fields pattern
+(rparser) where every shell was stamped with FBase at creation time, so a
+non-first struct's first field appended at the live tail while its FBase still
+held a stale earlier index — overlapping the earlier struct's window.
+
+Confirmed via instrumentation: Pair's first field now re-bases (fbase 0→1) so its
+window [1..3) no longer overlaps Square's [0..1). Repro prints "a 300 b 44".
+Safe vs the two documented special cases (anonymous-record relocation + C parser
+manual re-anchor) — both fire only for FCount>0.
+
+Regression test: extended test/test_rust_tuple_struct.rs to two field-bearing
+structs, smaller (Square) first → "a 300 b 44 s 7". Gates: self-host byte-
+identical (Pascal registers per-class, never hits the empty-window rebase — the
+byte-identical result IS the gate), quick tier green, c-conformance 214/0/6 (C's
+re-anchor untouched), all Rust tests green, Pascal multi-record sanity green.
+Unblocks the multi-struct rungs of feature-rust-corpus-chess.
+
+Note: AddUMeth/UClsMBase and UClsPBase have the same stamp-at-creation shape and
+will want the identical guard the day a frontend registers method/prop shells
+early — left as-is (no current trigger).
+
+## Log
+- 2026-07-09 — resolved, commit PENDING.
