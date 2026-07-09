@@ -400,10 +400,182 @@ begin
   Result := castNode;
 end;
 
+{ ---- C11 _Generic structural type descriptors (cgXxx) ----------------------
+  A C-type model richer than TTypeKind, built ON DEMAND only inside _Generic
+  (the pool CGCount resets per _Generic call, so a handful of slots suffice).
+  It exists because _Generic association matching must distinguish long from
+  long long, char from signed/unsigned char, and const-qualified pointees —
+  distinctions TTypeKind collapses. C-mode only; the Pascal self-host source
+  never reaches here, so this layer is inert during self-host. }
+function CGAlloc(kind: Integer): Integer;
+begin
+  if CGCount < 1 then CGCount := 1;        { slot 0 reserved = cgUnknown }
+  if CGCount >= MAX_CGTYPE then begin Result := 0; Exit; end;
+  Result := CGCount; Inc(CGCount);
+  CGKindA[Result] := kind; CGConstA[Result] := False;
+  CGRecA[Result] := REC_NONE; CGSubA[Result] := 0; CGArrLenA[Result] := -1;
+end;
+
+function CGScalarKindOfTk(tkOrd: Integer): Integer;
+begin
+  case IntToTypeKind(tkOrd) of
+    tyChar:              Result := cgChar;
+    tyInt8:              Result := cgSChar;
+    tyUInt8:             Result := cgUChar;
+    tyInt16:             Result := cgShort;
+    tyUInt16:            Result := cgUShort;
+    tyInteger, tyInt32:  Result := cgInt;
+    tyUInt32:            Result := cgUInt;
+    tyInt64:             Result := cgLong;
+    tyUInt64:            Result := cgULong;
+    tySingle:            Result := cgFloat;
+    tyDouble:            Result := cgDouble;
+    tyRecord:            Result := cgStruct;
+    tyPointer:           Result := cgPtr;
+    else                 Result := cgUnknown;
+  end;
+end;
+
+{ Descriptor of a controlling expression (unevaluated). Handles the shapes a
+  _Generic controlling expr takes; anything else falls back to its ASTTk. }
+function CExprCG(node: Integer): Integer;
+var sym, sub: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_STR_LIT:
+      begin
+        Result := CGAlloc(cgArray);          { char[N] — decays to char* below }
+        CGSubA[Result] := CGAlloc(cgChar);
+      end;
+    AN_PROCADDR:
+      Result := CGAlloc(cgFunc);             { function — decays to fn-pointer }
+    AN_IDENT:
+      begin
+        sym := ASTIVal[node];
+        if (sym >= 0) and (sym < SymCount) then
+        begin
+          if Syms[sym].TypeKind = tyPointer then
+          begin
+            Result := CGAlloc(cgPtr);
+            if SymPtrDepth[sym] >= 2 then
+            begin
+              sub := CGAlloc(cgPtr);
+              CGSubA[sub] := CGAlloc(CGScalarKindOfTk(Ord(Syms[sym].PtrElemTk)));
+            end
+            else
+            begin
+              sub := CGAlloc(CGScalarKindOfTk(Ord(Syms[sym].PtrElemTk)));
+              CGConstA[sub] := SymPtrPointeeConst[sym];
+              if Syms[sym].PtrElemTk = tyRecord then CGRecA[sub] := Syms[sym].PtrElemRec;
+            end;
+            CGSubA[Result] := sub;
+          end
+          else if Syms[sym].TypeKind = tyRecord then
+          begin
+            Result := CGAlloc(cgStruct);
+            CGRecA[Result] := Syms[sym].RecName;
+          end
+          else
+            Result := CGAlloc(CGScalarKindOfTk(Ord(Syms[sym].TypeKind)));
+        end
+        else
+          Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
+      end;
+    else
+      { integer/char literals, arithmetic results, casts: the frontend already
+        computed the promoted result type into ASTTk. }
+      Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
+  end;
+end;
+
+{ Lvalue conversion for the controlling type: strip top-level const, and decay
+  array/function to pointer (C11 6.5.1.1p2, as gcc/clang implement it). }
+function CGConvControlling(idx: Integer): Integer;
+begin
+  Result := idx;
+  if idx <= 0 then Exit;
+  if CGKindA[idx] = cgArray then
+  begin Result := CGAlloc(cgPtr); CGSubA[Result] := CGSubA[idx]; Exit; end;
+  if CGKindA[idx] = cgFunc then
+  begin Result := CGAlloc(cgPtr); CGSubA[Result] := idx; Exit; end;
+  CGConstA[idx] := False;                   { drop top-level const }
+end;
+
+{ Parse one _Generic association type-name into a descriptor. }
+function ParseCGAssocType: Integer;
+var tk: TTypeKind;
+    depth, i, baseKind, innermost, p, arrLen: Integer;
+    baseConst, longlong: Boolean;
+begin
+  tk := ParseCDeclType;
+  depth := CTypePtrDepth;
+  baseConst := CTypeBaseConst;
+  longlong := CTypeLongLong;
+  if (CTypeProcSig >= 0) and (tk = tyPointer) then
+  begin
+    { fn-pointer typedef (e.g. `fptr`): pointer-to-function. }
+    Result := CGAlloc(cgPtr);
+    CGSubA[Result] := CGAlloc(cgFunc);
+    for i := 2 to depth do begin p := CGAlloc(cgPtr); CGSubA[p] := Result; Result := p; end;
+    Exit;
+  end;
+  if depth > 0 then
+  begin
+    if IntToTypeKind(CTypePtrBaseTk) = tyRecord then
+    begin innermost := CGAlloc(cgStruct); CGRecA[innermost] := CTypePtrBaseRec; end
+    else innermost := CGAlloc(CGScalarKindOfTk(CTypePtrBaseTk));
+    CGConstA[innermost] := baseConst;       { pointee const }
+    Result := CGAlloc(cgPtr); CGSubA[Result] := innermost;
+    for i := 2 to depth do begin p := CGAlloc(cgPtr); CGSubA[p] := Result; Result := p; end;
+  end
+  else if tk = tyRecord then
+  begin
+    Result := CGAlloc(cgStruct); CGRecA[Result] := CTypeBaseRec;
+    CGConstA[Result] := baseConst;
+  end
+  else
+  begin
+    baseKind := CGScalarKindOfTk(Ord(tk));
+    if longlong and (baseKind = cgLong) then baseKind := cgLLong
+    else if longlong and (baseKind = cgULong) then baseKind := cgULLong;
+    Result := CGAlloc(baseKind);
+    CGConstA[Result] := baseConst;
+  end;
+  { array type-name suffix `int[4]` }
+  if CurTok.Kind = tkLBrack then
+  begin
+    Next;
+    arrLen := -1;
+    if CurTok.Kind <> tkRBrack then arrLen := CEvalConstExpr;
+    Expect(tkRBrack, ']');
+    p := CGAlloc(cgArray); CGSubA[p] := Result; CGArrLenA[p] := arrLen; Result := p;
+  end;
+end;
+
+{ Structural match of an association type (a) against the (already lvalue-
+  converted) controlling type (c). Function types match loosely. }
+function CGMatch(a, c: Integer): Boolean;
+begin
+  Result := False;
+  if (a <= 0) or (c <= 0) then Exit;
+  if CGKindA[a] <> CGKindA[c] then Exit;
+  if CGConstA[a] <> CGConstA[c] then Exit;
+  case CGKindA[a] of
+    cgStruct: Result := (CGRecA[a] = CGRecA[c]);
+    cgPtr:    Result := CGMatch(CGSubA[a], CGSubA[c]);
+    cgArray:  Result := (CGArrLenA[a] = CGArrLenA[c]) and CGMatch(CGSubA[a], CGSubA[c]);
+    cgFunc:   Result := True;
+    else      Result := True;               { scalar kinds already equal }
+  end;
+end;
+
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     apNode, addrNode, callNode, helper, a2, a3, a4, a5, a5arg: Integer;
     vaK, vaPIdx, vaGpBytes, vaRegSz: Integer;
+    genCtrl, genCtrlCG, genSel, genDefault, genVal, genAssocCG: Integer;
     vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
     vaRecId, ptrNode: Integer;
     vt: TTypeKind;
@@ -440,6 +612,15 @@ begin
         ASTTk[node] := Ord(tyInt64)
       else
         ASTTk[node] := Ord(tyInteger);
+      { l/L / ll suffix: at least `long`. `long long` is 64-bit on every target;
+        `long` is 64-bit only on LP64. Promote a 32-bit-tagged value so `17L` reads
+        as long (C11 _Generic dispatch, printf width). Preserves unsignedness. }
+      if ((CAttrFlags[TokPos - 1] and 32) <> 0) or
+         (((CAttrFlags[TokPos - 1] and 16) <> 0) and (TARGET_PTR_SIZE = 8)) then
+      begin
+        if IntToTypeKind(ASTTk[node]) = tyUInt32 then ASTTk[node] := Ord(tyUInt64)
+        else if IntToTypeKind(ASTTk[node]) in [tyInteger, tyInt32] then ASTTk[node] := Ord(tyInt64);
+      end;
       Next;
       Result := node;
     end;
@@ -504,7 +685,42 @@ begin
       Next;
       { varargs builtins, desugared over stdarg.h's va_list struct + the pure-C
         __pxx_va_* helpers (so the only special codegen is the variadic prologue). }
-      if (name = '__builtin_va_arg') and (CurTok.Kind = tkLParen) then
+      if (name = '_Generic') and (CurTok.Kind = tkLParen) then
+      begin
+        { C11 6.5.1.1 generic selection: pick the association whose type-name
+          matches the controlling expression's type (after lvalue conversion),
+          else `default`. Compile-time: the controlling expr and unchosen assoc
+          exprs are parsed but discarded (never lowered), so only the selected
+          expression reaches codegen. }
+        Next;                                { consume '(' }
+        CGCount := 1;                        { reset the per-_Generic descriptor pool }
+        genCtrl := ParseCExpr;               { controlling expr (unevaluated) }
+        genCtrlCG := CGConvControlling(CExprCG(genCtrl));
+        genSel := -1; genDefault := -1;
+        while CurTok.Kind = tkComma do
+        begin
+          Next;                              { consume ',' }
+          if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'default') then
+          begin
+            Next; Expect(tkColon, ':');
+            genVal := ParseCExpr;
+            if genDefault < 0 then genDefault := genVal;
+          end
+          else
+          begin
+            genAssocCG := ParseCGAssocType;
+            Expect(tkColon, ':');
+            genVal := ParseCExpr;
+            if (genSel < 0) and CGMatch(genAssocCG, genCtrlCG) then genSel := genVal;
+          end;
+        end;
+        Expect(tkRParen, ')');
+        if genSel >= 0 then Result := genSel
+        else if genDefault >= 0 then Result := genDefault
+        else begin Error('_Generic: no matching association and no default'); Result := -1; end;
+        Exit;
+      end
+      else if (name = '__builtin_va_arg') and (CurTok.Kind = tkLParen) then
       begin
         { __builtin_va_arg(ap, type) -> *(type*)__pxx_va_arg_{gp|fp}(&ap) }
         Next;
@@ -2260,6 +2476,7 @@ var
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
+  CTypeBaseConst := False; CTypeLongLong := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdIsFnType := False;
@@ -2275,7 +2492,7 @@ begin
   while loop do
   begin
     case CurTok.Kind of
-      tkConst:     Next;
+      tkConst:     begin CTypeBaseConst := True; Next; end;
       tkCSigned:   begin isSigned := True; sawBase := True; Next; end;
       tkCUnsigned: begin isUnsigned := True; sawBase := True; Next; end;
       tkCShort:    begin Inc(shortCount); sawBase := True; Next; end;
@@ -2353,6 +2570,7 @@ begin
   end;
 
   CTypeIsVoid := isVoid;
+  CTypeLongLong := (longCount >= 2);
 
   if isVoid then
     Result := tyInteger          { placeholder; pointer suffix overrides below }
@@ -2700,6 +2918,11 @@ begin
   if CLocalStaticDecl then CurProc := -1;
   Result := AllocVar(name, tk);
   CurProc := savedCurProc;
+  { Record whether a pointer variable's pointee is const-qualified (`const T *p`),
+    for C11 _Generic lvalue-converted matching. CTypeBaseConst reflects the base
+    type of the ParseCDeclType that just produced `tk`. }
+  if (Result >= 0) and (tk = tyPointer) then
+    SymPtrPointeeConst[Result] := CTypeBaseConst;
 end;
 
 function CAllocDeclArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;

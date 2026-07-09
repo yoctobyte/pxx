@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (79)
+## backlog (78)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +44,6 @@ _none_
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
-| feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-callconv-register-args | A | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
@@ -165,7 +164,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (552)
+## done (553)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -482,6 +481,7 @@ _none_
 | feature-c-crtl-socket-pal-bridge | B | 50 | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-c-default-crtl-include-path | A | 50 | feature | C: auto-search pxx's crtl headers by default (+ `-nostdinc`) | — |
 | feature-c-forward-enum-decl | C | 45 | feature | C forward enum declaration `enum efoo;` (GCC extension, common in the wild) | — |
+| feature-c-generic-selection | C | 28 | feature | C11 _Generic selection | — |
 | feature-c-header-import-complex | C | 50 | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-pragma-push-pop-macro | C | 45 | feature | C preprocessor: #pragma push_macro / pop_macro | — |
 | feature-c-regex-library-devtest | C | 50 | feature | C regex library dev-test import | — |
@@ -816,7 +816,6 @@ _none_
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
-- [p 28] [C] feature-c-generic-selection
 - [p 25] [C] idea-c-realworld-test-targets
 
 ## Leverage (tickets each one unblocks)

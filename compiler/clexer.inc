@@ -268,6 +268,7 @@ begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
   CLexUnsignedSuffix := False;
+  CLexLongCount := 0;
   CLexHexOctal := False;
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
@@ -320,6 +321,7 @@ begin
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do
     begin
       if Source[SrcPos] in ['u','U'] then CLexUnsignedSuffix := True;
+      if Source[SrcPos] in ['l','L'] then Inc(CLexLongCount);
       Inc(SrcPos);
     end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
@@ -365,6 +367,7 @@ begin
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do
     begin
       if Source[SrcPos] in ['u','U'] then CLexUnsignedSuffix := True;
+      if Source[SrcPos] in ['l','L'] then Inc(CLexLongCount);
       Inc(SrcPos);
     end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
@@ -599,6 +602,8 @@ begin
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
     if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
+    if CLexLongCount >= 1 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 16;
+    if CLexLongCount >= 2 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 32;
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;
@@ -662,6 +667,8 @@ begin
     if CAttrPacked then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 1;
     if CAttrAligned then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 2;
     if CLexUnsignedSuffix then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 4;
+    if CLexLongCount >= 1 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 16;
+    if CLexLongCount >= 2 then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 32;
     if CLexHexOctal then CAttrFlags[TokCount] := CAttrFlags[TokCount] or 8;
     CAttrAlignValues[TokCount] := CAttrAlignValue;
     CAttrPacked := False;

@@ -88,6 +88,16 @@ const
   MAX_ENUMVAL  = 4096;
   MAX_TYPEALIAS = 4096;
   MAX_CTYPEDEF  = 8192;
+  { C11 _Generic structural type descriptors (cgXxx). A type model richer than
+    TTypeKind — distinguishes long/long long, char/signed char/unsigned char, and
+    per-level const, which _Generic association matching needs and TTypeKind
+    collapses. Pool index 0 = "unknown". C-mode only; the Pascal self-host source
+    never builds one, so this whole layer is inert during self-host. }
+  MAX_CGTYPE    = 8192;
+  cgUnknown = 0; cgVoid = 1; cgBool = 2; cgChar = 3; cgSChar = 4; cgUChar = 5;
+  cgShort = 6; cgUShort = 7; cgInt = 8; cgUInt = 9; cgLong = 10; cgULong = 11;
+  cgLLong = 12; cgULLong = 13; cgFloat = 14; cgDouble = 15; cgLDouble = 16;
+  cgStruct = 17; cgPtr = 18; cgArray = 19; cgFunc = 20;
   MAX_RESOURCES   = 16;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
@@ -1139,6 +1149,18 @@ var
   CTagHash    : array[0..16383] of Integer;  { name->idx+1 (0=empty), O(1) tag lookup }
   CTypedefChars : array[0..524287] of Char;
   CTypedefCharLen : Integer;
+  { C11 _Generic type-descriptor pool (see cgXxx consts). Index 0 is reserved
+    "unknown" (zero-init means unset), so parallel Sym/typedef descriptor arrays
+    need no explicit fill. }
+  CGKindA   : array[0..MAX_CGTYPE-1] of Integer;  { cgXxx kind }
+  CGConstA  : array[0..MAX_CGTYPE-1] of Boolean;  { this level is const-qualified }
+  CGRecA    : array[0..MAX_CGTYPE-1] of Integer;  { struct rec id (cgStruct) }
+  CGSubA    : array[0..MAX_CGTYPE-1] of Integer;  { pointee (cgPtr) / element (cgArray) descriptor idx }
+  CGArrLenA : array[0..MAX_CGTYPE-1] of Integer;  { array length (cgArray), -1 = unsized }
+  CGCount   : Integer;                            { next free pool slot (starts at 1); reset per _Generic }
+  CTypeBaseConst : Boolean;  { last ParseCDeclType: the BASE type carried `const` (=> pointee-const once a star follows). Additive, C-mode only. }
+  CTypeLongLong  : Boolean;  { last ParseCDeclType: base was `long long` (TTypeKind collapses it into tyInt64; _Generic needs the distinction). }
+  SymPtrPointeeConst : array[0..MAX_SYMS-1] of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -1522,6 +1544,7 @@ var
   CAttrAligned    : Boolean;
   CAttrAlignValue : Integer;
   CLexUnsignedSuffix : Boolean; { last C integer literal had a u/U suffix }
+  CLexLongCount : Integer;      { last C integer literal's l/L suffix count (1=long, >=2=long long) }
   CLexHexOctal : Boolean; { last C integer literal was hex or octal (radix<>10) — C types these through the unsigned rungs of the constant ladder, decimals do not }
   { Declaration-order gating for program/unit GLOBAL VARIABLES (declare-before-use,
     FPC-parity). The whole-program pre-scan registers every global before any body
