@@ -289,6 +289,14 @@ const
   ATOMIC_CAS64  = 4;
   ATOMIC_ADD64  = 5;
 
+  AN_COMPOUND_LITERAL = 81; { C99 compound literal (T)[brace-list] as an expression.
+                           IVal = hidden record temp sym; Left = init statement chain
+                           (AN_SEQ of CMakeZeroLocal + CInitLocalAggregate stores over
+                           the temp); rec = Syms[IVal].RecName. IRLowerAST/IRLowerAddress
+                           both emit Left as a statement then yield IR_LEA on the temp
+                           (records are carried BY ADDRESS in this IR). C-mode only;
+                           never created by the Pascal frontend so inert in self-host. }
+
   AN_SLOTADDR      = 77;
   AN_INLINE_PARAM  = 78;  { placeholder inside a RETAINED inline body: IVal = param index. Only exists in the reserved inline AST region; substituted to an AN_IDENT of the caller's arg temp when the body is cloned into a call site. Never reaches IRLowerAST directly. }
   AN_INLINE_LOCAL  = 79;  { placeholder for a callee LOCAL: IVal = local index (slice 2b, -O3). Substituted to an AN_IDENT of a fresh caller local. }

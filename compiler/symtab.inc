@@ -5631,6 +5631,9 @@ begin
     else
       Result := Syms[ASTIVal[node]].RecName;
   end
+  else if ASTKind[node] = AN_COMPOUND_LITERAL then
+    { C99 compound literal — its record is the hidden temp's RecName. }
+    Result := Syms[Integer(ASTIVal[node])].RecName
   else if ASTKind[node] = AN_AS_CAST then
     { `obj as T` yields type T — so (obj as T).field/.method resolves against T. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])

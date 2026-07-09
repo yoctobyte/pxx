@@ -702,6 +702,14 @@ begin
     Result := IRLowerAST(node);
     Exit;
   end;
+  { address-of a compound literal: emit its init statements, then yield the
+    temp's address (the temp IS an lvalue). }
+  if ASTKind[node] = AN_COMPOUND_LITERAL then
+  begin
+    IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
+    Result := IRAppend(IR_LEA, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     Result := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
@@ -1270,7 +1278,8 @@ begin
   else
     Result := (ASTKind[node] = AN_FIELD) or
               (ASTKind[node] = AN_INDEX) or
-              (ASTKind[node] = AN_DEREF);
+              (ASTKind[node] = AN_DEREF) or
+              (ASTKind[node] = AN_COMPOUND_LITERAL);
 end;
 
 { Source data address for a `var`/`out` open-array writeback temp (PendOAWB*).
@@ -3425,6 +3434,15 @@ begin
     begin
       { Address of the variable's OWN slot — no by-ref auto-deref (see defs). }
       Result := IRAppend(IR_SLOTADDR, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_COMPOUND_LITERAL:
+    begin
+      { C99 compound literal as a value: emit the init statement chain into the
+        current block, then yield the temp's ADDRESS (records are carried by
+        address in this IR, so by-value use / assignment RHS copy from it). }
+      IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
+      Result := IRAppend(IR_LEA, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
     end;
 
     AN_PROCADDR:

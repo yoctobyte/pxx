@@ -1692,10 +1692,40 @@ begin
   TokPos := savedPos; Next;        { rewind to '(' }
 end;
 
+{ C99 6.5.2.5 compound literal (T) followed by a braced initializer, where T is
+  a record. Materialise a hidden temp of T, then build an AN_COMPOUND_LITERAL:
+  IVal = the temp, Left = the init statement chain (zero-fill + the braced
+  element stores over the temp). CurTok is the opening brace; CInitLocalAggregate
+  consumes through the closing brace. IRLowerAST/IRLowerAddress emit Left then
+  yield the temp's address — records are carried BY ADDRESS in this IR, so
+  by-value / address-of / assignment-RHS all work. Block-scope: automatic
+  storage (temp lives in the current frame). }
+function CParseCompoundLiteralRec(recId: Integer): Integer;
+var tmpSym, savedRecId, zseq, initChain, node, t: Integer;
+begin
+  savedRecId := LastTypeRecId;
+  LastTypeRecId := recId;
+  tmpSym := AllocVar('', tyRecord);
+  LastTypeRecId := savedRecId;
+  zseq := CMakeZeroLocal(tmpSym, tyRecord);
+  initChain := CInitLocalAggregate(tmpSym, Ord(tyRecord), recId, 1, 1, 1, 1, False);
+  if initChain <> -1 then
+  begin
+    t := zseq;
+    while ASTRight[t] <> -1 do t := ASTRight[t];
+    ASTRight[t] := initChain;
+  end;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := tmpSym;
+  ASTLeft[node] := zseq;
+  ASTTk[node] := Ord(tyRecord);
+  Result := node;
+end;
+
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
-    argSeq, castProcSig: Integer;
+    argSeq, castProcSig, clRecId: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -1716,7 +1746,16 @@ begin
     castBaseRec := CTypePtrBaseRec;
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
+    clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
     Expect(tkRParen, ')');
+    { C99 6.5.2.5 compound literal: a brace after the cast type is NOT a cast of
+      a braced expr — materialise the anonymous object and yield it. }
+    if (CurTok.Kind = tkBegin) and (castTk = tyRecord) and (castDepth = 0)
+       and (clRecId >= REC_UCLASS_BASE) then
+    begin
+      Result := CParseCompoundLiteralRec(clRecId);
+      Exit;
+    end;
     operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
     { `(void)expr` evaluates expr for its side effects and discards the value.
       Return the operand unwrapped so a void-cast call statement (e.g. the lua
