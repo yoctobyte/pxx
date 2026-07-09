@@ -5669,6 +5669,19 @@ begin
     end
     else if ASTKind[ASTLeft[node]] = AN_INDEX then
       Result := ResolveNodeRec(ASTLeft[node])
+    else if ASTKind[ASTLeft[node]] = AN_ADDR then
+      { `(&X)[i]` indexes a pointer to X, so the element record is X's own record. }
+      Result := ResolveNodeRec(ASTLeft[ASTLeft[node]])
+    else if ASTKind[ASTLeft[node]] = AN_PTR_CAST then
+      { `((T *) x)[i]` — element record is the cast's pointee record (alias table).
+        Without this the record id is lost and the subsequent `.field` type-tag
+        defaults to tyInteger (4 bytes), truncating 8-byte pointer fields — the
+        duktape value-stack `((duk_tval *) ...)[i].v.heaphdr` access, whose
+        truncated pointer later crashes duk_pcompile. }
+      if ASTIVal[ASTLeft[node]] >= 0 then
+        Result := AliasElemRec[ASTIVal[ASTLeft[node]]]
+      else
+        Result := REC_NONE
     else
       Result := REC_NONE;
   end
