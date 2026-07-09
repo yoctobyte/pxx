@@ -1,13 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-07T18:48:34Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "de4ef1adf7d7f5ae700b3540a681a8aee576d7af",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-07T18:52:56Z",
    "fixed": [],
    "new_red": [],
@@ -438,6 +431,16 @@
    "new_red": [],
    "sha": "bfc0a6b16fb237fad4f4808b5d69729c46eedf77",
    "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-09T06:29:48Z",
+   "fixed": [
+    "test-emit-obj#02"
+   ],
+   "new_red": [],
+   "sha": "bfc0a6b16fb237fad4f4808b5d69729c46eedf77",
+   "tier": "full",
    "verdict": "GREEN"
   }
  ],
@@ -1365,7 +1368,7 @@
   "test-debug-g#00": "pass",
   "test-emit-obj#00": "pass",
   "test-emit-obj#01": "pass",
-  "test-emit-obj#02": "fail",
+  "test-emit-obj#02": "pass",
   "test-float-determinism#00": "pass",
   "test-i386#00": "pass",
   "test-i386#01": "pass",
@@ -1532,26 +1535,18 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-09T06:25:40Z",
+  "date": "2026-07-09T06:29:48Z",
   "sha": "bfc0a6b16fb237fad4f4808b5d69729c46eedf77",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 93.8
+  "wall": 226.5
  },
  "last_full": {
-  "date": "2026-07-09T06:03:47Z",
-  "sha": "c53553f2121456f40c70e519982a8427c4f313ac",
+  "date": "2026-07-09T06:29:48Z",
+  "sha": "bfc0a6b16fb237fad4f4808b5d69729c46eedf77",
   "tier": "full",
-  "verdict": "RED",
-  "wall": 213.2
+  "verdict": "GREEN",
+  "wall": 226.5
  },
- "open_regressions": [
-  {
-   "bad": "c53553f2121456f40c70e519982a8427c4f313ac",
-   "good": "c53553f2121456f40c70e519982a8427c4f313ac",
-   "job": "test-emit-obj#02",
-   "opened": "2026-07-09T06:03:47Z",
-   "range": []
-  }
- ]
+ "open_regressions": []
 }
