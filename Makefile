@@ -1005,6 +1005,8 @@ test-core: $(COMPILER)
 	/tmp/crange_designator_b21026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/carray_designated_init_b211.c /tmp/carray_designated_init_b21126
 	/tmp/carray_designated_init_b21126; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_array_range_b212.c /tmp/cglobal_array_range_b21226
+	/tmp/cglobal_array_range_b21226; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

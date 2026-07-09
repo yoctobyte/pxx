@@ -4240,12 +4240,22 @@ begin
       tkLBrack:
         begin
           { `[<int>] =` element designator repositions the running index. Only a
-            literal index is understood here (the scanner can't fold consts). }
+            literal index is understood here (the scanner can't fold consts). A
+            GNU range `[<int> ... <int>] =` fills lo..hi, so the array must be
+            sized to hi. `...` lexes to three tkDot. }
           if (depth = 1) and (Tokens[j + 1].Kind = tkInteger) and
              (Tokens[j + 2].Kind = tkRBrack) then
           begin
             ei := Tokens[j + 1].IVal;
             Inc(j, 2);   { land on ']'; the loop's Inc(j) steps past it }
+          end
+          else if (depth = 1) and (Tokens[j + 1].Kind = tkInteger) and
+                  (Tokens[j + 2].Kind = tkDot) and (Tokens[j + 3].Kind = tkDot) and
+                  (Tokens[j + 4].Kind = tkDot) and (Tokens[j + 5].Kind = tkInteger) and
+                  (Tokens[j + 6].Kind = tkRBrack) then
+          begin
+            ei := Tokens[j + 5].IVal;   { hi — the highest index the range touches }
+            Inc(j, 6);
           end
           else begin Result := -1; Exit; end;
         end;
@@ -4948,7 +4958,7 @@ end;
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
-    recId, initSymIdx, procIdx, initOff, di: Integer; wasArr: Boolean; initV: Int64;
+    recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
@@ -5408,27 +5418,51 @@ begin
         ei := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
-          { `[k] =` array element designator repositions the index (C 6.7.8);
-            skipped slots stay 0 (globals are BSS-zeroed). }
+          { `[k] =` repositions the index; `[lo ... hi] =` (GNU range) fills every
+            index lo..hi with the one value. Skipped slots stay 0 (BSS-zeroed). }
+          rangeHiG := -1;
           if CurTok.Kind = tkLBrack then
           begin
             Next;                                     { '[' }
             ei := CEvalConstExpr;
+            if CurTok.Kind = tkDot then                { `...` = three tkDot }
+            begin
+              Next; if CurTok.Kind = tkDot then Next; if CurTok.Kind = tkDot then Next;
+              rangeHiG := CEvalConstExpr;
+            end;
             Expect(tkRBrack, ']');
             if CurTok.Kind = tkAssign then Next;      { '=' }
           end;
           initV := CEvalConstExpr;
-          if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+          if rangeHiG >= ei then
           begin
-            PendingInitSym[PendingInitCount]  := idx;
-            PendingInitElem[PendingInitCount] := ei;
-            PendingInitFOff[PendingInitCount] := -1;
-            PendingInitFLen[PendingInitCount] := 0;
-            PendingInitVal[PendingInitCount]  := initV;
-            PendingInitTk[PendingInitCount]   := Ord(baseTk);
-            Inc(PendingInitCount);
+            for gk := ei to rangeHiG do
+              if (gk >= 0) and (gk < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+              begin
+                PendingInitSym[PendingInitCount]  := idx;
+                PendingInitElem[PendingInitCount] := gk;
+                PendingInitFOff[PendingInitCount] := -1;
+                PendingInitFLen[PendingInitCount] := 0;
+                PendingInitVal[PendingInitCount]  := initV;
+                PendingInitTk[PendingInitCount]   := Ord(baseTk);
+                Inc(PendingInitCount);
+              end;
+            ei := rangeHiG + 1;
+          end
+          else
+          begin
+            if (ei >= 0) and (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+            begin
+              PendingInitSym[PendingInitCount]  := idx;
+              PendingInitElem[PendingInitCount] := ei;
+              PendingInitFOff[PendingInitCount] := -1;
+              PendingInitFLen[PendingInitCount] := 0;
+              PendingInitVal[PendingInitCount]  := initV;
+              PendingInitTk[PendingInitCount]   := Ord(baseTk);
+              Inc(PendingInitCount);
+            end;
+            Inc(ei);
           end;
-          Inc(ei);
           Eat(tkComma);
         end;
         Eat(tkEnd);
