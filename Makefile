@@ -1001,6 +1001,8 @@ test-core: $(COMPILER)
 	/tmp/cvariadic_struct_b20826; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c /tmp/cgeneric_selection_b20926
 	/tmp/cgeneric_selection_b20926; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c /tmp/crange_designator_b21026
+	/tmp/crange_designator_b21026; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

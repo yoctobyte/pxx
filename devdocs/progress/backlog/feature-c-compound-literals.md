@@ -74,6 +74,47 @@ from pxx.skip.
   cast-branch hook, ~1447) — still unimplemented; needed for tcc/zlib-style code,
   no conformance test isolates it yet.
 
+## 2026-07-09 (A+B+C agent) — 00216 mapped to 5 sub-features across 4 init paths; range designators LANDED
+
+Retested 00216 at HEAD (v179). It is NOT one gap — it needs 5 distinct
+sub-features, spread over 4 SEPARATE initializer code paths, each self-host-
+critical. Precise map (minimal repros each confirmed):
+
+1. **Range designators `[lo ... hi] = v`** — the recursive aggregate-init walker
+   (`CInitWalkArray`, the `[` designator branch). **DONE this session**: expands
+   the range, re-seeking the one value's tokens per index; covers local + global
+   struct-member arrays (both route through the walker via CEmitDeferredCAggInits).
+   gcc-verified, test/crange_designator_b210.c → exit 42. Overlapping ranges
+   resolve left-to-right.
+2. **Range designators in the GLOBAL SCALAR-array path** — a DIFFERENT loop
+   (`ParseCGlobalVarDecl` ~5352) gated by `CBraceFlatIntInitCountAt`, which rejects
+   `[lo...hi]` (only `[int]`). `int g[4]={[0...2]=7}` silently zero-fills. TODO:
+   accept the range in the flat-int scanner + the emit loop.
+3. **Global FUNCTION-POINTER arrays** `const fptr t[3]={a,b}` — don't parse at all
+   ("stray token"): the global pointer-array scanner marks proc names arrKind=3 but
+   the emit loop (~5287) has no arrKind=3 case (falls to NULL/int), AND typedef'd
+   fn-ptr arrays (`fptr t[N]`) may not reach that scanner. TODO: emit arrKind=3 as
+   a proc-address PendingInit (FOff=-4 style) + range support here for the
+   `[0...2]=&sys_ni` reloc table.
+4. **Nested designators `.a.j = v`** — walker (`CInitWalkRecord` ~4649) handles ONE
+   `.name` level then positional; a continuation `.j`/`[i]` in an UNBRACED sub-agg
+   isn't processed (designator handling is gated on `braced`). TODO: decouple
+   designator-processing from brace-bounding, navigate the full chain pushing path
+   frames. (`struct SEB b={.a.j=5}`.)
+5. **Inline compound literals `(T){...}` as expressions** — `ParseCUnary` cast
+   branch (~1719): after `castTk=ParseCDeclType; Expect(')')`, a following `{` is a
+   compound literal, today it recurses into ParseCUnary and derails. The blocker is
+   REUSE: materialize an anonymous object (automatic at block scope, static at file
+   scope), init it via the brace machinery, yield an lvalue — needs the local
+   brace-init extracted into a callable `CParseBraceInitInto`. Self-host-fragile
+   (shared init walker). Once this lands, the walker's EMIT-mode leaf (which uses
+   ParseCExpr) gets compound-literal VALUES + `&func` + casts for free, unblocking
+   `{((struct Wrap){inc}), inc}` and `.a=(struct A){1,2}`.
+
+Order to finish: (2)+(3) global paths, (4) nested designators, then (5) compound
+literals (biggest + riskiest). (1) is committed. Remaining pieces parked in
+backlog — each a focused, self-host-verified change.
+
 ## Assessment 2026-07-08 (cfront-agent) — released; remaining work is deep, needs the factor-out
 Confirmed the remaining two pieces are NOT bounded wire-ups:
 - **Block-scope `(T){...}`**: the file-scope fix reused `CAggInit`/`CEmitDeferredCAggInits`,

@@ -4692,7 +4692,7 @@ end;
 procedure CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel, nDims,
                          count, baseFlat, elemsBelow: Integer;
                          braced, emit: Boolean; var consumed: Integer);
-var i, spanN, ebN, subCons: Integer;
+var i, spanN, ebN, subCons, lo, hi, idx, valStart: Integer;
 begin
   i := 0;
   consumed := 0;
@@ -4702,12 +4702,43 @@ begin
     if (not braced) and (CurTok.Kind = tkSemicolon) then Break;
     if braced and (CurTok.Kind = tkLBrack) then
     begin
-      { `[k] =` element designator repositions the index (C 6.7.8). }
+      { `[k] =` element designator repositions the index; `[lo ... hi] =` (GNU
+        range, C-testsuite 00216) fills every index lo..hi with the one value. }
       Next;
-      i := CEvalConstExpr;
+      lo := CEvalConstExpr;
+      hi := lo;
+      if CurTok.Kind = tkDot then
+      begin
+        { `...` lexes to three tkDot } Next;
+        if CurTok.Kind = tkDot then Next;
+        if CurTok.Kind = tkDot then Next;
+        hi := CEvalConstExpr;
+      end;
       Expect(tkRBrack, ']');
       if CurTok.Kind = tkAssign then Next;
-      if i < 0 then i := 0;
+      if lo < 0 then lo := 0;
+      i := lo;
+      if hi > lo then
+      begin
+        { Range: re-seek the single value's tokens for each index in lo..hi and
+          fill it. Range designators target scalar / pointer element arrays in
+          practice, so a scalar-leaf fill covers them. }
+        valStart := TokPos - 1;
+        idx := lo;
+        while idx <= hi do
+        begin
+          if (count >= 0) and (idx >= count) then Break;
+          TokPos := valStart; Next;
+          CInitPathPush(0, baseFlat + idx, elemTkOrd);
+          CInitLeaf(elemTkOrd, emit);
+          Dec(CInitPathDepth);
+          Inc(idx);
+        end;
+        if idx > consumed then consumed := idx;
+        i := idx;
+        if CurTok.Kind = tkComma then begin Next; Continue; end
+        else Break;
+      end;
     end;
     if (count >= 0) and (i >= count) then
     begin
