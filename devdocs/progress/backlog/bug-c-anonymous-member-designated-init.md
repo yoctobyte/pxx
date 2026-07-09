@@ -37,3 +37,16 @@ span) so the walker can re-group them for a brace.
 `union UV g = {{.b=7,.a=8}}` byte-identical to gcc; contributes to unskipping
 c-testsuite 00216 (with [[bug-c-fullfile-cumulative-parser-desync]]).
 [[feature-c-compound-literals]]
+
+## 2026-07-09 — precise location + now the SOLE 00216 blocker
+With the form-feed lexer bug fixed ([[bug-c-fullfile-cumulative-parser-desync]], done),
+this is the ONLY remaining blocker for c-testsuite 00216 (→ 220/220).
+The promotion happens in `ParseCStructInto` (cparser.inc ~8213-8246): an anonymous
+aggregate member's fields are copied FLAT into the parent's bf* field list (name +
+adjusted offset), with **no marker recording the anon-group origin (sub-record id +
+field span)**. So the init walker (`CInitWalkRecord`/`CInitWalkMember`) cannot tell
+that field[k..k+n] form one anonymous sub-aggregate to descend on an inner brace.
+Fix needs a grouping marker (e.g. a parallel `UFldAnonRec`/`UFldAnonSpan` on the
+promoted fields) — a SHARED UField-table change (Track A, self-host-critical; land
+additive + byte-identical). Then the walker, on an inner `{` at the first field of a
+promoted anon group, descends that group as one member honoring its own designators.

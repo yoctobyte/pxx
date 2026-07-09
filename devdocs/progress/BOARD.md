@@ -26,12 +26,11 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (79)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-anonymous-member-designated-init | C | 40 | bug | C anonymous struct/union member braced-designated init (`-fms-extensions`) | — |
-| bug-c-fullfile-cumulative-parser-desync | C | 40 | bug | C: cumulative parser desync ("stray token at top level") on large multi-function files | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -166,7 +165,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (553)
+## done (554)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -223,6 +222,7 @@ _none_
 | bug-c-float-single-return-zero | C | 60 | bug | C: a function returning `float` (single) returns 0 on x86-64 | — |
 | bug-c-float-vararg-promotion-32bit | A | 55 | bug | C: float (single) vararg prints 0.000000 on i386/arm32/riscv32 — default argument promotion missing | — |
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | bug-c-external-func-address-indirect-call |
+| bug-c-fullfile-cumulative-parser-desync | C | 40 | bug | C: cumulative parser desync ("stray token at top level") on large multi-function files | — |
 | bug-c-function-pointer-local-variable | C | 50 | bug | C: function-pointer local variable declaration not parsed | — |
 | bug-c-function-pointer-struct-member | C | 50 | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
@@ -814,7 +814,6 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [C] bug-c-anonymous-member-designated-init
-- [p 40] [C] bug-c-fullfile-cumulative-parser-desync
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section

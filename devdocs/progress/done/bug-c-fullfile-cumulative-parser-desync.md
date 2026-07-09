@@ -38,3 +38,17 @@ token short.
 The full 00216 function set parses without a stray-token desync; contributes to
 unskipping c-testsuite 00216 (with [[bug-c-anonymous-member-designated-init]]).
 [[feature-c-compound-literals]]
+
+## RESOLVED 2026-07-09 — was an unhandled form-feed whitespace char (not accumulation)
+Root cause found by instrumenting clexer's "unknown punctuation" fallback: the
+stray empty-SVal token is a **form-feed (0x0C)**. The C lexer's whitespace skip set
+was `[' ', #9, #10, #13]` — missing #12 (form-feed) and #11 (vertical-tab), both C6.4
+whitespace. A form-feed fell through the char `case` to `else CurTok.Kind := tkIdent`
+(empty SVal) → surfaced as "stray token at top level: ''". 00216 has TWO form-feeds
+(source lines 220, 253, page-breaks between its later functions) — hence the
+"cumulative / only-with-all-functions" illusion (subsets excluding those lines never
+hit the char). NOT a cap, NOT #0, NOT unreset state. One-line fix in
+`compiler/clexer.inc` (main whitespace case + the string-continuation skips). Regression
+test `test/cformfeed_whitespace_b220.c` (form-feed between two functions → exit 42),
+self-host byte-identical. 00216 now stops at its remaining anonymous-member blocker
+([[bug-c-anonymous-member-designated-init]]) instead of desyncing.
