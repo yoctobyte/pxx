@@ -5162,6 +5162,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
     arrOffs, arrLens, arrKind, arrSym, arrTgt: array[0..255] of Integer;
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
+    clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;
@@ -5635,6 +5636,26 @@ begin
     if CurTok.Kind = tkAssign then
     begin
       Next;
+      { File-scope compound-literal initializer for a record var: `= (T){...}` or
+        `= ((T){...})` (00216 `struct S gs = ((struct S){1,2,3,4})`). Strip the
+        wrapping parens and the `(T)` cast so the record brace-init branch below
+        sees the brace token; the matching trailing parens are eaten after the
+        brace is skipped (clWrap). A file-scope struct CL has static storage, so it
+        is exactly the braced initializer applied to the var. }
+      clWrap := 0;
+      if (baseTk = tyRecord) and (not wasArr) and (CurTok.Kind = tkLParen) then
+      begin
+        clSavedPos := TokPos - 1;
+        while (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkLParen) do
+        begin Next; Inc(clWrap); end;
+        if (CurTok.Kind = tkLParen) and CIsCastAhead then
+        begin
+          Next; ParseCDeclType; Expect(tkRParen, ')');
+          if CurTok.Kind <> tkBegin then
+          begin TokPos := clSavedPos; Next; clWrap := 0; end;
+        end
+        else begin TokPos := clSavedPos; Next; clWrap := 0; end;
+      end;
       { Materialise a non-array struct/union global brace-initializer as per-field
         PendingInit writes (constant values only) — so e.g. lstrlib's nativeendian
         union and small struct globals read correctly at runtime instead of zero.
@@ -5819,6 +5840,7 @@ begin
           Inc(CAggInitCount);
         end;
         SkipBraceBlock;
+        while clWrap > 0 do begin Eat(tkRParen); Dec(clWrap); end;   { close a stripped compound-literal wrapper }
       end
       else if CurTok.Kind = tkBegin then
       begin

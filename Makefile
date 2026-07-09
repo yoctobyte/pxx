@@ -1031,6 +1031,8 @@ test-core: $(COMPILER)
 	/tmp/cfnptr_range_array_len_b22326; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cflex_array_member_sizeof_b224.c /tmp/cflex_array_member_sizeof_b22426
 	/tmp/cflex_array_member_sizeof_b22426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_compound_literal_init_b225.c /tmp/cglobal_compound_literal_init_b22526
+	/tmp/cglobal_compound_literal_init_b22526; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726
