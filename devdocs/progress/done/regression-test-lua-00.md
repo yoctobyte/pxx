@@ -26,3 +26,4 @@ pascal26:18246: error: unexpected token ()
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-09 — resolved, commit 801f6f5d.
