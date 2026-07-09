@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-08T18:26:15Z",
-   "fixed": [
-    "test-core#600",
-    "test-core#601"
-   ],
-   "new_red": [],
-   "sha": "523f029557d9c1ec501e2f9c0b1ac85a5f219ebe",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-08T18:31:54Z",
    "fixed": [],
    "new_red": [],
@@ -418,6 +407,14 @@
    "new_red": [],
    "sha": "b48a65a0ddfd0a598637b96aa48239de283aa7f5",
    "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-09T15:08:38Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b48a65a0ddfd0a598637b96aa48239de283aa7f5",
+   "tier": "full",
    "verdict": "GREEN"
   }
  ],
@@ -1521,18 +1518,18 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-09T15:03:31Z",
+  "date": "2026-07-09T15:08:38Z",
   "sha": "b48a65a0ddfd0a598637b96aa48239de283aa7f5",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 97.5
- },
- "last_full": {
-  "date": "2026-07-09T14:48:49Z",
-  "sha": "aba9ed31fe11088fab774ad633a09c91c0d1a1b5",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 206.9
+  "wall": 284.5
+ },
+ "last_full": {
+  "date": "2026-07-09T15:08:38Z",
+  "sha": "b48a65a0ddfd0a598637b96aa48239de283aa7f5",
+  "tier": "full",
+  "verdict": "GREEN",
+  "wall": 284.5
  },
  "open_regressions": []
 }
