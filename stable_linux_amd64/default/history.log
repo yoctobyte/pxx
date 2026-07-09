@@ -189,3 +189,4 @@
 2026-07-09T15:54:42Z  v189  413dd0f81211b6fc6d09a3e1649d315602837fac9369970cd5876c5815586dbe  d507de164296ceff1708e0f42e78527f9b933668  docs: resolve feature-c-designated-init-compound-literals (array CL done)
 2026-07-09T16:57:13Z  v190  3a336388073390aefd6fb98e19131dea4f64c55f5eaa8e32f205484d4f047c22  a000a9daab865eaa429624f6eb2deb2bbb8c9c96  docs: resolve two cfront preproc bugs (c50065e8); duktape parked at crtl wall
 2026-07-09T18:06:57Z  v191  e8d0ea7413a636d8c4917b8fe9a5490312494240e8073646205e124b0d623dbc  491a2b709c984414fe794b8a25fe27c6b3c20259  feat(crtl): gmtime_r/localtime_r/strptime/gettimeofday/cbrt for duktape
+2026-07-09T20:35:10Z  v192  e51e9041b61025289f361b29eaa9796d2cc51c86959f75995a928971e25e4e28  b30ccf886c52a05eb659972e9f1bc0f3bee68904  fix(cfront): resolve element record for indexed pointer-cast base
