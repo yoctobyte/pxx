@@ -14,6 +14,9 @@ typedef unsigned long long uint64_t;
 typedef long intptr_t;
 typedef unsigned long uintptr_t;
 
+typedef long long          intmax_t;
+typedef unsigned long long uintmax_t;
+
 typedef signed char int_least8_t;
 typedef unsigned char uint_least8_t;
 typedef short int_least16_t;
@@ -44,5 +47,9 @@ typedef unsigned long long uint_fast64_t;
 #define INT64_MIN (-9223372036854775807LL - 1LL)
 #define INT64_MAX 9223372036854775807LL
 #define UINT64_MAX 18446744073709551615ULL
+
+#define INTMAX_MIN INT64_MIN
+#define INTMAX_MAX INT64_MAX
+#define UINTMAX_MAX UINT64_MAX
 
 #endif

@@ -24,8 +24,7 @@
 #define PRIuPTR "lu"
 #define PRIxPTR "lx"
 
-typedef long long          intmax_t;
-typedef unsigned long long uintmax_t;
+/* intmax_t / uintmax_t live in <stdint.h> (C99 7.18.1.5), included above. */
 
 extern intmax_t  strtoimax(const char *nptr, char **endptr, int base);
 extern uintmax_t strtoumax(const char *nptr, char **endptr, int base);
