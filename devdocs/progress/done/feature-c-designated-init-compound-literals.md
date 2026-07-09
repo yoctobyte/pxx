@@ -81,3 +81,13 @@ this ticket is specifically the three designator/compound-literal forms above.
   isolates it; 00216 does not use it. Record-CL acceptance met; array-CL open.
 
 - 2026-07-09 (A+B+C) — record-CL acceptance MET (00216 220/220, [[feature-c-compound-literals]] resolved). ARRAY compound literals `(int[]){1,2,3}` remain the only open item on this ticket.
+
+## RESOLVED 2026-07-09 — array compound literals landed
+`(int[]){1,2,3}` / `(elem[N]){...}` implemented (CParseCompoundLiteralArr + the cast-
+branch abstract-array declarator + AN_INDEX-over-array-CL IR case). Both acceptance
+repros pass (record `sum((struct Point){3,4})`==7 done earlier; array `(int[]){1,2,3}`
+via pointer/arg/direct-index all gcc-verified, b226). All three original forms
+(designated struct-field, designated array-index, compound literals — record AND
+array) are done. Only unsupported edge left: STRUCT-element array literals with nested
+braces `(struct P[]){{1,2},{3,4}}` (errors cleanly, no miscompile) — a rare extension,
+not filed separately. Conformance 220/220. RESOLVED — moving to done.
