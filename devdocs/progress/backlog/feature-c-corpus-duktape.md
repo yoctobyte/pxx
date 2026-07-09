@@ -6,8 +6,9 @@ prio: 55
 
 - **Type:** feature (C frontend validation) — Track A/C.
 - **Status:** backlog — planned 2026-07-09. Do AFTER [[feature-c-corpus-chess]].
-  Two cfront walls cleared 2026-07-09 (predefine + macro-arg string bug); now parked at
-  the first **crtl breadth** wall (`gmtime_r`) — a Track B layer, not a compiler bug.
+  **COMPILES END-TO-END 2026-07-09** (pinned v191). Four bring-up walls cleared; now
+  blocked on a **runtime** segfault in the first JS eval — see
+  [[bug-c-duktape-runtime-segfault-eval]].
 - **Parent:** [[feature-c-corpus-expansion]] (was roadmap item #5, promoted after tcc).
 
 ## Why Duktape
@@ -70,13 +71,26 @@ against gcc byte-for-byte early, it hides subtle float bugs.
   string literal corrupted function-like macro-arg matching (paren/comma scan ignored string
   literals). Fixed in `CPExpandRange`. [[bug-c-preproc-macro-arg-string-literal-paren]].
   After the fix duktape compiles ~13k lines further (to duktape.c ~28502).
-- **Wall #3 (crtl, Track B — OPEN):** `call to undeclared function: gmtime_r`. This is a
-  crtl breadth gap, not a compiler bug — the cascade has shifted from cfront to library
-  functions (expect more `*_r` / time / stdio corners behind it). Next duktape session =
-  Track B crtl work: implement/declare `gmtime_r` and the following missing libc functions,
-  each with the usual libc-free PAL treatment, then re-probe.
+- **Wall #3 (crtl, Track B, FIXED):** missing libc functions — `gmtime_r`/`localtime_r`,
+  `strptime`, `gettimeofday` (time.c/h) and `cbrt` (math.c, was declared-not-defined).
+  Commit 491a2b70.
+- **Wall #4 (cfront, FIXED — the real blocker):** `while expected after do` surfacing at
+  EOF. Root cause: `CPReadLine` spliced `\`<newline> only OUTSIDE comments, but C phase-2
+  line-splicing precedes comment removal. A multi-line block comment whose lines end with
+  `\` (every line of a block comment inside a `#define` body — duktape's
+  `DUK__RZ_SUPPRESS_CHECK` refzero macros) was cut at the first comment newline, truncating
+  the macro body and desyncing do/while brace matching. Fixed in `CPReadLine` (commit
+  9aef018d). This was NOT a size/buffer bug — the ~55k-line truncation "threshold" was
+  coincidental (the refzero helper lives at duktape.c:~54800). Regression b229.
+  (Also hardened the unchecked `TokChars` pool writes → [[feature-c-compiler-dynarrays]].)
 
-Regressions for the two cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
-`test/cpreproc_stdc_version_predefine_b228.c` (both exit 42, wired into test-core).
+**RESULT:** duktape 2.7.0 compiles + links + heap-inits under pxx (pinned v191). Blocked on
+a **runtime** segfault in the first `duk_peval_string` — [[bug-c-duktape-runtime-segfault-eval]]
+(setjmp/longjmp shim prime suspect). `make test-duktape` NOT wired yet (won't land a red
+gate until the smoke runs green).
 
-[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[feature-c-cmdline-define-flag]]
+Regressions for the cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
+`test/cpreproc_stdc_version_predefine_b228.c`, `test/cpreproc_macro_comment_continuation_b229.c`
+(all exit 42, wired into test-core).
+
+[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[bug-c-duktape-runtime-segfault-eval]] · [[feature-c-compiler-dynarrays]] · [[feature-c-cmdline-define-flag]]
