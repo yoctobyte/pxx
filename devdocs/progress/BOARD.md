@@ -19,7 +19,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | C | 55→50 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
+| bug-c-abi-battery-00204 | C | 55 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 
@@ -27,11 +27,10 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-abi-battery-00204 | A | 50 | bug |  | — |
 | bug-c-multidim-float-brace-init | C | 35 | bug | C: a 2-D (multi-dim) brace initializer of a FLOAT element array zero-fills | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -773,7 +772,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 50] [A] bug-c-abi-battery-00204
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 45] [A] chore-makefile-testtmp-parameterize
