@@ -101,3 +101,88 @@ UFldTk/UFldOff_ (symtab.inc). Bounded to x86-64 first; cross backends untouched.
 
 Released to unfinished (scoped, not landed — NO compiler change this session, so
 the self-host gate is untouched). Next picker: a focused variadic-struct session.
+
+## COPY-PASTE KICKOFF PROMPT (fresh session, variadic struct passing)
+
+You are Track A+B+C (compiler core + C frontend), on master, sole-A confirmed
+(you may self-resolve shared-internals changes). Task: implement C variadic
+struct passing + `va_arg(struct)` and turn c-testsuite 00204 green. Read this
+ticket first — scope, repro, root cause, and codegen map are already settled;
+do NOT re-derive them.
+
+VERIFIED FACTS (do not re-check):
+- Non-varargs struct-by-value (all size classes) AND HFA float aggregates
+  (`struct{float x,y}`, 3/4-float, `struct{double a,b}`) already pass/return
+  byte-identical to gcc via direct calls. The 2026-07-08 "HFA reads garbage" note
+  is STALE. Do NOT touch the direct-call struct ABI.
+- The ENTIRE 00204 diff is the VARARGS path: passing a struct BY VALUE through
+  `...` and reading it back with `va_arg(ap, struct T)`. Both INTEGER-class
+  (char[9]) and "SSE-class" (float HFA) variadic structs fail.
+- 00204 is ALL-PXX (its `myprintf` is pxx; structs never cross to glibc). So the
+  fix needs the variadic CALLER and `va_arg(struct)` to be MUTUALLY CONSISTENT
+  through the GP register-save-area — it does NOT need true SysV SSE/HFA
+  eightbyte classification. Keep pxx's "structs travel in GP" convention.
+
+MINIMAL REPRO (fails today; gcc prints "3.1,4.4 ABCDEFGH"):
+    #include <stdarg.h>
+    extern int printf(const char*,...);
+    struct FF{float x,y;}; struct S9{char s[9];};
+    void vp(int n,...){ va_list ap; va_start(ap,n);
+      struct FF f=va_arg(ap,struct FF); struct S9 c=va_arg(ap,struct S9);
+      printf("%.1f,%.1f %s\n",f.x,f.y,c.s); va_end(ap); }
+    int main(){ struct FF f={3.1f,4.4f}; struct S9 c={"ABCDEFGH"}; vp(1,f,c); return 0; }
+  pxx today: "ff -0.0,0.0 s9 <garbage>".
+
+ROOT CAUSE:
+- `va_arg(ap, struct T)` (cparser.inc ~506-557): TypeIsFloat(tyRecord)=false, so
+  it picks `__pxx_va_arg_gp` which returns a pointer to ONE 8-byte GP slot, then
+  wraps `AN_DEREF` with ASTTk=tyRecord. A struct is thus read as a single 8-byte
+  scalar — wrong for >8B structs (S9=9B needs 2 slots) and it never copies
+  RecSize bytes.
+- Caller side (IR_CALL arg marshalling, ir_codegen.inc ~3319-3360): a struct arg
+  is treated as a single 8-byte GP value; a >8B variadic struct arg is not split
+  into consecutive GP slots.
+
+APPROACH (x86-64 first; keep GP-consistent, no SSE classification):
+1. va_arg(struct T): when vt=tyRecord, return a pointer to the next
+   ceil(RecSize/8) GP slots (advance gp_offset / overflow_arg_area by that many
+   8-byte slots, honoring the reg-save-area→overflow transition the scalar path
+   already implements), and copy RecSize bytes to a result temp. Verify AN_DEREF
+   with ASTTk=tyRecord actually memcpy's RecSize (if not, materialize a temp +
+   record-copy). May need a size-parametrized helper (mirror
+   `__pxx_va_arg_cross32`'s size arg) or a new `__pxx_va_arg_agg(ap, size)`.
+2. Variadic CALLER: a struct passed as a variadic arg must place its
+   ceil(RecSize/8) eightbytes into consecutive GP arg regs (rdi..r9), overflow to
+   the stack, so they land contiguously in the callee's GP save area / overflow.
+   Ensure the AL vector-count (ir_codegen.inc ~3481) is unaffected (structs use GP,
+   contribute 0 to AL).
+3. Confirm caller and va_arg agree on slot count and ordering for 1-slot (FF, 8B)
+   and 2-slot (S9, 9B) structs. Test the minimal repro FIRST, then 00204.
+
+CODEGEN SITES (investigator map):
+- IR_CALL arg classify: ir_codegen.inc 3319-3360 (struct→single-8B-GP today);
+  XMM machinery 3442/3481 (leave for scalars); struct return via hidden dest
+  symtab.inc 5169.
+- va_arg helpers: `__pxx_va_arg_gp/_fp/_cross/_cross32`, `__pxx_va_start_impl`
+  (cparser.inc 506-639). The GP helper's overflow logic is the model to extend.
+- Field walk (if needed): UClsFBase/UClsFCount/UFldTk/UFldOff_ (symtab.inc).
+- RecSize / RetViaHiddenDest (symtab.inc 1534).
+
+GATE: minimal repro matches gcc; drop 00204 from test/c-conformance/pxx.skip;
+`make test-c-conformance` = 218 pass / 0 fail / 2 skip; self-host fixedpoint
+BYTE-IDENTICAL; quick tier + lua/core green; cross targets unaffected (this is
+x86-64-only — do NOT edit ir_codegen386/arm32/aarch64/riscv32/xtensa). If any
+codegen changed the stable binary needs it: `make stabilize` then `make pin`
+(watch pin.log; verify VERSION advanced). Commit with a regression test
+(test/cvariadic_struct_bNNN.c → exit 42, wire into test-core), update this
+ticket, board-md, push.
+
+LANDMINES:
+- NO literal `{` or `}` inside `{ }` comments — nested comments are ON, a braced
+  char in a comment desyncs the self-host lexer ("unexpected character"). Reword
+  to prose. (This caused two bogus "self-host-fragile" reverts before.)
+- `ErrOutput` is unavailable in this codebase for debug — use plain `writeln`
+  (compile-time output to stdout) and remove before the byte-identical build.
+- After any AST/marker change, verify one-step self-host convergence; a 2-step
+  converge = a reseed slipped in (usually the comment-brace landmine, not a real
+  codegen reseed).
