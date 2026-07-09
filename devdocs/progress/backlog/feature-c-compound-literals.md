@@ -74,6 +74,15 @@ from pxx.skip.
   cast-branch hook, ~1447) — still unimplemented; needed for tcc/zlib-style code,
   no conformance test isolates it yet.
 
+## 2026-07-09 STATUS — 00216 is 4/5 done; ONLY inline compound literals remain (v185)
+Pieces 1-4 + piece 3's designators all landed and pinned (v180→v185), each
+gcc-verified + self-host byte-identical + regression test in test-core. The single
+remaining blocker for c-testsuite 00216 (→ 220/220) is **piece 5: inline compound
+literals `(T){...}`** — needs an `AN_COMPOUND_LITERAL` IR node (see the ATTEMPT
+note below; the parser-comma hack SEGVs). That node also unblocks 00216's
+file-scope `global_wrap[]` and closes feature-c-designated-init-compound-literals'
+compound-literal acceptance. Detailed 5-piece map + status follows.
+
 ## 2026-07-09 (A+B+C agent) — 00216 mapped to 5 sub-features across 4 init paths; range designators LANDED
 
 Retested 00216 at HEAD (v179). It is NOT one gap — it needs 5 distinct
