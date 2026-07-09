@@ -613,6 +613,7 @@ begin
     begin
       off := TokCharLen;
       len := Length(CurTok.SVal);
+      if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
       Tokens[TokCount].SOffset := off;
       Tokens[TokCount].SLen    := len;
       for i := 1 to len do
@@ -676,6 +677,7 @@ begin
     CAttrAlignValue := 0;
     sval := CurTok.SVal;
     len  := Length(sval);
+    if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
     Tokens[TokCount].SOffset := TokCharLen;
     Tokens[TokCount].SLen    := len;
     i := 1;

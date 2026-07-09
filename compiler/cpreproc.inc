@@ -1531,6 +1531,15 @@ begin
         writeln('pascal26:', wln, ': warning: "/*" within comment');
         Inc(pos); Inc(pos);
       end
+      else if (c = '\') and (pos < Length(src)) and (src[pos + 1] = #10) then
+      begin
+        { Phase-2 line splicing (`\`<newline>) happens BEFORE comment
+          recognition, so a backslash-continued line inside a block comment
+          still joins the logical line — as it does in every line of a
+          multi-line block comment within a `#define` body (duktape's refzero
+          macros). Splice without ending the line. }
+        Inc(pos); Inc(pos);
+      end
       else
       begin
         if c = #10 then done := True;
