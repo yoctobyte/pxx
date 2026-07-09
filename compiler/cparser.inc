@@ -5321,7 +5321,13 @@ begin
         else if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
       end
       else if fnHadDesig and (fnMaxTgt + 1 > arrLen) then arrLen := fnMaxTgt + 1
-      else if nArrElems > arrLen then arrLen := nArrElems;
+      else if (not fnHadDesig) and (nArrElems > arrLen) then arrLen := nArrElems;
+      { With designators/ranges, nArrElems counts init ENTRIES (a `[lo...hi]` range
+        plus later single overrides sum well past the real length) — the array is
+        sized by the highest index touched (fnMaxTgt) or the declared dim, never the
+        entry count. Applying nArrElems there inflated `const fptr t[3]` to length 6
+        -> sizeof/loop bound doubled -> `t[i]()` ran off the end into NULL (00216
+        test_multi_relocs SIGSEGV). }
     end;
     idx := FindSym(name);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;

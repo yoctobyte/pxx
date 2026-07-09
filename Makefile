@@ -1027,6 +1027,8 @@ test-core: $(COMPILER)
 	/tmp/canon_member_designated_init_b22126; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstruct_identity_cast_b222.c /tmp/cstruct_identity_cast_b22226
 	/tmp/cstruct_identity_cast_b22226; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfnptr_range_array_len_b223.c /tmp/cfnptr_range_array_len_b22326
+	/tmp/cfnptr_range_array_len_b22326; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726
