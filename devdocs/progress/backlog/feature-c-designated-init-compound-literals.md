@@ -56,3 +56,18 @@ this ticket is specifically the three designator/compound-literal forms above.
 ## Log
 - 2026-07-02 — Filed by Track B. All three forms isolated via minimal repros;
   no code touched — test/repro only.
+- 2026-07-09 (A+B+C) — **Designated initializers (both forms) DONE.** Designated
+  STRUCT-field init `{.y=5,.x=1,.z=9}` already worked (local record init routes
+  through the recursive brace-elision walker, which handles `.name`). Designated
+  ARRAY-index init `{[2]=7,[4]=9}` was the gap: the LOCAL scalar-array brace path
+  (ParseCLocalDeclAST) parsed positionally only and errored on `[`. Now handles
+  `[k]=`, unsized-array sizing to the max touched index, mixed
+  designated+positional, and GNU range `[lo ... hi]=`. gcc-verified,
+  test/carray_designated_init_b211.c → exit 42, self-host byte-identical,
+  conformance 219/0/1. (v181; also see [[feature-c-compound-literals]] range work.)
+  **Remaining for this ticket: compound literals `(struct P){3,4}` / `(int[]){1,2,3}`
+  as expressions** — the ParseCUnary `(T){...}` hook + anonymous-object
+  materialization (block-scope automatic, file-scope static). That is the
+  self-host-fragile keystone tracked in [[feature-c-compound-literals]] (also the
+  last blocker for c-testsuite 00216). Designated-init acceptance met; compound-
+  literal acceptance still open.

@@ -178,3 +178,4 @@
 2026-07-09T07:35:26Z  v178  453f95409f1663dd4e2ed2403840a2af7d4a0c3552c89de62396bf1a63bc0b21  02b3dc113caa81f051337ac5c9d74c960e5effe5  docs(00204): add copy-paste kickoff prompt for variadic-struct session
 2026-07-09T08:12:43Z  v179  999444cf10ad3bce891492ae0df05d176defa8c3b29f0e144e0ef47024bc1d9c  a69da24c300740dccf2b933ee9856e489565160e  fix(cfront): variadic struct passing + va_arg(struct) — 00204 green
 2026-07-09T09:16:24Z  v180  38276d5bd9b1a45498e8b195717d52066040f47242c7e781df8593b21f9fbc85  000fb63c7194c907082db22629fbbd73d91589de  feat(cfront): C11 _Generic selection — 00219 green
+2026-07-09T09:37:54Z  v181  3981fa15518ba7c8ebc16c6b98ad4885894d90b35a5d7df68eef0566a6434118  cf8c6b50eef68fffeb025b25ffe3ac84a58b63ed  docs(c-corpus): step 1 at 219/220 — 00204+00219 done, only 00216 (file-scope compound literals) left

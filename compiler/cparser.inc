@@ -2985,7 +2985,10 @@ var baseTk, declTk, scalarTk: TTypeKind;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
     wcp, wb0, wb1, wb2, wnb, wsoff, wslen: Integer;
+    curElemIdx, rangeHi, maxElemIdx, dk: Integer;
+    hadArrDesig: Boolean;
     arrElems: array[0..255] of Integer;
+    arrElemIdx: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
@@ -3231,6 +3234,7 @@ begin
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
       recArrInitCount := 0;
+      hadArrDesig := False;
       if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) then
         recArrInitCount := CBraceTopLevelInitCountAt(TokPos);
@@ -3258,6 +3262,7 @@ begin
           begin
             if nArrElems > 255 then Error('too many C array initializer elements');
             arrElems[nArrElems] := ParseCExpr;
+            arrElemIdx[nArrElems] := nArrElems;   { row-major flat position }
             Inc(nArrElems);
           end;
         end;
@@ -3266,11 +3271,45 @@ begin
          (Tokens[TokPos].Kind = tkBegin) and (dimCount <= 1) then
       begin
         Next; Next;   { consume the assign then the open brace }
+        curElemIdx := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
           if nArrElems > 255 then begin nArrElems := -1; Break; end;
+          { `[k] =` element designator, and `[lo ... hi] =` GNU range, reposition
+            the running index (C 6.7.8); the same value fills a whole range. }
+          rangeHi := -1;
+          if CurTok.Kind = tkLBrack then
+          begin
+            hadArrDesig := True;
+            Next;
+            curElemIdx := CEvalConstExpr;
+            if CurTok.Kind = tkDot then
+            begin
+              Next; if CurTok.Kind = tkDot then Next; if CurTok.Kind = tkDot then Next;
+              rangeHi := CEvalConstExpr;
+            end;
+            Expect(tkRBrack, ']');
+            if CurTok.Kind = tkAssign then Next;
+            if curElemIdx < 0 then curElemIdx := 0;
+          end;
           arrElems[nArrElems] := ParseCExpr;
+          arrElemIdx[nArrElems] := curElemIdx;
           Inc(nArrElems);
+          if rangeHi >= curElemIdx then
+          begin
+            { replicate the one value across [curElemIdx .. rangeHi] }
+            for dk := curElemIdx + 1 to rangeHi do
+            begin
+              if nArrElems > 255 then begin nArrElems := -1; Break; end;
+              arrElems[nArrElems] := arrElems[nArrElems - 1];
+              arrElemIdx[nArrElems] := dk;
+              Inc(nArrElems);
+            end;
+            if nArrElems < 0 then Break;
+            curElemIdx := rangeHi + 1;
+          end
+          else
+            Inc(curElemIdx);
           if CurTok.Kind = tkComma then begin Next; Continue; end;
           Break;
         end;
@@ -3355,13 +3394,23 @@ begin
           Inc(nArrElems);
         end;
       end;
+      { With `[k]=` / range designators an unsized array is sized to the highest
+        index touched, not the element count. }
+      maxElemIdx := -1;
+      if hadArrDesig then
+        for dk := 0 to nArrElems - 1 do
+          if arrElemIdx[dk] > maxElemIdx then maxElemIdx := arrElemIdx[dk];
       if arrLen < 1 then
       begin
-        if nArrElems > 0 then arrLen := nArrElems
+        if hadArrDesig and (maxElemIdx >= 0) then arrLen := maxElemIdx + 1
+        else if nArrElems > 0 then arrLen := nArrElems
         else if recArrInitCount > 0 then arrLen := recArrInitCount
         else arrLen := 1;
       end
-      else if (dimCount <= 1) and (nArrElems > arrLen) then arrLen := nArrElems;
+      else if (dimCount <= 1) and hadArrDesig and (maxElemIdx + 1 > arrLen) then
+        arrLen := maxElemIdx + 1
+      else if (dimCount <= 1) and (not hadArrDesig) and (nArrElems > arrLen) then
+        arrLen := nArrElems;
       if (dimCount <= 1) and (recArrInitCount > arrLen) then arrLen := recArrInitCount;
       idx := CAllocDeclArray(name, declTk, 0, arrLen - 1);
       if dimCount >= 2 then
@@ -3392,7 +3441,9 @@ begin
       for ei := 0 to nArrElems - 1 do
       begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
-        idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := ei; ASTTk[idxLit] := Ord(tyInteger);
+        idxLit := AllocNode(AN_INT_LIT);
+        if hadArrDesig then ASTIVal[idxLit] := arrElemIdx[ei] else ASTIVal[idxLit] := ei;
+        ASTTk[idxLit] := Ord(tyInteger);
         inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
         ASTTk[inode] := Ord(declTk);
         asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := arrElems[ei];
