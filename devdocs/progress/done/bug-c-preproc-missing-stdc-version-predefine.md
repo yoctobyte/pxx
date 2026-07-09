@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (C frontend / preprocessor) — **Track C** (predefined macros live in
   `compiler/cpreproc.inc`).
-- **Status:** backlog — found 2026-07-09 while bringing up [[feature-c-corpus-duktape]]
+- **Status:** done
   (first blocker wall). Filed under recon "analyze + ticket, don't inline-fix".
 - **Blocks:** [[feature-c-corpus-duktape]] (parked at this wall).
 
@@ -97,3 +97,6 @@ compiler sources; no ErrOutput/writeln left in the byte-identical build; `make s
 runs test-core (background it) then `make pin` + verify VERSION advanced.
 
 [[feature-c-corpus-duktape]] · [[feature-c-corpus-expansion]]
+
+## Log
+- 2026-07-09 — resolved, commit c50065e8.

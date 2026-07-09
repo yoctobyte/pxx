@@ -6,7 +6,8 @@ prio: 55
 
 - **Type:** feature (C frontend validation) — Track A/C.
 - **Status:** backlog — planned 2026-07-09. Do AFTER [[feature-c-corpus-chess]].
-  **PARKED 2026-07-09 at blocker #1** — see [[bug-c-preproc-missing-stdc-version-predefine]].
+  Two cfront walls cleared 2026-07-09 (predefine + macro-arg string bug); now parked at
+  the first **crtl breadth** wall (`gmtime_r`) — a Track B layer, not a compiler bug.
 - **Parent:** [[feature-c-corpus-expansion]] (was roadmap item #5, promoted after tcc).
 
 ## Why Duktape
@@ -61,10 +62,21 @@ against gcc byte-for-byte early, it hides subtle float bugs.
   regex/Math.sqrt/GC-loop/recursion) builds + runs clean, exit 42. Float formatting exact
   (`0.30000000000000004`, `0.3333333333333333`, `1.4142135623730951`) — the prize class is
   reachable once the frontend gets past config.
-- **pxx build fails at blocker #1: missing `__STDC_VERSION__` predefine** → duktape never
-  typedefs `duk_uintptr_t` (C99 `<inttypes.h>` gate) → cast parses as a call. Filed
-  [[bug-c-preproc-missing-stdc-version-predefine]] (Track C). Per recon rule: analyzed +
-  ticketed, no inline fix. Resume duktape once that lands (expect a cascade of further
-  cfront/crtl walls behind it).
+- **Wall #1 (cfront, FIXED):** missing `__STDC_VERSION__` predefine → duktape never typedefs
+  `duk_uintptr_t` (C99 `<inttypes.h>` gate) → cast parses as a call. Fixed by predefining
+  `__STDC_VERSION__ 199901L` (+ `__STDC_HOSTED__`) in `cpreproc.inc`.
+  [[bug-c-preproc-missing-stdc-version-predefine]].
+- **Wall #2 (cfront, FIXED):** `duk_push_literal(thr, "Symbol(")` — the `(` inside the
+  string literal corrupted function-like macro-arg matching (paren/comma scan ignored string
+  literals). Fixed in `CPExpandRange`. [[bug-c-preproc-macro-arg-string-literal-paren]].
+  After the fix duktape compiles ~13k lines further (to duktape.c ~28502).
+- **Wall #3 (crtl, Track B — OPEN):** `call to undeclared function: gmtime_r`. This is a
+  crtl breadth gap, not a compiler bug — the cascade has shifted from cfront to library
+  functions (expect more `*_r` / time / stdio corners behind it). Next duktape session =
+  Track B crtl work: implement/declare `gmtime_r` and the following missing libc functions,
+  each with the usual libc-free PAL treatment, then re-probe.
 
-[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]]
+Regressions for the two cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
+`test/cpreproc_stdc_version_predefine_b228.c` (both exit 42, wired into test-core).
+
+[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[feature-c-cmdline-define-flag]]

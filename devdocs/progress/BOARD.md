@@ -30,7 +30,6 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-preproc-missing-stdc-version-predefine | C | 55 | bug | C frontend: missing `__STDC_VERSION__` predefine breaks C99 feature-detection | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -40,6 +39,7 @@ _none_
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
@@ -164,7 +164,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (558)
+## done (560)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -256,6 +256,8 @@ _none_
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-preproc-macro-arg-string-literal-paren | C | 55 | bug | C preprocessor: macro-arg paren/comma scan ignores string & char literals | — |
+| bug-c-preproc-missing-stdc-version-predefine | C | 55 | bug | C frontend: missing `__STDC_VERSION__` predefine breaks C99 feature-detection | — |
 | bug-c-preproc-paste-rescan | C | 60 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
 | bug-c-preprocessor-defined-expression-sqlite | C | 50 | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
@@ -766,7 +768,6 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 55] [C] bug-c-preproc-missing-stdc-version-predefine
 - [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
@@ -816,6 +817,7 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 40] [C] feature-c-cmdline-define-flag
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section
