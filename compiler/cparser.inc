@@ -3619,6 +3619,9 @@ begin
     Next;
     node := AllocNode(AN_CASE);
     ASTIVal[node] := CEvalConstExpr;
+    ASTSLen[node] := 1;   { C switch-case MARKER flag (distinct from a Pascal AN_CASE
+                            statement, whose ASTRight is a branch chain) — the switch
+                            lowering turns it into an IR_LABEL dispatch target. }
     Expect(tkColon, ':');
     Result := node;
     Exit;
@@ -3627,7 +3630,10 @@ begin
   begin
     Next;
     Expect(tkColon, ':');
-    Result := AllocNode(AN_DEFAULT);
+    node := AllocNode(AN_DEFAULT);
+    ASTSLen[node] := 1;   { C switch-default MARKER flag (distinct from the Default(T)
+                            intrinsic node, ASTSLen=0). }
+    Result := node;
     Exit;
   end;
 
@@ -3854,22 +3860,45 @@ begin
   Expect(tkLParen, '(');
   selNode := ParseCExpr;
   Expect(tkRParen, ')');
-  Expect(tkBegin, '{');
   bodyNode := AllocNode(AN_BLOCK);
   lastSeq := -1;
-  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  if CurTok.Kind = tkBegin then
   begin
-    stmtNode := ParseCStatementAST;
-    if stmtNode <> -1 then
+    Next;                        { consume the opening brace }
+    while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
     begin
-      seqNode := AllocNode(AN_SEQ);
-      ASTLeft[seqNode] := stmtNode;
-      if lastSeq = -1 then ASTLeft[bodyNode] := seqNode
-      else ASTRight[lastSeq] := seqNode;
-      lastSeq := seqNode;
+      stmtNode := ParseCStatementAST;
+      if stmtNode <> -1 then
+      begin
+        seqNode := AllocNode(AN_SEQ);
+        ASTLeft[seqNode] := stmtNode;
+        if lastSeq = -1 then ASTLeft[bodyNode] := seqNode
+        else ASTRight[lastSeq] := seqNode;
+        lastSeq := seqNode;
+      end;
     end;
+    Expect(tkEnd, '}');
+  end
+  else
+  begin
+    { Non-compound switch body (C 6.8.4.2): the body is a single statement, e.g.
+      `switch(x) case 0: ;`. A `case`/`default` MARKER does not attach its labelled
+      statement (fallthrough model), so collect leading markers then the one real
+      statement that follows. }
+    repeat
+      stmtNode := ParseCStatementAST;
+      if stmtNode <> -1 then
+      begin
+        seqNode := AllocNode(AN_SEQ);
+        ASTLeft[seqNode] := stmtNode;
+        if lastSeq = -1 then ASTLeft[bodyNode] := seqNode
+        else ASTRight[lastSeq] := seqNode;
+        lastSeq := seqNode;
+      end;
+    until (stmtNode = -1) or
+          (not ((ASTKind[stmtNode] = AN_CASE) or (ASTKind[stmtNode] = AN_DEFAULT)))
+          or (CurTok.Kind = tkEOF);
   end;
-  Expect(tkEnd, '}');
   node := AllocNode(AN_SWITCH);
   ASTLeft[node] := selNode;
   ASTRight[node] := bodyNode;

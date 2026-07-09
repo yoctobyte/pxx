@@ -64,3 +64,32 @@ Next attempt must land it WITH a reseed step (make stabilize→pin) and confirm 
 two-step convergence is truly deterministic, or find why restructuring this
 C-only function shifts Pascal codegen. 00143 (Duff's) still separate
 (output-matches / exit-1 control-flow bug).
+
+## FIXED 2026-07-09 (cfront-agent, combined A+B+C) — both 00051 and 00143
+Reworked C switch to the labels-on-statements model. Key: case/default are LABELS
+on arbitrarily nested statements (C 6.8.1); dispatch is a jump to the matching
+label; fallthrough is natural label ordering.
+
+- **Parser** (cparser.inc): C case/default markers now carry ASTSLen=1 (flag
+  distinguishing them from a Pascal AN_CASE statement / the Default(T) node).
+  ParseCSwitchAST accepts a NON-COMPOUND body (`switch(x) case 0: stmt;`): when the
+  token after `)` is not `{`, collect leading markers + the one real statement.
+- **IR** (ir.inc): dispatch scan is now RECURSIVE over the whole switch body (any
+  depth), assigning each marker an IR_LABEL + emitting the compare, and stopping at
+  a nested AN_SWITCH (its cases are its own). The body is lowered by NORMAL
+  IRLowerAST (was a bespoke top-level-only walker), and the AN_CASE/AN_DEFAULT arms
+  emit IR_LABEL in place for C markers. This is what makes Duff's device work: the
+  case labels buried inside the do-while get their IR_LABELs dropped in the loop
+  body and dispatch jumps straight in; subsequent iterations run the full body.
+
+**Self-host: one-step BYTE-IDENTICAL — no reseed needed.** The two prior reverts
+blamed a codegen-reseed; the real cause was a `{` literal in an added comment
+(`{ consume '{' }`) desyncing the nested-comment lexer. Comment reworded; converges
+in one step (see [[project_nested_comment_brace_selfhost_landmine]]).
+
+00051 + 00143 green (exit 0). Repro test/cswitch_noncompound_duff_b207.c (exit 42:
+non-compound body + fallthrough + Duff's copy). c-conformance 216 pass / 0 fail /
+4 skip, quick tier green. Resolves bug-c-switch-nonblock-and-duffs-device.
+
+## Log
+- 2026-07-09 — resolved, commit PENDING.

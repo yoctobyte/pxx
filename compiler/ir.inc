@@ -2077,57 +2077,37 @@ begin
   lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
 end;
 
-procedure IRLowerCSwitchDispatchSeq(seqNode, selTmp, selTk: Integer; var defaultLabel: Integer);
-var seq, stmt, condNode: Integer;
+{ Dispatch scan: walk the ENTIRE switch body (any depth — case/default labels are
+  labels on arbitrarily nested statements, C 6.8.1) assigning each C marker an
+  IR_LABEL and, for a case, emitting `if (sel == val) goto label`. Recurses into
+  every construct EXCEPT a nested AN_SWITCH (its own cases belong to it). This is
+  what lets Duff's device work: the case labels buried inside a do-while are found
+  here and the body lowering (normal IRLowerAST) drops the IR_LABELs in place, so
+  dispatch can jump straight into the loop. C markers carry ASTSLen=1 (distinct
+  from a Pascal AN_CASE statement / the Default(T) node). }
+procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer; var defaultLabel: Integer);
+var condNode: Integer;
 begin
-  seq := seqNode;
-  while seq <> -1 do
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_SWITCH then Exit;   { nested switch owns its own case labels }
+  if (ASTKind[node] = AN_CASE) and (ASTSLen[node] = 1) then
   begin
-    stmt := ASTLeft[seq];
-    if stmt >= 0 then
-    begin
-      if ASTKind[stmt] = AN_CASE then
-      begin
-        ASTSOffset[stmt] := IRNewLabel;
-        condNode := IRAppend(IR_BINOP,
-          IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
-          IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[stmt], selTk),
-          Ord(tkNeq), 0, Ord(tyBoolean));
-        IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[stmt], condNode, -1, 0, 0);
-      end
-      else if ASTKind[stmt] = AN_DEFAULT then
-      begin
-        ASTSOffset[stmt] := IRNewLabel;
-        defaultLabel := ASTSOffset[stmt];
-      end
-      else if ASTKind[stmt] = AN_BLOCK then
-        IRLowerCSwitchDispatchSeq(ASTLeft[stmt], selTmp, selTk, defaultLabel);
-    end;
-    seq := ASTRight[seq];
+    ASTSOffset[node] := IRNewLabel;
+    condNode := IRAppend(IR_BINOP,
+      IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
+      IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], selTk),
+      Ord(tkNeq), 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[node], condNode, -1, 0, 0);
+    Exit;                                    { marker has no children of interest }
   end;
-end;
-
-procedure IRLowerCSwitchBodySeq(seqNode: Integer);
-var seq, stmt, lowered: Integer;
-begin
-  seq := seqNode;
-  while seq <> -1 do
+  if (ASTKind[node] = AN_DEFAULT) and (ASTSLen[node] = 1) then
   begin
-    stmt := ASTLeft[seq];
-    if stmt >= 0 then
-    begin
-      if (ASTKind[stmt] = AN_CASE) or (ASTKind[stmt] = AN_DEFAULT) then
-        IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[stmt], 0)
-      else if ASTKind[stmt] = AN_BLOCK then
-        IRLowerCSwitchBodySeq(ASTLeft[stmt])
-      else
-      begin
-        lowered := IRLowerAST(stmt);
-        IRMarkStatementNode(lowered);
-      end;
-    end;
-    seq := ASTRight[seq];
+    ASTSOffset[node] := IRNewLabel;
+    defaultLabel := ASTSOffset[node];
+    Exit;
   end;
+  IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
+  IRLowerCSwitchDispatchScan(ASTRight[node], selTmp, selTk, defaultLabel);
 end;
 
 { Inline expansion (feature-inline-routines): clone a retained inline body from
@@ -2327,7 +2307,13 @@ begin
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
 
     AN_DEFAULT:
-      Error('default requires an assignment target');
+      { C switch-default MARKER (ASTSLen=1): drop its dispatch IR_LABEL in place.
+        The bare Default(T) intrinsic node (ASTSLen=0) as an rvalue is still an
+        error — it is only valid as an assignment target (IRLowerAddress). }
+      if ASTSLen[node] = 1 then
+        Result := IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[node], 0)
+      else
+        Error('default requires an assignment target');
 
     AN_ARRAY_CTOR:
     begin
@@ -4815,10 +4801,13 @@ begin
       { pass 1 — dispatch: give each case/default marker a label and, for a case,
         emit `if (sel == caseval) goto label` (via JUMP_IF_FALSE of `sel != val`). }
       swDefault := -1;
-      IRLowerCSwitchDispatchSeq(ASTLeft[ASTRight[node]], swSelTmp, swSelTk, swDefault);
+      IRLowerCSwitchDispatchScan(ASTRight[node], swSelTmp, swSelTk, swDefault);
       if swDefault >= 0 then IRAppend(IR_JUMP, swDefault, -1, -1, 0, 0)
       else IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
-      { pass 2 — bodies in source order (fallthrough). break -> end; continue is
+      { pass 2 — lower the whole body normally (fallthrough by label ordering).
+        C case/default markers lower to IR_LABEL in place (see the AN_CASE/AN_DEFAULT
+        arms), so labels nested inside loops (Duff's device) land correctly and the
+        dispatch above can jump straight into them. break -> end; continue is
         inherited so it targets the enclosing loop, giving a break-only scope. }
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
@@ -4828,7 +4817,7 @@ begin
         IRLoopStackContinue[IRLoopStackDepth] := endLabel;
       IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
-      IRLowerCSwitchBodySeq(ASTLeft[ASTRight[node]]);
+      IRMarkStatementNode(IRLowerAST(ASTRight[node]));
       Dec(IRLoopStackDepth);
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
@@ -4956,6 +4945,15 @@ begin
 
     AN_CASE:
     begin
+      { C switch-case MARKER (ASTSLen=1): dispatch already assigned its IR_LABEL
+        (ASTSOffset) and emitted the compare; here we just drop the label in place
+        so fallthrough / jump-into-loop lands correctly. Distinct from the Pascal
+        AN_CASE statement handled below (which has a branch chain in ASTRight). }
+      if ASTSLen[node] = 1 then
+      begin
+        Result := IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[node], 0);
+        Exit;
+      end;
       { GUARD-RAIL — this lowers `case` to a COMPARE-CHAIN: every clause target
         is an IR_LABEL reached by IR_JUMP_IF_FALSE/IR_JUMP. IROptDeadCode
         (ir.inc) depends on the invariant that EVERY control-transfer landing

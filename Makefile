@@ -927,6 +927,9 @@ test-core: $(COMPILER)
 	# b206 (bug-c-pointer-to-array-declarator): `char (*p)[4]` pointer-to-array + p[i][j]
 	./$(COMPILER) test/cptr_to_array_declarator_b206.c /tmp/cptr_to_array_declarator_b20626
 	/tmp/cptr_to_array_declarator_b20626; test "$$?" = "42"
+	# b207 (bug-c-switch-nonblock-and-duffs-device): non-compound switch body + Duff's device
+	./$(COMPILER) test/cswitch_noncompound_duff_b207.c /tmp/cswitch_noncompound_duff_b20726
+	/tmp/cswitch_noncompound_duff_b20726; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi
