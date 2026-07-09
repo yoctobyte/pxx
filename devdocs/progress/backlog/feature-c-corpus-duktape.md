@@ -6,6 +6,7 @@ prio: 55
 
 - **Type:** feature (C frontend validation) — Track A/C.
 - **Status:** backlog — planned 2026-07-09. Do AFTER [[feature-c-corpus-chess]].
+  **PARKED 2026-07-09 at blocker #1** — see [[bug-c-preproc-missing-stdc-version-predefine]].
 - **Parent:** [[feature-c-corpus-expansion]] (was roadmap item #5, promoted after tcc).
 
 ## Why Duktape
@@ -52,4 +53,18 @@ Extra: duktape leans on `setjmp`/`longjmp` (crtl already has a shim from the tcc
 reuse it) and on double formatting (`%g`/`%.17g` round-trip) — validate string<->number
 against gcc byte-for-byte early, it hides subtle float bugs.
 
-[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]]
+## Recon log — 2026-07-09 (bring-up attempt, parked at wall #1)
+- Vendored Duktape 2.7.0 prebuilt amalgamation (`duktape-2.7.0.tar.xz` → `src/duktape.c`
+  101351 lines + `duktape.h` + `duk_config.h`; cmdline in `examples/cmdline/`). Not yet
+  wired into `install_lib_candidates.sh` — deferred until unblocked (don't land a red gate).
+- gcc oracle (17-case smoke: arith/float-fmt/NaN/Inf/mod/strings/arrays/closures/JSON/
+  regex/Math.sqrt/GC-loop/recursion) builds + runs clean, exit 42. Float formatting exact
+  (`0.30000000000000004`, `0.3333333333333333`, `1.4142135623730951`) — the prize class is
+  reachable once the frontend gets past config.
+- **pxx build fails at blocker #1: missing `__STDC_VERSION__` predefine** → duktape never
+  typedefs `duk_uintptr_t` (C99 `<inttypes.h>` gate) → cast parses as a call. Filed
+  [[bug-c-preproc-missing-stdc-version-predefine]] (Track C). Per recon rule: analyzed +
+  ticketed, no inline fix. Resume duktape once that lands (expect a cascade of further
+  cfront/crtl walls behind it).
+
+[[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]]
