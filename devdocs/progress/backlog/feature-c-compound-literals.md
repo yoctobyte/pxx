@@ -133,7 +133,47 @@ Order to finish: (2)+(3) global paths, (4) nested designators, then (5) compound
 literals (biggest + riskiest). (1) is committed. Remaining pieces parked in
 backlog — each a focused, self-host-verified change.
 
-### Block-scope compound-literal ATTEMPT 2026-07-09 — parser-comma approach FAILS at IR lowering
+### Block-scope compound literals — AN_COMPOUND_LITERAL IR node PROVEN for flat cases 2026-07-09
+Second attempt (the right layer). Added an `AN_COMPOUND_LITERAL` AST node
+(defs.inc = 81) and integrated it — this WORKS for flat block-scope compound
+literals and is the design the next session should re-apply:
+- **defs.inc**: `AN_COMPOUND_LITERAL = 81`; IVal = hidden record temp sym, Left =
+  init statement chain (AN_SEQ of CMakeZeroLocal + CInitLocalAggregate stores over
+  the temp), recId = Syms[IVal].RecName.
+- **cparser.inc ParseCUnary**: after the cast type+`)`, if `CurTok=tkBegin` and the
+  type is a record (castTk=tyRecord, castDepth=0, CTypeBaseRec>=REC_UCLASS_BASE),
+  call `CParseCompoundLiteralRec(recId)` which allocs the temp, splices
+  zero+stores into one AN_SEQ, and returns the node. (Capture clRecId := CTypeBaseRec
+  BEFORE Expect(')').)
+- **ir.inc IRLowerAST + IRLowerAddress**: emit Left (IRMarkStatementNode), then
+  yield `IR_LEA temp` — records are carried BY ADDRESS in this IR, so by-value
+  args / assignment RHS copy from it correctly. This is why the node works where
+  the AST-comma didn't.
+- **ir.inc IsASTLValue** and **symtab.inc ResolveNodeRec**: add the node
+  (lvalue; rec = temp's RecName).
+
+VERIFIED vs gcc (all exit 42): `(struct P){3,4}` as a by-value arg; `&(struct P){1,2,3}`
++ `p->field`; `struct FF f = (struct FF){1.5f,2.5f}`; designated
+`(struct P){.c=5,.a=1}`. C-mode-gated + inert in Pascal self-host (self-build OK).
+
+REVERTED (kept v185 clean) because three cases were still wrong and one SILENTLY
+miscompiled — must not land a silent-wrong path. Remaining before it can land:
+1. **Postfix `(T){...}.field` / `[i]`** — ParseCUnary's cast branch `Exit`s, so the
+   CL result skips ParseCPostfix → "expected C expression". Route the CL node back
+   through the postfix-tail so `.f`/`->`/`[i]` chain onto it.
+2. **Nested CL as a designated sub-value** `(struct Out){.a = (struct In){...}}` —
+   SILENTLY WRONG: the outer walker descends into `.a`'s fields and misassigns the
+   inner CL. The walker's leaf/member path must detect a whole-record value
+   (CL or struct rvalue) for a record-typed field and assign it WHOLE (IR_COPY_REC)
+   instead of descending. (Same "whole-aggregate-value element" gap that
+   `.daddr = phdr->daddr` needs.)
+3. **File-scope CL in a global array** (00216 `global_wrap[]`) — SEGV: the global
+   record-array walker replays at main via ParseCExpr; a CL temp AllocVar'd during
+   that deferred emit has the wrong CurProc/storage context. File-scope CLs have
+   static storage (C99) — likely needs the static-anon-object path (like
+   done 00149/00150 `&(T){...}`), not the automatic block-scope temp.
+
+### Block-scope compound-literal ATTEMPT 1 2026-07-09 — parser-comma approach FAILS at IR lowering
 Tried the obvious block-scope impl in `ParseCUnary`'s cast branch: on `(recTk){`
 materialise `tmpSym := AllocVar('',tyRecord)` (LastTypeRecId=recId), zero via
 `CMakeZeroLocal`, init via `CInitLocalAggregate` (chain mode), then splice the
