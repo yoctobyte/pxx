@@ -40,6 +40,9 @@ double difftime(time_t end, time_t beginning);
 time_t mktime(struct tm *tm);
 struct tm *gmtime(const time_t *timer);
 struct tm *localtime(const time_t *timer);
+struct tm *gmtime_r(const time_t *timer, struct tm *result);
+struct tm *localtime_r(const time_t *timer, struct tm *result);
 size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm);
+char *strptime(const char *s, const char *fmt, struct tm *tm);
 
 #endif

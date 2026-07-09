@@ -34,6 +34,13 @@ double pow(double b, double e) {
   if (b < 0.0)  return -Exp(e * Ln(-b));   /* lua only raises positive bases; sign best-effort */
   return Exp(e * Ln(b));
 }
+double cbrt(double x) {
+  /* Cube root, sign-preserving. Real cube root of a negative is negative,
+     so route through |x| (pow's Exp*Ln path is positive-only). */
+  if (x == 0.0) return 0.0;
+  if (x < 0.0)  return -Exp(Ln(-x) / 3.0);
+  return Exp(Ln(x) / 3.0);
+}
 double log(double x)             { return Ln(x); }
 double atan2(double y, double x) { return ArcTan2(y, x); }
 double asin(double x)            { return ArcSin(x); }

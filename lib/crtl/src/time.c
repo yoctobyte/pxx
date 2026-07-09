@@ -12,6 +12,7 @@
  */
 
 #include <time.h>
+#include <sys/time.h>
 
 extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
@@ -94,6 +95,15 @@ struct tm *gmtime(const time_t *timer) {
 /* No timezone database — local time == UTC. */
 struct tm *localtime(const time_t *timer) { return gmtime(timer); }
 
+/* Reentrant variants (POSIX): fill the caller's buffer, no shared static. */
+struct tm *gmtime_r(const time_t *timer, struct tm *result) {
+  *result = *gmtime(timer);
+  return result;
+}
+struct tm *localtime_r(const time_t *timer, struct tm *result) {
+  return gmtime_r(timer, result);
+}
+
 time_t mktime(struct tm *tm) {
   long long y = (long long)tm->tm_year + 1900;
   long long days = days_from_civil(y, (unsigned)(tm->tm_mon + 1),
@@ -173,4 +183,102 @@ size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm) {
 done:
   if (max) *p = '\0';
   return (size_t)(p - s);
+}
+
+/* gettimeofday: wall clock via the PAL. Second precision only (__pxx_time
+   discards sub-second), so tv_usec is always 0 — enough for Date.now()/VFS
+   timestamps, not a high-resolution timer. */
+int gettimeofday(struct timeval *tv, void *tz) {
+  (void)tz;
+  if (tv) { tv->tv_sec = (long)__pxx_time(); tv->tv_usec = 0; }
+  return 0;
+}
+
+/* --- strptime: parse a broken-down time from a string (POSIX). ------------ */
+
+static int sp_ci_eq(char a, char b) {
+  if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+  if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+  return a == b;
+}
+
+/* Match one of `names` (case-insensitive, prefix) at *sp; on success advance
+   *sp past the match, store the 0-based index in *out, return 1. */
+static int sp_match_name(const char **sp, const char *const *names, int n, int *out) {
+  int i;
+  for (i = 0; i < n; i++) {
+    const char *s = *sp, *t = names[i];
+    while (*t && sp_ci_eq(*s, *t)) { s++; t++; }
+    if (*t == '\0') { *sp = s; *out = i; return 1; }
+  }
+  return 0;
+}
+
+/* Read up to `maxw` decimal digits (skipping leading spaces) into *out. */
+static int sp_num(const char **sp, int maxw, int *out) {
+  const char *s = *sp;
+  int v = 0, got = 0;
+  while (*s == ' ' || *s == '\t') s++;
+  while (got < maxw && *s >= '0' && *s <= '9') { v = v * 10 + (*s - '0'); s++; got++; }
+  if (!got) return 0;
+  *sp = s; *out = v; return 1;
+}
+
+static const char *sp_parse(const char *s, const char *fmt, struct tm *tm);
+
+char *strptime(const char *s, const char *fmt, struct tm *tm) {
+  const char *r = sp_parse(s, fmt, tm);
+  return (char *)r;   /* NULL on mismatch */
+}
+
+static const char *sp_parse(const char *s, const char *fmt, struct tm *tm) {
+  int v, idx;
+  while (*fmt) {
+    if (*fmt == '%') {
+      fmt++;
+      switch (*fmt) {
+        case 'a': case 'A':
+          if (!sp_match_name(&s, wday_full, 7, &idx) &&
+              !sp_match_name(&s, wday_abbr, 7, &idx)) return 0;
+          tm->tm_wday = idx; break;
+        case 'b': case 'B': case 'h':
+          if (!sp_match_name(&s, mon_full, 12, &idx) &&
+              !sp_match_name(&s, mon_abbr, 12, &idx)) return 0;
+          tm->tm_mon = idx; break;
+        case 'd': case 'e':
+          if (!sp_num(&s, 2, &v)) return 0; tm->tm_mday = v; break;
+        case 'H': if (!sp_num(&s, 2, &v)) return 0; tm->tm_hour = v; break;
+        case 'I': if (!sp_num(&s, 2, &v)) return 0; tm->tm_hour = v % 12; break;
+        case 'j': if (!sp_num(&s, 3, &v)) return 0; tm->tm_yday = v - 1; break;
+        case 'm': if (!sp_num(&s, 2, &v)) return 0; tm->tm_mon = v - 1; break;
+        case 'M': if (!sp_num(&s, 2, &v)) return 0; tm->tm_min = v; break;
+        case 'S': if (!sp_num(&s, 2, &v)) return 0; tm->tm_sec = v; break;
+        case 'y': if (!sp_num(&s, 2, &v)) return 0;
+                  tm->tm_year = v < 69 ? v + 100 : v; break;
+        case 'Y': if (!sp_num(&s, 4, &v)) return 0; tm->tm_year = v - 1900; break;
+        case 'p':
+          if (sp_ci_eq(s[0], 'p') && sp_ci_eq(s[1], 'm')) { if (tm->tm_hour < 12) tm->tm_hour += 12; s += 2; }
+          else if (sp_ci_eq(s[0], 'a') && sp_ci_eq(s[1], 'm')) { if (tm->tm_hour == 12) tm->tm_hour = 0; s += 2; }
+          else return 0;
+          break;
+        case 'c':   /* locale date+time: "Www Mmm dd hh:mm:ss yyyy" */
+          s = sp_parse(s, "%a %b %e %H:%M:%S %Y", tm);
+          if (!s) return 0; break;
+        case 'n': case 't':
+          while (*s == ' ' || *s == '\t' || *s == '\n') s++; break;
+        case '%':
+          if (*s != '%') return 0; s++; break;
+        case '\0': return s;
+        default: return 0;   /* unsupported specifier */
+      }
+      fmt++;
+    } else if (*fmt == ' ' || *fmt == '\t' || *fmt == '\n') {
+      while (*s == ' ' || *s == '\t' || *s == '\n') s++;
+      fmt++;
+    } else {
+      if (*s != *fmt) return 0;
+      s++; fmt++;
+    }
+  }
+  return s;
 }
