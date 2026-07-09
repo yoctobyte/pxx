@@ -1652,6 +1652,12 @@ begin
       function pointer; that fn's return signature makes the second `()` an
       indirect call. }
     Result := ProcRetProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_CALL_IND then
+    { `(*(*p)(a,b))(c,d)` — the callee is the RESULT of an INDIRECT call
+      (through a fn-pointer variable) whose pointee returns a function pointer
+      (00124: `int (*(*p)(int,int))(int,int)`). Mirror the AN_CALL arm; an
+      AN_CALL_IND's ASTIVal is its callee signature-proc index. }
+    Result := ProcRetProcSig[ASTIVal[inner]]
   else if (ASTKind[inner] = AN_INDEX) and (ASTKind[ASTLeft[inner]] = AN_IDENT) then
     { `arr[i](args)` — call through an element of a function-pointer array; the
       array sym carries the per-element call signature in SymElemProcSig. }
@@ -2184,6 +2190,8 @@ var
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
   fpNParams, fpSig, fnRetNParams, pi: Integer;
+  retSig: Integer;                 { returned-fnptr sig when the pointee returns a fn-pointer (00124) }
+  pointeeRetFn: Boolean;           { declarator is `(* (*name)(...))(...)` — pointee returns a fn-pointer }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   fpPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -2389,6 +2397,15 @@ begin
   if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
   begin
     fpRet := Result;                  { return type parsed above (before the '(') }
+    { A function pointer whose POINTEE returns a function pointer:
+      `ret (* (*name)(pP))(rP)` (00124). The nested `(* (*` opener distinguishes
+      it from a plain fn-pointer `ret (*name)(...)` (where TokPos+1 is the name/`*`)
+      and from the fn-DEFINITION `ret (* name(...))(...)` (TokPos+1 is the name).
+      The trailing `(rP)` group is, per C declarator semantics, the RETURNED fn's
+      signature — captured below as fpSig; we register it as retSig and thread it
+      onto ProcRetProcSig[fpSig] so a chained call `(*(*p)(..))(..)` resolves. }
+    pointeeRetFn := (Tokens[TokPos+1].Kind = tkLParen) and
+                    (Tokens[TokPos+2].Kind = tkStar);
     if isVoid then fpRet := tyInteger;
     { Capture the return type's pointed-at kind/record BEFORE the param recursion
       (which resets the CType* globals) so a struct-pointer-returning callback
@@ -2541,6 +2558,18 @@ begin
     begin
       ProcRetPtrElemTk[fpSig] := fpRetElemTk;
       ProcRetPtrElemRec[fpSig] := fpRetElemRec;
+    end;
+    { Pointee returns a fn-pointer (`ret (* (*name)(pP))(rP)`, 00124): the trailing
+      `(rP)`/fpRet group captured above IS the RETURNED fn's signature. Register a
+      distinct sig for it and thread it onto ProcRetProcSig[fpSig] so a chained
+      indirect call through name — `(*(*name)(..))(..)` — recovers the second
+      call's ABI (CNodeProcSig's AN_CALL_IND arm reads it). }
+    if pointeeRetFn then
+    begin
+      retSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
+      Procs[retSig].BodyAddr := -1;
+      ProcCdecl[retSig] := True;
+      ProcRetProcSig[fpSig] := retSig;
     end;
     { A function pointer is a non-void pointer VALUE. The inner signature parse
       (e.g. `void (*x)(void)`'s `void` return / `(void)` params) leaves the

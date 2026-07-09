@@ -150,3 +150,6 @@ quick tier + lua/core green. Dropped 00089 from pxx.skip.
 FUNCTION returning a fnptr, full inline declarator) still compiles but exits 85:
 the double-indirect call `(*(*p)(0,2))(2,2)` returns garbage. Separate from the
 typedef-fnptr-return path above — a fn-returning-fnptr codegen/declarator bug.
+
+## Log
+- 2026-07-09 — resolved, commit PENDING.

@@ -15,12 +15,11 @@ _none_
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (4)
+## unfinished (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-abi-battery-00204 | C | 55→50 | bug | c-testsuite 00204: calling-convention battery (structs 1..17 bytes by value, HFAs, varargs) | — |
-| bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 
@@ -173,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (544)
+## done (545)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -231,6 +230,7 @@ _none_
 | bug-c-fnptr-to-crtl-variadic | C | 55 | bug | C: taking &fprintf (crtl variadic) and calling through the pointer SIGSEGVs | bug-c-external-func-address-indirect-call |
 | bug-c-function-pointer-local-variable | C | 50 | bug | C: function-pointer local variable declaration not parsed | — |
 | bug-c-function-pointer-struct-member | C | 50 | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
+| bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-function-returning-function-pointer-prototype-sqlite | C | 50 | bug | C: function returning function pointer prototype not registered | — |
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
