@@ -45,3 +45,28 @@ work: `char (*p)[4]` = a POINTER whose element is a fixed array-of-4. Needs, in 
 The ICE "Unsupported linear node Kind=10" today is the unmodelled AST reaching
 codegen. Peer of the fn-ptr declarator + the multidim array stride code; ~one
 focused session. Corpus payoff is modest (rare idiom) — prio stays 55.
+
+## FIXED 2026-07-09 (cfront-agent) — ticket closed
+Implemented the full pointer-to-array `elem (*p)[N]` model. Five parts:
+1. **Declarator parse** (ParseCDeclType): detect the `( * ident ) [` shape
+   (distinct from fn-ptr `(*name)(...)` and array-of-fnptr `(*name[N])(...)`),
+   collapse to tyPointer, record row length in new global CTypePtrElemArrLen +
+   the name in CTypeFnPtrName. Also a **sibling** handler in the
+   ParseCLocalDeclAST multi-declarator loop (00130 is `char arr[2][4], (*p)[4],
+   *q;` — the loop used to Break on the leading `(`); it mirrors the loop-tail
+   comma/star setup so a following `*q` sibling is not dropped.
+2. **Symbol field** SymPtrElemArrLen (defs.inc) = pointee row length; reset in
+   all four symtab alloc sites (parallel-array landmine).
+3. **Index lowering** (ParseCPostfix): `p[i][j]` → AN_INDEX(p, i*N + j); the
+   AN_INDEX over a POINTER base loads p and strides by PtrElemTk size, so the
+   address is load(p) + (i*N+j)*sizeof(elem). Full two-subscript form only.
+4. **Decay** `p = arr`: reuses the existing 2-D-array→pointer decay (base
+   address); the row length is baked onto p at declaration, so no runtime carry.
+5. `q = &arr[1][3]` / `*q` / `*v` already worked.
+
+00130 green (exit 0). Repro test/cptr_to_array_declarator_b206.c (exit 42; char
++ int `(*vp)[2]` + sibling `*q` forms). c-conformance 214 pass / 0 fail / 6 skip,
+self-host byte-identical, quick tier green.
+
+## Log
+- 2026-07-09 — resolved, commit PENDING.

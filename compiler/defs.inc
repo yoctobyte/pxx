@@ -1005,6 +1005,7 @@ var
   SymPtrDepth : array[0..MAX_SYMS-1] of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
   SymPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
   SymPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
+  SymPtrElemArrLen : array[0..MAX_SYMS-1] of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -1094,6 +1095,7 @@ var
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
+  CTypePtrElemArrLen : Integer; { pointer-to-array declarator `elem (*Name)[N]`: the pointee is a fixed array of N (row length). 0 = not a pointer-to-array. }
   CTypeFnRetIsFunc : Boolean; { last ParseCDeclType saw `ret (*Name(params))(...)`: a real function returning a fn pointer, not a fn-pointer variable }
   CTypeFnRetParamCount : Integer;
   CTypeFnRetPTypes : array[0..MAX_PROC_PARAMS-1] of TTypeKind;

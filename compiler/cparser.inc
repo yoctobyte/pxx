@@ -1714,6 +1714,29 @@ begin
         ASTTk[inode] := Ord(Syms[ASTIVal[node]].ElemType);
         node := inode;
       end
+      else if (ASTKind[node] = AN_IDENT) and
+              (SymPtrElemArrLen[ASTIVal[node]] > 0) and (CurTok.Kind = tkLBrack) then
+      begin
+        { Pointer-to-array `elem (*p)[N]`: `p[i][j]` addresses *(p) as a `[.][N]`
+          row-major block. Flatten to AN_INDEX(p, i*N + j); AN_INDEX over a POINTER
+          base LOADS p and strides by the element size (PtrElemTk = elem), so the
+          address is load(p) + (i*N + j)*sizeof(elem). Only the full two-subscript
+          form is modelled here (partial `p[i]` row-decay is a rarer follow-up). }
+        rowStride := SymPtrElemArrLen[ASTIVal[node]];
+        Next;                          { second '[' }
+        strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInteger);
+        mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+        ASTLeft[mulNode] := idxExpr; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
+        idxExpr := ParseCExpr;         { second subscript }
+        Expect(tkRBrack, ']');
+        flatNode := AllocNode(AN_BINOP); ASTIVal[flatNode] := Ord(tkPlus);
+        ASTLeft[flatNode] := mulNode; ASTRight[flatNode] := idxExpr; ASTTk[flatNode] := Ord(tyInteger);
+        inode := AllocNode(AN_INDEX);
+        ASTLeft[inode] := node;
+        ASTRight[inode] := flatNode;
+        ASTTk[inode] := Ord(Syms[ASTIVal[node]].PtrElemTk);
+        node := inode;
+      end
       else if (ASTKind[node] = AN_FIELD) and
          (RecFieldArrNDims(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) >= 2) then
       begin
@@ -2192,6 +2215,7 @@ var
   fpNParams, fpSig, fnRetNParams, pi: Integer;
   retSig: Integer;                 { returned-fnptr sig when the pointee returns a fn-pointer (00124) }
   pointeeRetFn: Boolean;           { declarator is `(* (*name)(...))(...)` — pointee returns a fn-pointer }
+  paArrLen: Integer;               { pointer-to-array declarator `elem (*name)[N]` row length }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   fpPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -2211,6 +2235,7 @@ begin
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
+  CTypePtrElemArrLen := 0;
   CTypeFnRetIsFunc := False;
   CTypeFnRetParamCount := 0;
   loop := True;
@@ -2388,13 +2413,43 @@ begin
     CTypeIsVoid := False;
   end;
 
+  { Pointer-to-array declarator `elem (*name)[N]` — name is a POINTER whose
+    pointee is a fixed array-of-N of elem (00130's `char (*p)[4]`). Distinct from
+    a fn-pointer `(*name)(...)` and an array-of-fn-pointer `(*name[N])(...)`:
+    detect the exact `( * ident ) [` shape. The pointer strides by elem size and
+    `p[i][j]` flattens to i*N+j (ParseCPostfix). Records the row length in
+    CTypePtrElemArrLen and the name in CTypeFnPtrName so the caller allocates it. }
+  if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+     (Tokens[TokPos+1].Kind = tkIdent) and (Tokens[TokPos+2].Kind = tkRParen) and
+     (Tokens[TokPos+3].Kind = tkLBrack) then
+  begin
+    fpRet := Result;                 { element scalar type (before the pointer) }
+    Next;                            { consume '(' }
+    Next;                            { consume '*' }
+    CTypeFnPtrName := CurTok.SVal;    { the declarator name (current token) }
+    CTypeFnPtrNameOff := Tokens[TokPos-1].SOffset;
+    CTypeFnPtrNameLen := Tokens[TokPos-1].SLen;
+    Next;                            { consume name -> ')' }
+    Next;                            { consume ')' -> '[' }
+    Next;                            { consume '[' }
+    paArrLen := CEvalConstExpr;      { N }
+    Expect(tkRBrack, ']');
+    Result := tyPointer;
+    CTypeElemTk := Ord(fpRet);       { pointee element scalar kind (elem stride) }
+    CTypeElemRec := baseRec;
+    CTypePtrDepth := 1;
+    CTypePtrBaseTk := Ord(fpRet);
+    CTypePtrBaseRec := baseRec;
+    CTypePtrElemArrLen := paArrLen;
+    CTypeIsVoid := False;
+  end
   { Function-pointer declarator: ret (*name)(params) — e.g. sqlite3_exec's
     callback. Without this the base type (int) leaks through as the param
     type, so a Pointer/nil argument fails overload and would truncate to 4
     bytes. Detect `(` immediately followed by `*`, collapse to Pointer, and
     skip both the `(*name)` declarator group and the trailing `(params)`
     group so the caller's parameter loop resyncs on the next `,`/`)`. }
-  if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
+  else if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
   begin
     fpRet := Result;                  { return type parsed above (before the '(') }
     { A function pointer whose POINTEE returns a function pointer:
@@ -2664,6 +2719,7 @@ function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
+    paLen, sibPaLen: Integer;
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     declPtrDepth, declBaseTk, declBaseRec: Integer;
@@ -2686,6 +2742,7 @@ begin
   ptrBaseTk := CTypePtrBaseTk;
   ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
+  paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
   if CTypeFnPtrName <> '' then
   begin
     { Inline function-pointer local `RET (*name)(params) [= init];` —
@@ -2694,15 +2751,30 @@ begin
       already consumed), so allocate the local here as an 8-byte callable
       pointer and parse the optional initializer. Mirrors the ParseCStructInto
       inline fn-ptr member branch. (Capture the name now: a cast inside the
-      initializer expression re-runs ParseCDeclType and resets the global.) }
+      initializer expression re-runs ParseCDeclType and resets the global.)
+      A pointer-to-array `elem (*name)[N]` reuses this branch (name captured, no
+      call signature) but records the pointee element type + row length so
+      `p[i][j]` flattens and the pointer strides by the element size. }
     name := CTypeFnPtrName;
     idx := CAllocDeclVar(name, tyPointer);
-    Syms[idx].PtrElemTk := tyUnknown;
-    Syms[idx].PtrElemRec := REC_NONE;
-    SymPtrDepth[idx] := 1;
-    SymPtrBaseTk[idx] := Ord(tyUnknown);
-    SymPtrBaseRec[idx] := REC_NONE;
-    if procSig >= 0 then SymProcSig[idx] := procSig;
+    if paLen > 0 then
+    begin
+      Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
+      Syms[idx].PtrElemRec := elemRec;
+      SymPtrElemArrLen[idx] := paLen;
+      SymPtrDepth[idx] := 1;
+      SymPtrBaseTk[idx] := ptrBaseTk;
+      SymPtrBaseRec[idx] := ptrBaseRec;
+    end
+    else
+    begin
+      Syms[idx].PtrElemTk := tyUnknown;
+      Syms[idx].PtrElemRec := REC_NONE;
+      SymPtrDepth[idx] := 1;
+      SymPtrBaseTk[idx] := Ord(tyUnknown);
+      SymPtrBaseRec[idx] := REC_NONE;
+      if procSig >= 0 then SymProcSig[idx] := procSig;
+    end;
     head := -1; tail := -1;
     if CurTok.Kind = tkAssign then
     begin
@@ -2769,6 +2841,71 @@ begin
   end;
   while True do
   begin
+    { Sibling pointer-to-array declarator `elem (*name)[N]` — the multi-declarator
+      loop otherwise Breaks on the leading `(` (00130's `char arr[2][4], (*p)[4]`).
+      The element scalar is the declaration's scalar base; record the row length so
+      `p[i][j]` flattens and the pointer strides by the element size. }
+    if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) and
+       (Tokens[TokPos+1].Kind = tkIdent) and (Tokens[TokPos+2].Kind = tkRParen) and
+       (Tokens[TokPos+3].Kind = tkLBrack) then
+    begin
+      Next;                          { '(' }
+      Next;                          { '*' }
+      name := CurTok.SVal; Next;     { name -> ')' }
+      Next;                          { ')' -> '[' }
+      Next;                          { '[' }
+      sibPaLen := CEvalConstExpr;    { N }
+      Expect(tkRBrack, ']');
+      idx := CAllocDeclVar(name, tyPointer);
+      Syms[idx].PtrElemTk := scalarTk;
+      Syms[idx].PtrElemRec := scalarRec;
+      SymPtrElemArrLen[idx] := sibPaLen;
+      SymPtrDepth[idx] := 1;
+      SymPtrBaseTk[idx] := Ord(scalarTk);
+      SymPtrBaseRec[idx] := scalarRec;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        initExpr := ParseCExpr;
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(tyPointer);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+        ASTTk[asn] := Ord(tyPointer);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
+      { Set up the NEXT declarator's pointer level (mirrors the shared comma/star
+        block at the loop tail, which this branch's Continue would otherwise skip
+        — so `*q` in `char (*p)[4], *q` is not dropped). }
+      if CurTok.Kind = tkComma then
+      begin
+        Next;
+        declPtr := 0;
+        while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+        if declPtr > 0 then
+        begin
+          declTk := tyPointer; declPtrDepth := declPtr;
+          declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
+          if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
+          else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+          declProcSig := -1;
+        end
+        else if hadStar then
+        begin
+          declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
+          declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
+          declProcSig := -1;
+        end
+        else
+        begin
+          declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
+          declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
+          declProcSig := procSig;
+        end;
+        Continue;
+      end;
+      Break;
+    end;
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
     if CurTok.Kind = tkLParen then
