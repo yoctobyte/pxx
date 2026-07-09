@@ -17,6 +17,7 @@ prio: 65  # auto
   bug-c-string-literal-binop-decay, bug-c-ptrdiff-of-addr-elem — the last
   because the draft regressed test-core b133. Next inside step 1: burn down
   the skip list ticket by ticket; then step 2 (zlib).
+- **2026-07-09 — NEXT RUNGS scoped:** ladder so far c-testsuite/zlib/cjson/lua/sqlite/tcc all green (tcc self-compiles, pxx/gcc lineages converge). Next new-muscle targets filed with kickoff prompts: [[feature-c-corpus-chess]] (perft, compiler-independent oracle, cross-validates Rust chess — DO FIRST) then [[feature-c-corpus-duktape]] (JS engine, GC + IEEE-754). GNU Pascal / gcc rejected (gcc front-end / C++ / generated-code bootstrap — not standalone C).
 - **2026-07-09 — STEP 1 COMPLETE: c-testsuite 220/220 pass, 0 fail, 0 skip.** The
   last skip (00216) is byte-identical to gcc after 7 fixes (compound literals, form-feed
   whitespace, anonymous members, struct identity cast, fn-ptr range-array length,

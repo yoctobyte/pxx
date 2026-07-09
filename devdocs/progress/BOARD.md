@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (76)
+## backlog (78)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,6 +39,8 @@ _none_
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
+| feature-c-corpus-chess | A | 60 | feature | C corpus: chess engine — perft as a compiler-independent oracle | — |
+| feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -752,6 +754,7 @@ _none_
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
+- [p 60] [A] feature-c-corpus-chess
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [B] feature-dns-resolver-library
 - [p 60] [A] feature-esoteric-frontend-probes
@@ -763,6 +766,7 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [B] feature-demo-chess
