@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `1e8962fd335b` | 2026-07-09T18:17:01Z | RED (full) | 276.3s | `1e8962fd335b` RED |
+| borg | `ccf3af932166` | 2026-07-09T18:19:06Z | GREEN (native) | 97.8s | `1e8962fd335b` RED |
 
 ## Open regressions
 - **test-lua#00** (borg): bad `074e902b62ef`, last good `074e902b62ef`, 0 commit(s) in range
