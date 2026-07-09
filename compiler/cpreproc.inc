@@ -1139,7 +1139,20 @@ begin
           end;
           while (q <= last) and ((depth > 0) or (src[q] <> ')')) do
           begin
-            if src[q] = '(' then Inc(depth)
+            if (src[q] = '"') or (src[q] = '''') then
+            begin
+              { Skip string/char literals so a '(', ')', or ',' inside them does
+                not corrupt argument matching, e.g. duk_push_literal(thr,
+                "Symbol("). Honour backslash escapes. }
+              quote := src[q];
+              Inc(q);
+              while (q <= last) and (src[q] <> quote) do
+              begin
+                if (src[q] = '\') and (q < last) then Inc(q);
+                Inc(q);
+              end;
+            end
+            else if src[q] = '(' then Inc(depth)
             else if src[q] = ')' then Dec(depth)
             else if (src[q] = ',') and (depth = 0) and (argc < 16) then
             begin
@@ -2167,6 +2180,8 @@ begin
     CPAddLiteral('_ILP32', '01');
   end;
   CPAddLiteral('__STDC__', '01');
+  CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
+  CPAddLiteral('__STDC_HOSTED__', '01');
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
   SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }
