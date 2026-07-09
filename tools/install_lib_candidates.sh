@@ -50,6 +50,9 @@ CGLM_COMMIT="46f46e5dcb84bc5bfcc07675f026077272704f0c"   # master, 2026-07 snaps
 ENET_URL="https://github.com/lsalzman/enet"
 ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snapshot
 
+VICE_URL="https://github.com/bluefeversoft/vice"
+VICE_COMMIT="a89f82dcab34b74481d6504312e3d52bbba44320"   # HEAD, 2026-07 snapshot (Vice11)
+
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
 SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
@@ -289,8 +292,23 @@ EOF
   say "enet -> $DEST/enet"
 }
 
+fetch_vice() {
+  if present chess; then say "chess/vice present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$VICE_URL" chess "$VICE_COMMIT"
+  cat > "$DEST/chess/PROVENANCE.md" <<EOF
+# VICE Chess Engine Candidate (perft corpus)
+Upstream: ${VICE_URL}
+Commit: ${VICE_COMMIT}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: see LICENSE in tree (bluefeversoft tutorial engine).
+Source under Vice11/src. Used by \`make test-chess-perft\` — legal-move perft against
+canonical known-answer counts (compiler-independent oracle; no gcc build needed).
+EOF
+  say "chess/vice -> $DEST/chess"
+}
+
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -302,7 +320,8 @@ EOF
     c-testsuite)   fetch_c_testsuite ;;
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson)" ;;
+    chess|vice)    fetch_vice ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson|chess)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

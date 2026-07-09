@@ -35,7 +35,7 @@ PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -3309,6 +3309,34 @@ test-zlib: $(COMPILER)
 	  echo "test-zlib: PASS — byte-identical to gcc oracle"; \
 	else \
 	  echo "test-zlib: FAIL — output differs from gcc oracle"; exit 1; \
+	fi
+
+# Chess perft corpus (feature-c-corpus-chess, corpus step after tcc). Unity-builds
+# crtl + the VICE engine's perft translation units and runs legal-move perft over
+# the canonical positions (startpos + Kiwipete + positions 3-6). The oracle is NOT
+# gcc: the perft counts are compiler-independent known-answer values baked into the
+# runner — a wrong count is a pxx miscompile (movegen / 64-bit bitboard mask /
+# recursion / array-of-struct movelist), never the engine. Default depth 1..4 (a
+# few seconds); PERFT_DEEP=5 for the heavy depth-5 sweep (~40s). Skips if the
+# gitignored tree is absent (tools/install_lib_candidates.sh chess). NOT in
+# `make test` (3rd-party).
+CHESS_SRC ?= library_candidates/chess/Vice11/src
+PERFT_DEEP ?=
+test-chess-perft: $(COMPILER)
+	@if [ ! -f "$(CHESS_SRC)/perft.c" ]; then \
+	  echo "test-chess-perft: SKIP — no chess tree at $(CHESS_SRC) (tools/install_lib_candidates.sh chess)"; \
+	  exit 0; \
+	fi; \
+	deep=""; [ -n "$(PERFT_DEEP)" ] && deep="-DPERFT_DEEP=$(PERFT_DEEP)"; \
+	echo "compiling pxx chess perft runner ..."; \
+	./$(COMPILER) $$deep -Ilib/crtl/include -Ilib/crtl/src -I$(CHESS_SRC) \
+	  test/chess/perft_runner.c /tmp/pxx_chess_perft || exit 1; \
+	/tmp/pxx_chess_perft > /tmp/pxx_chess_perft.txt 2>&1; rc=$$?; \
+	cat /tmp/pxx_chess_perft.txt; \
+	if [ "$$rc" = "42" ]; then \
+	  echo "test-chess-perft: PASS — all canonical perft counts match"; \
+	else \
+	  echo "test-chess-perft: FAIL — perft mismatch (exit $$rc)"; exit 1; \
 	fi
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
