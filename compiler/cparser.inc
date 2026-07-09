@@ -1122,6 +1122,13 @@ var recId, inner, depth, baseTk: Integer; fieldName: AnsiString;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
+  { An ARRAY compound literal decays to a pointer whose pointee is the array's
+    element type — so `(int[]){..}[i]` / `*(char[]){..}` load the right width. }
+  if (ASTKind[node] = AN_COMPOUND_LITERAL) and Syms[ASTIVal[node]].IsArray then
+  begin
+    Result := Ord(Syms[ASTIVal[node]].ElemType);
+    Exit;
+  end;
   { A string literal is a `char[]`, so indexing/dereferencing it yields a char —
     the rvalue load must be a single byte. Defaulting to tyInteger read 4 bytes,
     so `int c = "abc"[0]` came back with the adjacent chars in the high bits
@@ -1317,6 +1324,11 @@ var baseNode, recId: Integer; fieldName: AnsiString;
 begin
   Result := REC_NONE;
   if node < 0 then Exit;
+  if (ASTKind[node] = AN_COMPOUND_LITERAL) and Syms[ASTIVal[node]].IsArray then
+  begin
+    Result := Syms[ASTIVal[node]].ElemRecName;   { array CL of structs: element record }
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray then
@@ -1723,10 +1735,52 @@ begin
   Result := node;
 end;
 
+{ C99 6.5.2.5 ARRAY compound literal `(elem[N]){e0,e1,...}` / unsized `(elem[]){...}`.
+  Materialise an anonymous array temp, store the braced elements into it, and yield
+  an AN_COMPOUND_LITERAL that decays to the temp's base ADDRESS (tyPointer) — the
+  same node the record form uses (IRLowerAST emits the init then IR_LEA temp; on an
+  array sym that LEA is the base pointer, i.e. array-to-pointer decay). declaredLen
+  = -1 for an unsized literal (sized from the element count). CurTok is the opening
+  brace. Only scalar/pointer element types are handled here. }
+function CParseCompoundLiteralArr(elemTk, declaredLen: Integer): Integer;
+var tmpSym, n, i, len, idn, idxLit, inode, asn, seq, tail, node: Integer;
+    elems: array[0..255] of Integer;
+begin
+  n := 0;
+  Next;   { consume the opening brace }
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if n > 255 then Error('too many array compound-literal elements');
+    elems[n] := ParseCExpr; Inc(n);
+    if not Eat(tkComma) then Break;
+  end;
+  Eat(tkEnd);
+  if declaredLen >= 0 then len := declaredLen else len := n;
+  if len < 1 then len := 1;
+  tmpSym := AllocArray('', IntToTypeKind(elemTk), 0, len - 1);
+  seq := CMakeZeroLocal(tmpSym, IntToTypeKind(elemTk));   { C99 6.7.8p21 tail zero }
+  tail := seq;
+  for i := 0 to n - 1 do
+  begin
+    if i >= len then Break;
+    idn := AllocNode(AN_IDENT); ASTIVal[idn] := tmpSym; ASTTk[idn] := elemTk;
+    idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := i; ASTTk[idxLit] := Ord(tyInteger);
+    inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit; ASTTk[inode] := elemTk;
+    asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := elems[i]; ASTTk[asn] := elemTk;
+    node := AllocNode(AN_SEQ); ASTLeft[node] := asn; ASTRight[node] := -1;
+    ASTRight[tail] := node; tail := node;
+  end;
+  node := AllocNode(AN_COMPOUND_LITERAL);
+  ASTIVal[node] := tmpSym;
+  ASTLeft[node] := seq;
+  ASTTk[node] := Ord(tyPointer);   { array decays to a pointer to its first element }
+  Result := node;
+end;
+
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
-    argSeq, castProcSig, clRecId: Integer;
+    argSeq, castProcSig, clRecId, arrCastLen: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -1748,9 +1802,26 @@ begin
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
+    { Abstract array declarator in a cast: `(elem[N])` / `(elem[])` — ParseCDeclType
+      stops at the '[', so consume the dimension here. Marks a possible ARRAY
+      compound literal (arrCastLen >= -1); non-array casts leave it -99. }
+    arrCastLen := -99;
+    if (castDepth = 0) and (CurTok.Kind = tkLBrack) then
+    begin
+      Next;
+      if CurTok.Kind = tkRBrack then arrCastLen := -1   { unsized `[]`, sized from the init }
+      else arrCastLen := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+    end;
     Expect(tkRParen, ')');
     { C99 6.5.2.5 compound literal: a brace after the cast type is NOT a cast of
       a braced expr — materialise the anonymous object and yield it. }
+    if (CurTok.Kind = tkBegin) and (arrCastLen <> -99) then
+    begin
+      { array compound literal `(elem[]){...}` -> decays to a pointer; chain postfix. }
+      Result := ParseCPostfixTail(CParseCompoundLiteralArr(Ord(castTk), arrCastLen));
+      Exit;
+    end;
     if (CurTok.Kind = tkBegin) and (castTk = tyRecord) and (castDepth = 0)
        and (clRecId >= REC_UCLASS_BASE) then
     begin

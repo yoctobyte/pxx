@@ -1033,6 +1033,8 @@ test-core: $(COMPILER)
 	/tmp/cflex_array_member_sizeof_b22426; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cglobal_compound_literal_init_b225.c /tmp/cglobal_compound_literal_init_b22526
 	/tmp/cglobal_compound_literal_init_b22526; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/carray_compound_literal_b226.c /tmp/carray_compound_literal_b22626
+	/tmp/carray_compound_literal_b22626; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

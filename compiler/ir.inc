@@ -733,6 +733,19 @@ begin
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
     end;
+    { Array compound literal indexing `(int[]){..}[i]`: the CL decays to a pointer
+      whose VALUE is the temp's base address (IRLowerAST emits the init + IR_LEA);
+      stride is the element size. Mirrors the AN_IDENT pointer path. }
+    if (ASTKind[baseNode] = AN_COMPOUND_LITERAL) and Syms[ASTIVal[baseNode]].IsArray then
+    begin
+      indexNode := IRLowerAST(ASTRight[node]);
+      tk := Syms[ASTIVal[baseNode]].ElemType;
+      if tk = tyRecord then elemSize := RecSize(Syms[ASTIVal[baseNode]].ElemRecName)
+      else elemSize := TypeSize(tk);
+      baseAddr := IRLowerAST(baseNode);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
+      Exit;
+    end;
     { Pointer-typed class field indexing FField[i]: base is the field's VALUE
       (the pointer), stride is the pointed-at element size. Mirrors the AN_IDENT
       pointer path above for an AN_FIELD base. }
