@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `c53553f21214` | 2026-07-09T06:03:47Z | RED (full) | 213.2s | `c53553f21214` RED |
+| borg | `bfc0a6b16fb2` | 2026-07-09T06:25:40Z | GREEN (native) | 93.8s | `c53553f21214` RED |
 
 ## Open regressions
 - **test-emit-obj#02** (borg): bad `c53553f21214`, last good `c53553f21214`, 0 commit(s) in range
