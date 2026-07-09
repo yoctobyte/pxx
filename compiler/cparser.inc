@@ -1759,6 +1759,13 @@ begin
       Exit;
     end;
     operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
+    { A struct-to-struct cast `(struct S)x` (record target, depth 0) is an IDENTITY:
+      the operand already IS the aggregate value. Retagging it as an AN_PTR_CAST
+      (records are carried BY ADDRESS in this IR) yielded a value where an address
+      was expected — a by-value/assign copy then read garbage and SEGV'd. Yield the
+      operand unchanged (composes with the whole-record-value init path). }
+    if (castDepth = 0) and (castTk = tyRecord) then
+    begin Result := operand; Exit; end;
     { `(void)expr` evaluates expr for its side effects and discards the value.
       Return the operand unwrapped so a void-cast call statement (e.g. the lua
       API macro `lua_pushglobaltable` = `((void)lua_rawgeti(...))`) keeps its
