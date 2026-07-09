@@ -5052,7 +5052,20 @@ begin
     if CTypeFnPtrName <> '' then
       name := CTypeFnPtrName
     else
-    begin name := CurTok.SVal; Next; end;
+    begin
+      name := CurTok.SVal; Next;
+      { fn-pointer TYPEDEF array `fptr t[N]` / `fptr t[]`: the `[N]` follows the
+        NAME (an ordinary array declarator), not the fn-ptr declarator, so
+        ParseCDeclType left CTypeFnPtrArrLen unset. Consume it here so wasArr is
+        true and the brace init materialises per-element proc addresses. }
+      if CurTok.Kind = tkLBrack then
+      begin
+        Next;
+        if CurTok.Kind = tkRBrack then CTypeFnPtrArrLen := -1   { unbounded `[]` }
+        else CTypeFnPtrArrLen := CEvalConstExpr;
+        Expect(tkRBrack, ']');
+      end;
+    end;
     procIdx := CTypeProcSig;             { the fn-ptr call signature }
     wasArr := (CTypeFnPtrArrLen >= -1);
     nArrElems := 0;
@@ -5062,6 +5075,7 @@ begin
       while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
       begin
         if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        if CurTok.Kind = tkAmp then Next;   { `&func` == `func` for a fn pointer }
         if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
         begin
           arrKind[nArrElems] := 3;       { proc address }

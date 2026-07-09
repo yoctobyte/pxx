@@ -90,12 +90,17 @@ critical. Precise map (minimal repros each confirmed):
    (`ParseCGlobalVarDecl` ~5352) gated by `CBraceFlatIntInitCountAt`, which rejects
    `[lo...hi]` (only `[int]`). `int g[4]={[0...2]=7}` silently zero-fills. TODO:
    accept the range in the flat-int scanner + the emit loop.
-3. **Global FUNCTION-POINTER arrays** `const fptr t[3]={a,b}` — don't parse at all
-   ("stray token"): the global pointer-array scanner marks proc names arrKind=3 but
-   the emit loop (~5287) has no arrKind=3 case (falls to NULL/int), AND typedef'd
-   fn-ptr arrays (`fptr t[N]`) may not reach that scanner. TODO: emit arrKind=3 as
-   a proc-address PendingInit (FOff=-4 style) + range support here for the
-   `[0...2]=&sys_ni` reloc table.
+3. **Global FUNCTION-POINTER arrays** — **typedef arrays DONE 2026-07-09**:
+   `fptr t[N] = {a,b}` / unsized `fp t[] = {&sq,&dbl}` now work. The fn-ptr global
+   path only recognised INLINE declarators `(*t[N])()`; a typedef array left the
+   trailing `[N]` after the name unconsumed (desync). Now that `[N]` is parsed
+   (wasArr set) and `&func` element prefixes accepted; the branch already emits
+   arrKind=3 proc-address PendingInits (Kind=2 → AN_PROCADDR). gcc-verified,
+   test/cfnptr_typedef_array_b214.c → exit 42, 219/0/1.
+   **STILL TODO for 00216's `table[3]`**: `[k]=` designators + `[lo ... hi]` range
+   in THIS array scanner (5062+) with per-element target-index tracking — mirror
+   the local-array arrElemIdx[] work. 00216's reloc table is
+   `{[0 ... 2]=&sys_ni, [0]=sys_one, [1]=sys_two, [2]=sys_three}`.
 4. **Nested designators `.a.j = v`** — **DONE 2026-07-09**: after `.name`
    positions to a field, a continuation `.sub`/`[i]` now descends the full chain
    via `CInitDesignatedDescend` (pushes path frames, inits the designated leaf or

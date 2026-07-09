@@ -181,3 +181,4 @@
 2026-07-09T09:37:54Z  v181  3981fa15518ba7c8ebc16c6b98ad4885894d90b35a5d7df68eef0566a6434118  cf8c6b50eef68fffeb025b25ffe3ac84a58b63ed  docs(c-corpus): step 1 at 219/220 — 00204+00219 done, only 00216 (file-scope compound literals) left
 2026-07-09T09:57:39Z  v182  b2350dec86d910e588076f1fc9c335b83a8aae224c2a21dbfcc1bc80a18eadc7  991c41f9d82a9a4b8fe578629ca1eab763098172  docs(c-compound-literals): block-scope parser-comma attempt fails at IR lowering — needs AN_COMPOUND_LITERAL node
 2026-07-09T10:12:25Z  v183  a45ff72872e56e0dc64b611fe201e8327b584bf50f55c8e1f75f42d8e8eea395  fcc738b44530629b38b3d977e86f64d29829a764  feat(cfront): global scalar-array range designators [lo ... hi] =
+2026-07-09T10:29:57Z  v184  f5f8e8419fc95c7a9b02abcee786ac0474adc515d6f44d0c4c71745ebf0e58a5  164efbb3169e306066698c9d28d6127774ac33ac  feat(cfront): C99 nested / sub-level designators .a.j = v
