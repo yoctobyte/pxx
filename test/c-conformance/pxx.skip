@@ -5,4 +5,3 @@
 # tickets: bug-c-ptrdiff-of-addr-elem, bug-c-string-literal-binop-decay,
 # feature-c-crtl-bind-hand-declared-prototypes).
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
-00216.c	empty structs + compound-literal initializers — feature-c-compound-literals
