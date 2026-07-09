@@ -1023,6 +1023,8 @@ test-core: $(COMPILER)
 	/tmp/ccompound_literal_global_array_b21926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cformfeed_whitespace_b220.c /tmp/cformfeed_whitespace_b22026
 	/tmp/cformfeed_whitespace_b22026; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/canon_member_designated_init_b221.c /tmp/canon_member_designated_init_b22126
+	/tmp/canon_member_designated_init_b22126; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

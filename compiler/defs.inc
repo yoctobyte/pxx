@@ -1814,6 +1814,7 @@ var
   UFldOff_   : array[0..MAX_UFIELD-1] of Integer;
   UFldTk     : array[0..MAX_UFIELD-1] of Integer;
   UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
+  UFldAnonRec : array[0..MAX_UFIELD-1] of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
   UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
   UFldProcSig : array[0..MAX_UFIELD-1] of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }

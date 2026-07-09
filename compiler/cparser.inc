@@ -4881,6 +4881,35 @@ begin
       else Break;
     end;
     fi := base + fldI;
+    { Promoted anonymous member + a nested inner brace (C11 6.7.2.1): the brace
+      initialises the whole anon member, not its first flattened field. Descend the
+      source sub-record — its field names resolve against the parent's promoted
+      fields, so the target offsets are correct — then advance past the whole group
+      (and any overlapping union siblings). Only fires at the FIRST field of a group. }
+    if (UFldAnonRec[fi] >= REC_UCLASS_BASE) and (CurTok.Kind = tkBegin) and
+       ((fldI = 0) or (UFldAnonRec[base + fldI - 1] <> UFldAnonRec[fi])) then
+    begin
+      di := UFldAnonRec[fi];
+      Next;   { consume the inner opening brace }
+      CInitWalkRecord(di - REC_UCLASS_BASE, True, emit);
+      Eat(tkEnd);
+      fEnd := UFldOff_[fi] + CInitFieldSize(fi);
+      while (fldI < n) and (UFldAnonRec[base + fldI] = di) do
+      begin
+        if UFldOff_[base + fldI] + CInitFieldSize(base + fldI) > fEnd then
+          fEnd := UFldOff_[base + fldI] + CInitFieldSize(base + fldI);
+        Inc(fldI);
+      end;
+      while (fldI < n) and (UFldOff_[base + fldI] < fEnd) and
+            (UFldBitWidth[base + fldI] = 0) do Inc(fldI);
+      if CurTok.Kind = tkComma then
+      begin
+        if (not braced) and (fldI >= n) then Break;
+        Next;
+      end
+      else Break;
+      Continue;
+    end;
     CInitWalkMember(fi, emit);
     { positional advance: skip union / promoted-anonymous-union siblings that
       overlap the bytes just consumed; bitfields advance one by one. }
@@ -8149,6 +8178,7 @@ var
   bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
   bfIsArr: array[0..MAX_BF-1] of Boolean;
   bfBitWidth, bfBitShift, bfBitBytes: array[0..MAX_BF-1] of Integer;
+  bfAnonRec: array[0..MAX_BF-1] of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
   bfNDims: array[0..MAX_BF-1] of Integer;
   bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
@@ -8169,6 +8199,7 @@ begin
   curOff := 0;
   maxAlign := 1;
   bfCount := 0;
+  for k := 0 to MAX_BF - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
@@ -8237,6 +8268,7 @@ begin
                 bfBitShift[bfCount] := UFldBitShift[UClsFBase[subci] + k];
                 bfBitBytes[bfCount] := UFldBitBytes[UClsFBase[subci] + k];
                 bfNDims[bfCount]   := 0;
+                bfAnonRec[bfCount] := REC_UCLASS_BASE + subci;   { flattened from this anon member }
                 Inc(bfCount);
               end;
             if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
@@ -8574,6 +8606,7 @@ begin
     LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
     LastTypePointerElemRec := bfElemRec[k];
     AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
+    UFldAnonRec[UFldCount-1] := bfAnonRec[k];
     UFldIsArray[UFldCount-1] := bfIsArr[k];
     UFldArrLen[UFldCount-1] := bfArrLen[k];
     UFldBitWidth[UFldCount-1] := bfBitWidth[k];

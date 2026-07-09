@@ -551,6 +551,7 @@ begin
       UFldNOff[dst+k] := UFldNOff[src];  UFldNLen[dst+k] := UFldNLen[src];
       UFldOff_[dst+k] := UFldOff_[src];  UFldTk[dst+k] := UFldTk[src];
       UFldRec_[dst+k] := UFldRec_[src];  UFldProcSig[dst+k] := UFldProcSig[src];
+      UFldAnonRec[dst+k] := UFldAnonRec[src];
       UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
@@ -575,6 +576,7 @@ begin
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;
+  UFldAnonRec[fi] := REC_NONE;   { anon-promotion marker; C struct parser overrides for flattened anon members }
   { Procedural-type field: remember the signature so `rec.field(args)` can lower
     to an indirect call (LastTypeProcSig set by ParseTypeKind for the field type;
     a plain proc field is tyPointer, a method-pointer field tyRecord). }
