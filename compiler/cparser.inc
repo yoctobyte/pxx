@@ -4587,6 +4587,47 @@ begin
   end;
 end;
 
+{ Non-consuming: the type-kind ordinal of the next initializer element, obtained
+  by speculatively parsing one C expression and rewinding the token cursor (as
+  CIsCastAhead does). Leaks the throwaway AST nodes / any temp a peeked compound
+  literal allocates — both harmless. Used to tell a WHOLE-RECORD VALUE initializer
+  (struct lvalue `ls`, `*ptr`, `->field`, a `(struct S)` cast, a compound literal)
+  apart from brace-elision scalar fill of a subaggregate's leaves. }
+function CInitPeekElemTk: Integer;
+var savedPos, e, d, savedSym, savedDepth: Integer;
+    savK, savV, savT: array[0..MAX_CINIT_PATH - 1] of Integer;
+begin
+  savedPos := TokPos - 1;
+  { The speculative parse may run a nested aggregate init (a compound literal),
+    which resets CInitPathDepth to 0 and reuses the shared CInitPath* arrays from
+    index 0 — clobbering the frames the OUTER walker has pushed (e.g. the record
+    member frame set just before this peek). Snapshot and restore them. }
+  savedDepth := CInitPathDepth; savedSym := CAggCurSym;
+  for d := 0 to savedDepth - 1 do
+  begin
+    savK[d] := CInitPathKind[d]; savV[d] := CInitPathVal[d]; savT[d] := CInitPathTk[d];
+  end;
+  e := ParseCExpr;
+  Result := ASTTk[e];
+  TokPos := savedPos; Next;
+  CInitPathDepth := savedDepth; CAggCurSym := savedSym;
+  for d := 0 to savedDepth - 1 do
+  begin
+    CInitPathKind[d] := savK[d]; CInitPathVal[d] := savV[d]; CInitPathTk[d] := savT[d];
+  end;
+end;
+
+{ True when the next initializer element for a record-typed member/element is a
+  single whole-record VALUE (to be copied wholesale) rather than a brace list or
+  a scalar to brace-elide into the subaggregate. }
+function CInitElemIsWholeRecord(recId: Integer): Boolean;
+begin
+  Result := (recId >= REC_UCLASS_BASE) and
+            (CurTok.Kind <> tkBegin) and (CurTok.Kind <> tkEnd) and
+            (CurTok.Kind <> tkComma) and
+            (IntToTypeKind(CInitPeekElemTk) = tyRecord);
+end;
+
 { Emit a completed leaf assignment: either compile it now (global path, at
   main) or append it to the local declaration's AST chain. In chain mode the
   AST nodes must persist, so ASTNodeCount is NOT reset. }
@@ -4733,6 +4774,10 @@ begin
       CInitWalkRecord(ci2, True, emit);
       Eat(tkEnd);
     end
+    else if CInitElemIsWholeRecord(UFldRec_[fi]) then
+      { whole-record value (compound literal, struct lvalue, *ptr, ->field,
+        cast): copy the whole struct, do NOT descend into its subfields. }
+      CInitLeaf(UFldTk[fi], emit)
     else
       CInitWalkRecord(ci2, False, emit);
     Dec(CInitPathDepth);
@@ -4946,6 +4991,8 @@ begin
         CInitWalkRecord(elemRec - REC_UCLASS_BASE, True, emit);
         Eat(tkEnd);
       end
+      else if CInitElemIsWholeRecord(elemRec) then
+        CInitLeaf(elemTkOrd, emit)   { whole-record array element: copy wholesale }
       else
         CInitWalkRecord(elemRec - REC_UCLASS_BASE, False, emit);
       Dec(CInitPathDepth);
@@ -5037,11 +5084,14 @@ end;
 function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
                              nDims, dim0, elemsBelow: Integer;
                              isArr: Boolean): Integer;
-var savedMode, savedHead, savedTail, savedDepth, cons: Integer;
+var savedMode, savedHead, savedTail, savedDepth, savedSym, cons: Integer;
 begin
   savedMode := Ord(CInitChainMode);
   savedHead := CInitChainHead; savedTail := CInitChainTail;
   savedDepth := CInitPathDepth;
+  savedSym := CAggCurSym;   { restore so a NESTED aggregate init (e.g. a compound
+                              literal as a whole-record value) does not leave the
+                              outer walker's CInitBuildTarget pointing at our temp }
   CInitChainMode := True;
   CInitChainHead := -1; CInitChainTail := -1;
   CAggCurSym := symIdx;
@@ -5058,6 +5108,7 @@ begin
   CInitChainMode := savedMode <> 0;
   CInitChainHead := savedHead; CInitChainTail := savedTail;
   CInitPathDepth := savedDepth;
+  CAggCurSym := savedSym;
 end;
 
 { A top-level global variable definition: <type> name (, name)* ;
