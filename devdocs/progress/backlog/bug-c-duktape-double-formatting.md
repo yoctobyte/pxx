@@ -55,3 +55,16 @@ Isolated reproductions of the suspected access all pass — the trigger needs du
 context (as with the pointer bug). Instrument in-place rather than trying to minimize.
 
 [[feature-c-corpus-duktape]]
+
+## Update — localized to numconv but not yet found (2026-07-09)
+Instrumented `duk__numconv_stringify_raw`: under pxx it receives an ALREADY-WRONG value —
+input `"0.5"` arrives as `x = 47683715820312.5` (= 0.5 * 5^20); `"3.0"` as `3 * 5^19`. So
+the corruption is in the SHARED numconv machinery (parse over-scales by ~5^k, stringify
+under-scales) — the dragon4 big-integer decimal conversion (`duk__bi_*`, `duk__dragon4_*`),
+NOT downstream formatting and NOT the tval double load. Ruled out in isolation (match gcc):
+the core `duk__bi_mul` primitive `(u64)a*(u64)b + acc; tmp>>32` and `1e9*1e9` u32*u32->u64.
+So it is a higher-level dragon4 exponent/scale miscompile, context-dependent like the pointer
+bug — needs in-place instrumentation of `duk__dragon4_prepare`/`_scale` (the power-of-2 vs
+power-of-5 scaling; the 5^k factor means the ×5 path runs but the compensating ×2/shift or
+the decimal-exponent `k` is dropped). Next session: bisect the dragon4 stages with prints,
+gcc vs pxx, to the first divergent bigint op.
