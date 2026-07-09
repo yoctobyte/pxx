@@ -46,3 +46,16 @@ cross-line file deps: compile in one line, link in another), or make the ld-link
 jobs depend on the compile job AND share its scratch (declare a dep like the
 prologue path already does, or emit each `.o` inside the job that links it). Not
 fixed here — testmgr.py is Track T's lane. Reassign to Track T.
+
+## Resolution 2026-07-09 (trackt-agent, Track T)
+Fixed in testmgr `split_jobs`: after the compile-after-check split, groups that
+reference the same `/tmp` scratch file are union-find-merged back into one job —
+a recipe that compiles an artifact in one line and consumes it later (the
+emit-obj `.o` compile → ld-link pattern) can no longer land producer and
+consumer in different jobs. This also covers the standalone `--job` repro case
+(fresh scratch dir per run) and two latent same-class races in test-core
+(`/tmp/test_big_static_array_open_param26`, `/tmp/test_exception_unhandled.out`).
+
+Verified: emit-obj collapses to one job, standalone run green; full-tier scan
+shows zero remaining cross-job tmp shares; `tools/testmgr.py --tier full` GREEN
+(1074/1074 pass, 9 corpus skips). Job-count delta: test-core 684→680.

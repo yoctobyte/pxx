@@ -264,6 +264,35 @@ def split_jobs(target, lines):
             cur_has_check = True
     if cur:
         groups.append(cur)
+    # Merge groups that touch the same /tmp scratch file.  A recipe may
+    # compile an artifact in one line and consume it many lines later
+    # (test-emit-obj builds test_emit_obj_rv.o, then links it after the
+    # xtensa block) — the split above puts producer and consumer in
+    # DIFFERENT jobs, which have no ordering between them, and a
+    # standalone `--job` repro runs the consumer with a fresh scratch dir
+    # where the artifact never existed.  Shared scratch file = cross-job
+    # dependency = must stay one job.
+    tmp_re = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
+    parent = list(range(len(groups)))
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    owner = {}
+    for i, g in enumerate(groups):
+        for f in set(tmp_re.findall("\n".join(g))):
+            if f in owner:
+                a, b = find(owner[f]), find(i)
+                if a != b:
+                    parent[max(a, b)] = min(a, b)
+            else:
+                owner[f] = i
+    if any(find(i) != i for i in range(len(groups))):
+        buckets = {}
+        for i, g in enumerate(groups):
+            buckets.setdefault(find(i), []).extend(g)
+        groups = [buckets[k] for k in sorted(buckets)]
     jobs = []
     for i, g in enumerate(groups):
         jobs.append(Job(target, i, g))
