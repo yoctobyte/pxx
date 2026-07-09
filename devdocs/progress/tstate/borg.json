@@ -1,21 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-07T19:03:22Z",
-   "fixed": [],
-   "new_red": [
-    "test-cjson#00",
-    "test-lua#00",
-    "test-sqlite-threads-aarch64#00",
-    "test-sqlite-threads-arm32#00",
-    "test-sqlite-threads-i386#00",
-    "test-sqlite-threads-x86_64#00",
-    "test-zlib#00"
-   ],
-   "sha": "adb6c0880d7c946f1451772fc9bbc21842675fb9",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-07T19:17:12Z",
    "fixed": [
     "test-core#261",
@@ -443,6 +428,14 @@
    "new_red": [],
    "sha": "abaadc1cd4e1d7aa5c0823d541e1b1fe86bff1d5",
    "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-09T06:51:26Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "abaadc1cd4e1d7aa5c0823d541e1b1fe86bff1d5",
+   "tier": "full",
    "verdict": "GREEN"
   }
  ],
@@ -1334,8 +1327,6 @@
   "test-core#678": "pass",
   "test-core#679": "pass",
   "test-core#68": "pass",
-  "test-core#680": "pass",
-  "test-core#681": "pass",
   "test-core#69": "pass",
   "test-core#70": "pass",
   "test-core#71": "pass",
@@ -1369,8 +1360,6 @@
   "test-core#99": "pass",
   "test-debug-g#00": "pass",
   "test-emit-obj#00": "pass",
-  "test-emit-obj#01": "pass",
-  "test-emit-obj#02": "pass",
   "test-float-determinism#00": "pass",
   "test-i386#00": "pass",
   "test-i386#01": "pass",
@@ -1537,18 +1526,18 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-09T06:47:44Z",
+  "date": "2026-07-09T06:51:26Z",
   "sha": "abaadc1cd4e1d7aa5c0823d541e1b1fe86bff1d5",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 93.0
- },
- "last_full": {
-  "date": "2026-07-09T06:29:48Z",
-  "sha": "bfc0a6b16fb237fad4f4808b5d69729c46eedf77",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 226.5
+  "wall": 214.1
+ },
+ "last_full": {
+  "date": "2026-07-09T06:51:26Z",
+  "sha": "abaadc1cd4e1d7aa5c0823d541e1b1fe86bff1d5",
+  "tier": "full",
+  "verdict": "GREEN",
+  "wall": 214.1
  },
  "open_regressions": []
 }
