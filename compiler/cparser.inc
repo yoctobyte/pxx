@@ -329,6 +329,7 @@ end;
 
 function ParseCUnary: Integer; forward;
 function ParseCPostfix: Integer; forward;
+function ParseCPostfixTail(node: Integer): Integer; forward;
 
 { Build the shared-IR AN_INCDEC value node (master shape): Left = the lvalue
   (address computed once at lowering), ASTIVal = +1/-1 (the lowering scales by
@@ -1753,7 +1754,8 @@ begin
     if (CurTok.Kind = tkBegin) and (castTk = tyRecord) and (castDepth = 0)
        and (clRecId >= REC_UCLASS_BASE) then
     begin
-      Result := CParseCompoundLiteralRec(clRecId);
+      { route through the postfix tail so `(T){...}.f` / `[i]` / `->` chain on. }
+      Result := ParseCPostfixTail(CParseCompoundLiteralRec(clRecId));
       Exit;
     end;
     operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
@@ -1966,13 +1968,20 @@ end;
 { Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
   postfix (`[] . -> ()`) arrive with the lvalue increment. }
 function ParseCPostfix: Integer;
-var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
+begin
+  { primary, then its postfix tail (`[] . -> () ++ --`). Split out so a
+    compound literal (built in ParseCUnary's cast branch, not via ParseCPrimary)
+    can also flow through the tail, e.g. `(struct P){7,9}.y`. }
+  Result := ParseCPostfixTail(ParseCPrimary);
+end;
+
+function ParseCPostfixTail(node: Integer): Integer;
+var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
     ndimsF, flatNode, spanD, ndi, nIdx: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
-  node := ParseCPrimary;
   done := False;
   while not done do
   begin
