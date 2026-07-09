@@ -167,7 +167,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (549)
+## done (550)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -710,6 +710,7 @@ _none_
 | regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
 | regression-test-core-602 | T | 70 | regression | regression: test-core#602 red at 4dfde8f92cb4 (auto-filed by twatch) | — |
 | regression-test-core-603 | T | 70 | regression | regression: test-core#603 red at 3615126067aa (auto-filed by twatch) | — |
+| regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |

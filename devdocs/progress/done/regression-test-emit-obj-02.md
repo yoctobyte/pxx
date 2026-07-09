@@ -59,3 +59,4 @@ consumer in different jobs. This also covers the standalone `--job` repro case
 Verified: emit-obj collapses to one job, standalone run green; full-tier scan
 shows zero remaining cross-job tmp shares; `tools/testmgr.py --tier full` GREEN
 (1074/1074 pass, 9 corpus skips). Job-count delta: test-core 684→680.
+- 2026-07-09 — resolved, commit ee0881c2.
