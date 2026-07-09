@@ -68,3 +68,15 @@ bug — needs in-place instrumentation of `duk__dragon4_prepare`/`_scale` (the p
 power-of-5 scaling; the 5^k factor means the ×5 path runs but the compensating ×2/shift or
 the decimal-exponent `k` is dropped). Next session: bisect the dragon4 stages with prints,
 gcc vs pxx, to the first divergent bigint op.
+
+### Further localization: it's the PARSE, not stringify
+Instrumented `duk__numconv_stringify_raw`: it receives an already-wrong `x` — so the JS
+number LITERAL parse (`duk__numconv_parse_raw`, radix 10) produces the wrong double and it's
+stored correctly (tval load/store verified). The parse accumulates the mantissa into a bigint
+`f` (`f = f*radix + dig`, duktape.c ~90418) and tracks `expt`/`expt_adj`; net exponent =
+`expt + expt_adj`; final value = `f * 10^net`. Next session: instrument `expt`, `expt_adj`,
+and the final pushed number in `duk__numconv_parse_raw`, plus the bigint `f` after
+accumulation (`DUK__BI_PRINT`), gcc vs pxx — the divergence is either the exponent counter
+(a small-int off) or the bigint→double final scaling. The ~5^k (not 10^k) factor is the key
+clue: the ×5 half of the ×10 scaling is applied without the compensating ×2 / decimal-point
+shift.
