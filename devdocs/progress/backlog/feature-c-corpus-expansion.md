@@ -151,3 +151,23 @@ Plus non-conformance: multidim-float global brace init, UClass field-window fix.
   / bug-c-init-designated-and-nested)
 - **00219** C11 `_Generic` — needs a richer C type model (const-qual, pointer-const,
   integer-width distinctions). Largest, lowest prio. (feature-c-generic-selection)
+
+## Step 1 essentially COMPLETE — 219/220, only 00216 left — 2026-07-09 (A+B+C agent)
+Conformance is now **219 pass / 0 fail / 1 skip** (v180). Cleared this session,
+each self-host byte-identical + gcc-verified + regression test wired into
+test-core:
+- **00204** variadic struct passing + `va_arg(struct)` (v178) — the gap was ONLY
+  the varargs path; structs travel as one by-pointer GP slot, `va_arg(struct)` just
+  needed a double-deref. tstate confirmed the FULL matrix GREEN.
+- **00219** C11 `_Generic` (v179) — the "richer type model" fear was overstated:
+  most distinctions already live in TTypeKind; only long-vs-long-long + pointee-const
+  needed adding, via an on-demand `cgXxx` descriptor built inside _Generic (no
+  per-symbol type-table growth). Plus an l/L literal-suffix the lexer had been eating.
+- **partial 00216**: GNU range designators `[lo ... hi]` landed in the aggregate
+  walker (v180).
+
+**Only 00216 remains** — and it needs FILE-SCOPE compound literals in array
+initializers (`struct Wrap g[] = {((struct Wrap){f}), f}` desyncs the top-level
+parser before any other 00216 feature is even reached). That is the large,
+self-host-fragile keystone; full 5-path map in feature-c-compound-literals.
+Step 1 is done bar this one deferred feature. Steps 2 (zlib) / 3 (tcc) unchanged.
