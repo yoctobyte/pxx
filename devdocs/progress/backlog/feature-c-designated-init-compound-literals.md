@@ -79,3 +79,5 @@ this ticket is specifically the three designator/compound-literal forms above.
   distinct path (array-type cast `(int[])` isn't recognised by ParseCDeclType/
   CIsCastAhead; needs an array temp, not a record temp). No conformance test
   isolates it; 00216 does not use it. Record-CL acceptance met; array-CL open.
+
+- 2026-07-09 (A+B+C) — record-CL acceptance MET (00216 220/220, [[feature-c-compound-literals]] resolved). ARRAY compound literals `(int[]){1,2,3}` remain the only open item on this ticket.

@@ -17,6 +17,11 @@ prio: 65  # auto
   bug-c-string-literal-binop-decay, bug-c-ptrdiff-of-addr-elem — the last
   because the draft regressed test-core b133. Next inside step 1: burn down
   the skip list ticket by ticket; then step 2 (zlib).
+- **2026-07-09 — STEP 1 COMPLETE: c-testsuite 220/220 pass, 0 fail, 0 skip.** The
+  last skip (00216) is byte-identical to gcc after 7 fixes (compound literals, form-feed
+  whitespace, anonymous members, struct identity cast, fn-ptr range-array length,
+  flexible-array-member sizeof, file-scope struct CL init) — see
+  [[feature-c-compound-literals]]. pxx.skip is empty. Next: step 2 (zlib).
 - **2026-07-09 — conformance at 219/220 pass, 1 skip (only 00216).** Compound
   literals landed (RECORD form: base + postfix + nested/whole-value + file-scope
   global array; [[feature-c-compound-literals]]), clearing 00216's compound-literal

@@ -26,11 +26,10 @@ _none_
 
 _none_
 
-## backlog (79)
+## backlog (77)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-anonymous-member-designated-init | C | 40 | bug | C anonymous struct/union member braced-designated init (`-fms-extensions`) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -40,7 +39,6 @@ _none_
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-c-designated-init-compound-literals | C | 45 | feature | C99 designated initializers + compound literals unsupported | — |
@@ -165,7 +163,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (554)
+## done (556)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -191,6 +189,7 @@ _none_
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | C | 50 | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-addr-of-unsupported-ir | A | 50 | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-anon-struct-nested-enum-global | C | 30 | bug | C: anonymous struct global var with a NESTED anonymous enum member drops the declarator | — |
+| bug-c-anonymous-member-designated-init | C | 40 | bug | C anonymous struct/union member braced-designated init (`-fms-extensions`) | — |
 | bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
@@ -475,6 +474,7 @@ _none_
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
+| feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-tcc | C | 50 | feature | C corpus: bring up tcc (TinyCC) as a real-world multi-file C target | — |
 | feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-gzgetc-fnlike-macro-call |
 | feature-c-cross-lua-sqlite | C | 50 | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |
@@ -765,7 +765,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
-- [p 53] [C] feature-c-compound-literals
 - [p 53] [B] feature-demo-chess
 - [p 53] [B] feature-esp-peripheral-callback-api
 - [p 53] [B] feature-gui-real-window-xvfb-smoke
@@ -813,7 +812,6 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
-- [p 40] [C] bug-c-anonymous-member-designated-init
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section

@@ -50,3 +50,14 @@ Fix needs a grouping marker (e.g. a parallel `UFldAnonRec`/`UFldAnonSpan` on the
 promoted fields) — a SHARED UField-table change (Track A, self-host-critical; land
 additive + byte-identical). Then the walker, on an inner `{` at the first field of a
 promoted anon group, descends that group as one member honoring its own designators.
+
+## RESOLVED 2026-07-09
+Implemented via a UFldAnonRec[] group marker (defs.inc): each field promoted from an
+anonymous member carries its source sub-record id (set in ParseCStructInto's bf*
+buffer -> emission, defaulted REC_NONE, carried through AddUField relocation). The
+init walker CInitWalkRecord, at the first field of an anon group with an inner brace,
+descends the sub-record (field names resolve against the parent's promoted fields, so
+offsets are correct) and advances past the whole group + overlapping union siblings.
+Positional {{6,5}}, designated {{.b,.a}}, union-level {.b,.a}, local + global all
+gcc-verified (b221). Was the last 00216 blocker; 00216 now 220/220. See
+[[feature-c-compound-literals]].

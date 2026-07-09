@@ -74,7 +74,32 @@ from pxx.skip.
   cast-branch hook, ~1447) — still unimplemented; needed for tcc/zlib-style code,
   no conformance test isolates it yet.
 
-## 2026-07-09 (A+B+C agent) — COMPOUND LITERALS COMPLETE; 00216 blocked by TWO pre-existing NON-CL bugs
+## 2026-07-09 (A+B+C agent) — RESOLVED: c-testsuite 00216 GREEN, conformance 220/220/0
+
+00216 is byte-identical to the gcc oracle; dropped from pxx.skip; `make
+test-c-conformance = 220 pass / 0 fail / 0 skip`. The task's premise ("only inline
+compound literals block 00216") was wrong — reaching 00216 green took SEVEN fixes,
+each gcc-verified + self-host byte-identical + a test-core regression (b216-b225):
+1. Record compound literals `(T){...}` — base node AN_COMPOUND_LITERAL=81 + gaps
+   A (postfix), B (whole-record-value elements + CInitPeekElemTk/CAggCurSym/CInitPath
+   save-restore), C (file-scope CL in global array). (b216-b219)
+2. C lexer form-feed/vtab whitespace (#12/#11) — the "cumulative desync" ghost. (b220)
+3. Anonymous struct/union member braced-designated init — UFldAnonRec group marker,
+   walker re-groups a promoted anon member for an inner brace. (b221)
+4. Redundant struct-to-struct cast `(struct S)x` = identity, not AN_PTR_CAST retag
+   (retag of an address-carried record SEGV'd on copy). (b222)
+5. Range designator `[lo...hi]` must not inflate a fn-ptr array's length (sizeof
+   doubled -> `t[i]()` ran off the end into NULL -> SIGSEGV). (b223)
+6. Flexible array member `T x[]` is 0-size in sizeof (was parsed as [1]). (b224)
+7. File-scope struct var initialized by a compound literal `= (T){...}` /
+   `= ((T){...})` (was left zero). (b225)
+
+Also satisfies [[feature-c-designated-init-compound-literals]] record-CL acceptance
+and resolves [[bug-c-anonymous-member-designated-init]] +
+[[bug-c-fullfile-cumulative-parser-desync]]. Pinned (compiler changed). Cross targets
+untouched (frontend/IR only). RESOLVED — moving to done.
+
+## 2026-07-09 (A+B+C agent) — COMPOUND LITERALS COMPLETE; 00216 blocked by TWO pre-existing NON-CL bugs (superseded — all resolved, see above)
 
 Inline compound literals `(T)` + braced init are now fully implemented and pinned
 (the AN_COMPOUND_LITERAL node from the ATTEMPT note, re-applied + all 3 gaps closed).
