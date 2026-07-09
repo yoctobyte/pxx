@@ -920,6 +920,9 @@ test-core: $(COMPILER)
 	# b203 (bug-c-multidim-ordinal-global-init): multidim ordinal global array init
 	./$(COMPILER) test/cmultidim_ordinal_global_b203.c /tmp/cmultidim_ordinal_global_b20326
 	/tmp/cmultidim_ordinal_global_b20326; test "$$?" = "42"
+	# b205 (bug-c-multidim-float-brace-init): multidim FLOAT/DOUBLE global brace init
+	./$(COMPILER) test/cmultidim_float_global_b205.c /tmp/cmultidim_float_global_b20526
+	/tmp/cmultidim_float_global_b20526; test "$$?" = "42"
 	# stb_sprintf callback engine (feature-game-library-candidate-suite): integer
 	# subset. Skips when the gitignored stb tree is absent (install_lib_candidates.sh stb).
 	@if [ -f library_candidates/stb/stb_sprintf.h ]; then 	  ./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/stb test/gamelib/stb_sprintf_probe.c /tmp/stb_sprintf_probe26 >/dev/null && 	  /tmp/stb_sprintf_probe26; test "$$?" = "42" && echo "stb_sprintf_probe: OK"; 	else echo "stb_sprintf_probe: SKIP (no library_candidates/stb)"; fi

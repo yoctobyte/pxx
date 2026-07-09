@@ -4874,14 +4874,17 @@ begin
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
       if (CurTok.Kind = tkBegin) and wasArr and (dimCount >= 2) and
-         (baseTk <> tyRecord) and (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
+         (baseTk <> tyRecord) and (baseTk <> tyPointer) and
+         (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) and
          (idx >= 0) then
       begin
-        { MULTIDIMENSIONAL ordinal global `int a[2][3] = {{1,2,3},{4,5,6}}`
-          (and brace-elided `{1,2,3,4,5,6}`): the flat-int path below rejects
-          nested braces, so route through the recursive brace-elision walker,
-          replayed at main by CEmitDeferredCAggInits with the sym's dim shape.
-          Globals are BSS-zeroed, so unlisted tail elements stay 0. }
+        { MULTIDIMENSIONAL ordinal-or-float global `int a[2][3] = {{1,2,3},{4,5,6}}`
+          / `float m[2][4] = {{..},{..}}`: the flat paths below reject nested
+          braces (and the flat-FLOAT path is 1-D only), so route through the
+          recursive brace-elision walker, replayed at main by
+          CEmitDeferredCAggInits with the sym's dim shape. The walker's leaf store
+          handles float element types (same path the fixed LOCAL multidim-float
+          case uses). Globals are BSS-zeroed, so unlisted tail elements stay 0. }
         if CAggInitCount < MAX_C_AGG_INITS then
         begin
           CAggInitSym[CAggInitCount] := idx;

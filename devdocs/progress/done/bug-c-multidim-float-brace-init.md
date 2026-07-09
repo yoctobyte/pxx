@@ -49,3 +49,15 @@ must emit float bit patterns into the global data blob.
 ## Gate
 `float gm[2][4] = {{...},{...}}` at file scope reads back correct; a focused
 repro; c-conformance + corpus green.
+
+## GLOBAL case fixed 2026-07-09 (cfront-agent) — ticket closed
+The file-scope path now works. `ParseCGlobalVarDecl`'s multidim brace-init route
+(cparser.inc ~4876) was gated `TypeIsOrdinal(baseTk)`, excluding tySingle/tyDouble;
+the flat-FLOAT path (~4929) is 1-D only — so `float gm[2][4]={{..},{..}}` fell
+through to the skip path and read 0.0. Relaxed the gate to
+`(TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk))` so multidim float globals route
+through the recursive brace-elision walker (CEmitDeferredCAggInits →
+CInitWalkArray), whose leaf store already handles floats (same path the LOCAL fix
+used). Flat float (dimCount 1) still hits the 1-D float path — no regression.
+Repro test/cmultidim_float_global_b205.c (exit 42; float+double+typedef-vec4+
+elided+partial). c-conformance 213/0/7, self-host byte-identical, quick green.
