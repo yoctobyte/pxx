@@ -5,7 +5,7 @@ prio: 60
 # C corpus: chess engine — perft as a compiler-independent oracle
 
 - **Type:** feature (C frontend validation) — Track A/C.
-- **Status:** backlog — planned 2026-07-09, after c-testsuite hit 220/220 + zlib/tcc green.
+- **Status:** done
 - **Parent:** [[feature-c-corpus-expansion]] (this is the next rung after tcc).
 
 ## Why chess / why perft
@@ -122,3 +122,37 @@ byte-identical build; a 2-step converge = the comment-brace landmine not a resee
 the divide, don't guess.
 
 After chess lands, the next rung is [[feature-c-corpus-duktape]] (JS engine, GC + float).
+
+## RESOLUTION — 2026-07-09 (Track A+C, sole-A)
+
+**Landed GREEN, zero compiler fixes needed.** The C frontend compiles the VICE
+engine's full legal-move perft path correctly on the first build — every
+canonical perft count matches, so the blocker loop never fired. Chess exercised
+a genuinely new muscle (64-bit bitboard masks, bit-shift/rotate movegen, deep
+recursion, array-of-struct movelists) and pxx got them all right out of the box.
+
+- **Engine:** VICE (bluefeversoft/vice @ a89f82dc, Vice11) — legal-move perft
+  built in (`perft.c`: MakeMove returns false for illegal → counts are legal,
+  matching the canonical table exactly). Vendored via
+  `tools/install_lib_candidates.sh chess` → `library_candidates/chess`
+  (gitignored + PROVENANCE.md).
+- **Runner:** `test/chess/perft_runner.c` — unity build (crtl units + the
+  perft-path VICE TUs; omits uci/search/vice/evaluate/pvtable/tinycthread; three
+  search/eval symbols referenced by validate.c's DEBUG helpers are stubbed and
+  never called). Calls only the four perft-relevant inits (skips InitPolyBook so
+  no "Book File Not Read" noise). Canonical counts baked in = the oracle; exit 42
+  on ALL OK.
+- **Gate:** `make test-chess-perft` (default depth 1..4, ~7s pxx;
+  `PERFT_DEEP=5` for the heavy depth-5 sweep, ~40s). NO gcc oracle needed —
+  numbers are compiler-independent truth. gcc cross-check of the same driver
+  also passes (harness sanity).
+- **Verified:** depth 1..5 ALL match for startpos + Kiwipete + positions 3-6
+  (incl. kiwipete(5)=193690690, position5(5)=89941194, position6(5)=164075551).
+  No compiler/IR/backend change → self-host untouched, no stabilize/pin.
+- **Cross-validation:** same perft ground truth as `test_rust_chess_perft.rs`
+  (20/400/8902) — C and Rust frontends now triangulate against one oracle.
+
+Next rung: [[feature-c-corpus-duktape]].
+
+## Log
+- 2026-07-09 — resolved, commit 8817914c.

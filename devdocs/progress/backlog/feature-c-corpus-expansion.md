@@ -18,6 +18,7 @@ prio: 65  # auto
   because the draft regressed test-core b133. Next inside step 1: burn down
   the skip list ticket by ticket; then step 2 (zlib).
 - **2026-07-09 — NEXT RUNGS scoped:** ladder so far c-testsuite/zlib/cjson/lua/sqlite/tcc all green (tcc self-compiles, pxx/gcc lineages converge). Next new-muscle targets filed with kickoff prompts: [[feature-c-corpus-chess]] (perft, compiler-independent oracle, cross-validates Rust chess — DO FIRST) then [[feature-c-corpus-duktape]] (JS engine, GC + IEEE-754). GNU Pascal / gcc rejected (gcc front-end / C++ / generated-code bootstrap — not standalone C).
+- **2026-07-09 — CHESS LANDED GREEN (zero compiler fixes):** VICE perft (`make test-chess-perft`) — all canonical counts match depth 1..5 (startpos + Kiwipete + positions 3-6), first build, no blocker loop. 64-bit bitboard masks / bit-shift movegen / deep recursion / array-of-struct movelists all correct out of the box. Same oracle as `test_rust_chess_perft.rs` → C+Rust triangulated. See [[feature-c-corpus-chess]] resolution. **Next rung: [[feature-c-corpus-duktape]].**
 - **2026-07-09 — STEP 1 COMPLETE: c-testsuite 220/220 pass, 0 fail, 0 skip.** The
   last skip (00216) is byte-identical to gcc after 7 fixes (compound literals, form-feed
   whitespace, anonymous members, struct identity cast, fn-ptr range-array length,
