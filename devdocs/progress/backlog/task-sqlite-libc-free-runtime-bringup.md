@@ -109,13 +109,17 @@ libc-free end to end (open64→write→fstat64/stat64, regression b234).
    each path element and branches on `errno==ENOENT`. Stale errno made a missing
    file look like a real error → `unixFullPathname` returned CANTOPEN before open()
    ran. Fixed: wrappers set `errno = -r`. Regression b235.
-2. **Segfault in `fillInUnixFile` — OPEN, blocks here.** With the errno fix,
-   `sqlite3_open` reaches `unixOpen`/`posixOpen` (fd obtained), then segfaults at
-   the locking-style finder call `(**(finder_type*)pVfs->pAppData)(...)`. Root
-   cause is a **cfront codegen bug**: a call through a DEREF of a
-   pointer-to-function-pointer drops the call. Filed as
-   [[bug-c-call-through-deref-of-fnptr-pointer]] (full root cause + fix design +
-   minimal repros there). This is the current blocker for file-backed sqlite.
+2. **Segfault in `fillInUnixFile` finder call — FIXED (cfront, e1f28f54).** The
+   locking-style finder `(**(finder_type*)pVfs->pAppData)(...)` — a call through a
+   deref of a CAST to pointer-to-fnptr — dropped the call. Fixed
+   ([[bug-c-call-through-deref-of-fnptr-pointer]], cast form; bare-ident form still
+   open). sqlite now opens + CREATES a file-backed db (file appears on disk).
+3. **Segfault in `unixRead` — OPEN, blocks here.** First page read of the new file:
+   `pFile->mmapSize`/`pMapRegion` are garbage despite `memset(p,0,sizeof(unixFile))`,
+   because those `unixFile` members resolve to **offset 0** (h resolves correctly at
+   24). The mmap fast-path then memcpy's from a bogus pointer. A cfront
+   struct-field-offset bug that only manifests in the FULL `unixFile` (isolated repro
+   is byte-identical to gcc). Filed as [[bug-c-unixfile-mmap-field-offset-zero]].
 
 ## Acceptance
 

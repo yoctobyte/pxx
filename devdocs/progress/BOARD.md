@@ -26,12 +26,13 @@ _none_
 
 _none_
 
-## backlog (81)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
+| bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -774,6 +775,7 @@ _none_
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [A] bug-c-call-through-deref-of-fnptr-pointer
+- [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] bug-c-duktape-double-formatting
 - [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
