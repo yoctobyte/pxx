@@ -295,9 +295,12 @@ end;
 function GetTokenStrFromRaw(off, len: Integer): AnsiString;
 var s: AnsiString; i: Integer;
 begin
-  s := '';
+  { TokChars[off..off+len-1] is contiguous — materialise in one SetLength + fill.
+    The old char-at-a-time AppendChar reallocated per char (O(n^2) for the token),
+    and this builds every identifier/keyword/string token. Same result string. }
+  SetLength(s, len);
   for i := 0 to len - 1 do
-    AppendChar(s, TokChars[off + i]);
+    s[i + 1] := TokChars[off + i];
   Result := s;
 end;
 
@@ -993,10 +996,11 @@ end;
 function PasCondTokText(k: Integer): AnsiString;
 var i, off, len: Integer;
 begin
-  Result := '';
   off := Tokens[k].SOffset;
   len := Tokens[k].SLen;
-  for i := 0 to len - 1 do AppendChar(Result, TokChars[off + i]);
+  { contiguous pool slice — one SetLength + fill (see GetTokenStrFromRaw). }
+  SetLength(Result, len);
+  for i := 0 to len - 1 do Result[i + 1] := TokChars[off + i];
 end;
 
 { DECLARED(name) at directive-evaluation time. Conditionals are resolved during
@@ -2094,14 +2098,16 @@ begin
   CurTok.Kind := Tokens[TokPos].Kind;
   CurTok.IVal := Tokens[TokPos].IVal;
   CurTok.Line := Tokens[TokPos].Line;
-  CurTok.SVal := '';
   off := Tokens[TokPos].SOffset;
   len := Tokens[TokPos].SLen;
+  { TokChars[off..off+len-1] is contiguous — one SetLength + fill instead of
+    per-char AppendChar realloc. Runs for every token the parser consumes. }
+  SetLength(CurTok.SVal, len);
   i := 0;
   while i < len do
   begin
     j := off + i;
-    AppendChar(CurTok.SVal, TokChars[j]);
+    CurTok.SVal[i + 1] := TokChars[j];
     Inc(i);
   end;
   Inc(TokPos);
