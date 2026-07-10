@@ -6,8 +6,8 @@ prio: 64  # auto
 
 - **Type:** task (libc-free runtime bring-up) — Track B (`lib/crtl/**`) +
   harness; the compiler/lowering side is done.
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** fable-ebp
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up
   ([[feature-c-desktop-lua-sqlite-path]]), after the preprocessor-arithmetic fix
   ([[bug-c-sqlite-undefined-symbol-memsetdefault]]) let `sqlite3_open` run.
@@ -155,3 +155,6 @@ libc-free end to end (open64→write→fstat64/stat64, regression b234).
   only the intended ones). **MET 2026-07-10** (csqlite_extended_test, 0 NEEDED).
 - File-backed VFS: create + reopen + read-back off disk, libc-free, native +
   cross. **MET 2026-07-10** (walls 1-4 all cleared; csqlite_file_probe).
+
+## Log
+- 2026-07-10 — resolved, commit d65d95d8.

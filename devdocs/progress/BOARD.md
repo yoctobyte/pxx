@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (79)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -107,7 +107,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
@@ -170,7 +169,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (569)
+## done (570)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -735,6 +734,7 @@ _none_
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
+| task-sqlite-libc-free-runtime-bringup | B | 64 | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | test-c-crypt | C | 50 | test | Implement a C interop regression test for passphrase hashing (`crypt.h`) | — |
 | test-c-dlopen | C | 50 | test | Implement C interop regression test for dynamic loading and runtime symbol invocation (`dlopen`/`dlsym`) | — |
 | tooling-nested-comment-brace-selfhost-guard | A | 40 | tooling | Nested-comment brace hazard in compiler source — investigation + lint guard | — |
@@ -767,7 +767,6 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
-- [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
 - [p 62] [P] feature-pascal-corpus-expansion
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
@@ -836,6 +835,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision
+- [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
@@ -844,4 +844,3 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **1** — task-sqlite-libc-free-runtime-bringup
