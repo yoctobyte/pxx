@@ -6,7 +6,7 @@ prio: 58
 
 - **Type:** bug (C frontend codegen) — **Track A/C** (shared `cparser.inc` call
   lowering).
-- **Status:** working
+- **Status:** done
   `(**(finder_type*)pAppData)(...)`) is fixed — commit pending, regression b236.
   The **bare-identifier** form (`ft *pf; (*pf)(args)`) is still open (needs the
   declarator sig-threading below). Root-caused while bringing up file-backed
@@ -24,13 +24,40 @@ fn-pointer) and takes the sig from the alias. Verified: `(*(ft*)pv)()`,
 sqlite `fillInUnixFile` finder call (the db file is now created; further file-VFS
 walls remain — see the sqlite ticket).
 
-## Bare-identifier form — STILL OPEN
-`ft *pf; (*pf)(args)` (pf a pointer-to-fnptr VARIABLE). Needs the pointee sig on
-the SYMBOL (via `SymElemProcSig`, the `*pf` ≡ `pf[0]` channel) threaded through the
-declarator sites (params ~7160, locals ~3633, globals, struct members) from
-`CTypePtrElemProcSig`, plus a `CNodeProcSig` AN_DEREF(AN_IDENT-with-SymElemProcSig)
-arm. Deferred — not needed by sqlite, and the declarator threading is spread across
-~8 sites (do it carefully with self-host reverify).
+## Bare-identifier form — FIXED for local/param/global (2026-07-10)
+`ft *pf; (*pf)(args)` (pf a pointer-to-fnptr VARIABLE) now calls correctly for
+**local, parameter, and global** `pf`. The pointee sig is threaded from
+`CTypePtrElemProcSig` into the SYMBOL's `SymElemProcSig` channel (the `*pf` ≡
+`pf[0]` channel — shared with array-element calls) at three declarator sites:
+- locals: `ParseCLocalDeclAST` — capture `ptrElemSig := CTypePtrElemProcSig`
+  (mutually exclusive with `procSig`), thread through the per-declarator
+  `declPtrElemSig` (primary + the comma/sibling reset branches), set
+  `SymElemProcSig[idx]` in the `declTk = tyPointer` block;
+- params: parallel `pptrelemsig[]` array captured at the param loop +
+  fn-return-param path, set `SymElemProcSig[idx]` beside the SymProcSig param loop;
+- globals: `SymElemProcSig[idx] := CTypePtrElemProcSig` in the normal
+  global-pointer block of `ParseCGlobalVarDecl` (`ft *gpf` fails the special
+  fn-ptr-global guard — CTypeProcSig is cleared by the `*` — so it lands here).
+Plus the `CNodeProcSig` AN_IDENT arm: when `SymProcSig[id] < 0` but a deref was
+stripped and `SymElemProcSig[id] >= 0`, keep ONE `AN_DEREF` as the callee and take
+the sig from the elem channel (twin of the AN_PTR_CAST deref arm).
+**As predicted, self-host is a non-issue** (cparser C paths never run when
+compiling the Pascal compiler — byte-identical trivially); the real gate is the C
+corpus. Verified: c-testsuite 220/220, testmgr quick GREEN, sqlite file probe
+clean, regression `test/cfnptr_deref_call_b241.c` (exit 42, covers local/param/
+global + the `pf[0]` shared channel + reassign-through-pointer).
+
+### Remaining sub-case: STRUCT MEMBER `(*s.pf)(args)` — OPEN
+A struct field that is itself a POINTER-to-fnptr (`struct S { ft *pf; }`) then
+`(*s.pf)()`. Rare (the corpus doesn't hit it). Recipe when wanted: a parallel
+`UFldElemProcSig` field array (defs.inc) beside `UFldProcSig`, copied in the
+field-copy loop (symtab.inc ~575) and set from a `LastTypePtrElemProcSig` global
+(~605); a `RecFieldElemProcSig(rec,field)` accessor; capture
+`CTypePtrElemProcSig` at the struct field builder (cparser ~8558) and thread it
+through the `bfProcSig`-parallel bitfield path (~8574/8769/8823); then a
+`CNodeProcSig` AN_FIELD arm mirroring the AN_IDENT one (derefCount≥1 +
+RecFieldElemProcSig → keep one deref). Direct fnptr fields (`ft f; s.f()`)
+already work via `RecFieldProcSig`.
 - **Blocks:** file-backed sqlite VFS. `sqlite3_open("/tmp/x.db")` now reaches
   `unixOpen`/`posixOpen` (fd obtained, after the crtl errno fix 495a989a) but then
   segfaults in `fillInUnixFile` at the locking-style finder call.
@@ -116,3 +143,6 @@ existing `CNodeProcSig` arm intact and only ADD the pointer-to-fnptr handling.
 Verify self-host byte-identical (expect a 2-step reseed if codegen shifts).
 
 [[task-sqlite-libc-free-runtime-bringup]]
+
+## Log
+- 2026-07-10 — resolved, commit 9e068f38.
