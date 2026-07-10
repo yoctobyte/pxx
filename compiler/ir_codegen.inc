@@ -2852,6 +2852,30 @@ begin
           else
             begin EmitB($4C); EmitB($89); EmitB($C8); end; { mov rax, r9 }
         end
+        else if (OptLevel >= 3) and (not InLValueWrite) and
+                CsScratchOn and (CsDepth < 2) then
+        begin
+          { -O3 W1 callee-saved scratch: the right subtree contains calls (or
+            other r8-r11 hazards), but r12/r13 survive any call — the body
+            saved the caller's values at entry (CalleeScratchAssign) and the
+            epilogue restores them on every return, so within a statement they
+            are free scratch. Value subtrees cannot contain IR_ASM (asm is a
+            statement), and every runtime path (pxx bodies, helper blobs,
+            CoSwitch, the setjmp buf) preserves r12/r13. }
+          IREmitNode(left);
+          if CsDepth = 0 then
+            begin EmitB($49); EmitB($89); EmitB($C4); end  { mov r12, rax }
+          else
+            begin EmitB($49); EmitB($89); EmitB($C5); end; { mov r13, rax }
+          Inc(CsDepth);
+          IREmitNode(right);
+          Dec(CsDepth);
+          EmitB($48); EmitB($89); EmitB($C1);              { mov rcx, rax }
+          if CsDepth = 0 then
+            begin EmitB($4C); EmitB($89); EmitB($E0); end  { mov rax, r12 }
+          else
+            begin EmitB($4C); EmitB($89); EmitB($E8); end; { mov rax, r13 }
+        end
         else
         begin
           IREmitNode(left);
@@ -5205,6 +5229,24 @@ begin
               else
                 begin EmitB($4C); EmitB($89); EmitB($C8); end;     { mov rax, r9 }
             end
+            else if (OptLevel >= 3) and (not InLValueWrite) and
+                    CsScratchOn and (CsDepth < 2) then
+            begin
+              { -O3 W1 callee-saved scratch on the fused-compare operands. }
+              IREmitNode(cLeft);
+              if CsDepth = 0 then
+                begin EmitB($49); EmitB($89); EmitB($C4); end      { mov r12, rax }
+              else
+                begin EmitB($49); EmitB($89); EmitB($C5); end;     { mov r13, rax }
+              Inc(CsDepth);
+              IREmitNode(cRight);
+              Dec(CsDepth);
+              EmitB($48); EmitB($89); EmitB($C1);                  { mov rcx, rax }
+              if CsDepth = 0 then
+                begin EmitB($4C); EmitB($89); EmitB($E0); end      { mov rax, r12 }
+              else
+                begin EmitB($4C); EmitB($89); EmitB($E8); end;     { mov rax, r13 }
+            end
             else
             begin
               IREmitNode(cLeft); EmitB($50);                       { push rax }
@@ -5490,6 +5532,54 @@ begin
   end;
 end;
 
+{ -O3 W1 callee-saved scratch (x86-64): decide per MAIN body whether to reserve
+  r12/r13 as cross-call operand scratch. Runs from CompileAST right after
+  RegcallAssignResidency, under the same discipline (see the r14/r15 residency
+  re-emit lesson, bug-a-o2-miscompiles-disassembler): suppressed during local
+  typed-const initializer emissions so the one-time save + the single epilogue
+  restore stay paired. Emits the two frame-slot saves immediately (code lands
+  between the prologue/residency saves and the body). Enabled only when the IR
+  actually contains a BINOP whose right operand would take the push/pop path
+  with a call-bearing subtree — otherwise the body pays nothing. Bodies with
+  inline asm bail entirely: user asm may use r12/r13 across statements. }
+function CsWouldFire(right: Integer): Boolean;
+begin
+  CsWouldFire := (IRKind[right] <> IR_CONST_INT) and
+                 (not LeafSymRcxLoadable(right)) and
+                 (not ScratchSafeSubtree(right));
+end;
+
+procedure CalleeScratchAssign;
+var k: Integer; found: Boolean;
+begin
+  CsScratchOn := False;
+  CsDepth := 0;
+  if OptLevel < 3 then Exit;
+  if CurProc < 0 then Exit;
+  if RcSuppressAssign then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if CurProcIsGenerator or CurProcIsStackless then Exit;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  found := False;
+  for k := 0 to IRCount - 1 do
+    if (IRKind[k] = IR_BINOP) and CsWouldFire(IRB[k]) then
+    begin found := True; Break; end;
+  if not found then
+    for k := 0 to IRCount - 1 do
+      if (IRKind[k] = IR_JUMP_IF_FALSE) and (IRKind[IRB[k]] = IR_BINOP) and
+         CmpFusible(IRB[k]) and CsWouldFire(IRB[IRB[k]]) then
+      begin found := True; Break; end;
+  if not found then Exit;
+  FrameSize := AlignTo(FrameSize + 8, 8);
+  CsSaveOff12 := -FrameSize;
+  FrameSize := AlignTo(FrameSize + 8, 8);
+  CsSaveOff13 := -FrameSize;
+  EmitB($4C); EmitB($89); EmitB($A5); EmitI32(CsSaveOff12);  { mov [rbp+off], r12 }
+  EmitB($4C); EmitB($89); EmitB($AD); EmitI32(CsSaveOff13);  { mov [rbp+off], r13 }
+  CsScratchOn := True;
+end;
+
 { Phase-0 opportunity probe for feature-inline-routines / auto-inline. Records the
   current body's size + leaf/early-exit/addr-taken-param facts, and counts direct
   internal call sites per target proc. Pure measurement. }
@@ -5580,6 +5670,10 @@ begin
     so -O0 emits the raw lowering byte-identically; runs after IRVerify (on
     validated IR) and before IRDump so `--dump-ir` shows the optimized form. }
   if OptLevel >= 1 then IROptimize;
+  { After IROptimize so the fire-scan sees the final IR (inline splices can add
+    call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
+    land ahead of the body code. }
+  CalleeScratchAssign;
   if DumpIR then IRDump;
   IREmitMachineCode;
 end;

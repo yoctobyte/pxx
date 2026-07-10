@@ -5327,6 +5327,14 @@ begin
       begin EmitB($4C); EmitB($8B); EmitB($B5); EmitI32(RcResidentSaveOff[i]); end  { mov r14, [rbp+off] }
     else
       begin EmitB($4C); EmitB($8B); EmitB($BD); EmitI32(RcResidentSaveOff[i]); end; { mov r15, [rbp+off] }
+  { -O3 W1 callee-saved scratch: restore the caller's r12/r13 from their frame
+    slots (saved once by CalleeScratchAssign). Reached by every return path,
+    exactly like the r14/r15 residency restore above. }
+  if CsScratchOn then
+  begin
+    EmitB($4C); EmitB($8B); EmitB($A5); EmitI32(CsSaveOff12);  { mov r12, [rbp+off] }
+    EmitB($4C); EmitB($8B); EmitB($AD); EmitI32(CsSaveOff13);  { mov r13, [rbp+off] }
+  end;
   EmitB($C9); EmitB($C3);
 end;
 

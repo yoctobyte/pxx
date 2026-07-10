@@ -177,3 +177,26 @@ architecture `devdocs/dev/optimization-architecture.md`.
   `pop rsi` ~10k = runtime-helper ARG staging (hand-coded per call site);
   `pop rax` 16.7k = binop dances whose right subtree contains calls — needs a
   callee-saved scratch (r12/r13 + prologue/epilogue save) = the W2 boundary.
+
+### 2026-07-11 — W1 slice 2 LANDED behind -O3: callee-saved r12/r13 scratch across call-bearing right subtrees
+- The remaining generic binop dances (right subtree contains calls, so r8-r11
+  die) now park the left value in **r12/r13**, which survive calls. Per main
+  body, `CalleeScratchAssign` (called from CompileAST after IROptimize, under
+  the same suppression discipline as regcall residency) pre-scans the final IR;
+  if any BINOP/fused-compare right operand would take the push/pop path, it
+  reserves two frame slots, saves caller r12/r13 once at entry, and
+  `EmitProcEpilog` restores them on every return (mirrors the r14/r15 restore).
+  Bodies with inline asm bail entirely (user asm may use r12/r13 across
+  statements); value subtrees cannot contain IR_ASM (asm is statement-only),
+  and every runtime path (pxx bodies, helper blobs, CoSwitch context save, the
+  setjmp buf) preserves r12/r13 — audited before landing.
+- **Measured runtime of compiled programs, -O2 vs -O3 (identical outputs):**
+  mandelbrot --bench **1.14×** (86.7→76.3 ms), raytracer 1.04×, sieve 1.01×
+  (memory-bound), compiler self-compile 1.01× (memory-bound — IPC rises but
+  the frontend is cache-limited, consistent with the label-clear findings).
+  W1's payoff is compute-bound user code, not the compiler itself.
+- Fire: `mov r12, rax` ×1802 in the self-compile image; binop pop-dances
+  20.7k (O2) → 14.9k (O3 incl. slice 1).
+- Gates: -O2 fixedpoint untouched + byte-identical; -O3 self-host fixedpoint
+  byte-identical; test-opt (incl. -O3 column + fixedpoint) green; make test
+  green; testmgr quick GREEN.
