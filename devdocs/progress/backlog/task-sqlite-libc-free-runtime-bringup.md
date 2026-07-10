@@ -114,12 +114,20 @@ libc-free end to end (open64→write→fstat64/stat64, regression b234).
    deref of a CAST to pointer-to-fnptr — dropped the call. Fixed
    ([[bug-c-call-through-deref-of-fnptr-pointer]], cast form; bare-ident form still
    open). sqlite now opens + CREATES a file-backed db (file appears on disk).
-3. **Segfault in `unixRead` — OPEN, blocks here.** First page read of the new file:
-   `pFile->mmapSize`/`pMapRegion` are garbage despite `memset(p,0,sizeof(unixFile))`,
-   because those `unixFile` members resolve to **offset 0** (h resolves correctly at
-   24). The mmap fast-path then memcpy's from a bogus pointer. A cfront
-   struct-field-offset bug that only manifests in the FULL `unixFile` (isolated repro
-   is byte-identical to gcc). Filed as [[bug-c-unixfile-mmap-field-offset-zero]].
+3. **`unixFile` mmap fields at offset 0 — FIXED (cpreproc, fc5b6a59).** The
+   `#if SQLITE_MAX_MMAP_SIZE>0` (`0x7fff0000`) evaluated FALSE at the struct (the
+   preprocessor didn't parse HEX literals in `#if`), so the mmap fields were dropped
+   and `pFile->mmapSize` resolved to offset 0. Fixed by making `#if` parse hex/octal
+   ([[bug-c-unixfile-mmap-field-offset-zero]], regression b237). This was the real
+   cause of the offset-0 symptom.
+4. **Segfault in `unixRead` — OPEN, current wall.** With walls 1-3 fixed, a
+   file-backed `sqlite3_open`+`exec` creates the db file but still segfaults inside
+   `unixRead` on the first page read — BEFORE `seekAndRead`'s `lseek`, and it
+   persists with `SQLITE_MAX_MMAP_SIZE=0` (so it is NOT the mmap path and NOT the
+   earlier walls). Needs fresh in-place instrumentation of `unixRead` /
+   `seekAndRead` / the aSyscall read dispatch (osRead vs osPread — confirm which
+   path compiles: USE_PREAD should be OFF since crtl has no `pread` and the driver
+   links with 0 undefined symbols). `:memory:` remains fully working + libc-free.
 
 ## Acceptance
 
