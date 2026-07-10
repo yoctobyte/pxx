@@ -194,7 +194,44 @@ params/body. Closes a real chunk of FPC's ~2x lead.
 compiled output and just get a faster compiler. Pinned via
 `make PXXFLAGS=-O2 stabilize && make pin`.
 
-Status: **phase 0 + phase 1 DONE.** Next candidates (optional, measure first):
-phase 2 (expand to rbx/r12/r13 after auditing helpers save them — reaches 78%
-capture vs phase 1's 61%; diminishing return, re-benchmark first); phase 3
-(caller-side direct-eval into arg regs); phase 4 (cross targets).
+Status: **phase 0 + phase 1 DONE. Phase 2 MEASURED + REJECTED (2026-07-10).**
+Phase 3/4 remain open.
+
+## Phase 2 (r12/r13 residency, cap 2→4) — MEASURED, REJECTED (2026-07-10)
+
+Prototyped the full phase-2 extension and measured it before shipping (per the
+"re-benchmark first" note). **Net result: no measurable runtime win; reverted.**
+
+- **Register audit first.** `rbx` is NOT usable — the x86-64 node emitter uses it
+  as inline scratch (variant tag/payload load ir_codegen.inc ~3876; string-copy
+  src/dest ~4501; ~2329/4138/4673). `r12`/`r13` ARE safe: zero uses in
+  ir_codegen.inc; the only uses are in symtab.inc's WriteInt/WriteFloat runtime
+  formatters, which push/pop them (ABI-safe across calls). So phase-2 could add
+  **r12/r13 only (cap 4)**, not rbx (so the "78% capture" figure is unreachable;
+  the real reach is r12/r13).
+- **Opportunity (probe):** `--measure-regcall` on compiler.pas: eligible=2295,
+  capture@2reg=1769, capture@5reg=2254 → phase-2 would make ~+485 more params
+  resident.
+- **Flat cap-4: net NEGATIVE.** Self-compile 1.02x *slower* (user 4.93s→5.04s,
+  +2%), compiler code **+6005B larger** (4154662→4160506B). Converged self-host
+  byte-identical (s3==s4==s5), test-opt green, full `make test` green — i.e.
+  *correct*, just not *worth it*: the 3rd/4th declaration-order params are colder
+  and each residency costs a fixed entry save/load + per-exit restore that a
+  rarely-read param can't amortize.
+- **Use-count-gated (r12/r13 only if param read ≥4×): WASH.** Self-compile 1.01x
+  (user 4.93s→4.96s, within noise), code −204B. Threshold rejects the cold tail;
+  what's left changes nothing measurable.
+- **Ideal-case probe still flat.** Built a micro-benchmark with 4 hot scalar
+  params read ~240×/call in a tight loop (the textbook regcall win). phase-1 /
+  gated / flat all within noise (6.43 / 6.46 / 6.38s, σ up to 0.375). **Root
+  cause:** the inner loop is latency-bound on the accumulator dependency chain;
+  the c/d frame loads phase-1 leaves behind are L1-resident and fully hidden by
+  out-of-order execution. Residency removes *instructions*, not *critical-path
+  cycles*. Phase-1's first-2 capture already grabbed the spill-traffic win on the
+  hottest two params; registers 3-4 add prologue/epilogue + code for no runtime
+  benefit on modern OoO x86.
+- **Conclusion:** stop investing in *wider* register residency. The lever is not
+  more callee-saved regs; it's (phase 3) caller-side direct-eval into arg regs so
+  the callee never spills at all, and reducing per-call prologue/epilogue. Same
+  measured-not-speculative call as the const-fold / strength-reduction rejections.
+  Code reverted to HEAD; no source change landed.
