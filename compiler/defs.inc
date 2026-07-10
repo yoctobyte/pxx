@@ -1109,6 +1109,7 @@ var
   CTypePtrBaseRec : Integer; { ultimate pointed-at base record id when CTypePtrDepth>0 }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
+  CTypePtrElemProcSig : Integer; { POINTER-to-fn-ptr (`ft *`): sig of the pointee fn-pointer, so `(*pf)()`/`(**(ft*)x)()` can find the callee sig CTypeProcSig drops. -1 = pointee not a fn-ptr }
   CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the last ParseCDeclType, else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }

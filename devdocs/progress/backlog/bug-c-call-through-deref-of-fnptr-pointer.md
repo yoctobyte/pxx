@@ -6,9 +6,31 @@ prio: 58
 
 - **Type:** bug (C frontend codegen) — **Track A/C** (shared `cparser.inc` call
   lowering).
-- **Status:** backlog — root-caused 2026-07-10 while bringing up file-backed
-  sqlite ([[task-sqlite-libc-free-runtime-bringup]]). It is the CURRENT wall for
-  a file (non-`:memory:`) sqlite database.
+- **Status:** PARTIALLY FIXED 2026-07-10. The **cast** form (sqlite's
+  `(**(finder_type*)pAppData)(...)`) is fixed — commit pending, regression b236.
+  The **bare-identifier** form (`ft *pf; (*pf)(args)`) is still open (needs the
+  declarator sig-threading below). Root-caused while bringing up file-backed
+  sqlite ([[task-sqlite-libc-free-runtime-bringup]]).
+
+## Cast form — FIXED (2026-07-10)
+A cast to a POINTER-to-fn-ptr now carries the pointee fn-pointer signature on its
+alias (`AliasProcSig`): a new `CTypePtrElemProcSig` global captures the sig at the
+`FnPtrTypedef *` star (cparser ~2790, before `CTypeProcSig := -1`), threaded to
+`castPtrElemProcSig` and stored on the cast's alias. `CNodeProcSig`'s AN_PTR_CAST
+arm: when `ASTRight < 0` but the alias has `AliasProcSig >= 0` and ≥1 deref was
+stripped, it keeps ONE `AN_DEREF` as the callee (so AN_CALL_IND loads `*cast` = the
+fn-pointer) and takes the sig from the alias. Verified: `(*(ft*)pv)()`,
+`(**(ft*)pv)()` correct; self-host byte-identical; regression b236. Unblocked the
+sqlite `fillInUnixFile` finder call (the db file is now created; further file-VFS
+walls remain — see the sqlite ticket).
+
+## Bare-identifier form — STILL OPEN
+`ft *pf; (*pf)(args)` (pf a pointer-to-fnptr VARIABLE). Needs the pointee sig on
+the SYMBOL (via `SymElemProcSig`, the `*pf` ≡ `pf[0]` channel) threaded through the
+declarator sites (params ~7160, locals ~3633, globals, struct members) from
+`CTypePtrElemProcSig`, plus a `CNodeProcSig` AN_DEREF(AN_IDENT-with-SymElemProcSig)
+arm. Deferred — not needed by sqlite, and the declarator threading is spread across
+~8 sites (do it carefully with self-host reverify).
 - **Blocks:** file-backed sqlite VFS. `sqlite3_open("/tmp/x.db")` now reaches
   `unixOpen`/`posixOpen` (fd obtained, after the crtl errno fix 495a989a) but then
   segfaults in `fillInUnixFile` at the locking-style finder call.

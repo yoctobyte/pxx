@@ -655,6 +655,8 @@ test-core: $(COMPILER)
 	/tmp/cloop_b526; test "$$?" = "28"
 	./$(COMPILER) test/cfnptr_b6.c /tmp/cfnptr_b626
 	/tmp/cfnptr_b626; test "$$?" = "91"
+	./$(COMPILER) test/cfnptr_call_via_ptr_cast_b236.c /tmp/cfnptr_call_via_ptr_cast_b23626
+	/tmp/cfnptr_call_via_ptr_cast_b23626; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_struct_b7.c /tmp/ctypedef_struct_b726
 	/tmp/ctypedef_struct_b726; test "$$?" = "51"
 	./$(COMPILER) test/cstruct_fwd_interleave_b8.c /tmp/cstruct_fwd_interleave_b826

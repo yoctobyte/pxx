@@ -1780,7 +1780,7 @@ end;
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
-    argSeq, castProcSig, clRecId, arrCastLen: Integer;
+    argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -1800,6 +1800,7 @@ begin
     castBaseTk := CTypePtrBaseTk;
     castBaseRec := CTypePtrBaseRec;
     castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
+    castPtrElemProcSig := CTypePtrElemProcSig;  { ptr-to-fn-ptr cast `(ft*)e`: pointee callee sig }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     clRecId := CTypeBaseRec;    { captured before Expect for a possible compound literal }
     { Abstract array declarator in a cast: `(elem[N])` / `(elem[])` — ParseCDeclType
@@ -1884,6 +1885,7 @@ begin
       AliasPtrDepth[AliasCount-1] := castDepth;
       AliasPtrBaseTk[AliasCount-1] := castBaseTk;
       AliasPtrBaseRec[AliasCount-1] := castBaseRec;
+      AliasProcSig[AliasCount-1] := castPtrElemProcSig;  { pointee fn-ptr sig for `(ft*)e` -> (*..)() call }
       ASTIVal[node] := AliasCount - 1;
       ASTTk[node] := Ord(tyPointer);
     end
@@ -1991,12 +1993,12 @@ end;
   returns the node whose value is the function address (the var/field itself,
   never the deref) so `(*p->cb)(args)` calls through `p->cb`. }
 function CNodeProcSig(node: Integer; var callee: Integer): Integer;
-var inner, recId, commaCallee: Integer; fname: AnsiString;
+var inner, recId, commaCallee, derefCount: Integer; fname: AnsiString;
 begin
   Result := -1; callee := node;
   if node < 0 then Exit;
-  inner := node;
-  while ASTKind[inner] = AN_DEREF do inner := ASTLeft[inner];
+  inner := node; derefCount := 0;
+  while ASTKind[inner] = AN_DEREF do begin inner := ASTLeft[inner]; Inc(derefCount); end;
   callee := inner;
   if ASTKind[inner] = AN_COMMA then
   begin
@@ -2031,7 +2033,23 @@ begin
       array sym carries the per-element call signature in SymElemProcSig. }
     Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]]
   else if ASTKind[inner] = AN_PTR_CAST then
-    Result := ASTRight[inner]   { cast to a fn-pointer type carries its callee sig (>=0), else -1 }
+  begin
+    if ASTRight[inner] >= 0 then
+      Result := ASTRight[inner]   { cast to a fn-pointer type carries its callee sig }
+    else if (derefCount >= 1) and (ASTIVal[inner] >= 0)
+            and (AliasProcSig[ASTIVal[inner]] >= 0) then
+    begin
+      { `(*(ft*)e)(args)` / `(**(ft*)e)(args)` — cast to a POINTER-to-fn-ptr; the
+        first deref is a REAL LOAD of the pointee fn-pointer (sqlite's
+        `(**(finder_type*)pVfs->pAppData)(...)`). The greedy deref-strip above
+        dropped that load; keep exactly ONE deref as the callee so AN_CALL_IND
+        evaluates *cast = the loaded fn-pointer, and take the sig from the alias. }
+      Result := AliasProcSig[ASTIVal[inner]];
+      callee := AllocNode(AN_DEREF);
+      ASTLeft[callee] := inner;
+      ASTTk[callee] := Ord(tyPointer);
+    end;
+  end
   else if ASTKind[inner] = AN_FIELD then
   begin
     recId := ResolveNodeRec(ASTLeft[inner]);
@@ -2609,6 +2627,7 @@ begin
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdIsFnType := False;
   CTypeProcSig := -1;
+  CTypePtrElemProcSig := -1;
   CTypeTypedefArrLen := -1;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
@@ -2764,6 +2783,10 @@ begin
   end;
   if CurTok.Kind = tkStar then
   begin
+    { A star past a fn-pointer typedef makes a POINTER-to-fn-ptr: not directly
+      callable, but preserve the pointee sig so `(*pf)()` / `(**(ft*)x)()` can
+      still resolve the callee (see CNodeProcSig). }
+    if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig;
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
