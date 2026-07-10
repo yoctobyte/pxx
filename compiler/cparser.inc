@@ -2020,7 +2020,23 @@ begin
     Exit;
   end;
   if ASTKind[inner] = AN_IDENT then
-    Result := SymProcSig[ASTIVal[inner]]
+  begin
+    if SymProcSig[ASTIVal[inner]] >= 0 then
+      Result := SymProcSig[ASTIVal[inner]]   { `pf` is itself a fn-pointer var }
+    else if (derefCount >= 1) and (SymElemProcSig[ASTIVal[inner]] >= 0) then
+    begin
+      { `(*pf)(args)` — `pf` is a POINTER-to-fn-ptr VARIABLE (`ft *pf`); `*pf` is
+        a REAL LOAD of the pointee fn-pointer — the bare-identifier twin of the
+        `(*(ft*)e)()` cast arm below, and of `pf[0](args)` (same SymElemProcSig
+        channel, since `*pf` == `pf[0]`). The greedy deref-strip above dropped
+        that load; keep exactly ONE deref as the callee so AN_CALL_IND evaluates
+        `*pf` = the loaded fn-pointer, and take the sig from the pointee channel. }
+      Result := SymElemProcSig[ASTIVal[inner]];
+      callee := AllocNode(AN_DEREF);
+      ASTLeft[callee] := inner;
+      ASTTk[callee] := Ord(tyPointer);
+    end;
+  end
   else if ASTKind[inner] = AN_PROCADDR then
     { `(name)(args)` — a parenthesized bare function name decayed to its address
       (AN_PROCADDR). Its own proc is the call signature; the callee value is the
@@ -3136,6 +3152,7 @@ function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
+    ptrElemSig, declPtrElemSig: Integer;  { pointee fn-ptr sig for `ft *pf` (SymElemProcSig channel) }
     paLen, sibPaLen: Integer;
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
@@ -3162,6 +3179,7 @@ begin
   ptrBaseTk := CTypePtrBaseTk;
   ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
+  ptrElemSig := CTypePtrElemProcSig;  { pointee sig if this is `ft *` (mutually exclusive with procSig) }
   paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
   if CTypeFnPtrName <> '' then
   begin
@@ -3256,6 +3274,7 @@ begin
   if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
+  declPtrElemSig := ptrElemSig;   { primary declarator: `ft *pf` pointee sig }
   declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
   head := -1; tail := -1;
   end;
@@ -3308,19 +3327,19 @@ begin
           declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
           if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
           else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
-          declProcSig := -1;
+          declProcSig := -1; declPtrElemSig := -1;
         end
         else if hadStar then
         begin
           declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
           declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-          declProcSig := -1;
+          declProcSig := -1; declPtrElemSig := -1;
         end
         else
         begin
           declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
           declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
-          declProcSig := procSig;
+          declProcSig := procSig; declPtrElemSig := ptrElemSig;
         end;
         Continue;
       end;
@@ -3664,6 +3683,9 @@ begin
         SymPtrBaseTk[idx] := declBaseTk;
         SymPtrBaseRec[idx] := declBaseRec;
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
+        { `ft *pf` — pointer to a fn-pointer: the pointee sig lets `(*pf)(args)`
+          resolve (SymElemProcSig channel, shared with `pf[0](args)`). }
+        if declPtrElemSig >= 0 then SymElemProcSig[idx] := declPtrElemSig;
       end;
       initExpr := -1;
       if CurTok.Kind = tkAssign then
@@ -3729,14 +3751,14 @@ begin
         declBaseRec := scalarRec;
         if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
         else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
-        declProcSig := -1;
+        declProcSig := -1; declPtrElemSig := -1;
       end
       else if hadStar then
       begin
         { sibling with no star, base had a redistributable star: plain scalar }
         declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
         declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
-        declProcSig := -1;
+        declProcSig := -1; declPtrElemSig := -1;
       end
       else
       begin
@@ -3744,7 +3766,7 @@ begin
           same full base type + metadata }
         declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
         declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
-        declProcSig := procSig;
+        declProcSig := procSig; declPtrElemSig := ptrElemSig;
       end;
       Continue;
     end;
@@ -5744,6 +5766,8 @@ begin
       SymPtrDepth[idx] := CTypePtrDepth;
       SymPtrBaseTk[idx] := CTypePtrBaseTk;
       SymPtrBaseRec[idx] := CTypePtrBaseRec;
+      { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
+      if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
     end;
     for ei := 0 to nArrElems - 1 do
     begin
@@ -6893,6 +6917,7 @@ var
   pelemrec: array[0..31] of Integer;
   precid: array[0..31] of Integer;    { record id per tyRecord param (for isRef field access) }
   pprocsig: array[0..31] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
+  pptrelemsig: array[0..31] of Integer;  { pointee fn-ptr sig for a `ft *pf` param (`(*pf)()`), else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
@@ -6941,6 +6966,7 @@ begin
       pelemrec[i] := CTypeFnRetPElemRec[i];
       precid[i] := CTypeFnRetPRecId[i];
       pprocsig[i] := CTypeFnRetPProcSig[i];
+      pptrelemsig[i] := -1;   { fn-return param path carries no ptr-to-fnptr channel }
     end;
   end;
 
@@ -7021,6 +7047,7 @@ begin
           pelemrec[nparams] := CTypeElemRec;
           precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
           pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
+          pptrelemsig[nparams] := CTypePtrElemProcSig;  { `ft *pf` param: pointee sig for `(*pf)()` }
           if CTypeFnPtrName <> '' then
           begin
             { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
@@ -7228,6 +7255,7 @@ begin
       SymPtrBaseTk[idx] := pbasetk[i];
       SymPtrBaseRec[idx] := pbaserec[i];
       if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
+      if pptrelemsig[i] >= 0 then SymElemProcSig[idx] := pptrelemsig[i];  { `ft *pf` param: `(*pf)()` }
     end;
   end;
   

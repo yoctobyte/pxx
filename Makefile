@@ -717,6 +717,8 @@ test-core: $(COMPILER)
 	/tmp/cdefine_flag_b23926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sqrt_correctly_rounded_b240.c /tmp/cmath_sqrt_b24026
 	/tmp/cmath_sqrt_b24026; test "$$?" = "42"
+	./$(COMPILER) test/cfnptr_deref_call_b241.c /tmp/cfnptr_deref_call_b24126
+	/tmp/cfnptr_deref_call_b24126; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_tvalue_int_b131.c /tmp/c_lua_tvalue_int_b13126
 	/tmp/c_lua_tvalue_int_b13126; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_opcode_decode_b132.c /tmp/c_lua_opcode_decode_b13226

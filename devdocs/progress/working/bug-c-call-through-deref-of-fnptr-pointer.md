@@ -6,7 +6,7 @@ prio: 58
 
 - **Type:** bug (C frontend codegen) — **Track A/C** (shared `cparser.inc` call
   lowering).
-- **Status:** PARTIALLY FIXED 2026-07-10. The **cast** form (sqlite's
+- **Status:** working
   `(**(finder_type*)pAppData)(...)`) is fixed — commit pending, regression b236.
   The **bare-identifier** form (`ft *pf; (*pf)(args)`) is still open (needs the
   declarator sig-threading below). Root-caused while bringing up file-backed
