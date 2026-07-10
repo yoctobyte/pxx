@@ -63,15 +63,18 @@ end;
 { Substring s[from..from+len-1] (1-based), built by char append — the dialect
   has no Copy. }
 function AsmTextSlice(const s: AnsiString; from, len: Integer): AnsiString;
-var i: Integer;
+var i, last, count: Integer;
 begin
-  Result := '';
-  i := from;
-  while (i < from + len) and (i <= Length(s)) do
-  begin
-    AppendChar(Result, s[i]);
-    Inc(i);
-  end;
+  { copy s[from .. min(from+len-1, Length(s))] in one SetLength + fill (the old
+    char-at-a-time AppendChar reallocated per char). Hot: every mnemonic/operand
+    split in the asm-text engine goes through here. }
+  last := from + len - 1;
+  if last > Length(s) then last := Length(s);
+  if last < from then begin Result := ''; Exit; end;
+  count := last - from + 1;
+  SetLength(Result, count);
+  for i := 0 to count - 1 do
+    Result[i + 1] := s[from + i];
 end;
 
 { Lowercase a single ASCII letter. }
@@ -119,14 +122,18 @@ end;
 
 { Trim leading/trailing whitespace. Shared by all per-target emitters. }
 function AsmTextTrim(const s: AnsiString): AnsiString;
-var i, n: Integer;
+var i, n, k, count: Integer;
 begin
-  Result := '';
   n := Length(s);
   i := 1;
   while (i <= n) and AsmTextIsSpace(AsmTextCharAt(s, i)) do Inc(i);
   while (n >= i) and AsmTextIsSpace(AsmTextCharAt(s, n)) do Dec(n);
-  while i <= n do begin AppendChar(Result, s[i]); Inc(i); end;
+  count := n - i + 1;
+  if count <= 0 then begin Result := ''; Exit; end;
+  { one SetLength + fill instead of per-char AppendChar realloc. }
+  SetLength(Result, count);
+  for k := 0 to count - 1 do
+    Result[k + 1] := s[i + k];
 end;
 
 { True when an operand token reads as a label reference (not %, not a signed
@@ -313,9 +320,8 @@ begin
   { mnemonic }
   mnem := '';
   while (i <= n) and not AsmTextIsSpace(AsmTextCharAt(line, i)) do begin AppendChar(mnem, AsmTextLower(line[i])); Inc(i); end;
-  { rest = operands }
-  rest := '';
-  while i <= n do begin AppendChar(rest, line[i]); Inc(i); end;
+  { rest = operands (one slice; AsmTextSlice is SetLength+fill) }
+  rest := AsmTextSlice(line, i, n - i + 1);
   haveOps := Length(rest) > 0;
 
   { zero-operand forms }
