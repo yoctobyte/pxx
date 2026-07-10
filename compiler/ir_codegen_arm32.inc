@@ -3287,7 +3287,8 @@ var i, lblId, pos, targetOffset, f, si, classIdx, sz, procIdx: Integer;
     tk: TTypeKind;
     LabelFixupCount: Integer;
 begin
-  for i := 0 to MAX_IR - 1 do
+  { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
+  for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 

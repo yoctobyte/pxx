@@ -4999,7 +4999,14 @@ begin
     IREmitMachineCodeXtensa;
     Exit;
   end;
-  for i := 0 to MAX_IR - 1 do
+  { Clear only the labels this body actually allocated. IRReset zeroes
+    IRLabelCount per body and IRNewLabel hands out ids in [0, IRLabelCount),
+    so every label id emitted or jumped-to in this body is < IRLabelCount;
+    entries >= IRLabelCount are never read. Clearing the full MAX_IR (131072)
+    array per body wrote ~1MB and thrashed cache for ~1766 bodies per
+    self-compile — this shrinks it to the handful of labels per body with
+    byte-identical output. }
+  for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 

@@ -2111,7 +2111,8 @@ begin
           rv32_sw(reg_zero, reg_t0, 0);
         end;
       end;
-  for i := 0 to MAX_IR - 1 do
+  { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
+  for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 

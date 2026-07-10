@@ -2925,7 +2925,8 @@ procedure IREmitMachineCodeAarch64;
 var i, lblId, pos, targetOffset, f, si, classIdx, procIdx: Integer;
     LabelFixupCount: Integer;
 begin
-  for i := 0 to MAX_IR - 1 do
+  { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
+  for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 
