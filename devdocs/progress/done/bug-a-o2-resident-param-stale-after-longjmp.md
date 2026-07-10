@@ -5,7 +5,7 @@ prio: 90
 # bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp
 
 - **Type:** bug (codegen — regcall residency, x86-64) — Track A
-- **Status:** urgent — found 2026-07-11 while designing W2 loop-residency
+- **Status:** done
   (feature-opt-o3-register-pressure); affects the SHIPPING -O2 default (v194+).
 - **Owner:** fable-O
 
@@ -58,3 +58,6 @@ pre-fix pinned binary fails it exactly as diagnosed (7/1002/0/30 instead of
 green, make test green.
 
 NOTE: pinned v194 carries the bug at the default -O2 — re-pin after landing.
+
+## Log
+- 2026-07-11 — resolved, commit e975489f.
