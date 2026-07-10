@@ -8,30 +8,29 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
-| feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (2)
+## unfinished (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
+| feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 
 ## blocked (0)
 
 _none_
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -175,7 +174,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (570)
+## done (571)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -368,6 +367,7 @@ _none_
 | bug-i386-float-byval-param | A | 50 | bug | i386 backend: by-value set parameter unsupported | — |
 | bug-i386-try-except-segfault | A | 50 | bug | i386 target: `try...except` segfaults (layout-sensitive, not universal) | — |
 | bug-impl-prescan-codegen-regression | A | 50 | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
+| bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | bug-implicit-self-dynarray-length | A | 50 | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-implicit-self-method-loses-to-unit-proc | A | 50 | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
 | bug-implicit-textfile-unit-method-local | A | 50 | bug | Implicit textfile import misses method-local `Text` in units | — |
@@ -848,7 +848,6 @@ _none_
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
-- [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets

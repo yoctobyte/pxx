@@ -72,3 +72,9 @@ Rung of [[feature-pascal-corpus-expansion]] · method mirror
   [[task-pascal-conformance-long-tail]] (rest).
 - Note: the two big parser clusters touch shared `parser.inc` → sole-A
   confirmation needed before an E+B+P agent edits them.
+
+## Parked 2026-07-10
+Infra + baseline + cluster tickets landed (see above). Burn-down of the two big
+parser clusters edits shared `parser.inc` — needs the sole-A confirmation an
+E+B+P agent doesn't have. Resume: grab a cluster ticket, confirm sole-A, burn
+skip-list entries.
