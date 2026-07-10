@@ -26,10 +26,11 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (81)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-c-struct-member-ptr-to-fnptr-deref-call | C | 30 | bug | C: call through deref of a STRUCT-MEMBER pointer-to-function-pointer | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -755,6 +756,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [A] bug-a-o2-miscompiles-disassembler
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
