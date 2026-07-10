@@ -35,6 +35,12 @@ function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: I
 function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 
+{ AAAA (IPv6) sibling of DnsResolveHost: same "files dns" policy and search
+  candidates, addresses come back as 16-byte network-order TDnsIpv6. /etc/hosts
+  IPv6 lines are not consulted yet (dns_config parses IPv4 hosts only) — a
+  hosts miss goes straight to the nameservers. }
+function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
+
 implementation
 
 function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Integer;
@@ -204,6 +210,53 @@ begin
     idx := idx + 1;
   end;
   DnsResolveHost := rc;   { last rcode (e.g. NXDOMAIN), or NOCONFIG if no candidates }
+end;
+
+function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
+var
+  resolvText: string;
+  ns: TDnsIpv4Array;
+  localIps: TDnsIpv6Array;
+  search: TDnsSearchArray;
+  nsCount, searchCount, ndots, localCount, rc, i, j, idx: Integer;
+  cand: string;
+begin
+  count := 0;
+  rc := ReadFileText(PChar('/etc/resolv.conf'), resolvText, 8192);
+
+  nsCount := 0;
+  searchCount := 0;
+  ndots := DNS_DEFAULT_NDOTS;
+  rc := DnsParseResolvConfEx(resolvText, ns, nsCount, search, searchCount, ndots);
+  if nsCount = 0 then
+  begin
+    DnsResolveHost6 := DNS_ERR_NOCONFIG;
+    Exit;
+  end;
+  rc := DNS_ERR_NOCONFIG;
+  idx := 0;
+  cand := '';
+  while DnsQueryCandidate(name, search, searchCount, ndots, idx, cand) do
+  begin
+    localCount := 0;
+    rc := DnsResolveAAAAList(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
+    if rc < 0 then
+    begin
+      DnsResolveHost6 := rc;
+      Exit;
+    end;
+    if (rc = 0) and (localCount > 0) then
+    begin
+      for i := 0 to localCount - 1 do
+        for j := 0 to 15 do
+          ips[i][j] := localIps[i][j];
+      count := localCount;
+      DnsResolveHost6 := 0;
+      Exit;
+    end;
+    idx := idx + 1;
+  end;
+  DnsResolveHost6 := rc;
 end;
 
 end.

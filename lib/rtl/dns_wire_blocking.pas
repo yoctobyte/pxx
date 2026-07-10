@@ -49,6 +49,10 @@ function DnsResolveAListEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
 function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
+{ DnsResolveAAAA across a nameserver list (first definitive answer wins). }
+function DnsResolveAAAAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+
 implementation
 
 var
@@ -386,6 +390,38 @@ begin
     { negative = transport failure; try the next nameserver }
   end;
   DnsResolveAListEx := rc;   { last error }
+end;
+
+function DnsResolveAAAAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  i, j, k, rc, localCount: Integer;
+  localIps: TDnsIpv6Array;
+begin
+  count := 0;
+  if nsCount <= 0 then
+  begin
+    DnsResolveAAAAList := DNS_ERR_NONS;
+    Exit;
+  end;
+  rc := DNS_ERR_NONS;
+  for i := 0 to nsCount - 1 do
+  begin
+    localCount := 0;
+    rc := DnsResolveAAAA(ns[i], nsPort, name, localIps, localCount, timeoutMs);
+    if rc >= 0 then
+    begin
+      { definitive answer (even NXDOMAIN) — copy out and stop }
+      for j := 0 to localCount - 1 do
+        for k := 0 to 15 do
+          ips[j][k] := localIps[j][k];
+      count := localCount;
+      DnsResolveAAAAList := rc;
+      Exit;
+    end;
+    { negative = transport failure; try the next nameserver }
+  end;
+  DnsResolveAAAAList := rc;   { last error }
 end;
 
 end.

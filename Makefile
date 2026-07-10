@@ -3860,6 +3860,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_chase.pas /tmp/lib_dns_chase
 	test "$$(/tmp/lib_dns_chase)" = "$$(printf 'rcode=0\ncount=1\nchased=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas /tmp/lib_dns_aaaa
+	test "$$(/tmp/lib_dns_aaaa)" = "$$(printf 'rcode=0\ncount=1\nip6=ok')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas /tmp/lib_dns_buildguard
 	test "$$(/tmp/lib_dns_buildguard)" = "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
 	$(PXX_STABLE) test/lib_dns_parsefuzz.pas /tmp/lib_dns_parsefuzz

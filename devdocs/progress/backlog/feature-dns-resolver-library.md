@@ -310,6 +310,12 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
     lib_dns_config (Ex parse + candidate order), new `test/lib_dns_chase.pas`
     (forked mock serves CNAME then A; resolver follows with a second query).
     All in `make lib-test`, green against stable v194.
-  REMAINING: async sibling over asyncnet, `dns_libc`/`dns_resolved`/`dns_esp`
-  backends + profile selection, AAAA facade entrypoint (`DnsResolveHost6`),
+  REMAINING (after the AAAA-facade slice below): async sibling over asyncnet,
+  `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection,
   negative-response caching.
+- 2026-07-10 — **AAAA facade landed** (Track B): `DnsResolveAAAAList`
+  (dns_wire_blocking) + `dns.DnsResolveHost6` — same resolv.conf/search-
+  candidate policy as DnsResolveHost; hosts-file IPv6 lines and AAAA-side CNAME
+  chasing deliberately not yet (dns_config parses IPv4 hosts only; chase needs
+  an AAAA Ex variant). New forked-mock e2e `test/lib_dns_aaaa.pas` in
+  `make lib-test`.
