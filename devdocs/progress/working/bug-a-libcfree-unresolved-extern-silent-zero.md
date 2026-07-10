@@ -7,7 +7,7 @@ prio: 68  # auto — a whole bug class (silent miscompile → runtime SIGSEGV) t
 
 - **Type:** bug (compiler linker / diagnostics) — **Track A** (`compiler/elfwriter.inc`,
   `compiler/symtab.inc`, C-side marking in `compiler/cparser.inc`).
-- **Status:** backlog
+- **Status:** working
 - **Found / Opened:** 2026-07-10, sqlite file-VFS wall 4
   ([[task-sqlite-libc-free-runtime-bringup]],
   [[project_sqlite_file_vfs_wall4_null_syscall_slot]]).

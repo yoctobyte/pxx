@@ -990,6 +990,16 @@ begin
           end
           else
           begin
+            { An unresolved identifier used as a value degrades to integer 0 — a
+              best-effort leniency for tokens a self-referential / unmodelled
+              macro leaves behind (and for the predefined-but-unmodelled
+              __LINE__/__FILE__/__func__ family, which are `__`-prefixed). Warn
+              on the non-reserved cases so a genuine missing symbol is surfaced
+              instead of silently becoming 0 — see the static-initializer sites
+              below, which is where sqlite's `(...)pread` in aSyscall[] hid the
+              file-VFS null-call. Reserved `__`-names stay silent to avoid spam. }
+            if (Length(name) < 2) or (name[1] <> '_') or (name[2] <> '_') then
+              Warn('undeclared identifier ''' + name + ''' used as value (treated as 0)');
             node := AllocNode(AN_INT_LIT);
             ASTIVal[node] := 0;
             ASTTk[node] := Ord(tyInteger);
@@ -4509,6 +4519,7 @@ function CConsumeCastProcInit(var procIdx: Integer): Boolean;
   recognizes the cast wrapper and reuses the existing proc-address PendingInit
   kind used by bare function names. }
 var openIdx, j, depth, procTok, afterTok: Integer;
+    procName: AnsiString;
 begin
   Result := False;
   procIdx := -1;
@@ -4530,8 +4541,21 @@ begin
   if (procTok >= TokCount) or (Tokens[procTok].Kind <> tkIdent) then Exit;
   if (afterTok < TokCount) and not (Tokens[afterTok].Kind in [tkComma, tkEnd]) then Exit;
 
-  procIdx := FindProc(GetTokenStr(procTok));
-  if procIdx < 0 then Exit;
+  procName := GetTokenStr(procTok);
+  procIdx := FindProc(procName);
+  if procIdx < 0 then
+  begin
+    { The shape IS `(type)identifier` in a static initializer but the name is
+      not a known proc. If it is also not a known global and not NULL, it is an
+      undeclared symbol that would silently become a null slot — sqlite's
+      `(sqlite3_syscall_ptr)pread` in aSyscall[]. Warn (skip reserved __names)
+      before falling back to the caller's null-slot path. }
+    if (FindSym(procName) < 0) and (procName <> 'NULL') and
+       ((Length(procName) < 2) or (procName[1] <> '_') or (procName[2] <> '_')) then
+      WarnAt(Tokens[procTok].Line, 'undeclared identifier ''' + procName +
+             ''' in static initializer cast (treated as null slot)');
+    Exit;
+  end;
 
   TokPos := afterTok;
   Next;               { CurTok now points at the delimiter after the function name }
@@ -5340,11 +5364,21 @@ begin
         end
         else if CurTok.Kind = tkIdent then
         begin
-          { NULL or another resolvable global pointer; otherwise a null slot. }
+          { NULL or another resolvable global pointer; otherwise a null slot.
+            An identifier that is neither a known global nor `NULL` is an
+            undeclared symbol silently becoming a null slot — the sqlite
+            aSyscall[] file-VFS null-call class. Warn (skip reserved __names). }
           idx := FindSym(CurTok.SVal);
           if (idx >= 0) and (CurTok.SVal <> 'NULL') then
           begin arrKind[nArrElems] := 2; arrSym[nArrElems] := idx; end
-          else begin arrKind[nArrElems] := 1; arrSym[nArrElems] := 0; end;
+          else
+          begin
+            if (idx < 0) and (CurTok.SVal <> 'NULL') and
+               ((Length(CurTok.SVal) < 2) or (CurTok.SVal[1] <> '_') or (CurTok.SVal[2] <> '_')) then
+              Warn('undeclared identifier ''' + CurTok.SVal +
+                   ''' in static initializer (treated as null slot)');
+            arrKind[nArrElems] := 1; arrSym[nArrElems] := 0;
+          end;
           Next;
         end
         else if CurTok.Kind = tkInteger then
