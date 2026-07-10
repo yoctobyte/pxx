@@ -3595,7 +3595,8 @@ test-opt: $(COMPILER)
 	         test_inline_expand test_conformance_1 test_conformance_2 \
 	         test_class_is_as test_const_set test_cast_string \
 	         test_call_result_member strings test_char_to_string \
-	         test_cross_ptr_arith test_anonymous_record; do \
+	         test_cross_ptr_arith test_anonymous_record \
+	         test_exc_resident_param; do \
 	  ./$(COMPILER) test/$$t.pas /tmp/opt0_$$t >/dev/null && \
 	  ./$(COMPILER) -O1 test/$$t.pas /tmp/opt1_$$t >/dev/null && \
 	  ./$(COMPILER) -O2 test/$$t.pas /tmp/opt2_$$t >/dev/null && \

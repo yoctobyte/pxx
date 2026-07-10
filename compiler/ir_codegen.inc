@@ -5064,7 +5064,7 @@ begin
 end;
 
 procedure IREmitMachineCode;
-var i, lblId, pos, targetOffset, f, procIdx: Integer;
+var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     LabelFixupCount: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
@@ -5320,6 +5320,36 @@ begin
           ]);
           IREmitCodeCall(ExcSetJmpAddr);
           EmitAsmX64(['test eax, eax']);
+          if RcResidentCount > 0 then
+          begin
+            { Resident register caches (r14/r15 regcall residency) are ROLLED
+              BACK by the raise longjmp to their try-entry snapshot, while the
+              frame slots — the authoritative store — keep any value stored
+              inside the protected block. Route the exception landing through
+              an inline refresh (reload each resident register from its frame
+              slot) before entering the handler, so handler reads never see the
+              stale snapshot (bug-a-o2-resident-param-stale-after-longjmp).
+              rax is dead at the handler label (IR_EXC_MATCH reloads it). }
+            EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz over the refresh (normal path) }
+            for f := 0 to RcResidentCount - 1 do
+              RegcallRefreshResident(RcResidentSym[f]);
+            if LabelPositions[lblId] <> -1 then
+            begin
+              EmitB($E9);                                             { jmp handler }
+              EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+            end
+            else
+            begin
+              EmitB($E9);
+              if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+              LabelFixupPos[LabelFixupCount] := CodeLen;
+              LabelFixupTarget[LabelFixupCount] := lblId;
+              Inc(LabelFixupCount);
+              EmitI32(0);
+            end;
+            Patch32(excSkip, CodeLen - (excSkip + 4));
+          end
+          else
           if LabelPositions[lblId] <> -1 then
           begin
             EmitB($0F); EmitB($85);
