@@ -8,6 +8,7 @@
  */
 
 #include <sys/stat.h>
+#include <errno.h>
 
 /* Mirrors TPxxStatBuf (lib/rtl/pxxcio.pas): 5 x int64 + 2 x int32 = 48 bytes,
    identical layout on every target. */
@@ -43,25 +44,34 @@ static void fill(struct stat *buf, const struct __pxx_statbuf *sb) {
   buf->st_ctime   = (long)sb->mtime;
 }
 
+/* The PAL stat calls return the raw syscall result: 0 on success, -errno on
+   failure. Propagate -errno into errno — callers (notably sqlite's path
+   resolver, appendOnePathElement) branch on `errno==ENOENT` to tell "file does
+   not exist yet" (fine, create it) from a real error; without this, a stale
+   errno made a missing file look like an I/O error and sqlite3_open a
+   non-:memory: db returned SQLITE_CANTOPEN. */
 int fstat(int fd, struct stat *buf) {
   struct __pxx_statbuf sb;
   int r = __pxx_fstat(fd, &sb);
-  if (r >= 0) fill(buf, &sb);
-  return r < 0 ? -1 : 0;
+  if (r >= 0) { fill(buf, &sb); return 0; }
+  errno = -r;
+  return -1;
 }
 
 int stat(const char *path, struct stat *buf) {
   struct __pxx_statbuf sb;
   int r = __pxx_stat(path, &sb);
-  if (r >= 0) fill(buf, &sb);
-  return r < 0 ? -1 : 0;
+  if (r >= 0) { fill(buf, &sb); return 0; }
+  errno = -r;
+  return -1;
 }
 
 int lstat(const char *path, struct stat *buf) {
   struct __pxx_statbuf sb;
   int r = __pxx_lstat(path, &sb);
-  if (r >= 0) fill(buf, &sb);
-  return r < 0 ? -1 : 0;
+  if (r >= 0) { fill(buf, &sb); return 0; }
+  errno = -r;
+  return -1;
 }
 
 /* LFS (_LARGEFILE64_SOURCE) aliases sqlite's os_unix.c imports. On LP64 st_size

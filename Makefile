@@ -707,6 +707,8 @@ test-core: $(COMPILER)
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c /tmp/crtl_lfs64_aliases_b23426
 	/tmp/crtl_lfs64_aliases_b23426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_stat_errno_enoent_b235.c /tmp/crtl_stat_errno_enoent_b23526
+	/tmp/crtl_stat_errno_enoent_b23526; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_tvalue_int_b131.c /tmp/c_lua_tvalue_int_b13126
 	/tmp/c_lua_tvalue_int_b13126; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_opcode_decode_b132.c /tmp/c_lua_opcode_decode_b13226
