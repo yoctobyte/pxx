@@ -705,6 +705,8 @@ test-core: $(COMPILER)
 	/tmp/cinline_struct_ptr_field_b12926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c /tmp/crtl_lfs64_aliases_b23426
+	/tmp/crtl_lfs64_aliases_b23426; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_tvalue_int_b131.c /tmp/c_lua_tvalue_int_b13126
 	/tmp/c_lua_tvalue_int_b13126; test "$$?" = "42"
 	./$(COMPILER) test/c_lua_opcode_decode_b132.c /tmp/c_lua_opcode_decode_b13226

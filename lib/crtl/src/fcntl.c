@@ -50,3 +50,26 @@ int fcntl(int fd, int cmd, ...) {
   va_end(ap);
   return __pxx_fcntl(fd, cmd, (long long)arg);
 }
+
+/* LFS (_LARGEFILE64_SOURCE) aliases sqlite's os_unix.c imports. off_t is already
+   64-bit on LP64 and the native long on ILP32, so the *64 names are the SAME
+   syscall path as the base ones — forward, no field translation. */
+int open64(const char *path, int flags, ...) {
+  int mode = 0;
+  if (flags & O_CREAT) {
+    va_list ap;
+    va_start(ap, flags);
+    mode = va_arg(ap, int);
+    va_end(ap);
+  }
+  return __pxx_open(path, flags, mode);
+}
+
+int fcntl64(int fd, int cmd, ...) {
+  va_list ap;
+  long arg;
+  va_start(ap, cmd);
+  arg = va_arg(ap, long);
+  va_end(ap);
+  return __pxx_fcntl(fd, cmd, (long long)arg);
+}

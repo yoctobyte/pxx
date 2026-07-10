@@ -87,8 +87,34 @@ fchmod fcntl64 fstat64 fsync getpid gettimeofday localtime lstat64 mkdir
 mmap64 munmap nanosleep open64 stat64 sysconf utimes
 ```
 
+## 2026-07-10 update — LFS *64 aliases added; :memory: acceptance MET
+
+The 17 remaining OS/VFS imports were all present in the crtl EXCEPT five LFS
+(`_LARGEFILE64_SOURCE`) aliases that sqlite's os_unix.c uses on 64-bit Linux:
+`open64 fcntl64 fstat64 lstat64 stat64 mmap64`. On LP64 these are identical to
+the base calls (off_t already 64-bit), so the crtl now forwards them:
+- `lib/crtl/src/fcntl.c`: open64, fcntl64
+- `lib/crtl/src/sys/stat.c`: fstat64, stat64, lstat64
+- `lib/crtl/src/sys/mman.c`: mmap64
+
+With these, `test/csqlite_extended_test.c` (unity-including the crtl srcs)
+**links and runs fully libc-free** — `readelf -d` shows ZERO `DT_NEEDED`, opens a
+`:memory:` db, runs CREATE/INSERT/SELECT + aggregate queries, closes, exit 0.
+**Acceptance (below) is MET for `:memory:`.** crtl file I/O verified working
+libc-free end to end (open64→write→fstat64/stat64, regression b234).
+
+### Next wall — FILE-backed VFS returns SQLITE_CANTOPEN (14)
+`sqlite3_open("/tmp/x.db")` returns rc=14 (plain CANTOPEN, no sub-code). NOT the
+crtl bridge — direct crtl `open64`/`write`/`fstat64`/`stat64`/`fcntl64` all
+succeed (b234). So the failure is inside sqlite's os_unix.c VFS logic (candidate:
+the F_SETLK advisory-lock `fcntl`, a directory-fsync open, `access()`, or another
+syscall returning an unexpected value the PAL stubs). Next session: instrument
+os_unix.c `unixOpen`/`robust_open`/`unixLock` (or set a breakpoint on the first
+crtl call that returns <0) to find which syscall sqlite rejects. This is the
+file-VFS bring-up; `:memory:` does not need it.
+
 ## Acceptance
 
 - A libc-free sqlite driver (unity-including the crtl srcs) opens, executes SQL,
   and closes a `:memory:` database without faulting and with no `DT_NEEDED` (or
-  only the intended ones).
+  only the intended ones). **MET 2026-07-10** (csqlite_extended_test, 0 NEEDED).

@@ -64,6 +64,13 @@ int lstat(const char *path, struct stat *buf) {
   return r < 0 ? -1 : 0;
 }
 
+/* LFS (_LARGEFILE64_SOURCE) aliases sqlite's os_unix.c imports. On LP64 st_size
+   is already 64-bit and `struct stat64` == `struct stat`, so the *64 calls share
+   the base path — the PAL statx already returns a 64-bit size. */
+int fstat64(int fd, struct stat *buf)          { return fstat(fd, buf); }
+int stat64(const char *path, struct stat *buf) { return stat(path, buf); }
+int lstat64(const char *path, struct stat *buf){ return lstat(path, buf); }
+
 int mkdir(const char *path, mode_t mode) {
   return __pxx_mkdir(path, (int)mode);
 }

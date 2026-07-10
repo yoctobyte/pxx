@@ -16,6 +16,12 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
   return MAP_FAILED;
 }
 
+/* LFS alias: sqlite's os_unix.c imports mmap64 under _LARGEFILE64_SOURCE. Same
+   stub-fallback behaviour as mmap (mmap I/O is off by default). */
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  return mmap(addr, length, prot, flags, fd, offset);
+}
+
 int munmap(void *addr, size_t length) {
   (void)addr; (void)length;
   return 0;
