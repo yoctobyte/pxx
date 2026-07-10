@@ -877,6 +877,8 @@ var
   DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
   OptLevel : Integer;     { -O0..-O3: optimization level. 0 (default) = the historic 1:1 emission — the self-host byte-identity gate runs at -O0 and is NEVER affected by opt passes; each pass gates on OptLevel >= its tier. }
   WarnedMissedFold : Boolean;  { one-shot latch for IROptWarnMissedFold: a foldable const-const / identity IR_BINOP reached codegen (const-fold was measured 0-fire and not shipped; this tripwire flags a future pass that starts producing them). }
+  WarnMissedFold : Boolean;  { opt-in (--warn-missed-fold) gate for the tripwire. OFF by default: with -O2 the default, inline (-O2) legitimately produces foldable BINOPs on nearly every compile, so the tripwire would spam. Kept as a dev/measurement tool to re-check whether const-fold/identities are now worth reviving (feature-revive-const-fold-identity-pass). }
+  OptLevelExplicit : Boolean;  { true once an explicit -O flag was seen. -g (DWARF Tier-1) defaults to -O0 for debuggable 1:1 codegen (inline/opt would relocate or elide lines/functions, breaking breakpoints) UNLESS the user explicitly picked an -O level. }
   { --measure-regcall: phase-0 opportunity probe for feature-callconv-register-args.
     Per compiled body, tally params and how many are register-residency-eligible
     (scalar int/ptr, not by-ref/array/float/aggregate, address never taken in the

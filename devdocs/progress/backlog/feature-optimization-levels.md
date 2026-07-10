@@ -5,7 +5,16 @@ prio: 65  # auto
 # Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
 
 - **Type:** feature — umbrella
-- **Status:** backlog — **-O1 arc DELIVERED + pinned (v171); higher tiers pending.**
+- **Status:** backlog — **-O2 IS THE DEFAULT as of 2026-07-10 (pinned v194).**
+  OptLevel default 0→2; ~1.34x faster / ~11% smaller; self-host -O2 fixedpoint
+  byte-identical; `make test` + `make test-opt` green. `-g` now implies `-O0`
+  unless an explicit `-O` is given (opt relocates/elides debug lines). The
+  missed-fold tripwire is now opt-in (`--warn-missed-fold`) since inline (-O2)
+  legitimately produces foldable BINOPs on nearly every compile. The blocking
+  disassembler miscompile ([[bug-a-o2-miscompiles-disassembler]], the r14/r15
+  residency re-emit) is fixed. Const-fold/identities revival is now worth
+  re-measuring under -O2 ([[feature-revive-const-fold-identity-pass]]).
+  **-O1 arc DELIVERED + pinned (v171); higher tiers pending.**
   Moved out of working/ 2026-07-04 (no longer actively worked; not half-applied
   — every landed pass is clean + self-host byte-identical). -O1: passes 1-4
   (operand direct-load, compare-into-branch fusion), imm-fold, shared-IR

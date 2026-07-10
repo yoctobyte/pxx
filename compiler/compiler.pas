@@ -129,9 +129,11 @@ begin
   MeasureInline := False;
   InlineASTNext := INLINE_AST_BASE;
   InliningActive := 0;
-  OptLevel := 0;
+  OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable and remains the byte-identity reference; opt passes gate on OptLevel>=tier. }
+  OptLevelExplicit := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
+  WarnMissedFold := False;
   DumpCpp := False;
   NoStdInc := False;
   CUseSystemLibs := False;
@@ -191,9 +193,15 @@ begin
       MeasureInline := True;
       Inc(i);
     end
+    else if option = '--warn-missed-fold' then
+    begin
+      WarnMissedFold := True;
+      Inc(i);
+    end
     else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then
     begin
       OptLevel := Ord(option[3]) - Ord('0');
+      OptLevelExplicit := True;
       Inc(i);
     end
     else if option = '--dump-cpp' then
@@ -533,6 +541,11 @@ begin
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
   if MimicFpc then PasApplyMimicDefines;
+  { -g (DWARF Tier-1) implies -O0 unless the user explicitly chose an -O level:
+    opt passes (inline, DCE, jump threading) relocate/elide source lines and small
+    functions, so breakpoints and single-step break. `-g -O2` is still honoured for
+    users who accept degraded debug info. See feature-optimization-levels. }
+  if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 

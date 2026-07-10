@@ -5780,5 +5780,9 @@ procedure IROptimize;
 begin
   IROptDeadCode;
   IROptRedundantJump;
-  IROptWarnMissedFold;
+  { Opt-in only: with -O2 the default, inline produces foldable BINOPs on nearly
+    every compile, so this dev tripwire would fire on ordinary builds. Run it only
+    under --warn-missed-fold when re-measuring whether const-fold is worth reviving
+    (feature-revive-const-fold-identity-pass). }
+  if WarnMissedFold then IROptWarnMissedFold;
 end;
