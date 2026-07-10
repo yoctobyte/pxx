@@ -5,7 +5,7 @@ prio: 55
 # duktape: JS number formatting wrong (doubles scaled by ~5^13)
 
 - **Type:** bug (runtime — C frontend codegen) — **Track A/C**.
-- **Status:** backlog — found 2026-07-09, once the segfault was fixed (commit b30ccf88)
+- **Status:** done
   and duktape actually ran JS.
 - **Blocks:** [[feature-c-corpus-duktape]] running its JS test-suite (engine runs; number
   output is wrong).
@@ -150,3 +150,21 @@ accumulation (`DUK__BI_PRINT`), gcc vs pxx — the divergence is either the expo
 (a small-int off) or the bigint→double final scaling. The ~5^k (not 10^k) factor is the key
 clue: the ×5 half of the ×10 scaling is applied without the compensating ×2 / decimal-point
 shift.
+
+### Residual #3 FIXED (2026-07-10) — RTL Sqrt now correctly-rounded
+`Math.sqrt(2)` → `1.414213562373095` (dropped 17th digit) was NOT a dragon4
+generate bug: pxx's `sqrt(2)` double was itself 1 ULP low (`...bcc` vs IEEE
+`...bcd`), so dragon4 correctly formatted a slightly-wrong value. Root cause: RTL
+`Sqrt` (lib/rtl/math.pas) was software Newton-Raphson whose FP fixed point sits 1
+ULP below the correctly-rounded root; the `g:=x` seed + 200-iter cap also never
+converged for large/small exponents (sqrt(1e300) wrong, near-DBL_MAX → NaN).
+Fixed portably (commit 00a363e9): bit-hack exponent-halving seed → quadratic
+convergence in ≤8 steps, then one correctly-rounded correction using an exact
+Dekker two-product residual (`g + (x-g*g)/(2g)`). Bit-exact vs gcc on
+19989/20000 random doubles (3 misses = 1 ULP at the subnormal boundary);
+sqrt(2) bit-exact on all 5 targets. Regression b240.
+
+**All residuals now closed — resolving the ticket.**
+
+## Log
+- 2026-07-10 — resolved, commit 00a363e9.

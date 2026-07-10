@@ -26,12 +26,11 @@ _none_
 
 _none_
 
-## backlog (81)
+## backlog (80)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
-| bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -167,7 +166,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (564)
+## done (565)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -217,6 +216,7 @@ _none_
 | bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-expr-result-type-model | C | 55 | bug | C expression result-type model: `!` width, shift result type, hex-constant typing | — |
 | bug-c-external-func-address-indirect-call | A | 50 | bug | C: address of an EXTERNAL function called through a pointer does nothing | — |
 | bug-c-external-function-address-dlsym-sqlite | C | 50 | bug | C: address of external libc function used as function pointer | — |
@@ -778,7 +778,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [A] bug-c-call-through-deref-of-fnptr-pointer
 - [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
-- [p 55] [A] bug-c-duktape-double-formatting
 - [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
