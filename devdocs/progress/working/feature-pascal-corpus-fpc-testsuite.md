@@ -6,9 +6,9 @@ prio: 60  # auto — rung 1 of the Pascal corpus; biggest dialect coverage per e
 
 - **Type:** feature (frontend conformance corpus)
 - **Track:** P (Pascal frontend)
-- **Status:** backlog — filed 2026-07-10. Rung 1 of
+- **Status:** working
   [[feature-pascal-corpus-expansion]].
-- **Owner:** —
+- **Owner:** fable-ebp
 
 ## Idea
 FPC ships `tests/test/**` — thousands of small `.pp` programs, each exercising
@@ -50,3 +50,25 @@ curated subset; expand the subset as rungs clear.
 Rung of [[feature-pascal-corpus-expansion]] · method mirror
 [[feature-c-corpus-expansion]] · dialect policy
 [[project_fpc_compat_next_queue]] · [[project_mimic_fpc_done]].
+
+## 2026-07-10 — infra landed + baseline audit
+
+- Fetcher: `tools/install_lib_candidates.sh fpc-testsuite` — sparse
+  `tests/test` + `tests/tstunits` (erroru et al, symlinked next to the tests)
+  at FPC `release_3_2_2` (0d122c49), gitignored, PROVENANCE.md.
+- Runner: `tools/run_pascal_conformance.sh` — curated categories (generics,
+  classes/props, exceptions, operators, strings/arrays/sets/case/enums/for-in,
+  extended records, interfaces...), FPC dotest directives honored (`%FAIL` =
+  must-reject, `%NORUN`, `%RESULT`, cpu/target/version/opt gates auto-skip),
+  `--shard I/N`, `--all`, `--only GLOB`. Skip list
+  `test/pascal-conformance/pxx.skip` (name + reason), same discipline as
+  c-testsuite.
+- **Baseline: 222 pass / 294 skip-listed / 34 auto-gated of 550 curated.**
+- Cluster tickets filed: [[bug-pascal-headerless-program]] (111!),
+  [[feature-pascal-delphi-generics-syntax]] (93),
+  [[feature-pascal-generic-nonclass-templates]] (10),
+  [[feature-pascal-class-management-operators]] (8),
+  [[bug-pascal-missing-diagnostics-fail-tests]] (13),
+  [[task-pascal-conformance-long-tail]] (rest).
+- Note: the two big parser clusters touch shared `parser.inc` → sole-A
+  confirmation needed before an E+B+P agent edits them.

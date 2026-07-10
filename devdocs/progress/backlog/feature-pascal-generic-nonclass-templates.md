@@ -1,0 +1,24 @@
+---
+prio: 50  # auto — 10 conformance tests
+---
+
+# Generic templates beyond classes: records, arrays, procvars
+
+- **Type:** feature (Pascal frontend, generics)
+- **Track:** P (shared `parser.inc` — A-gated)
+- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+  ([[feature-pascal-corpus-fpc-testsuite]]).
+- **Owner:** —
+
+## Symptom
+`error: generic templates must be class declarations` — pxx only allows
+`generic T<...> = class`. FPC also allows generic **records** (`generic
+TRec<T> = record`), **dynamic arrays** (`generic TArr<T> = array of T`), and
+**procedure types**.
+
+## Impact
+10 curated failures. Skip-list reason: `parser: generic record/array/procvar
+templates`.
+
+## Gate
+`make test` + self-host byte-identical; burn the skip-list entries.

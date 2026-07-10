@@ -1,0 +1,38 @@
+---
+prio: 44  # auto — ~60 heterogeneous conformance failures, small clusters
+---
+
+# FPC-conformance long tail: RTL gaps, runtime faults, small parser holes
+
+- **Type:** task umbrella (catch-all for the audit's small clusters)
+- **Track:** P (frontend) / B (RTL pieces)
+- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+  ([[feature-pascal-corpus-fpc-testsuite]]).
+- **Owner:** —
+
+The four big clusters have their own tickets ([[bug-pascal-headerless-program]]
+111, [[feature-pascal-delphi-generics-syntax]] 93+,
+[[feature-pascal-generic-nonclass-templates]] 10,
+[[feature-pascal-class-management-operators]] 8,
+[[bug-pascal-missing-diagnostics-fail-tests]] 13). This ticket tracks the rest
+(reasons verbatim in `test/pascal-conformance/pxx.skip`):
+
+- **RTL gaps (B):** `ExitCode` writable var (blocks every erroru-using test —
+  cheap, high value), `RandSeed`, `LowerCase`, `flush`, `DynArraySize`,
+  `IInterface`/`IEnumerator` base interfaces, `variants` unit, `fgl` unit,
+  `TAB` const.
+- **Runtime faults (P/A, investigate first):** tforin3 + tstring1 segfault
+  (139), tstring9 exit 2, tcase45_2/tcase46_2 exit 1, tarray11 exit 30,
+  tover1 exit 1.
+- **Parser small holes:** case-label edge cases (`case string label must not
+  be empty`, `expected case label`, `case label must be constant`),
+  `enumerator` modifier on class functions, `for-in` over custom enumerators,
+  dynarray `+` concat (modeswitch arrayoperators), dynarray initializers,
+  `declared(NAME)` conditional, operator overloading on plain types
+  (`LongInt is not a record or class`), `Self` in class methods,
+  static-field access paths, ConstEval `Pred` in const-expr,
+  `Mismatch in MatchProcCall` (internal error — investigate).
+
+## Method
+Pick a sub-cluster, split it into its own narrowed ticket when starting real
+work; burn skip-list entries as they green.

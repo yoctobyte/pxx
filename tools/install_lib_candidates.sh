@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson|stb|cglm|enet] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -52,6 +52,9 @@ ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snaps
 
 VICE_URL="https://github.com/bluefeversoft/vice"
 VICE_COMMIT="a89f82dcab34b74481d6504312e3d52bbba44320"   # HEAD, 2026-07 snapshot (Vice11)
+
+FPC_URL="https://github.com/fpc/FPCSource"
+FPC_COMMIT="0d122c49534b480be9284c21bd60b53d99904346"   # release_3_2_2 tag
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -185,6 +188,26 @@ EOF
   say "c-testsuite -> $DEST/c-testsuite"
 }
 
+fetch_fpc_testsuite() {
+  if present fpc-testsuite; then say "fpc-testsuite present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$FPC_URL" fpc-testsuite "$FPC_COMMIT" tests/test tests/tstunits LICENSE
+  # helper units (erroru, ...) live in tests/tstunits; link them next to the
+  # tests so `uses erroru` resolves from the test dir
+  for u in "$DEST/fpc-testsuite/tests/tstunits"/*.pp; do
+    ln -sf "../tstunits/$(basename "$u")" "$DEST/fpc-testsuite/tests/test/"
+  done
+  cat > "$DEST/fpc-testsuite/PROVENANCE.md" <<EOF
+# FPC test-suite Candidate (Pascal conformance corpus)
+Upstream: ${FPC_URL}
+Commit: ${FPC_COMMIT} (release_3_2_2 tag)
+Paths: tests/test/, tests/tstunits/ (helper units e.g. erroru), LICENSE
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: FPC sources are GPL-2.0-or-later (see LICENSE); used here only as a
+test corpus, never linked or shipped.
+EOF
+  say "fpc-testsuite -> $DEST/fpc-testsuite"
+}
+
 fetch_zlib() {
   if present zlib; then say "zlib present (FORCE=1 to re-fetch) — skip"; return 0; fi
   fetch_commit "$ZLIB_URL" zlib "$ZLIB_COMMIT"
@@ -308,7 +331,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -318,10 +341,11 @@ EOF
     freebsd-regex) fetch_freebsd_regex ;;
     sqlite)        fetch_sqlite ;;
     c-testsuite)   fetch_c_testsuite ;;
+    fpc-testsuite) fetch_fpc_testsuite ;;
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
     chess|vice)    fetch_vice ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|zlib|tcc|cjson|chess)" ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."
