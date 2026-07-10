@@ -4,8 +4,10 @@ prio: 58  # auto — greenlit optimization campaign; real speed win but explorat
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
 
-- **Type:** feature (codegen — optimization) — **Track A** — umbrella for the
-  next optimization campaign.
+- **Type:** feature (codegen — optimization) — **Track O** (Optimization lane;
+  file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
+  backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
+  for the next optimization campaign.
 - **Status:** backlog — greenlit 2026-07-10. Exploratory work lands **behind
   `-O3`** (see gating); `-O2` stays the proven default and the stable fallback.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
@@ -60,6 +62,21 @@ small per-statement register scheduler over expression trees (rax/rcx/rdx +
 caller-saved r8–r11 are free *within* a statement, clobbered only across calls).
 Local, low-risk, attacks the single biggest slice. De-risks the register model
 before the bigger scaffold. x86-64 emitter (§3b); a cross variant later.
+
+**Leaf functions first (the golden class).** A function that calls nothing
+(`ProcBodyMakesCall = false`, already computed by the inline pass) may use all 9
+caller-saved registers (rax,rcx,rdx,rsi,rdi,r8–r11) as scratch with **zero
+save/restore** — nothing can clobber them. Simplest, highest-value case: no
+prologue register save, whole scratch set free. Start the scheduler here, extend
+to non-leaf (where cross-call values need callee-saved or spill) after.
+
+**Standard ABI preserved at every call boundary.** W1/W2 do *internal* allocation
+only — callers never see it, so nothing crystallizes and each body is an
+independent island. Custom register *calling conventions* (caller-side param
+passing, which DOES crystallize into the callee's ABI and only works when every
+call site is direct+visible — breaks on fn-pointers / virtual / exported /
+separate compilation) are explicitly **deferred** to a regcall-phase-3 follow-up
+([[feature-callconv-register-args]]), not part of W1/W2.
 
 ### W2 — register-liveness scaffold → linear-scan allocator (the keystone)
 A pre-emit IR pass computing per-body live ranges, then assigning free

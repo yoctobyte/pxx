@@ -97,6 +97,17 @@ frontend)"). **At session start, infer your track from the request:**
   MAY carry cross-target reds for hours — tstate is the truth, and a
   core-job red older than a day is a revert candidate. Gate for T's own
   tooling changes = `tools/testmgr.py --tier full` green.
+- **Track O — optimization (formal category, implicitly Track A).** A
+  cross-cutting *lane*, not a file set: codegen/runtime speed work —
+  register allocation, `-O` passes, the heap allocator, anything chasing the
+  emitted-code or alloc-path cost. Almost everything here edits Track A's shared
+  ground (`ir_codegen.inc`, `symtab.inc`, the backends, `compiler/builtin/**`), so
+  **an O ticket carries a Track A file-ownership tag and obeys A's rules**:
+  self-host byte-identical gate, no-concurrent-edit with A. O is just the visible
+  grouping so the optimization campaign reads as one lane (surfaced on the board
+  like R/T; `feature-opt-*` slugs auto-tag O). New passes land behind `-O3` (a
+  free tier — nothing gates `OptLevel>=3` yet) and promote to `-O2` per-pass only
+  after the full gate; `-O2` stays the proven default. Works on `master`.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
@@ -190,6 +201,15 @@ Rust tests) on `master`; live work under `devdocs/progress/working/feature-rust-
 backend → **file a Track A ticket**, don't edit under R. Gate = Rust tests green +
 self-host byte-identical + cross. Land only green; destabilizing work behind a
 flag or incrementally, never a long-lived branch.
+
+### Track O in one line
+Optimization lane = **implicitly Track A**. Codegen/runtime speed (register
+allocation, `-O` passes, heap allocator). Edits A's shared files (`ir*.inc`,
+`symtab.inc`, backends, `compiler/builtin/**`), so file it as a Track A ticket
+(O is the visible grouping) and obey A's gate: `make test` + self-host
+byte-identical (+ cross where a backend/runtime is touched). New passes land
+behind `-O3`, promote to `-O2` per-pass only after the full gate; `-O2` is the
+proven default and the stable fallback. Land only green.
 
 ### Track T in one line
 Own the test infra: `tools/testmgr.py`, `tools/twatch.py`,

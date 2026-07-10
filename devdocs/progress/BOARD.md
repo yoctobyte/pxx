@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (81)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -82,8 +82,9 @@ _none_
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-opt-o3-register-pressure | A | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
-| feature-opt-store-reload-elimination | A | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
+| feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
+| feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-optimization-levels | A | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
@@ -642,7 +643,7 @@ _none_
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
-| feature-opt-imm-fold-binop | A | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
+| feature-opt-imm-fold-binop | O | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
@@ -774,12 +775,12 @@ _none_
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [A] feature-inline-routines
-- [p 60] [A] feature-opt-store-reload-elimination
+- [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 58] [A] feature-opt-o3-register-pressure
+- [p 58] [O] feature-opt-o3-register-pressure
 - [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -790,6 +791,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 45] [A] chore-makefile-testtmp-parameterize
