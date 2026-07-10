@@ -4,7 +4,7 @@ prio: 45  # auto
 
 # Register-based internal calling convention (args in registers, not stack slots)
 
-- **Type:** feature (codegen — ABI-wide) — Track A
+- **Type:** feature (codegen — ABI-wide) — **Track O** (Optimization lane; file-ownership Track A)
 - **Status:** backlog
 - **Opened:** 2026-07-03 (pin-time optimization campaign)
 - **Umbrella:** the -O2 tier of [[feature-optimization-levels]]; split out

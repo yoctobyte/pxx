@@ -4,7 +4,7 @@ prio: 65  # auto
 
 # Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
 
-- **Type:** feature — umbrella
+- **Type:** feature — umbrella — **Track O** (Optimization lane; file-ownership Track A)
 - **Status:** backlog — **-O2 IS THE DEFAULT as of 2026-07-10 (pinned v194).**
   OptLevel default 0→2; ~1.34x faster / ~11% smaller; self-host -O2 fixedpoint
   byte-identical; `make test` + `make test-opt` green. `-g` now implies `-O0`
@@ -29,6 +29,15 @@ prio: 65  # auto
   now the bottleneck (several minutes per pin; goal ~20s — see
   [[chore-fast-pin-tiered-tests]]), and the language/RTL surface has settled
   enough. Start with the low-hanging -O1 peepholes below.
+
+## Target scope (Track O policy)
+**Per-backend optimization effort = x86-64 + aarch64 only.** Shared-IR passes
+(§3a) help all six targets for free and stay target-agnostic; per-backend work
+(emitter peepholes, register allocator/scheduler) is built only for the two
+targets where compiled-code throughput matters. 32-bit (i386/arm32/rv32) is
+perf-irrelevant (legacy/control/bring-up, not throughput); ESP32/xtensa is a
+special case whose hot paths are hardware peripherals (DMA/ADC/SPI, already
+supported), not compiled loops. Don't port per-backend passes to those.
 
 ## Motivation
 

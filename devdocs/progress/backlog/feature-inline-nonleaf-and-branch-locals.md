@@ -4,7 +4,7 @@ prio: 45  # auto
 
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
 
-- **Type:** feature (codegen — optimization) — Track A
+- **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
 - **Status:** backlog
 - **Opened:** 2026-07-04 (follow-up split from [[feature-inline-routines]])
 - **Umbrella:** the `-O2`/`-O3` tier of [[feature-optimization-levels]]; the

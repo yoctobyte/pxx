@@ -107,7 +107,10 @@ frontend)"). **At session start, infer your track from the request:**
   grouping so the optimization campaign reads as one lane (surfaced on the board
   like R/T; `feature-opt-*` slugs auto-tag O). New passes land behind `-O3` (a
   free tier — nothing gates `OptLevel>=3` yet) and promote to `-O2` per-pass only
-  after the full gate; `-O2` stays the proven default. Works on `master`.
+  after the full gate; `-O2` stays the proven default. **Per-backend effort
+  (peepholes, register allocator) = x86-64 + aarch64 only** — 32-bit is
+  perf-irrelevant and ESP/xtensa's hot paths are hardware peripherals; shared-IR
+  passes still help all targets free. Works on `master`.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.

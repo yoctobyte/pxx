@@ -4,7 +4,7 @@ prio: 60  # auto
 
 # Inline routine expansion (`inline;`)
 
-- **Type:** feature
+- **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-18 (design discussion — small-helper performance)

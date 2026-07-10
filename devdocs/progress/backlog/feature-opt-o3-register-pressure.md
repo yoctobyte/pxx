@@ -31,6 +31,22 @@ r14/r15 param residency ([[feature-callconv-register-args]]) already bought
 **1.34× self-compile from just 2 registers** — direct proof the lever is real and
 far from exhausted. Killing the 37% is where the next multiplier lives.
 
+## Target scope — per-backend effort = x86-64 + aarch64 only
+Optimization splits by home (see `optimization-architecture.md` §3): **shared-IR
+passes (§3a) help all six targets for free** — one implementation, keep those
+target-agnostic. **Per-backend work (§3b: emitter peepholes, the operand
+scheduler, the register allocator's emit side) targets x86-64 + aarch64 ONLY.**
+Rationale:
+- **32-bit (i386 / arm32 / riscv32): perf-irrelevant.** Legacy / control-plane /
+  bring-up correctness, never throughput. Not worth per-backend allocator effort.
+- **ESP32 / xtensa: special case, also skip.** Its perf-critical paths are the
+  hardware peripherals (DMA / ADC / SPI capture), already supported and offloaded
+  to silicon — not compiled-code throughput. Tight compiled loops there are rare
+  and not the bottleneck.
+So: build W1/W2 for x86-64 first, aarch64 second; do NOT port the register
+allocator to the 32-bit or xtensa backends. Shared-IR passes (DCE, any future
+IR-level transform) still land once and benefit all — no reason to gate those.
+
 ## Pipeline home — decided (do NOT post-rewrite bytes)
 
 Register work lives **before bytes, over the IR** — a *planning* pass that
