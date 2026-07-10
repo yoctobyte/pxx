@@ -97,12 +97,39 @@ when the owning class flags case-sensitive fields. Regression test
 **Result:** `1/3 => 0.3333333333333333`, `(0.1+0.2) => 0.30000000000000004`,
 `5.5%2 => 1.5`, `sqrt(2) => 1.414...`, `bigint sum => 4999950000` — all correct now.
 
-### Residuals (separate, lower severity — NOT the ~5^k bug)
-1. `String(0/0)` → `-2147483648` (INT_MIN) instead of `NaN`. Separate NaN-detection
-   path (`duk__dragon4_double_to_ctx` / fint handling), unrelated to field case.
-2. `Math.sqrt(2)` → `1.414213562373095` vs gcc `1.4142135623730951` — pxx drops the
-   final significant digit (16 vs 17 sig digits → rounds to a different double).
-   A distinct shortest-round-trip/last-digit issue in the free-format generate path.
+### Residual #1 FIXED (2026-07-10) — NaN compare ignored unordered (PF)
+`String(0/0)` → `-2147483648` was NOT a NaN-detection bug in duktape — it was the
+x86-64 float compare in `ir_codegen.inc`: `ucomisd` + plain `setcc` read only ZF/CF
+and ignored **PF (parity = unordered)**. On NaN, ucomisd sets ZF=PF=CF=1, so
+`sete`/`setb`/`setbe` returned 1 and `setne` returned 0 → `NaN==NaN` true,
+`NaN!=NaN` false, `NaN<x` true. duktape's `DUK_ISNAN(x)` = `(x!=x)` therefore
+returned false → NaN escaped into dragon4 → `cvttsd2si` → INT_MIN. Pure-C repro
+(no duktape): `d/d` with d=0 → `nan==nan`=1, `nan!=nan`=0, `nan<1`=1 (all wrong).
+**Fix:** fold PF into `==,!=,<,<=` (`Eq=ZF&!PF`, `Neq=!ZF|PF`, `Lt=CF&!PF`,
+`Le=(CF|ZF)&!PF`); `>`/`>=` (seta/setae, CF=0-based) already give 0 on unordered.
+Now `String(0/0)`="NaN", `isNaN(0/0)`=true, `NaN!==NaN`=true. Regression b232.
+Affects Pascal too (shared codegen). Self-host byte-identical (2-step reseed).
+
+### Cross-target non-uniformity (SAME bug class, other backends)
+The unordered handling differs per target (user-flagged):
+- **x86-64 / i386**: `ucomisd` + setcc, PF ignored. x64 FIXED; **i386 still open**
+  (`ir_codegen386.inc:1879` `EmitSetcc(op,False)`, same PF gap).
+- **aarch64** (`ir_codegen_aarch64.inc:1309`): `fcmp` unordered = N0 Z0 C1 V1.
+  Eq/Neq/Gt/Ge correct, but **Lt uses `lt`(N≠V) and Le uses `le`** → both wrongly
+  true on NaN. Need float-specific `mi` / `ls`. **OPEN.**
+- **arm32** (`ir_codegen_arm32.inc:1472`): same VFP NZCV; `EmitSetccArm32(op,True)`
+  → same Lt/Le NaN bug. **OPEN.**
+- **riscv32 / xtensa**: already NaN-correct (soft-float kernel returns code 2 =
+  unordered, mapped correctly). No change needed.
+
+### Residual #2 (open, separate — crtl, Track B)
+`Math.sqrt(-1)` → `0` instead of `NaN`: crtl `sqrt()` (lib/crtl/src/math.c) returns 0
+for negative args instead of NaN. Track B crtl gap, unrelated to codegen.
+
+### Residual #3 (open) — sqrt last digit
+`Math.sqrt(2)` → `1.414213562373095` vs gcc `1.4142135623730951` — pxx drops the
+17th sig digit (rounds to a different double). Distinct shortest-round-trip issue in
+the free-format dragon4 generate path.
 
 ### Further localization: it's the PARSE, not stringify (superseded by ROOT CAUSE above)
 Instrumented `duk__numconv_stringify_raw`: it receives an already-wrong `x` — so the JS

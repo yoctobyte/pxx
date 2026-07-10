@@ -2918,11 +2918,37 @@ begin
               tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
                 begin
                   EmitB($66); EmitB($0F); EmitB($2E); EmitB($C8); { ucomisd xmm1, xmm0 }
+                  { ucomisd sets ZF=PF=CF=1 when either operand is NaN (unordered).
+                    IEEE requires every ordered comparison FALSE for NaN (and != TRUE).
+                    Plain setcc reads only ZF/CF and would misreport NaN: sete/setb/
+                    setbe -> 1, setne -> 0. Fold in PF (parity = unordered) for
+                    ==,!=,<,<=. seta/setae (Gt/Ge, CF=0 based) are already 0 on
+                    unordered, so they need no PF guard. cl is a free scratch here. }
                   case op of
-                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end; { sete al }
-                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end; { setne al }
-                    tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end; { setb al }
-                    tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end; { setbe al }
+                    tkEq:                                                { al <- ZF & !PF }
+                      begin
+                        EmitB($0F); EmitB($94); EmitB($C0);              { sete al }
+                        EmitB($0F); EmitB($9B); EmitB($C1);              { setnp cl }
+                        EmitB($20); EmitB($C8);                          { and al, cl }
+                      end;
+                    tkNeq:                                               { al <- !ZF | PF }
+                      begin
+                        EmitB($0F); EmitB($95); EmitB($C0);              { setne al }
+                        EmitB($0F); EmitB($9A); EmitB($C1);              { setp cl }
+                        EmitB($08); EmitB($C8);                          { or al, cl }
+                      end;
+                    tkLt:                                                { al <- CF & !PF }
+                      begin
+                        EmitB($0F); EmitB($92); EmitB($C0);              { setb al }
+                        EmitB($0F); EmitB($9B); EmitB($C1);              { setnp cl }
+                        EmitB($20); EmitB($C8);                          { and al, cl }
+                      end;
+                    tkLe:                                                { al <- (CF|ZF) & !PF }
+                      begin
+                        EmitB($0F); EmitB($96); EmitB($C0);              { setbe al }
+                        EmitB($0F); EmitB($9B); EmitB($C1);              { setnp cl }
+                        EmitB($20); EmitB($C8);                          { and al, cl }
+                      end;
                     tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end; { seta al }
                     tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end; { setae al }
                   end;
