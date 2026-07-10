@@ -110,17 +110,19 @@ returned false → NaN escaped into dragon4 → `cvttsd2si` → INT_MIN. Pure-C 
 Now `String(0/0)`="NaN", `isNaN(0/0)`=true, `NaN!==NaN`=true. Regression b232.
 Affects Pascal too (shared codegen). Self-host byte-identical (2-step reseed).
 
-### Cross-target non-uniformity (SAME bug class, other backends)
-The unordered handling differs per target (user-flagged):
-- **x86-64 / i386**: `ucomisd` + setcc, PF ignored. x64 FIXED; **i386 still open**
-  (`ir_codegen386.inc:1879` `EmitSetcc(op,False)`, same PF gap).
-- **aarch64** (`ir_codegen_aarch64.inc:1309`): `fcmp` unordered = N0 Z0 C1 V1.
-  Eq/Neq/Gt/Ge correct, but **Lt uses `lt`(N≠V) and Le uses `le`** → both wrongly
-  true on NaN. Need float-specific `mi` / `ls`. **OPEN.**
-- **arm32** (`ir_codegen_arm32.inc:1472`): same VFP NZCV; `EmitSetccArm32(op,True)`
-  → same Lt/Le NaN bug. **OPEN.**
+### Cross-target non-uniformity (SAME bug class) — ALL FIXED (2026-07-10)
+The unordered handling differed per target (user-flagged). Verified via
+`test/cfloat_nan_compare_b232.c` cross-compiled + run under qemu:
+- **x86-64**: `ucomisd`+setcc, PF ignored → FIXED (fold PF, commit prior).
+- **i386** (`ir_codegen386.inc:1879`): same PF gap; now calls shared
+  `EmitSetccFloat` (PF-folded, raw bytes valid 32/64). FIXED, qemu 42.
+- **aarch64** (`ir_codegen_aarch64.inc:1309`): `fcmp` unordered = N0 Z0 C1 V1;
+  `lt`/`le` fired on NaN. New `EmitSetccA64Float` uses `mi`/`ls`. FIXED, qemu 42.
+- **arm32** (`ir_codegen_arm32.inc:1472`): same VFP NZCV; new `EmitSetccArm32Float`
+  uses `movmi`/`movls`. FIXED, qemu 42.
+- Also switched x64 **Variant** double compare (`comisd`) to `EmitSetccFloat`.
 - **riscv32 / xtensa**: already NaN-correct (soft-float kernel returns code 2 =
-  unordered, mapped correctly). No change needed.
+  unordered); verified riscv32 qemu 42. No change.
 
 ### Residual #2 (open, separate — crtl, Track B)
 `Math.sqrt(-1)` → `0` instead of `NaN`: crtl `sqrt()` (lib/crtl/src/math.c) returns 0

@@ -1203,6 +1203,30 @@ begin
   EmitAsmX64([mnem, 'movzx eax, al']);
 end;
 
+procedure EmitSetccFloat(opTk: Integer);
+{ setcc after comisd/ucomisd, NaN-correct. comisd sets ZF=PF=CF=1 when unordered
+  (a NaN operand); IEEE wants every ordered relation FALSE and <> TRUE. Plain
+  unsigned setcc reads only ZF/CF: sete/setb/setbe -> 1, setne -> 0 on NaN. Fold
+  in PF (parity=unordered) for ==,!=,<,<=; seta/setae (Gt/Ge, CF=0) are already 0
+  on unordered. cl is a free scratch at both float callers (i386 float binop,
+  Variant double compare). Raw bytes are identical in 32- and 64-bit (no REX). }
+begin
+  if opTk = Ord(tkEq) then
+    begin EmitB($0F);EmitB($94);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { sete al; setnp cl; and al,cl }
+  else if opTk = Ord(tkNeq) then
+    begin EmitB($0F);EmitB($95);EmitB($C0); EmitB($0F);EmitB($9A);EmitB($C1); EmitB($08);EmitB($C8); end { setne al; setp cl; or al,cl }
+  else if opTk = Ord(tkLt) then
+    begin EmitB($0F);EmitB($92);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { setb al; setnp cl; and al,cl }
+  else if opTk = Ord(tkLe) then
+    begin EmitB($0F);EmitB($96);EmitB($C0); EmitB($0F);EmitB($9B);EmitB($C1); EmitB($20);EmitB($C8); end { setbe al; setnp cl; and al,cl }
+  else if opTk = Ord(tkGt) then
+    begin EmitB($0F);EmitB($97);EmitB($C0); end { seta al }
+  else if opTk = Ord(tkGe) then
+    begin EmitB($0F);EmitB($93);EmitB($C0); end { setae al }
+  else Error('float compare: unsupported operator');
+  EmitB($0F); EmitB($B6); EmitB($C0); { movzx eax, al }
+end;
+
 procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
 { rdi = left variant addr, rsi = right variant addr. Closed double-dispatch:
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
@@ -1501,7 +1525,7 @@ begin
   if isCompare then
   begin
     EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);          { comisd xmm0,xmm1 }
-    EmitSetcc(opTk, False);
+    EmitSetccFloat(opTk);
   end
   else if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
   begin

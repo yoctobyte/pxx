@@ -169,6 +169,23 @@ begin
   end;
 end;
 
+procedure EmitSetccArm32Float(opTk: Integer);
+{ VFP compare after `vcmp.f64` + `vmrs APSR_nzcv`: unordered (NaN operand) sets
+  N=0 Z=0 C=1 V=1. IEEE wants every ordered relation FALSE for NaN and <> TRUE.
+  Signed `lt` (N<>V) and `le` (Z or N<>V) both fire on unordered, so use the
+  FP-safe `mi` (N==1) for < and `ls` (C==0 or Z==1) for <=. eq/ne (Z-based) and
+  gt/ge (N==V, 0 on unordered) are already correct. }
+begin
+  EmitAsmArm32('mov r0, #0');
+  if opTk = Ord(tkEq) then EmitAsmArm32('moveq r0, #1')
+  else if opTk = Ord(tkNeq) then EmitAsmArm32('movne r0, #1')
+  else if opTk = Ord(tkLt) then EmitAsmArm32('movmi r0, #1')
+  else if opTk = Ord(tkLe) then EmitAsmArm32('movls r0, #1')
+  else if opTk = Ord(tkGt) then EmitAsmArm32('movgt r0, #1')
+  else if opTk = Ord(tkGe) then EmitAsmArm32('movge r0, #1')
+  else Error('target arm32: unsupported float compare operator');
+end;
+
 procedure EmitHeapAllocLockedArm32;
 { r0 = requested payload bytes. Returns payload pointer in r0. }
 var procIdx: Integer;
@@ -1471,7 +1488,7 @@ begin
           begin
             EmitI32($EEB40B41);                  { vcmp.f64 d0, d1 }
             EmitI32($EEF1FA10);                  { vmrs APSR_nzcv, fpscr }
-            EmitSetccArm32(op, True);            { VFP flags use signed cond codes }
+            EmitSetccArm32Float(op);             { NaN-correct: mi/ls for </<= }
           end
           else
             Error('target arm32: unsupported float binop');

@@ -843,6 +843,22 @@ begin
   EmitSetccA64Ex(opTk, False);
 end;
 
+procedure EmitSetccA64Float(opTk: Integer);
+{ Float compare after `fcmp`: unordered (NaN operand) sets N=0 Z=0 C=1 V=1.
+  IEEE wants every ordered relation FALSE for NaN and <> TRUE. The signed
+  integer conditions `lt` (N<>V) and `le` (Z or N<>V) both fire on unordered,
+  so use the FP-safe `mi` (N==1) for < and `ls` (C==0 or Z==1) for <=. eq/ne
+  (Z-based) and gt/ge (N==V, both 0 on unordered) are already correct. }
+begin
+  if opTk = Ord(tkEq) then EmitAsmA64('cset x0, eq')
+  else if opTk = Ord(tkNeq) then EmitAsmA64('cset x0, ne')
+  else if opTk = Ord(tkLt) then EmitAsmA64('cset x0, mi')
+  else if opTk = Ord(tkLe) then EmitAsmA64('cset x0, ls')
+  else if opTk = Ord(tkGt) then EmitAsmA64('cset x0, gt')
+  else if opTk = Ord(tkGe) then EmitAsmA64('cset x0, ge')
+  else Error('target aarch64: unsupported float compare operator');
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1306,7 +1322,7 @@ begin
                   (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
           begin
             EmitI32($1E612000); { fcmp d0, d1 }
-            EmitSetccA64(op);
+            EmitSetccA64Float(op);
           end
           else
             Error('target aarch64: unsupported float binop');

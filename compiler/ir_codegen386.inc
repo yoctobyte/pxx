@@ -16,6 +16,7 @@
   handling and EmitSetcc are shared. }
 
 procedure EmitSetcc(opTk: Integer; signed: Boolean); forward;
+procedure EmitSetccFloat(opTk: Integer); forward;
 
 procedure IREmitNode386(node: Integer); forward;
 
@@ -1877,7 +1878,7 @@ begin
                   (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
           begin
             EmitB($66); EmitB($0F); EmitB($2E); EmitB($C1);              { ucomisd xmm0, xmm1 }
-            EmitSetcc(op, False);                                        { unsigned forms }
+            EmitSetccFloat(op);                                          { NaN-correct (PF) }
           end
           else
             Error('target i386: unsupported float binop');
