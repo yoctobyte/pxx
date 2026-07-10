@@ -5,7 +5,7 @@ prio: 30  # auto
 # bug: impl-prescan rejects include-level var sections late in the include chain
 
 - **Type:** bug (Track A — impl prescan / declaration ordering)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-06 (found by the Whitespace esoteric probe — exactly the
   kind of shared-internals find the probe category exists for)
 
@@ -100,3 +100,6 @@ which could break decl-order for those bodies — must be validated against the 
 generic/nested corpus + self-host byte-identical before landing. That validation +
 the shared-`parser.inc` `CurBodyHdrTok` change is more self-host risk than this
 prio-30 warrants, so still parked behind the clean defs.inc workaround.
+
+## Log
+- 2026-07-10 — resolved, commit b6563fc5.
