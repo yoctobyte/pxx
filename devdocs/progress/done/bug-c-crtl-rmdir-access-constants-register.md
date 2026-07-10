@@ -7,7 +7,7 @@ prio: 58  # auto
 - **Type:** bug cluster (crtl completeness + one cfront keyword gap) —
   **Track B** (`lib/crtl`) for rmdir + the access() constants; **Track C**
   (cfront) for the `register` keyword.
-- **Status:** backlog
+- **Status:** done
 - **Found / Opened:** 2026-07-10, immediately after the undeclared-identifier
   warning landed ([[bug-a-libcfree-unresolved-extern-silent-zero]], commit
   afa42ddd) — building sqlite now prints these instead of silently emitting 0.
@@ -40,3 +40,6 @@ prio: 58  # auto
 - `rmdir` round-trips libc-free (mkdir a dir, rmdir it, stat → ENOENT); add to
   the b238-style crtl POSIX-IO guard.
 - c-testsuite still 220/220; self-host byte-identical.
+
+## Log
+- 2026-07-10 — resolved, commit 3d440574.

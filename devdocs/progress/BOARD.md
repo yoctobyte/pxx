@@ -26,12 +26,11 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
-| bug-c-crtl-rmdir-access-constants-register | A | 58 | bug | crtl gaps surfaced by the undeclared-identifier warning: rmdir, F_OK/W_OK/R_OK, register | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -169,7 +168,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (562)
+## done (563)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -215,6 +214,7 @@ _none_
 | bug-c-crtl-missing-net-headers-enet | C | 45 | bug | crtl: missing <netinet/tcp.h>, <netdb.h>, <poll.h> — ENet falls back to host headers | — |
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
+| bug-c-crtl-rmdir-access-constants-register | A | 58 | bug | crtl gaps surfaced by the undeclared-identifier warning: rmdir, F_OK/W_OK/R_OK, register | — |
 | bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
@@ -777,7 +777,6 @@ _none_
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [A] bug-c-call-through-deref-of-fnptr-pointer
-- [p 58] [A] bug-c-crtl-rmdir-access-constants-register
 - [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] bug-c-duktape-double-formatting
 - [p 55] [A] feature-c-corpus-duktape
