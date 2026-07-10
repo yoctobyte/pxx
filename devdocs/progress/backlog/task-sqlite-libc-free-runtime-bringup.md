@@ -120,17 +120,38 @@ libc-free end to end (open64→write→fstat64/stat64, regression b234).
    and `pFile->mmapSize` resolved to offset 0. Fixed by making `#if` parse hex/octal
    ([[bug-c-unixfile-mmap-field-offset-zero]], regression b237). This was the real
    cause of the offset-0 symptom.
-4. **Segfault in `unixRead` — OPEN, current wall.** With walls 1-3 fixed, a
-   file-backed `sqlite3_open`+`exec` creates the db file but still segfaults inside
-   `unixRead` on the first page read — BEFORE `seekAndRead`'s `lseek`, and it
-   persists with `SQLITE_MAX_MMAP_SIZE=0` (so it is NOT the mmap path and NOT the
-   earlier walls). Needs fresh in-place instrumentation of `unixRead` /
-   `seekAndRead` / the aSyscall read dispatch (osRead vs osPread — confirm which
-   path compiles: USE_PREAD should be OFF since crtl has no `pread` and the driver
-   links with 0 undefined symbols). `:memory:` remains fully working + libc-free.
+4. **Segfault in `unixRead` — FIXED (crtl+PAL, 2026-07-10).** NOT a compiler
+   bug: it was a **null-call through an unresolved `aSyscall[]` slot**. cfront's
+   linker fills a referenced-but-undefined C symbol with address 0 instead of
+   erroring, so every libc syscall sqlite's os_unix.c imported that the crtl did
+   NOT define became a `call 0` → SIGSEGV the moment that VFS path ran. On
+   `__linux__` (cpreproc predefines it) sqlite takes `USE_PREAD`, so `osPread` =
+   `aSyscall[9]` = `pread` — and the crtl had no `pread`, so the FIRST page read
+   null-called (the `unixRead` symptom). Behind it, `fillInUnixFile` null-called
+   `geteuid`+`fchown` (both active under `HAVE_FCHOWN`, which sqlite defines).
+   Full set the crtl was missing: `pread pwrite ftruncate access geteuid fchown
+   readlink`. Added libc-free, LP64/ILP32-safe:
+   - `lib/crtl/src/stdio.c`: `pread`/`pwrite` — offset-preserving (save `lseek`
+     SEEK_CUR, seek, io, restore); no PAL positioned-io syscall exists.
+   - `lib/crtl/src/unistd.c`: `ftruncate access fchown geteuid readlink`
+     wrappers over new `__pxx_*` PAL bridges.
+   - `lib/rtl/pxxcio.pas` + `lib/rtl/platform.pas` +
+     `lib/rtl/platform/posix/platform_backend.pas`: `__pxx_ftruncate/access/
+     fchown/geteuid/readlink` → raw syscalls (`SYS_ftruncate SYS_faccessat
+     SYS_geteuid SYS_fchown SYS_readlinkat`, numbered for x86_64/i386/aarch64/
+     arm32/rv32; `access`→`faccessat(AT_FDCWD)`, `readlink`→`readlinkat`).
+     ESP backend gets `PAL_ERR_UNSUPPORTED` stubs.
+   Regression `test/crtl_posix_io_leaf_b238.c` (Makefile, exit 42, 0 NEEDED).
+   Integration probe `test/csqlite_file_probe.c`: file-backed CREATE/INSERT then
+   **close+reopen+SELECT reads the row back off disk** (`row: 1 hello`), producing
+   a valid SQLite file, fully libc-free (0 DT_NEEDED), verified native +
+   aarch64/i386/arm32 under qemu (rv32 shares the aarch64 asm-generic table), with
+   AND without the mmap path. **File-backed VFS is now working end to end.**
 
 ## Acceptance
 
 - A libc-free sqlite driver (unity-including the crtl srcs) opens, executes SQL,
   and closes a `:memory:` database without faulting and with no `DT_NEEDED` (or
   only the intended ones). **MET 2026-07-10** (csqlite_extended_test, 0 NEEDED).
+- File-backed VFS: create + reopen + read-back off disk, libc-free, native +
+  cross. **MET 2026-07-10** (walls 1-4 all cleared; csqlite_file_probe).

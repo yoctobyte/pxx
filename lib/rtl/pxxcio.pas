@@ -79,6 +79,11 @@ function __pxx_lstat(path: PChar; sb: PPxxStatBuf): Integer;
 function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
 function __pxx_fsync(fd: Integer): Integer;
 function __pxx_fchmod(fd, mode: Integer): Integer;
+function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
+function __pxx_access(path: PChar; mode: Integer): Integer;
+function __pxx_fchown(fd, owner, group: Integer): Integer;
+function __pxx_geteuid: Integer;
+function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
 function __pxx_getpid: Integer;
 function __pxx_getcwd(buf: PChar; size: Integer): Integer;
@@ -325,6 +330,31 @@ end;
 function __pxx_fchmod(fd, mode: Integer): Integer;
 begin
   Result := PalFchmod(fd, mode);
+end;
+
+function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
+begin
+  Result := PalFtruncate(fd, length);
+end;
+
+function __pxx_access(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalAccess(path, mode);
+end;
+
+function __pxx_fchown(fd, owner, group: Integer): Integer;
+begin
+  Result := PalFchown(fd, owner, group);
+end;
+
+function __pxx_geteuid: Integer;
+begin
+  Result := PalGeteuid;
+end;
+
+function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
+begin
+  Result := PalReadlink(path, buf, bufsz);
 end;
 
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;

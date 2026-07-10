@@ -702,6 +702,32 @@ long lseek(int fd, long offset, int whence) { long r = __pxx_seek(fd, offset, wh
 long read(int fd, void *buf, unsigned long count) { long r = __pxx_read(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
 long write(int fd, const void *buf, unsigned long count) { long r = __pxx_write(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
 
+/* Positioned I/O — no PAL pread/pwrite syscall, so emulate offset-preserving:
+   save the current offset, seek to `off`, do the read/write, restore. POSIX
+   requires pread/pwrite to leave the file offset unchanged; sqlite's USE_PREAD
+   path (os_unix seekAndRead/seekAndWrite) calls these directly. Not atomic wrt
+   concurrent access, but crtl sqlite runs SQLITE_THREADSAFE=0 / single-fd. */
+long pread(int fd, void *buf, unsigned long count, long off) {
+  long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  if (cur < 0) { errno = -cur; return -1; }
+  long s = __pxx_seek(fd, off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = -s; return -1; }
+  long r = __pxx_read(fd, buf, count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = -r; return -1; }
+  return r;
+}
+long pwrite(int fd, const void *buf, unsigned long count, long off) {
+  long cur = __pxx_seek(fd, 0, 1 /* SEEK_CUR */);
+  if (cur < 0) { errno = -cur; return -1; }
+  long s = __pxx_seek(fd, off, 0 /* SEEK_SET */);
+  if (s < 0) { errno = -s; return -1; }
+  long r = __pxx_write(fd, buf, count);
+  __pxx_seek(fd, cur, 0);
+  if (r < 0) { errno = -r; return -1; }
+  return r;
+}
+
 /* ---- buffering / status (unbuffered model: no-ops) ------------------------ */
 
 int fflush(FILE *stream) { (void)stream; return 0; }

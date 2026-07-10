@@ -90,6 +90,11 @@ function PalLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
+function PalFtruncate(handle: Integer; length: Int64): Integer;
+function PalAccess(path: PChar; mode: Integer): Integer;
+function PalFchown(handle, owner, group: Integer): Integer;
+function PalGeteuid: Integer;
+function PalReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalGetpid: Integer;
 function PalGetcwd(buf: PChar; size: Integer): Integer;
 function PalNanosleep(sec, nsec: Int64): Integer;
@@ -253,6 +258,31 @@ end;
 function PalFchmod(handle, mode: Integer): Integer;
 begin
   Result := PalBackendFchmod(handle, mode);
+end;
+
+function PalFtruncate(handle: Integer; length: Int64): Integer;
+begin
+  Result := PalBackendFtruncate(handle, length);
+end;
+
+function PalAccess(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalBackendAccess(path, mode);
+end;
+
+function PalFchown(handle, owner, group: Integer): Integer;
+begin
+  Result := PalBackendFchown(handle, owner, group);
+end;
+
+function PalGeteuid: Integer;
+begin
+  Result := PalBackendGeteuid;
+end;
+
+function PalReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
+begin
+  Result := PalBackendReadlink(path, buf, bufsz);
 end;
 
 function PalGetpid: Integer;

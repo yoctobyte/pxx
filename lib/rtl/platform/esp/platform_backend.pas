@@ -30,6 +30,11 @@ function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
+function PalBackendAccess(path: PChar; mode: Integer): Integer;
+function PalBackendFchown(handle, owner, group: Integer): Integer;
+function PalBackendGeteuid: Integer;
+function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalBackendGetpid: Integer;
 function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
@@ -411,6 +416,31 @@ begin
 end;
 
 function PalBackendFchmod(handle, mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendAccess(path: PChar; mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendFchown(handle, owner, group: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGeteuid: Integer;
+begin
+  Result := 0;
+end;
+
+function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

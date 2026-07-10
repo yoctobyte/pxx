@@ -30,6 +30,11 @@ function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
+function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
+function PalBackendAccess(path: PChar; mode: Integer): Integer;
+function PalBackendFchown(handle, owner, group: Integer): Integer;
+function PalBackendGeteuid: Integer;
+function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function PalBackendGetpid: Integer;
 function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
@@ -88,6 +93,7 @@ const
   SYS_clock_gettime = 228;
   SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_getcwd = 79;
+  SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -102,6 +108,7 @@ const
   SYS_clock_gettime = 265;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_getcwd = 183;
+  SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -115,6 +122,7 @@ const
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_getcwd = 17;
+  SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -128,6 +136,7 @@ const
   SYS_clock_gettime = 263;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_getcwd = 183;
+  SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -145,6 +154,7 @@ const
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_getcwd = 17;
+  SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -291,6 +301,35 @@ function PalBackendRmdir(path: PChar): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_unlinkat, PAL_AT_FDCWD, Int64(path),
     PAL_AT_REMOVEDIR, 0, 0, 0));
+end;
+
+function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_ftruncate, handle, length, 0, 0, 0, 0));
+end;
+
+function PalBackendAccess(path: PChar; mode: Integer): Integer;
+begin
+  { access(path,mode) = faccessat(AT_FDCWD, path, mode, 0) — the plain access
+    syscall is absent on the asm-generic table (aarch64/rv32). }
+  Result := Integer(__pxxrawsyscall(SYS_faccessat, PAL_AT_FDCWD, Int64(path), mode, 0, 0, 0));
+end;
+
+function PalBackendFchown(handle, owner, group: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fchown, handle, owner, group, 0, 0, 0));
+end;
+
+function PalBackendGeteuid: Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_geteuid, 0, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendReadlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
+begin
+  { readlink(path,buf,n) = readlinkat(AT_FDCWD, path, buf, n). }
+  Result := Integer(__pxxrawsyscall(SYS_readlinkat, PAL_AT_FDCWD, Int64(path),
+    Int64(buf), bufsz, 0, 0));
 end;
 
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
