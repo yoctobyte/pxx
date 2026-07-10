@@ -6,13 +6,16 @@ unit dns_wire_core;
   and parses A-record answers, including compressed names. No PAL / network
   dependency; runs and is tested entirely offline.
 
-  First slice: A (IPv4) only. AAAA, CNAME-chain following, /etc/hosts and
-  resolv.conf, search/ndots and TCP fallback are deliberately later. }
+  Covers A and AAAA queries/answers plus CNAME-target extraction for chain
+  chasing; /etc/hosts, resolv.conf and search/ndots policy live in dns_config,
+  transports in dns_wire_blocking. }
 
 interface
 
 const
-  DNS_TYPE_A    = 1;
+  DNS_TYPE_A     = 1;
+  DNS_TYPE_CNAME = 5;
+  DNS_TYPE_AAAA  = 28;
   DNS_CLASS_IN  = 1;
   DNS_FLAG_RD   = $0100;   { recursion desired }
   DNS_MAX_IPS   = 16;
@@ -24,11 +27,16 @@ const
 
 type
   TDnsIpv4Array = array[0..DNS_MAX_IPS - 1] of LongWord;
+  TDnsIpv6 = array[0..15] of Byte;   { one AAAA address, network byte order }
+  TDnsIpv6Array = array[0..DNS_MAX_IPS - 1] of TDnsIpv6;
 
-{ Encode a recursive A query for `name` into buf[0..bufLen-1]. Returns the packet
-  length, DNS_ERR_MALFORMED if a label is empty or > 63 bytes, or DNS_ERR_TOOLONG
-  if the encoding would exceed bufLen (the write is bounded — it never runs past
-  bufLen). }
+{ Encode a recursive query of `qtype` (DNS_TYPE_A / DNS_TYPE_AAAA / ...) for
+  `name` into buf[0..bufLen-1]. Returns the packet length, DNS_ERR_MALFORMED if
+  a label is empty or > 63 bytes, or DNS_ERR_TOOLONG if the encoding would
+  exceed bufLen (the write is bounded — it never runs past bufLen). }
+function DnsBuildQuery(const name: string; qtype, queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
+
+{ Encode a recursive A query — DnsBuildQuery with qtype DNS_TYPE_A. }
 function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
 
 { Parse a DNS response in buf[0..len-1]. On success returns the DNS RCODE
@@ -37,6 +45,17 @@ function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufL
   on a malformed packet. RCODE 0 with count 0 means no A records. }
 function DnsParseResponseA(buf: Pointer; len: Integer; var ips: TDnsIpv4Array;
   var count: Integer; var outId: Integer): Integer;
+
+{ Parse a DNS response as for DnsParseResponseA, but extracting AAAA (IPv6)
+  answers into ips (each 16 bytes, network byte order). }
+function DnsParseResponseAAAA(buf: Pointer; len: Integer; var ips: TDnsIpv6Array;
+  var count: Integer; var outId: Integer): Integer;
+
+{ Extract the first CNAME answer's target name (dotted, lower-noise: bytes are
+  copied verbatim) from a response. Used to chase a CNAME chain across queries
+  when a response carries the alias but no address records. Returns False if no
+  CNAME answer is present or the packet is malformed. }
+function DnsExtractCname(buf: Pointer; len: Integer; var target: string): Boolean;
 
 { True if the response has the TC (truncated) header bit set, meaning the answer
   did not fit in the UDP datagram and the query must be retried over TCP. }
@@ -119,14 +138,14 @@ begin
   WriteLabel := pos;
 end;
 
-function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
+function DnsBuildQuery(const name: string; qtype, queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
 var
   pos, i, labelStart: Integer;
 begin
   { 12-byte header + at least the root label + QTYPE/QCLASS (5). }
   if bufLen < 17 then
   begin
-    DnsBuildQueryA := DNS_ERR_TOOLONG;
+    DnsBuildQuery := DNS_ERR_TOOLONG;
     Exit;
   end;
   { Header: ID, flags (RD), QDCOUNT=1, AN/NS/AR = 0. }
@@ -148,7 +167,7 @@ begin
       pos := WriteLabel(buf, pos, bufLen, name, labelStart, i - 1);
       if pos < 0 then
       begin
-        DnsBuildQueryA := pos;   { propagate MALFORMED / TOOLONG }
+        DnsBuildQuery := pos;   { propagate MALFORMED / TOOLONG }
         Exit;
       end;
       labelStart := i + 1;
@@ -159,26 +178,31 @@ begin
     pos := WriteLabel(buf, pos, bufLen, name, labelStart, Length(name));
     if pos < 0 then
     begin
-      DnsBuildQueryA := pos;
+      DnsBuildQuery := pos;
       Exit;
     end;
   end;
   { root terminator + QTYPE + QCLASS = 5 bytes. }
   if pos + 5 > bufLen then
   begin
-    DnsBuildQueryA := DNS_ERR_TOOLONG;
+    DnsBuildQuery := DNS_ERR_TOOLONG;
     Exit;
   end;
   SetByteAt(buf, pos, 0);
   pos := pos + 1;
 
-  { QTYPE = A, QCLASS = IN. }
-  SetByteAt(buf, pos, 0);            pos := pos + 1;
-  SetByteAt(buf, pos, DNS_TYPE_A);   pos := pos + 1;
-  SetByteAt(buf, pos, 0);            pos := pos + 1;
-  SetByteAt(buf, pos, DNS_CLASS_IN); pos := pos + 1;
+  { QTYPE + QCLASS = IN. }
+  SetByteAt(buf, pos, (qtype shr 8) and $FF);  pos := pos + 1;
+  SetByteAt(buf, pos, qtype and $FF);          pos := pos + 1;
+  SetByteAt(buf, pos, 0);                      pos := pos + 1;
+  SetByteAt(buf, pos, DNS_CLASS_IN);           pos := pos + 1;
 
-  DnsBuildQueryA := pos;
+  DnsBuildQuery := pos;
+end;
+
+function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
+begin
+  DnsBuildQueryA := DnsBuildQuery(name, DNS_TYPE_A, queryId, buf, bufLen);
 end;
 
 function DnsParseResponseA(buf: Pointer; len: Integer; var ips: TDnsIpv4Array;
@@ -256,6 +280,166 @@ begin
   end;
 
   DnsParseResponseA := rcode;
+end;
+
+function DnsParseResponseAAAA(buf: Pointer; len: Integer; var ips: TDnsIpv6Array;
+  var count: Integer; var outId: Integer): Integer;
+var
+  qd, an, rcode, pos, i, j: Integer;
+  atype, aclass, rdlen: Integer;
+begin
+  count := 0;
+  outId := 0;
+  if len < 12 then
+  begin
+    DnsParseResponseAAAA := DNS_ERR_SHORT;
+    Exit;
+  end;
+  outId := ReadU16(buf, 0);
+  rcode := ByteAt(buf, 3) and $0F;
+  qd := ReadU16(buf, 4);
+  an := ReadU16(buf, 6);
+  pos := 12;
+
+  for i := 1 to qd do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then
+    begin
+      DnsParseResponseAAAA := pos;
+      Exit;
+    end;
+    pos := pos + 4;
+    if pos > len then
+    begin
+      DnsParseResponseAAAA := DNS_ERR_SHORT;
+      Exit;
+    end;
+  end;
+
+  for i := 1 to an do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then
+    begin
+      DnsParseResponseAAAA := pos;
+      Exit;
+    end;
+    if pos + 10 > len then
+    begin
+      DnsParseResponseAAAA := DNS_ERR_SHORT;
+      Exit;
+    end;
+    atype  := ReadU16(buf, pos);
+    aclass := ReadU16(buf, pos + 2);
+    rdlen  := ReadU16(buf, pos + 8);
+    pos := pos + 10;
+    if pos + rdlen > len then
+    begin
+      DnsParseResponseAAAA := DNS_ERR_SHORT;
+      Exit;
+    end;
+    if (atype = DNS_TYPE_AAAA) and (aclass = DNS_CLASS_IN) and (rdlen = 16) then
+    begin
+      if count < DNS_MAX_IPS then
+      begin
+        for j := 0 to 15 do
+          ips[count][j] := Byte(ByteAt(buf, pos + j));
+        count := count + 1;
+      end;
+    end;
+    pos := pos + rdlen;
+  end;
+
+  DnsParseResponseAAAA := rcode;
+end;
+
+{ Decode the domain name at pos into a dotted string, following compression
+  pointers (hop-bounded so a pointer loop cannot hang). Returns True on a
+  well-formed name. }
+function ReadNameAt(buf: Pointer; len, pos: Integer; var s: string): Boolean;
+var
+  b, j, hops: Integer;
+  first: Boolean;
+begin
+  ReadNameAt := False;
+  s := '';
+  hops := 0;
+  first := True;
+  while True do
+  begin
+    if (pos < 0) or (pos >= len) then Exit;
+    b := ByteAt(buf, pos);
+    if b = 0 then
+    begin
+      ReadNameAt := True;
+      Exit;
+    end;
+    if (b and $C0) = $C0 then
+    begin
+      if pos + 1 >= len then Exit;
+      hops := hops + 1;
+      if hops > 16 then Exit;   { pointer loop }
+      pos := ((b and $3F) shl 8) or ByteAt(buf, pos + 1);
+    end
+    else if (b and $C0) <> 0 then
+      Exit
+    else
+    begin
+      if pos + 1 + b > len then Exit;
+      if not first then s := s + '.';
+      for j := 1 to b do
+        s := s + Chr(ByteAt(buf, pos + j));
+      first := False;
+      pos := pos + 1 + b;
+      if Length(s) > 255 then Exit;   { RFC 1035 name bound }
+    end;
+  end;
+end;
+
+function DnsExtractCname(buf: Pointer; len: Integer; var target: string): Boolean;
+var
+  qd, an, pos, i: Integer;
+  atype, aclass, rdlen: Integer;
+  nameOut: string;
+begin
+  DnsExtractCname := False;
+  target := '';
+  if len < 12 then Exit;
+  qd := ReadU16(buf, 4);
+  an := ReadU16(buf, 6);
+  pos := 12;
+
+  for i := 1 to qd do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    pos := pos + 4;
+    if pos > len then Exit;
+  end;
+
+  for i := 1 to an do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    if pos + 10 > len then Exit;
+    atype  := ReadU16(buf, pos);
+    aclass := ReadU16(buf, pos + 2);
+    rdlen  := ReadU16(buf, pos + 8);
+    pos := pos + 10;
+    if pos + rdlen > len then Exit;
+    if (atype = DNS_TYPE_CNAME) and (aclass = DNS_CLASS_IN) then
+    begin
+      nameOut := '';
+      if ReadNameAt(buf, len, pos, nameOut) then
+      begin
+        target := nameOut;
+        DnsExtractCname := True;
+      end;
+      Exit;
+    end;
+    pos := pos + rdlen;
+  end;
 end;
 
 function DnsTruncated(buf: Pointer; len: Integer): Boolean;

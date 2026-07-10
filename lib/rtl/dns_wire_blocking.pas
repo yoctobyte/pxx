@@ -6,9 +6,9 @@ unit dns_wire_blocking;
   address (from dns_config / resolv.conf); this unit holds no resolver policy
   and never assumes a public DNS server.
 
-  First slice: single UDP query, no retry across multiple nameservers, no TCP
-  fallback on a truncated (TC) response, no search-domain qualification. Those
-  are later slices in the same facade. }
+  Covers A and AAAA queries, TCP fallback on a truncated (TC) response, and
+  in-order retry across a nameserver list. Search-domain qualification and
+  CNAME chasing are resolver policy — they live in the dns facade. }
 
 interface
 
@@ -33,6 +33,21 @@ function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
   DNS_ERR_NONS if the list is empty. }
 function DnsResolveAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+
+{ As DnsResolveA, and additionally: when the answer carries no A records but
+  does carry a CNAME (rcode 0, count 0), cname is set to the alias target so
+  the caller can chase the chain with a follow-up query. cname is '' otherwise. }
+function DnsResolveAEx(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; var cname: string; timeoutMs: Integer): Integer;
+
+{ DnsResolveAEx across a nameserver list (first definitive answer wins). }
+function DnsResolveAListEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
+  timeoutMs: Integer): Integer;
+
+{ Resolve AAAA (IPv6) records — same transport behavior as DnsResolveA. }
+function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
 implementation
 
@@ -133,31 +148,32 @@ begin
   DnsQueryTcp := rlen;
 end;
 
-function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
-  var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+{ One query/response round for (name, qtype) against one nameserver: UDP send,
+  bounded wait, receive; on a truncated (TC) answer retry the same query over
+  TCP. On success returns the response length with the raw packet in respBuf
+  and the transaction id in queryId; negative PAL/timeout/DNS_ERR_* otherwise. }
+function DnsQueryOnce(nsHost: LongWord; nsPort: Integer; const name: string;
+  qtype: Integer; respBuf: Pointer; respMax, timeoutMs: Integer; var queryId: Integer): Integer;
 var
-  sock, qlen, pr, i, queryId: Integer;
+  sock, qlen, pr, id: Integer;
   qbuf: array[0..511] of Byte;
-  rbuf: array[0..1535] of Byte;
   n: Int64;
-  localIps: TDnsIpv4Array;
-  localCount, outId, rcode: Integer;
   fromAddr: LongWord;
   fromPort: Integer;
 begin
-  count := 0;
-  queryId := NextQueryId;
-  qlen := DnsBuildQueryA(name, queryId, @qbuf[0], 512);
+  id := NextQueryId;
+  queryId := id;
+  qlen := DnsBuildQuery(name, qtype, id, @qbuf[0], 512);
   if qlen < 0 then
   begin
-    DnsResolveA := qlen;
+    DnsQueryOnce := qlen;
     Exit;
   end;
 
   sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
   if sock < 0 then
   begin
-    DnsResolveA := sock;
+    DnsQueryOnce := sock;
     Exit;
   end;
 
@@ -165,7 +181,7 @@ begin
   if n < 0 then
   begin
     PalSocketClose(sock);
-    DnsResolveA := Integer(n);
+    DnsQueryOnce := Integer(n);
     Exit;
   end;
 
@@ -173,30 +189,52 @@ begin
   if pr <= 0 then
   begin
     PalSocketClose(sock);
-    if pr = 0 then DnsResolveA := PAL_NET_ETIMEDOUT else DnsResolveA := pr;
+    if pr = 0 then DnsQueryOnce := PAL_NET_ETIMEDOUT else DnsQueryOnce := pr;
     Exit;
   end;
 
   fromAddr := 0;
   fromPort := 0;
-  n := PalRecvFromIpv4(sock, @rbuf[0], 1536, fromAddr, fromPort);
+  n := PalRecvFromIpv4(sock, respBuf, respMax, fromAddr, fromPort);
   PalSocketClose(sock);
   if n < 0 then
   begin
-    DnsResolveA := Integer(n);
+    DnsQueryOnce := Integer(n);
     Exit;
   end;
 
   { Truncated (TC) answer: retry the same query over TCP, which has no datagram
     size limit. The query bytes in qbuf are reused. }
-  if DnsTruncated(@rbuf[0], Integer(n)) then
+  if DnsTruncated(respBuf, Integer(n)) then
   begin
-    n := DnsQueryTcp(nsHost, nsPort, @qbuf[0], qlen, @rbuf[0], 1536, timeoutMs);
+    n := DnsQueryTcp(nsHost, nsPort, @qbuf[0], qlen, respBuf, respMax, timeoutMs);
     if n < 0 then
     begin
-      DnsResolveA := Integer(n);
+      DnsQueryOnce := Integer(n);
       Exit;
     end;
+  end;
+
+  DnsQueryOnce := Integer(n);
+end;
+
+function DnsResolveAEx(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; var cname: string; timeoutMs: Integer): Integer;
+var
+  rbuf: array[0..1535] of Byte;
+  rlen, i, queryId: Integer;
+  localIps: TDnsIpv4Array;
+  localCount, outId, rcode: Integer;
+  chase: string;
+begin
+  count := 0;
+  cname := '';
+  queryId := 0;
+  rlen := DnsQueryOnce(nsHost, nsPort, name, DNS_TYPE_A, @rbuf[0], 1536, timeoutMs, queryId);
+  if rlen < 0 then
+  begin
+    DnsResolveAEx := rlen;
+    Exit;
   end;
 
   { Parse into locals, then copy out — keeps this riscv32-clean by not forwarding
@@ -204,22 +242,83 @@ begin
     (feature-riscv32-var-param-forwarding). }
   localCount := 0;
   outId := 0;
-  rcode := DnsParseResponseA(@rbuf[0], Integer(n), localIps, localCount, outId);
+  rcode := DnsParseResponseA(@rbuf[0], rlen, localIps, localCount, outId);
   if rcode < 0 then
   begin
-    DnsResolveA := rcode;
+    DnsResolveAEx := rcode;
     Exit;
   end;
   if outId <> queryId then
   begin
-    DnsResolveA := DNS_ERR_BADID;
+    DnsResolveAEx := DNS_ERR_BADID;
     Exit;
   end;
 
   for i := 0 to localCount - 1 do
     ips[i] := localIps[i];
   count := localCount;
-  DnsResolveA := rcode;
+  if (rcode = 0) and (localCount = 0) then
+  begin
+    chase := '';
+    if DnsExtractCname(@rbuf[0], rlen, chase) then
+      cname := chase;
+  end;
+  DnsResolveAEx := rcode;
+end;
+
+function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv4Array;
+  localCount, rc, i: Integer;
+  cname: string;
+begin
+  count := 0;
+  localCount := 0;
+  cname := '';
+  rc := DnsResolveAEx(nsHost, nsPort, name, localIps, localCount, cname, timeoutMs);
+  for i := 0 to localCount - 1 do
+    ips[i] := localIps[i];
+  count := localCount;
+  DnsResolveA := rc;
+end;
+
+function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  rbuf: array[0..1535] of Byte;
+  rlen, i, j, queryId: Integer;
+  localIps: TDnsIpv6Array;
+  localCount, outId, rcode: Integer;
+begin
+  count := 0;
+  queryId := 0;
+  rlen := DnsQueryOnce(nsHost, nsPort, name, DNS_TYPE_AAAA, @rbuf[0], 1536, timeoutMs, queryId);
+  if rlen < 0 then
+  begin
+    DnsResolveAAAA := rlen;
+    Exit;
+  end;
+
+  localCount := 0;
+  outId := 0;
+  rcode := DnsParseResponseAAAA(@rbuf[0], rlen, localIps, localCount, outId);
+  if rcode < 0 then
+  begin
+    DnsResolveAAAA := rcode;
+    Exit;
+  end;
+  if outId <> queryId then
+  begin
+    DnsResolveAAAA := DNS_ERR_BADID;
+    Exit;
+  end;
+
+  for i := 0 to localCount - 1 do
+    for j := 0 to 15 do
+      ips[i][j] := localIps[i][j];
+  count := localCount;
+  DnsResolveAAAA := rcode;
 end;
 
 function DnsResolveAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
@@ -251,6 +350,42 @@ begin
     { negative = transport failure; try the next nameserver }
   end;
   DnsResolveAList := rc;   { last error }
+end;
+
+function DnsResolveAListEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
+  timeoutMs: Integer): Integer;
+var
+  i, j, rc, localCount: Integer;
+  localIps: TDnsIpv4Array;
+  localCname: string;
+begin
+  count := 0;
+  cname := '';
+  if nsCount <= 0 then
+  begin
+    DnsResolveAListEx := DNS_ERR_NONS;
+    Exit;
+  end;
+  rc := DNS_ERR_NONS;
+  for i := 0 to nsCount - 1 do
+  begin
+    localCount := 0;
+    localCname := '';
+    rc := DnsResolveAEx(ns[i], nsPort, name, localIps, localCount, localCname, timeoutMs);
+    if rc >= 0 then
+    begin
+      { definitive answer (even NXDOMAIN) — copy out and stop }
+      for j := 0 to localCount - 1 do
+        ips[j] := localIps[j];
+      count := localCount;
+      cname := localCname;
+      DnsResolveAListEx := rc;
+      Exit;
+    end;
+    { negative = transport failure; try the next nameserver }
+  end;
+  DnsResolveAListEx := rc;   { last error }
 end;
 
 end.

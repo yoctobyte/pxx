@@ -14,6 +14,7 @@ uses platform, dns_wire_core, dns_config, dns_wire_blocking;
 
 const
   DNS_ERR_NOCONFIG = -4;   { no /etc/resolv.conf nameserver and no hosts match }
+  DNS_MAX_CNAME_CHAIN = 4; { alias-chase bound (resolver policy, matches BIND's 8/2 spirit) }
 
 { Testable seam: resolve `name` against the given hosts text first, then (on a
   miss) query nameserver nsHost:nsPort over UDP. Returns 0 (RCODE NOERROR) with
@@ -26,6 +27,13 @@ function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Int
   Returns DNS_ERR_NOCONFIG if nothing in hosts matches and no nameserver is
   configured. }
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
+
+{ Resolve A records for one exact query name through the nameserver list,
+  chasing a CNAME chain across follow-up queries (bounded by
+  DNS_MAX_CNAME_CHAIN). No hosts/search policy — the building block under
+  DnsResolveHost, exported for tests and direct use. }
+function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 
 implementation
 
@@ -97,12 +105,53 @@ begin
   ReadFileText := total;
 end;
 
+function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv4Array;
+  localCount, rc, i, depth: Integer;
+  cur, cname: string;
+begin
+  count := 0;
+  cur := name;
+  rc := DNS_ERR_NOCONFIG;
+  for depth := 0 to DNS_MAX_CNAME_CHAIN - 1 do
+  begin
+    localCount := 0;
+    cname := '';
+    rc := DnsResolveAListEx(ns, nsCount, nsPort, cur, localIps, localCount, cname, timeoutMs);
+    if rc < 0 then
+    begin
+      DnsResolveChase := rc;
+      Exit;
+    end;
+    if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+    begin
+      { alias with no address in the same response — follow the target }
+      cur := cname;
+      { loop on }
+    end
+    else
+    begin
+      for i := 0 to localCount - 1 do
+        ips[i] := localIps[i];
+      count := localCount;
+      DnsResolveChase := rc;
+      Exit;
+    end;
+  end;
+  { chain exceeded the bound — return the last rcode with no addresses }
+  DnsResolveChase := rc;
+end;
+
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 var
   hostsText, resolvText: string;
   ns, localIps: TDnsIpv4Array;
-  nsCount, localCount, rc, i: Integer;
+  search: TDnsSearchArray;
+  nsCount, searchCount, ndots, localCount, rc, i, idx: Integer;
   hostIp: LongWord;
+  cand: string;
 begin
   count := 0;
   rc := ReadFileText(PChar('/etc/hosts'), hostsText, 65536);
@@ -118,23 +167,43 @@ begin
     Exit;
   end;
 
-  { "dns" — try every configured nameserver in order; never public DNS. }
+  { "dns" — every configured nameserver, glibc search-list candidate order,
+    CNAME chains chased; never public DNS. }
   nsCount := 0;
-  rc := DnsParseResolvConf(resolvText, ns, nsCount);
+  searchCount := 0;
+  ndots := DNS_DEFAULT_NDOTS;
+  rc := DnsParseResolvConfEx(resolvText, ns, nsCount, search, searchCount, ndots);
   if nsCount = 0 then
   begin
     DnsResolveHost := DNS_ERR_NOCONFIG;
     Exit;
   end;
-  localCount := 0;
-  rc := DnsResolveAList(ns, nsCount, DNS_PORT, name, localIps, localCount, 2000);
-  if rc >= 0 then
+  rc := DNS_ERR_NOCONFIG;
+  idx := 0;
+  cand := '';
+  while DnsQueryCandidate(name, search, searchCount, ndots, idx, cand) do
   begin
-    for i := 0 to localCount - 1 do
-      ips[i] := localIps[i];
-    count := localCount;
+    localCount := 0;
+    rc := DnsResolveChase(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
+    if rc < 0 then
+    begin
+      { transport failure — the nameservers are unreachable; stop, do not walk
+        the whole search list against a dead resolver }
+      DnsResolveHost := rc;
+      Exit;
+    end;
+    if (rc = 0) and (localCount > 0) then
+    begin
+      for i := 0 to localCount - 1 do
+        ips[i] := localIps[i];
+      count := localCount;
+      DnsResolveHost := 0;
+      Exit;
+    end;
+    { NXDOMAIN / no records — try the next candidate }
+    idx := idx + 1;
   end;
-  DnsResolveHost := rc;
+  DnsResolveHost := rc;   { last rcode (e.g. NXDOMAIN), or NOCONFIG if no candidates }
 end;
 
 end.

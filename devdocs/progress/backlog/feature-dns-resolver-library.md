@@ -294,3 +294,22 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   the real `/etc/hosts`. The libc-free `dns_wire` resolver is now a complete
   working vertical (codec -> config -> blocking transport -> facade); the
   REMAINING items above are incremental on top.
+- 2026-07-10 — **AAAA + CNAME chase + search/ndots landed** (Track B):
+  - `dns_wire_core`: `DnsBuildQuery(qtype)` generalization (A wrapper kept),
+    `DnsParseResponseAAAA` (TDnsIpv6/TDnsIpv6Array), `DnsExtractCname` with a
+    compression-following, hop-bounded name decoder.
+  - `dns_config`: `DnsParseResolvConfEx` (search/domain last-wins, `options
+    ndots:N` capped at 15) + `DnsQueryCandidate` (glibc candidate order:
+    trailing-dot absolute; >= ndots as-is first; else search first, bare last).
+  - `dns_wire_blocking`: transport factored into `DnsQueryOnce` (UDP + TC->TCP
+    fallback shared by all query types); `DnsResolveAEx`/`DnsResolveAListEx`
+    (CNAME target out) and `DnsResolveAAAA`.
+  - `dns.pas`: `DnsResolveChase` (cross-query CNAME chain, bound 4);
+    `DnsResolveHost` now walks the search-candidate list and chases aliases.
+  - Tests: lib_dns_wire (AAAA encode/parse, compressed CNAME extract),
+    lib_dns_config (Ex parse + candidate order), new `test/lib_dns_chase.pas`
+    (forked mock serves CNAME then A; resolver follows with a second query).
+    All in `make lib-test`, green against stable v194.
+  REMAINING: async sibling over asyncnet, `dns_libc`/`dns_resolved`/`dns_esp`
+  backends + profile selection, AAAA facade entrypoint (`DnsResolveHost6`),
+  negative-response caching.

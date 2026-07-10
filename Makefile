@@ -3845,9 +3845,9 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net_timeout.pas /tmp/lib_net_timeout
 	test "$$(/tmp/lib_net_timeout)" = "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')"
 	$(PXX_STABLE) test/lib_dns_wire.pas /tmp/lib_dns_wire
-	test "$$(/tmp/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok')"
+	test "$$(/tmp/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok')"
 	$(PXX_STABLE) test/lib_dns_config.pas /tmp/lib_dns_config
-	test "$$(/tmp/lib_dns_config)" = "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok')"
+	test "$$(/tmp/lib_dns_config)" = "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok\nex-count=3\nex-search=2\nex-s0=ok\nex-s1=ok\nex-ndots=2\nex-domain=ok\nc-rel0=ok\nc-rel1=ok\nc-rel2=ok\nc-rel3=ok\nc-abs0=ok\nc-abs1=ok\nc-root0=ok\nc-root1=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_resolve.pas /tmp/lib_dns_resolve
 	test "$$(/tmp/lib_dns_resolve)" = "$$(printf 'rcode=0\ncount=2\nip0=ok\nip1=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_facade.pas /tmp/lib_dns_facade
@@ -3858,6 +3858,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_tcp)" = "$$(printf 'rcode=0\ncount=2\ntcp-fallback=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_multins.pas /tmp/lib_dns_multins
 	test "$$(/tmp/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_chase.pas /tmp/lib_dns_chase
+	test "$$(/tmp/lib_dns_chase)" = "$$(printf 'rcode=0\ncount=1\nchased=ok')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas /tmp/lib_dns_buildguard
 	test "$$(/tmp/lib_dns_buildguard)" = "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
 	$(PXX_STABLE) test/lib_dns_parsefuzz.pas /tmp/lib_dns_parsefuzz

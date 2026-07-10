@@ -8,8 +8,9 @@ uses dns_wire_core, dns_config;
 var
   ip: LongWord;
   ns: TDnsIpv4Array;
-  count, i: Integer;
-  cfg, hosts: string;
+  search: TDnsSearchArray;
+  count, searchCount, ndots, i: Integer;
+  cfg, hosts, cand: string;
 
 procedure Show(const tag: string; pass: Boolean);
 begin
@@ -56,4 +57,34 @@ begin
   Show('h-comment', not DnsLookupHosts(hosts, 'commented.host', ip));
   ip := 0;
   Show('h-miss', not DnsLookupHosts(hosts, 'nope', ip));
+
+  { ---- resolv.conf: search list + ndots ---- }
+  count := DnsParseResolvConfEx(cfg, ns, count, search, searchCount, ndots);
+  writeln('ex-count=', count);
+  writeln('ex-search=', searchCount);
+  Show('ex-s0', search[0] = 'example.com');
+  Show('ex-s1', search[1] = 'lan');
+  writeln('ex-ndots=', ndots);
+  { `domain` replaces an earlier search list (last one wins) }
+  count := DnsParseResolvConfEx('search a.example b.example'#10'domain only.example'#10,
+    ns, count, search, searchCount, ndots);
+  Show('ex-domain', (searchCount = 1) and (search[0] = 'only.example') and (ndots = 1));
+
+  { ---- candidate ordering ---- }
+  searchCount := 2;
+  search[0] := 'example.com';
+  search[1] := 'lan';
+  ndots := 1;
+  { bare single-label name (0 dots < ndots): search-qualified first, bare last }
+  cand := '';
+  Show('c-rel0', DnsQueryCandidate('myhost', search, searchCount, ndots, 0, cand) and (cand = 'myhost.example.com'));
+  Show('c-rel1', DnsQueryCandidate('myhost', search, searchCount, ndots, 1, cand) and (cand = 'myhost.lan'));
+  Show('c-rel2', DnsQueryCandidate('myhost', search, searchCount, ndots, 2, cand) and (cand = 'myhost'));
+  Show('c-rel3', not DnsQueryCandidate('myhost', search, searchCount, ndots, 3, cand));
+  { dotted name (>= ndots): as-is first, then qualified }
+  Show('c-abs0', DnsQueryCandidate('a.b', search, searchCount, ndots, 0, cand) and (cand = 'a.b'));
+  Show('c-abs1', DnsQueryCandidate('a.b', search, searchCount, ndots, 1, cand) and (cand = 'a.b.example.com'));
+  { trailing dot = absolute, exactly one candidate }
+  Show('c-root0', DnsQueryCandidate('a.b.', search, searchCount, ndots, 0, cand) and (cand = 'a.b'));
+  Show('c-root1', not DnsQueryCandidate('a.b.', search, searchCount, ndots, 1, cand));
 end.
