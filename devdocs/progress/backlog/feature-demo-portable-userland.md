@@ -47,6 +47,20 @@ from "proven toy" (classes, control flow, auto-typing, C-import binding all work
 to a real language, one concrete feature at a time. And it demos the cross-target
 thesis at the *concurrency* level (preemptive tasks on ESP, threads on desktop).
 
+## Why not busybox (decided — stop re-litigating)
+busybox recurs in brainstorms as "the shell." It's **welded to the Linux kernel
+model**: fork/exec (multi-call binary re-invokes itself per applet), termios,
+signals, `/proc`, the full syscall + VFS surface. Porting it to ESP32/FreeRTOS
+(no processes, no MMU, no fork/exec, one address space) = reimplementing half a
+kernel — significant hacks, wrong effort. So busybox is **NOT the ESP path**;
+the hand-written NilPy applet shell is. Two legitimate busybox uses stay open,
+both Linux-only and separate from this demo's portable goal:
+- **busybox-ash via cfront** as a monster **Track C corpus** target
+  ([[idea-c-realworld-test-targets]]) — and, if it compiles, a real `/bin/sh`
+  for the *Linux* `/init` backend only.
+We borrow busybox's *internal applet-dispatch pattern* (a name→function table in
+one binary), not its process model.
+
 ## Real dependencies (NilPy frontend gaps the shell forces — Track A)
 - **[[feature-nilpy-collections-and-string-methods]]** — `list`/`dict` (argv,
   env, job table) + string methods (`split`/`join`/`strip` for parsing). The
