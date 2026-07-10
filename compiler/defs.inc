@@ -393,6 +393,7 @@ const
   IR_SET_SIGNAL    = 65; { SetSignalHandler(sig, @proc): IRA = signal-number value node, IRB = handler-address value node (0/nil = revert to default on next delivery). Lowers to a call of the emitted SigSetHook stub (store hook slot + rt_sigaction install). x86-64 Linux only; other targets Error at codegen. }
   IR_IO_LOCK       = 66; { --threadsafe statement-atomic console I/O: acquire the reentrant owner-tid I/O spinlock (BSS_IO_OWNER/BSS_IO_DEPTH). Emitted by AN_WRITE/AN_WRITELN/AN_READ* lowering around the whole statement, x86-64 + ThreadSafeMode only. Reentrant so a write-arg calling a writing function cannot self-deadlock. }
   IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
+  MAX_LOOPSYM_SCAN = 64; { -O3 loop-residency: cap on distinct syms tallied inside a body's loop ranges (LoopResidencyAssign); overflow just means later syms are not residency candidates. }
   IR_CONST_DATA    = 68; { generic data-reference constant: IRIVal = Data[] offset OR a negative dataref sentinel (RECORD_RTTI/CLASSREF/SYM_RTTI bases, resolved by the pre-link fixup pass). Value = absolute data address in the accumulator. Lets IR-level CALLS pass descriptor addresses (e.g. a record layout descriptor to PXXDynArrayRetainImmediate) instead of needing a bespoke per-backend op. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
@@ -906,10 +907,10 @@ var
     the caller's values are saved to a reserved frame slot at body entry and
     restored in the epilogue. These globals hold the CURRENT proc's residency
     (procs compile sequentially; nested procs flush after the enclosing one). }
-  RcResidentCount   : Integer;               { 0..2 params resident in the current body }
-  RcResidentSym     : array[0..1] of Integer; { Syms[] index of each resident param }
-  RcResidentReg     : array[0..1] of Integer; { 14 or 15 }
-  RcResidentSaveOff : array[0..1] of Integer; { rbp offset of the caller-reg save slot }
+  RcResidentCount   : Integer;               { 0..4 syms resident in the current body (slots 0-1: r14/r15 params at -O2; slots 2-3: r12/r13 loop-hot locals at -O3) }
+  RcResidentSym     : array[0..3] of Integer; { Syms[] index of each resident sym }
+  RcResidentReg     : array[0..3] of Integer; { 12..15 }
+  RcResidentSaveOff : array[0..3] of Integer; { rbp offset of the caller-reg save slot }
   { Set while CompilePendingLocalInits emits routine-local typed-const initializer
     assignments (each via its own CompileAST call, BEFORE the main body). Residency
     assignment must NOT run for those: it would re-emit the r14/r15 save+load once

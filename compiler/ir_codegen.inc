@@ -2316,6 +2316,10 @@ begin
             EmitB($48); EmitB($C7); EmitB($C1); EmitI32(size);            { mov rcx, size }
             EmitB($F3); EmitB($AA);                                       { rep stosb }
           end;
+          { The zeroing wrote the frame slot directly — re-sync a resident
+            register cache (loop-residency locals can hit this mid-body). }
+          if ResidentRegOf(symIdx) <> 0 then
+            RegcallRefreshResident(symIdx);
         end;
       end;
 
@@ -5579,6 +5583,108 @@ begin
                  (not ScratchSafeSubtree(right));
 end;
 
+{ -O3 W2 slice: loop-local register residency. Per main body, find the
+  loop-hottest scalar locals/params (access counts inside backward-jump loop
+  ranges) and keep up to two resident in r12/r13 — extending the r14/r15
+  regcall residency mechanism (same choke points: EmitLoadVar/EmitLoadVarRcx
+  read the register, EmitStoreVar dual-writes + refreshes, EmitProcEpilog
+  restores the caller's registers, and the IR_EXC_ENTER landing refresh
+  covers the longjmp rollback — see
+  bug-a-o2-resident-param-stale-after-longjmp). The payoff target is the
+  loop-carried store-forward chain through the frame slot (i := i + 1 in a
+  hot loop), which OoO cannot hide — unlike plain L1 reloads (the measured
+  regcall phase-2 rejection). Mutually exclusive with the W1 r12/r13 callee
+  scratch: CalleeScratchAssign bails when residency claimed the registers. }
+procedure LoopResidencyAssign;
+var k, j, t, best, bestCnt, nextReg, saveOff, lbl: Integer;
+    sym: array[0..1] of Integer;
+    picked: Integer;
+    Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    nsyms, si: Integer;
+    inLoop: Boolean;
+begin
+  if OptLevel < 3 then Exit;
+  if CurProc < 0 then Exit;
+  if RcSuppressAssign then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if CurProcIsGenerator or CurProcIsStackless then Exit;
+  if RcResidentCount > 2 then Exit;   { no free slot }
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  { Tally LOAD/STORE_SYM references that sit inside at least one loop range
+    (IR_JUMP to an earlier IR_LABEL). Two nested passes over the flat IR:
+    outer finds backward jumps, inner credits the accesses in the range. }
+  nsyms := 0;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_JUMP then
+    begin
+      lbl := IRA[k];
+      { find the matching earlier label }
+      t := -1;
+      for j := 0 to k - 1 do
+        if (IRKind[j] = IR_LABEL) and (IRIVal[j] = lbl) then begin t := j; Break; end;
+      if t < 0 then Continue;
+      for j := t to k do
+        if (IRKind[j] = IR_LOAD_SYM) or (IRKind[j] = IR_STORE_SYM) then
+        begin
+          si := IRA[j];
+          if si < 0 then Continue;
+          inLoop := False;
+          for best := 0 to nsyms - 1 do
+            if CSyms[best] = si then begin Inc(Counts[best]); inLoop := True; Break; end;
+          if (not inLoop) and (nsyms < MAX_LOOPSYM_SCAN) then
+          begin
+            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+          end;
+        end;
+    end;
+  if nsyms = 0 then Exit;
+  { Filter to residency-eligible syms and pick the top two by count. }
+  picked := 0;
+  while picked < 2 do
+  begin
+    best := -1; bestCnt := 3;   { threshold: > 3 loop accesses }
+    for k := 0 to nsyms - 1 do
+      if Counts[k] > bestCnt then
+      begin
+        si := CSyms[k];
+        if Syms[si].IsArray then Continue;
+        if not ((Syms[si].Kind = skLocal) or
+                ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Continue;
+        if not RegcallScalarType(Syms[si].TypeKind) then Continue;
+        if ResidentRegOf(si) <> 0 then Continue;
+        inLoop := False;   { reuse as addr-taken flag }
+        for j := 0 to IRCount - 1 do
+          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
+          begin inLoop := True; Break; end;
+        if inLoop then Continue;
+        best := k; bestCnt := Counts[k];
+      end;
+    if best < 0 then Break;
+    sym[picked] := CSyms[best];
+    Counts[best] := 0;
+    Inc(picked);
+  end;
+  if picked = 0 then Exit;
+  nextReg := 12;
+  for k := 0 to picked - 1 do
+  begin
+    if RcResidentCount >= 4 then Break;
+    si := sym[k];
+    FrameSize := AlignTo(FrameSize + 8, 8);
+    saveOff := -FrameSize;
+    EmitB($4C); EmitB($89); EmitB($85 or ((nextReg - 8) shl 3)); EmitI32(saveOff); { mov [rbp+off], r12/r13 }
+    EmitLoadVar(si);                                        { rax = canonical frame value (register not yet listed) }
+    EmitB($49); EmitB($89); EmitB($C0 or (nextReg - 8));    { mov r12/r13, rax }
+    RcResidentSym[RcResidentCount] := si;
+    RcResidentReg[RcResidentCount] := nextReg;
+    RcResidentSaveOff[RcResidentCount] := saveOff;
+    Inc(RcResidentCount);
+    Inc(nextReg);
+  end;
+end;
+
 procedure CalleeScratchAssign;
 var k: Integer; found: Boolean;
 begin
@@ -5589,6 +5695,10 @@ begin
   if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   if CurProcIsGenerator or CurProcIsStackless then Exit;
+  { r12/r13 already claimed by loop residency for this body — the registers
+    are not free scratch there. }
+  for k := 0 to RcResidentCount - 1 do
+    if RcResidentReg[k] < 14 then Exit;
   for k := 0 to IRCount - 1 do
     if IRKind[k] = IR_ASM then Exit;
   found := False;
@@ -5703,6 +5813,7 @@ begin
   { After IROptimize so the fire-scan sees the final IR (inline splices can add
     call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
     land ahead of the body code. }
+  LoopResidencyAssign;
   CalleeScratchAssign;
   if DumpIR then IRDump;
   IREmitMachineCode;

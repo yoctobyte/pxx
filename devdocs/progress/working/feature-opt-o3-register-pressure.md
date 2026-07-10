@@ -200,3 +200,26 @@ architecture `devdocs/dev/optimization-architecture.md`.
 - Gates: -O2 fixedpoint untouched + byte-identical; -O3 self-host fixedpoint
   byte-identical; test-opt (incl. -O3 column + fixedpoint) green; make test
   green; testmgr quick GREEN.
+
+### 2026-07-11 — W2 slice 1 LANDED behind -O3: loop-local register residency (r12/r13)
+- `LoopResidencyAssign` (CompileAST, after IROptimize): tallies LOAD/STORE_SYM
+  accesses inside backward-jump loop ranges (nested ranges credit twice —
+  natural depth weighting), picks up to two eligible scalar locals/params
+  (>3 loop accesses, no addr-taken, RegcallScalarType) and keeps them resident
+  in r12/r13 — the r14/r15 regcall mechanism generalized (choke-point encodings
+  now computed from the register number; residency arrays widened to 4). Body
+  entry saves the caller's r12/r13 to frame slots; every store dual-writes +
+  refreshes; the epilogue and the IR_EXC_ENTER exception-landing refresh cover
+  all exits (the longjmp-rollback landmine fixed earlier today). Mid-body
+  IR_ZERO_SYM on a resident local now refreshes too. Mutually exclusive per
+  body with the W1 r12/r13 callee scratch (residency wins; scratch bails).
+- **Why this works when regcall phase-2 (more param residency) was rejected:**
+  the target is the LOOP-CARRIED store-forward chain through the frame slot
+  (i := i + 1), which OoO cannot hide — not plain L1 reloads, which it can.
+- **Measured (-O2 vs -O3, outputs identical):** compiler self-compile
+  3.427 → 3.268 s = **1.05×** (was 1.01× with W1 alone); sieve 1.03×;
+  mandelbrot stays 1.13× (its loop kernel is float — excluded from residency,
+  wins came from W1). Cumulative -O3 story: compute-bound 1.13×, self-compile
+  1.05×.
+- Gates: -O2/-O3 self-host fixedpoints byte-identical; test-opt (incl. -O3
+  differential + fixedpoint) green; make test green; quick GREEN.

@@ -2275,8 +2275,7 @@ begin
   rreg := ResidentRegOf(idx);
   if rreg <> 0 then
   begin
-    if rreg = 14 then begin EmitB($4C); EmitB($89); EmitB($F0); end   { mov rax, r14 }
-    else begin EmitB($4C); EmitB($89); EmitB($F8); end;               { mov rax, r15 }
+    EmitB($4C); EmitB($89); EmitB($C0 or ((rreg - 8) shl 3));         { mov rax, r12..r15 }
     Exit;
   end;
   tk := Syms[idx].TypeKind;
@@ -2517,8 +2516,7 @@ begin
   rreg := ResidentRegOf(idx);
   if rreg <> 0 then
   begin
-    if rreg = 14 then begin EmitB($4C); EmitB($89); EmitB($F1); end   { mov rcx, r14 }
-    else begin EmitB($4C); EmitB($89); EmitB($F9); end;               { mov rcx, r15 }
+    EmitB($4C); EmitB($89); EmitB($C1 or ((rreg - 8) shl 3));         { mov rcx, r12..r15 }
     Exit;
   end;
   tk := Syms[idx].TypeKind;
@@ -2593,8 +2591,7 @@ begin
   RcResidentSym[saved] := -1;      { de-list: force a frame load }
   EmitLoadVar(idx);                { rax = re-extended value from the frame slot }
   RcResidentSym[saved] := idx;     { re-list }
-  if rreg = 14 then begin EmitB($49); EmitB($89); EmitB($C6); end   { mov r14, rax }
-  else begin EmitB($49); EmitB($89); EmitB($C7); end;               { mov r15, rax }
+  EmitB($49); EmitB($89); EmitB($C0 or (rreg - 8));                 { mov r12..r15, rax }
 end;
 
 procedure EmitStoreVar(idx: Integer);
@@ -5323,10 +5320,10 @@ begin
     frame teardown. Reached by every return (early Exit and fall-through both go
     through EmitProcEpilog). rbp is still valid here; rax (the result) untouched. }
   for i := 0 to RcResidentCount - 1 do
-    if RcResidentReg[i] = 14 then
-      begin EmitB($4C); EmitB($8B); EmitB($B5); EmitI32(RcResidentSaveOff[i]); end  { mov r14, [rbp+off] }
-    else
-      begin EmitB($4C); EmitB($8B); EmitB($BD); EmitI32(RcResidentSaveOff[i]); end; { mov r15, [rbp+off] }
+  begin
+    EmitB($4C); EmitB($8B); EmitB($85 or ((RcResidentReg[i] - 8) shl 3));           { mov r12..r15, [rbp+off] }
+    EmitI32(RcResidentSaveOff[i]);
+  end;
   { -O3 W1 callee-saved scratch: restore the caller's r12/r13 from their frame
     slots (saved once by CalleeScratchAssign). Reached by every return path,
     exactly like the r14/r15 residency restore above. }
