@@ -58,6 +58,22 @@ begin
   Result := True;
 end;
 
+function UNameMatchCS(off, len: Integer; const s: AnsiString): Boolean;
+{ Exact, case-SENSITIVE slice match (C struct/union fields — C distinguishes
+  `b` from `B`). Mirror of UNameMatch without the ASCII case fold. }
+var i: Integer;
+begin
+  Result := False;
+  if len <> Length(s) then Exit;
+  i := 0;
+  while i < len do
+  begin
+    if TokChars[off + i] <> s[i + 1] then Exit;
+    Inc(i);
+  end;
+  Result := True;
+end;
+
 function TokSlicesMatch(off1, len1, off2, len2: Integer): Boolean;
 var i: Integer; c1, c2: Char;
 begin
@@ -325,7 +341,7 @@ begin
 end;
 
 function FindUField(ci: Integer; const name: AnsiString): Integer;
-var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer; cs, hit: Boolean;
 begin
   Result := -1;
   name2 := name;
@@ -335,10 +351,15 @@ begin
   begin
     base := UClsFBase[curr];
     cnt  := UClsFCount[curr];
+    { C structs/unions distinguish `b` from `B` — match case-sensitively when the
+      owning class flags it; Pascal records stay case-insensitive (default). }
+    cs := UClsCaseSensFields[curr];
     i := 0;
     while i < cnt do
     begin
-      if UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      if cs then hit := UNameMatchCS(UFldNOff[base + i], UFldNLen[base + i], name)
+      else       hit := UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo);
+      if hit then begin Result := base + i; Exit; end;
       Inc(i);
     end;
     curr := UClsParent[curr];
@@ -497,6 +518,7 @@ begin
   UClsIsRecord[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
   UClsForward[UClsCount] := False;
+  UClsCaseSensFields[UClsCount] := False;
   UClsCount := UClsCount + 1;
 end;
 

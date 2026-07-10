@@ -2449,6 +2449,7 @@ begin
   if UClsCount >= MAX_UCLASS - 1 then begin Result := REC_NONE; Exit; end;
   ci := AddUClass(0, 0);
   UClsIsRecord[ci] := True;
+  UClsCaseSensFields[ci] := True; { C: `b` != `B` }
   rec := REC_UCLASS_BASE + ci;
   AddCTag(name, rec);
   Result := rec;
@@ -2465,6 +2466,7 @@ begin
   begin
     rec := REC_UCLASS_BASE + AddUClass(0, 0);
     UClsIsRecord[rec - REC_UCLASS_BASE] := True;
+    UClsCaseSensFields[rec - REC_UCLASS_BASE] := True; { C: `b` != `B` }
   end;
   if rec >= REC_UCLASS_BASE then
     ParseCStructInto(rec - REC_UCLASS_BASE, isUnion)
@@ -8326,7 +8328,7 @@ begin
         Next;
       end
       else if UClsCount < MAX_UCLASS - 1 then
-      begin subci := AddUClass(0, 0); UClsIsRecord[subci] := True; end
+      begin subci := AddUClass(0, 0); UClsIsRecord[subci] := True; UClsCaseSensFields[subci] := True; end
       else
         subci := -1;
       if subci >= 0 then
@@ -8829,6 +8831,7 @@ begin
       else
         ci := AddUClass(0, 0);
       UClsIsRecord[ci] := True;
+      UClsCaseSensFields[ci] := True; { C: `b` != `B` }
       ParseCStructInto(ci, isUnion);
       ptrStars := 0;
       while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
@@ -9092,6 +9095,7 @@ begin
     else
     begin
       UClsIsRecord[ci] := True;
+      UClsCaseSensFields[ci] := True; { C: `b` != `B` }
       if hasTag and (UClsNLen[ci] = 0) then
       begin
         UClsNOff[ci] := tagOff; UClsNLen[ci] := tagLen;  { name the record by its tag }

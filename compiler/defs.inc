@@ -1798,6 +1798,7 @@ var
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
   UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
+  UClsCaseSensFields : array[0..MAX_UCLASS-1] of Boolean; { field names match case-SENSITIVELY (C structs/unions; C distinguishes `b` and `B`). Default off = case-insensitive Pascal fields. }
   UClsCount  : Integer;
 
   { Per-(class, interface) Interface Method Table: a Data[] array of code
