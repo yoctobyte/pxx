@@ -1,6 +1,6 @@
 # Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels
 
-- **Type:** feature (harness + demo) — Track B
+- **Type:** feature (harness + demo) — **Track E** (Examples/apps; file-ownership Track B). Linux `/init` backend of [[feature-demo-portable-userland]].
 - **Status:** rainy-day 
 - **Owner:** — (Track B)
 - **Opened:** 2026-06-21

@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (78)
+## backlog (80)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,8 +53,9 @@ _none_
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-demo-chess | B | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-mandelbrot-gui-threaded | B | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
+| feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
+| feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -77,6 +78,7 @@ _none_
 | feature-inline-routines | O | 60 | feature | Inline routine expansion (`inline;`) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
+| feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -147,14 +149,14 @@ _none_
 | feature-extended-type-support | A | 50 | feature | Proper `Extended` type support (currently aliased to Double) | — |
 | feature-fpc-vs-pxx-feature-boundary | A | 50 | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | A | 50 | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
-| feature-kernel-matrix-bootroom | B | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
+| feature-kernel-matrix-bootroom | E | 50 | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-mode-delphi-remaining | A | 50 | feature | `{$mode delphi}` — remaining @-relax edge slices | — |
 | feature-no-ansistring-profile | A | 50 | feature | No-AnsiString / bounded-string profile | — |
 | feature-os-targets-bsd-mac | A | 50 | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-stackful-coro-port | A | 50 | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | 50 | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
-| idea-demo-app-candidates | B | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
@@ -546,20 +548,20 @@ _none_
 | feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
 | feature-default-params-on-methods | A | 50 | feature | Default parameter values on class/interface methods (works on free routines) | — |
 | feature-default-standard-units | A | 50 | feature | Default standard units: `System` + `textfile` | — |
-| feature-demo-2048 | B | 50 | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
-| feature-demo-calc | B | 50 | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
-| feature-demo-file-browser | B | 50 | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
-| feature-demo-gui-solitaire | B | 50 | feature | Demo — GUI Patience / Solitaire | — |
-| feature-demo-life | B | 50 | feature | Demo — Conway's Game of Life | — |
-| feature-demo-lisp | B | 50 | feature | Demo — Lisp / Scheme interpreter | — |
-| feature-demo-mandelbrot | B | 50 | feature | Demo — zoomable Mandelbrot explorer | — |
-| feature-demo-maze | B | 50 | feature | Demo — maze generator + solver | — |
-| feature-demo-raytracer | B | 50 | feature | Demo — CPU ray tracer | — |
-| feature-demo-solitaire | B | 50 | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
-| feature-demo-sudoku | B | 50 | feature | Demo — Sudoku (solver + generator + interactive play) | — |
-| feature-demo-video-player-audio-sync | B | 50 | feature | Video player audio playback and sync | — |
-| feature-demo-video-player | B | 50 | feature | Flagship Demo — Console Video Player (libc-free) | — |
-| feature-demo-vm | B | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
+| feature-demo-2048 | E | 50 | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
+| feature-demo-calc | E | 50 | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
+| feature-demo-file-browser | E | 50 | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
+| feature-demo-gui-solitaire | E | 50 | feature | Demo — GUI Patience / Solitaire | — |
+| feature-demo-life | E | 50 | feature | Demo — Conway's Game of Life | — |
+| feature-demo-lisp | E | 50 | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-mandelbrot | E | 50 | feature | Demo — zoomable Mandelbrot explorer | — |
+| feature-demo-maze | E | 50 | feature | Demo — maze generator + solver | — |
+| feature-demo-raytracer | E | 50 | feature | Demo — CPU ray tracer | — |
+| feature-demo-solitaire | E | 50 | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
+| feature-demo-sudoku | E | 50 | feature | Demo — Sudoku (solver + generator + interactive play) | — |
+| feature-demo-video-player-audio-sync | E | 50 | feature | Video player audio playback and sync | — |
+| feature-demo-video-player | E | 50 | feature | Flagship Demo — Console Video Player (libc-free) | — |
+| feature-demo-vm | E | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | A | 50 | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | 50 | feature | Double literal / value → Single narrowing on assign and argument | — |
@@ -780,9 +782,10 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] feature-c-corpus-duktape
+- [p 55] [E] feature-demo-portable-userland
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
-- [p 53] [B] feature-demo-chess
+- [p 53] [E] feature-demo-chess
 - [p 53] [B] feature-esp-peripheral-callback-api
 - [p 53] [B] feature-gui-real-window-xvfb-smoke
 - [p 53] [A] feature-threadsafe-heap-optimize
@@ -791,13 +794,14 @@ _none_
 - [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-game-library-candidate-suite
+- [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [O] feature-callconv-register-args
 - [p 45] [A] feature-cross-frontend-interop-contract
 - [p 45] [B] feature-crtl-implement-libc-assumptions
-- [p 45] [B] feature-demo-mandelbrot-gui-threaded
+- [p 45] [E] feature-demo-mandelbrot-gui-threaded
 - [p 45] [A] feature-dynamic-compiler-tables
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery

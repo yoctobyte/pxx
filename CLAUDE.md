@@ -24,6 +24,15 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   agents run at once and must not fight over the same file.
 - **Don't invent new letters.** No Track L for libraries, no "LC" for C
   libraries. The set below is deliberately small; resist splitting it finer.
+- **Two axes: lanes vs tags.** The letters mix two kinds of thing, and that's
+  fine once you see it. **File-lanes** (exclusive, collision-avoidance): **A**
+  core, **B** libs/demos, **C/P/R/Z** frontends — these answer "who owns this
+  file when two agents run at once." **Work-tags** (human grouping, compose
+  freely, each *inherits* a file-lane): **O** optimization (owned by A), **E**
+  examples/apps (owned by B), **T** testing, **D** docs, **X** experimental. A
+  tag is not a new file-lane — "Track O" work still lands under A's gate, "Track
+  E" under B's. So pick a new letter on the right axis: a new *place code lives* →
+  new lane (rare, resisted); a new *kind of work* over existing files → tag.
 - **X is a TAG, not a lane: experimental.** Tracks R (Rust) and Z (Zig) are
   also X — their tickets live in `devdocs/progress/experimental/` (never
   ranked by `next`/`ready`; see that folder's README for the upscale rule).
@@ -97,6 +106,14 @@ frontend)"). **At session start, infer your track from the request:**
   MAY carry cross-target reds for hours — tstate is the truth, and a
   core-job red older than a day is a revert candidate. Gate for T's own
   tooling changes = `tools/testmgr.py --tier full` green.
+- **Track E — examples & apps (formal category, file-owned by Track B).** Apps
+  *built with* PXX, not PXX itself: demos, games, GUIs, IDEs (the current Pascal
+  one and a future NilPy one are both just E apps — don't burn a letter per tool),
+  and the portable-userland/shell showcase. Lives in `examples/**`, `lib/**`, app
+  dirs = **Track B file-ownership + gate** (build with `$(PXX_STABLE)`, never
+  rebuild the compiler; `make lib-test`/`demos`). A compiler/frontend gap an app
+  forces → file it under the owning lane (Track A / the frontend). `feature-demo-`
+  / `idea-demo-` slugs auto-tag E. Works on `master`.
 - **Track O — optimization (formal category, implicitly Track A).** A
   cross-cutting *lane*, not a file set: codegen/runtime speed work —
   register allocation, `-O` passes, the heap allocator, anything chasing the
@@ -204,6 +221,12 @@ Rust tests) on `master`; live work under `devdocs/progress/working/feature-rust-
 backend → **file a Track A ticket**, don't edit under R. Gate = Rust tests green +
 self-host byte-identical + cross. Land only green; destabilizing work behind a
 flag or incrementally, never a long-lived branch.
+
+### Track E in one line
+Examples & apps (demos, games, GUIs, IDEs, the portable-userland/shell showcase)
+= **file-owned by Track B**. Build with `$(PXX_STABLE)`, never rebuild the
+compiler; gate = `make lib-test`/`demos` + the app runs. A compiler/frontend gap
+an app hits → file it under the owning lane (A / the frontend), don't fix it under E.
 
 ### Track O in one line
 Optimization lane = **implicitly Track A**. Codegen/runtime speed (register
