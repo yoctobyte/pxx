@@ -83,6 +83,10 @@ function Ceil(x: Single): Single;
 
 implementation
 
+type
+  PSqrtInt64  = ^Int64;    { double<->bits reinterpret for the Sqrt seed }
+  PSqrtDouble = ^Double;
+
 { ================= Double core ================= }
 
 function Pi: Double;
@@ -96,22 +100,51 @@ begin
 end;
 
 function Sqrt(x: Double): Double;
-{ Newton-Raphson: g := (g + x/g)/2, quadratic convergence. }
-var g, ng, z: Double; i: Integer;
+{ Newton-Raphson to ~1 ULP, then ONE correctly-rounded correction step using an
+  exact residual. Plain Newton has an FP fixed point that can sit 1 ULP below the
+  correctly-rounded root (sqrt(2) landed at ...bcc vs the IEEE ...bcd), and every
+  RTL routine built on Sqrt inherited that error. The correction computes the
+  exact residual r = x - g*g with a Dekker two-product (no FMA needed), then
+  applies r/(2g): sqrt(x) = g*sqrt(1+r/g^2) ~= g + r/(2g) to well past double
+  precision, so rounding g + r/(2g) yields the correctly-rounded result. }
+var g, ng, z, gh, gl, c, p, e, r: Double; i: Integer; bits: Int64;
 begin
   { FPC-faithful IEEE: Sqrt of a negative is NaN (C sqrt() binds here and expects
     NaN too). Sqrt(0)=0. z/z with z=0 yields a NaN without a NaN literal. }
   if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
   if x = 0.0 then begin Result := 0.0; Exit; end;
-  g := x;
-  if g < 1.0 then g := 1.0;
-  for i := 1 to 200 do
+  { Bit-hack seed: halving the raw exponent field gives g within a small factor
+    of sqrt(x) for ANY magnitude, so Newton converges quadratically in a handful
+    of steps. (`g := x` seeded far from the root for large/small x, needing far
+    more than the old 200-iteration cap — huge inputs never converged.)
+    (bits shr 1) + (1023 shl 51) re-biases the halved exponent. }
+  bits := PSqrtInt64(@x)^;
+  bits := (bits shr 1) + (Int64(1023) shl 51);
+  g := PSqrtDouble(@bits)^;
+  for i := 1 to 8 do
   begin
     ng := 0.5 * (g + x / g);
     if ng = g then break;
     g := ng;
   end;
-  Result := g;
+  { Dekker split of g into gh+gl (hi 26 bits + lo), so gh*gh, gh*gl, gl*gl are
+    each exact; then g*g = p (rounded) + e (exact error), and the exact residual
+    is (x - p) - e. 134217729 = 2^27 + 1. }
+  p := g * g;
+  { Near DBL_MAX, g*g overflows to +Inf and the residual would be NaN; the
+    Newton result is already ~1 ULP there, so skip the correction. (p - p = 0
+    for a finite p, NaN for Inf.) }
+  if (p - p) <> 0.0 then
+  begin
+    Result := g;
+    Exit;
+  end;
+  c  := g * 134217729.0;
+  gh := c - (c - g);
+  gl := g - gh;
+  e  := ((gh * gh - p) + 2.0 * gh * gl) + gl * gl;
+  r  := (x - p) - e;
+  Result := g + r / (2.0 * g);
 end;
 
 function Exp(x: Double): Double;

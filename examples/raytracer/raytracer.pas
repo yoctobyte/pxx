@@ -30,7 +30,9 @@ const
   MAXDEPTH = 3;
   INF      = 1.0e30;
   EPS      = 0.0001;
-  EXPECTED = 297935246;   { SMOKE_W x SMOKE_H pixel checksum; x86-64 == aarch64 }
+  EXPECTED = 297858362;   { SMOKE_W x SMOKE_H pixel checksum; x86-64 == aarch64.
+                            Updated when Sqrt became correctly-rounded (was 1 ULP
+                            low); the new value is bit-stable across targets. }
 
 type
   Vec3 = record x, y, z: Double; end;
