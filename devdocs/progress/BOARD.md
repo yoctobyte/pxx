@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (81)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
 | feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
@@ -168,7 +167,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (563)
+## done (564)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -483,6 +482,7 @@ _none_
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
+| feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-chess | A | 60 | feature | C corpus: chess engine — perft as a compiler-independent oracle | — |
 | feature-c-corpus-tcc | C | 50 | feature | C corpus: bring up tcc (TinyCC) as a real-world multi-file C target | — |
@@ -828,7 +828,6 @@ _none_
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
-- [p 40] [C] feature-c-cmdline-define-flag
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 30] [A] bug-impl-prescan-late-include-var-section
