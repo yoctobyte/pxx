@@ -5,9 +5,15 @@ prio: 56
 # C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent)
 
 - **Type:** bug (C frontend — struct field offset/resolution) — **Track A/C**.
-- **Status:** backlog — localized 2026-07-10. Current wall for file-backed sqlite
-  after the fnptr-cast fix ([[bug-c-call-through-deref-of-fnptr-pointer]]).
-- **Blocks:** file-backed sqlite read path ([[task-sqlite-libc-free-runtime-bringup]]).
+- **Status:** ROOT CAUSE FOUND + FIXED 2026-07-10 — it was NOT a field-offset bug.
+  The real cause is the preprocessor: `#if` didn't parse HEX literals, so
+  `#if SQLITE_MAX_MMAP_SIZE>0` (`0x7fff0000`) evaluated FALSE at the `unixFile`
+  struct (dropping the mmap fields → `mmapSize` lookup missed → default offset 0)
+  while other `#if 0x..` sites also mis-evaluated. Fixed by making CPExprAtom /
+  CPParsePoolNumber parse hex+octal (commit pending, regression b237). This
+  offset-0 ticket is superseded by that fix; keeping it as the diagnostic trail.
+- **Blocks:** was the apparent file-backed sqlite read wall; now the wall is the
+  (correctly-enabled) mmap path itself — see the sqlite ticket.
 
 ## Symptom
 In sqlite's `unixRead`, `pFile->mmapSize` and `pFile->pMapRegion` read GARBAGE

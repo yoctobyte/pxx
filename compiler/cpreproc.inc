@@ -405,11 +405,35 @@ begin
     negative := True;
     Inc(p);
   end;
-  while (p <= last) and (CPrepChars[p] in ['0'..'9']) do
+  if (p < last) and (CPrepChars[p] = '0') and
+     ((CPrepChars[p+1] = 'x') or (CPrepChars[p+1] = 'X')) then
   begin
-    Result := (Result * 10) + Ord(CPrepChars[p]) - Ord('0');
+    { hexadecimal macro value `#define M 0x...` }
+    Inc(p); Inc(p);
+    while (p <= last) and (CPrepChars[p] in ['0'..'9','a'..'f','A'..'F']) do
+    begin
+      if CPrepChars[p] in ['0'..'9'] then Result := (Result * 16) + Ord(CPrepChars[p]) - Ord('0')
+      else if CPrepChars[p] in ['a'..'f'] then Result := (Result * 16) + Ord(CPrepChars[p]) - Ord('a') + 10
+      else Result := (Result * 16) + Ord(CPrepChars[p]) - Ord('A') + 10;
+      Inc(p);
+    end;
+  end
+  else if (p < last) and (CPrepChars[p] = '0') and (CPrepChars[p+1] in ['0'..'7']) then
+  begin
+    { octal macro value }
     Inc(p);
-  end;
+    while (p <= last) and (CPrepChars[p] in ['0'..'7']) do
+    begin
+      Result := (Result * 8) + Ord(CPrepChars[p]) - Ord('0');
+      Inc(p);
+    end;
+  end
+  else
+    while (p <= last) and (CPrepChars[p] in ['0'..'9']) do
+    begin
+      Result := (Result * 10) + Ord(CPrepChars[p]) - Ord('0');
+      Inc(p);
+    end;
   if negative then Result := -Result;
 end;
 
@@ -427,7 +451,8 @@ procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first,
 procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward;
 
 function CPExprAtom: Int64;
-var a, b, mi, p, q, depth, argc, argBase, ai: Integer;
+var a, b, mi, p, q, depth, argc, argBase, ai, hd: Integer;
+    hc: Char;
     savedText, expanded: AnsiString; savedPos, savedEnd: Integer;
 begin
   CPSkipExprSpace;
@@ -443,11 +468,41 @@ begin
   end;
   if CPExprText[CPExprPos] in ['0'..'9'] then
   begin
-    while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['0'..'9']) do
+    if (CPExprText[CPExprPos] = '0') and (CPExprPos < CPExprEnd) and
+       ((CPExprText[CPExprPos + 1] = 'x') or (CPExprText[CPExprPos + 1] = 'X')) then
     begin
-      Result := (Result * 10) + Ord(CPExprText[CPExprPos]) - Ord('0');
-      Inc(CPExprPos);
-    end;
+      { hexadecimal `0x...` — decimal-only parsing here silently yielded 0, so
+        `#if 0x7fff0000 > 0` (sqlite SQLITE_MAX_MMAP_SIZE) was FALSE and dropped
+        the guarded struct fields while KEEPING the guarded code (offset-0 field
+        access -> garbage). }
+      Inc(CPExprPos); Inc(CPExprPos);              { skip 0x }
+      while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['0'..'9','a'..'f','A'..'F']) do
+      begin
+        hc := CPExprText[CPExprPos];
+        if hc in ['0'..'9'] then hd := Ord(hc) - Ord('0')
+        else if hc in ['a'..'f'] then hd := Ord(hc) - Ord('a') + 10
+        else hd := Ord(hc) - Ord('A') + 10;
+        Result := (Result * 16) + hd;
+        Inc(CPExprPos);
+      end;
+    end
+    else if (CPExprText[CPExprPos] = '0') and (CPExprPos < CPExprEnd) and
+            (CPExprText[CPExprPos + 1] in ['0'..'7']) then
+    begin
+      { octal `0NNN` (C 6.4.4.1) }
+      Inc(CPExprPos);                              { skip leading 0 }
+      while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['0'..'7']) do
+      begin
+        Result := (Result * 8) + Ord(CPExprText[CPExprPos]) - Ord('0');
+        Inc(CPExprPos);
+      end;
+    end
+    else
+      while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['0'..'9']) do
+      begin
+        Result := (Result * 10) + Ord(CPExprText[CPExprPos]) - Ord('0');
+        Inc(CPExprPos);
+      end;
     while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['u','U','l','L']) do
       Inc(CPExprPos);
     Exit;

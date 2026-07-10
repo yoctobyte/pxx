@@ -1045,6 +1045,8 @@ test-core: $(COMPILER)
 	/tmp/cpreproc_macro_arg_string_paren_b22726; test "$$?" = "42"
 	./$(COMPILER) test/cpreproc_stdc_version_predefine_b228.c /tmp/cpreproc_stdc_version_predefine_b22826
 	/tmp/cpreproc_stdc_version_predefine_b22826; test "$$?" = "42"
+	./$(COMPILER) test/cpreproc_hex_octal_if_b237.c /tmp/cpreproc_hex_octal_if_b23726
+	/tmp/cpreproc_hex_octal_if_b23726; test "$$?" = "42"
 	./$(COMPILER) test/cpreproc_macro_comment_continuation_b229.c /tmp/cpreproc_macro_comment_continuation_b22926
 	/tmp/cpreproc_macro_comment_continuation_b22926; test "$$?" = "42"
 	./$(COMPILER) test/cfield_ptrcast_index_b230.c /tmp/cfield_ptrcast_index_b23026
