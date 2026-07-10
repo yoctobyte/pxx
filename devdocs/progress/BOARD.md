@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (78)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -65,10 +65,6 @@ _none_
 | feature-embed-dwscript-rtti | B | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
-| feature-erlang-frontend-scoping | A | 65 | feature | Erlang frontend — scoping only | — |
-| feature-esoteric-ada | A | 65 | feature | Esoteric probe: Ada | — |
-| feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
-| feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
@@ -113,10 +109,14 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (15)
+## experimental (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-erlang-frontend-scoping | A | 65 | feature | Erlang frontend — scoping only | — |
+| feature-esoteric-ada | A | 65 | feature | Esoteric probe: Ada | — |
+| feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
+| feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
 | feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
@@ -760,8 +760,6 @@ _none_
 
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
-- [p 65] [A] feature-erlang-frontend-scoping
-- [p 65] [A] feature-esoteric-ada
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
@@ -771,7 +769,6 @@ _none_
 - [p 60] [A] feature-c-compiler-dynarrays
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [B] feature-dns-resolver-library
-- [p 60] [A] feature-esoteric-frontend-probes
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [O] feature-inline-routines
@@ -810,7 +807,6 @@ _none_
 - [p 45] [B] feature-embed-dwscript-rtti
 - [p 45] [B] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce
-- [p 45] [A] feature-esoteric-cobol
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling
 - [p 45] [B] feature-ilja-tui
