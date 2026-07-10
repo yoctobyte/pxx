@@ -440,3 +440,36 @@ change trips the self-host gate).
 Next passes queued: compare-into-branch fusion (branch pass, above);
 inc/dec + imm-fold into BINOP operand; store-reload once the liveness scaffold
 ([[feature-callconv-register-args]]) lands. Pin-flip awaiting Rene's OK.
+
+## Progress — compiler-throughput wins (2026-07-10, profiling session)
+
+Shifted from codegen-quality (emitted code) to compiler-throughput (pin time),
+profiling the self-compile with an **FPC-symboled binary** (`fpc -g -o...
+compiler.pas` — real per-function attribution; the pxx `--proc-map` route is
+unreliable). See [[project_per_body_full_array_clear_waste]].
+
+- **Label-array clear pair — LANDED, self-compile 1.30x faster** (984df81f +
+  50549a81). `IREmitMachineCode` (+ all 5 cross backends) and `IRVerify` reset
+  the full `MAX_IR` (131072) `LabelPositions`/`seenLabel` array on entry to
+  **every** proc body — ~1MB written + L2 thrash × ~1766 bodies. Every label id
+  is `< IRLabelCount` (per-body counter); clear only that range. Byte-identical
+  output at every opt level and all six targets (verified). hyperfine -O2 wall
+  5.28s→4.07s, user 4.99s→3.79s. Was ~19% (IREmit) + ~3.4% (IRVerify) of the
+  profile; both dropped out of the top after the fix.
+- **Token-string materialisation — LANDED, churn/robustness cleanup** (0058a31e).
+  `Next`/`GetTokenStrFromRaw`/the {$IF DECLARED} reader built token strings
+  char-by-char via `AppendChar` (realloc per char = O(n²) per token) from a
+  CONTIGUOUS pool; rebuilt as one `SetLength`+fill. Byte-identical; self-compile
+  delta within noise (churn is distributed) — kept as a latent-O(n²) fix +
+  simpler code, not a headline win.
+- **regcall phase-2 (r12/r13 residency) — MEASURED, REJECTED.** See
+  [[feature-callconv-register-args]]. Flat cap-4 regresses (OoO hides L1 frame
+  loads); phase-1's first-2 capture already took the win.
+- **Next lever: string-allocation COUNT**, not per-op cost. Filed
+  [[feature-opt-lazy-token-sval]] — skip `CurTok.SVal` materialisation for
+  non-text tokens (NewAnsiString is 8.5%); high-value but needs an exhaustive
+  SVal-read audit (silent-miscompile risk), so parked as its own ticket.
+
+Pin note: the label-clear win is byte-identical-transparent, so re-pinning would
+hand B/C/D a 1.30x-faster compiler for free — but pin-flip stays a user-approved
+action; the commits are on master and fold into the next pin.
