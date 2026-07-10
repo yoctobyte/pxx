@@ -26,10 +26,11 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-libcfree-unresolved-extern-silent-zero | A | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
@@ -752,6 +753,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 68] [A] bug-a-libcfree-unresolved-extern-silent-zero
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
