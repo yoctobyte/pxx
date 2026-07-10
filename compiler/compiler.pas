@@ -130,6 +130,7 @@ begin
   InlineASTNext := INLINE_AST_BASE;
   InliningActive := 0;
   OptLevel := 0;
+  RcSuppressAssign := False;
   WarnedMissedFold := False;
   DumpCpp := False;
   NoStdInc := False;

@@ -5328,6 +5328,13 @@ begin
   RcResidentCount := 0;
   if OptLevel < 2 then Exit;
   if CurProc < 0 then Exit;
+  { Skip during local typed-const initializer emission: these run as separate
+    CompileAST calls BEFORE the main body, and re-emitting the save+load per
+    initializer desyncs the single epilogue restore (it would end up restoring a
+    param value, not the caller's r14/r15). Residency is assigned once, at the
+    main body, with count left at 0 here so the initializers read params from the
+    frame. See bug-a-o2-miscompiles-disassembler. }
+  if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   { Generators/stackless routines load params from the coroutine instance, not the
     plain register-spill frame model — skip residency for them. }

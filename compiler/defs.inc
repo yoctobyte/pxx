@@ -903,6 +903,15 @@ var
   RcResidentSym     : array[0..1] of Integer; { Syms[] index of each resident param }
   RcResidentReg     : array[0..1] of Integer; { 14 or 15 }
   RcResidentSaveOff : array[0..1] of Integer; { rbp offset of the caller-reg save slot }
+  { Set while CompilePendingLocalInits emits routine-local typed-const initializer
+    assignments (each via its own CompileAST call, BEFORE the main body). Residency
+    assignment must NOT run for those: it would re-emit the r14/r15 save+load once
+    per initializer, each to a fresh slot, so the single epilogue restore reads the
+    LAST slot (which by then holds the PARAM value, not the caller's r14/r15) and
+    clobbers the caller. Residency is established exactly once, at the main body,
+    where r14/r15 still hold the caller's pristine values. See
+    bug-a-o2-miscompiles-disassembler. }
+  RcSuppressAssign  : Boolean;
   { --measure-inline: phase-0 opportunity probe for feature-inline-routines /
     auto-inline. Per compiled body records size + leaf/early-exit/addr-taken-param
     facts; per direct call target counts the call sites. Summary printed at end of

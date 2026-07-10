@@ -6,7 +6,7 @@ prio: 70  # auto — blocks making -O2 the default (a stated goal); a real codeg
 
 - **Type:** bug (codegen — optimization) — **Track A**
   (`compiler/asmdisasm_x64.inc`, `compiler/ir_codegen.inc` regcall/inline).
-- **Status:** backlog — found 2026-07-10 while attempting to flip the default to
+- **Status:** done
   -O2 ([[feature-optimization-levels]]). The -O2-default flip was REVERTED
   (unpushed) because of this.
 
@@ -66,3 +66,6 @@ fixedpoint byte-identical, make test-opt OK, c-testsuite 220/220, cross hello
 dev/measurement runs (NOT -Werror) when -O2 is default — inline produces foldable
 BINOPs on every compile; see [[feature-revive-const-fold-identity-pass]]. Re-do
 those together once the disassembler miscompile is fixed.
+
+## Log
+- 2026-07-10 — resolved, commit HEAD.

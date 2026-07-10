@@ -14548,6 +14548,12 @@ procedure CompilePendingLocalInits;
   the list is reset by the caller at routine entry. }
 var i, identNode, valNode, idxLit, target, assignNode: Integer;
 begin
+  { -O2 register-residency: suppress r14/r15 residency assignment for these
+    per-initializer CompileAST calls. Each would otherwise re-emit the save+load
+    (growing a fresh save slot) and desync the single epilogue restore, which then
+    restores a param value over the caller's r14/r15. Residency is assigned once,
+    at the main body, after these run. See bug-a-o2-miscompiles-disassembler. }
+  RcSuppressAssign := True;
   for i := 0 to LocalInitCount - 1 do
   begin
     identNode := AllocNode(AN_IDENT);
@@ -14597,6 +14603,7 @@ begin
     CompileAST(assignNode);
     ASTNodeCount := 0;
   end;
+  RcSuppressAssign := False;
   LocalInitCount := 0;
 end;
 
