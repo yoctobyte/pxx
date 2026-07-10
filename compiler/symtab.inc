@@ -2464,6 +2464,52 @@ begin
   end;
 end;
 
+{ -O3 W1 operand scheduler (x86-64): is this value subtree PROVEN safe to emit
+  while a live value is parked in r8/r9 — and free of observable side effects
+  (so it may also be emitted before, instead of after, a leaf left operand)?
+  Whitelist of IR kinds whose x86-64 emission touches only rax/rcx/rdx/xmm0/
+  xmm1 (+cl shifts), performs no call and no store. Everything not listed is
+  UNSAFE by default, so a new IR op stays on the push/pop path until someone
+  proves it here. Deliberate exclusions with reasons:
+  - IR_BINOP op=tkIn: its emit code uses r8 as a scratch (bit-index mask).
+  - string-typed BINOPs (operands or result): AnsiString concat/compare CALL
+    runtime helpers (clobber all caller-saved); frozen tyString concat inlines
+    a copy loop through rsi/rdi/rdx/r8/r10/r11.
+  - IR_CALL / IR_CALL_IND / IR_VIRTUAL_CALL: calls clobber r8-r11 — and a call
+    is the side effect the mirror reorder must never move across.
+  - IR_DYNUNIQUE / anything InLValueWrite-sensitive that can call (COW clone):
+    both transform sites additionally gate on `not InLValueWrite`, and the
+    IR_INDEX read paths admitted here emit plain derefs only. }
+function ScratchSafeSubtree(node: Integer): Boolean;
+var op: TTokenKind; nt, lt, rt: TTypeKind;
+begin
+  ScratchSafeSubtree := False;
+  if node < 0 then Exit;
+  case IRKind[node] of
+    IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA,
+    IR_LOAD_SYM, IR_LEA, IR_SLOTADDR, IR_DYNDATA:
+      ScratchSafeSubtree := True;
+    IR_NEG, IR_NOT, IR_FIELD, IR_LOAD_MEM:
+      ScratchSafeSubtree := ScratchSafeSubtree(IRA[node]);
+    IR_INDEX:
+      ScratchSafeSubtree := ScratchSafeSubtree(IRA[node]) and
+                            ScratchSafeSubtree(IRB[node]);
+    IR_BINOP:
+      begin
+        op := IntToTokenKind(IRC[node]);
+        if op = tkIn then Exit;
+        nt := IntToTypeKind(IRTk[node]);
+        lt := IntToTypeKind(IRTk[IRA[node]]);
+        rt := IntToTypeKind(IRTk[IRB[node]]);
+        if (nt = tyAnsiString) or TypeIsFrozenString(nt) or (nt = tyVariant) then Exit;
+        if (lt = tyAnsiString) or TypeIsFrozenString(lt) or (lt = tyVariant) or (lt = tySet) then Exit;
+        if (rt = tyAnsiString) or TypeIsFrozenString(rt) or (rt = tyVariant) or (rt = tySet) then Exit;
+        ScratchSafeSubtree := ScratchSafeSubtree(IRA[node]) and
+                              ScratchSafeSubtree(IRB[node]);
+      end;
+  end;
+end;
+
 procedure EmitLoadVarRcx(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin

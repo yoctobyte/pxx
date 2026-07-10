@@ -2444,8 +2444,42 @@ begin
             EmitDynArrayUnique(symIdx, elemSize);
         end;
 
+        { -O3 W1: a leaf index skips the push-base / eval-index / pop dance.
+          Constant index folds the whole element offset into one `add rax,disp`
+          (or nothing for element 0); a side-effect-free scalar sym loads
+          straight into rcx and scales there, leaving the base in rax untouched.
+          Semantics identical: the InLValueWrite reset around the index
+          evaluation is irrelevant for a const/plain-load index. }
+        if (OptLevel >= 3) and (IRKind[indexNode] = IR_CONST_INT) and (elemSize > 0) and
+           ((IRIVal[indexNode] - lo) * elemSize >= -2147483648) and
+           ((IRIVal[indexNode] - lo) * elemSize <= 2147483647) then
+        begin
+          if (IRIVal[indexNode] - lo) * elemSize <> 0 then
+          begin
+            EmitB($48); EmitB($05); EmitI32(Integer((IRIVal[indexNode] - lo) * elemSize)); { add rax, disp }
+          end;
+        end
+        else if (OptLevel >= 3) and LeafSymRcxLoadable(indexNode) then
+        begin
+          EmitLoadVarRcx(IRA[indexNode]);
+          if lo <> 0 then
+          begin
+            EmitB($48); EmitB($81); EmitB($E9); EmitI32(lo);          { sub rcx, lo }
+          end;
+          if elemSize = 8 then
+          begin
+            EmitB($48); EmitB($C1); EmitB($E1); EmitB($03);           { shl rcx, 3 }
+          end
+          else if elemSize > 1 then
+          begin
+            EmitB($48); EmitB($69); EmitB($C9); EmitI32(elemSize);    { imul rcx, rcx, elemSize }
+          end;
+          EmitB($48); EmitB($01); EmitB($C8);                         { add rax, rcx }
+        end
+        else
+        begin
         EmitB($50); { push rax }
-        
+
         savedLValueWrite := InLValueWrite;
         InLValueWrite := False;
         IREmitNode(indexNode); { rax = index }
@@ -2454,7 +2488,7 @@ begin
         begin
           EmitB($48); EmitB($2D); EmitI32(lo); { sub rax, lo }
         end;
-        
+
         if elemSize = 8 then
         begin
           EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); { shl rax, 3 }
@@ -2464,9 +2498,10 @@ begin
           EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
           EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); { imul rax, rcx }
         end;
-        
+
         EmitB($59); { pop rcx -- base address }
         EmitB($48); EmitB($01); EmitB($C8); { add rax, rcx }
+        end;
       end;
 
     IR_FIELD:
@@ -2774,6 +2809,48 @@ begin
             avoids clobbering the left value in rax. }
           IREmitNode(left);
           EmitLoadVarRcx(IRA[right]);
+        end
+        else if (OptLevel >= 3) and (not InLValueWrite) and
+                ((IRKind[left] = IR_CONST_INT) or
+                 (LeafSymRcxLoadable(left) and ScratchSafeSubtree(right))) then
+        begin
+          { -O3 W1 mirror: a LEAF left operand is loaded AFTER the complex right
+            evaluates, killing the push/eval/mov/pop dance from the other side
+            (2 stack ops + a shuffle collapse to one load). Register contract
+            downstream is IDENTICAL: rax = left, rcx = right. Reorder legality:
+            a constant left cannot observe anything, so the right may even
+            contain calls; a leaf-sym left could be MUTATED by right side
+            effects (g - f(x) where f writes g), so the sym form additionally
+            requires a proven side-effect-free right (ScratchSafeSubtree). }
+          IREmitNode(right);
+          EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
+          if IRKind[left] = IR_CONST_INT then
+            MovRaxImm(IRIVal[left])
+          else
+            EmitLoadVar(IRA[left]);
+        end
+        else if (OptLevel >= 3) and (not InLValueWrite) and
+                (ScratchDepth < 2) and ScratchSafeSubtree(right) then
+        begin
+          { -O3 W1 scratch: both operands complex, but the right subtree is
+            proven not to touch r8/r9 (and call-free) — park the left value in
+            a scratch register across the right's evaluation instead of the
+            stack. Same instruction count as push/pop, but reg-reg movs are
+            rename-eliminated while push/pop are real memory ops. Depth-nested
+            binops use r9, then fall back to push/pop (ScratchDepth guard). }
+          IREmitNode(left);
+          if ScratchDepth = 0 then
+            begin EmitB($49); EmitB($89); EmitB($C0); end  { mov r8, rax }
+          else
+            begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9, rax }
+          Inc(ScratchDepth);
+          IREmitNode(right);
+          Dec(ScratchDepth);
+          EmitB($48); EmitB($89); EmitB($C1);              { mov rcx, rax }
+          if ScratchDepth = 0 then
+            begin EmitB($4C); EmitB($89); EmitB($C0); end  { mov rax, r8 }
+          else
+            begin EmitB($4C); EmitB($89); EmitB($C8); end; { mov rax, r9 }
         end
         else
         begin
@@ -5009,6 +5086,7 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  ScratchDepth := 0;   { -O3 W1 scratch registers all free at body start (balanced Inc/Dec, but never trust a prior body's aborted state) }
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
@@ -5094,6 +5172,38 @@ begin
             begin
               IREmitNode(cLeft);
               EmitLoadVarRcx(IRA[cRight]);
+            end
+            else if (OptLevel >= 3) and (not InLValueWrite) and
+                    ((IRKind[cLeft] = IR_CONST_INT) or
+                     (LeafSymRcxLoadable(cLeft) and ScratchSafeSubtree(cRight))) then
+            begin
+              { -O3 W1 mirror on the fused-compare operands — same legality
+                argument as the IR_BINOP site (const left reorders freely;
+                leaf-sym left needs a side-effect-free right). }
+              IREmitNode(cRight);
+              EmitB($48); EmitB($89); EmitB($C1);                  { mov rcx, rax }
+              if IRKind[cLeft] = IR_CONST_INT then
+                MovRaxImm(IRIVal[cLeft])
+              else
+                EmitLoadVar(IRA[cLeft]);
+            end
+            else if (OptLevel >= 3) and (not InLValueWrite) and
+                    (ScratchDepth < 2) and ScratchSafeSubtree(cRight) then
+            begin
+              { -O3 W1 scratch on the fused-compare operands. }
+              IREmitNode(cLeft);
+              if ScratchDepth = 0 then
+                begin EmitB($49); EmitB($89); EmitB($C0); end      { mov r8, rax }
+              else
+                begin EmitB($49); EmitB($89); EmitB($C1); end;     { mov r9, rax }
+              Inc(ScratchDepth);
+              IREmitNode(cRight);
+              Dec(ScratchDepth);
+              EmitB($48); EmitB($89); EmitB($C1);                  { mov rcx, rax }
+              if ScratchDepth = 0 then
+                begin EmitB($4C); EmitB($89); EmitB($C0); end      { mov rax, r8 }
+              else
+                begin EmitB($4C); EmitB($89); EmitB($C8); end;     { mov rax, r9 }
             end
             else
             begin

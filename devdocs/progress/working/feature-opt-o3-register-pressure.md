@@ -8,10 +8,10 @@ prio: 58  # auto — greenlit optimization campaign; real speed win but explorat
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** backlog — greenlit 2026-07-10. Exploratory work lands **behind
+- **Status:** working
   `-O3`** (see gating); `-O2` stays the proven default and the stable fallback.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** —
+- **Owner:** fable-O
 
 ## Why — the measured opportunity
 
@@ -144,3 +144,36 @@ Umbrella [[feature-optimization-levels]] · [[feature-opt-store-reload-eliminati
 · [[feature-callconv-register-args]] · [[feature-inline-nonleaf-and-branch-locals]]
 · lesson [[project_regcall_residency_reemit_localinit_clobber]] ·
 architecture `devdocs/dev/optimization-architecture.md`.
+
+## Log
+
+### 2026-07-11 — W1 slice 1 LANDED behind -O3 (x86-64): binop mirror + r8/r9 scratch + leaf-index fold
+- **What fires** (all gate `OptLevel >= 3`, x86-64 emitter only, `not InLValueWrite`):
+  1. **Mirror**: leaf LEFT binop operand (const / plain scalar sym) loads AFTER
+     the complex right evaluates — kills push/eval/mov/pop from the left side.
+     Const left reorders across anything (incl. calls); sym left requires a
+     proven side-effect-free right.
+  2. **Scratch**: complex-complex binop parks the left value in r8 (nested: r9;
+     deeper: push/pop fallback) across the right's evaluation when
+     `ScratchSafeSubtree` proves the right subtree call-free and r8/r9-clean.
+     Whitelist predicate in symtab.inc next to LeafSymRcxLoadable; notable
+     exclusions documented there (tkIn uses r8; string concat/cmp call helpers
+     or inline through r8/r10/r11).
+  3. Both also applied to the compare-into-branch fusion operand dance.
+  4. **Leaf-index fold** (IR_INDEX): const index → single `add rax, disp`
+     (nothing for elem 0); leaf-sym index → load/scale in rcx directly. Kills
+     the push-base/eval-index/pop-rcx dance on every simple array access.
+- **Measured** (self-compile of compiler.pas, -S instruction mix O2 → O3):
+  total instructions 940,900 → 873,386 (**−7.2%**); `pop rcx` 34,374 → 14,175;
+  `pop rax` 20,690 → 16,749; `push rax` 99,877 → 75,757; emitted code
+  4,160,828 → 4,031,287 B (**−3.1%**). Wall-clock: 3.406s → 3.356s
+  (~1.5%, hyperfine ±0.02 — OoO/stack-engine hides most of the stack-op win,
+  consistent with the regcall-phase-2 lesson).
+- **Gates run**: -O2 self-host fixedpoint byte-identical (untouched, pass
+  inert below -O3); -O3 self-host fixedpoint byte-identical; -O3-built
+  compiler's -O2 output byte-identical to the -O2-built compiler's; test-opt
+  extended with an -O3 differential column + -O3 fixedpoint (green).
+- **Remaining W1 targets** (instruction-mix census at -O3): `pop rdi` ~31k +
+  `pop rsi` ~10k = runtime-helper ARG staging (hand-coded per call site);
+  `pop rax` 16.7k = binop dances whose right subtree contains calls — needs a
+  callee-saved scratch (r12/r13 + prologue/epilogue save) = the W2 boundary.
