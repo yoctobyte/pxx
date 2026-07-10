@@ -5,6 +5,7 @@ prio: 45  # auto
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
 
 - **Type:** feature / investigation (real-world compat target + feature)
+- **Track:** P (Pascal frontend) — rung of [[feature-pascal-corpus-expansion]]
 - **Status:** backlog
 - **Owner:** — (**Track B** — libraries; uses `$(PXX_STABLE)`, never rebuilds the
   compiler. Compiler gaps it surfaces → Track A tickets.)

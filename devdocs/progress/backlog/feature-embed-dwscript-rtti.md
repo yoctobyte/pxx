@@ -5,6 +5,7 @@ prio: 45  # auto
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
 
 - **Type:** feature / investigation (real-world compat target + RTTI driver)
+- **Track:** P (Pascal frontend) — rung of [[feature-pascal-corpus-expansion]]
 - **Status:** backlog
 - **Owner:** — (**Track B** drives the compile + files gaps; the RTTI half is a
   **Track A** typinfo/codegen driver. Built on `$(PXX_STABLE)`, never rebuilt.)

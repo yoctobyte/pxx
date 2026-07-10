@@ -26,7 +26,7 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,8 +63,8 @@ _none_
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | 45 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
-| feature-embed-dwscript-rtti | B | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
-| feature-embed-pascal-script | B | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
+| feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
+| feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -86,6 +86,8 @@ _none_
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
+| feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
+| feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
@@ -766,6 +768,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 64] [B] task-sqlite-libc-free-runtime-bringup (unblocks 1)
+- [p 62] [P] feature-pascal-corpus-expansion
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -775,6 +778,7 @@ _none_
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [O] feature-inline-routines
 - [p 60] [O] feature-opt-store-reload-elimination
+- [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
@@ -808,8 +812,8 @@ _none_
 - [p 45] [A] feature-dynarray-insert-delete-managed-elements
 - [p 45] [B] feature-eliah-ai-command-rail
 - [p 45] [B] feature-eliah-component-tabbar
-- [p 45] [B] feature-embed-dwscript-rtti
-- [p 45] [B] feature-embed-pascal-script
+- [p 45] [P] feature-embed-dwscript-rtti
+- [p 45] [P] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling
