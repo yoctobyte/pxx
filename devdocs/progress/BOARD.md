@@ -27,10 +27,11 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -790,6 +791,7 @@ _none_
 - [p 58] [P] bug-pascal-headerless-program
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 56] [P] feature-pascal-delphi-generics-syntax
+- [p 55] [A] bug-nilpy-str-param-length-index
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 53] [A] feature-asm-textual-emit-mode

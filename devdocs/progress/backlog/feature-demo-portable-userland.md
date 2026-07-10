@@ -85,3 +85,13 @@ byte-identical) since they touch shared frontend/RTL.
 [[feature-platform-abstraction-layer]] (the seam) · [[feature-kernel-matrix-bootroom]]
 (Linux backend) · [[feature-nilpy-collections-and-string-methods]] (blocker) ·
 [[project_nil_python_arc]] · thesis `devdocs/dev/ir-as-substrate.md`.
+
+## Log
+- 2026-07-10 — phase-1 scouting (Track E): `examples/shell/shell0.npy` skeleton
+  written (tokenize → dispatch → applets echo/wc/upper/rev, canned session) and
+  committed BLOCKED — it surfaced [[bug-nilpy-str-param-length-index]] (str
+  params unusable in functions: wrong Length, index segfault, codegen ICE; the
+  hard blocker ahead of even the collections gap), plus: no stdin/readline
+  surface, `import sysutils` trips "array of const requires builtinheap", and
+  1-based string indexing (dialect decision needed). PAL imports from NilPy
+  work (`import platform` → PalRead callable). See examples/shell/README.md.

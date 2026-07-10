@@ -1,0 +1,113 @@
+# nilsh phase 0 — applet-dispatch shell skeleton (feature-demo-portable-userland).
+#
+# The busybox-style shape: one binary, commands are built-in applet functions
+# dispatched by name; no fork/exec. This phase proves tokenize -> dispatch ->
+# applet in today's NilPy and drives out the frontend gaps (see README.md):
+# no stdin read yet, so the "session" below is a canned script of lines.
+# Interactive input, argv lists, and `a | b` pipes arrive with the NilPy
+# stdin + list/dict + split tickets.
+
+def tok(line: str, want: int) -> str:
+    # Return the want-th (1-based) whitespace-separated token of line, or "".
+    # Char-by-char scan: NilPy has no split() yet (tracked gap).
+    n = Length(line)
+    i = 1
+    idx = 0
+    cur = ""
+    out = ""
+    while i <= n + 1:
+        c = " "
+        if i <= n:
+            c = line[i]
+        if c == " ":
+            if cur != "":
+                idx = idx + 1
+                if idx == want:
+                    out = cur
+                cur = ""
+        else:
+            cur = cur + c
+        i = i + 1
+    return out
+
+def rest(line: str, fromtok: int) -> str:
+    # Everything from the fromtok-th token on, single-space normalized.
+    out = ""
+    i = fromtok
+    t = tok(line, i)
+    while t != "":
+        if out == "":
+            out = t
+        else:
+            out = out + " " + t
+        i = i + 1
+        t = tok(line, i)
+    return out
+
+def ap_echo(args: str) -> None:
+    print(args)
+
+def ap_wc(args: str) -> None:
+    # words and chars of the argument string
+    words = 0
+    i = 1
+    n = Length(args)
+    inword = False
+    while i <= n:
+        if args[i] == " ":
+            inword = False
+        else:
+            if not inword:
+                words = words + 1
+            inword = True
+        i = i + 1
+    print(words)
+    print(n)
+
+def ap_upper(args: str) -> None:
+    out = ""
+    i = 1
+    n = Length(args)
+    while i <= n:
+        c = args[i]
+        o = ord(c)
+        if o >= 97:
+            if o <= 122:
+                c = chr(o - 32)
+        out = out + c
+        i = i + 1
+    print(out)
+
+def ap_rev(args: str) -> None:
+    out = ""
+    i = Length(args)
+    while i >= 1:
+        out = out + args[i]
+        i = i - 1
+    print(out)
+
+def dispatch(line: str) -> None:
+    cmd = tok(line, 1)
+    args = rest(line, 2)
+    if cmd == "":
+        return
+    if cmd == "echo":
+        ap_echo(args)
+    elif cmd == "wc":
+        ap_wc(args)
+    elif cmd == "upper":
+        ap_upper(args)
+    elif cmd == "rev":
+        ap_rev(args)
+    elif cmd == "help":
+        print("applets: echo wc upper rev help")
+    else:
+        print("nilsh: unknown applet: " + cmd)
+
+# canned session (stdin read is a tracked NilPy gap)
+dispatch("help")
+dispatch("echo hello portable userland")
+dispatch("wc  one   two three ")
+dispatch("upper FreeRTOS and Linux, one source")
+dispatch("rev nilsh")
+dispatch("nosuch thing")
