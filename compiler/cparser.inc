@@ -4036,6 +4036,17 @@ begin
     Exit;
   end;
 
+  { A leading pure storage-class keyword on a block-scope declaration
+    (`register unsigned char *a, *b;` — sqlite3_strnicmp) has no semantic effect
+    in cfront, but if left unconsumed the statement parser treats `register` as
+    an expression identifier (→ the undeclared-identifier warning) and never
+    reaches the declaration. `static` is handled explicitly below (it needs BSS
+    storage); skip the type-neutral ones here and fall through to the normal
+    local-declaration path. `const`/`volatile` already route via IsCTypeTok. }
+  while (CurTok.Kind = tkIdent) and
+        ((CurTok.SVal = 'register') or (CurTok.SVal = 'auto')) do
+    Next;
+
   { block-scope static declaration: parse as a normal local declaration but
     allocate the declared storage in BSS so pointers to it survive the block.
     This is needed for sqlite's `static sqlite3_vfs aVfs[]` registry table. }

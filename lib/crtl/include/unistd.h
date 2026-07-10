@@ -11,6 +11,14 @@
 #define _SC_PAGESIZE 30
 #define _SC_PAGE_SIZE _SC_PAGESIZE
 
+/* access(2) mode bits (POSIX <unistd.h>). Match the Linux kernel values so a
+   real access() syscall interprets them; without these sqlite's access(path,
+   F_OK) silently passed mode 0 (== F_OK, so it happened to work). */
+#define F_OK 0
+#define X_OK 1
+#define W_OK 2
+#define R_OK 4
+
 int close(int fd);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
@@ -21,6 +29,7 @@ int fsync(int fd);
 int getpid(void);
 char *getcwd(char *buf, size_t size);
 int unlink(const char *path);
+int rmdir(const char *path);
 int ftruncate(int fd, off_t length);
 int access(const char *path, int mode);
 int fchown(int fd, uid_t owner, gid_t group);

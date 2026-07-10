@@ -85,6 +85,7 @@ function __pxx_fchown(fd, owner, group: Integer): Integer;
 function __pxx_geteuid: Integer;
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
+function __pxx_rmdir(path: PChar): Integer;
 function __pxx_getpid: Integer;
 function __pxx_getcwd(buf: PChar; size: Integer): Integer;
 function __pxx_nanosleep(sec, nsec: Int64): Integer;
@@ -360,6 +361,11 @@ end;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
 begin
   Result := PalMkdir(path, mode);
+end;
+
+function __pxx_rmdir(path: PChar): Integer;
+begin
+  Result := PalRmdir(path);
 end;
 
 function __pxx_getpid: Integer;

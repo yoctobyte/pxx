@@ -15,6 +15,7 @@
 #include "sys/stat.c"
 #include "fcntl.h"
 #include "unistd.h"
+#include "sys/stat.h"
 
 int main(void) {
   const char *path = "/tmp/pxx_crtl_posix_io_b238.tmp";
@@ -45,13 +46,27 @@ int main(void) {
 
   close(fd);
 
-  /* access: the file exists (F_OK=0), a bogus path does not */
-  if (access(path, 0) != 0) return 12;
-  if (access("/tmp/pxx_no_such_file_b238", 0) == 0) return 13;
+  /* access: the file exists (F_OK), a bogus path does not. F_OK/R_OK/W_OK are
+     now defined by <unistd.h> — before, F_OK decayed to an undeclared 0. */
+  if (access(path, F_OK) != 0) return 12;
+  if (access(path, R_OK | W_OK) != 0) return 14;
+  if (access("/tmp/pxx_no_such_file_b238", F_OK) == 0) return 13;
 
   /* geteuid returns a value (root=0 in the qemu sandbox, else the real euid) */
   (void)geteuid();
 
   unlink(path);
+
+  /* rmdir: mkdir a dir, remove it, confirm it is gone. Was a null-call class —
+     crtl had PalRmdir but no C wrapper, so sqlite's `rmdir` decayed to 0. */
+  {
+    const char *dir = "/tmp/pxx_crtl_posix_io_b238.dir";
+    rmdir(dir);                              /* clean any stale dir */
+    if (mkdir(dir, 0755) != 0) return 15;
+    if (access(dir, F_OK) != 0) return 16;   /* exists now */
+    if (rmdir(dir) != 0) return 17;
+    if (access(dir, F_OK) == 0) return 18;   /* gone */
+  }
+
   return 42;
 }

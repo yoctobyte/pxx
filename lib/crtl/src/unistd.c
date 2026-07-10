@@ -17,6 +17,7 @@ extern int __pxx_access(const char *path, int mode);
 extern int __pxx_fchown(int fd, int owner, int group);
 extern int __pxx_geteuid(void);
 extern int __pxx_readlink(const char *path, void *buf, int bufsz);
+extern int __pxx_rmdir(const char *path);
 
 int fsync(int fd) { return __pxx_fsync(fd); }
 
@@ -68,6 +69,15 @@ int execvp(const char *file, char *const argv[]) {
 /* unlink(2) on a file == the PAL's remove (unlinkat, no REMOVEDIR). */
 int unlink(const char *path) {
   int rc = __pxx_remove(path);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* rmdir(2) == the PAL's rmdir (unlinkat + AT_REMOVEDIR). sqlite deletes its
+   temp-directory / journal dirs through this; without it the reference decayed
+   to a null slot (same class as the pread file-VFS null-call). */
+int rmdir(const char *path) {
+  int rc = __pxx_rmdir(path);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }
