@@ -33,5 +33,16 @@ int main(void) {
   /* `pf[0](args)` must still work (the shared channel) */
   if (lpf[0](2)      != 102) return 5;
 
+  /* STRUCT-MEMBER ptr-to-fnptr (bug-c-struct-member-ptr-to-fnptr-deref-call):
+     a field that is itself `ft *` called through a deref. Mirrors the var form
+     via the UFldElemProcSig channel + the AN_FIELD arm of CNodeProcSig. */
+  {
+    struct S { ft *pf; } s;
+    s.pf = &gF;                      /* gF currently = add100 */
+    if ((*s.pf)(5)   != 105) return 6;
+    s.pf = &lf;                      /* lf currently = add100 (reassigned above) */
+    if ((*s.pf)(3)   != 103) return 7;
+  }
+
   return 42;
 }

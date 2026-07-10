@@ -2083,6 +2083,20 @@ begin
     begin
       fname := GetTokenStrFromRaw(ASTSOffset[inner], ASTSLen[inner]);
       Result := RecFieldProcSig(recId, fname);
+      if (Result < 0) and (derefCount >= 1) then
+      begin
+        { `(*s.pf)(args)` — the field `pf` is a POINTER-to-fn-ptr; the stripped
+          deref is a REAL LOAD of the pointee fn-pointer (twin of the AN_IDENT
+          `(*pf)()` arm). Keep exactly ONE deref as the callee and take the sig
+          from the field-elem channel. }
+        Result := RecFieldElemProcSig(recId, fname);
+        if Result >= 0 then
+        begin
+          callee := AllocNode(AN_DEREF);
+          ASTLeft[callee] := inner;
+          ASTTk[callee] := Ord(tyPointer);
+        end;
+      end;
     end;
   end;
 end;
@@ -8371,7 +8385,7 @@ const MAX_BF = 256;
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
-  fldProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
+  fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
   fTk: TTypeKind;
   isArr, firstDecl, subIsUnion: Boolean;
   { The parent's fields are BUFFERED during the walk and appended to the shared
@@ -8379,7 +8393,7 @@ var
     parent's fields stay contiguous — FindUField scans [base, base+count). Without
     this, a nested-aggregate member's sub-record fields would be inserted between
     the parent's fields and break the contiguous range. }
-  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
+  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfElemProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
   bfIsArr: array[0..MAX_BF-1] of Boolean;
   bfBitWidth, bfBitShift, bfBitBytes: array[0..MAX_BF-1] of Integer;
   bfAnonRec: array[0..MAX_BF-1] of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
@@ -8468,6 +8482,7 @@ begin
                 bfIsArr[bfCount]   := UFldIsArray[UClsFBase[subci] + k];
                 bfArrLen[bfCount]  := UFldArrLen[UClsFBase[subci] + k];
                 bfProcSig[bfCount] := UFldProcSig[UClsFBase[subci] + k];
+                bfElemProcSig[bfCount] := UFldElemProcSig[UClsFBase[subci] + k];
                 bfBitWidth[bfCount] := UFldBitWidth[UClsFBase[subci] + k];
                 bfBitShift[bfCount] := UFldBitShift[UClsFBase[subci] + k];
                 bfBitBytes[bfCount] := UFldBitBytes[UClsFBase[subci] + k];
@@ -8539,7 +8554,7 @@ begin
             bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
           end;
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
-          bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1;
+          bfNDims[bfCount] := fldNDims; bfProcSig[bfCount] := -1; bfElemProcSig[bfCount] := -1;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           Inc(bfCount);
         end;
@@ -8556,6 +8571,11 @@ begin
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
+      { pointee sig for a POINTER-to-fn-ptr field (`ft *pf`): base-star form leaves
+        CTypeProcSig -1 and stashes the sig in CTypePtrElemProcSig; a comma-later
+        star (`ft f, *pf`) keeps the direct sig in fldProcSig — take whichever fired. }
+      fldElemProcSig := CTypePtrElemProcSig;
+      if fldElemProcSig < 0 then fldElemProcSig := fldProcSig;
       if CTypeFnPtrName <> '' then
       begin
         { Inline function-pointer member `RET (*name)(params);` — ParseCDeclType
@@ -8571,7 +8591,7 @@ begin
           bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
-          bfProcSig[bfCount] := fldProcSig;
+          bfProcSig[bfCount] := fldProcSig; bfElemProcSig[bfCount] := -1;
           Inc(bfCount);
         end;
         if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
@@ -8767,6 +8787,9 @@ begin
             bfBitBytes[bfCount] := 0;
           end;
           if (declStars = 0) then bfProcSig[bfCount] := fldProcSig else bfProcSig[bfCount] := -1;
+          { `ft *pf` (exactly one star): field is a pointer-to-fn-ptr, callable via
+            `(*s.pf)()` — record the pointee sig on the parallel elem channel. }
+          if declStars = 1 then bfElemProcSig[bfCount] := fldElemProcSig else bfElemProcSig[bfCount] := -1;
           Inc(bfCount);
         end;
 
@@ -8821,6 +8844,7 @@ begin
     UFldBitShift[UFldCount-1] := bfBitShift[k];
     UFldBitBytes[UFldCount-1] := bfBitBytes[k];
     if bfProcSig[k] >= 0 then UFldProcSig[UFldCount-1] := bfProcSig[k];
+    if bfElemProcSig[k] >= 0 then UFldElemProcSig[UFldCount-1] := bfElemProcSig[k];
     if bfNDims[k] >= 2 then
     begin
       UFldArrNDims[UFldCount-1] := bfNDims[k];

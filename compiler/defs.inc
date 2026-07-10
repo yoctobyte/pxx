@@ -1839,6 +1839,7 @@ var
   UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
   UFldProcSig : array[0..MAX_UFIELD-1] of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }
+  UFldElemProcSig : array[0..MAX_UFIELD-1] of Integer; { POINTER-to-fn-ptr field (`ft *pf`): sig of the pointee fn-pointer, so `(*s.pf)(args)` finds the callee sig UFldProcSig drops; -1 = field not ptr-to-fn-ptr }
   UFldIsArray : array[0..MAX_UFIELD-1] of Boolean;
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }

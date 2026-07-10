@@ -573,6 +573,7 @@ begin
       UFldNOff[dst+k] := UFldNOff[src];  UFldNLen[dst+k] := UFldNLen[src];
       UFldOff_[dst+k] := UFldOff_[src];  UFldTk[dst+k] := UFldTk[src];
       UFldRec_[dst+k] := UFldRec_[src];  UFldProcSig[dst+k] := UFldProcSig[src];
+      UFldElemProcSig[dst+k] := UFldElemProcSig[src];
       UFldAnonRec[dst+k] := UFldAnonRec[src];
       UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
@@ -603,6 +604,7 @@ begin
     to an indirect call (LastTypeProcSig set by ParseTypeKind for the field type;
     a plain proc field is tyPointer, a method-pointer field tyRecord). }
   UFldProcSig[fi] := LastTypeProcSig;
+  UFldElemProcSig[fi] := -1;   { ptr-to-fn-ptr field sig: C struct builder overrides post-AddUField; Pascal fields never set it }
   if tk = Ord(tyPointer) then
   begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
@@ -1025,6 +1027,19 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldProcSig[fi];
+  end;
+end;
+
+{ Pointee call-signature of a POINTER-to-fn-ptr record field (`ft *pf`), or -1.
+  Used to lower `(*s.pf)(args)` to an indirect call through the loaded fn-pointer. }
+function RecFieldElemProcSig(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := -1; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldElemProcSig[fi];
   end;
 end;
 
