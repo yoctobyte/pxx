@@ -15366,9 +15366,18 @@ begin
   CurProc := procIdx;
   if declInline then ProcInline[procIdx] := True;
   { Decl-order gating: this body may only see globals declared before its header
-    token (TokPos is now in this routine's header). FindSym hides later globals. }
+    (TokPos is now in this routine's header). FindSym hides later globals. We key
+    on the header token's SOffset (its immutable char-pool position, monotonic in
+    lex/source order) rather than the token INDEX: pass-2 nested-routine excisions
+    and generic inserts renumber token indices (and shift the DeclItem spans that
+    drive this TokPos) but never move a token's SOffset, so a token-index horizon
+    drifted out of sync with the globals' recorded positions and falsely hid a
+    top-of-file global in a late include (bug-impl-prescan-late-include-var-section).
+    SOffset is stable under those edits, so decl-order stays correct with no
+    per-edit fixups. }
   savedVisVarSeq := CurBodyHdrTok;
-  CurBodyHdrTok := TokPos;
+  if TokPos < TokCount then CurBodyHdrTok := Tokens[TokPos].SOffset
+  else CurBodyHdrTok := $7FFFFFFF;
   Procs[procIdx].ScopeBase := SymCount;
 
   { Set method context before allocating params }

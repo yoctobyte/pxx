@@ -1889,7 +1889,11 @@ procedure StampDeclSeq(symIdx: Integer);
   body (e.g. the string-Result slot) run with PreScanPass=False and stay visible. }
 begin
   if PreScanPass and (Syms[symIdx].Kind = skGlobal) then
-    SymDeclTok[symIdx] := TokPos;
+    { Record the declaration's SOffset (immutable char-pool position, monotonic in
+      lex/source order), NOT the token INDEX: token indices are renumbered by pass-2
+      excisions/inserts while SOffsets never move, keeping decl-order stable — see
+      the CurBodyHdrTok note in ParseSubroutine (bug-impl-prescan-late-include-var-section). }
+    SymDeclTok[symIdx] := Tokens[TokPos].SOffset;
 end;
 
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;

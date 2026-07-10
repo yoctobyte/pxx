@@ -27,9 +27,20 @@
   Flow control (labels/jumps/call) and heap access are explicitly out of
   scope — the ticket caps this at proving the pipe end-to-end. }
 
-{ state lives in defs.inc (WsPos/WsStk/WsSp/WsStmtList/WsDone) — a var
-  section this late in the include chain hit "global declared later" from
-  the impl prescan, so the globals sit with the other frontend state. }
+{ Frontend-local transient state. A var section this late in the include chain
+  once tripped a false "global declared later" from the impl prescan: pass-2
+  nested-routine excisions renumbered token indices and shifted the body-header
+  horizon while the globals' recorded token indices went stale. Fixed by keying
+  decl-order on the immutable SOffset (char-pool position) instead of the token
+  index — see the note in ParseSubroutine (bug-impl-prescan-late-include-var-section).
+  Keeping the state here (not in defs.inc) doubles as the self-host regression
+  guard for that fix. }
+var
+  WsPos: Integer;                                 { read cursor into Source }
+  WsStk: array[0..MAX_WS_STACK-1] of Integer;     { AST node ids }
+  WsSp: Integer;
+  WsStmtList: Integer;
+  WsDone: Boolean;
 
 { next meaningful char: 's', 't', 'n', or #0 at end of input }
 function WsNext: Char;
