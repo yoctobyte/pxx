@@ -26,12 +26,10 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (80)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-struct-member-ptr-to-fnptr-deref-call | C | 30 | bug | C: call through deref of a STRUCT-MEMBER pointer-to-function-pointer | — |
-| bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -172,7 +170,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (567)
+## done (569)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -293,6 +291,7 @@ _none_
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
+| bug-c-struct-member-ptr-to-fnptr-deref-call | C | 30 | bug | C: call through deref of a STRUCT-MEMBER pointer-to-function-pointer | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
 | bug-c-tag-redef-misfiles-field-selfref-segv | A | 65 | bug | C: struct-tag redefinition misfiles a field into the prior record → self-referential record → compiler SIGSEGV | — |
@@ -301,6 +300,7 @@ _none_
 | bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
+| bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
 | bug-c-va-arg-local-fnptr-typedef-sqlite | C | 50 | bug | C: va_arg with local function-pointer typedef in sqlite | — |
@@ -784,7 +784,6 @@ _none_
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
-- [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -838,7 +837,6 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 35] [C] feature-c-esp-conformance-coverage
-- [p 30] [C] bug-c-struct-member-ptr-to-fnptr-deref-call
 - [p 30] [A] bug-impl-prescan-late-include-var-section
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear

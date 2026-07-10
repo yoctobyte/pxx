@@ -5,7 +5,7 @@ prio: 56
 # C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent)
 
 - **Type:** bug (C frontend — struct field offset/resolution) — **Track A/C**.
-- **Status:** ROOT CAUSE FOUND + FIXED 2026-07-10 — it was NOT a field-offset bug.
+- **Status:** done
   The real cause is the preprocessor: `#if` didn't parse HEX literals, so
   `#if SQLITE_MAX_MMAP_SIZE>0` (`0x7fff0000`) evaluated FALSE at the `unixFile`
   struct (dropping the mmap fields → `mmapSize` lookup missed → default offset 0)
@@ -62,3 +62,6 @@ Regression: the reduced struct once it reproduces (`test/cstruct_field_offset_*_
 Re-verify file-backed sqlite reads a page past `unixRead` afterwards.
 
 [[task-sqlite-libc-free-runtime-bringup]]
+
+## Log
+- 2026-07-10 — resolved, commit fc5b6a59.

@@ -6,7 +6,7 @@ prio: 30  # auto — rare pattern, corpus doesn't hit it; recipe fully derived
 
 - **Type:** bug (C frontend codegen) — **Track C** (`compiler/cparser.inc`,
   `compiler/symtab.inc`, `compiler/defs.inc`).
-- **Status:** backlog — split off 2026-07-10 from
+- **Status:** done
   [[bug-c-call-through-deref-of-fnptr-pointer]] (whose local/param/global +
   cast forms are all fixed).
 
@@ -38,3 +38,6 @@ was split out rather than blocking the parent fix.
 - `struct S{ ft *pf; } s; ... (*s.pf)(5)` calls correctly (extend
   `test/cfnptr_deref_call_b241.c` with a struct case, exit 42).
 - c-testsuite still 220/220; self-host byte-identical (C-frontend only).
+
+## Log
+- 2026-07-10 — resolved, commit 9f113aaa.
