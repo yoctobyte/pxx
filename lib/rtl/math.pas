@@ -97,9 +97,12 @@ end;
 
 function Sqrt(x: Double): Double;
 { Newton-Raphson: g := (g + x/g)/2, quadratic convergence. }
-var g, ng: Double; i: Integer;
+var g, ng, z: Double; i: Integer;
 begin
-  if x <= 0.0 then begin Result := 0.0; Exit; end;
+  { FPC-faithful IEEE: Sqrt of a negative is NaN (C sqrt() binds here and expects
+    NaN too). Sqrt(0)=0. z/z with z=0 yields a NaN without a NaN literal. }
+  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
+  if x = 0.0 then begin Result := 0.0; Exit; end;
   g := x;
   if g < 1.0 then g := 1.0;
   for i := 1 to 200 do
@@ -132,9 +135,11 @@ end;
 
 function Ln(x: Double): Double;
 { x = m*2^e, m in [1,2); ln(m) via atanh series t=(m-1)/(m+1). }
-var m, t, term, sum, p: Double; e, i: Integer;
+var m, t, term, sum, p, z: Double; e, i: Integer;
 begin
-  if x <= 0.0 then begin Result := 0.0; Exit; end;
+  { FPC-faithful IEEE: Ln(0) = -Inf, Ln(negative) = NaN (C log() binds here). }
+  if x < 0.0 then begin z := 0.0; Result := z / z; Exit; end;
+  if x = 0.0 then begin z := 0.0; Result := -1.0 / z; Exit; end;
   e := 0;
   m := x;
   while m >= 2.0 do begin m := m / 2.0; e := e + 1; end;

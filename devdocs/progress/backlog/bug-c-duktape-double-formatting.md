@@ -124,9 +124,15 @@ The unordered handling differed per target (user-flagged). Verified via
 - **riscv32 / xtensa**: already NaN-correct (soft-float kernel returns code 2 =
   unordered); verified riscv32 qemu 42. No change.
 
-### Residual #2 (open, separate — crtl, Track B)
-`Math.sqrt(-1)` → `0` instead of `NaN`: crtl `sqrt()` (lib/crtl/src/math.c) returns 0
-for negative args instead of NaN. Track B crtl gap, unrelated to codegen.
+### Residual #2 FIXED (2026-07-10, Track B) — RTL Sqrt/Ln domain errors
+`Math.sqrt(-1)` → `0` was RTL `Sqrt` (lib/rtl/math.pas), which C `sqrt` binds to
+case-insensitively. `Sqrt` returned 0 for `x<=0`; FPC-faithful IEEE is NaN for
+`x<0`, 0 for x=0. Sibling `Ln` had the same gap (`x<=0`→0; correct is `Ln(0)=-Inf`,
+`Ln(<0)=NaN`). Fixed both: produce NaN via `z/z` and -Inf via `-1.0/z` (z=0 var, no
+NaN literal, no const-fold). Verified under PXX_STABLE (pinned) via bits: sqrt(-1)
+NaN, sqrt(0)=0, log(-1) NaN, log(0)=-Inf. duktape `Math.sqrt(-1)` now "NaN".
+Regression `test/cmath_domain_nan_b233.c`. lib-test green. Existing callers
+(pow/cbrt/acosh/…) guard positive, so no regression.
 
 ### Residual #3 (open) — sqrt last digit
 `Math.sqrt(2)` → `1.414213562373095` vs gcc `1.4142135623730951` — pxx drops the

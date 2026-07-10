@@ -1047,6 +1047,8 @@ test-core: $(COMPILER)
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226
 	/tmp/cfloat_nan_compare_b23226; test "$$?" = "42"
+	./$(COMPILER) test/cmath_domain_nan_b233.c /tmp/cmath_domain_nan_b23326
+	/tmp/cmath_domain_nan_b23326; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726
