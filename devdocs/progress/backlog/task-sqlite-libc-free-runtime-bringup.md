@@ -103,15 +103,19 @@ With these, `test/csqlite_extended_test.c` (unity-including the crtl srcs)
 **Acceptance (below) is MET for `:memory:`.** crtl file I/O verified working
 libc-free end to end (open64→write→fstat64/stat64, regression b234).
 
-### Next wall — FILE-backed VFS returns SQLITE_CANTOPEN (14)
-`sqlite3_open("/tmp/x.db")` returns rc=14 (plain CANTOPEN, no sub-code). NOT the
-crtl bridge — direct crtl `open64`/`write`/`fstat64`/`stat64`/`fcntl64` all
-succeed (b234). So the failure is inside sqlite's os_unix.c VFS logic (candidate:
-the F_SETLK advisory-lock `fcntl`, a directory-fsync open, `access()`, or another
-syscall returning an unexpected value the PAL stubs). Next session: instrument
-os_unix.c `unixOpen`/`robust_open`/`unixLock` (or set a breakpoint on the first
-crtl call that returns <0) to find which syscall sqlite rejects. This is the
-file-VFS bring-up; `:memory:` does not need it.
+### File-backed VFS — two walls found 2026-07-10
+1. **SQLITE_CANTOPEN in path resolution — FIXED (crtl, 495a989a).** crtl
+   `stat`/`lstat`/`fstat` never set errno; sqlite's `appendOnePathElement` lstat()s
+   each path element and branches on `errno==ENOENT`. Stale errno made a missing
+   file look like a real error → `unixFullPathname` returned CANTOPEN before open()
+   ran. Fixed: wrappers set `errno = -r`. Regression b235.
+2. **Segfault in `fillInUnixFile` — OPEN, blocks here.** With the errno fix,
+   `sqlite3_open` reaches `unixOpen`/`posixOpen` (fd obtained), then segfaults at
+   the locking-style finder call `(**(finder_type*)pVfs->pAppData)(...)`. Root
+   cause is a **cfront codegen bug**: a call through a DEREF of a
+   pointer-to-function-pointer drops the call. Filed as
+   [[bug-c-call-through-deref-of-fnptr-pointer]] (full root cause + fix design +
+   minimal repros there). This is the current blocker for file-backed sqlite.
 
 ## Acceptance
 

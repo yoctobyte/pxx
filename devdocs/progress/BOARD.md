@@ -26,10 +26,11 @@ _none_
 
 _none_
 
-## backlog (80)
+## backlog (81)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -772,6 +773,7 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 58] [A] bug-c-call-through-deref-of-fnptr-pointer
 - [p 55] [A] bug-c-duktape-double-formatting
 - [p 55] [A] feature-c-corpus-duktape
 - [p 53] [A] feature-asm-textual-emit-mode
