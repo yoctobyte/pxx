@@ -464,12 +464,23 @@ begin
             ((option[2] = 'd') or (option[2] = 'D')) then
     begin
       PasDefineCommandOption(3);
+      { Also capture for the C preprocessor (raw, may carry `=value`). }
+      if CCmdDefCount < MAX_C_CMD_DEFINES then
+      begin
+        CCmdDefRaw[CCmdDefCount] := PasOptionTail(option, 3);
+        Inc(CCmdDefCount);
+      end;
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and
             ((option[2] = 'u') or (option[2] = 'U')) then
     begin
       PasUndefineCommandOption(3);
+      if CCmdUndefCount < MAX_C_CMD_DEFINES then
+      begin
+        CCmdUndefRaw[CCmdUndefCount] := PasOptionTail(option, 3);
+        Inc(CCmdUndefCount);
+      end;
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and

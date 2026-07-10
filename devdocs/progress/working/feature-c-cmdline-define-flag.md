@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** feature (C frontend / driver) — **Track C** (`compiler/cpreproc.inc` predefines
   + the driver arg parse).
-- **Status:** backlog — filed 2026-07-09 during [[feature-c-corpus-duktape]] bring-up.
+- **Status:** working
 
 ## What
 pxx does not honour `-D` on the command line for C. During the duktape bring-up,

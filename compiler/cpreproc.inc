@@ -2215,6 +2215,36 @@ begin
   end;
 end;
 
+{ Seed the C `-D`/`-U` command-line predefines (captured raw at arg-parse time).
+  A define splits on the first `=`: `name=value`, or `name` → value `1`. Undefs
+  reuse CPUndef via a synthetic single-name line. }
+procedure CPApplyCmdlineDefines;
+var i, eq: Integer; raw, nm, vl: AnsiString;
+begin
+  for i := 0 to CCmdDefCount - 1 do
+  begin
+    raw := CCmdDefRaw[i];
+    if raw = '' then Continue;
+    eq := Pos('=', raw);
+    if eq > 0 then
+    begin
+      nm := Copy(raw, 1, eq - 1);
+      vl := Copy(raw, eq + 1, Length(raw) - eq);
+    end
+    else
+    begin
+      nm := raw;
+      vl := '1';
+    end;
+    if nm <> '' then CPAddLiteral(nm, vl);
+  end;
+  for i := 0 to CCmdUndefCount - 1 do
+  begin
+    raw := CCmdUndefRaw[i];
+    if raw <> '' then CPUndef(raw, 1, Length(raw));
+  end;
+end;
+
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
 var i: Integer;
 begin
@@ -2246,6 +2276,11 @@ begin
   CPAddLiteral('__STDC__', '01');
   CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
   CPAddLiteral('__STDC_HOSTED__', '01');
+  { Command-line `-D<name>[=<value>]` predefines, applied AFTER the built-ins so
+    a `-D` overrides them (newest-wins lookup); then `-U<name>` removals last so
+    an explicit undefine beats any define of the same name. `-D<name>` with no
+    `=` defaults the value to `1` (cpp convention). }
+  CPApplyCmdlineDefines;
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
   SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }
