@@ -5,7 +5,7 @@ prio: 30  # auto
 # bug: impl-prescan rejects include-level var sections late in the include chain
 
 - **Type:** bug (Track A — impl prescan / declaration ordering)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-06 (found by the Whitespace esoteric probe — exactly the
   kind of shared-internals find the probe category exists for)
 
@@ -59,3 +59,44 @@ tokens aren't ordered monotonically vs the proc headers during prescan. Fix is i
 that prescan token-ordering — shared parser internals, self-host risk — so left
 parked behind the defs.inc workaround. Next picker: instrument SymDeclTok[WsPos]
 and CurBodyHdrTok at the failing lookup to see the exact inversion.
+
+## Root cause CONFIRMED + partial fix attempted, REVERTED 2026-07-10 (A+B+C session)
+
+Instrumented `SymDeclTok[WsPos]` / `CurBodyHdrTok` / every token edit on the
+FAILING layout (WsPos = sym k=1698, stamped at TokPos≈521461, TokCount≈596326).
+
+**Root cause (exact):** `AdjustPass2Spans` (lexer.inc:2064) fixes `DeclItemStart`/
+`DeclItemEnd`/`Pass2BodyTok` when a **pass-2** token edit shifts the stream
+(`ParseNestedRoutine` excises a nested body → `AdjustPass2Spans(finalCur,
+-remCount)` at parser.inc ~14496; generic `InsertTokens` likewise) — but it does
+**NOT** adjust `SymDeclTok[]`. So during pass 2 the body-header horizon
+(`CurBodyHdrTok`, derived from the adjusted `DeclItemStart`) moves down with the
+edits while `SymDeclTok[WsPos]` keeps its stale pass-1 token index → the
+`SymDeclTok > CurBodyHdrTok` test in `HiddenByDeclOrder` fires falsely. bparser's
+identical block survives only because fewer excisions accumulate before its
+(earlier) include position.
+
+**Partial fix tried:** add the parallel loop to `AdjustPass2Spans`
+(`for k := 0 to SymCount-1 do if SymDeclTok[k] >= atPos then SymDeclTok[k] += delta`).
+Confirmed it runs (19 adjustments hit k=1698). It makes MANY layouts pass — but it
+is **necessary-but-insufficient / Heisenbug**: the per-excision `>= atPos` boundary
+is individually correct, yet the clean `build` still inverts by a few tokens at the
+exact self-source layout while any instrumentation (which shifts token positions)
+makes it pass. Excision deltas are large (observed −93, −50, −36), so a 1-token
+boundary flip swings `SymDeclTok[WsPos]` by ~90 and tips the `>` comparison. So
+adjusting token INDICES on every edit is fundamentally fragile here — there is a
+residual edit path (suspect a pass-1 edit while `Pass2Active=False`, where
+`AdjustPass2Spans` early-exits and neither `DeclItemStart` nor `SymDeclTok` are
+adjusted, leaving a layout-dependent skew), or a codegen sensitivity in the clean
+build.
+
+**Robust direction (for next picker, NOT yet done):** stop tracking token INDICES
+(which shift under excision/insertion) and compare **immutable source char offsets**
+instead — stamp `SymDeclTok := Tokens[TokPos].SOffset` and set `CurBodyHdrTok`
+from the body header's `.SOffset`; source offsets never move under token-array
+edits, so no per-edit adjustment is needed at all. Risk: generic-specialized /
+lifted-nested-routine bodies carry synthetic or original `.SOffset`s (possibly 0),
+which could break decl-order for those bodies — must be validated against the full
+generic/nested corpus + self-host byte-identical before landing. That validation +
+the shared-`parser.inc` `CurBodyHdrTok` change is more self-host risk than this
+prio-30 warrants, so still parked behind the clean defs.inc workaround.
