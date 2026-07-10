@@ -155,7 +155,10 @@ procedure IRVerify;
 var i, lblId, op: Integer;
     seenLabel: array[0..MAX_IR-1] of Boolean;
 begin
-  for i := 0 to MAX_IR - 1 do
+  { Only [0, IRLabelCount) can be read: seenLabel is indexed by label id and
+    IRNewLabel hands out ids in that range (IRReset zeroes IRLabelCount per body).
+    Clearing the full MAX_IR array was a 128KB per-body memset for nothing. }
+  for i := 0 to IRLabelCount - 1 do
     seenLabel[i] := False;
 
   { Pass 1: populate seen labels and verify uniqueness }
