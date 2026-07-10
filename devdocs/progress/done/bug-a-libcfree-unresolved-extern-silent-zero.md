@@ -5,9 +5,10 @@ prio: 68  # auto — a whole bug class (silent miscompile → runtime SIGSEGV) t
 
 # libc-free link: unresolved external symbol patched to 0 instead of a link error
 
-- **Type:** bug (compiler linker / diagnostics) — **Track A** (`compiler/elfwriter.inc`,
-  `compiler/symtab.inc`, C-side marking in `compiler/cparser.inc`).
-- **Status:** working
+- **Type:** bug (compiler diagnostics) — **Track C** (cfront: `compiler/cparser.inc`).
+  (Originally filed as Track A / elfwriter; the real root cause is C-side, see
+  the RESOLVED note.)
+- **Status:** done
 - **Found / Opened:** 2026-07-10, sqlite file-VFS wall 4
   ([[task-sqlite-libc-free-runtime-bringup]],
   [[project_sqlite_file_vfs_wall4_null_syscall_slot]]).
@@ -93,3 +94,62 @@ Guards / do-not-break:
   `nm`/`objdump` yield nothing. Optionally emit a minimal `.symtab` (or a
   `--emit-symbols` flag) so a runtime `call 0` can at least be traced. Secondary
   to the link-time error, which prevents the crash entirely.
+
+## RESOLVED 2026-07-10 — real root cause was C-side, not the linker
+
+The filed hypothesis (unresolved *external* patched to 0 in a libc-free link) is
+**wrong**. Minimal repros proved the external/GOT path is safe: a declared
+`extern` that stays unresolved always gets a `DT_NEEDED` and the **dynamic loader
+reports it** (`symbol lookup error: undefined symbol: X`, exit 127) — never a
+silent 0. A direct **call** to an *undeclared* function is already a hard compile
+error (`call to undeclared function`, cparser.inc:971).
+
+The genuinely silent path is narrower and lives in **cfront**, not elfwriter: an
+**undeclared identifier used as a VALUE** decays to integer `0`
+(cparser.inc ~991, "best-effort leniency"). sqlite's os_unix.c references its
+syscalls only as addresses in the file-scope `static ... aSyscall[]` initializer
+(`(sqlite3_syscall_ptr)pread`, `(...)geteuid`, `(...)fchown`); the crtl headers
+didn't declare them, so each decayed to a `0` slot — a null fn-pointer that
+faulted only when os_unix later *called through* the slot (the "unixRead
+segfault"). Three distinct decay sites, all now warned:
+- inline value use (cparser.inc primary-expr 0-decay),
+- file-scope array-init bare identifier (`else { arrKind:=1; arrSym:=0 }`),
+- file-scope array-init cast form `(fp)name` (`CConsumeCastProcInit`, FindProc<0).
+
+### Fix shipped (Track C, cfront)
+
+Emit a **warning** (not a hard error) at all three sites:
+`undeclared identifier 'X' ... (treated as 0 / null slot)`. Reserved `__`-prefixed
+names stay silent (predefined `__LINE__`/`__FILE__`/`__func__` legitimately decay
+and are `__`-named). A hard error was tried first and **rejected**: it broke
+sqlite's use of `__LINE__` (undeclared in cfront) — the leniency is load-bearing
+for predefined macros cfront doesn't model. `-Werror` promotes the warning for
+anyone who wants it fatal.
+
+A speculative link-time `ValidateLinkage` (flagging internal procs with
+`BodyAddr<0` referenced by `ProcAddrFix`/`MethodFixups`) was also tried and
+**removed**: it false-positived on legitimate Pascal abstract/virtual VMT slots
+(`TB.G`), and it did not even cover the actual sqlite class (a data-`0`, not a
+proc fixup).
+
+### Validation
+
+- Self-host byte-identical; `testmgr --tier quick` GREEN; c-testsuite **220/220**
+  (warnings ride the compile log, don't perturb program-output comparison).
+- The warning **immediately surfaced real latent bugs** when building sqlite:
+  `rmdir` (crtl declares it via PalRmdir but exposes no C wrapper → same
+  null-call class as pread), `F_OK`/`W_OK`/`R_OK` (crtl never defines the
+  `access()` mode constants → mode silently 0), and `register` (a C storage-class
+  keyword cfront doesn't model → reaches the identifier path). Follow-ups:
+  [[bug-c-crtl-rmdir-access-constants-register]].
+
+### Deferred (optional hardening, not needed for this bug)
+
+- Model `__LINE__`/`__FILE__`/`__func__` in cpreproc so they don't decay, THEN
+  the inline value-use site could be upgraded from warning to hard error (gcc
+  parity) without breaking sqlite.
+- Emit a minimal `.symtab` in ET_EXEC output so a runtime `call 0` is traceable
+  with `nm`/`gdb` (currently no section headers → post-mortem tools are blind).
+
+## Log
+- 2026-07-10 — resolved, commit afa42ddd.

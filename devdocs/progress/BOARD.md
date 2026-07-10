@@ -30,8 +30,8 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-libcfree-unresolved-extern-silent-zero | A | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-c-call-through-deref-of-fnptr-pointer | A | 58 | bug | C: call through a DEREF of a pointer-to-function-pointer drops the call | — |
+| bug-c-crtl-rmdir-access-constants-register | A | 58 | bug | crtl gaps surfaced by the undeclared-identifier warning: rmdir, F_OK/W_OK/R_OK, register | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-impl-prescan-late-include-var-section | A | 30 | bug | bug: impl-prescan rejects include-level var sections late in the include chain | — |
@@ -169,12 +169,13 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (561)
+## done (562)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | 50 | audit | Audit: shared-global state — reentrancy & thread-safety | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
@@ -753,7 +754,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 68] [A] bug-a-libcfree-unresolved-extern-silent-zero
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [A] feature-erlang-frontend-scoping
@@ -777,6 +777,7 @@ _none_
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [A] bug-c-call-through-deref-of-fnptr-pointer
+- [p 58] [A] bug-c-crtl-rmdir-access-constants-register
 - [p 56] [A] bug-c-unixfile-mmap-field-offset-zero
 - [p 55] [A] bug-c-duktape-double-formatting
 - [p 55] [A] feature-c-corpus-duktape
