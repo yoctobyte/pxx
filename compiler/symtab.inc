@@ -2266,6 +2266,22 @@ begin
     end;
 end;
 
+{ -O3 float loop residency (x86-64): if idx is a tyDouble local/param currently
+  resident in xmm8/xmm9, return that xmm number (8 or 9), else 0. Only bodies
+  proven call-free enable this (FloatResidencyAssign), so the caller-saved
+  registers are never clobbered mid-body. }
+function FloatResidentXmmOf(idx: Integer): Integer;
+var k: Integer;
+begin
+  FloatResidentXmmOf := 0;
+  for k := 0 to FrResidentCount - 1 do
+    if FrResidentSym[k] = idx then
+    begin
+      FloatResidentXmmOf := 8 + k;
+      Exit;
+    end;
+end;
+
 procedure EmitLoadVar(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
 begin
@@ -2284,6 +2300,15 @@ begin
 
   if TypeIsFloat(tk) then
   begin
+    { -O3 float loop residency: the value lives in xmm8/xmm9 (call-free body,
+      tyDouble only — see FloatResidencyAssign). Same contract as a frame
+      load: value in xmm0. }
+    rreg := FloatResidentXmmOf(idx);
+    if rreg <> 0 then
+    begin
+      EmitB($41); EmitB($0F); EmitB($28); EmitB($C0 or (rreg - 8));  { movaps xmm0, xmm8/xmm9 }
+      Exit;
+    end;
     if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
     begin
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);  { mov rax, [rbp+off] }
@@ -2655,6 +2680,14 @@ begin
         else
           begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd [abs], xmm0 }
       skConst: Error('cannot assign to constant');
+    end;
+    { -O3 float loop residency dual-write: the frame slot was just written from
+      xmm0; mirror the value into the resident xmm8/xmm9 cache. tyDouble only
+      (no narrowing happened above), so register == a fresh frame load. }
+    if FloatResidentXmmOf(idx) <> 0 then
+    begin
+      EmitB($44); EmitB($0F); EmitB($28);
+      EmitB($C0 or ((FloatResidentXmmOf(idx) - 8) shl 3));  { movaps xmm8/xmm9, xmm0 }
     end;
     Exit;
   end;

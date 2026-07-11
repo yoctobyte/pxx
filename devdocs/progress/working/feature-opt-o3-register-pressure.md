@@ -223,3 +223,21 @@ architecture `devdocs/dev/optimization-architecture.md`.
   1.05×.
 - Gates: -O2/-O3 self-host fixedpoints byte-identical; test-opt (incl. -O3
   differential + fixedpoint) green; make test green; quick GREEN.
+
+### 2026-07-11 — W2 slice 2 LANDED behind -O3: float loop residency in xmm8/xmm9
+- Up to two loop-hot **tyDouble** locals/params stay resident in xmm8/xmm9 for
+  the whole body. xmm8-15 are caller-saved, so there is NO save/restore and no
+  exception/longjmp interplay — the trade is that residency is legal only in
+  bodies whose entire IR emission is provably call-free
+  (`FloatResidencyBodySafe`: node-kind whitelist + no managed-string /
+  dyn-array store traffic; div/mod allowed since the div-zero call never
+  returns). tySingle is excluded on purpose: a register cache would hold the
+  unrounded double and diverge from the frame's narrow-then-widen roundtrip.
+- Reads: `movaps xmm0, xmm8/9` in EmitLoadVar's float path; stores dual-write
+  (`movaps xmm8/9, xmm0` after the frame write); IR_ZERO_SYM refreshes.
+- **Measured (-O2 vs -O3, outputs identical):** mandelbrot --bench **1.21×**
+  (83.7 → 69.4 ms; was 1.13× before this slice), raytracer 1.04× (its kernels
+  call Vec helpers → bodies not call-free; inline-expansion follow-up would
+  unlock it). Cumulative -O3: mandelbrot 1.21×, self-compile 1.05×.
+- Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
+  quick GREEN.

@@ -884,6 +884,8 @@ var
   CsDepth : Integer;       { how many of r12/r13 currently hold a live left value (0 = r12 free, 1 = r12 live -> use r13, 2 = fall back to push/pop). }
   CsSaveOff12 : Integer;   { rbp offset of the caller-r12 save slot }
   CsSaveOff13 : Integer;   { rbp offset of the caller-r13 save slot }
+  FrResidentCount : Integer;                 { -O3 float loop residency: 0..2 tyDouble locals/params resident in xmm8/xmm9 for the whole body. Caller-saved regs, so no save/restore — but ONLY in bodies whose entire IR is call-free (FloatResidencyBodySafe whitelist): any call would clobber them. Frame slot stays authoritative (stores dual-write); register slot i lives in xmm(8+i). }
+  FrResidentSym   : array[0..1] of Integer;  { Syms[] index of each xmm-resident sym }
   OptLevelExplicit : Boolean;  { true once an explicit -O flag was seen. -g (DWARF Tier-1) defaults to -O0 for debuggable 1:1 codegen (inline/opt would relocate or elide lines/functions, breaking breakpoints) UNLESS the user explicitly picked an -O level. }
   { --measure-regcall: phase-0 opportunity probe for feature-callconv-register-args.
     Per compiled body, tally params and how many are register-residency-eligible

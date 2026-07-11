@@ -2320,6 +2320,12 @@ begin
             register cache (loop-residency locals can hit this mid-body). }
           if ResidentRegOf(symIdx) <> 0 then
             RegcallRefreshResident(symIdx);
+          if FloatResidentXmmOf(symIdx) <> 0 then
+          begin
+            EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+            EmitB($85 or ((FloatResidentXmmOf(symIdx) - 8) shl 3));
+            EmitI32(Syms[symIdx].Offset);                 { movsd xmm8/9, [rbp+off] }
+          end;
         end;
       end;
 
@@ -5685,6 +5691,110 @@ begin
   end;
 end;
 
+{ -O3 W2 slice: FLOAT loop residency in xmm8/xmm9. Caller-saved registers, so
+  zero save/restore cost — but legal ONLY in bodies whose entire emission is
+  call-free (any call clobbers xmm8-15). Whitelist over the whole body IR:
+  every node kind must be one whose x86-64 emission performs no call — and no
+  managed-string / dyn-array store traffic (those call retain/release/assign
+  helpers even without an IR_CALL node). Note div/mod stay allowed: the
+  div-zero check's call never returns. tyDouble syms only — a tySingle cache
+  would hold the unrounded double and diverge from a frame reload's
+  narrow-then-widen roundtrip. }
+function FloatResidencyBodySafe: Boolean;
+var k: Integer;
+begin
+  FloatResidencyBodySafe := False;
+  for k := 0 to IRCount - 1 do
+  begin
+    case IRKind[k] of
+      IR_NOP, IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA,
+      IR_LOAD_SYM, IR_STORE_SYM, IR_BINOP, IR_LABEL, IR_JUMP,
+      IR_JUMP_IF_FALSE, IR_NEG, IR_NOT, IR_LEA, IR_INDEX, IR_FIELD,
+      IR_LOAD_MEM, IR_STORE_MEM, IR_BLOCK, IR_TERMINATE, IR_ZERO_SYM,
+      IR_SLOTADDR, IR_COPY_REC, IR_PROCADDR, IR_CLASSREF, IR_VMTADDR: ;
+      else Exit;
+    end;
+    if (IRTk[k] = Ord(tyAnsiString)) or (IRTk[k] = Ord(tyString)) or
+       (IRTk[k] = Ord(tyVariant)) then Exit;
+    if (IRKind[k] = IR_STORE_SYM) and (IRA[k] >= 0) then
+      if (Syms[IRA[k]].IsArray and (Syms[IRA[k]].ArrLen = -1)) or
+         (Syms[IRA[k]].TypeKind = tyAnsiString) or
+         (Syms[IRA[k]].TypeKind = tyString) then Exit;
+  end;
+  FloatResidencyBodySafe := True;
+end;
+
+procedure FloatResidencyAssign;
+var k, j, t, best, bestCnt, lbl, picked, si, nsyms: Integer;
+    Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    seen, addrTaken: Boolean;
+begin
+  FrResidentCount := 0;
+  if OptLevel < 3 then Exit;
+  if CurProc < 0 then Exit;
+  if RcSuppressAssign then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if CurProcIsGenerator or CurProcIsStackless then Exit;
+  if not FloatResidencyBodySafe then Exit;
+  { Tally tyDouble LOAD/STORE_SYM accesses inside backward-jump loop ranges
+    (same walk as LoopResidencyAssign). }
+  nsyms := 0;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_JUMP then
+    begin
+      lbl := IRA[k];
+      t := -1;
+      for j := 0 to k - 1 do
+        if (IRKind[j] = IR_LABEL) and (IRIVal[j] = lbl) then begin t := j; Break; end;
+      if t < 0 then Continue;
+      for j := t to k do
+        if (IRKind[j] = IR_LOAD_SYM) or (IRKind[j] = IR_STORE_SYM) then
+        begin
+          si := IRA[j];
+          if si < 0 then Continue;
+          if Syms[si].TypeKind <> tyDouble then Continue;
+          seen := False;
+          for best := 0 to nsyms - 1 do
+            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+          if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
+          begin
+            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+          end;
+        end;
+    end;
+  if nsyms = 0 then Exit;
+  picked := 0;
+  while picked < 2 do
+  begin
+    best := -1; bestCnt := 3;
+    for k := 0 to nsyms - 1 do
+      if Counts[k] > bestCnt then
+      begin
+        si := CSyms[k];
+        if Syms[si].IsArray then Continue;
+        if not ((Syms[si].Kind = skLocal) or
+                ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Continue;
+        addrTaken := False;
+        for j := 0 to IRCount - 1 do
+          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
+          begin addrTaken := True; Break; end;
+        if addrTaken then Continue;
+        best := k; bestCnt := Counts[k];
+      end;
+    if best < 0 then Break;
+    si := CSyms[best];
+    Counts[best] := 0;
+    { Init the cache from the frame slot (params were spilled by the prologue;
+      an uninitialized local is garbage in BOTH places — consistently). }
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+    EmitB($85 or (picked shl 3)); EmitI32(Syms[si].Offset);   { movsd xmm8/xmm9, [rbp+off] }
+    FrResidentSym[picked] := si;
+    Inc(picked);
+  end;
+  FrResidentCount := picked;
+end;
+
 procedure CalleeScratchAssign;
 var k: Integer; found: Boolean;
 begin
@@ -5814,6 +5924,7 @@ begin
     call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
     land ahead of the body code. }
   LoopResidencyAssign;
+  FloatResidencyAssign;
   CalleeScratchAssign;
   if DumpIR then IRDump;
   IREmitMachineCode;
