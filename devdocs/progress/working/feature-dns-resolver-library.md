@@ -488,3 +488,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
     hops from cache. Existing chase tests unaffected (their CNAMEs carry
     TTL 0 = uncacheable).
   REMAINING: `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
+- 2026-07-11 (night 7) — **DnsResolveService landed** (Track B): the second
+  half of the ticket's public shape (`ResolveHost, ResolveService`).
+  - `dns_config`: `DnsLookupServices` — /etc/services matcher
+    (`name port/proto [aliases...]`, case-insensitive name/alias, `#`
+    comments, proto filter with '' = any). 9 offline checks in
+    lib_dns_config.
+  - `dns.pas`: `DnsResolveService(name, proto, var port)` — numeric-string
+    shortcut, else /etc/services via PAL; DNS_ERR_NOCONFIG on a miss.
+  REMAINING (the last item): `dns_libc`/`dns_resolved`/`dns_esp` backends +
+  profile/define selection — needs a design decision on libc linkage for
+  Pascal-emitted executables (static extern vs dlopen), so it is a candidate
+  for its own follow-up ticket.

@@ -137,4 +137,23 @@ begin
     and G6(ip6, $2001, $0DB8, 0, 0, 0, 0, 0, $42));
   Show('h6-skip4', not DnsLookupHosts6(hosts, 'myhost', ip6));
   Show('h6-miss', not DnsLookupHosts6(hosts, 'nope', ip6));
+
+  { ---- /etc/services lookup ---- }
+  hosts := '# comment line'#10 +
+           'ftp 21/tcp'#10 +
+           'ssh             22/tcp'#10 +
+           'domain 53/tcp nameserver'#10 +
+           'domain 53/udp nameserver'#10 +
+           'http 80/tcp www www-http # WorldWideWeb'#10 +
+           'https 443/tcp';   { no final newline }
+  i := 0;
+  Show('sv-basic', DnsLookupServices(hosts, 'ssh', 'tcp', i) and (i = 22));
+  Show('sv-ci', DnsLookupServices(hosts, 'HTTP', 'tcp', i) and (i = 80));
+  Show('sv-alias', DnsLookupServices(hosts, 'www', 'tcp', i) and (i = 80));
+  Show('sv-anyproto', DnsLookupServices(hosts, 'domain', '', i) and (i = 53));
+  Show('sv-udp', DnsLookupServices(hosts, 'domain', 'udp', i) and (i = 53));
+  Show('sv-nofinalnl', DnsLookupServices(hosts, 'https', 'tcp', i) and (i = 443));
+  Show('sv-protomiss', not DnsLookupServices(hosts, 'ssh', 'udp', i));
+  Show('sv-miss', not DnsLookupServices(hosts, 'gopher', 'tcp', i));
+  Show('sv-comment-alias', not DnsLookupServices(hosts, 'WorldWideWeb', 'tcp', i));
 end.

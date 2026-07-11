@@ -77,6 +77,12 @@ procedure DnsGlobalCachePut6(const name: string;
 function DnsGlobalCacheGetCname(const name: string; var target: string): Boolean;
 procedure DnsGlobalCachePutCname(const name, target: string; ttlSec: Integer);
 
+{ Resolve a service name to a port: a numeric string is returned as-is, else
+  /etc/services is consulted (name or alias, case-insensitive; proto filters
+  'tcp'/'udp', '' = any). Returns 0 with port set, or DNS_ERR_NOCONFIG when
+  nothing matches. }
+function DnsResolveService(const name, proto: string; var port: Integer): Integer;
+
 implementation
 
 var
@@ -313,6 +319,48 @@ begin
   end;
   { chain exceeded the bound — return the last rcode with no addresses }
   DnsResolveChase := rc;
+end;
+
+function DnsResolveService(const name, proto: string; var port: Integer): Integer;
+var
+  servicesText: string;
+  i, val, rc, found: Integer;
+  numeric: Boolean;
+begin
+  port := 0;
+  { a numeric port string needs no lookup }
+  numeric := Length(name) > 0;
+  val := 0;
+  for i := 1 to Length(name) do
+  begin
+    if (name[i] < '0') or (name[i] > '9') then
+    begin
+      numeric := False;
+      Break;
+    end;
+    val := val * 10 + (Ord(name[i]) - Ord('0'));
+    if val > 65535 then
+    begin
+      numeric := False;
+      Break;
+    end;
+  end;
+  if numeric and (val > 0) then
+  begin
+    port := val;
+    DnsResolveService := 0;
+    Exit;
+  end;
+
+  rc := ReadFileText(PChar('/etc/services'), servicesText, 262144);
+  found := 0;
+  if DnsLookupServices(servicesText, name, proto, found) then
+  begin
+    port := found;
+    DnsResolveService := 0;
+    Exit;
+  end;
+  DnsResolveService := DNS_ERR_NOCONFIG;
 end;
 
 function DnsResolveChase6(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;

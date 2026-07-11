@@ -64,6 +64,13 @@ function DnsParseIpv6(const s: string; startIdx, endIdx: Integer; var ip6: TDnsI
   with ip6 set (network byte order) on the first match. }
 function DnsLookupHosts6(const text: string; const name: string; var ip6: TDnsIpv6): Boolean;
 
+{ Look up a service in /etc/services text. Each line is
+  `<name> <port>/<proto> [aliases...]`; name/alias match is case-insensitive,
+  `#` starts a comment. proto filters ('tcp'/'udp'; '' accepts any). Returns
+  True with port set on the first match. }
+function DnsLookupServices(const text: string; const name, proto: string;
+  var port: Integer): Boolean;
+
 implementation
 
 function DnsParseIpv4(const s: string; startIdx, endIdx: Integer; var ip: LongWord): Boolean;
@@ -592,6 +599,106 @@ begin
   begin
     for k := 0 to 15 do ip6[k] := found[k];
     DnsLookupHosts6 := True;
+  end;
+end;
+
+{ One /etc/services line text[ls..le]: `<name> <port>/<proto> [aliases...]`.
+  True when the service name or an alias matches AND the proto matches (or the
+  filter is empty); port is filled. }
+function MatchServicesLine(const text: string; ls, le: Integer;
+  const name, proto: string; var port: Integer): Boolean;
+var
+  p, ts, te, tokIndex, i, slash, val: Integer;
+  portStart, portEnd: Integer;
+  nameMatched, protoOk: Boolean;
+begin
+  MatchServicesLine := False;
+  portStart := 0;
+  portEnd := -1;
+  tokIndex := 0;
+  nameMatched := False;
+  p := ls;
+  while p <= le do
+  begin
+    { skip whitespace }
+    while (p <= le) and IsSpace(text[p]) do p := p + 1;
+    if p > le then Break;
+    if text[p] = '#' then Break;
+    { token [ts..te] }
+    ts := p;
+    while (p <= le) and (not IsSpace(text[p])) and (text[p] <> '#') do p := p + 1;
+    te := p - 1;
+    if tokIndex = 0 then
+    begin
+      { the canonical service name }
+      if EqualsCI(text, ts, te, name) then nameMatched := True;
+    end
+    else if tokIndex = 1 then
+    begin
+      { port/proto }
+      portStart := ts;
+      portEnd := te;
+    end
+    else
+    begin
+      { aliases }
+      if EqualsCI(text, ts, te, name) then nameMatched := True;
+    end;
+    tokIndex := tokIndex + 1;
+  end;
+  if (not nameMatched) or (portEnd < portStart) then Exit;
+
+  { split port/proto and check both }
+  slash := -1;
+  for i := portStart to portEnd do
+    if text[i] = '/' then
+    begin
+      slash := i;
+      Break;
+    end;
+  if slash <= portStart then Exit;
+  protoOk := Length(proto) = 0;
+  if not protoOk then
+    protoOk := EqualsCI(text, slash + 1, portEnd, proto);
+  if not protoOk then Exit;
+  val := 0;
+  for i := portStart to slash - 1 do
+  begin
+    if (text[i] < '0') or (text[i] > '9') then Exit;
+    val := val * 10 + (Ord(text[i]) - Ord('0'));
+    if val > 65535 then Exit;
+  end;
+  if val = 0 then Exit;
+  port := val;
+  MatchServicesLine := True;
+end;
+
+function DnsLookupServices(const text: string; const name, proto: string;
+  var port: Integer): Boolean;
+var
+  i, ls, n, found: Integer;
+begin
+  DnsLookupServices := False;
+  found := 0;
+  n := Length(text);
+  ls := 1;
+  for i := 1 to n do
+  begin
+    if text[i] = #10 then
+    begin
+      if (i - 1 >= ls) and MatchServicesLine(text, ls, i - 1, name, proto, found) then
+      begin
+        port := found;
+        DnsLookupServices := True;
+        Exit;
+      end;
+      ls := i + 1;
+    end;
+  end;
+  if (ls <= n) and MatchServicesLine(text, ls, n, name, proto, found) then
+  begin
+    port := found;
+    DnsLookupServices := True;
   end;
 end;
 
