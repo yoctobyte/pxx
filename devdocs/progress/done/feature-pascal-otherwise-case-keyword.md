@@ -5,7 +5,7 @@ prio: 35
 # `otherwise` as case-else soft keyword (FPC default-mode parity)
 
 - **Type:** feature (Pascal frontend, small) — Track P
-- **Status:** working
+- **Status:** done
   conformance burn-down in [[bug-case-of-string-segfault-and-label-validation]]
 - **Owner:** opus-fruit
 
@@ -43,3 +43,6 @@ named `otherwise` compiling outside case (soft-keyword regression).
 
 `make test` + self-host fixedpoint (shared parser.inc = A-gated);
 `tools/run_pascal_conformance.sh --only 'tcase*'`.
+
+## Log
+- 2026-07-11 — resolved, commit 5a27ba18.
