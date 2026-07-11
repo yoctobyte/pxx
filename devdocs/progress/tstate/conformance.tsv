@@ -75,7 +75,7 @@ pass	tcase47.pp	tcase	-
 pass	tcase48_2.pp	tcase	-	
 pass	tcase48.pp	tcase	-	
 pass	tcase4.pp	tcase	-	
-skip	tcase50.pp	tcase	untriaged	parser: ExtendedPascal `otherwise` case clause not supported
+pass	tcase50.pp	tcase	-	
 pass	tcase5.pp	tcase	-	
 pass	tcase6.pp	tcase	-	
 pass	tcase7.pp	tcase	-	
