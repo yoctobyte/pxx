@@ -359,37 +359,6 @@ begin
   Result := cdivr(cln(caddr(z, 1.0) / crsub(1.0, z)), 2.0);
 end;
 
-{ str(x:len:dec) with VARIABLE width/dec is a pxx frontend gap (the Str builtin
-  only takes literal widths — ticket feature-pascal-str-variable-width), so the
-  fixed-point formatting is done by hand here. }
-function FmtFixed(v: Double; len, dec: Integer): string;
-var
-  scale: Double;
-  total, ip, fp, sc: Int64;
-  k: Integer;
-  neg: Boolean;
-  fs: string;
-begin
-  neg := v < 0.0;
-  if neg then v := -v;
-  if dec < 0 then dec := 0;
-  scale := 1.0;
-  for k := 1 to dec do scale := scale * 10.0;
-  sc := Trunc(scale);
-  total := Round(v * scale);
-  ip := total div sc;
-  fp := total mod sc;
-  Str(ip, Result);
-  if dec > 0 then
-  begin
-    Str(fp, fs);
-    while Length(fs) < dec do fs := '0' + fs;
-    Result := Result + '.' + fs;
-  end;
-  if neg then Result := '-' + Result;
-  while Length(Result) < len do Result := ' ' + Result;
-end;
-
 function cstr(z: complex): string;
 var istr, rstr: string;
 begin
@@ -423,8 +392,8 @@ end;
 function cstr(z: complex; len, dec: Integer): string;
 var istr, rstr: string;
 begin
-  istr := FmtFixed(z.im, len, dec);
-  rstr := FmtFixed(z.re, len, dec);
+  Str(z.im:len:dec, istr);
+  Str(z.re:len:dec, rstr);
   while (Length(istr) > 0) and (istr[1] = ' ') do
     Delete(istr, 1, 1);
   Result := rstr;
