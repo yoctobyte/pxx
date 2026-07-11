@@ -9480,26 +9480,29 @@ end;
 
 { Convert one write value into a string-valued node for TextWrite. Strings pass
   through; integers go via StrInt(x, width), floats via StrFloat(x, width, dec) —
-  the same builtin formatters the console Str(...) lowering uses. }
-function TextStrArg(exprNode, width, decw: Integer): Integer;
+  the same builtin formatters the console Str(...) lowering uses. widthNode /
+  decNode are AST expression nodes (-1 = default width 0 / decimals -1). }
+function TextStrArg(exprNode, widthNode, decNode: Integer): Integer;
 var tk: TTypeKind; pi: Integer;
 begin
   tk := IntToTypeKind(ASTTk[exprNode]);
+  if widthNode < 0 then widthNode := GenMakeIntLit(0);
   if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
     Result := exprNode
   else if TypeIsFloat(tk) then
   begin
     pi := FindProc('StrFloat');
     if pi < 0 then Error('write(Text): StrFloat not loaded (add `uses textfile;` deps)');
+    if decNode < 0 then decNode := GenMakeIntLit(-1);
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
-                GenMakeIntLit(width), GenMakeIntLit(decw), -1, -1, -1);
+                widthNode, decNode, -1, -1, -1);
   end
   else if TypeIsOrdinal(tk) and (tk <> tyChar) then
   begin
     pi := FindProc('StrInt');
     if pi < 0 then Error('write(Text): StrInt not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
-                GenMakeIntLit(width), -1, -1, -1, -1);
+                widthNode, -1, -1, -1, -1);
   end
   else
   begin
@@ -9526,17 +9529,16 @@ begin
   while Eat(tkComma) do
   begin
     ParseExpr; exprNode := CurASTNode;
-    width := 0; decw := -1;
+    { :width[:decimals] — ordinary integer expressions (FPC-legal), -1 = absent }
+    width := -1; decw := -1;
     if CurTok.Kind = tkColon then
     begin
       Next;
-      if CurTok.Kind <> tkInteger then Error('write: expected integer width after :');
-      width := CurTok.IVal; Next;
+      ParseExpr; width := CurASTNode;
       if CurTok.Kind = tkColon then
       begin
         Next;
-        if CurTok.Kind <> tkInteger then Error('write: expected integer decimals after :');
-        decw := CurTok.IVal; Next;
+        ParseExpr; decw := CurASTNode;
       end;
     end;
     sNode := TextStrArg(exprNode, width, decw);
@@ -9677,22 +9679,43 @@ begin
       ParseExpr; exprNode := CurASTNode;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := exprNode;
-      { Parse optional :width[:decimals] format specifiers }
-      widthVal := 0; decimalsVal := -1;
+      { Parse optional :width[:decimals] format specifiers. Literal (or
+        const-folded) widths keep the classic path: codegen reads them off
+        the WRITE arg node (ASTIVal/ASTSOffset). A VARIABLE width/decimals
+        (FPC-legal, e.g. writeln(x:w:d)) can't ride those literal slots, so
+        the value is pre-formatted through the same StrInt/StrFloat builtins
+        the Str(...) lowering uses and written as a plain string. }
+      widthVal := -1; decimalsVal := -1;
       if CurTok.Kind = tkColon then
       begin
         Next;
-        if CurTok.Kind <> tkInteger then Error('write: expected integer width after :');
-        widthVal := CurTok.IVal; Next;
+        ParseExpr; widthVal := CurASTNode;
         if CurTok.Kind = tkColon then
         begin
           Next;
-          if CurTok.Kind <> tkInteger then Error('write: expected integer decimals after :');
-          decimalsVal := CurTok.IVal; Next;
+          ParseExpr; decimalsVal := CurASTNode;
         end;
       end;
-      ASTIVal[argNode] := widthVal;
-      ASTSOffset[argNode] := decimalsVal;
+      if ((widthVal < 0) or (ASTKind[widthVal] = AN_INT_LIT)) and
+         ((decimalsVal < 0) or (ASTKind[decimalsVal] = AN_INT_LIT)) then
+      begin
+        { literal path: stash the raw values on the arg node as before }
+        if widthVal < 0 then ASTIVal[argNode] := 0
+        else ASTIVal[argNode] := ASTIVal[widthVal];
+        if decimalsVal < 0 then ASTSOffset[argNode] := -1
+        else ASTSOffset[argNode] := ASTIVal[decimalsVal];
+      end
+      else
+      begin
+        { variable width/decimals: pre-format to a string node }
+        if not (TypeIsFloat(IntToTypeKind(ASTTk[exprNode])) or
+                (TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
+                 not (IntToTypeKind(ASTTk[exprNode]) in [tyChar, tyBoolean]))) then
+          Error('write: variable width needs an integer or float value');
+        ASTLeft[argNode] := TextStrArg(exprNode, widthVal, decimalsVal);
+        ASTIVal[argNode] := 0;
+        ASTSOffset[argNode] := -1;
+      end;
       if lastArg = -1 then
         ASTLeft[node] := argNode
       else
@@ -10928,8 +10951,9 @@ begin
               (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Str(x[:w[:d]], s): format integer x into string s, right-justified to
-          width w. Parsed like write's value:w:d (literal width/decimals;
-          decimals ignored for integer Str). Rewritten to s := StrInt(x, w),
+          width w. Width/decimals are ordinary integer EXPRESSIONS (FPC-legal,
+          e.g. Str(z.im:len:dec, s) in rtl-extra ucomplex; decimals ignored
+          for integer Str). Rewritten to s := StrInt(x, w),
           which lives in the auto-included builtin unit.
           Guarded like Insert/Delete above: a user proc named `Str` shadows
           this, and a plain statement head not immediately followed by `(`
@@ -10940,18 +10964,16 @@ begin
           unconditionally. }
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;        { value }
-        castPrevTok := 0;                          { width default }
-        decVal := -1;                              { decimals: -1 = none (natural for float) }
+        stepsNode := -1;                           { width expr node; -1 = default (0) }
+        decNode := -1;                             { decimals expr node; -1 = none (natural for float) }
         if CurTok.Kind = tkColon then
         begin
           Next;
-          if CurTok.Kind <> tkInteger then Error('Str: expected integer width after :');
-          castPrevTok := CurTok.IVal; Next;
+          ParseExpr; stepsNode := CurASTNode;      { width: any integer expression }
           if CurTok.Kind = tkColon then
           begin
             Next;
-            if CurTok.Kind <> tkInteger then Error('Str: expected integer decimals after :');
-            decVal := CurTok.IVal; Next;
+            ParseExpr; decNode := CurASTNode;      { decimals: any integer expression }
           end;
         end;
         Expect(tkComma, ',');
@@ -10965,16 +10987,14 @@ begin
         strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
         if strIsFloat then procIdx := FindProc('StrFloat') else procIdx := FindProc('StrInt');
         if procIdx < 0 then Error('Str: builtin unit not loaded');
-        stepsNode := AllocNode(AN_INT_LIT);
-        ASTIVal[stepsNode] := castPrevTok; ASTTk[stepsNode] := Ord(tyInteger);
+        if stepsNode < 0 then stepsNode := GenMakeIntLit(0);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := stepsNode;
         if strIsFloat then
         begin
           { third arg: decimals }
-          decNode := AllocNode(AN_INT_LIT);
-          ASTIVal[decNode] := decVal; ASTTk[decNode] := Ord(tyInteger);
+          if decNode < 0 then decNode := GenMakeIntLit(-1);
           ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
           ASTLeft[ASTRight[ASTRight[argSeq]]] := decNode;
         end;

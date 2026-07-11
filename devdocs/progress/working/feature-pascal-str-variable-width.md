@@ -5,9 +5,9 @@ prio: 35
 # Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`)
 
 - **Type:** gap (Pascal frontend) — Track P
-- **Status:** backlog — filed 2026-07-11 while porting ucomplex
+- **Status:** working
   ([[feature-pascal-complex-numbers-ucomplex]])
-- **Owner:** —
+- **Owner:** opus-fruit
 
 ## Gap
 
