@@ -6,9 +6,9 @@ prio: 62
 
 - **Type:** bug (Pascal frontend + lowering) — Track P (shared `parser.inc` —
   A-gated, sole-A confirmation before edit)
-- **Status:** backlog — filed 2026-07-11 while scoping the case-label
+- **Status:** done
   validation cluster from [[bug-pascal-missing-diagnostics-fail-tests]]
-- **Owner:** —
+- **Owner:** trackP-fable
 
 ## Symptom 1 — SEGFAULT (the news)
 
@@ -62,3 +62,6 @@ ranges. Applies to ordinal cases too — validation simply doesn't exist.
 `make test` + self-host byte-identical (+ test-opt; shared parser.inc under
 A's no-concurrent-edit rule). New positive tests for case-of-string equality
 + ranges; negative tests for duplicate/inverted labels.
+
+## Log
+- 2026-07-11 — resolved, commit 3edb8f1b.
