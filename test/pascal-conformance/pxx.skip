@@ -1,6 +1,17 @@
 # pxx.skip — FPC-testsuite conformance skip list (rung 1, feature-pascal-corpus-fpc-testsuite)
 # One test per line: name.pp<TAB>reason. Burn down ticket by ticket; anything
 # not passing, not auto-gated, and not listed here = FAIL.
+#
+# TAXONOMY (feature-testmgr-fpc-compare-and-web-dashboard): the reason MAY lead
+# with a tag that the conformance dashboard groups by —
+#   gap: <reason>      a real unimplemented pxx feature — open work, burn it down.
+#   wontfix: <reason>  the test probes FPC-internal behaviour or something we
+#                      intentionally diverge on (RTTI layout, FPC-specific units,
+#                      internal-error messages) — it can NEVER pass by design and
+#                      is excluded from the adjusted pass rate.
+# An untagged reason reads as "untriaged" (the historical entries below). Filling
+# these tags is deliberate per-test review (agentic pass, own follow-up ticket);
+# add a tag when you've actually decided which bucket a test belongs in.
 # Baseline audit 2026-07-10: 222 pass / 294 skip-listed / 34 auto-gated (of 550 curated).
 # Re-audit 2026-07-11 (headerless-program fix, suite re-fetched): 213 pass /
 # 303 skip-listed / 34 auto-gated. The header fix green-lit 13 formerly

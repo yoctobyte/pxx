@@ -510,6 +510,17 @@ def run_bench_idle(clone, host, st, sha):
     r = subprocess.run([sys.executable,
                         os.path.join(clone.path, "tools/testmgr.py"),
                         "--bench"], cwd=clone.path, env=env)
+    # FPC conformance breakdown at this sha (feature-testmgr-fpc-compare-and-
+    # web-dashboard): per-test TSV the dashboard reads. Uses the compiler --bench
+    # just built at `sha`; the suite may be absent (runner SKIPs, empty report).
+    # Written to temp — the tracked tree is detached here, like bench.tsv.
+    conf_tmp = os.path.join(tempfile.gettempdir(),
+                            "twatch-conf-%d.tsv" % os.getpid())
+    if os.path.exists(conf_tmp):
+        os.unlink(conf_tmp)
+    subprocess.run(["sh", os.path.join(clone.path,
+                    "tools/run_pascal_conformance.sh"), "--report", conf_tmp],
+                   cwd=clone.path, stdout=subprocess.DEVNULL)
     clone_head_back(clone)
     rows = 0
     if os.path.exists(tmp_tsv):
@@ -524,12 +535,28 @@ def run_bench_idle(clone, host, st, sha):
                     f.write("# date\thost\tsha\tworkload\tlevel\tms\n")
                 f.writelines(new)
         os.unlink(tmp_tsv)
+    conf_rows = 0
+    if os.path.exists(conf_tmp):
+        with open(conf_tmp) as f:
+            cdata = f.read()
+        conf_rows = sum(1 for ln in cdata.splitlines()
+                        if ln and not ln.startswith("#"))
+        if conf_rows:
+            with open(os.path.join(clone.path, TSTATE_REL,
+                                   "conformance.tsv"), "w") as f:
+                f.write(cdata)
+        os.unlink(conf_tmp)
+    # regenerate the committed static dashboard from the fresh tstate data
+    subprocess.run([sys.executable,
+                    os.path.join(clone.path, "tools/twatch_web.py"),
+                    "--clone", clone.path, "--static"],
+                   cwd=clone.path, stdout=subprocess.DEVNULL)
     st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r.returncode,
-                        "rows": rows}
+                        "rows": rows, "conf_rows": conf_rows}
     save_state(clone, host, st)
-    clone.publish("tstate(%s): bench %s %s (%d rows)"
+    clone.publish("tstate(%s): bench %s %s (%d bench rows, %d conf)"
                   % (host, sha[:12],
-                     "ok" if r.returncode == 0 else "RED", rows))
+                     "ok" if r.returncode == 0 else "RED", rows, conf_rows))
 
 
 # A commit that only touches tickets/docs/tstate cannot change a test verdict,
