@@ -229,10 +229,17 @@ begin
 end;
 
 procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
-var id: Integer; stk, top: Int64; r: PReactor;
+var id, i2: Integer; stk, top: Int64; r: PReactor;
 begin
   r := CurR;
-  id := r^.coCount; Inc(r^.coCount);
+  { reuse a freed slot (state 0) before growing — bounds coCount so a program
+    that spawns per-connection over its lifetime does not exceed MAX_CO. }
+  id := -1;
+  for i2 := 0 to r^.coCount - 1 do
+    if r^.coState[i2] = 0 then begin id := i2; Break; end;
+  if id < 0 then begin id := r^.coCount; Inc(r^.coCount); end;
+  if id >= MAX_CO then
+  begin writeln('fatal: scheduler out of coroutine slots (MAX_CO)'); Halt(216); end;
   stk := Int64(GetMem(stackBytes));
   PW(stk)^ := CO_CANARY;          { overflow guard at the low end of the stack }
   top := stk + stackBytes;
@@ -416,6 +423,7 @@ begin
             Halt(217);
           end;
           FreeMem(Pointer(r^.coStk[i]));
+          r^.coState[i] := 0;   { free the slot for reuse by a later Spawn }
         end;
       end;
     anyBlocked := 0;
