@@ -11,7 +11,7 @@ prio: 45
   feature. (Ticket originally misfiled as Track P on the wrong assumption
   the feature was missing; corrected 2026-07-11 after verifying a complex
   `*`/`+` overload chain compiles and runs on pxx today.)
-- **Status:** working
+- **Status:** done
 - **Depends on:** [[feature-pascal-operator-decl-fpc-compat]] for natural
   `z1 / z2` syntax (declarable op set today lacks `/`) — can land with a
   `cdiv` function first and switch when that P one-liner lands.
@@ -59,3 +59,6 @@ double as frontend regression coverage.
 
 Track B: build with `$(PXX_STABLE)`, `make lib-test` green. Frontend gaps
 found while porting → ticket the P lane, don't patch here.
+
+## Log
+- 2026-07-11 — resolved, commit ba6e6048.
