@@ -130,6 +130,17 @@ candidates — selection criteria, hard filters, and why each alternative was ke
 or rejected — lives in its own ticket: **idea-demo-app-candidates**.
 
 ## Log
+- 2026-07-11 — **slice 5 (benchmark harness) landed** (Track E, x86-64).
+  `examples/chess/chess.pas` gains a `--bench` mode: fixed workload (startpos
+  perft(1..5) + kiwipete perft(1..4)) with the oracle kept diffable — `perft(d)
+  = N` lines are the deterministic cross-target part, wall-time/nodes/nps go on
+  `# `-prefixed comment lines a diff harness strips. Clock is
+  `PalMonotonicMillis` (portable per-target PAL backend), so the same source
+  benchmarks on every target. Verified: perft(5)=4865609, kiwipete(4)=4085603
+  (published constants), `--selftest` still ALL OK, ~500k nps native.
+  **Remaining (Track A/T):** cross-target byte-identical `--bench`/`--selftest`
+  perft on all 5 targets + cycles/node once a target exposes its cycle counter
+  (CCOUNT / rdcycle / rdtsc / cntvct).
 - 2026-06-28 — **slice 2 (search+eval) unblocked + verified** (Track B, v83).
   [[bug-proc-typed-call-const-record-arg]] fixed by Track A. `go 3` from startpos
   returns `bestmove e2e4 score 10 nodes 40793` — no longer INF. `--selftest` still

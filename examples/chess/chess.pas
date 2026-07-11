@@ -23,7 +23,7 @@ program Chess;
 
 {$mode objfpc}
 
-uses coroutine, sysutils;
+uses coroutine, sysutils, platform;
 
 const
   INF      = 30000;
@@ -976,6 +976,47 @@ begin
   if allok then writeln('ALL OK') else writeln('FAIL');
 end;
 
+{ ===== Benchmark (slice 5) =====
+  Fixed workload, two outputs kept apart so the oracle stays diffable:
+    * `perft(d) = N` lines — deterministic leaf counts, identical on every
+      target, the part the cross output-equality harness compares.
+    * `# ...` lines — wall-time ms, nodes (summed leaf counts), and nodes/sec.
+      Timing is machine-dependent, so it is comment-prefixed: a diff harness
+      strips `#` lines and still matches byte-for-byte across targets, while a
+      human/benchmark scraper reads them for nodes/sec (and, once a target
+      exposes a cycle counter, cycles/node). PalMonotonicMillis is the portable
+      clock (per-target PAL backend), so the same source benchmarks everywhere. }
+procedure BenchPosition(var pos: TPosition; const name: AnsiString; maxDepth: Integer);
+var
+  d: Integer;
+  leaves, total: Int64;
+  t0, dt: Int64;
+begin
+  writeln('bench ', name, ':');
+  total := 0;
+  t0 := PalMonotonicMillis;
+  for d := 1 to maxDepth do
+  begin
+    leaves := Perft(pos, d);
+    writeln('perft(', d, ') = ', leaves);
+    total := total + leaves;
+  end;
+  dt := PalMonotonicMillis - t0;
+  write('# time ', dt, ' ms  nodes ', total);
+  if dt > 0 then
+    writeln('  nps ', (total * 1000) div dt)
+  else
+    writeln('  nps -');   { workload finished under the clock's 1ms resolution }
+end;
+
+procedure Bench(eng: TEngine);
+begin
+  eng.NewGame;
+  BenchPosition(eng.pos, 'startpos', 5);
+  SetFEN(eng.pos, 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -');
+  BenchPosition(eng.pos, 'kiwipete', 4);
+end;
+
 { ===== Main ===== }
 
 var
@@ -996,6 +1037,8 @@ begin
 
   if (ParamCount >= 1) and (ParamStr(1) = '--selftest') then
     SelfTest(eng)
+  else if (ParamCount >= 1) and (ParamStr(1) = '--bench') then
+    Bench(eng)
   else
   begin
     writeln('PXX chess demo');
