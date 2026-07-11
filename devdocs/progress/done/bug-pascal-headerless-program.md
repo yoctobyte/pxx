@@ -6,7 +6,7 @@ prio: 58  # auto — 111 conformance tests behind it, biggest single unlock
 
 - **Type:** bug (Pascal frontend, dialect fidelity)
 - **Track:** P (shared `parser.inc` — A-gated, sole-A confirmation before edit)
-- **Status:** working
+- **Status:** done
   ([[feature-pascal-corpus-fpc-testsuite]]).
 - **Owner:** fable-O
 
@@ -34,3 +34,6 @@ erroring. Watch self-host + `make test` (shared `parser.inc`).
 ## Gate
 `make test` + self-host byte-identical; re-run
 `tools/run_pascal_conformance.sh` and burn the 111 skip-list entries.
+
+## Log
+- 2026-07-11 — resolved, commit 74d6c9eb.
