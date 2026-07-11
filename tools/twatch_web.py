@@ -420,6 +420,7 @@ def serve(clone, host, port):
  <span id=sha></span> (<span id=tier></span>)</div>
  <div id=reds class=RED></div></div>
 <h2>Open regressions</h2><div id=regs>none</div>
+<!--COVERAGE-->
 <h2>Recent runs</h2><table id=runs></table>
 <h2>Reports</h2><div id=reports></div>
 <script>
@@ -450,7 +451,8 @@ tick();once();setInterval(tick,2000);setInterval(once,30000);
 
     @app.route("/")
     def index():
-        return LIVE
+        # inject the tier-coverage table fresh each load (the rest is live JS)
+        return LIVE.replace("<!--COVERAGE-->", render_coverage(tdir))
 
     @app.route("/bench")
     def bench():
