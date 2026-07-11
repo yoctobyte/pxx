@@ -3853,6 +3853,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
 	test "$$(/tmp/lib_random)" = "$$(printf '5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ')"
+	$(PXX_STABLE) test/lib_ucomplex.pas /tmp/lib_ucomplex
+	test "$$(/tmp/lib_ucomplex)" = "$$(printf 'chain=14.000000 2.000000\nadd=4.000000 2.000000\nsub=2.000000 6.000000\nmul=11.000000 -2.000000\ndiv=-1.000000 2.000000\neq=yes\nneq=yes\ncmod=5.000000\ncarg_i=1.570796\ncong=3.000000 -4.000000\ncinv=0.000000 -0.500000\ncsqrt-1=0.000000 1.000000\ncsqrt=2.000000 1.000000\ncexp_ipi_re=-1.000000\ncexp_ipi_im_small=TRUE\ncln_e=1.000000 0.000000\ncsqr=-7.000000 24.000000\nipow2_re=-1.000000\nipow2_im_small=TRUE\ncaddr=4.000000 4.000000\ncsubr=2.000000 4.000000\ncrsub=-2.000000 -4.000000\ncmulr=6.000000 8.000000\ncdivr=1.500000 2.000000\ncrdiv=0.000000 -1.000000\ncneg=-3.000000 -4.000000\ncdiv_fn=-1.000000 2.000000\nsincos_re=1.000000\nsincos_im_small=TRUE\nsame=TRUE\nnotsame=FALSE\ncstr=1.00-2.00i\ncstr0=1.50\ncstrp=-1.00+2.00i')"
 	$(PXX_STABLE) test/lib_bitset.pas /tmp/lib_bitset
 	test "$$(/tmp/lib_bitset)" = "$$(printf 'TRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nTRUE\nFALSE\nFALSE\nFALSE\nTRUE\nFALSE\n6\n5 10 70 150 \n4\n-1\n10\n70')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas /tmp/lib_platform
@@ -4080,7 +4082,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + ucomplex + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
