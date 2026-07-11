@@ -3570,32 +3570,38 @@ end;
   Anonymous inline `record ... end` types match structurally (a pxx
   extension) — and each textual occurrence mints a fresh rec id (prescan vs
   body parse!), so identity must never discriminate them. }
-{ True when record ri (transitively) contains a Text/TextFile field — the RTL
-  `text` record — so Default() and similar can reject it (FPC forbids file
-  types there). Depth-guarded against pathological nesting. }
-function RecContainsTextRecDepth(ri, depth: Integer): Boolean;
-var textId, ci, fb, i: Integer;
+function RecContainsRecIdDepth(ri, target, depth: Integer): Boolean;
+var ci, fb, i: Integer;
 begin
   Result := False;
-  if depth > 8 then Exit;
-  textId := IsRecordType('text');
-  if textId = REC_NONE then Exit;
-  if ri = textId then begin Result := True; Exit; end;
+  if (depth > 8) or (target = REC_NONE) then Exit;
+  if ri = target then begin Result := True; Exit; end;
   if ri < REC_UCLASS_BASE then Exit;
   ci := ri - REC_UCLASS_BASE;
   fb := UClsFBase[ci];
   for i := 0 to UClsFCount[ci] - 1 do
     if (UFldRec_[fb + i] <> REC_NONE) and (UFldRec_[fb + i] <> ri) and
-       RecContainsTextRecDepth(UFldRec_[fb + i], depth + 1) then
+       (UFldDynDepth[fb + i] = 0) and
+       (UFldTk[fb + i] = Ord(tyRecord)) and  { by-value only: class fields are pointers }
+       RecContainsRecIdDepth(UFldRec_[fb + i], target, depth + 1) then
     begin
       Result := True;
       Exit;
     end;
 end;
 
+{ True when record ri (transitively, by value) contains record `target`. }
+function RecContainsRecId(ri, target: Integer): Boolean;
+begin
+  Result := RecContainsRecIdDepth(ri, target, 0);
+end;
+
+{ True when record ri (transitively) contains a Text/TextFile field — the RTL
+  `text` record — so Default() and similar can reject it (FPC forbids file
+  types there). }
 function RecContainsTextRec(ri: Integer): Boolean;
 begin
-  Result := RecContainsTextRecDepth(ri, 0);
+  Result := RecContainsRecIdDepth(ri, IsRecordType('text'), 0);
 end;
 
 function RecIdsDistinctNamed(a, b: Integer): Boolean;

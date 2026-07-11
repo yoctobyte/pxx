@@ -58,7 +58,6 @@ terecs20.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs3.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
 terecs8.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs9.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 texception1.pp	parser: mode-Delphi generics TFoo<T> syntax
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
 tforin24.pp	parser: named/class operator (Initialize/Finalize/Explicit...)

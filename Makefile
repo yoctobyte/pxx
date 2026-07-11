@@ -415,6 +415,8 @@ test-core: $(COMPILER)
 	grep -q "record type contains a file field" /tmp/test_dff.log
 	! ./$(COMPILER) test/test_forin_string_char_fail.pas /tmp/test_fsc26 > /tmp/test_fsc.log 2>&1
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
+	! ./$(COMPILER) test/test_record_self_field_fail.pas /tmp/test_rsf26 > /tmp/test_rsf.log 2>&1
+	grep -q "record field cannot be of the enclosing record type" /tmp/test_rsf.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26

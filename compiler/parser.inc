@@ -12652,6 +12652,13 @@ begin
         fAlign := TokPackRecords[TokPos - 1];
       if isArr then
         fSize := fSize * arrLen;
+      { A by-value field of the record's OWN type (direct or transitive) is
+        infinitely recursive — FPC rejects it (terecs9); pxx used to lay out a
+        zero-sized field silently. Dynarray fields (heap indirection) are fine
+        and skipped by the walk. }
+      if (fTk = tyRecord) and (not fIsDyn) and (fRec <> REC_NONE) and
+         RecContainsRecId(fRec, REC_UCLASS_BASE + ci) then
+        Error('record field cannot be of the enclosing record type');
       for fni := 0 to nFldNames - 1 do
       begin
         curFieldOff := AlignTo(curFieldOff, fAlign);
