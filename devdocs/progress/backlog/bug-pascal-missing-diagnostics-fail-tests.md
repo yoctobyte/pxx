@@ -1,5 +1,5 @@
 ---
-prio: 46  # auto — 13 %FAIL conformance tests accepted; each is a missing check
+prio: 18  # RAINY-DAY (user call 2026-07-11): conformance-driven diagnostics deprioritized; 10/22 already burned, rest are deep clusters.
 ---
 
 # pxx accepts invalid programs the FPC suite's %FAIL tests reject

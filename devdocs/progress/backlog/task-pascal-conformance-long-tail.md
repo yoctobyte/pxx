@@ -1,5 +1,5 @@
 ---
-prio: 44  # auto — ~60 heterogeneous conformance failures, small clusters
+prio: 12  # RAINY-DAY (user call 2026-07-11): FPC-testsuite burndown deprioritized — own tests are the gate.
 ---
 
 # FPC-conformance long tail: RTL gaps, runtime faults, small parser holes

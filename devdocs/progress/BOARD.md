@@ -28,12 +28,12 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
-| bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
+| bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -88,8 +88,7 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
-| feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
-| feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
+| feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
@@ -114,7 +113,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| task-pascal-conformance-long-tail | P | 44 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
+| task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
@@ -178,7 +177,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (585)
+## done (586)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -675,6 +674,7 @@ _none_
 | feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
+| feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
@@ -792,7 +792,6 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
-- [p 62] [P] feature-pascal-corpus-expansion
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -806,7 +805,6 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 56] [P] feature-pascal-delphi-generics-syntax
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 54] [A] bug-transitive-dns_cache-import-corrupts-managed-strings
@@ -825,7 +823,6 @@ _none_
 - [p 50] [P] feature-pascal-generic-nonclass-templates
 - [p 48] [A] bug-inline-array-field-const-bound
 - [p 48] [P] feature-pascal-class-management-operators
-- [p 46] [P] bug-pascal-missing-diagnostics-fail-tests
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -862,7 +859,6 @@ _none_
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
-- [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
@@ -872,6 +868,9 @@ _none_
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 18] [P] bug-pascal-missing-diagnostics-fail-tests
+- [p 15] [P] feature-pascal-corpus-expansion
+- [p 12] [P] task-pascal-conformance-long-tail
 
 ## Leverage (tickets each one unblocks)
 

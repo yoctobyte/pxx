@@ -1,5 +1,5 @@
 ---
-prio: 56  # auto — 93 conformance tests behind it, second-biggest unlock
+prio: 56  # resolved: surface syntax landed 3d71edcf; conformance burndown split off as rainy-day
 ---
 
 # Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>`
@@ -7,7 +7,14 @@ prio: 56  # auto — 93 conformance tests behind it, second-biggest unlock
 - **Type:** feature (Pascal frontend, dialect)
 - **Track:** P (shared `lexer.inc`/`parser.inc` — A-gated, sole-A confirmation
   before edit)
-- **Status:** working
+- **Status:** done
+  class` decls (any mode), `TFoo<Concrete>` uses desugared to minted
+  `specialize` aliases, `procedure TFoo<T>.M` impls stripped to the buffered
+  objfpc path. test/test_delphi_generics.pas covers it. What the FPC
+  conformance cluster still needs (class var/nested types in generics, generic
+  functions/records, constraints, management operators) is separate features —
+  rainy-day per user call 2026-07-11.
+- **Was:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
 - **Owner:** opus-a
 
@@ -36,3 +43,6 @@ surface-syntax alias, not a new semantics engine.
 
 ## Gate
 `make test` + self-host byte-identical; burn the 93 skip-list entries.
+
+## Log
+- 2026-07-11 — resolved, commit 3d71edcf.

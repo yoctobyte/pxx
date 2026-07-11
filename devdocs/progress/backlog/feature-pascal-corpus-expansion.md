@@ -1,5 +1,5 @@
 ---
-prio: 62  # auto — un-neglect Pascal; the full dialect (Track P) is only stressed by real programs
+prio: 15  # RAINY-DAY (user call 2026-07-11): FPC testsuite conformance is NOT a prio — we have our own tests. The real goal on this ladder is compiling REAL programs (and eventually FPC itself, rung 6); pick up on request or for fun.
 ---
 
 # Pascal real-world corpus expansion — the ladder Track P never had
