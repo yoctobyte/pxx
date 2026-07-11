@@ -6,7 +6,7 @@ prio: 44
 
 - **Type:** bug/gap (Pascal frontend, small) — Track P (shared parser.inc,
   A-gated)
-- **Status:** working
+- **Status:** done
   [[feature-pascal-complex-numbers-ucomplex]]; widened same day after
   verifying the two compilers accept EXACTLY complementary syntax
 - **Owner:** fable-p
@@ -48,3 +48,6 @@ clean version of [[feature-pascal-complex-numbers-ucomplex]] and
 `make test` + self-host fixedpoint byte-identical. Tests: named-result
 operator (with early Exit in body), `/` overload, both-form mix in one
 program; negative: junk between `)` and `:`.
+
+## Log
+- 2026-07-11 — resolved, commit a384369a.

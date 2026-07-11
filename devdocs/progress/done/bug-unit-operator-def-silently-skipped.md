@@ -5,7 +5,7 @@ prio: 44
 # unit-scoped operator definitions silently skipped → record binop miscompile
 
 - **Type:** bug (compiler core / shared parser.inc + ir.inc) — Track A
-- **Status:** filed 2026-07-11 while landing
+- **Status:** done
   [[feature-pascal-operator-decl-fpc-compat]] (found the moment a unit-scoped
   operator was tried; pre-existing — pinned stable segfaults too).
   Self-resolved same session under combined P+A assignment.
@@ -45,3 +45,6 @@ ordering rules — fine in practice, operators sit near the top).
 
 `make test` + self-host fixedpoint byte-identical. Tests:
 `test/test_op_fpc_named_result.pas` (program) + unit-scoped operator test.
+
+## Log
+- 2026-07-11 — resolved, commit a384369a.

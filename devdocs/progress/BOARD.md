@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (88)
+## backlog (87)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -94,7 +94,6 @@ _none_
 | feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
-| feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -181,7 +180,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (576)
+## done (578)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -464,6 +463,7 @@ _none_
 | bug-tthread-execute-writeln-crash | A | 50 | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-uclass-field-window-stale-base | A | 60 | bug | bug: UClass field window base goes stale under shells-then-fields registration | — |
+| bug-unit-operator-def-silently-skipped | A | 44 | bug | unit-scoped operator definitions silently skipped → record binop miscompile | — |
 | bug-unit-qualified-constant-not-resolved | A | 50 | bug | Unit-qualified constant reference `Unit.Const` is not resolved | — |
 | bug-unqualified-property-in-method | A | 50 | bug | Unqualified property access inside a method body fails | — |
 | bug-untyped-float-const | A | 50 | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
@@ -670,6 +670,7 @@ _none_
 | feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
 | feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |
@@ -856,7 +857,6 @@ _none_
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
-- [p 44] [A] feature-pascal-operator-decl-fpc-compat
 - [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [B] feature-lib-bignum-operators
