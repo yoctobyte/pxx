@@ -33,6 +33,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
+| bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -79,7 +80,6 @@ _none_
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | O | 60 | feature | Inline routine expansion (`inline;`) | — |
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
-| feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -180,7 +180,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (579)
+## done (580)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -644,6 +644,7 @@ _none_
 | feature-json-library | B | 50 | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | A | 50 | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
+| feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-library-test-suite | A+B | 50 | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | 50 | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
 | feature-local-typed-constant | B | 50 | feature | Local typed constants (initialized const inside a routine) | — |
@@ -821,6 +822,7 @@ _none_
 - [p 50] [P] feature-pascal-generic-nonclass-templates
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 46] [P] bug-pascal-missing-diagnostics-fail-tests
+- [p 45] [A] bug-overload-resolution-record-identity
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -860,7 +862,6 @@ _none_
 - [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [B] feature-lib-bignum-operators
-- [p 42] [B] feature-lib-vecmath
 - [p 40] [A] bug-pascal-unicodestring-widestring-type-missing
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity

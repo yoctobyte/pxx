@@ -5,7 +5,7 @@ prio: 42
 # vecmath library: TVec2/3/4 + TMat with operator overloads — Track B
 
 - **Type:** feature (library) — Track B
-- **Status:** working
+- **Status:** done
   bignum — nice library legwork that is testable, and we all love more
   tests"), sibling of [[feature-pascal-complex-numbers-ucomplex]]
 - **Owner:** fable-p
@@ -39,3 +39,6 @@ vectors, operator chains. Integer-valued inputs keep expected strings exact
 
 Track B: build with `$(PXX_STABLE)`, `make lib-test` green. Frontend gaps →
 P-lane ticket, don't patch here.
+
+## Log
+- 2026-07-11 — resolved, commit 32758fcc.
