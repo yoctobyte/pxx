@@ -3566,6 +3566,59 @@ begin
   Result := -1;
 end;
 
+{ True when a and b are two KNOWN, DISTINCT, NAMED record/class identities.
+  Anonymous inline `record ... end` types match structurally (a pxx
+  extension) — and each textual occurrence mints a fresh rec id (prescan vs
+  body parse!), so identity must never discriminate them. }
+function RecIdsDistinctNamed(a, b: Integer): Boolean;
+begin
+  Result := False;
+  if (a = REC_NONE) or (b = REC_NONE) or (a = b) then Exit;
+  if (a >= REC_UCLASS_BASE) and (UClsNLen[a - REC_UCLASS_BASE] = 0) then Exit;
+  if (b >= REC_UCLASS_BASE) and (UClsNLen[b - REC_UCLASS_BASE] = 0) then Exit;
+  Result := True;
+end;
+
+{ Rec-aware variant of FindProcOverload for declaration-time matching: two
+  routines whose params differ only in RECORD/CLASS identity are DIFFERENT
+  overloads. Without this the second `Dot(const a, b: TVec3)` matched the
+  registered `Dot(const a, b: TVec2)` slot (both params tyRecord) and its body
+  overwrote the first's — every call then ran the last-declared body
+  (bug-overload-resolution-record-identity). A rec id is only compared when
+  both sides are known (<> REC_NONE), so registration paths that never stored
+  ProcParamRecId keep matching as before. }
+function FindProcOverloadRec(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const precs: array of Integer; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
+var i, j: Integer; match: Boolean;
+begin
+  for i := 0 to ProcCount-1 do
+  begin
+    if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) then
+    begin
+      if Procs[i].ParamCount = nParams then
+      begin
+        match := True;
+        for j := 0 to nParams-1 do
+        begin
+          if (Procs[i].Params[j].TypeKind <> ptypes[j]) or
+             (Procs[i].Params[j].IsArray <> parr[j]) or
+             (Procs[i].Params[j].IsRef <> pbyref[j]) then
+            match := False;
+          if ((ptypes[j] = tyRecord) or (ptypes[j] = tyClass)) and
+             (j < MAX_PROC_PARAMS) and
+             RecIdsDistinctNamed(precs[j], ProcParamRecId[i * MAX_PROC_PARAMS + j]) then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+  Result := -1;
+end;
+
 function TypesCompatible(pType, aType: TTypeKind): Boolean;
 begin
   if pType = aType then
@@ -3744,6 +3797,37 @@ begin
   end;
 end;
 
+{ True when call arg j's RECORD identity contradicts candidate i's param j.
+  Only fires when both rec ids are known and the arg rec ids were filled for
+  this call (MatchArgRecValid) — otherwise the matcher stays rec-blind, so
+  callers that don't provide rec ids keep the legacy behavior. Records only:
+  class params keep their inheritance-tolerant matching.
+  (bug-overload-resolution-record-identity) }
+function MatchArgRecMismatch(i, j: Integer; aTk: TTypeKind): Boolean;
+var pr, ar, curr: Integer;
+begin
+  Result := False;
+  if not MatchArgRecValid then Exit;
+  if j >= MAX_PROC_PARAMS then Exit;
+  if (aTk <> tyRecord) or (Procs[i].Params[j].TypeKind <> tyRecord) then Exit;
+  pr := ProcParamRecId[i * MAX_PROC_PARAMS + j];
+  ar := MatchArgRec[j];
+  if not RecIdsDistinctNamed(ar, pr) then Exit;
+  { Interface (and any future record) inheritance: an argument whose type
+    DESCENDS from the param's type is a valid widening (IBar -> IFoo param),
+    not a mismatch. Walk the arg's ancestor chain. }
+  if (pr >= REC_UCLASS_BASE) and (ar >= REC_UCLASS_BASE) then
+  begin
+    curr := ar - REC_UCLASS_BASE;
+    while curr >= 0 do
+    begin
+      if curr = pr - REC_UCLASS_BASE then Exit;   { descendant: compatible }
+      curr := UClsParent[curr];
+    end;
+  end;
+  Result := True;
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
 var i, j: Integer; match: Boolean; cn: AnsiString;
 begin
@@ -3766,8 +3850,9 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
-             not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+          if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and
+             not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
+             MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
         end;
         if match then
@@ -3791,8 +3876,9 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
-             not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+          if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and
+             not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
+             MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
         end;
         if match then
@@ -3819,11 +3905,12 @@ begin
       match := True;
       for j := 0 to nArgs-1 do
       begin
-        if not ((Procs[i].Params[j].TypeKind = argTypes[j]) or
+        if (not ((Procs[i].Params[j].TypeKind = argTypes[j]) or
                 ProcParamUntyped[i * MAX_PROC_PARAMS + j] or
                 ((argTypes[j] = tyChar) and
                  ((Procs[i].Params[j].TypeKind = tyString) or
-                  (Procs[i].Params[j].TypeKind = tyAnsiString)))) then
+                  (Procs[i].Params[j].TypeKind = tyAnsiString))))) or
+           MatchArgRecMismatch(i, j, argTypes[j]) then
           match := False;
       end;
       if match then
@@ -3846,8 +3933,9 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
-                  ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                  ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
+             MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
         end;
         if match then
@@ -3871,8 +3959,9 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
-                  ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                  ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
+             MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
         end;
         if match then
@@ -3896,9 +3985,10 @@ begin
       match := True;
       for j := 0 to nArgs-1 do
       begin
-        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
                 (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
-                ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then
+                ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
+           MatchArgRecMismatch(i, j, argTypes[j]) then
           match := False;
       end;
       if match then
@@ -3943,7 +4033,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then match := False;
+        if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;
@@ -3961,7 +4051,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then match := False;
+        if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;
@@ -3977,7 +4067,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then match := False;
+        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;
@@ -3995,7 +4085,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j]) then match := False;
+        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;

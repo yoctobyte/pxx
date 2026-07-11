@@ -401,6 +401,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
 	./$(COMPILER) test/test_many_properties.pas /tmp/test_many_properties26
 	test "$$(/tmp/test_many_properties26)" = "$$(printf '11\nTRUE\n99')"
+	./$(COMPILER) test/test_overload_record_identity.pas /tmp/test_overload_record_identity26
+	test "$$(/tmp/test_overload_record_identity26)" = "$$(printf '11.0\n37.0\nvec2\nthing')"
+	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
+	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
 	test "$$(/tmp/test_virtual_managed_arg26)" = "$$(printf '2\ncherry\napple')"
 	./$(COMPILER) test/test_stream_methods.pas /tmp/test_stream_methods26

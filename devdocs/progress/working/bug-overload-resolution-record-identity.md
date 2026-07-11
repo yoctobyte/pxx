@@ -6,9 +6,9 @@ prio: 45
 
 - **Type:** bug (Pascal frontend, overload matching) — Track P (shared
   parser.inc/symtab.inc, A-gated)
-- **Status:** backlog — filed 2026-07-11 while building
+- **Status:** working
   [[feature-lib-vecmath]] (probe below), pre-existing (stable v197)
-- **Owner:** —
+- **Owner:** opus-a
 
 ## Symptom
 

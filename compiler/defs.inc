@@ -970,6 +970,12 @@ var
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }
+  { Record identity of each call argument, for overload matching. Filled by
+    MatchCallDelphiProcAddr (the single entry into MatchProcCall*) from the
+    arg AST nodes; REC_NONE when unknown. Valid=False -> matcher ignores them
+    (rec-blind legacy behavior), so paths that never fill the array are safe. }
+  MatchArgRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  MatchArgRecValid : Boolean;
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }
   InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }

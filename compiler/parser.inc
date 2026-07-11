@@ -4124,6 +4124,22 @@ begin
     currArg := ASTRight[currArg];
   end;
 
+  { Record identity of each argument, for rec-aware overload phases
+    (bug-overload-resolution-record-identity). This function is the single
+    entry into MatchProcCall*, so refilling here keeps the side channel fresh;
+    it stays valid across the retry matches below (same argument list). }
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if i < MAX_PROC_PARAMS then
+    begin
+      if argTypes[i] = tyRecord then MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
+      else MatchArgRec[i] := REC_NONE;
+    end;
+    currArg := ASTRight[currArg];
+  end;
+  MatchArgRecValid := True;
+
   MatchQuiet := hasCand or hasPChar;   { the call-first / pchar probe must not print mismatch diag }
   if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
   else match0 := MatchProcCall(name, nArgs, argTypes);
@@ -15151,7 +15167,7 @@ begin
       if CurTok.Kind = tkString then begin extSym := CurTok.SVal; Next; end;
     end;
     Eat(tkSemicolon);
-    procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+    procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     ProcRetRecId[procIdx] := retRecId;
@@ -15159,6 +15175,8 @@ begin
     begin
       Procs[procIdx].Params[i].IsArray := parr[i];
       Procs[procIdx].Params[i].IsRef := pbyref[i];
+      if (i < MAX_PROC_PARAMS) and ((ptypes[i] = tyClass) or (ptypes[i] = tyRecord)) then
+        ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
     end;
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
@@ -15295,7 +15313,7 @@ begin
     end;
     if (not PreScanPass) or (methOwnerCi < 0) then
     begin
-      procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+      procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
       if procIdx < 0 then
       begin
         if StrictOverload and (FindProc(name) >= 0) then
@@ -15345,7 +15363,7 @@ begin
   end;
 
   { Register or resolve }
-  procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+  procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
   if procIdx < 0 then
   begin
     if StrictOverload and (FindProc(name) >= 0) then
