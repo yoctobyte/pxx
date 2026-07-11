@@ -692,11 +692,12 @@ FPC_LEVEL = "fpc"
 # and timed under `fpc -O2` for the cross-compiler `fpc` level.
 BENCH_SUITE = (
     ("mandelbrot", "examples/mandelbrot/mandelbrot.pas",
-     [], ["--bench", "400", "300"], False),         # float compute (pxx units)
+     [], ["--bench", "1600", "1200"], False),       # float compute (pxx units)
     ("raytracer", "examples/raytracer/raytracer.pas",
      [], ["--ppm", "{tmp}/rt.ppm", "480", "360"], False),  # call-heavy float
     ("sieve", "examples/primes/sieve.pas", [], [], False),  # memory-bound int
     ("nbody", "bench/portable/nbody.pas", [], [], True),   # float, FPC-comparable
+    ("fib", "bench/portable/fib.pas", [], [], True),       # call-heavy int, FPC-comparable
 )
 
 

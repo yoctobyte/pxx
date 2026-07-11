@@ -300,8 +300,10 @@ def render_conf(tdir, links):
 def export_static(clone, out):
     tdir = os.path.join(clone, TSTATE)
     os.makedirs(out, exist_ok=True)
+    # BOARD.html is gitignored (generated); BOARD.md is the tracked, always-present
+    # board that GitHub renders — link that so the static dashboard never 404s.
     links = {"d": "dashboard.html", "b": "bench.html",
-             "c": "conformance.html", "board": "../devdocs/progress/BOARD.html"}
+             "c": "conformance.html", "board": "../BOARD.md"}
     pages = {"dashboard.html": render_dashboard,
              "bench.html": render_bench,
              "conformance.html": render_conf}
@@ -375,11 +377,25 @@ tick();once();setInterval(tick,2000);setInterval(once,30000);
 
     @app.route("/board")
     def board():
+        # BOARD.html is gitignored/generated — build it on demand if missing,
+        # then serve it; fall back to the tracked BOARD.md as text.
+        import subprocess
         p = os.path.join(clone, "devdocs/progress/BOARD.html")
         if not os.path.exists(p):
-            abort(404)
-        with open(p, errors="replace") as f:
-            return Response(f.read(), mimetype="text/html")
+            try:
+                subprocess.run(["sh", os.path.join(clone, "tools/progress.sh"),
+                                "board-md"], cwd=clone, capture_output=True,
+                               timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        if os.path.exists(p):
+            with open(p, errors="replace") as f:
+                return Response(f.read(), mimetype="text/html")
+        md = os.path.join(clone, "devdocs/progress/BOARD.md")
+        if os.path.exists(md):
+            with open(md, errors="replace") as f:
+                return Response(f.read(), mimetype="text/plain")
+        abort(404)
 
     @app.route("/api/live")
     def api_live():
