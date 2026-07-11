@@ -60,6 +60,45 @@ solitaire_smoke() {
 }
 solitaire_smoke
 
+# Real-window smokes: map an actual window, run the real gtk event loop, and
+# self-quit from a g_timeout (--gui-smoke). Needs a display -> xvfb-run; every
+# invocation is timeout-bounded so a missing self-quit can never hang CI.
+have_xvfb() { command -v xvfb-run >/dev/null 2>&1; }
+
+gui_window_smoke() {
+  local name="$1" bin="$2" expect="$3"
+  local log="/tmp/gui_test_${name}_win.log"
+  if ! have_xvfb; then
+    say "SKIP  $name (real window) -- xvfb-run not installed"
+    return
+  fi
+  if [ "$(timeout 30 xvfb-run -a "$bin" --gui-smoke 2>"$log" | tail -1)" != "$expect" ]; then
+    say "FAIL  $name -- real-window smoke: $(tail -1 "$log")"; fail=1; return
+  fi
+  say "OK    $name (real window)"
+}
+
+gui_window_smoke solitaire_gui /tmp/gui_test_solitaire "GUI SMOKE OK"
+
+# life: the original real-window self-closing GUI run (its --smoke maps a GTK
+# window and auto-quits after ~9 generations) — the reference case.
+life_smoke() {
+  local src="$ROOT/examples/life/life.pas"
+  local out="/tmp/gui_test_life" log="/tmp/gui_test_life.log"
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  life -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if ! have_xvfb; then
+    say "SKIP  life (real window) -- xvfb-run not installed"
+    return
+  fi
+  if ! timeout 30 xvfb-run -a "$out" --smoke >"$log" 2>&1; then
+    say "FAIL  life -- real-window smoke: $(tail -1 "$log")"; fail=1; return
+  fi
+  say "OK    life (real window)"
+}
+life_smoke
+
 # Eliah IDE (apps/ide/eliah): compile + headless --smoke (tree populates, opens a
 # file in the editor, compiles it, prints SMOKE OK).
 eliah_smoke() {
@@ -74,6 +113,7 @@ eliah_smoke() {
   say "OK    eliah_ide"
 }
 eliah_smoke
+gui_window_smoke eliah_ide "$ROOT/apps/ide/eliah/eliah" "GUI SMOKE OK"
 
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."

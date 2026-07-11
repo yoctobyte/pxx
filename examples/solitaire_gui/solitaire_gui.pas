@@ -9,7 +9,11 @@ program solitaire_gui;
   the window. New / Undo / Auto buttons and a move counter complete it.
 
   `--smoke`: set up, drive the handlers headlessly (draw, drag, key, resize),
-  assert a stock press draws, print SMOKE OK and exit (no event loop). }
+  assert a stock press draws, print SMOKE OK and exit (no event loop).
+
+  `--gui-smoke`: map the REAL window and run the REAL event loop (gtk_main via
+  Application.Run), self-quitting from a g_timeout so the realize/map/paint/
+  teardown path is exercised (under xvfb in CI); prints GUI SMOKE OK. }
 
 {$define PXX_MANAGED_STRING}
 
@@ -313,6 +317,14 @@ begin
   b.OnClick := m;
 end;
 
+{ --gui-smoke: self-quit fired by g_timeout_add once the real event loop has
+  been running (the window is mapped and painted by then). }
+function GuiAutoQuit(data: Pointer): Integer; cdecl;
+begin
+  gtk_main_quit;
+  GuiAutoQuit := 0;   { one-shot: remove the source }
+end;
+
 var
   Form1: TForm;
   PaintBox: TPaintBox;
@@ -378,6 +390,14 @@ begin
     end;
     H.OnPaint(PaintBox, PaintBox.Canvas);
     writeln('SMOKE OK');
+  end
+  else if arg = '--gui-smoke' then
+  begin
+    { real-window smoke: run the actual event loop (window maps + paints on a
+      live surface), self-quit after 400ms. The suite runs this under xvfb. }
+    g_timeout_add(400, @GuiAutoQuit, nil);
+    Application.Run;
+    writeln('GUI SMOKE OK');
   end
   else
     Application.Run;

@@ -6,8 +6,8 @@ prio: 53  # auto
 
 - **Type:** feature / test-coverage
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** opus-night
 - **Opened:** 2026-06-25
 - **Found-by:** Track A, validating the GUI apps headlessly under `xvfb-run`
   (no compiler change). All `--smoke` runs and `make gui-test` pass under xvfb
@@ -63,3 +63,18 @@ live surface) would pass smoke.
 - Pattern to copy: `examples/life/life.pas` `AutoQuit` + `g_timeout_add` +
   `--smoke` arg dispatch (`life.pas:335`, `:426`).
 - Keep it Track-B: `$(PXX_STABLE)` only, never rebuild the compiler.
+
+## Log
+
+- 2026-07-11 (opus-night) — **DONE.**
+  - solitaire_gui + eliah gain `--gui-smoke`: build the real window, register
+    `g_timeout_add(400, @GuiAutoQuit, nil)` (gtk_main_quit, one-shot), run the
+    REAL event loop via Application.Run, print `GUI SMOKE OK` after it returns.
+    Headless `--smoke` assertions kept unchanged.
+  - `tools/gui_suite.sh`: new `gui_window_smoke` helper — each real-window case
+    runs `timeout 30 xvfb-run -a <bin> --gui-smoke` (SKIP with a message when
+    xvfb-run is absent); `life --smoke` added as the reference real-window case
+    (compiled + run under xvfb the same way).
+  - `make gui-test` green: 10 PCL tests + solitaire/eliah headless + 3
+    real-window cases (solitaire, life, eliah) mapping actual windows under
+    xvfb, all self-closing, all timeout-bounded.

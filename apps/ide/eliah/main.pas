@@ -959,6 +959,14 @@ begin
   MkMenuItem := it;
 end;
 
+{ --gui-smoke: self-quit fired by g_timeout_add once the real event loop has
+  been running (the window is mapped and painted by then). }
+function GuiAutoQuit(data: Pointer): Integer; cdecl;
+begin
+  gtk_main_quit;
+  GuiAutoQuit := 0;   { one-shot: remove the source }
+end;
+
 begin
   Application := TApplication.Create;
   Application.Initialize;
@@ -1077,6 +1085,7 @@ begin
   begin
     parg := ParamStr(pix);
     if parg = '--smoke' then arg := '--smoke'
+    else if parg = '--gui-smoke' then arg := '--gui-smoke'
     else if parg = '--code' then EliahForm.startPersp := 'code'
     else if parg = '--design' then EliahForm.startPersp := 'design'
     else if parg = '--split' then EliahForm.startPersp := 'split'
@@ -1362,6 +1371,15 @@ begin
     if Length(EliahForm.Win.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
 
     writeln('SMOKE OK');
+  end
+  else if arg = '--gui-smoke' then
+  begin
+    { real-window smoke: run the actual event loop (window maps + paints on a
+      live surface), self-quit after 400ms. The suite runs this under xvfb. }
+    Application.MainForm := EliahForm;
+    g_timeout_add(400, @GuiAutoQuit, nil);
+    Application.Run;
+    writeln('GUI SMOKE OK');
   end
   else
   begin
