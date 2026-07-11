@@ -27,7 +27,7 @@ _none_
 
 _none_
 
-## backlog (86)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,7 +75,6 @@ _none_
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
-| feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
@@ -178,7 +177,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (595)
+## done (596)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -631,6 +630,7 @@ _none_
 | feature-forin-member-access-source | A | 50 | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
 | feature-general-typename-cast | B | 50 | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-generators-yield | A | 50 | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
+| feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-hashing-library | B | 50 | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-high-low-of-type | A | 50 | feature | `High`/`Low` of an ordinal TYPE (e.g. `High(Byte)`, `Low(ShortInt)`) | — |
 | feature-hint-directives-deprecated-platform | A | 50 | feature | Hint directives (`deprecated` / `platform` / `experimental` / …) on const/type/proc | — |
@@ -821,7 +821,6 @@ _none_
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess
-- [p 53] [B] feature-gui-real-window-xvfb-smoke
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch

@@ -6,7 +6,7 @@ prio: 53  # auto
 
 - **Type:** feature / test-coverage
 - **Track:** B
-- **Status:** working
+- **Status:** done
 - **Owner:** opus-night
 - **Opened:** 2026-06-25
 - **Found-by:** Track A, validating the GUI apps headlessly under `xvfb-run`
@@ -78,3 +78,4 @@ live surface) would pass smoke.
   - `make gui-test` green: 10 PCL tests + solitaire/eliah headless + 3
     real-window cases (solitaire, life, eliah) mapping actual windows under
     xvfb, all self-closing, all timeout-bounded.
+- 2026-07-11 — resolved, commit 1972c6e8.
