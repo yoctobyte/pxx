@@ -305,3 +305,14 @@ Both bugs filed 2026-06-28. When Track A fixes them, re-probe to find the next w
 ## TRIAGE (2026-06-30, multi-agent verify)
 
 UPDATE (verify): both listed Track A blockers (bug-chr-builtin-shadows-param-name, bug-consteval-named-type-cast) are now in done/. Re-probe 'uses synautil --mimic-fpc' advances past them to a NEW wall: 'too many array constant elements' (candidate focused Track A ticket / capacity bump). Track B compile target still open.
+
+### Re-probe 2026-07-11 (v201, opus-night)
+`uses synautil --mimic-fpc` now dies at jedi.inc: PXX evaluates `{$...}`
+directives inside `(* ... *)` comments, and jedi.inc's big doc comment
+(lines 48-699) contains example directives with `14.2` float literals →
+"unexpected character" (misreported at synautil.pas:458 via the include
+splice). Same lexer bug the New-ZenGL ladder hit the same night —
+[[bug-pascal-directive-inside-paren-star-comment]], prio raised to 65 since
+it walls BOTH corpora. Without --mimic-fpc the probe instead takes the
+Kylix path and stops at `uses libc` (expected). Next wall after the lexer
+fix is presumably the previously-noted "too many array constant elements".

@@ -1,5 +1,5 @@
 ---
-prio: 55
+prio: 65  # blocks BOTH the ZenGL ladder and the whole Synapse compile (jedi.inc)
 ---
 
 # {$...} directives are processed inside (* ... *) comments
@@ -38,9 +38,19 @@ preprocessor lines with `&&` in a Khronos-generated ZenGL unit,
 
 ## Where hit
 
-`library_candidates/zengl/Zengl_SRC/srcGL/zgl_gltypeconst.pas` — a large
-`(* ... *)`-commented block of half-translated C `#if` lines. Blocks every
-ZenGL unit that pulls `zgl_gltypeconst`.
+- `library_candidates/zengl/Zengl_SRC/srcGL/zgl_gltypeconst.pas` — a large
+  `(* ... *)`-commented block of half-translated C `#if` lines. Blocks every
+  ZenGL unit that pulls `zgl_gltypeconst`.
+- **Synapse (2026-07-11 re-probe at v201):** `external/synapse/jedi.inc` has a
+  `(* ... *)` documentation block (lines 48-699) containing example directives,
+  including `{$IF Declared(RTLVersion) and (RTLVersion >= 14.2)}` (line 501) —
+  PXX evaluates it, chokes on `14.2` ("unexpected character", reported at
+  synautil.pas:458 through the include splice), and EVERY Synapse unit dies at
+  `{$I jedi.inc}`. This regressed the Synapse compile-check from its previous
+  wall ("too many array constant elements") to line 52 — earlier probes (v83)
+  got past jedi.inc, so either the comment/directive handling changed since or
+  the doc block did. Fixing this unblocks the whole
+  [[feature-synapse-compile-check]] ladder at once.
 
 ## Acceptance
 
