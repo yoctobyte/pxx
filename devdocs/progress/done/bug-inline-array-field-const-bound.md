@@ -7,7 +7,7 @@ prio: 48  # auto — narrow parser gap; named-alias sidesteps it, but it's a rea
 - **Type:** bug (frontend — parser, inline array-type in a record field)
 - **Track:** A (`parser.inc` array-type / record-field parsing). Filed from
   Track B (dns_cache) — hand off, do not fix under B/E.
-- **Status:** working
+- **Status:** done
 - **Owner:** trackA-e-bugs
 
 ## Symptom
@@ -49,3 +49,6 @@ the inline form.
 ## Gate
 `make test` + self-host byte-identical; add a `.pas` regression mirroring the
 repro (inline const-expr-bound array field reads/writes correctly).
+
+## Log
+- 2026-07-11 — resolved, commit 2c17de43.

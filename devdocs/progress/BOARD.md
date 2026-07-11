@@ -28,11 +28,10 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -176,7 +175,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (587)
+## done (588)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -376,6 +375,7 @@ _none_
 | bug-implicit-self-method-loses-to-unit-proc | A | 50 | bug | Implicit-Self method call loses to a same-name plain proc from a used unit | — |
 | bug-implicit-textfile-unit-method-local | A | 50 | bug | Implicit textfile import misses method-local `Text` in units | — |
 | bug-import-class-sibling-call-corrupts-resolution | A | 50 | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
+| bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
 | bug-integer-div-zero-sigfpe-uncatchable | A | 50 | bug | Integer `div` / `mod` by zero aborts with SIGFPE (uncatchable) | — |
 | bug-integer-to-enum-typecast-undefined-variable | A | 50 | bug | `TEnum(intExpr)` ordinal→enum typecast fails: "undefined variable" | — |
 | bug-ir-unsupported-call-lvalue | A | 50 | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
@@ -820,7 +820,6 @@ _none_
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-pascal-generic-nonclass-templates
-- [p 48] [A] bug-inline-array-field-const-bound
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
