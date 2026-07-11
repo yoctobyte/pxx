@@ -12,7 +12,9 @@ devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
                          (opt out: --no-daemon / --no-web / --no-attach),
                          prints the local URL, shows status, attaches live
   trackt start|stop|restart|status
-  trackt watch           live progress (Ctrl-C detaches, daemon keeps going)
+  trackt watch           live progress (Ctrl-C detaches, daemon keeps going);
+                         each finished suite run leaves a timestamped result
+                         line incl. commit hash (--no-sha to omit it)
   trackt run [tier]      manual testmgr run in THIS checkout (default quick)
   trackt setup           box prerequisites + git fetch/push access check
   trackt config [k [v]]  show / set daemon config (applies live where safe)
@@ -177,6 +179,50 @@ def cmd_status(clone, attach_ok=True):
 
 
 # ----------------------------------------------------------------- watch ---
+def runs_files(clone):
+    tsdir = os.path.join(clone, twatch.TSTATE_REL)
+    try:
+        names = sorted(os.listdir(tsdir))
+    except OSError:
+        return []
+    return [os.path.join(tsdir, n) for n in names
+            if n.startswith("runs-") and n.endswith(".ndjson")]
+
+
+def emit_completions(clone, pos, show_sha=True):
+    """Print a persistent timestamped line for every suite run completed
+    since the last call — new rows in tstate/runs-<host>.ndjson, the
+    per-run archive twatch appends to when a gate finishes."""
+    for path in runs_files(clone):
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            continue
+        last = pos.get(path)
+        pos[path] = size
+        if last is None or size <= last:
+            continue  # first sighting: report only runs finishing from now on
+        host = os.path.basename(path)[len("runs-"):-len(".ndjson")]
+        with open(path) as f:
+            f.seek(last)
+            for ln in f:
+                try:
+                    r = json.loads(ln)
+                except ValueError:
+                    continue
+                col = RED if r.get("verdict") == "RED" else GRN
+                line = "[%s] %s %s %s%s%s %ds" % (
+                    r.get("date", "?"), host, r.get("tier", "?"),
+                    col, r.get("verdict", "?"), OFF, r.get("wall", 0))
+                if show_sha and r.get("sha"):
+                    line += " " + r["sha"][:12]
+                if r.get("new_red"):
+                    line += " %sNEW-RED:%s%s" % (RED, ",".join(r["new_red"][:5]), OFF)
+                if r.get("fixed"):
+                    line += " %sFIXED:%s%s" % (GRN, ",".join(r["fixed"][:5]), OFF)
+                print("\r\033[K  " + line)
+
+
 def render_live(clone, w, live, last_reds):
     phase = w.get("phase", "?")
     if phase != "testing" or not live:
@@ -206,24 +252,27 @@ def render_live(clone, w, live, last_reds):
     return set(reds) | set(last_reds)
 
 
-def watch_loop(clone):
+def watch_loop(clone, show_sha=True):
     print("%s  live view — Ctrl-C to leave (you'll be asked about the daemon)%s"
           % (DIM, OFF))
     seen = set()
+    pos = {}
+    emit_completions(clone, pos, show_sha)   # prime offsets, print nothing
     while True:
         pid, w = daemon_pid(clone)
         live = read_json(os.path.join(clone, ".testmgr", "live.json"))
         if not pid:
             print("\n  daemon not running.")
             return 1
+        emit_completions(clone, pos, show_sha)
         seen = render_live(clone, w, live, seen)
         time.sleep(1)
 
 
-def cmd_watch(clone):
+def cmd_watch(clone, show_sha=True):
     """Explicit `trackt watch`: view only — Ctrl-C detaches, never stops."""
     try:
-        return watch_loop(clone)
+        return watch_loop(clone, show_sha)
     except KeyboardInterrupt:
         print("\n  detached — daemon keeps running (trackt stop to stop it).")
         return 0
@@ -375,6 +424,8 @@ def main():
     ap.add_argument("--no-web", action="store_true", help="up: skip web UI")
     ap.add_argument("--no-daemon", action="store_true",
                     help="up: don't start the daemon")
+    ap.add_argument("--no-sha", action="store_true",
+                    help="watch: omit the commit hash from completion lines")
     ap.add_argument("--no-attach", action="store_true",
                     help="up: print status and return (implies daemon may "
                          "keep running — you asked not to supervise it)")
@@ -394,7 +445,7 @@ def main():
         subprocess.run(["git", "-C", clone, "pull", "--rebase", "--quiet"])
         return cmd_start(clone)
     if a.cmd == "watch":
-        return cmd_watch(clone)
+        return cmd_watch(clone, show_sha=not a.no_sha)
     if a.cmd == "run":
         tier = a.arg[0] if a.arg else "quick"
         if tier not in TIERS:
