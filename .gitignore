@@ -62,5 +62,10 @@ examples/**/*.map
 .claude/
 
 devdocs/progress/BOARD.html
+# tstate dashboard pages are generated artifacts (twatch_web.py --static),
+# regenerated from the committed .tsv/.ndjson/.json data on every idle bench.
+# Committing them makes every writer (dev, each watcher host) collide on a
+# rebase — the data is the source of truth, the html is a local/served view.
+devdocs/progress/tstate/*.html
 .testmgr/
 fred.txt

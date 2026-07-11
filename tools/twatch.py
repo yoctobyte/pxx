@@ -140,9 +140,25 @@ class Clone:
                  cwd=self.path)
         return out.splitlines() if out else []
 
+    def _pull_rebase(self):
+        """pull --rebase, but never leave a half-applied rebase behind: on any
+        conflict/failure, `git rebase --abort` so the daemon can't wedge in a
+        UU state (observed 2026-07-11: committed generated html conflicted and
+        the publish loop span forever). Re-raises so the caller backs off."""
+        try:
+            sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
+               cwd=self.path)
+        except RuntimeError:
+            sh(["git", "rebase", "--abort"], cwd=self.path, check=False)
+            raise
+
     def publish(self, message, paths=None):
         """Commit ONLY the given paths (default: tstate) onto the branch tip
-        and push, with rebase-retry so parallel watcher hosts don't fight."""
+        and push, with rebase-retry so parallel watcher hosts don't fight.
+        Only tracked, non-ignored files under `paths` are committed — the
+        generated tstate/*.html dashboard is gitignored on purpose (every
+        writer would otherwise collide on it), so this publishes just the
+        source-of-truth data (bench.tsv, conformance.tsv, runs/regressions)."""
         paths = list(paths or [TSTATE_REL])
         sh(["git", "checkout", "--quiet", self.branch], cwd=self.path)
         sh(["git", "add", "--"] + paths, cwd=self.path)
@@ -150,16 +166,14 @@ class Clone:
             return
         sh(["git", "commit", "--quiet", "-m", message, "--"] + paths,
            cwd=self.path)
-        sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
-           cwd=self.path)
+        self._pull_rebase()
         for attempt in range(5):
             try:
                 sh(["git", "push", "--quiet", "origin", self.branch], cwd=self.path)
                 return
             except RuntimeError:
                 time.sleep(2 + attempt * 3)
-                sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
-                   cwd=self.path)
+                self._pull_rebase()
         raise RuntimeError("twatch: push kept failing after retries")
 
 
