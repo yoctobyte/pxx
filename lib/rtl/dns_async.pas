@@ -43,6 +43,12 @@ function DnsQueryAListAsyncEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
   timeoutMs: Integer): Integer;
 
+{ DnsQueryAAsyncTTL across a nameserver list — as DnsQueryAListAsyncEx but
+  threading out the response's cache lifetime (ttl, seconds; 0 = uncacheable). }
+function DnsQueryAListAsyncTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
+  var ttl: Integer; timeoutMs: Integer): Integer;
+
 { Async mirror of dns.DnsResolveChase: one exact query name through the
   nameserver list, CNAME chain chased across follow-up queries (bound
   DNS_MAX_CNAME_CHAIN). }
@@ -205,23 +211,25 @@ begin
   Result := rc;
 end;
 
-function DnsQueryAListAsyncEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+function DnsQueryAListAsyncTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
-  timeoutMs: Integer): Integer;
+  var ttl: Integer; timeoutMs: Integer): Integer;
 var
-  i, j, rc, localCount: Integer;
+  i, j, rc, localCount, localTtl: Integer;
   localIps: TDnsIpv4Array;
   localCname: string;
 begin
   count := 0;
   cname := '';
+  ttl := 0;
   if nsCount <= 0 then begin Result := DNS_ERR_NONS; Exit; end;
   rc := DNS_ERR_NONS;
   for i := 0 to nsCount - 1 do
   begin
     localCount := 0;
+    localTtl := 0;
     localCname := '';
-    rc := DnsQueryAAsyncEx(ns[i], nsPort, name, localIps, localCount, localCname, timeoutMs);
+    rc := DnsQueryAAsyncTTL(ns[i], nsPort, name, localIps, localCount, localCname, localTtl, timeoutMs);
     if rc >= 0 then
     begin
       { definitive answer (even NXDOMAIN) — copy out and stop }
@@ -229,6 +237,7 @@ begin
         ips[j] := localIps[j];
       count := localCount;
       cname := localCname;
+      ttl := localTtl;
       Result := rc;
       Exit;
     end;
@@ -237,11 +246,32 @@ begin
   Result := rc;
 end;
 
+function DnsQueryAListAsyncEx(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; var cname: string;
+  timeoutMs: Integer): Integer;
+var
+  i, rc, localCount, ttl: Integer;
+  localIps: TDnsIpv4Array;
+  localCname: string;
+begin
+  count := 0;
+  cname := '';
+  localCount := 0;
+  ttl := 0;
+  localCname := '';
+  rc := DnsQueryAListAsyncTTL(ns, nsCount, nsPort, name, localIps, localCount, localCname, ttl, timeoutMs);
+  for i := 0 to localCount - 1 do
+    ips[i] := localIps[i];
+  count := localCount;
+  cname := localCname;
+  Result := rc;
+end;
+
 function DnsResolveChaseAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 var
   localIps: TDnsIpv4Array;
-  localCount, rc, i, depth: Integer;
+  localCount, rc, i, depth, crc, ttl: Integer;
   cur, cname: string;
 begin
   count := 0;
@@ -251,8 +281,16 @@ begin
   begin
     localCount := 0;
     cname := '';
-    rc := DnsQueryAListAsyncEx(ns, nsCount, nsPort, cur, localIps, localCount, cname, timeoutMs);
-    if rc < 0 then begin Result := rc; Exit; end;
+    crc := 0;
+    if DnsGlobalCacheGet(cur, DNS_TYPE_A, localIps, localCount, crc) then
+      rc := crc   { live cached answer (positive or negative) — no query }
+    else
+    begin
+      ttl := 0;
+      rc := DnsQueryAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+      if rc < 0 then begin Result := rc; Exit; end;
+      DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
+    end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
       cur := cname   { alias with no address — follow the target }
     else
@@ -463,24 +501,16 @@ begin
   end;
 
   { miss — query the nameserver list, keeping the ttl for the store }
-  if nsCount <= 0 then begin Result := DNS_ERR_NONS; Exit; end;
-  rc := DNS_ERR_NONS;
-  for i := 0 to nsCount - 1 do
+  localCount := 0; ttl := 0; cname := '';
+  rc := DnsQueryAListAsyncTTL(ns, nsCount, nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
+  if rc >= 0 then
   begin
-    localCount := 0; ttl := 0; cname := '';
-    rc := DnsQueryAAsyncTTL(ns[i], nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
-    if rc >= 0 then
-    begin
-      for j := 0 to localCount - 1 do ips[j] := localIps[j];
-      count := localCount;
-      rcode := rc;
-      { store positive/negative answers with a live TTL; ttl seconds -> ms }
-      if ttl > 0 then
-        DnsCachePut(c, name, DNS_TYPE_A, localIps, localCount, rc, nowMs, Int64(ttl) * 1000);
-      Result := rc;
-      Exit;
-    end;
-    { transport failure (incl. timeout) — try the next nameserver }
+    for j := 0 to localCount - 1 do ips[j] := localIps[j];
+    count := localCount;
+    rcode := rc;
+    { store positive/negative answers with a live TTL; ttl seconds -> ms }
+    if ttl > 0 then
+      DnsCachePut(c, name, DNS_TYPE_A, localIps, localCount, rc, nowMs, Int64(ttl) * 1000);
   end;
   Result := rc;
 end;

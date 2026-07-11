@@ -10,7 +10,7 @@ unit dns;
 
 interface
 
-uses platform, dns_wire_core, dns_config, dns_wire_blocking;
+uses platform, dns_wire_core, dns_config, dns_wire_blocking, dns_cache;
 
 const
   DNS_ERR_NOCONFIG = -4;   { no /etc/resolv.conf nameserver and no hosts match }
@@ -41,7 +41,85 @@ function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   hosts miss goes straight to the nameservers. }
 function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 
+{ Process-wide facade answer cache (dns_cache, keyed on monotonic time):
+  consulted by DnsResolveChase (and the async chase in dns_async) for exact
+  query names. Positive answers live for their minimum answer TTL,
+  NXDOMAIN/NODATA for the RFC 2308 negative TTL; alias (CNAME) hops are not
+  cached yet. On by default; the cache is per-process and not thread-safe —
+  multithreaded resolvers should disable it or serialize resolution. }
+procedure DnsCacheSetEnabled(enabled: Boolean);
+procedure DnsCacheFlush;
+
+{ Shared-cache accessors (exported for the async facade and tests): look up /
+  store an exact (name, qtype) answer against the process-wide cache at
+  PalMonotonicMillis. Get returns True on a live hit — including a cached
+  negative answer (count 0, the cached rcode). Put ignores ttlSec <= 0. Both
+  are no-ops (miss) while the cache is disabled. }
+function DnsGlobalCacheGet(const name: string; qtype: Integer;
+  var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer): Boolean;
+procedure DnsGlobalCachePut(const name: string; qtype: Integer;
+  const ips: TDnsIpv4Array; count, rcode, ttlSec: Integer);
+
 implementation
+
+var
+  gCache: TDnsCache;
+  gCacheReady: Boolean;   { lazy one-time init }
+  gCacheOff: Boolean;     { zero-init = enabled }
+
+procedure EnsureCache;
+begin
+  if not gCacheReady then
+  begin
+    DnsCacheInit(gCache);
+    gCacheReady := True;
+  end;
+end;
+
+procedure DnsCacheSetEnabled(enabled: Boolean);
+begin
+  gCacheOff := not enabled;
+end;
+
+procedure DnsCacheFlush;
+begin
+  DnsCacheInit(gCache);
+  gCacheReady := True;
+end;
+
+function DnsGlobalCacheGet(const name: string; qtype: Integer;
+  var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer): Boolean;
+var
+  localIps: TDnsIpv4Array;
+  localCount, localRcode, i: Integer;
+begin
+  count := 0;
+  rcode := 0;
+  DnsGlobalCacheGet := False;
+  if gCacheOff then Exit;
+  EnsureCache;
+  { locals + copy: never forward a var parameter into another routine's var
+    parameter (feature-riscv32-var-param-forwarding) }
+  localCount := 0;
+  localRcode := 0;
+  if DnsCacheGet(gCache, name, qtype, PalMonotonicMillis, localIps, localCount, localRcode) then
+  begin
+    for i := 0 to localCount - 1 do
+      ips[i] := localIps[i];
+    count := localCount;
+    rcode := localRcode;
+    DnsGlobalCacheGet := True;
+  end;
+end;
+
+procedure DnsGlobalCachePut(const name: string; qtype: Integer;
+  const ips: TDnsIpv4Array; count, rcode, ttlSec: Integer);
+begin
+  if gCacheOff then Exit;
+  if ttlSec <= 0 then Exit;
+  EnsureCache;
+  DnsCachePut(gCache, name, qtype, ips, count, rcode, PalMonotonicMillis, Int64(ttlSec) * 1000);
+end;
 
 function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
@@ -115,7 +193,7 @@ function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 var
   localIps: TDnsIpv4Array;
-  localCount, rc, i, depth: Integer;
+  localCount, rc, i, depth, crc, ttl: Integer;
   cur, cname: string;
 begin
   count := 0;
@@ -125,11 +203,19 @@ begin
   begin
     localCount := 0;
     cname := '';
-    rc := DnsResolveAListEx(ns, nsCount, nsPort, cur, localIps, localCount, cname, timeoutMs);
-    if rc < 0 then
+    crc := 0;
+    if DnsGlobalCacheGet(cur, DNS_TYPE_A, localIps, localCount, crc) then
+      rc := crc   { live cached answer (positive or negative) — no query }
+    else
     begin
-      DnsResolveChase := rc;
-      Exit;
+      ttl := 0;
+      rc := DnsResolveAListTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+      if rc < 0 then
+      begin
+        DnsResolveChase := rc;
+        Exit;
+      end;
+      DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
     begin

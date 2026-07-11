@@ -5,8 +5,8 @@ prio: 60  # auto
 # DNS resolver library (`dns.pas`) with selectable backends
 
 - **Type:** feature (Track B networking / resolver policy)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** opus-night
 - **Opened:** 2026-06-21 (DNS design discussion)
 - **Relation:** follows `feature-pal-network-datagram-poll-errno`; feeds
   `feature-networking`, `asyncnet.pas`, and Synapse/protocol reuse
@@ -382,3 +382,32 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   `make lib-test` stays green (http's managed strings intact). Facade-level
   caching (fold into `DnsResolveHostAsync` / blocking `DnsResolveHost`) is now
   unblocked — next slice.
+- 2026-07-11 (night) — **facade-level caching landed** (Track B): a process-wide
+  answer cache now sits under BOTH facades, at the exact-query-name level inside
+  the CNAME chase (every hop's positive/negative answer is cached; alias
+  responses themselves are not cached yet — that's the separate chase-result
+  item).
+  - `dns_wire_blocking`: `DnsResolveATTL` (blocking mirror of the async
+    `DnsQueryAAsyncTTL` — threads out min-answer-TTL / RFC 2308 negative TTL)
+    + `DnsResolveAListTTL`; `DnsResolveAEx` kept as a TTL-dropping wrapper.
+  - `dns.pas`: process-wide `TDnsCache` (lazy-init, on by default, keyed on
+    `PalMonotonicMillis`) behind `DnsGlobalCacheGet`/`DnsGlobalCachePut`
+    (exported for the async facade + tests), `DnsCacheSetEnabled` and
+    `DnsCacheFlush`. `DnsResolveChase` consults it per hop: live hit (positive
+    OR negative) short-circuits the query; miss queries via the TTL variant and
+    stores. Not thread-safe (documented) — coroutines fine, threads should
+    disable or serialize.
+  - `dns_async`: `DnsQueryAListAsyncTTL` (list variant of the TTL query;
+    `DnsQueryAListAsyncEx` now a wrapper; `DnsQueryAListCachedAsync`'s miss
+    path rebuilt on it), `DnsResolveChaseAsync` wired to the same global cache
+    — `DnsResolveHost`/`DnsResolveHostAsync`/`DnsResolveChase*` all share one
+    cache.
+  - New e2e `test/lib_dns_cache_facade.pas` (in `make lib-test`): forked mock
+    serves exactly ONE response (TTL 60) then dies; lookup 2 must be served
+    from cache, and after `DnsCacheFlush` lookup 3 must fail — proving the hit
+    was the cache, not the network. Existing chase test unaffected (its mock
+    answers carry TTL 0 = uncacheable).
+  REMAINING: CNAME-chase result caching (cache the alias hop / final mapping),
+  async TC->TCP fallback, hosts-file IPv6 + AAAA CNAME chase, AAAA caching
+  (cache keyed by qtype already; the AAAA paths just don't thread TTL yet),
+  and the `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.

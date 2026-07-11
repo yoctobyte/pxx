@@ -3935,6 +3935,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_chase.pas /tmp/lib_dns_chase
 	test "$$(/tmp/lib_dns_chase)" = "$$(printf 'rcode=0\ncount=1\nchased=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_cache_facade.pas /tmp/lib_dns_cache_facade
+	test "$$(/tmp/lib_dns_cache_facade)" = "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas /tmp/lib_dns_aaaa
 	test "$$(/tmp/lib_dns_aaaa)" = "$$(printf 'rcode=0\ncount=1\nip6=ok')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas /tmp/lib_dns_buildguard
