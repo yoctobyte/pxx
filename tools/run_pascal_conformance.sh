@@ -29,7 +29,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 CC="$ROOT/compiler/pascal26"
 SUITE="$ROOT/library_candidates/fpc-testsuite/tests/test"
 SHARD_I=0; SHARD_N=1
-ALL=0; ONLY=""
+ALL=0; ONLY=""; REPORT=""
 case "${1:-}" in ''|--*) ;; *) CC="$1"; shift ;; esac
 case "${1:-}" in ''|--*) ;; *) SUITE="$1"; shift ;; esac
 while [ $# -gt 0 ]; do
@@ -39,6 +39,8 @@ while [ $# -gt 0 ]; do
     --all)     ALL=1 ;;
     --only)    ONLY="$2"; shift ;;
     --only=*)  ONLY="${1#--only=}" ;;
+    --report)  REPORT="$2"; shift ;;   # per-test TSV: status name category tag reason
+    --report=*) REPORT="${1#--report=}" ;;
     *) echo "run_pascal_conformance: unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -84,6 +86,34 @@ list_tests() {
   fi | grep -v '^u' | sort -u
 }
 
+# --- per-test report (feature-testmgr-fpc-compare-and-web-dashboard) -------
+# category = the CATEGORIES prefix the name starts with (else "other").
+# tag: skip reasons may lead with "wontfix:" (tests FPC internals / intentional
+# divergence — never counts as a failure) or "gap:" (real unimplemented
+# feature); untagged skips are "untriaged". Non-skip rows carry tag "-".
+cat_of() {
+  for c in $CATEGORIES; do
+    case "$1" in ${c}*) printf '%s' "$c"; return ;; esac
+  done
+  printf 'other'
+}
+emit() {  # emit STATUS NAME REASON
+  [ -n "$REPORT" ] || return 0
+  _st="$1"; _nm="$2"; _rs="$3"; _tag="-"
+  case "$_rs" in
+    wontfix:*) _tag="wontfix"; _rs="$(printf '%s' "$_rs" | sed 's/^wontfix:[ \t]*//')" ;;
+    gap:*)     _tag="gap";     _rs="$(printf '%s' "$_rs" | sed 's/^gap:[ \t]*//')" ;;
+    *) [ "$_st" = skip ] && _tag="untriaged" ;;
+  esac
+  # strip stray tabs from reason so the TSV stays 5-column
+  _rs="$(printf '%s' "$_rs" | tr '\t' ' ')"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$_st" "$_nm" "$(cat_of "$_nm")" "$_tag" "$_rs" >> "$REPORT"
+}
+if [ -n "$REPORT" ]; then
+  : > "$REPORT"
+  printf '# status\tname\tcategory\ttag\treason\n' > "$REPORT"
+fi
+
 pass=0; fail=0; skip=0; auto=0; failed=""; idx=-1
 
 for name in $(list_tests); do
@@ -114,6 +144,7 @@ $dirs
 EOF
   if [ -n "$gate" ]; then
     auto=$((auto+1))
+    emit auto "$name" "$gate"
     continue
   fi
 
@@ -124,6 +155,7 @@ EOF
   fi
   if [ -n "$reason" ]; then
     skip=$((skip+1))
+    emit skip "$name" "$reason"
     echo "SKIP $name — $reason"
     continue
   fi
@@ -146,9 +178,10 @@ EOF
 
   if [ "$expect_fail" = "1" ]; then
     if [ "$compile_ok" != "0" ]; then
-      pass=$((pass+1))
+      pass=$((pass+1)); emit pass "$name" ""
     else
       fail=$((fail+1)); failed="$failed $name(accepted-invalid)"
+      emit fail "$name" "accepted-invalid: %FAIL test compiled"
       echo "FAIL $name — %FAIL test compiled (must be rejected)"
     fi
     continue
@@ -156,22 +189,24 @@ EOF
 
   if [ "$compile_ok" != "0" ]; then
     fail=$((fail+1)); failed="$failed $name(compile)"
+    emit fail "$name" "compile error"
     echo "FAIL $name — compile error:"
     sed -n '1,4p' "$WORK/cc.log" | sed 's/^/    /'
     continue
   fi
-  [ "$norun" = "1" ] && { pass=$((pass+1)); continue; }
+  [ "$norun" = "1" ] && { pass=$((pass+1)); emit pass "$name" ""; continue; }
 
   # ---- run ----
   ( cd "$WORK" && timeout "$TIMEOUT_S" "$bin" ) > "$WORK/out.txt" 2>&1
   rc=$?
   if [ "$rc" != "$want_rc" ]; then
     fail=$((fail+1)); failed="$failed $name(exit=$rc)"
+    emit fail "$name" "runtime: exit code $rc (want $want_rc)"
     echo "FAIL $name — exit code $rc (want $want_rc)"
     sed -n '1,4p' "$WORK/out.txt" | sed 's/^/    /'
     continue
   fi
-  pass=$((pass+1))
+  pass=$((pass+1)); emit pass "$name" ""
 done
 
 echo "$LABEL: $pass pass, $fail fail, $skip skip, $auto auto-gated (of $((pass+fail+skip+auto)))"
