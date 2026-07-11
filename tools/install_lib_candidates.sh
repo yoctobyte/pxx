@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -49,6 +49,9 @@ CGLM_COMMIT="46f46e5dcb84bc5bfcc07675f026077272704f0c"   # master, 2026-07 snaps
 
 ENET_URL="https://github.com/lsalzman/enet"
 ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snapshot
+
+ZENGL_URL="https://github.com/seenkao/New-ZenGL"
+ZENGL_COMMIT="26f402516542286354d7c41e3b435d613b8c7812"   # HEAD, 2026-07 snapshot
 
 VICE_URL="https://github.com/bluefeversoft/vice"
 VICE_COMMIT="a89f82dcab34b74481d6504312e3d52bbba44320"   # HEAD, 2026-07 snapshot (Vice11)
@@ -330,8 +333,22 @@ EOF
   say "chess/vice -> $DEST/chess"
 }
 
+fetch_zengl() {
+  if present zengl; then say "zengl present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$ZENGL_URL" zengl "$ZENGL_COMMIT"
+  cat > "$DEST/zengl/PROVENANCE.md" <<EOF
+# New-ZenGL Candidate (Pascal 2D game framework, ZenGL continuation)
+Upstream: ${ZENGL_URL}
+Commit: ${ZENGL_COMMIT}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: zlib (ZenGL heritage).
+First probe: Pascal game-library ladder (feature-game-library-candidate-suite slice C).
+EOF
+  say "zengl -> $DEST/zengl"
+}
+
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -345,6 +362,7 @@ EOF
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
     chess|vice)    fetch_vice ;;
+    zengl)         fetch_zengl ;;
     *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess)" ;;
   esac
 done

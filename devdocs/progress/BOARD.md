@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -25,10 +26,13 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-pascal-directive-inside-paren-star-comment | A | 55 | bug | {$...} directives are processed inside (* ... *) comments | — |
+| bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
+| bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
@@ -69,7 +73,6 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
-| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -802,13 +805,14 @@ _none_
 - [p 60] [A] feature-c-compiler-dynarrays
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [A] feature-float-exception-mask-control
-- [p 60] [B+C] feature-game-library-candidate-suite
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [O] feature-inline-routines
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
+- [p 55] [A] bug-pascal-directive-inside-paren-star-comment
+- [p 55] [A] bug-pascal-high-low-in-const-expr
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -820,6 +824,7 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
+- [p 50] [A] bug-pascal-include-search-silent-miss
 - [p 50] [P] bug-pascal-scopedenums-ignored
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [A] feature-nilpy-collections-and-string-methods

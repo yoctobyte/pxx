@@ -5,9 +5,9 @@ prio: 60  # auto
 # Game and engine library candidate suite
 
 - **Type:** feature / investigation (library-suite discovery + compiler test workloads)
-- **Status:** backlog — catalog + slice B (C candidates) done, gaps filed; slice C (Pascal ladder, Track B) unstarted. Unparked 2026-07-11 ticket maintenance
+- **Status:** working
 - **Track:** B+C
-- **Owner:** —
+- **Owner:** opus-night
 - **Opened:** 2026-06-28
 - **Relation:** expands [[feature-c-source-frontend]], [[feature-c-regex-library-devtest]], [[feature-synapse-compile-check]], and [[feature-embed-pascal-script]] with game/engine-shaped workloads. Candidate catalog: [[game-library-candidates]].
 
@@ -125,3 +125,26 @@ green library suite.
   had landed on the backlog path while the full ticket sat parked in
   unfinished/ (duplicate file). Slice B (C candidates: stb/cglm/ENet probed,
   gaps filed) DONE; slice C (Pascal ladder) unstarted — Track B.
+- 2026-07-11 (opus-night, Pascal ladder / slice C started) — imported
+  **New-ZenGL** (installer fetcher `zengl`, pinned commit 26f40251, gitignored)
+  and probed the leaf units (`test/gamelib/zengl_probe1.pas`). Three Track P
+  blockers filed, in order of encounter:
+  - **[[bug-pascal-high-low-in-const-expr]]** — `array[0..High(LongWord) shr
+    1 - 1]` (zgl_types.pas:105) rejected by the const evaluator; even
+    `array[0..High(Byte)]` fails. Local-patched in the candidate tree
+    (literal bounds + marker comments) to keep probing; zgl_types then
+    compiles clean.
+  - **[[bug-pascal-directive-inside-paren-star-comment]]** — zgl_gltypeconst
+    has a big `(* ... *)`-commented block of half-translated C `#if` junk
+    (`&&`, `{$include <inttypes.h>}`); PXX evaluates `{$...}` inside `(* *)`
+    comments and dies. FPC treats them as comment text. Hard-blocks every
+    unit that pulls zgl_gltypeconst (i.e. nearly all of ZenGL).
+  - **[[bug-pascal-include-search-silent-miss]]** — `{$I zgl_config.cfg}`
+    lives in `headers/` while units live in `src/`/`srcGL/`; PXX has no
+    `-Fi` include path AND a missing include is silently dropped, so every
+    zgl unit compiles with the wrong (empty) configuration. The silent miss
+    is the dangerous half.
+  Probe checked in (documents the fetch/compile line + blocker list); ladder
+  parked until the lexer-level P tickets land — next Pascal candidate (Apus)
+  will likely hit the same include-path wall, so fixing these first is the
+  cheaper path.
