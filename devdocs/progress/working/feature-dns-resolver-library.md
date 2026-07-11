@@ -441,3 +441,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   REMAINING: AAAA answer caching (needs an IPv6 value side in dns_cache),
   CNAME-chase result caching, async TC->TCP fallback,
   `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
+- 2026-07-11 (night 4) — **AAAA answer caching landed** (Track B):
+  - `dns_cache`: entry grows an `ips6: TDnsIpv6Array` side; `DnsCachePut6` /
+    `DnsCacheGet6` store/fetch 16-byte IPv6 answers under qtype DNS_TYPE_AAAA
+    with the same TTL/negative/eviction semantics; an A and an AAAA entry for
+    one name coexist (distinct qtype keys). 4 new offline checks in
+    `test/lib_dns_cache.pas` (v6 hit / A-coexist / expiry / negative).
+  - `dns.pas`: `DnsGlobalCacheGet6`/`DnsGlobalCachePut6` on the same
+    process-wide cache; `DnsResolveChase6` consults per hop.
+  - `dns_async`: `DnsResolveChase6Async` wired the same way — all four chase
+    entrypoints (A/AAAA x blocking/async) now share the one cache.
+  REMAINING: CNAME-chase result caching, async TC->TCP fallback,
+  `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.

@@ -8,6 +8,7 @@ uses dns_wire_core, dns_cache;
 var
   c: TDnsCache;
   ips: TDnsIpv4Array;
+  ips6: TDnsIpv6Array;
   cnt, rc, i: Integer;
 
 procedure Show(const tag: string; pass: Boolean);
@@ -86,4 +87,22 @@ begin
   Show('evict-cap',   DnsCacheLiveCount(c, 20) = DNS_CACHE_SLOTS);
   Show('evict-oldest', not DnsCacheGet(c, 'k0', DNS_TYPE_A, 20, ips, cnt, rc));
   Show('evict-newkept', DnsCacheGet(c, 'knew', DNS_TYPE_A, 20, ips, cnt, rc) and (ips[0] = $FF));
+
+  { ---- AAAA entries: hit, expiry, coexistence with an A entry, negative ---- }
+  DnsCacheInit(c);
+  for i := 0 to 15 do ips6[0][i] := 0;
+  ips6[0][0] := $20; ips6[0][1] := $01; ips6[0][15] := 9;
+  DnsCachePut6(c, 'dual.test', ips6, 1, 0, 1000, 500);   { expires at 1500 }
+  Zero(ips); ips[0] := $0A000001;
+  DnsCachePut(c, 'dual.test', DNS_TYPE_A, ips, 1, 0, 1000, 500);
+  for i := 0 to 15 do ips6[0][i] := 0;
+  Show('v6-hit', DnsCacheGet6(c, 'dual.test', 1200, ips6, cnt, rc)
+    and (cnt = 1) and (ips6[0][0] = $20) and (ips6[0][1] = $01) and (ips6[0][15] = 9));
+  Zero(ips);
+  Show('v6-coexist', DnsCacheGet(c, 'dual.test', DNS_TYPE_A, 1200, ips, cnt, rc)
+    and (cnt = 1) and (ips[0] = $0A000001));
+  Show('v6-expired', not DnsCacheGet6(c, 'dual.test', 1500, ips6, cnt, rc));
+  DnsCachePut6(c, 'gone6.test', ips6, 0, 3, 1000, 300);   { negative NXDOMAIN }
+  Show('v6-neg', DnsCacheGet6(c, 'gone6.test', 1100, ips6, cnt, rc)
+    and (cnt = 0) and (rc = 3));
 end.

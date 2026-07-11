@@ -84,7 +84,7 @@ function DnsQueryAAAAListAsyncTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Inte
 
 { Async AAAA mirror of dns.DnsResolveChase6: one exact query name through the
   nameserver list, CNAME chain chased across follow-up AAAA queries (bound
-  DNS_MAX_CNAME_CHAIN). Not cached yet (the cache stores IPv4 values only). }
+  DNS_MAX_CNAME_CHAIN), each hop consulting the process-wide cache. }
 function DnsResolveChase6Async(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
@@ -536,7 +536,7 @@ function DnsResolveChase6Async(const ns: TDnsIpv4Array; nsCount, nsPort: Integer
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 var
   localIps: TDnsIpv6Array;
-  localCount, rc, i, j, depth, ttl: Integer;
+  localCount, rc, i, j, depth, ttl, crc: Integer;
   cur, cname: string;
 begin
   count := 0;
@@ -546,9 +546,16 @@ begin
   begin
     localCount := 0;
     cname := '';
-    ttl := 0;
-    rc := DnsQueryAAAAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
-    if rc < 0 then begin Result := rc; Exit; end;
+    crc := 0;
+    if DnsGlobalCacheGet6(cur, localIps, localCount, crc) then
+      rc := crc   { live cached answer (positive or negative) — no query }
+    else
+    begin
+      ttl := 0;
+      rc := DnsQueryAAAAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+      if rc < 0 then begin Result := rc; Exit; end;
+      DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
+    end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
       cur := cname   { alias with no address — follow the target }
     else

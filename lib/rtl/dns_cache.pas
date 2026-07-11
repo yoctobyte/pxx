@@ -11,8 +11,8 @@ unit dns_cache;
 
   Pure string/record -> data: no PAL, no network, no global state (the cache is
   a record the caller owns), so it is tested entirely offline like dns_config.
-  A record; qtype is kept so an A and AAAA entry for one name do not collide,
-  even though only A values are stored today. }
+  Entries are keyed by (name, qtype): A entries carry IPv4 values, AAAA entries
+  (the Put6/Get6 pair) carry 16-byte IPv6 values; one name can hold both. }
 
 interface
 
@@ -27,6 +27,7 @@ type
     name:    string;
     qtype:   Integer;
     ips:     TDnsIpv4Array;
+    ips6:    TDnsIpv6Array;   { AAAA values (qtype DNS_TYPE_AAAA entries) }
     count:   Integer;      { 0 = negative answer }
     rcode:   Integer;      { the cached DNS RCODE (0 NODATA / 3 NXDOMAIN / ...) }
     expiry:  Int64;        { absolute monotonic ms; entry dead once now >= this }
@@ -51,6 +52,14 @@ procedure DnsCachePut(var c: TDnsCache; const name: string; qtype: Integer;
   effect, reaps that expired slot). }
 function DnsCacheGet(var c: TDnsCache; const name: string; qtype: Integer;
   nowMs: Int64; var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer): Boolean;
+
+{ AAAA siblings: insert / look up 16-byte IPv6 answers under qtype
+  DNS_TYPE_AAAA. Same TTL/negative/eviction semantics as the A pair; an A and
+  an AAAA entry for one name never collide (distinct qtype keys). }
+procedure DnsCachePut6(var c: TDnsCache; const name: string;
+  const ips6: TDnsIpv6Array; count, rcode: Integer; nowMs, ttlMs: Int64);
+function DnsCacheGet6(var c: TDnsCache; const name: string; nowMs: Int64;
+  var ips6: TDnsIpv6Array; var count: Integer; var rcode: Integer): Boolean;
 
 { Number of live (unexpired) entries at nowMs — for tests / diagnostics. }
 function DnsCacheLiveCount(var c: TDnsCache; nowMs: Int64): Integer;
@@ -145,6 +154,53 @@ begin
         count := c.slots[i].count;
         rcode := c.slots[i].rcode;
         DnsCacheGet := True;
+      end
+      else
+        c.slots[i].used := False;   { reap the expired entry }
+      Exit;
+    end;
+end;
+
+procedure DnsCachePut6(var c: TDnsCache; const name: string;
+  const ips6: TDnsIpv6Array; count, rcode: Integer; nowMs, ttlMs: Int64);
+var
+  idx, i, k, n: Integer;
+begin
+  if ttlMs <= 0 then Exit;   { do not cache an already-dead answer }
+  idx := SlotFor(c, name, DNS_TYPE_AAAA);
+  c.slots[idx].used := True;
+  c.slots[idx].name := name;
+  c.slots[idx].qtype := DNS_TYPE_AAAA;
+  n := count;
+  if n < 0 then n := 0;
+  if n > DNS_MAX_IPS then n := DNS_MAX_IPS;
+  for i := 0 to n - 1 do
+    for k := 0 to 15 do
+      c.slots[idx].ips6[i][k] := ips6[i][k];
+  c.slots[idx].count := n;
+  c.slots[idx].rcode := rcode;
+  c.slots[idx].expiry := nowMs + ttlMs;
+end;
+
+function DnsCacheGet6(var c: TDnsCache; const name: string; nowMs: Int64;
+  var ips6: TDnsIpv6Array; var count: Integer; var rcode: Integer): Boolean;
+var
+  i, j, k: Integer;
+begin
+  count := 0;
+  rcode := 0;
+  DnsCacheGet6 := False;
+  for i := 0 to DNS_CACHE_SLOTS - 1 do
+    if KeyMatch(c.slots[i], name, DNS_TYPE_AAAA) then
+    begin
+      if nowMs < c.slots[i].expiry then
+      begin
+        for j := 0 to c.slots[i].count - 1 do
+          for k := 0 to 15 do
+            ips6[j][k] := c.slots[i].ips6[j][k];
+        count := c.slots[i].count;
+        rcode := c.slots[i].rcode;
+        DnsCacheGet6 := True;
       end
       else
         c.slots[i].used := False;   { reap the expired entry }

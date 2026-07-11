@@ -37,8 +37,7 @@ function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
 
 { AAAA sibling of DnsResolveChase: one exact query name through the nameserver
   list, CNAME chain chased across follow-up AAAA queries (bounded by
-  DNS_MAX_CNAME_CHAIN). Answers are not cached yet (the cache stores IPv4
-  values only). }
+  DNS_MAX_CNAME_CHAIN), each hop consulting the process-wide cache. }
 function DnsResolveChase6(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
@@ -66,6 +65,12 @@ function DnsGlobalCacheGet(const name: string; qtype: Integer;
   var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer): Boolean;
 procedure DnsGlobalCachePut(const name: string; qtype: Integer;
   const ips: TDnsIpv4Array; count, rcode, ttlSec: Integer);
+
+{ AAAA siblings of the shared-cache accessors (qtype DNS_TYPE_AAAA implied). }
+function DnsGlobalCacheGet6(const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var rcode: Integer): Boolean;
+procedure DnsGlobalCachePut6(const name: string;
+  const ips: TDnsIpv6Array; count, rcode, ttlSec: Integer);
 
 implementation
 
@@ -126,6 +131,39 @@ begin
   if ttlSec <= 0 then Exit;
   EnsureCache;
   DnsCachePut(gCache, name, qtype, ips, count, rcode, PalMonotonicMillis, Int64(ttlSec) * 1000);
+end;
+
+function DnsGlobalCacheGet6(const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var rcode: Integer): Boolean;
+var
+  localIps: TDnsIpv6Array;
+  localCount, localRcode, i, k: Integer;
+begin
+  count := 0;
+  rcode := 0;
+  DnsGlobalCacheGet6 := False;
+  if gCacheOff then Exit;
+  EnsureCache;
+  localCount := 0;
+  localRcode := 0;
+  if DnsCacheGet6(gCache, name, PalMonotonicMillis, localIps, localCount, localRcode) then
+  begin
+    for i := 0 to localCount - 1 do
+      for k := 0 to 15 do
+        ips[i][k] := localIps[i][k];
+    count := localCount;
+    rcode := localRcode;
+    DnsGlobalCacheGet6 := True;
+  end;
+end;
+
+procedure DnsGlobalCachePut6(const name: string;
+  const ips: TDnsIpv6Array; count, rcode, ttlSec: Integer);
+begin
+  if gCacheOff then Exit;
+  if ttlSec <= 0 then Exit;
+  EnsureCache;
+  DnsCachePut6(gCache, name, ips, count, rcode, PalMonotonicMillis, Int64(ttlSec) * 1000);
 end;
 
 function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Integer;
@@ -247,7 +285,7 @@ function DnsResolveChase6(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 var
   localIps: TDnsIpv6Array;
-  localCount, rc, i, j, depth, ttl: Integer;
+  localCount, rc, i, j, depth, ttl, crc: Integer;
   cur, cname: string;
 begin
   count := 0;
@@ -257,12 +295,19 @@ begin
   begin
     localCount := 0;
     cname := '';
-    ttl := 0;
-    rc := DnsResolveAAAAListTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
-    if rc < 0 then
+    crc := 0;
+    if DnsGlobalCacheGet6(cur, localIps, localCount, crc) then
+      rc := crc   { live cached answer (positive or negative) — no query }
+    else
     begin
-      DnsResolveChase6 := rc;
-      Exit;
+      ttl := 0;
+      rc := DnsResolveAAAAListTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+      if rc < 0 then
+      begin
+        DnsResolveChase6 := rc;
+        Exit;
+      end;
+      DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
     begin
