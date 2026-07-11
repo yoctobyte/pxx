@@ -5,7 +5,7 @@ prio: 65  # auto
 # IR correctness fuzzer — cross-target differential + mutation-seeded
 
 - **Type:** feature (Track A — compiler/tools infrastructure)
-- **Status:** working (taken 2026-07-05)
+- **Status:** done
 - **Track:** A
 - **Owner:** Claude (~/frank2)
 - **Opened:** 2026-07-05 (design discussion: language-target frontends are a
@@ -147,3 +147,13 @@ probes — this fuzzer follows the same spirit for a different technique).
   (confirms robustness for the mutation shapes tried), not "nothing to
   report." Harness committed at `tools/fuzz.sh`. Next: longer/scheduled
   runs, richer mutation set, then extend to C/BASIC/Nil-Python per sub-step 4.
+
+## Resolution (2026-07-11, ticket maintenance)
+Acceptance met since 2026-07-05: tools/fuzz.sh v1 committed (3ed2aac5) —
+bounded budget, mutation-seeded, cross-target differential, per-run timeouts,
+one real run completed and logged (204 trials / 203 compiled / 0 divergences
+after fixing the two harness bugs). Owner idle 6 days; resolving per the
+working/-is-a-live-lock rule. Follow-on work has its own tickets:
+feature-fuzzer-idle-scheduling (scheduled runs), richer mutations / other
+frontends can be filed when picked up.
+- 2026-07-11 — resolved, commit 3ed2aac5.

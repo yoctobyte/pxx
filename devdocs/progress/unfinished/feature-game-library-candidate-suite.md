@@ -5,9 +5,9 @@ prio: 60  # auto
 # Game and engine library candidate suite
 
 - **Type:** feature / investigation (library-suite discovery + compiler test workloads)
-- **Status:** working
+- **Status:** backlog — discovery done (catalog in devdocs/developer/game-library-candidates.md), slices never started; unparked 2026-07-11 ticket maintenance
 - **Track:** B+C
-- **Owner:** fable-c
+- **Owner:** —
 - **Opened:** 2026-06-28
 - **Relation:** expands [[feature-c-source-frontend]], [[feature-c-regex-library-devtest]], [[feature-synapse-compile-check]], and [[feature-embed-pascal-script]] with game/engine-shaped workloads. Candidate catalog: [[game-library-candidates]].
 
