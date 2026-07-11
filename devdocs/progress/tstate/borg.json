@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-10T11:10:37Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "42b68afdec0e34b83cd2738b9bd6b6a0762b5876",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-10T11:15:52Z",
    "fixed": [],
    "new_red": [],
@@ -399,11 +391,25 @@
    "sha": "98306ac8581b9f0f71563f16d5c7f4f7fc85d340",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-11T11:12:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "98306ac8581b9f0f71563f16d5c7f4f7fc85d340",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "lib-fpc-clean#00": "pass",
+  "optdiff#shard0/6": "pass",
+  "optdiff#shard1/6": "pass",
+  "optdiff#shard2/6": "pass",
+  "optdiff#shard3/6": "pass",
+  "optdiff#shard4/6": "pass",
+  "optdiff#shard5/6": "pass",
   "test-aarch64#00": "pass",
   "test-aarch64#01": "pass",
   "test-aarch64#02": "pass",
@@ -1478,6 +1484,11 @@
   "test-i386#98": "pass",
   "test-i386#99": "pass",
   "test-lua#00": "pass",
+  "test-opt#00": "pass",
+  "test-opt#01": "pass",
+  "test-opt#02": "pass",
+  "test-opt#03": "pass",
+  "test-opt#04": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1531,11 +1542,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-11T11:10:55Z",
+  "date": "2026-07-11T11:12:56Z",
   "sha": "98306ac8581b9f0f71563f16d5c7f4f7fc85d340",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 127.4
+  "wall": 114.8
  },
  "last_bench": {
   "date": "2026-07-11T11:01:02Z",
