@@ -15,12 +15,11 @@ _none_
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (3)
+## unfinished (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-desktop-lua-sqlite-path | C | 65 | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
-| feature-game-library-candidate-suite | B+C | 60→50 | feature | Game and engine library candidate suite | — |
 | feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 
 ## blocked (0)
@@ -71,7 +70,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
-| feature-game-library-candidate-suite | B | 50 | feature |  | — |
+| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
@@ -802,6 +801,7 @@ _none_
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [B] feature-dns-resolver-library
 - [p 60] [A] feature-float-exception-mask-control
+- [p 60] [B+C] feature-game-library-candidate-suite
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [O] feature-inline-routines
 - [p 60] [O] feature-opt-store-reload-elimination
@@ -821,7 +821,6 @@ _none_
 - [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [P] bug-pascal-scopedenums-ignored
 - [p 50] [C] feature-c-corpus-quickjs
-- [p 50] [B] feature-game-library-candidate-suite
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-pascal-generic-nonclass-templates
 - [p 48] [P] feature-pascal-class-management-operators
