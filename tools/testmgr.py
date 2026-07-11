@@ -183,6 +183,7 @@ class Job:
         # exclusive resources: two xvfb-run jobs race on the same X display
         self.resources = {"xvfb"} if "xvfb-run" in "\n".join(lines) else set()
         self.name = "%s#%02d" % (target, index)
+        self.src = extract_src(lines)
         self.deps = []            # jobs that must PASS before this launches
         self.proc = None
         self.t0 = self.t1 = None
@@ -215,6 +216,23 @@ class Job:
                 continue                      # recipe comment: shell no-op
             parts.append("{\n%s\n} || exit $?" % ln.replace("/tmp/", RUN_TMP + "/"))
         return "\n".join(parts) + "\n"
+
+
+# repo-relative source files a job touches — the human answer to "which test
+# IS test-core#601?" without mapping job numbers back to Makefile lines
+SRC_RE = re.compile(r"\b(?:test|lib|examples|tools|compiler)/[A-Za-z0-9_./+-]*"
+                    r"\.[A-Za-z0-9]+\b")
+
+
+def extract_src(lines):
+    seen = []
+    for m in SRC_RE.finditer("\n".join(lines)):
+        if m.group(0) not in seen:
+            seen.append(m.group(0))
+    if not seen:
+        return ""
+    extra = " +%d" % (len(seen) - 2) if len(seen) > 2 else ""
+    return " ".join(seen[:2]) + extra
 
 
 def classify(lines):
@@ -861,8 +879,8 @@ def main():
 
     if args.list:
         for j in jobs:
-            print("%-32s %-12s %2d lines%s" %
-                  (j.name, j.cls, len(j.lines),
+            print("%-32s %-12s %2d lines  %s%s" %
+                  (j.name, j.cls, len(j.lines), j.src,
                    "  deps:" + ",".join(d.name for d in j.deps) if j.deps else ""))
         print("total: %d jobs" % len(jobs))
         return 0
@@ -902,15 +920,17 @@ def main():
         if j.exp_dur and j.status == "pass" and dur > max(5.0, j.exp_dur * 4):
             note = "  SLOW (expected %.1fs)" % j.exp_dur
             slow.append(j.name)
-        print("  %-8s %-32s %-12s %6.1fs%s" %
-              (j.status.upper(), j.name, j.cls, dur, note))
+        print("  %-8s %-32s %-12s %6.1fs  %s%s" %
+              (j.status.upper(), j.name, j.cls, dur, j.src, note))
         if j.status in ("fail", "timeout") and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
     print("  %d/%d pass%s" % (npass, len(jobs) - nskip,
                               ", %d skip (corpus absent)" % nskip if nskip else ""))
     if first_fail:
-        print("\n-- first failure: %s (%s) --" % (first_fail.name, first_fail.status))
+        print("\n-- first failure: %s (%s)%s --" %
+              (first_fail.name, first_fail.status,
+               " — " + first_fail.src if first_fail.src else ""))
         print("-- commands --")
         for ln in first_fail.lines:
             print("  " + ln)
@@ -924,7 +944,8 @@ def main():
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
                "verdict": "GREEN" if rc == 0 else "RED",
                "slow": slow,
-               "jobs": [{"name": j.name, "cls": j.cls, "status": j.status,
+               "jobs": [{"name": j.name, "cls": j.cls, "src": j.src,
+                         "status": j.status,
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
                          "log": j.logpath}
