@@ -19,61 +19,38 @@ tarray12.pp	unclassified: pascal26:44: error: base type not found: IInterface ()
 tarray13.pp	unclassified: pascal26:23: error: undefined variable (DynArraySize)
 tarray14.pp	unclassified: pascal26:100: error: arithmetic operator not supported for dynamic arrays (`a + 
 tarray15.pp	unclassified: pascal26:31: error: dynamic array initializer not supported ()
-tarray16.pp	parser: mode-Delphi generics TFoo<T> syntax
 tarray17.pp	unclassified: Expected: :=, but got:  (Kind: 124, Line: 32) | near: Halt     a >>>
-tarray18.pp	parser: mode-Delphi generics TFoo<T> syntax
 tarray2.pp	unclassified: pascal26:57: error: dereferenced value is not a pointer ()
 tarray7.pp	unclassified: Expected: ], but got:  (Kind: 82, Line: 45) | near: average  a    >>>
 tarrconstr1.pp	unclassified: pascal26:12: error: undefined variable (TAB)
 tarrconstr5.pp	unclassified: Expected: >, but got: TArray (Kind: 1, Line: 14) | near: TStringArrayArray2  spe
 tarrconstr6.pp	unclassified: pascal26:24: error: undefined variable (TLongIntArray)
 tarrconstr7.pp	unclassified: pascal26:6: error: base type not found: IInterface ()
-tclass10c.pp	parser: mode-Delphi generics TFoo<T> syntax
-tclass11a.pp	parser: mode-Delphi generics TFoo<T> syntax
-tclass12a.pp	parser: mode-Delphi generics TFoo<T> syntax
-tclass12c.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12d.pp	unclassified: pascal26:21: error: undefined variable (SomeValue)
-tclass13.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass15.pp	unclassified: pascal26:458: error: unexpected character ()
-tclass16.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass5.pp	unclassified: pascal26:30: error: undefined variable (fail)
 tclass9.pp	unclassified: pascal26:27: error: undefined variable (FSomeClassVar)
 tclassinfo1.pp	unclassified: pascal26:8: error: undefined variable (TObject)
-tdefault10.pp	parser: mode-Delphi generics TFoo<T> syntax
 tdefault12.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tdefault1.pp	unclassified: pascal26:8: error: uses: unit source not found: variants ()
 tdefault5.pp	unclassified: pascal26:458: error: unexpected character ()
 tenum3.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 12) | near: third   TRange1  first >
 tenum4.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
-terecs10.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs11.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs14.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs15.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs16.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs20.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs3.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
-terecs8.pp	parser: mode-Delphi generics TFoo<T> syntax
-texception1.pp	parser: mode-Delphi generics TFoo<T> syntax
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
 tforin24.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-tforin25.pp	parser: mode-Delphi generics TFoo<T> syntax
 tforin28.pp	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
 tforin2.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tforin3.pp	runtime: exit code 139 (want 0)
 tforin4.pp	unclassified: pascal26:23: error: for-in: not a generator, enum type, or iterable variable ()
 tforin5.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-tforin6.pp	parser: mode-Delphi generics TFoo<T> syntax
-tforin7.pp	parser: mode-Delphi generics TFoo<T> syntax
 tforin8.pp	unclassified: pascal26:11: error: base type not found: IEnumerator ()
 tforin9.pp	unclassified: Expected: end, but got: enumerator (Kind: 1, Line: 14) | near:  function StepFor
-tgenconstraint1.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenconstraint37.pp	unclassified: Expected: end, but got:  (Kind: 78, Line: 18) | near:  class  ITestInterface  in
 tgenconstraint38.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgenconstraint39.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgeneric102.pp	unclassified: pascal26:15: error: expected generic class name ()
-tgeneric106.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric107.pp	parser: inline specialize expression
 tgeneric15.pp	unclassified: pascal26:17: error: base type not found: specialize ()
 tgeneric16.pp	unclassified: pascal26:18: error: base type not found: specialize ()
@@ -81,101 +58,31 @@ tgeneric23.pp	unclassified: pascal26:6: error: uses: unit source not found: fgl 
 tgeneric24.pp	parser: generic record/array/procvar templates
 tgeneric25.pp	parser: generic record/array/procvar templates
 tgeneric27.pp	parser: generic record/array/procvar templates
-tgeneric28.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric29.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric32.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric33.pp	parser: generic record/array/procvar templates
-tgeneric34.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric35.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric36.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric37.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric38.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric39.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric40.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric41.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric42.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric43.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric44.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric45.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric46.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric47.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric48.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric49.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric50.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric51.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric52.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric53.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric54.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric56.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgeneric59.pp	unclassified: pascal26:11: error: expected name ()
-tgeneric60.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric61.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric62.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric63.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric64.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric65.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric66.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric67.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric68.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric69.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric70.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric78.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric79.pp	parser: generic record/array/procvar templates
-tgeneric80.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric81.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric82.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric86.pp	parser: generic record/array/procvar templates
 tgeneric87.pp	parser: generic record/array/procvar templates
 tgeneric88.pp	parser: generic record/array/procvar templates
-tgeneric89.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric90.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric91.pp	unclassified: pascal26:31: error: undefined variable (Self)
 tgeneric93.pp	unclassified: pascal26:0: error: conditional directive: declared requires (NAME) ()
 tgeneric94.pp	parser: generic record/array/procvar templates
 tgeneric95.pp	parser: generic record/array/procvar templates
 tgeneric97.pp	unclassified: pascal26:14: error: undefined variable (LowerCase)
-tgeneric99.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc10.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-tgenfunc12.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc19.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc1.pp	parser: inline specialize expression
 tgenfunc23.pp	parser: inline specialize expression
-tgenfunc2.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc3.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc4.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc5.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc6.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc7.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc8.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-tgenfunc9.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator10.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator11.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator1.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator2.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator3.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator4.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator5.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator7.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator8.pp	parser: mode-Delphi generics TFoo<T> syntax
-tmoperator9.pp	parser: mode-Delphi generics TFoo<T> syntax
 tobject1.pp	rtl: ExitCode variable missing
 tobject5.pp	unclassified: pascal26:8: error: undefined variable (TObject)
-tobject6.pp	parser: mode-Delphi generics TFoo<T> syntax
-tobject7.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator11.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-toperator12.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator78.pp	unclassified: pascal26:4: error: operator overloading: LongInt is not a record or class type (
 toperator89.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
-toperator91.pp	parser: mode-Delphi generics TFoo<T> syntax
-toperator93.pp	parser: mode-Delphi generics TFoo<T> syntax
-toperator94.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator9.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tover1.pp	runtime: exit code 1 (want 0)
-tpropdef.pp	parser: mode-Delphi generics TFoo<T> syntax
 tset1.pp	unclassified: pascal26:36: error: undefined variable (RandSeed)
 tsetsize.pp	unclassified: ConstEval error at SrcLine 256: SVal = Pred Kind = 1 TokPos = 20
-tstatic1.pp	parser: mode-Delphi generics TFoo<T> syntax
-tstatic2.pp	parser: mode-Delphi generics TFoo<T> syntax
 tstatic5.pp	unclassified: pascal26:33: error: undefined variable (FSomethingStatic)
 tstring10.pp	unclassified: pascal26:16: error: undefined variable (flush)
 tstring11.pp	unclassified: Mismatch in MatchProcCall: name = Test1, nArgs = 1
@@ -251,10 +158,96 @@ tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
 tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
 tclass13c.pp	missing diagnostic: accepts invalid code — TRootClass.Integer nested-type member; needs a per-class nested-type registry (legit nested types TTest.TRecord pass by name fall-through, see tdefault8)
 terecs_u1.pp	parser: extended-record features in unit (pascal26:12 unexpected token via unit driver)
-tgeneric103.pp	parser: mode-Delphi generics TFoo<T> syntax (unit driver; pascal26:9)
-tgeneric76.pp	parser: mode-Delphi generics TFoo<T> syntax (unit driver; pascal26:14)
 tgeneric77.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
 tgenfunc15.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
 toperator2.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
 toperator3.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
 toperator4.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+tarray16.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 8)
+tarray18.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 63, Line: 21)
+tclass10c.pp	mode-delphi generics adjacent: Expected: :, but got: f2 (Kind: 1, Line: 14)
+tclass11a.pp	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
+tclass12a.pp	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
+tclass12c.pp	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
+tclass13.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 81, Line: 18)
+tclass16.pp	mode-delphi generics adjacent: Expected: :, but got: Test (Kind: 1, Line: 14)
+tdefault11.pp	mode-delphi generics adjacent: compiles but %FAIL expected (missing diagnostic)
+terecs10.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 74, Line: 9)
+terecs11.pp	mode-delphi generics adjacent: Expected: :, but got: type (Kind: 9, Line: 9)
+terecs14.pp	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 15)
+terecs15.pp	mode-delphi generics adjacent: Expected: :, but got: X (Kind: 1, Line: 11)
+terecs16.pp	mode-delphi generics adjacent: Expected: :, but got: Create (Kind: 1, Line: 7)
+terecs20.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 14)
+terecs3.pp	mode-delphi generics adjacent: Expected: :, but got: F1 (Kind: 1, Line: 12)
+terecs8.pp	mode-delphi generics adjacent: pascal26:8: error: class var is not allowed in a record type ()
+texception1.pp	mode-delphi generics adjacent: Expected: :, but got: do (Kind: 19, Line: 81)
+tforin25.pp	mode-delphi generics adjacent: Expected: :, but got: FIndex (Kind: 1, Line: 10)
+tforin6.pp	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
+tforin7.pp	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
+tgenconstraint1.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 78, Line: 50)
+tgeneric103.pp	mode-delphi generics adjacent: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no
+tgeneric105.pp	mode-delphi generics adjacent: pascal26:4: error: this file is a unit, not a program — compile a program that uses it (pxx has no
+tgeneric106.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 9)
+tgeneric28.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric29.pp	mode-delphi generics adjacent: pascal26:7: error: generic templates must be class declarations ()
+tgeneric30.pp	mode-delphi generics adjacent: compiles but %FAIL expected (missing diagnostic)
+tgeneric34.pp	mode-delphi generics adjacent: pascal26:6: error: generic templates must be class declarations ()
+tgeneric35.pp	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
+tgeneric37.pp	mode-delphi generics adjacent: pascal26:15: error: generic templates must be class declarations ()
+tgeneric38.pp	mode-delphi generics adjacent: pascal26:15: error: generic templates must be class declarations ()
+tgeneric39.pp	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
+tgeneric40.pp	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
+tgeneric41.pp	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
+tgeneric43.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric44.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric45.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric46.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric47.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric48.pp	mode-delphi generics adjacent: pascal26:14: error: generic templates must be class declarations ()
+tgeneric50.pp	mode-delphi generics adjacent: pascal26:30: error: undefined variable (TTestInteger)
+tgeneric55.pp	mode-delphi generics adjacent: compiles but %FAIL expected (missing diagnostic)
+tgeneric60.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 74, Line: 15)
+tgeneric61.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 81, Line: 19)
+tgeneric62.pp	mode-delphi generics adjacent: Expected: begin, but got: end (Kind: 6, Line: 17)
+tgeneric63.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric64.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric65.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric66.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric67.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric68.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric76.pp	mode-delphi generics adjacent: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no
+tgeneric78.pp	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
+tgeneric80.pp	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
+tgeneric81.pp	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
+tgeneric82.pp	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
+tgeneric89.pp	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
+tgeneric90.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+tgeneric99.pp	mode-delphi generics adjacent: Expected: :, but got: TTest (Kind: 1, Line: 17)
+tgenfunc12.pp	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 7)
+tgenfunc19.pp	mode-delphi generics adjacent: Expected: :, but got: for (Kind: 20, Line: 12)
+tgenfunc2.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 7)
+tgenfunc3.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 9)
+tgenfunc4.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 9)
+tgenfunc5.pp	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 9)
+tgenfunc6.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 9)
+tgenfunc7.pp	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
+tgenfunc9.pp	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
+tmoperator10.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 11)
+tmoperator11.pp	mode-delphi generics adjacent: Expected: :, but got: Initialize (Kind: 1, Line: 10)
+tmoperator1.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 14)
+tmoperator2.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
+tmoperator3.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
+tmoperator4.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
+tmoperator5.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
+tmoperator7.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
+tmoperator8.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 10)
+tmoperator9.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
+tobject6.pp	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 9)
+tobject7.pp	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 9)
+toperator12.pp	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 10)
+toperator91.pp	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 12)
+toperator93.pp	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 14)
+toperator94.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 63, Line: 13)
+tpropdef.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 64, Line: 11)
+tstatic1.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 13)
+tstatic2.pp	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 13)

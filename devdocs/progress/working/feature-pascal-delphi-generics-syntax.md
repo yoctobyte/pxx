@@ -7,9 +7,9 @@ prio: 56  # auto — 93 conformance tests behind it, second-biggest unlock
 - **Type:** feature (Pascal frontend, dialect)
 - **Track:** P (shared `lexer.inc`/`parser.inc` — A-gated, sole-A confirmation
   before edit)
-- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+- **Status:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** opus-a
 
 ## Symptom
 pxx only parses objfpc-style `generic TFoo<T> = class` + `specialize

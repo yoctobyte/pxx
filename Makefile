@@ -423,6 +423,8 @@ test-core: $(COMPILER)
 	grep -q "cannot compare an enum with a pointer" /tmp/test_epc.log
 	! ./$(COMPILER) test/test_forin_enum_holes_fail.pas /tmp/test_feh26 > /tmp/test_feh.log 2>&1
 	grep -q "non-contiguous values" /tmp/test_feh.log
+	./$(COMPILER) test/test_delphi_generics.pas /tmp/test_delphi_generics26
+	test "$$(/tmp/test_delphi_generics26)" = "$$(printf '42\nhi')"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1

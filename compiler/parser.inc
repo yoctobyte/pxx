@@ -884,16 +884,168 @@ begin
   Inc(TokCount, subCount);
 end;
 
+{ Append a string to the TokChars pool and return its offset (for synthesized
+  identifier tokens — the mode-Delphi generics desugar mints alias names). }
+function TokCharsAppend(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := TokCharLen;
+  for i := 1 to Length(s) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token character pool overflow');
+    TokChars[TokCharLen] := s[i];
+    Inc(TokCharLen);
+  end;
+end;
+
+procedure ParseGenericTemplateNamed(const templateName: AnsiString; delphiForm: Boolean); forward;
+
+{ mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
+  captured, rewrite every later use of the Delphi surface into the objfpc
+  surface the existing template/specialization machinery parses:
+  - `TFoo<Concrete,...>`  -> a minted alias ident `TFoo$Concrete$...`, with
+    ONE alias declaration `TFoo$... = specialize TFoo<Concrete,...>;` inserted
+    at insertAt (right after the template declaration, still inside the type
+    section) per distinct argument tuple;
+  - `TFoo<T>` spelled with the template's OWN param names (method impls:
+    `procedure TFoo<T>.M;`) -> the `<...>` group is removed, leaving
+    `procedure TFoo.M;` which BufferGenericMethod already handles.
+  Guards: the name must match ti's, the `<...>` group must be a plain
+  comma-separated list of type idents closed by `>`, and the arity must match
+  — anything else (e.g. a real `a < b` comparison) is left untouched. }
+procedure DelphiRewriteGenericUses(ti, insertAt: Integer);
+const MAX_DGEN_TUPLES = 512;
+var
+  i, j, k, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
+  tname, aname, key: AnsiString;
+  argTok: array[0..MAX_TEMPLATE_PARAMS-1] of TRawToken;
+  seenKey: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
+  seenOff: array[0..MAX_DGEN_TUPLES-1] of Integer;
+  seenLen: array[0..MAX_DGEN_TUPLES-1] of Integer;
+  seenArg: array[0..MAX_DGEN_TUPLES*MAX_TEMPLATE_PARAMS-1] of TRawToken;
+  ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
+  ok, isParamForm: Boolean;
+  si: Integer;
+begin
+  tname := Templates[ti].Name;
+  np := TemplateNParams[ti];
+  seenCnt := 0;
+  i := insertAt;
+  while i < TokCount - 1 do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkLt) and
+       CaseEqual(GetTokenStr(i), tname) then
+    begin
+      { collect the <...> argument list }
+      ok := True; na := 0; j := i + 2;
+      while ok do
+      begin
+        if (j < TokCount) and (na < MAX_TEMPLATE_PARAMS) and
+           (Tokens[j].Kind in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T, tkString_T]) then
+        begin
+          argTok[na] := Tokens[j]; Inc(na); Inc(j);
+          if (j < TokCount) and (Tokens[j].Kind = tkComma) then Inc(j)
+          else Break;
+        end
+        else ok := False;
+      end;
+      if ok and ((j >= TokCount) or (Tokens[j].Kind <> tkGt)) then ok := False;
+      if ok and (na <> np) then ok := False;
+      if ok then
+      begin
+        isParamForm := True;
+        for k := 0 to na - 1 do
+          if not ((argTok[k].Kind = tkIdent) and
+                  CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
+                            TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k])) then
+            isParamForm := False;
+        if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
+        if isParamForm then
+          RemoveTokens(i + 1, j - i)   { strip `<T>` — method impl reference }
+        else
+        begin
+          key := '';
+          for k := 0 to na - 1 do
+          begin
+            key := key + '$';
+            key := key + GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen);
+          end;
+          si := -1;
+          for k := 0 to seenCnt - 1 do
+            if seenKey[k] = key then si := k;
+          if si < 0 then
+          begin
+            if seenCnt >= MAX_DGEN_TUPLES then Error('too many distinct generic specializations (MAX_DGEN_TUPLES)');
+            si := seenCnt;
+            aname := tname + key;
+            seenKey[si] := key;
+            seenOff[si] := TokCharsAppend(aname);
+            seenLen[si] := Length(aname);
+            for k := 0 to na - 1 do
+              seenArg[si * MAX_TEMPLATE_PARAMS + k] := argTok[k];
+            Inc(seenCnt);
+          end;
+          Tokens[i].SOffset := seenOff[si];
+          Tokens[i].SLen := seenLen[si];
+          RemoveTokens(i + 1, j - i);
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+
+  { one alias declaration per distinct tuple, inserted in first-seen order }
+  for si := 0 to seenCnt - 1 do
+  begin
+    sOff := TokCharsAppend('specialize');
+    tOff := TokCharsAppend(tname);
+    insCnt := 0;
+    ins[insCnt].Kind := tkIdent; ins[insCnt].IVal := 0; ins[insCnt].Line := Tokens[insertAt].Line;
+    ins[insCnt].SOffset := seenOff[si]; ins[insCnt].SLen := seenLen[si]; Inc(insCnt);
+    ins[insCnt].Kind := tkEq; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
+    ins[insCnt].Kind := tkIdent; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := sOff; ins[insCnt].SLen := 10; Inc(insCnt);
+    ins[insCnt].Kind := tkIdent; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := tOff; ins[insCnt].SLen := Length(tname); Inc(insCnt);
+    ins[insCnt].Kind := tkLt; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
+    for k := 0 to np - 1 do
+    begin
+      if k > 0 then
+      begin
+        ins[insCnt].Kind := tkComma; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+        ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
+      end;
+      ins[insCnt] := seenArg[si * MAX_TEMPLATE_PARAMS + k]; Inc(insCnt);
+    end;
+    ins[insCnt].Kind := tkGt; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
+    ins[insCnt].Kind := tkSemicolon; ins[insCnt].IVal := 0; ins[insCnt].Line := ins[0].Line;
+    ins[insCnt].SOffset := 0; ins[insCnt].SLen := 0; Inc(insCnt);
+    InsertTokens(insertAt, ins, insCnt);
+    insertAt := insertAt + insCnt;
+  end;
+end;
+
 procedure ParseGenericTemplate;
+begin
+  Next; { consume 'generic' }
+  if CurTok.Kind <> tkIdent then Error('expected generic class name');
+  ParseGenericTemplateNamed(CurTok.SVal, False);
+end;
+
+procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean);
 var
   templateName, nextStr: AnsiString;
   depth, startTok, cur, finalCur, np, gi: Integer;
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   isOpener, doneParams: Boolean;
 begin
-  Next; { consume 'generic' }
-  if CurTok.Kind <> tkIdent then Error('expected generic class name');
-  templateName := CurTok.SVal; Next;
+  { Copy BEFORE Next: callers pass CurTok.SVal, and a const AnsiString param
+    aliases it by reference — Next would mutate the name out from under us. }
+  templateName := templateNameIn;
+  Next; { consume the template name (caller verified it) }
 
   { <T> / <TKey, TData> / <T: TObject> / <TKey; TData: TObject> — groups of
     comma-separated names, each group with an optional `: constraint` (the
@@ -985,6 +1137,14 @@ begin
   if DebugTrace then
     writeln('TEMPLATE ', templateName, ' startTok=', startTok, ' endTok=', finalCur,
             ' endLine=', Tokens[finalCur-1].Line);
+
+  { mode-Delphi form (`TFoo<T> = class`): desugar the rest of the token stream
+    to the objfpc surface the machinery above already speaks — rewrite each
+    concrete use `TFoo<Args>` to a minted alias ident (registering the alias
+    declaration tokens `alias = specialize TFoo<Args>;` right after this
+    template), and strip `<T>` from method impls `procedure TFoo<T>.M`. }
+  if delphiForm then
+    DelphiRewriteGenericUses(TemplateCount - 1, finalCur);
 
   TokPos := finalCur;
   Next;
@@ -12864,9 +13024,23 @@ begin
     keep their keyword forms. }
   while (CurTok.Kind = tkIdent) and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and (not CaseEqual(CurTok.SVal, 'implementation')) and (not CaseEqual(CurTok.SVal, 'initialization')) and (not CaseEqual(CurTok.SVal, 'finalization')) and not stopTypes and
         (CaseEqual(CurTok.SVal, 'generic') or CaseEqual(CurTok.SVal, 'specialize') or CaseEqual(CurTok.SVal, 'operator') or
-         ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkEq))) do
+         ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkEq)) or
+         ((not CaseEqual(CurTok.SVal, 'operator')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLt))) do
   begin
-    if CaseEqual(CurTok.SVal, 'generic') then
+    { `TFoo<T> = class` — Delphi-style generic template. Accepted in every
+      mode (not just {$mode delphi}): at type-declaration position the
+      `ident <` shape is unambiguous — except `operator < (...)` overload
+      definitions, which the operator branch below owns. }
+    if (not CaseEqual(CurTok.SVal, 'operator')) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLt) then
+    begin
+      { mode-Delphi generic template `TFoo<T> = class ... end;` — the name
+        comes first; ParseGenericTemplateNamed captures the template and
+        desugars all later Delphi-surface uses (see DelphiRewriteGenericUses). }
+      ParseGenericTemplateNamed(CurTok.SVal, True);
+    end
+    else if CaseEqual(CurTok.SVal, 'generic') then
     begin
       ParseGenericTemplate;
     end

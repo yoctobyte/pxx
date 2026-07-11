@@ -2091,6 +2091,17 @@ begin
   AdjustPass2Spans(insertPos, count);
 end;
 
+{ Remove `count` tokens starting at atPos (mirror of InsertTokens). Used by
+  the mode-Delphi generics desugar to excise `<...>` groups it rewrote. }
+procedure RemoveTokens(atPos, count: Integer);
+var i: Integer;
+begin
+  for i := atPos to TokCount - count - 1 do
+    Tokens[i] := Tokens[i + count];
+  Dec(TokCount, count);
+  AdjustPass2Spans(atPos, -count);
+end;
+
 procedure Next;
 var i, off, len, j: Integer;
 begin
