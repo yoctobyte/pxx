@@ -131,7 +131,18 @@ EOF
   # ---- compile ----
   bin="$WORK/${name%.pp}"
   compile_ok=0
-  ( cd "$SUITE" && timeout "$TIMEOUT_S" "$CC" "$name" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+  if sed -n '1,40p' "$src" | grep -qi '^[ \t]*unit[ \t]'; then
+    # UNIT-shaped test (FPC compiles units standalone): synthesize a driver
+    # program that uses it, so the unit's whole body is compiled. Compile-only
+    # (the suite's unit tests carry their checks in callers we don't have).
+    uname="${name%.pp}"
+    cp "$src" "$WORK/$uname.pas"
+    printf 'program drv_%s;\nuses %s;\nbegin\nend.\n' "$uname" "$uname" > "$WORK/drv_$uname.pas"
+    ( cd "$WORK" && timeout "$TIMEOUT_S" "$CC" "drv_$uname.pas" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+    norun=1
+  else
+    ( cd "$SUITE" && timeout "$TIMEOUT_S" "$CC" "$name" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+  fi
 
   if [ "$expect_fail" = "1" ]; then
     if [ "$compile_ok" != "0" ]; then

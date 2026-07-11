@@ -193,7 +193,6 @@ tclass3.pp	unclassified: pascal26:26: error: inherited call argument count misma
 tenum1.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
 tenum2.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tenum6.pp	runtime: exit code 1 (want 0)
-terecs_u1.pp	unclassified: pascal26:2: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 texception10.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 32)
 texception2.pp	unclassified: Expected: :, but got: do (Kind: 19, Line: 25)
 texception3.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
@@ -208,7 +207,6 @@ tforin26.pp	unclassified: pascal26:2: error: expected name ()
 tforin27.pp	unclassified: pascal26:5: error: expected name ()
 tgeneric1.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
 tgeneric10.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
-tgeneric103.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tgeneric11.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
 tgeneric13.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tgeneric14.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
@@ -218,12 +216,9 @@ tgeneric3.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
 tgeneric5.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 7)
 tgeneric6.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
 tgeneric7.pp	runtime: exit code 0 (want 201)
-tgeneric76.pp	unclassified: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tgeneric77.pp	unclassified: pascal26:4: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tgeneric8.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
 tgeneric9.pp	runtime: exit code 1 (want 0)
 tgeneric92.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 7)
-tgenfunc15.pp	unclassified: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tint642.pp	unclassified: pascal26:33: error: undefined variable (hexstr)
 tint643.pp	unclassified: Expected: :, but got: do (Kind: 19, Line: 53)
 tinterface4.pp	unclassified: pascal26:3: error: uses: unit source not found: variants ()
@@ -231,9 +226,6 @@ tinterface6.pp	unclassified: pascal26:22: error: typed string constant: expected
 tobject2.pp	unclassified: Expected: begin, but got: x (Kind: 1, Line: 7)
 tobject4.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 16)
 toperator1.pp	unclassified: Expected: =, but got:  (Kind: 80, Line: 10)
-toperator2.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-toperator3.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-toperator4.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 toperator6.pp	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
 tover3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tover4.pp	runtime: exit code 1 (want 0)
@@ -256,9 +248,13 @@ tstring5.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
 tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
 tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
-tcase45.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase48.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
 tclass13c.pp	missing diagnostic: accepts invalid code — TRootClass.Integer nested-type member; needs a per-class nested-type registry (legit nested types TTest.TRecord pass by name fall-through, see tdefault8)
+terecs_u1.pp	parser: extended-record features in unit (pascal26:12 unexpected token via unit driver)
+tgeneric103.pp	parser: mode-Delphi generics TFoo<T> syntax (unit driver; pascal26:9)
+tgeneric76.pp	parser: mode-Delphi generics TFoo<T> syntax (unit driver; pascal26:14)
+tgeneric77.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
+tgenfunc15.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
+toperator2.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+toperator3.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+toperator4.pp	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
