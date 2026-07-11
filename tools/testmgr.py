@@ -19,9 +19,10 @@ Design (ticket feature-parallel-test-harness):
     exit code = gate verdict
 
 Usage:
-  tools/testmgr.py --tier quick|limited|full [--jobs N] [--serial]
+  tools/testmgr.py --tier quick|limited|full|opt [--jobs N] [--serial]
                    [--fail-fast] [--list] [--deadline SECS]
                    [--inject-hang]   # self-test: prove hang handling
+  tools/testmgr.py --bench           # tracked benchmark run -> tstate/bench.tsv
 """
 
 import argparse
@@ -68,11 +69,18 @@ TIERS = {
         "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
         "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
     ],
+    # opt: O-level differential gate (feature-testmgr-opt-tier-and-benchmarks).
+    # test-opt = hand-picked corpus + -O1/-O2 self-compile fixedpoints; on top,
+    # generate() adds OPT_SHARDS optdiff.sh jobs sweeping EVERY test/*.pas|.c
+    # at -O0 vs -O2/-O3 (stdout+rc must match). Idle watcher work, not `full`.
+    "opt": ["test-opt"],
 }
 
 # The conformance battery (~220 programs behind one script) is a wall-time
 # pole as a single job: fan it out with the script's --shard support.
 CONFORMANCE_SHARDS = 6
+# Same idea for the ~900-program optdiff sweep (tier opt).
+OPT_SHARDS = 6
 
 # ---------------------------------------------------------- cost classes ---
 # est_mem: bytes we expect the job to occupy at peak (pascal26 maps a large
@@ -84,6 +92,7 @@ CLASSES = {
     "selfhost":    {"est_mem": 1200 << 20, "timeout": 600},
     "corpus":      {"est_mem": 1400 << 20, "timeout": 1200},
     "conformance": {"est_mem": 1000 << 20, "timeout": 1200},
+    "opt":         {"est_mem": 700 << 20,  "timeout": 900},
 }
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 PROBE_REF = 0.35                # seconds: hello.pas compile on reference box
@@ -119,7 +128,7 @@ LIVE_PATH = os.path.join(REPO, ".testmgr", "live.json")
 # default work-weights for jobs with no learned duration yet, per class —
 # used only for the progress estimate, never for scheduling
 CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
-                "corpus": 45.0, "conformance": 90.0}
+                "corpus": 45.0, "conformance": 90.0, "opt": 30.0}
 
 
 def write_json_atomic(path, obj):
@@ -210,6 +219,8 @@ class Job:
 
 def classify(lines):
     text = "\n".join(lines)
+    if "optdiff.sh" in text:
+        return "opt"
     if "compiler.pas" in text or "compiler/compiler.pas" in text:
         return "selfhost"
     if "run_c_conformance" in text:
@@ -317,6 +328,12 @@ def generate(tier):
                     jobs.append(shard)
             else:
                 jobs.append(job)
+    if tier == "opt":
+        for i in range(OPT_SHARDS):
+            j = Job("optdiff", i,
+                    ["tools/optdiff.sh --shard %d/%d" % (i, OPT_SHARDS)])
+            j.name = "optdiff#shard%d/%d" % (i, OPT_SHARDS)
+            jobs.append(j)
     return jobs
 
 
@@ -627,10 +644,175 @@ def build_compiler():
         sys.exit("testmgr: building %s failed" % COMPILER)
 
 
+# ------------------------------------------------------------- benchmark ---
+# --bench face (feature-testmgr-opt-tier-and-benchmarks): fixed workload
+# suite spanning the regimes the -O3 campaign identified, each at every
+# BENCH_LEVEL. Output equality across levels is verified FIRST (canary: a
+# timing row from a miscompiled binary is worse than none), then wall time =
+# min of BENCH_RUNS runs. Rows append to tstate/bench.tsv (greppable
+# history); a same-host (workload, level) slower than the previous recorded
+# row by >BENCH_SLOW_PCT is flagged. Serial on purpose — timing needs a
+# quiet box, so this never goes through the parallel Manager.
+BENCH_LEVELS = ("-O0", "-O2", "-O3")
+BENCH_RUNS = 5
+BENCH_SELF_RUNS = 3            # self-compile is ~10s a run: 3 is plenty
+BENCH_SLOW_PCT = 10.0
+BENCH_TSV_REL = "devdocs/progress/tstate/bench.tsv"
+COMPILER_SRC = "compiler/compiler.pas"
+# (name, source, canary argv, timed argv) — canary mode must be
+# deterministic; {tmp} expands to the bench scratch dir
+BENCH_SUITE = (
+    ("mandelbrot", "examples/mandelbrot/mandelbrot.pas",
+     [], ["--bench", "400", "300"]),               # float compute
+    ("raytracer", "examples/raytracer/raytracer.pas",
+     [], ["--ppm", "{tmp}/rt.ppm", "480", "360"]),  # call-heavy float
+    ("sieve", "examples/primes/sieve.pas", [], []),  # memory-bound int
+)
+
+
+def bench_time(argv, runs, timeout):
+    best = None
+    for _ in range(runs):
+        t0 = time.monotonic()
+        try:
+            r = subprocess.run(argv, cwd=REPO, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
+        if r.returncode != 0:
+            return None
+        dt = time.monotonic() - t0
+        best = dt if best is None else min(best, dt)
+    return best
+
+
+def bench_prev(tsv, host):
+    """Latest recorded ms per (workload, level) for this host."""
+    prev = {}
+    try:
+        with open(tsv) as f:
+            for ln in f:
+                c = ln.rstrip("\n").split("\t")
+                if len(c) >= 6 and c[1] == host:
+                    try:
+                        prev[(c[3], c[4])] = float(c[5])
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return prev
+
+
+def run_bench():
+    import socket
+    build_compiler()
+    cc = os.path.join(REPO, COMPILER)
+    host = re.sub(r"[^A-Za-z0-9_-]", "-",
+                  socket.gethostname().split(".")[0])
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO,
+                         capture_output=True, text=True).stdout.strip()[:12]
+    date = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    tsv = os.path.join(REPO, BENCH_TSV_REL)
+    out_tsv = os.environ.get("TESTMGR_BENCH_TSV", tsv)   # twatch: detached
+    prev = bench_prev(tsv, host)                          # checkout writes
+    tmp = tempfile.mkdtemp(prefix="tbench-")              # elsewhere
+    timeout = 120 * float(os.environ.get("TESTMGR_TIME_SCALE", "1"))
+    rows, slow, red = [], [], []
+
+    def record(name, lvl, secs):
+        ms = round(secs * 1000, 1)
+        rows.append("%s\t%s\t%s\t%s\t%s\t%s" % (date, host, sha, name, lvl, ms))
+        old = prev.get((name, lvl))
+        note = ""
+        if old and ms > old * (1 + BENCH_SLOW_PCT / 100.0):
+            note = "  SLOW (was %sms)" % old
+            slow.append("%s %s %s -> %sms" % (name, lvl, old, ms))
+        print("  bench %-12s %-4s %8.1fms%s" % (name, lvl, ms, note), flush=True)
+
+    for name, src, canary, timed in BENCH_SUITE:
+        ref = None
+        for lvl in BENCH_LEVELS:
+            b = os.path.join(tmp, name + lvl.replace("-", "_"))
+            if subprocess.run([cc, lvl, src, b], cwd=REPO,
+                              capture_output=True).returncode != 0:
+                print("  bench %-12s %-4s COMPILE-FAIL" % (name, lvl))
+                red.append("%s %s compile" % (name, lvl))
+                continue
+            argv = [b] + [a.format(tmp=tmp) for a in canary]
+            try:
+                c = subprocess.run(argv, cwd=REPO, capture_output=True,
+                                   stdin=subprocess.DEVNULL, timeout=timeout)
+                got = (c.returncode, c.stdout)
+            except subprocess.TimeoutExpired:
+                got = None
+            if lvl == "-O0":
+                ref = got
+            if got is None or ref is None or got != ref:
+                print("  bench %-12s %-4s CANARY-DIFF vs -O0" % (name, lvl))
+                red.append("%s %s canary" % (name, lvl))
+                continue
+            dt = bench_time([b] + [a.format(tmp=tmp) for a in timed],
+                            BENCH_RUNS, timeout)
+            if dt is None:
+                red.append("%s %s run" % (name, lvl))
+                continue
+            record(name, lvl, dt)
+
+    # self-compile: the memory-bound big-program case. Timed = an -OL-built
+    # compiler compiling the compiler source; canary = every stage's output
+    # for a fixed input must be byte-identical (optimizing the compiler must
+    # not change what it emits).
+    ref_out = None
+    for lvl in BENCH_LEVELS:
+        stage = os.path.join(tmp, "p26" + lvl.replace("-", "_"))
+        if subprocess.run([cc, lvl, COMPILER_SRC, stage], cwd=REPO,
+                          capture_output=True).returncode != 0:
+            print("  bench %-12s %-4s COMPILE-FAIL" % ("selfcompile", lvl))
+            red.append("selfcompile %s compile" % lvl)
+            continue
+        hello = os.path.join(tmp, "hello" + lvl.replace("-", "_"))
+        subprocess.run([stage, "test/hello.pas", hello], cwd=REPO,
+                       capture_output=True)
+        try:
+            with open(hello, "rb") as f:
+                out = f.read()
+        except OSError:
+            out = None
+        if lvl == "-O0":
+            ref_out = out
+        if out is None or ref_out is None or out != ref_out:
+            print("  bench %-12s %-4s CANARY-DIFF vs -O0" % ("selfcompile", lvl))
+            red.append("selfcompile %s canary" % lvl)
+            continue
+        dt = bench_time([stage, COMPILER_SRC, os.path.join(tmp, "selfout")],
+                        BENCH_SELF_RUNS, timeout * 5)
+        if dt is None:
+            red.append("selfcompile %s run" % lvl)
+            continue
+        record("selfcompile", lvl, dt)
+
+    if rows:
+        os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
+        fresh = not os.path.exists(out_tsv) or not os.path.getsize(out_tsv)
+        with open(out_tsv, "a") as f:
+            if fresh:
+                f.write("# date\thost\tsha\tworkload\tlevel\tms\n")
+            f.write("\n".join(rows) + "\n")
+    print("bench: %d rows -> %s%s%s" %
+          (len(rows), out_tsv,
+           "  SLOW: " + "; ".join(slow) if slow else "",
+           "  RED: " + "; ".join(red) if red else ""), flush=True)
+    return 1 if red else 0
+
+
 # ------------------------------------------------------------------ main ---
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--tier", choices=sorted(TIERS), required=True)
+    ap.add_argument("--tier", choices=sorted(TIERS))
+    ap.add_argument("--bench", action="store_true",
+                    help="tracked benchmark run: fixed suite at -O0/-O2/-O3, "
+                         "canary-checked then timed, rows appended to "
+                         "tstate/bench.tsv (serial, ~2-3 min)")
     ap.add_argument("--jobs", type=int, help="fixed concurrency cap (else adaptive)")
     ap.add_argument("--serial", action="store_true", help="PAR=1: one job at a time")
     ap.add_argument("--fail-fast", action="store_true",
@@ -646,6 +828,11 @@ def main():
     ap.add_argument("--inject-hang", action="store_true",
                     help="add a sleep-loop job to prove hang handling")
     args = ap.parse_args()
+
+    if args.bench:
+        return run_bench()
+    if not args.tier:
+        ap.error("--tier is required (unless --bench)")
 
     build_compiler()
     jobs = generate(args.tier)

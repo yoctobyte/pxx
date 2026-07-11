@@ -39,7 +39,7 @@ CHECKOUT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import twatch                                            # noqa: E402
 
-TIERS = ("quick", "native", "limited", "full")
+TIERS = ("quick", "native", "limited", "full", "opt")
 ISATTY = sys.stdout.isatty()
 RED = "\033[31;1m" if ISATTY else ""
 GRN = "\033[32m" if ISATTY else ""

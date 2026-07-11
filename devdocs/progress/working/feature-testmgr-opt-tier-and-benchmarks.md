@@ -5,10 +5,10 @@ prio: 60
 # testmgr: opt-level differential tier + tracked benchmark runs
 
 - **Type:** feature (testing infra) — **Track T**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-11 (user request, during the -O3 W1/W2 optimization
   campaign — see [[feature-opt-o3-register-pressure]])
-- **Owner:** —
+- **Owner:** fable-trackt
 
 ## Why
 

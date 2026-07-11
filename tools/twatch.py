@@ -51,6 +51,8 @@ CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
 CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
                  "autoticket": True,   # stub regression tickets (face 1)
+                 "idle_opt": True,     # idle: O-level differential sweep
+                 "idle_bench": True,   # idle: tracked benchmark timings
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
@@ -457,6 +459,46 @@ def clone_head_back(clone):
     sh(["git", "checkout", "--quiet", clone.branch], cwd=clone.path)
 
 
+def run_bench_idle(clone, host, st, sha):
+    """Idle work: tracked benchmark timings for the fully-tested sha — the
+    clone's testmgr --bench, rows published to tstate/bench.tsv. Runs
+    detached at `sha`, so the TSV is written to a temp file and appended
+    after checking the branch back out (bench.tsv is tracked: mutating it
+    under a detached HEAD would block the checkout back). Not preemptible —
+    ~2-3 min, shorter than a full backfill."""
+    print("twatch: bench %s" % sha[:12], flush=True)
+    set_phase(clone, host, "bench", sha=sha)
+    clone.checkout(sha)
+    tmp_tsv = os.path.join(tempfile.gettempdir(),
+                           "twatch-bench-%d.tsv" % os.getpid())
+    if os.path.exists(tmp_tsv):
+        os.unlink(tmp_tsv)
+    env = dict(os.environ, TESTMGR_BENCH_TSV=tmp_tsv)
+    r = subprocess.run([sys.executable,
+                        os.path.join(clone.path, "tools/testmgr.py"),
+                        "--bench"], cwd=clone.path, env=env)
+    clone_head_back(clone)
+    rows = 0
+    if os.path.exists(tmp_tsv):
+        with open(tmp_tsv) as f:
+            new = [ln for ln in f if not ln.startswith("#")]
+        rows = len(new)
+        if new:
+            tsv = os.path.join(clone.path, TSTATE_REL, "bench.tsv")
+            fresh = not os.path.exists(tsv) or not os.path.getsize(tsv)
+            with open(tsv, "a") as f:
+                if fresh:
+                    f.write("# date\thost\tsha\tworkload\tlevel\tms\n")
+                f.writelines(new)
+        os.unlink(tmp_tsv)
+    st["last_bench"] = {"sha": sha, "date": utcnow(), "rc": r.returncode,
+                        "rows": rows}
+    save_state(clone, host, st)
+    clone.publish("tstate(%s): bench %s %s (%d rows)"
+                  % (host, sha[:12],
+                     "ok" if r.returncode == 0 else "RED", rows))
+
+
 # A commit that only touches tickets/docs/tstate cannot change a test verdict,
 # so it needs no gate run.  Without this filter the watcher full-tiers its own
 # tstate commits forever: every publish moves the head it then retests
@@ -469,6 +511,22 @@ def needs_test(repo, sha):
               "-m", "--first-parent", sha], cwd=repo)
     files = [f for f in out.splitlines() if f]
     return any(not f.startswith(NOTEST_PREFIXES) for f in files)
+
+
+def make_preempted(clone, tested):
+    """Abort-check for idle work (full backfill / opt sweep): a real push
+    preempts, docs/tstate-only movement (e.g. our own fast-phase publish)
+    must not abort the work it queued."""
+    def preempted():
+        if STOP:
+            return True
+        clone.fetch()
+        h = clone.remote_head()
+        if h == tested:
+            return False
+        return any(needs_test(clone.path, c)
+                   for c in clone.commits_between(tested, h))
+    return preempted
 
 
 def bisect_step(clone, host, st, tier):
@@ -700,19 +758,28 @@ def main():
                 # idle: backfill the full matrix (cross + corpus) for the
                 # newest fast-tested sha; a new push preempts it — the run is
                 # SIGINTed and discarded, no verdict recorded
-                def preempted():
-                    if STOP:
-                        return True
-                    clone.fetch()
-                    h = clone.remote_head()
-                    if h == tested:
-                        return False
-                    # docs/tstate-only movement (e.g. our own fast-phase
-                    # publish) must not abort the backfill it queued
-                    return any(needs_test(clone.path, c)
-                               for c in clone.commits_between(tested, h))
                 test_sha(clone, host, st, tested, args.tier,
-                         full=True, abort_check=preempted)
+                         full=True, abort_check=make_preempted(clone, tested))
+                did_work = True
+            elif tested and CONF.get("idle_opt") and \
+                    (st.get("last_full") or {}).get("sha") == tested and \
+                    (st.get("last_opt") or {}).get("sha") != tested:
+                # idle, full matrix done: O-level differential sweep (tier
+                # opt — the silent-miscompile oracle). A push preempts it.
+                r = test_sha(clone, host, st, tested, "opt", full=False,
+                             abort_check=make_preempted(clone, tested))
+                if r != "aborted":
+                    st = load_state(clone, host)
+                    st["last_opt"] = {"sha": tested, "date": utcnow()}
+                    if r is False:      # old sha: its testmgr has no tier
+                        st["last_opt"]["note"] = "unsupported"   # opt yet —
+                    save_state(clone, host, st)                  # don't wedge
+                did_work = True
+            elif tested and CONF.get("idle_bench") and \
+                    (st.get("last_full") or {}).get("sha") == tested and \
+                    (st.get("last_bench") or {}).get("sha") != tested:
+                # idle, opt done too: tracked benchmark timings per sha
+                run_bench_idle(clone, host, st, tested)
                 did_work = True
             elif not args.no_bisect:
                 st = load_state(clone, host)

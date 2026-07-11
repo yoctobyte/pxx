@@ -1,0 +1,8 @@
+# optdiff.sh skiplist — programs whose output is legitimately nondeterministic
+# (never a miscompile signal). Shell-glob patterns, one per line, matched
+# against the basename. Keep this list visible and short; a new entry needs a
+# one-line reason.
+test_c_gtk_*.c
+test_c_gtk_*.pas
+# lib_sockets: fixed port, TIME_WAIT flakes across back-to-back runs
+lib_sockets*
