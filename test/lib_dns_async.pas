@@ -3,15 +3,22 @@ program lib_dns_async;
   a loopback UDP DNS server coroutine answers a canned A record; a client
   coroutine resolves through DnsQueryAAsync. Both run on one thread, reactor-
   driven — proves async UDP + the DNS wire round-trip without external network. }
-uses scheduler, platform, dns_wire_core, dns_async;
+uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_async;
 
-const PORT = 28766;
+const
+  PORT = 28766;
+  CPORT = 28767;   { chase server }
+  DPORT = 28768;   { deaf server (never answers) — timeout check }
 
 var
   gRcode: Integer;
   gCount: Integer;
   gIp:    LongWord;
   gServerDone: Boolean;
+  gChaseRcode, gChaseCount: Integer;
+  gChaseIp: LongWord;
+  gChaseServerDone: Boolean;
+  gTimeoutRc: Integer;
 
 procedure ServerCo(arg: Pointer);
 var
@@ -59,6 +66,95 @@ begin
   if cnt > 0 then gIp := ips[0];
 end;
 
+{ Chase server: two queries on CPORT. First (www..., leading label length 3)
+  gets a CNAME to real.x and no address; second gets A 5.6.7.8. Mirrors the
+  blocking-side lib_dns_chase mock, but as a coroutine instead of a fork. }
+procedure ChaseServerCo(arg: Pointer);
+var
+  sock, rc, q, i, rlen: Integer;
+  qbuf: array[0..511] of Byte;
+  resp: array[0..511] of Byte;
+  n: Int64; fromAddr: LongWord; fromPort: Integer;
+begin
+  sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  rc := PalBindIpv4(sock, PAL_NET_IP_LOOPBACK, CPORT);
+  rc := PalSetSocketNonBlocking(sock, 1);
+  for q := 1 to 2 do
+  begin
+    WaitReadable(sock);
+    n := PalRecvFromIpv4(sock, @qbuf[0], 512, fromAddr, fromPort);
+    while n = PAL_NET_EAGAIN do
+    begin
+      WaitReadable(sock);
+      n := PalRecvFromIpv4(sock, @qbuf[0], 512, fromAddr, fromPort);
+    end;
+    if n < 17 then begin rc := PalSocketClose(sock); Exit; end;
+    for i := 0 to Integer(n) - 1 do resp[i] := qbuf[i];
+    resp[2] := $81; resp[3] := $80;
+    resp[7] := 1;
+    rlen := Integer(n);
+    resp[rlen] := $C0; resp[rlen + 1] := $0C;
+    if qbuf[12] = 3 then
+    begin
+      { www.x -> CNAME real.x }
+      resp[rlen + 2] := 0; resp[rlen + 3] := DNS_TYPE_CNAME;
+      resp[rlen + 4] := 0; resp[rlen + 5] := 1;
+      resp[rlen + 6] := 0; resp[rlen + 7] := 0; resp[rlen + 8] := 0; resp[rlen + 9] := 0;
+      resp[rlen + 10] := 0; resp[rlen + 11] := 8;
+      resp[rlen + 12] := 4;
+      resp[rlen + 13] := Ord('r'); resp[rlen + 14] := Ord('e');
+      resp[rlen + 15] := Ord('a'); resp[rlen + 16] := Ord('l');
+      resp[rlen + 17] := 1; resp[rlen + 18] := Ord('x');
+      resp[rlen + 19] := 0;
+      rlen := rlen + 20;
+    end
+    else
+    begin
+      { real.x -> A 5.6.7.8 }
+      resp[rlen + 2] := 0; resp[rlen + 3] := DNS_TYPE_A;
+      resp[rlen + 4] := 0; resp[rlen + 5] := 1;
+      resp[rlen + 6] := 0; resp[rlen + 7] := 0; resp[rlen + 8] := 0; resp[rlen + 9] := 0;
+      resp[rlen + 10] := 0; resp[rlen + 11] := 4;
+      resp[rlen + 12] := 5; resp[rlen + 13] := 6;
+      resp[rlen + 14] := 7; resp[rlen + 15] := 8;
+      rlen := rlen + 16;
+    end;
+    n := PalSendToIpv4(sock, @resp[0], rlen, fromAddr, fromPort);
+  end;
+  rc := PalSocketClose(sock);
+  gChaseServerDone := True;
+end;
+
+procedure ChaseClientCo(arg: Pointer);
+var
+  ips, ns: TDnsIpv4Array;
+  cnt, i: Integer;
+begin
+  for i := 0 to DNS_MAX_IPS - 1 do begin ips[i] := 0; ns[i] := 0; end;
+  ns[0] := PAL_NET_IP_LOOPBACK;
+  cnt := 0;
+  gChaseRcode := DnsResolveChaseAsync(ns, 1, CPORT, 'www.x', ips, cnt, 2000);
+  gChaseCount := cnt;
+  if cnt > 0 then gChaseIp := ips[0];
+end;
+
+{ Timeout: a bound socket that never answers; 200ms budget must come back
+  PAL_NET_ETIMEDOUT instead of hanging the reactor. }
+procedure TimeoutClientCo(arg: Pointer);
+var
+  ips: TDnsIpv4Array;
+  cnt: Integer;
+  cname: string;
+  deaf, rc: Integer;
+begin
+  deaf := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  rc := PalBindIpv4(deaf, PAL_NET_IP_LOOPBACK, DPORT);
+  cnt := 0;
+  cname := '';
+  gTimeoutRc := DnsQueryAAsyncEx(PAL_NET_IP_LOOPBACK, DPORT, 'dead.x', ips, cnt, cname, 200);
+  rc := PalSocketClose(deaf);
+end;
+
 procedure SayBool(const tag: string; b: Boolean);
 begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
@@ -66,12 +162,22 @@ end;
 
 begin
   gRcode := -999; gCount := 0; gIp := 0; gServerDone := False;
+  gChaseRcode := -999; gChaseCount := 0; gChaseIp := 0; gChaseServerDone := False;
+  gTimeoutRc := -999;
   Spawn(@ServerCo, nil);
   Spawn(@ClientCo, nil);
+  Spawn(@ChaseServerCo, nil);
+  Spawn(@ChaseClientCo, nil);
+  Spawn(@TimeoutClientCo, nil);
   RunUntilDone;
 
   SayBool('server-done', gServerDone);
   SayBool('rcode', gRcode = 0);
   SayBool('count', gCount = 1);
   SayBool('ip', gIp = $01020304);   { 1.2.3.4 host byte order }
+  SayBool('chase-server-done', gChaseServerDone);
+  SayBool('chase-rcode', gChaseRcode = 0);
+  SayBool('chase-count', gChaseCount = 1);
+  SayBool('chase-ip', gChaseIp = $05060708);
+  SayBool('timeout', gTimeoutRc = PAL_NET_ETIMEDOUT);
 end.

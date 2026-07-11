@@ -46,6 +46,13 @@ procedure SetNonBlocking(fd: Integer);
   a plain CoYield (no real delay). }
 procedure CoSleep(ms: Integer);
 
+{ Like WaitReadable but bounded: parks until fd is readable OR ms milliseconds
+  elapse (a one-shot timerfd registered alongside fd on the same reactor).
+  Returns False when the timer fired. A both-ready race can report False with
+  data pending — attempt one nonblocking read before treating False as a hard
+  timeout. ms < 0 waits unbounded (plain WaitReadable, always True). }
+function WaitReadableTimeout(fd, ms: Integer): Boolean;
+
 implementation
 
 const
@@ -264,7 +271,11 @@ procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
   (it_interval, it_value); timespec is tv_sec then tv_nsec with the machine word
   width, so it_value starts at one timespec (16 bytes on 64-bit, 8 on 32-bit).
   PW = ^NativeInt writes the matching word width. }
-procedure CoSleep(ms: Integer);
+{ Arm a fresh one-shot non-blocking timerfd for ms milliseconds and return it.
+  itimerspec is two timespecs (it_interval, it_value); timespec is tv_sec then
+  tv_nsec with the machine word width, so it_value starts at one timespec
+  (16 bytes on 64-bit, 8 on 32-bit). }
+function ArmOneShotTimer(ms: Integer): Integer;
 var tfd, i: Integer; spec: array[0..31] of Byte; base, rc: Int64;
 begin
   tfd := Integer(__pxxrawsyscall(SYS_timerfd_create, CLOCK_MONOTONIC, TFD_NONBLOCK, 0, 0, 0, 0));
@@ -278,9 +289,46 @@ begin
   PW(base + 12)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
 {$endif}
   rc := __pxxrawsyscall(SYS_timerfd_settime, tfd, 0, base, 0, 0, 0);
+  ArmOneShotTimer := tfd;
+end;
+
+procedure CoSleep(ms: Integer);
+var tfd: Integer; buf, rc: Int64;
+begin
+  tfd := ArmOneShotTimer(ms);
   WaitReadable(tfd);
-  rc := __pxxrawsyscall(SYS_read, tfd, base, 8, 0, 0, 0);  { drain expirations }
+  rc := __pxxrawsyscall(SYS_read, tfd, Int64(@buf), 8, 0, 0, 0);  { drain expirations }
   rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
+end;
+
+function WaitReadableTimeout(fd, ms: Integer): Boolean;
+var
+  tfd: Integer;
+  ev: TEpollEvent;
+  rc, got, buf: Int64;
+begin
+  if ms < 0 then
+  begin
+    WaitReadable(fd);
+    WaitReadableTimeout := True;
+    Exit;
+  end;
+  if epfd = 0 then
+    epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
+  tfd := ArmOneShotTimer(ms);
+  { park on BOTH fds; whichever readies first wakes this coroutine }
+  ev.events := EPOLLIN;
+  ev.data := curCo;
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, tfd, Int64(@ev), 0, 0);
+  coState[curCo] := 3;                         { io-blocked }
+  __pxxcoswitch(@coSp[curCo], @schedSp);       { -> scheduler }
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, tfd, 0, 0, 0);
+  { non-blocking read: 8 bytes = the timer fired first (or simultaneously) }
+  got := __pxxrawsyscall(SYS_read, tfd, Int64(@buf), 8, 0, 0, 0);
+  rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
+  WaitReadableTimeout := got <> 8;
 end;
 
 { Round-robin every runnable coroutine; when none are runnable but some are

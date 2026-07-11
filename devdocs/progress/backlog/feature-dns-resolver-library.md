@@ -310,12 +310,22 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
     lib_dns_config (Ex parse + candidate order), new `test/lib_dns_chase.pas`
     (forked mock serves CNAME then A; resolver follows with a second query).
     All in `make lib-test`, green against stable v194.
-  REMAINING (after the AAAA-facade slice below): async sibling over asyncnet,
+  REMAINING (after the AAAA-facade + async-parity slices below):
   `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection,
-  negative-response caching.
+  negative-response caching, async TC->TCP fallback, async AAAA.
 - 2026-07-10 — **AAAA facade landed** (Track B): `DnsResolveAAAAList`
   (dns_wire_blocking) + `dns.DnsResolveHost6` — same resolv.conf/search-
   candidate policy as DnsResolveHost; hosts-file IPv6 lines and AAAA-side CNAME
   chasing deliberately not yet (dns_config parses IPv4 hosts only; chase needs
   an AAAA Ex variant). New forked-mock e2e `test/lib_dns_aaaa.pas` in
   `make lib-test`.
+- 2026-07-11 — **async parity landed** (Track B): `scheduler.WaitReadableTimeout`
+  (one-shot timerfd parked alongside the fd on the reactor; CoSleep refactored
+  onto the shared `ArmOneShotTimer`) gives coroutines bounded waits — a dead
+  nameserver no longer hangs the reactor. `dns_async` rebuilt on it:
+  `DnsQueryAAsyncEx` (timeout + CNAME target out + var-forwarding fixed),
+  `DnsQueryAListAsyncEx` (multi-NS retry), `DnsResolveChaseAsync` (chain bound
+  4), and `DnsResolveHostAsync` now walks search/ndots candidates — full parity
+  with the blocking facade except TC->TCP fallback and AAAA (noted). Test
+  lib_dns_async grown: coroutine chase server (CNAME then A) + deaf-server
+  200ms timeout scenario. `make lib-test` green vs stable v197.
