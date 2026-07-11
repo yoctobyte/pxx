@@ -427,6 +427,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_delphi_generics26)" = "$$(printf '42\nhi')"
 	./$(COMPILER) test/test_inline_array_field_const_bound.pas /tmp/test_inline_array_field_const_bound26
 	test "$$(/tmp/test_inline_array_field_const_bound26)" = "$$(printf '0\n70\n6\n103')"
+	./$(COMPILER) test/test_symslot_stale_ndims.pas /tmp/test_symslot_stale_ndims26
+	test "$$(/tmp/test_symslot_stale_ndims26)" = "136"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1

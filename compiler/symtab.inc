@@ -1916,6 +1916,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
   SymElemDynDepth[SymCount] := 0;
+  SymArrNDims[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
@@ -2020,6 +2021,11 @@ begin
   if isArray then Syms[SymCount].ArrLen := 1000;
   SymDynDepth[SymCount] := 0;
   SymElemDynDepth[SymCount] := 0;
+  { Reset recycled parallel-array fields — a stale SymArrNDims >= 2 from a
+    popped local reappearing under a new symbol at the same slot made a 1-D
+    named-array param index with the old N-D dims (silent stride corruption;
+    bug-transitive-dns_cache-import-corrupts-managed-strings). }
+  SymArrNDims[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
@@ -2193,6 +2199,7 @@ begin
   Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
   SymDynDepth[SymCount] := depth;
   SymElemDynDepth[SymCount] := 0;
+  SymArrNDims[SymCount] := 0;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
@@ -2256,6 +2263,9 @@ begin
   Syms[SymCount].ConstVal := v;
   Syms[SymCount].Offset   := 0;
   Syms[SymCount].IsRef    := False;
+  Syms[SymCount].IsArray  := False;
+  Syms[SymCount].ArrLen   := 0;
+  SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);

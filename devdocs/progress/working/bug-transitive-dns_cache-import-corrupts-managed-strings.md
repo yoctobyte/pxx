@@ -7,8 +7,8 @@ prio: 54  # auto — silent managed-string corruption from a unit-graph position
 - **Type:** bug (frontend/codegen — unit compilation / managed strings)
 - **Track:** A. Filed from Track B (dns cache wiring) — hand off, do not fix
   under B/E.
-- **Status:** backlog — filed 2026-07-11.
-- **Owner:** —
+- **Status:** working
+- **Owner:** trackA-e-bugs
 
 ## Symptom
 Adding `dns_cache` to the `uses` clause of `lib/rtl/dns_async.pas` — with **zero
@@ -54,3 +54,18 @@ stays green, but a program that needs BOTH managed-string `http` and
 `make test` + self-host byte-identical; add the http-vs-dns_cache import case as
 a regression (build a managed-string program through the http→intermediate→
 dns_cache graph and check URL parsing + no fault).
+
+## Resolution (2026-07-11)
+Root cause was not unit compilation order at all: `AllocParam` / `AllocVar` /
+`AllocDynArray` / `AddConst` never reset `SymArrNDims` on a recycled symbol
+slot (symbol slots are reused after a proc body restores SymCount). A 2-D
+local elsewhere in the graph left `NDims=2` in its slot; `dns_async`'s
+`const ns: TDnsIpv4Array` param later landed on that slot and indexed with the
+stale N-D dims — stride 64 instead of 4. The extra `uses dns_cache` merely
+shifted global symbol allocation by one, aligning the param with the stale
+slot; ANY interface const in the unit reproduced it. Fixed by resetting
+`SymArrNDims` in all four Alloc paths (AllocArray already did). Regression:
+`test/test_symslot_stale_ndims.pas` reproduces the slot-recycling directly
+(pinned v197 prints 1, fixed prints 136) — deterministic, unlike the
+alignment-dependent http graph. Track B may now revert the dns_cached
+workaround and import dns_cache from dns_async directly if preferred.
