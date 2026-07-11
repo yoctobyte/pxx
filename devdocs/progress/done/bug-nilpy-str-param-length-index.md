@@ -7,7 +7,7 @@ prio: 55  # auto — hard-blocks feature-demo-portable-userland phase 1 (any str
 - **Type:** bug (frontend — Nil-Python; obeys Track A's gate like the Pascal
   frontend)
 - **Track:** A (`compiler/pyparser.inc` / NilPy str-param lowering)
-- **Status:** working
+- **Status:** done
   shell ([[feature-demo-portable-userland]] phase 1).
 - **Owner:** opus-a
 
@@ -59,3 +59,6 @@ end-to-end check.
 ## Links
 Blocks [[feature-demo-portable-userland]] · sibling gap
 [[feature-nilpy-collections-and-string-methods]].
+
+## Log
+- 2026-07-11 — resolved, commit 12e484f1.
