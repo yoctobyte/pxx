@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,7 +100,6 @@ _none_
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-testmgr-enroll-c-cross-conformance | T | 45 | feature | testmgr: enroll the C cross-conformance matrix + lua-cross in the full tier | — |
-| feature-testmgr-opt-tier-and-benchmarks | T | 60 | feature | testmgr: opt-level differential tier + tracked benchmark runs | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -176,7 +175,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (574)
+## done (575)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -710,6 +709,7 @@ _none_
 | feature-target-i386 | A | 50 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-tcomponent-tpersistent | B | 50 | feature | TComponent / TPersistent (FPC Classes owner-child surface) | — |
 | feature-terminal-ansi-library | B | 50 | feature | Terminal ANSI library | — |
+| feature-testmgr-opt-tier-and-benchmarks | T | 60 | feature | testmgr: opt-level differential tier + tracked benchmark runs | — |
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
@@ -793,7 +793,6 @@ _none_
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
-- [p 60] [T] feature-testmgr-opt-tier-and-benchmarks
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 56] [P] feature-pascal-delphi-generics-syntax
 - [p 55] [A] bug-nilpy-str-param-length-index

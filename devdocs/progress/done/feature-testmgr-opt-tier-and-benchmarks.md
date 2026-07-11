@@ -5,7 +5,7 @@ prio: 60
 # testmgr: opt-level differential tier + tracked benchmark runs
 
 - **Type:** feature (testing infra) — **Track T**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11 (user request, during the -O3 W1/W2 optimization
   campaign — see [[feature-opt-o3-register-pressure]])
 - **Owner:** fable-trackt
@@ -98,3 +98,6 @@ done
 - [[feature-optimization-levels]] — umbrella; `make test-opt` stays as the
   dev-loop quick gate, this tier is the offloaded broad version.
 - [[project_track_t_concept]] — tstate/report conventions.
+
+## Log
+- 2026-07-11 — resolved, commit 597e4ab0.
