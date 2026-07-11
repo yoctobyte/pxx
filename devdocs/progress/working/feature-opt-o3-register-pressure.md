@@ -263,3 +263,18 @@ architecture `devdocs/dev/optimization-architecture.md`.
   for OO/method-pointer-heavy user code rather than the compiler itself.
 - Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
   quick GREEN.
+
+## Next steps (queued, in rough order)
+1. **Record-aware inline** (the raytracer unlock): Vec3-style record
+   params/returns block both inline v1 (scalar-only) and float xmm residency
+   (helper calls make bodies non-call-free). SROA-like splitting of small
+   by-value records into scalars at inline sites — multi-session effort, file
+   under [[feature-inline-routines]].
+2. **-O2 promotion** of the W1/W2 set after soak: the ticket's full gate
+   (500-program -O0-vs differential, all four cross targets, -O2 flip +
+   re-pin). Hold until T is back up or run the matrix locally.
+3. IR_INDEX callee-scratch for call-bearing index expressions (rare; cheap
+   once measured worthwhile). Remaining stack-op census after slice 3b:
+   pop rdi 9.4k (cdecl/variadic staging), pop rax 14.9k (call-y binop
+   dances at depth>2 / InLValueWrite contexts), pop rcx 14.2k (complex
+   index/base dances).
