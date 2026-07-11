@@ -61,18 +61,36 @@ function DnsResolveChaseAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
 function DnsResolveHostAsync(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 
 { Async AAAA (IPv6) query to an explicit nameserver, timeout-bounded like the A
-  path. Addresses come back 16 bytes each (network byte order). CNAME chasing
-  and TCP fallback are not applied here yet (mirrors the sync AAAA slice). }
+  path. Addresses come back 16 bytes each (network byte order). TCP fallback is
+  not applied here yet (mirrors the sync AAAA slice). }
 function DnsQueryAAAAAsync(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+
+{ AAAA sibling of DnsQueryAAsyncTTL: cname carries the alias target when the
+  answer is a CNAME with no AAAA records; ttl is the allowed cache lifetime
+  (seconds; 0 = uncacheable). }
+function DnsQueryAAAAAsyncTTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
 
 { DnsQueryAAAAAsync across a nameserver list (first definitive answer wins). }
 function DnsQueryAAAAListAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
+{ DnsQueryAAAAAsyncTTL across a nameserver list (first definitive answer wins). }
+function DnsQueryAAAAListAsyncTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; var cname: string;
+  var ttl: Integer; timeoutMs: Integer): Integer;
+
+{ Async AAAA mirror of dns.DnsResolveChase6: one exact query name through the
+  nameserver list, CNAME chain chased across follow-up AAAA queries (bound
+  DNS_MAX_CNAME_CHAIN). Not cached yet (the cache stores IPv4 values only). }
+function DnsResolveChase6Async(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+
 { Async AAAA sibling of dns.DnsResolveHost6: IPv6-literal shortcut, /etc/hosts
-  IPv6 lines, then resolv.conf nameservers + glibc search/ndots candidates.
-  AAAA CNAME chasing is not applied yet (same limit as the sync facade). }
+  IPv6 lines, then resolv.conf nameservers + glibc search/ndots candidates,
+  with CNAME chains chased like the A path. }
 function DnsResolveHost6Async(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 
 { Cached A query for an exact name against the nameserver list. Consults `c` at
@@ -357,10 +375,11 @@ begin
   Result := rc;
 end;
 
-function DnsQueryAAAAAsync(nsHost: LongWord; nsPort: Integer; const name: string;
-  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+function DnsQueryAAAAAsyncTTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
 var
-  sock, qlen, rcode, outId, qid, rc, i, j: Integer;
+  sock, qlen, rcode, outId, qid, rc, i, j, t: Integer;
   n: Int64;
   qbuf: array[0..511] of Byte;
   rbuf: array[0..1535] of Byte;
@@ -368,8 +387,11 @@ var
   fromPort: Integer;
   localIps: TDnsIpv6Array;
   localCount: Integer;
+  chase: string;
 begin
   count := 0;
+  cname := '';
+  ttl := 0;
   sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
   if sock < 0 then begin Result := sock; Exit; end;
   rc := PalSetSocketNonBlocking(sock, 1);
@@ -411,32 +433,135 @@ begin
     for j := 0 to 15 do
       ips[i][j] := localIps[i][j];
   count := localCount;
+  if localCount > 0 then
+  begin
+    { positive: cacheable for the shortest answer TTL }
+    t := DnsAnswerMinTTL(@rbuf[0], Integer(n));
+    if t > 0 then ttl := t;
+  end
+  else if rcode = 0 then
+  begin
+    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    chase := '';
+    if DnsExtractCname(@rbuf[0], Integer(n), chase) then
+      cname := chase
+    else
+    begin
+      t := DnsNegativeTTL(@rbuf[0], Integer(n));   { NODATA negative TTL }
+      if t > 0 then ttl := t;
+    end;
+  end
+  else
+  begin
+    { NXDOMAIN etc.: negative TTL from the SOA }
+    t := DnsNegativeTTL(@rbuf[0], Integer(n));
+    if t > 0 then ttl := t;
+  end;
   Result := rcode;
 end;
 
-function DnsQueryAAAAListAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
-  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+function DnsQueryAAAAAsync(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 var
-  i, j, k, rc, localCount: Integer;
   localIps: TDnsIpv6Array;
+  localCount, ttl, rc, i, j: Integer;
+  cname: string;
 begin
   count := 0;
+  localCount := 0;
+  ttl := 0;
+  cname := '';
+  rc := DnsQueryAAAAAsyncTTL(nsHost, nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
+  for i := 0 to localCount - 1 do
+    for j := 0 to 15 do
+      ips[i][j] := localIps[i][j];
+  count := localCount;
+  Result := rc;
+end;
+
+function DnsQueryAAAAListAsyncTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; var cname: string;
+  var ttl: Integer; timeoutMs: Integer): Integer;
+var
+  i, j, k, rc, localCount, localTtl: Integer;
+  localIps: TDnsIpv6Array;
+  localCname: string;
+begin
+  count := 0;
+  cname := '';
+  ttl := 0;
   if nsCount <= 0 then begin Result := DNS_ERR_NONS; Exit; end;
   rc := DNS_ERR_NONS;
   for i := 0 to nsCount - 1 do
   begin
     localCount := 0;
-    rc := DnsQueryAAAAAsync(ns[i], nsPort, name, localIps, localCount, timeoutMs);
+    localTtl := 0;
+    localCname := '';
+    rc := DnsQueryAAAAAsyncTTL(ns[i], nsPort, name, localIps, localCount, localCname, localTtl, timeoutMs);
     if rc >= 0 then
     begin
       for j := 0 to localCount - 1 do
         for k := 0 to 15 do
           ips[j][k] := localIps[j][k];
       count := localCount;
+      cname := localCname;
+      ttl := localTtl;
       Result := rc;
       Exit;
     end;
   end;
+  Result := rc;
+end;
+
+function DnsQueryAAAAListAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  i, j, rc, localCount, ttl: Integer;
+  localIps: TDnsIpv6Array;
+  cname: string;
+begin
+  count := 0;
+  localCount := 0;
+  ttl := 0;
+  cname := '';
+  rc := DnsQueryAAAAListAsyncTTL(ns, nsCount, nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
+  for i := 0 to localCount - 1 do
+    for j := 0 to 15 do
+      ips[i][j] := localIps[i][j];
+  count := localCount;
+  Result := rc;
+end;
+
+function DnsResolveChase6Async(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv6Array;
+  localCount, rc, i, j, depth, ttl: Integer;
+  cur, cname: string;
+begin
+  count := 0;
+  cur := name;
+  rc := DNS_ERR_NOCONFIG;
+  for depth := 0 to DNS_MAX_CNAME_CHAIN - 1 do
+  begin
+    localCount := 0;
+    cname := '';
+    ttl := 0;
+    rc := DnsQueryAAAAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+    if rc < 0 then begin Result := rc; Exit; end;
+    if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+      cur := cname   { alias with no address — follow the target }
+    else
+    begin
+      for i := 0 to localCount - 1 do
+        for j := 0 to 15 do
+          ips[i][j] := localIps[i][j];
+      count := localCount;
+      Result := rc;
+      Exit;
+    end;
+  end;
+  { chain exceeded the bound — last rcode, no addresses }
   Result := rc;
 end;
 
@@ -484,7 +609,7 @@ begin
   while DnsQueryCandidate(name, search, searchCount, ndots, idx, cand) do
   begin
     localCount := 0;
-    rc := DnsQueryAAAAListAsync(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
+    rc := DnsResolveChase6Async(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
     if rc < 0 then begin Result := rc; Exit; end;
     if (rc = 0) and (localCount > 0) then
     begin

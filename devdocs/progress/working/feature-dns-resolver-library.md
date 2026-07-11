@@ -426,3 +426,18 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   REMAINING (unchanged otherwise): CNAME-chase result caching, async TC->TCP
   fallback, AAAA CNAME chase + AAAA caching, `dns_libc`/`dns_resolved`/`dns_esp`
   backends + profile selection.
+- 2026-07-11 (night 3) — **AAAA CNAME chase landed** (Track B):
+  - `dns_wire_blocking`: `DnsResolveAAAATTL` + `DnsResolveAAAAListTTL` (AAAA
+    siblings of the A TTL variants — cname out for alias answers, min-answer /
+    RFC 2308 negative TTL out for later caching); `DnsResolveAAAA` /
+    `DnsResolveAAAAList` kept as dropping wrappers.
+  - `dns.pas`: `DnsResolveChase6` (blocking AAAA chase, bound
+    DNS_MAX_CNAME_CHAIN; not cached yet — dns_cache stores IPv4 values only);
+    `DnsResolveHost6` candidates now resolve through it.
+  - `dns_async`: `DnsQueryAAAAAsyncTTL` (+ list variant) and
+    `DnsResolveChase6Async`; `DnsResolveHost6Async` chases like the A path.
+  - `test/lib_dns_aaaa.pas` grown: second forked mock serves CNAME(real6.x)
+    then AAAA 2001:db8::2; `DnsResolveChase6` follows with a second query.
+  REMAINING: AAAA answer caching (needs an IPv6 value side in dns_cache),
+  CNAME-chase result caching, async TC->TCP fallback,
+  `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.

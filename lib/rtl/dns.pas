@@ -35,10 +35,17 @@ function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: I
 function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 
+{ AAAA sibling of DnsResolveChase: one exact query name through the nameserver
+  list, CNAME chain chased across follow-up AAAA queries (bounded by
+  DNS_MAX_CNAME_CHAIN). Answers are not cached yet (the cache stores IPv4
+  values only). }
+function DnsResolveChase6(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+
 { AAAA (IPv6) sibling of DnsResolveHost: same "files dns" policy and search
   candidates, addresses come back as 16-byte network-order TDnsIpv6. An IPv6
   literal short-circuits without network; /etc/hosts IPv6 lines are consulted
-  before the nameservers. }
+  before the nameservers; CNAME chains are chased like the A path. }
 function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 
 { Process-wide facade answer cache (dns_cache, keyed on monotonic time):
@@ -236,6 +243,47 @@ begin
   DnsResolveChase := rc;
 end;
 
+function DnsResolveChase6(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv6Array;
+  localCount, rc, i, j, depth, ttl: Integer;
+  cur, cname: string;
+begin
+  count := 0;
+  cur := name;
+  rc := DNS_ERR_NOCONFIG;
+  for depth := 0 to DNS_MAX_CNAME_CHAIN - 1 do
+  begin
+    localCount := 0;
+    cname := '';
+    ttl := 0;
+    rc := DnsResolveAAAAListTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
+    if rc < 0 then
+    begin
+      DnsResolveChase6 := rc;
+      Exit;
+    end;
+    if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+    begin
+      { alias with no address in the same response — follow the target }
+      cur := cname;
+      { loop on }
+    end
+    else
+    begin
+      for i := 0 to localCount - 1 do
+        for j := 0 to 15 do
+          ips[i][j] := localIps[i][j];
+      count := localCount;
+      DnsResolveChase6 := rc;
+      Exit;
+    end;
+  end;
+  { chain exceeded the bound — return the last rcode with no addresses }
+  DnsResolveChase6 := rc;
+end;
+
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 var
   hostsText, resolvText: string;
@@ -346,7 +394,7 @@ begin
   while DnsQueryCandidate(name, search, searchCount, ndots, idx, cand) do
   begin
     localCount := 0;
-    rc := DnsResolveAAAAList(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
+    rc := DnsResolveChase6(ns, nsCount, DNS_PORT, cand, localIps, localCount, 2000);
     if rc < 0 then
     begin
       DnsResolveHost6 := rc;

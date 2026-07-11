@@ -66,6 +66,19 @@ function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
 function DnsResolveAAAAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
+{ AAAA sibling of DnsResolveATTL: cname carries the alias target when the
+  answer is a CNAME with no AAAA records (rcode 0, count 0); ttl (seconds) is
+  the cache lifetime the response allows (min answer TTL / RFC 2308 negative
+  TTL / 0 = uncacheable). }
+function DnsResolveAAAATTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
+
+{ DnsResolveAAAATTL across a nameserver list (first definitive answer wins). }
+function DnsResolveAAAAListTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; var cname: string;
+  var ttl: Integer; timeoutMs: Integer): Integer;
+
 implementation
 
 var
@@ -379,20 +392,24 @@ begin
   DnsResolveA := rc;
 end;
 
-function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
-  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+function DnsResolveAAAATTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
 var
   rbuf: array[0..1535] of Byte;
   rlen, i, j, queryId: Integer;
   localIps: TDnsIpv6Array;
-  localCount, outId, rcode: Integer;
+  localCount, outId, rcode, t: Integer;
+  chase: string;
 begin
   count := 0;
+  cname := '';
+  ttl := 0;
   queryId := 0;
   rlen := DnsQueryOnce(nsHost, nsPort, name, DNS_TYPE_AAAA, @rbuf[0], 1536, timeoutMs, queryId);
   if rlen < 0 then
   begin
-    DnsResolveAAAA := rlen;
+    DnsResolveAAAATTL := rlen;
     Exit;
   end;
 
@@ -401,12 +418,12 @@ begin
   rcode := DnsParseResponseAAAA(@rbuf[0], rlen, localIps, localCount, outId);
   if rcode < 0 then
   begin
-    DnsResolveAAAA := rcode;
+    DnsResolveAAAATTL := rcode;
     Exit;
   end;
   if outId <> queryId then
   begin
-    DnsResolveAAAA := DNS_ERR_BADID;
+    DnsResolveAAAATTL := DNS_ERR_BADID;
     Exit;
   end;
 
@@ -414,7 +431,90 @@ begin
     for j := 0 to 15 do
       ips[i][j] := localIps[i][j];
   count := localCount;
-  DnsResolveAAAA := rcode;
+  if localCount > 0 then
+  begin
+    { positive: cacheable for the shortest answer TTL }
+    t := DnsAnswerMinTTL(@rbuf[0], rlen);
+    if t > 0 then ttl := t;
+  end
+  else if rcode = 0 then
+  begin
+    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    chase := '';
+    if DnsExtractCname(@rbuf[0], rlen, chase) then
+      cname := chase
+    else
+    begin
+      t := DnsNegativeTTL(@rbuf[0], rlen);   { NODATA negative TTL }
+      if t > 0 then ttl := t;
+    end;
+  end
+  else
+  begin
+    { NXDOMAIN etc.: negative TTL from the SOA }
+    t := DnsNegativeTTL(@rbuf[0], rlen);
+    if t > 0 then ttl := t;
+  end;
+  DnsResolveAAAATTL := rcode;
+end;
+
+function DnsResolveAAAA(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv6Array;
+  localCount, ttl, rc, i, j: Integer;
+  cname: string;
+begin
+  count := 0;
+  localCount := 0;
+  ttl := 0;
+  cname := '';
+  rc := DnsResolveAAAATTL(nsHost, nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
+  for i := 0 to localCount - 1 do
+    for j := 0 to 15 do
+      ips[i][j] := localIps[i][j];
+  count := localCount;
+  DnsResolveAAAA := rc;
+end;
+
+function DnsResolveAAAAListTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv6Array; var count: Integer; var cname: string;
+  var ttl: Integer; timeoutMs: Integer): Integer;
+var
+  i, j, k, rc, localCount, localTtl: Integer;
+  localIps: TDnsIpv6Array;
+  localCname: string;
+begin
+  count := 0;
+  cname := '';
+  ttl := 0;
+  if nsCount <= 0 then
+  begin
+    DnsResolveAAAAListTTL := DNS_ERR_NONS;
+    Exit;
+  end;
+  rc := DNS_ERR_NONS;
+  for i := 0 to nsCount - 1 do
+  begin
+    localCount := 0;
+    localTtl := 0;
+    localCname := '';
+    rc := DnsResolveAAAATTL(ns[i], nsPort, name, localIps, localCount, localCname, localTtl, timeoutMs);
+    if rc >= 0 then
+    begin
+      { definitive answer (even NXDOMAIN) — copy out and stop }
+      for j := 0 to localCount - 1 do
+        for k := 0 to 15 do
+          ips[j][k] := localIps[j][k];
+      count := localCount;
+      cname := localCname;
+      ttl := localTtl;
+      DnsResolveAAAAListTTL := rc;
+      Exit;
+    end;
+    { negative = transport failure; try the next nameserver }
+  end;
+  DnsResolveAAAAListTTL := rc;   { last error }
 end;
 
 function DnsResolveAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
