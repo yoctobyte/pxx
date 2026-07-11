@@ -399,6 +399,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_set_of_char_const26)" = "$$(printf '65\n1\n0\n1\n0\n120')"
 	./$(COMPILER) test/test_indexed_property.pas /tmp/test_indexed_property26
 	test "$$(/tmp/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
+	./$(COMPILER) test/test_many_properties.pas /tmp/test_many_properties26
+	test "$$(/tmp/test_many_properties26)" = "$$(printf '11\nTRUE\n99')"
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
 	test "$$(/tmp/test_virtual_managed_arg26)" = "$$(printf '2\ncherry\napple')"
 	./$(COMPILER) test/test_stream_methods.pas /tmp/test_stream_methods26

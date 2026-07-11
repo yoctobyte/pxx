@@ -7,8 +7,8 @@ prio: 52  # auto — blocks the GL demo (sole demos-dashboard FAIL); order-depen
 - **Type:** bug (frontend — shared symbol resolution / property-setter lookup)
 - **Track:** A (`parser.inc` / `symtab.inc` property + unit-scope resolution).
   Filed from Track B/E (GL demo triage) — hand off, do not fix under B/E.
-- **Status:** backlog — filed 2026-07-11.
-- **Owner:** —
+- **Status:** working
+- **Owner:** opus-a
 
 ## Symptom
 Writing a **class-typed property** through its setter fails to parse with

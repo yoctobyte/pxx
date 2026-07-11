@@ -481,6 +481,11 @@ end;
 function AddUProperty(ci, noff, nlen, tk, recId: Integer): Integer;
 var pri: Integer;
 begin
+  { Overflow here silently corrupts the sibling UProp* parallel arrays (the
+    entry spills into the NEXT array's low indices) -- flipping random flags
+    like UPropIsIndexed on unrelated properties, order-dependently
+    (bug-property-setter-resolution-uses-order). Fail loudly instead. }
+  if UPropCount >= MAX_UPROP then Error('too many class properties (MAX_UPROP)');
   pri := UPropCount;
   UPropNOff[pri] := noff; UPropNLen[pri] := nlen;
   UPropTk[pri] := tk; UPropRec[pri] := recId;

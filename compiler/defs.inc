@@ -84,7 +84,7 @@ const
   MAX_UFIELD      = 262144; { field slots across all user classes/records }
   MAX_UMETH       = 8192;  { method slots across all user classes }
   MAX_IMT         = 512;   { per-(class,interface) interface method tables }
-  MAX_UPROP       = 64;
+  MAX_UPROP       = 4096;
   MAX_ENUMTYPE = 512;
   MAX_ENUMVAL  = 4096;
   MAX_TYPEALIAS = 4096;
