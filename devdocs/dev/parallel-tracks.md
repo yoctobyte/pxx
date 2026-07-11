@@ -213,6 +213,23 @@ the published tree under `docs/` builds whatever static-site generator the
 website uses (kept generator-agnostic — plain Markdown + front-matter so any of
 mkdocs / Docusaurus / Hugo / a custom puller can render it).
 
+## Work-tag: compat (reference compatibility)
+
+`compat` is a work-tag (no letter, like X's mirror image): "behave like the
+reference implementation" for any frontend — FPC/Delphi for P, gcc/ISO C for
+C, rustc for R, Zig for Z. It spans compiling real-world code (fgl, Synapse,
+FPC itself, gcc-byte-identical zlib) down to parity diagnostics, the
+per-feature strict flags (`--strict-case`, `--strict-overload`) and `{%FAIL}`
+conformance tests. Compat tickets stay in the ranked queue (the tag carries no
+priority — the `prio:` field does), inherit the owning frontend's file-lane
+and gate, and use the `compat-<lang>-*` slug convention. Escape rule: a compat
+finding that means silent wrong behavior is promoted to a normal `bug-` ticket
+in the owning lane. PXX's dialect stays deliberately lax by default —
+FPC-parity strictness is opt-in per feature, and the conformance sweep
+(`tools/run_pascal_conformance.sh`) runs with the strict flags on; deliberate
+divergences are documented as `dialect-pass` entries in
+`test/pascal-conformance/pxx.skip`.
+
 ## Lanes are soft, not walls
 
 The split above is the *ideal*, not a fence. This is a dialect:

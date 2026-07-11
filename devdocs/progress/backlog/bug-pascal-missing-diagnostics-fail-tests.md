@@ -5,7 +5,7 @@ prio: 18  # RAINY-DAY (user call 2026-07-11): conformance-driven diagnostics dep
 # pxx accepts invalid programs the FPC suite's %FAIL tests reject
 
 - **Type:** bug umbrella (Pascal frontend, missing diagnostics)
-- **Track:** P
+- **Track:** P — tag: compat (FPC-parity diagnostics; see parallel-tracks.md)
 - **Status:** backlog, RAINY-DAY — triaged 2026-07-11 (see below): dialect-pass
   entries closed as not-bugs; remaining real gaps parked as reminder tests
   ([[feature-pascal-corpus-fpc-testsuite]]).

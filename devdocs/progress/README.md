@@ -8,6 +8,9 @@ Two axes:
 
 - **Status = folder.** Moving the file (`git mv`) is the only state change.
 - **Type = filename prefix.** So a single folder of mixed work stays filterable.
+  Work-tag prefixes compose with it: `compat-<lang>-*` marks reference-
+  compatibility work (FPC/Delphi parity for Pascal, gcc/ISO C for C, ...) —
+  see the compat section in `devdocs/dev/parallel-tracks.md`.
 
 This replaces the older split `devdocs/bugs/` and `devdocs/features/` folders.
 

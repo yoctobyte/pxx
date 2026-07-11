@@ -40,6 +40,23 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   "optional, never a prio, pick up on user request or for fun". Reserved,
   unstaffed letter: **J** = JavaScript (currently routed through Track C —
   the QuickJS corpus ticket — so J may never need staffing).
+- **compat is a TAG (no letter): reference compatibility.** "Behave like the
+  reference implementation" for any frontend — FPC/Delphi for P, gcc/ISO C
+  for C, rustc for R, Zig for Z. One category spanning the whole spectrum:
+  compiling real-world code (fgl, Synapse, FPC itself, gcc-byte-identical
+  zlib) down to parity diagnostics, strict-mode flags (`--strict-case`,
+  `--strict-overload`) and `{%FAIL}` conformance tests. Mirror image of X:
+  X = *more* than the spec (experimental, unranked); compat = *exactly* the
+  spec (stays ranked — the tag carries no priority, the `prio:` field does:
+  "Synapse must compile" can sit at 60 while conformance-diagnostic parity
+  idles at 15-20). Inherits the owning frontend's file-lane and gate like
+  every tag. Slug convention: `compat-<lang>-*`. Escape rule: a compat
+  finding that means *silent wrong behavior* (e.g. an ignored directive
+  producing wrong values) is promoted to a normal `bug-` ticket in the owning
+  lane — the tag is for parity work, not a place to hide real bugs. PXX's own
+  dialect stays deliberately lax by default; FPC-parity strictness lives
+  behind per-feature strict flags, and the conformance sweep runs with them
+  on (see pxx.skip's `dialect-pass` entries).
 
 Two axes cut the repo, and the tracks follow them:
 

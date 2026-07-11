@@ -4,7 +4,7 @@ prio: 60  # auto
 
 # Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded)
 
-- **Type:** meta (governance / index / epic) — Track A
+- **Type:** meta (governance / index / epic) — Track A; tag: compat (this is the Pascal-compat charter: dialect-vs-FPC-parity policy, strict-flag family — see parallel-tracks.md)
 - **Status:** backlog (standing index — never "done"; new dialect work links here)
 - **Owner:** — (Track A; language-design calls go to the user)
 - **Opened:** 2026-06-30
