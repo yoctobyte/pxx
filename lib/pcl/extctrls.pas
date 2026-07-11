@@ -3,7 +3,7 @@ unit extctrls;
 
 interface
 
-uses classes_lite, controls, uwidgetset, typinfo, graphics, gtk3_c;
+uses classes_lite, controls, uwidgetset, typinfo, graphics, gtk3_c, stdctrls;
 
 type
   TPanel = class(TWinControl)
@@ -92,6 +92,26 @@ type
   published
     property Vertical: Boolean read FVertical write FVertical;
     property Spacing: Integer read FSpacing write FSpacing;
+  end;
+
+  { TTabBar — a Lazarus-style tabbed component bar: a GtkNotebook whose pages
+    are horizontal button rows (feature-eliah-component-tabbar). Built directly
+    on gtk3_c like graphics.pas. AddTab appends a named tab; AddButton drops a
+    real TButton into a tab's row (so the normal OnClick trampoline serves it)
+    and returns it. Buttons keep their natural size and pack left-to-right;
+    icons are caption placeholders until per-component glyphs exist. }
+  TTabBar = class(TWinControl)
+  private
+    FPages: array of Pointer;   { the hbox of each tab, in AddTab order }
+  public
+    constructor Create(AOwner: TComponent); override;
+    procedure CreateHandle; override;
+    function AddTab(const ACaption: string): Integer;
+    function AddButton(ATab: Integer; const ACaption: string; AOnClick: TMethod): TButton;
+    function TabCount: Integer;
+    { the visible tab index (-1 when empty) }
+    function ActiveTab: Integer;
+    procedure SetActiveTab(AIndex: Integer);
   end;
 
 implementation
@@ -296,6 +316,65 @@ end;
 procedure TPaintBox.CreateHandle;
 begin
   Self.Handle := WidgetSet.CreatePaintBox(Self);
+end;
+
+{ TTabBar }
+
+constructor TTabBar.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  SetLength(FPages, 0);
+  Self.HandleNeeded;
+end;
+
+procedure TTabBar.CreateHandle;
+begin
+  Self.Handle := gtk_notebook_new();
+end;
+
+function TTabBar.AddTab(const ACaption: string): Integer;
+var
+  box, lbl: Pointer;
+begin
+  box := gtk_box_new(0, 2);   { horizontal row of component buttons }
+  lbl := gtk_label_new(PChar(ACaption));
+  gtk_notebook_append_page(Self.Handle, box, lbl);
+  gtk_widget_show(box);
+  SetLength(FPages, Length(FPages) + 1);
+  FPages[Length(FPages) - 1] := box;
+  AddTab := Length(FPages) - 1;
+end;
+
+function TTabBar.AddButton(ATab: Integer; const ACaption: string; AOnClick: TMethod): TButton;
+var
+  b: TButton;
+begin
+  AddButton := nil;
+  if (ATab < 0) or (ATab >= Length(FPages)) then Exit;
+  b := TButton.Create(Self);
+  b.Caption := ACaption;
+  { pack into the tab's row instead of a fixed-coord parent; the button's
+    handle already exists (TButton.Create does HandleNeeded) and is wired to
+    the click trampoline, so OnClick works as on any button }
+  gtk_box_pack_start(FPages[ATab], b.Handle, 0, 0, 2);
+  gtk_widget_show(b.Handle);
+  b.OnClick := AOnClick;
+  AddButton := b;
+end;
+
+function TTabBar.TabCount: Integer;
+begin
+  TabCount := Length(FPages);
+end;
+
+function TTabBar.ActiveTab: Integer;
+begin
+  ActiveTab := gtk_notebook_get_current_page(Self.Handle);
+end;
+
+procedure TTabBar.SetActiveTab(AIndex: Integer);
+begin
+  gtk_notebook_set_current_page(Self.Handle, AIndex);
 end;
 
 end.

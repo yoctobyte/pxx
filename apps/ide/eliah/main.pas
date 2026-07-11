@@ -45,7 +45,8 @@ const
   W_RIGHT   = 300;
   H_BOTTOM  = 200;
   ERR_H     = 150;        { error-list height at the bottom of the left column }
-  TOOLBAR_H = 40;        { toolbar strip height (buttons are 26px at Top=3) }
+  TOOLBAR_H = 104;       { toolbar strip: button row (26px at Top=3) + the
+                           component tab bar (TTabBar at Top=36, ~64px) }
   PXX_PATH  = 'stable_linux_amd64/default/pinned';
   BUILD_OUT = '/tmp/eliah_build';
   SAMPLE_LFM = 'apps/ide/eliah/sample.lfm';
@@ -65,6 +66,12 @@ type
     FBagNames: array of AnsiString; { property name backing each extra-property row }
     PaletteNames: array of AnsiString; { class name backing each palette row }
     PlaceMode: Boolean;    { next designer click drops a new widget }
+    { tabbed component bar (feature-eliah-component-tabbar): registry-driven
+      like the combo; clicking a component button selects that palette row and
+      arms Place. BarRows maps each bar button to its PaletteNames row. }
+    CompBar: TTabBar;
+    BarButtons: array of TButton;
+    BarRows: array of Integer;
     Dsn: TDesigner;
     Sel: TSelectionModel;  { shared selection — designer + editor stay in sync via it }
     Persp: TPerspective;   { current layout: column visibility + priority compacting }
@@ -138,6 +145,10 @@ type
     procedure OnTreeClick(Sender: TObject);
     procedure OnErrorClick(Sender: TObject);
     procedure OnPlaceToggle(Sender: TObject);
+    { NOTE Sender is typed TButton, not TObject: a TObject-typed parameter
+      arrives 32-bit-truncated (bug-tobject-param-truncated-32bit), which
+      broke the identity search below. Concrete class params are fine. }
+    procedure OnPaletteButton(Sender: TButton);
     procedure OnPickFromCaret(Sender: TObject);
     procedure OnWireOnClick(Sender: TObject);
     procedure OnPropClick(Sender: TObject);
@@ -815,6 +826,20 @@ begin
   if PlaceMode then PlaceBtn.Caption := 'Place*' else PlaceBtn.Caption := 'Place';
 end;
 
+{ A component-bar button: select its palette row and make sure Place is armed
+  (sticky, same as arming via the Place button). }
+procedure TEliahForm.OnPaletteButton(Sender: TButton);
+var i: Integer;
+begin
+  for i := 0 to Length(BarButtons) - 1 do
+    if Pointer(BarButtons[i]) = Pointer(Sender) then
+    begin
+      Palette.ItemIndex := BarRows[i];
+      if not PlaceMode then OnPlaceToggle(nil);
+      Exit;
+    end;
+end;
+
 procedure TEliahForm.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
 var idx: Integer; k: TWidgetKind;
 begin
@@ -947,6 +972,8 @@ var
   comps: TRegEntryArr;
   ci, nvFirst: Integer;
   pk: TWidgetKind;
+  tabStd, tabNv, barTab: Integer;
+  bb: TButton;
   exlist: TFileInfoArray;
   exi: Integer;
 
@@ -1077,6 +1104,31 @@ begin
     end;
   EliahForm.Palette.ItemIndex := 0;
   EliahForm.PlaceMode := False;
+
+  { tabbed component bar under the button row — same registry enumeration as
+    the combo, grouped visual / non-visual; short 3-char placeholder captions
+    until per-component glyphs exist. Clicking arms Place for that component. }
+  EliahForm.CompBar := TTabBar.Create(nil);
+  EliahForm.CompBar.Parent := EliahForm;
+  EliahForm.CompBar.SetBounds(0, 36, W_WIN, TOOLBAR_H - 40);
+  tabStd := EliahForm.CompBar.AddTab('Standard');
+  tabNv := EliahForm.CompBar.AddTab('Non-visual');
+  SetLength(EliahForm.BarButtons, 0);
+  SetLength(EliahForm.BarRows, 0);
+  for ci := 0 to Length(EliahForm.PaletteNames) - 1 do
+  begin
+    if EliahForm.PaletteNames[ci] = '' then continue;   { the divider row }
+    if ci < nvFirst then barTab := tabStd else barTab := tabNv;
+    bb := EliahForm.CompBar.AddButton(barTab,
+      Copy(CompDisplay(EliahForm.PaletteNames[ci]), 1, 3), @EliahForm.OnPaletteButton);
+    if bb <> nil then
+    begin
+      SetLength(EliahForm.BarButtons, Length(EliahForm.BarButtons) + 1);
+      EliahForm.BarButtons[Length(EliahForm.BarButtons) - 1] := bb;
+      SetLength(EliahForm.BarRows, Length(EliahForm.BarRows) + 1);
+      EliahForm.BarRows[Length(EliahForm.BarRows) - 1] := ci;
+    end;
+  end;
 
   arg := '';
   startDir := EXAMPLES_DIR;   { open the demo projects by default (override with a dir arg) }
@@ -1244,6 +1296,17 @@ begin
       begin writeln('SMOKE FAIL: sticky place did not add a 2nd node'); Halt(1); end;
     EliahForm.OnPlaceToggle(nil);   { disarm }
     if EliahForm.PlaceMode then begin writeln('SMOKE FAIL: toggle did not disarm'); Halt(1); end;
+
+    { component tab bar: two tabs, buttons present, clicking one selects that
+      palette row and arms Place (through the real gtk click path) }
+    if EliahForm.CompBar.TabCount <> 2 then begin writeln('SMOKE FAIL: tab bar tab count'); Halt(1); end;
+    if Length(EliahForm.BarButtons) < 2 then begin writeln('SMOKE FAIL: tab bar empty'); Halt(1); end;
+    gtk_button_clicked(EliahForm.BarButtons[1].Handle);
+    if EliahForm.Palette.ItemIndex <> EliahForm.BarRows[1] then
+      begin writeln('SMOKE FAIL: bar click did not select row'); Halt(1); end;
+    if not EliahForm.PlaceMode then begin writeln('SMOKE FAIL: bar click did not arm place'); Halt(1); end;
+    EliahForm.OnPlaceToggle(nil);   { disarm again for the checks below }
+    EliahForm.Palette.ItemIndex := 1;
 
     { undo: the place above is on the undo stack -> undo restores the prior count }
     centerW := EliahForm.Dsn.Doc.Count;

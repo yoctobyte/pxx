@@ -44,6 +44,7 @@ run_gui_test test_pcl_menus
 run_gui_test test_pcl_input
 run_gui_test test_pcl_paned
 run_gui_test test_pcl_stream_paned
+run_gui_test test_pcl_tabbar
 
 # Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
 # --smoke run (renders the board + a few engine moves, prints SMOKE OK).

@@ -5,7 +5,7 @@ prio: 45  # auto
 # feature: Eliah tabbed component bar (Lazarus-style, with icons)
 
 - **Type:** feature (Track B)
-- **Status:** backlog
+- **Status:** working
 - **Track:** B
 - **Parent:** feature-eliah-ide
 - **Opened:** 2026-06-24
@@ -52,3 +52,27 @@ surfaces a new icon with no IDE edit. gui_suite green; screenshot of the bar.
 
 ## Log
 - 2026-06-24 — filed from GUI-testing feedback (Lazarus-style component bar).
+
+## Log
+
+- 2026-07-12 (opus-night) — **landed.**
+  - PCL: `TTabBar` in extctrls (GtkNotebook of horizontal button rows, built
+    directly on gtk3_c like graphics.pas; gtk3_c.h gained the 4 notebook
+    decls). `AddTab(caption)`, `AddButton(tab, caption, onClick)` (real
+    TButtons → normal click trampoline), `TabCount`/`ActiveTab`/
+    `SetActiveTab`. New `test/gui/test_pcl_tabbar.pas` in the gui suite.
+  - Eliah: `CompBar: TTabBar` under the button row (TOOLBAR_H 40 → 104),
+    tabs Standard / Non-visual, driven by the SAME registry enumeration as
+    the combo (BarRows maps buttons to palette rows); clicking a component
+    button selects its palette row and arms Place (sticky). Combo kept
+    (augment, not replace). Captions are 3-char placeholders until glyph art
+    exists (the ticket's intended bootstrap). Smoke asserts: 2 tabs, buttons
+    present, a real gtk click selects the row + arms Place.
+  - **Compiler bug found + filed:** [[bug-tobject-param-truncated-32bit]]
+    (Track A, prio 60) — a `Sender: TObject` parameter arrives 32-bit
+    truncated in methods (and is rejected outright in plain routines); every
+    PCL handler that reads Sender's value is affected. Eliah's handler is
+    typed `Sender: TButton` as the workaround (commented).
+  - `make gui-test` fully green (incl. the 3 real-window xvfb cases).
+  Remaining (cosmetic follow-up, not blocking): real per-component glyphs to
+  replace the caption placeholders; finer tab groups beyond visual/non-visual.

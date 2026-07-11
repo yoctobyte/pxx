@@ -155,6 +155,12 @@ void gtk_menu_item_set_submenu(void* menu_item, void* submenu);
 void gtk_menu_shell_append(void* menu_shell, void* menu_item);
 void gtk_menu_item_activate(void* menu_item);
 
+// Notebook (tab strip; the TTabBar component bar)
+void* gtk_notebook_new(void);
+int gtk_notebook_append_page(void* notebook, void* child, void* tab_label);
+void gtk_notebook_set_current_page(void* notebook, int page_num);
+int gtk_notebook_get_current_page(void* notebook);
+
 // Box & Container Layout
 void* gtk_box_new(int orientation, int spacing);
 void gtk_box_pack_start(void* box, void* child, int expand, int fill, unsigned int padding);
