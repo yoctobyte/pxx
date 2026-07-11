@@ -152,6 +152,11 @@ begin
   EmitAsmTextMode := False;
   EspBareBoot := False;
   NoDefaultRtl := False;
+  StrictIR := True;   { DEFAULT ON since 2026-07-11: IRVerify rejects any IR_UNSUPPORTED
+                        node (frontend failed to lower an AST node) — fail loud instead of
+                        the silent self-host miscompile it once caused. All frontends incl.
+                        the Rust suite measure 0. --no-strict-ir opts out for in-development
+                        frontend work. feature-selfhost-guard-ir-unsupported. }
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
   NoUnhandledHandler := False;
@@ -385,11 +390,17 @@ begin
     end
     else if option = '--strict-ir' then
     begin
-      { Opt in to the self-host safety guard: IRVerify hard-errors on any
-        IR_UNSUPPORTED node (a frontend failed to lower an AST node). Default
-        off — an in-development frontend may still emit it. See
-        feature-selfhost-guard-ir-unsupported. }
+      { Now the default; kept as an accepted no-op for existing invocations. }
       StrictIR := True;
+      Inc(i);
+    end
+    else if option = '--no-strict-ir' then
+    begin
+      { Opt OUT of the self-host safety guard (IRVerify hard-error on any
+        IR_UNSUPPORTED node) — for an in-development frontend that still
+        emits it for unlowered constructs. See
+        feature-selfhost-guard-ir-unsupported. }
+      StrictIR := False;
       Inc(i);
     end
     else if option = '--auto-locals' then

@@ -5,7 +5,7 @@ prio: 60  # auto
 # Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile)
 
 - **Type:** feature (compiler — self-host safety) — Track A
-- **Status:** backlog — **opt-in flag `--strict-ir` DELIVERED (2026-07-04)**;
+- **Status:** working
   remaining = flip to default once Track R coordinated (still gated, see risk)
 - **Opened:** 2026-07-04 (from root-causing bug-selfhost-multifn-ifelse-miscompile)
 

@@ -1608,7 +1608,7 @@ var
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
   NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
   NoSignals        : Boolean;    { user opt-out (--no-signals): skip the default signal runtime (SIGINT/SIGTERM dispatch + SetSignalHandler support). Default ON, no auto-detection — user decision, see feature-signal-handlers. x86-64 Linux only for now. }
-  StrictIR         : Boolean;    { user opt-in (--strict-ir): IRVerify hard-errors on any IR_UNSUPPORTED node (a frontend could not lower an AST node). Default OFF so an in-development frontend (e.g. Track R Rust) that still emits IR_UNSUPPORTED is not broken. Turns "frontend gap -> silent nondeterministic self-host miscompile" into an immediate compile error naming the AST kind. See feature-selfhost-guard-ir-unsupported / bug-selfhost-multifn-ifelse-miscompile. }
+  StrictIR         : Boolean;    { DEFAULT ON (--no-strict-ir opts out): IRVerify hard-errors on any IR_UNSUPPORTED node (a frontend could not lower an AST node). Turns "frontend gap -> silent nondeterministic self-host miscompile" into an immediate compile error naming the AST kind. All frontends incl. Rust measured 0 before the flip. See feature-selfhost-guard-ir-unsupported / bug-selfhost-multifn-ifelse-miscompile. }
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
