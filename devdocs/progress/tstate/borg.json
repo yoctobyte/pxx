@@ -1555,5 +1555,9 @@
   "verdict": "GREEN",
   "wall": 108.2
  },
+ "last_opt": {
+  "date": "2026-07-11T07:17:13Z",
+  "sha": "7960a34e6846f0ca9c7b164ccafce3ddec24cce0"
+ },
  "open_regressions": []
 }
