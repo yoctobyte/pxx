@@ -12496,6 +12496,15 @@ begin
   classAlign := 1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
+    { `class var` inside a RECORD: no shared-storage model for record class
+      vars in pxx (class-body class vars have one, see ParseTypeSection).
+      FPC additionally forbids the local-type and anonymous-record contexts
+      (terecs12c/terecs13c) — reject all three loudly instead of silently
+      skipping the section (the old fall-through made TRec.X fail later with
+      a misleading 'class method not found'). }
+    if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkVar) then
+      Error('class var is not allowed in a record type');
     if CurTok.Kind = tkIdent then
     begin
       { comma-separated names share one type: `X, Y: Integer` }

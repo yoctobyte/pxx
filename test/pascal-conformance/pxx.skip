@@ -49,8 +49,6 @@ tenum4.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
 terecs10.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs11.pp	parser: mode-Delphi generics TFoo<T> syntax
-terecs12c.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-terecs13c.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 terecs14.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs15.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs16.pp	parser: mode-Delphi generics TFoo<T> syntax

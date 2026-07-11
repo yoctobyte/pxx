@@ -417,6 +417,8 @@ test-core: $(COMPILER)
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
 	! ./$(COMPILER) test/test_record_self_field_fail.pas /tmp/test_rsf26 > /tmp/test_rsf.log 2>&1
 	grep -q "record field cannot be of the enclosing record type" /tmp/test_rsf.log
+	! ./$(COMPILER) test/test_record_class_var_fail.pas /tmp/test_rcv26 > /tmp/test_rcv.log 2>&1
+	grep -q "class var is not allowed in a record type" /tmp/test_rcv.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
