@@ -6,9 +6,10 @@ prio: 18  # RAINY-DAY (user call 2026-07-11): conformance-driven diagnostics dep
 
 - **Type:** bug umbrella (Pascal frontend, missing diagnostics)
 - **Track:** P
-- **Status:** working
+- **Status:** backlog, RAINY-DAY — triaged 2026-07-11 (see below): dialect-pass
+  entries closed as not-bugs; remaining real gaps parked as reminder tests
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** opus-a
+- **Owner:** —
 
 ## Symptom
 13 curated `{ %FAIL }` tests — programs the reference compiler must REJECT —
