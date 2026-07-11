@@ -1548,6 +1548,12 @@
   "verdict": "GREEN",
   "wall": 107.8
  },
+ "last_bench": {
+  "date": "2026-07-11T07:35:20Z",
+  "rc": 0,
+  "rows": 12,
+  "sha": "b51a92f0879fd728e176c3c9a52b37acdc838d80"
+ },
  "last_full": {
   "date": "2026-07-11T07:29:34Z",
   "sha": "b51a92f0879fd728e176c3c9a52b37acdc838d80",

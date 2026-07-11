@@ -1,0 +1,13 @@
+# date	host	sha	workload	level	ms
+2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O0	114.1
+2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O2	114.1
+2026-07-11T07:31:45Z	borg	b51a92f0879f	mandelbrot	-O3	114.0
+2026-07-11T07:31:45Z	borg	b51a92f0879f	raytracer	-O0	14546.6
+2026-07-11T07:31:45Z	borg	b51a92f0879f	raytracer	-O2	8482.3
+2026-07-11T07:31:45Z	borg	b51a92f0879f	raytracer	-O3	7730.1
+2026-07-11T07:31:45Z	borg	b51a92f0879f	sieve	-O0	114.0
+2026-07-11T07:31:45Z	borg	b51a92f0879f	sieve	-O2	114.0
+2026-07-11T07:31:45Z	borg	b51a92f0879f	sieve	-O3	114.0
+2026-07-11T07:31:45Z	borg	b51a92f0879f	selfcompile	-O0	4773.6
+2026-07-11T07:31:45Z	borg	b51a92f0879f	selfcompile	-O2	3621.6
+2026-07-11T07:31:45Z	borg	b51a92f0879f	selfcompile	-O3	3721.9
