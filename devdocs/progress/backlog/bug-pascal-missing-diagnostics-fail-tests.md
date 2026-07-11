@@ -27,6 +27,23 @@ One test at a time: reproduce → add the check (with a matching `test/*.pas`
 negative test in our own suite) → unskip. Split out sub-tickets if any check
 turns out deep.
 
+## Progress 2026-07-11 (opus-a)
+
+Batches 1–3 landed (f6908a23, 034ce7ea, 3a601a9a) — 7 of 22 burned:
+tdefault2/4/6 (file-type + Default() checks; TextFile now a real record),
+tforin11 (string for-in requires Char var), terecs9 (self-containing record),
+terecs12c/13c (class var in record rejected). Full sweep 263-ish pass / 0 fail.
+
+Remaining 15 cluster deep:
+- generics: tdefault12, tgenconstraint38/39, tgeneric13/14/20/21/56 (needs a
+  generic-template registry lookup / constraint checks)
+- enum identity: tenum2 (inc past range via unit), tenum4 ($SCOPEDENUMS),
+  tforin20 (enum with holes), toperatorerror (enum vs pointer compare) — all
+  need per-var enum identity (SymEnumId parallel array) first
+- tover3: overload AMBIGUITY ranking (cardinal arg vs longint/smallint/word
+  candidates must error, needs scored matching not first-hit)
+- tarrconstr8 (`var.Create`), tclass13c (TRootClass.Integer)
+
 ## Gate
 `make test` + self-host byte-identical; burn the skip-list entries.
 
