@@ -5,9 +5,9 @@ prio: 40
 # unicodestring/widestring: types not really supported (decls "work", semantics don't)
 
 - **Type:** bug / gap (Pascal frontend) — Track P
-- **Status:** backlog — filed 2026-07-11 while resolving
+- **Status:** working
   [[bug-case-of-string-segfault-and-label-validation]]
-- **Owner:** —
+- **Owner:** opus-a
 
 ## Symptom
 

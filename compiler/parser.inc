@@ -5224,7 +5224,8 @@ begin
             prevTok := TypeSize(tyUInt8)
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then
             prevTok := TypeSize(tyChar)
-          else if CaseEqual(name, 'ansistring') then
+          else if CaseEqual(name, 'ansistring') or
+                  CaseEqual(name, 'unicodestring') or CaseEqual(name, 'widestring') then
           begin
             if PasDefineExists('PXX_MANAGED_STRING') then
               prevTok := TypeSize(tyAnsiString)
@@ -6336,7 +6337,8 @@ begin
           else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then castTk := tyUInt8
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then castTk := tyChar
           else if CaseEqual(name, 'boolean') then castTk := tyBoolean
-          else if CaseEqual(name, 'ansistring') then
+          else if CaseEqual(name, 'ansistring') or
+                  CaseEqual(name, 'unicodestring') or CaseEqual(name, 'widestring') then
           begin
             if PasDefineExists('PXX_MANAGED_STRING') then
               castTk := tyAnsiString
@@ -11508,8 +11510,14 @@ begin
         Result := tySet;
         Exit;
       end;
-      if CaseEqual(lo, 'ansistring') then
+      if CaseEqual(lo, 'ansistring') or
+         CaseEqual(lo, 'unicodestring') or CaseEqual(lo, 'widestring') then
       begin
+        { unicodestring/widestring: pragmatic alias to the native string type
+          (byte semantics). FPC's UTF-16 payload model is a later slice; the
+          alias gives literals/writeln/compare/case-of/indexing string
+          behavior instead of a bare machine word
+          (bug-pascal-unicodestring-widestring-type-missing). }
         if PasDefineExists('PXX_MANAGED_STRING') then
           Result := tyAnsiString
         else

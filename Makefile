@@ -403,6 +403,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_many_properties26)" = "$$(printf '11\nTRUE\n99')"
 	./$(COMPILER) test/test_overload_record_identity.pas /tmp/test_overload_record_identity26
 	test "$$(/tmp/test_overload_record_identity26)" = "$$(printf '11.0\n37.0\nvec2\nthing')"
+	./$(COMPILER) test/test_unicodestring_alias.pas /tmp/test_unicodestring_alias26
+	test "$$(/tmp/test_unicodestring_alias26)" = "$$(printf 'abc\nhello\n5\ne\neq\nhello!\n2')"
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26

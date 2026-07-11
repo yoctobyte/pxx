@@ -13,7 +13,6 @@
 # bug-case-of-string-segfault-and-label-validation): 238 pass / 278
 # skip-listed / 34 auto-gated. Burned the tcase cluster (21 entries incl. all
 # exit=139 segfaults + the {%FAIL} label-validation tests); the 26 tcase
-# entries that remain hinge on the missing unicodestring type, unit-only
 # sources, enum parsing, or the `otherwise` clause — not on case handling.
 tarray11.pp	runtime: exit code 30 (want 0)
 tarray12.pp	unclassified: pascal26:44: error: base type not found: IInterface ()
@@ -267,27 +266,7 @@ tstring2.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring5.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
 tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
-tcase0.pp	unclassified: unicodestring case selector — unicodestring type not supported (case-of-string itself works, see bug-case-of-string-segfault-and-label-validation)
 tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
-tcase12.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase13.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase14.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase15.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase16.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase17.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase18.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase24.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase25.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase28.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase29.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase30.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase31.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase32.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase33.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase34.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase40.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase41.pp	unclassified: unicodestring case selector — unicodestring type not supported
-tcase44.pp	unclassified: unicodestring case selector — unicodestring type not supported
 tcase45.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
