@@ -6,3 +6,8 @@ test_c_gtk_*.c
 test_c_gtk_*.pas
 # lib_sockets: fixed port, TIME_WAIT flakes across back-to-back runs
 lib_sockets*
+# thread interleaving: output order differs run to run even at -O0
+test_multithreading*
+# prints RTTI/prop POINTER values — binary-layout-dependent, differs
+# between binaries by construction
+test_rtti*

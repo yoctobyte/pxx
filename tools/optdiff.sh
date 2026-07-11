@@ -17,7 +17,9 @@ cd "$(dirname "$0")/.." || exit 1
 CC=${TESTMGR_COMPILER:-compiler/pascal26}
 TMP=${TESTMGR_TMP:-${TMPDIR:-/tmp}}/optdiff.$$
 SCALE=${TESTMGR_TIME_SCALE:-1}
-TMO=$(awk "BEGIN{printf \"%d\", 10*$SCALE}")
+# 30s base: the slowest legit programs (lib_x509 ~5s solo) run under
+# full shard parallelism — a tight cap turns box load into false DIFFs
+TMO=$(awk "BEGIN{printf \"%d\", 30*$SCALE}")
 SHARD=0; NSHARD=1
 if [ "${1:-}" = "--shard" ] && [ -n "${2:-}" ]; then
   SHARD=${2%%/*}; NSHARD=${2##*/}
