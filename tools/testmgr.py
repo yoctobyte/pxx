@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -679,14 +680,23 @@ BENCH_SELF_RUNS = 3            # self-compile is ~10s a run: 3 is plenty
 BENCH_SLOW_PCT = 10.0
 BENCH_TSV_REL = "devdocs/progress/tstate/bench.tsv"
 COMPILER_SRC = "compiler/compiler.pas"
-# (name, source, canary argv, timed argv) — canary mode must be
-# deterministic; {tmp} expands to the bench scratch dir
+# FPC comparison (feature-testmgr-fpc-compare-and-web-dashboard): the `fpc`
+# level in bench.tsv times the reference compiler on the same source so the
+# dashboard can show pxx-vs-FPC. Flags mirror the Makefile bootstrap.
+FPC_BIN = os.environ.get("FPC", "fpc")
+FPC_FLAGS = ["-O2", "-Tlinux", "-Px86_64"]
+FPC_LEVEL = "fpc"
+# (name, source, canary argv, timed argv, fpc_ok) — canary mode must be
+# deterministic; {tmp} expands to the bench scratch dir. fpc_ok marks sources
+# in the common pascal26/FPC subset (no pxx-only units) that are ALSO compiled
+# and timed under `fpc -O2` for the cross-compiler `fpc` level.
 BENCH_SUITE = (
     ("mandelbrot", "examples/mandelbrot/mandelbrot.pas",
-     [], ["--bench", "400", "300"]),               # float compute
+     [], ["--bench", "400", "300"], False),         # float compute (pxx units)
     ("raytracer", "examples/raytracer/raytracer.pas",
-     [], ["--ppm", "{tmp}/rt.ppm", "480", "360"]),  # call-heavy float
-    ("sieve", "examples/primes/sieve.pas", [], []),  # memory-bound int
+     [], ["--ppm", "{tmp}/rt.ppm", "480", "360"], False),  # call-heavy float
+    ("sieve", "examples/primes/sieve.pas", [], [], False),  # memory-bound int
+    ("nbody", "bench/portable/nbody.pas", [], [], True),   # float, FPC-comparable
 )
 
 
@@ -704,6 +714,14 @@ def bench_time(argv, runs, timeout):
         dt = time.monotonic() - t0
         best = dt if best is None else min(best, dt)
     return best
+
+
+def fpc_build(src, out, tmp):
+    """Compile `src` with FPC into `out` (units to `tmp`). Returns True on a
+    clean build, False otherwise. Silent — the caller reports."""
+    r = subprocess.run([FPC_BIN] + FPC_FLAGS + ["-FU" + tmp, "-FE" + tmp,
+                        "-o" + out, src], cwd=REPO, capture_output=True)
+    return r.returncode == 0 and os.path.exists(out)
 
 
 def bench_prev(tsv, host):
@@ -737,6 +755,9 @@ def run_bench():
     prev = bench_prev(tsv, host)                          # checkout writes
     tmp = tempfile.mkdtemp(prefix="tbench-")              # elsewhere
     timeout = 120 * float(os.environ.get("TESTMGR_TIME_SCALE", "1"))
+    fpc_present = shutil.which(FPC_BIN) is not None
+    if not fpc_present:
+        print("  bench: fpc not found — skipping the `fpc` comparison level")
     rows, slow, red = [], [], []
 
     def record(name, lvl, secs):
@@ -749,7 +770,7 @@ def run_bench():
             slow.append("%s %s %s -> %sms" % (name, lvl, old, ms))
         print("  bench %-12s %-4s %8.1fms%s" % (name, lvl, ms, note), flush=True)
 
-    for name, src, canary, timed in BENCH_SUITE:
+    for name, src, canary, timed, fpc_ok in BENCH_SUITE:
         ref = None
         for lvl in BENCH_LEVELS:
             b = os.path.join(tmp, name + lvl.replace("-", "_"))
@@ -777,6 +798,32 @@ def run_bench():
                 red.append("%s %s run" % (name, lvl))
                 continue
             record(name, lvl, dt)
+
+        # fpc comparison level: same source under the reference compiler. Not
+        # a regression signal (RED) if it fails — FPC just may not accept a
+        # source, and its absence is fine; only pxx levels gate.
+        if fpc_ok and fpc_present:
+            fb = os.path.join(tmp, name + "_fpc")
+            if not fpc_build(src, fb, tmp):
+                print("  bench %-12s %-4s FPC-COMPILE-FAIL" % (name, FPC_LEVEL))
+            else:
+                argv = [fb] + [a.format(tmp=tmp) for a in canary]
+                try:
+                    c = subprocess.run(argv, cwd=REPO, capture_output=True,
+                                       stdin=subprocess.DEVNULL, timeout=timeout)
+                    got = (c.returncode, c.stdout)
+                except subprocess.TimeoutExpired:
+                    got = None
+                # canary on exit code only — stdout may differ in float
+                # formatting between the two RTLs even when both are correct.
+                if got is None or ref is None or got[0] != ref[0]:
+                    print("  bench %-12s %-4s FPC-CANARY-DIFF vs -O0"
+                          % (name, FPC_LEVEL))
+                else:
+                    dt = bench_time([fb] + [a.format(tmp=tmp) for a in timed],
+                                    BENCH_RUNS, timeout)
+                    if dt is not None:
+                        record(name, FPC_LEVEL, dt)
 
     # self-compile: the memory-bound big-program case. Timed = an -OL-built
     # compiler compiling the compiler source; canary = every stage's output
@@ -810,6 +857,22 @@ def run_bench():
             red.append("selfcompile %s run" % lvl)
             continue
         record("selfcompile", lvl, dt)
+
+    # selfcompile `fpc` level: time the REFERENCE compiler compiling the same
+    # compiler source (the historic vs-FPC compile-speed metric, now per-SHA).
+    # No canary — FPC emits its own binary; this measures compile throughput.
+    if fpc_present:
+        ftmp = os.path.join(tmp, "fpc_self")
+        os.makedirs(ftmp, exist_ok=True)
+        argv = ([FPC_BIN] + FPC_FLAGS + ["-FU" + ftmp, "-FE" + ftmp,
+                 "-o" + os.path.join(ftmp, "p26_fpc"), COMPILER_SRC])
+        if subprocess.run(argv, cwd=REPO, capture_output=True).returncode != 0:
+            print("  bench %-12s %-4s FPC-COMPILE-FAIL" % ("selfcompile",
+                                                           FPC_LEVEL))
+        else:
+            dt = bench_time(argv, BENCH_SELF_RUNS, timeout * 5)
+            if dt is not None:
+                record("selfcompile", FPC_LEVEL, dt)
 
     if rows:
         os.makedirs(os.path.dirname(out_tsv), exist_ok=True)
