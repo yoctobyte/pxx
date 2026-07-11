@@ -5,7 +5,7 @@ prio: 42
 # bignum operator layer: TBigInt + - * div mod comparisons — Track B
 
 - **Type:** feature (library) — Track B
-- **Status:** working
+- **Status:** done
   [[feature-lib-vecmath]] / [[feature-pascal-complex-numbers-ucomplex]]
 - **Owner:** fable-p
 
@@ -39,3 +39,6 @@ determinism concerns.
 
 Track B: build with `$(PXX_STABLE)`, `make lib-test` green. A managed-temp
 crash found here → Track A ticket with minimal repro, don't work around.
+
+## Log
+- 2026-07-11 — resolved, commit 78ab71c8.
