@@ -20,6 +20,8 @@ devdocs/progress/tstate/**) — the daemon (tools/twatch.py) stays the engine.
   trackt config [k [v]]  show / set daemon config (applies live where safe)
   trackt log             follow the daemon log
   trackt web on|off      enable/disable the Flask UI (spawned by start)
+  trackt dashboard       (re)generate the static tstate/*.html pages from the
+                         committed data (one-liner; the html is gitignored)
 
 The watcher clone is found via --clone, $TRACKT_CLONE, ~/.config/trackt.path,
 or ~/trackt-watch.  `trackt run` never touches the clone — it tests the
@@ -418,7 +420,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("cmd", nargs="?", default="up",
                     choices=["up", "status", "start", "stop", "restart",
-                             "watch", "run", "setup", "config", "log", "web"])
+                             "watch", "run", "setup", "config", "log", "web",
+                             "dashboard"])
     ap.add_argument("arg", nargs="*")
     ap.add_argument("--clone", help="watcher clone dir")
     ap.add_argument("--remote", help="start: clone URL if dir missing")
@@ -461,6 +464,10 @@ def main():
         return cmd_setup(clone, a.fetch_corpus)
     if a.cmd == "config":
         return cmd_config(clone, *(a.arg[:2] or [None]))
+    if a.cmd == "dashboard":
+        os.execv(sys.executable, [sys.executable,
+                                  os.path.join(HERE, "twatch_web.py"),
+                                  "--clone", clone, "--static"])
     if a.cmd == "log":
         os.execvp("tail", ["tail", "-n", "50", "-f", logpath(clone)])
     if a.cmd == "web":
