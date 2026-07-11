@@ -188,7 +188,6 @@ tarray3.pp	unclassified: Expected: begin, but got: ABCD (Kind: 3, Line: 13)
 tarray6.pp	unclassified: pascal26:6: error: local var-section initializer not supported; use `var x := value;` ()
 tarray8.pp	unclassified: pascal26:18: error: undefined variable (uniquestring)
 tclass13a.pp	unclassified: Expected: ), but got:  (Kind: 81, Line: 12)
-tclass13c.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tclass13d.pp	unclassified: Expected: :, but got:  (Kind: 64, Line: 7)
 tclass3.pp	unclassified: pascal26:26: error: inherited call argument count mismatch ()
 tenum1.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
@@ -262,3 +261,4 @@ tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program �
 tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tcase48.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
+tclass13c.pp	missing diagnostic: accepts invalid code — TRootClass.Integer nested-type member; needs a per-class nested-type registry (legit nested types TTest.TRecord pass by name fall-through, see tdefault8)
