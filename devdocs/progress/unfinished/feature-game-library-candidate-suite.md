@@ -148,3 +148,7 @@ green library suite.
   parked until the lexer-level P tickets land — next Pascal candidate (Apus)
   will likely hit the same include-path wall, so fixing these first is the
   cheaper path.
+- 2026-07-11 (parked -> unfinished) — slice C's ZenGL probe done + blockers
+  filed; further Pascal-ladder candidates (Apus, Castle) hit the same
+  include-path/lexer walls, so parked until the three Track P tickets above
+  land. Slice B remains done; slice D untouched.
