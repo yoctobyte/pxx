@@ -15,7 +15,7 @@ unit dns_async;
 
 interface
 
-uses scheduler, platform, dns, dns_config, dns_wire_core, dns_wire_blocking;
+uses scheduler, platform, dns, dns_cache, dns_config, dns_wire_core, dns_wire_blocking;
 
 { Async A-record query to an explicit nameserver (host byte order) + port,
   bounded by timeoutMs (PAL_NET_ETIMEDOUT when it lapses; < 0 = unbounded).
@@ -68,6 +68,16 @@ function DnsQueryAAAAListAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer
   search/ndots candidates. /etc/hosts IPv6 lines and AAAA CNAME chasing are not
   consulted yet (same limits as the sync facade). }
 function DnsResolveHost6Async(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
+
+{ Cached A query for an exact name against the nameserver list. Consults `c` at
+  `nowMs` first — a live positive OR negative entry short-circuits the network —
+  and on a miss queries, then stores the answer under its TTL (positive: min
+  answer TTL; negative NXDOMAIN/NODATA carrying an SOA: RFC 2308 negative TTL).
+  `rcode` is the DNS RCODE. CNAME-chase results are not cached (the exact name
+  is; a following chase query is a separate lookup on its own key). }
+function DnsQueryAListCachedAsync(var c: TDnsCache; const ns: TDnsIpv4Array;
+  nsCount, nsPort: Integer; const name: string; nowMs: Int64;
+  var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer; timeoutMs: Integer): Integer;
 
 implementation
 
@@ -427,6 +437,50 @@ begin
       Exit;
     end;
     idx := idx + 1;
+  end;
+  Result := rc;
+end;
+
+function DnsQueryAListCachedAsync(var c: TDnsCache; const ns: TDnsIpv4Array;
+  nsCount, nsPort: Integer; const name: string; nowMs: Int64;
+  var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer; timeoutMs: Integer): Integer;
+var
+  cIps, localIps: TDnsIpv4Array;
+  cCount, cRcode, i, j, rc, localCount, ttl: Integer;
+  cname: string;
+begin
+  count := 0;
+  rcode := 0;
+  { cache first — a live positive OR negative entry short-circuits the query }
+  cCount := 0; cRcode := 0;
+  if DnsCacheGet(c, name, DNS_TYPE_A, nowMs, cIps, cCount, cRcode) then
+  begin
+    for i := 0 to cCount - 1 do ips[i] := cIps[i];
+    count := cCount;
+    rcode := cRcode;
+    Result := cRcode;
+    Exit;
+  end;
+
+  { miss — query the nameserver list, keeping the ttl for the store }
+  if nsCount <= 0 then begin Result := DNS_ERR_NONS; Exit; end;
+  rc := DNS_ERR_NONS;
+  for i := 0 to nsCount - 1 do
+  begin
+    localCount := 0; ttl := 0; cname := '';
+    rc := DnsQueryAAsyncTTL(ns[i], nsPort, name, localIps, localCount, cname, ttl, timeoutMs);
+    if rc >= 0 then
+    begin
+      for j := 0 to localCount - 1 do ips[j] := localIps[j];
+      count := localCount;
+      rcode := rc;
+      { store positive/negative answers with a live TTL; ttl seconds -> ms }
+      if ttl > 0 then
+        DnsCachePut(c, name, DNS_TYPE_A, localIps, localCount, rc, nowMs, Int64(ttl) * 1000);
+      Result := rc;
+      Exit;
+    end;
+    { transport failure (incl. timeout) — try the next nameserver }
   end;
   Result := rc;
 end;

@@ -373,3 +373,12 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   opt into caching via `dns_cached`. `make lib-test` green (http intact). NEXT
   after that Track A fix: fold caching into the DnsResolveHostAsync facade + the
   blocking facade; CNAME-chase result caching; async TC->TCP fallback.
+- 2026-07-11 (later) — **workarounds reverted after the Track A fixes landed**
+  (pin v199): [[bug-inline-array-field-const-bound]] and
+  [[bug-transitive-dns_cache-import-corrupts-managed-strings]] are both fixed, so
+  `TDnsCache.slots` is back to an inline `array[0..DNS_CACHE_SLOTS-1]` field and
+  `DnsQueryAListCachedAsync` moved back INTO `dns_async` (the separate
+  `dns_cached` unit is deleted); `dns_async` now `uses dns_cache` directly and
+  `make lib-test` stays green (http's managed strings intact). Facade-level
+  caching (fold into `DnsResolveHostAsync` / blocking `DnsResolveHost`) is now
+  unblocked — next slice.

@@ -3,7 +3,7 @@ program lib_dns_async;
   a loopback UDP DNS server coroutine answers a canned A record; a client
   coroutine resolves through DnsQueryAAsync. Both run on one thread, reactor-
   driven — proves async UDP + the DNS wire round-trip without external network. }
-uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_cache, dns_async, dns_cached;
+uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_cache, dns_async;
 
 const
   PORT = 28766;

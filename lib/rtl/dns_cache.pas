@@ -32,9 +32,8 @@ type
     expiry:  Int64;        { absolute monotonic ms; entry dead once now >= this }
   end;
 
-  TDnsCacheSlots = array[0..DNS_CACHE_SLOTS - 1] of TDnsCacheEntry;
   TDnsCache = record
-    slots: TDnsCacheSlots;
+    slots: array[0..DNS_CACHE_SLOTS - 1] of TDnsCacheEntry;
   end;
 
 { Reset a cache to empty. Call once before first use. }
