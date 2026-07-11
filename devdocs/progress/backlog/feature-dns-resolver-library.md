@@ -337,3 +337,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   async TC->TCP fallback, negative-response caching, hosts-file IPv6 + AAAA
   CNAME chase, and the `dns_libc`/`dns_resolved`/`dns_esp` backends + profile
   selection.
+- 2026-07-11 — **answer cache landed** (Track B): `lib/rtl/dns_cache.pas` — a
+  fixed 64-slot TTL cache keyed by (name, qtype), caching positive answers AND
+  negative answers (NXDOMAIN/NODATA, RFC 2308) with an absolute monotonic-ms
+  expiry; injected `nowMs` keeps the logic pure/offline-testable. Soonest-
+  expiring eviction on a full cache; expired entries reaped on lookup. Pure
+  record, no PAL/global state. Offline test `test/lib_dns_cache.pas` (14 checks:
+  TTL hit/expiry, negative entries, qtype separation, replace-in-place, ttl<=0
+  no-op, full-cache eviction) in `make lib-test`. Filing a Track A parser
+  ticket [[bug-inline-array-field-const-bound]] found while writing it. NEXT:
+  wire the cache into the sync + async facades (PalMonotonicMillis + the answer
+  TTL / SOA-minimum for negatives), which needs pulling the record's min-TTL out
+  of the wire response (a small dns_wire_core add).

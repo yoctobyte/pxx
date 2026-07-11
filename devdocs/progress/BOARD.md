@@ -28,10 +28,11 @@ _none_
 
 _none_
 
-## backlog (87)
+## backlog (88)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
@@ -822,6 +823,7 @@ _none_
 - [p 50] [B] feature-game-library-candidate-suite
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-pascal-generic-nonclass-templates
+- [p 48] [A] bug-inline-array-field-const-bound
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 46] [P] bug-pascal-missing-diagnostics-fail-tests
 - [p 45] [A] bug-overload-resolution-record-identity
