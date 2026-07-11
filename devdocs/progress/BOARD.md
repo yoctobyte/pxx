@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (88)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -78,6 +78,8 @@ _none_
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | O | 60 | feature | Inline routine expansion (`inline;`) | — |
+| feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
+| feature-lib-vecmath | B | 42 | feature | vecmath library: TVec2/3/4 + TMat with operator overloads — Track B | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -88,10 +90,11 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
-| feature-pascal-complex-numbers-ucomplex | B | 45 | feature | complex numbers the FPC way: global operator overloading + ucomplex unit | — |
+| feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
 | feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
+| feature-pascal-operator-slash-overload | A | 40 | feature | operator `/` overload not declarable (use site already resolves it) | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -855,8 +858,11 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 42] [B] feature-lib-bignum-operators
+- [p 42] [B] feature-lib-vecmath
 - [p 40] [A] bug-pascal-unicodestring-widestring-type-missing
 - [p 40] [A] feature-c-package-namespace-decision
+- [p 40] [A] feature-pascal-operator-slash-overload
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-pascal-otherwise-case-keyword
