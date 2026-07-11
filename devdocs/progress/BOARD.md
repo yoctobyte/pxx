@@ -28,13 +28,13 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-case-of-string-segfault-and-label-validation | A | 62 | bug | case-of-string: SEGFAULTS at runtime (worse than the missing diagnostics) | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
+| bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -88,9 +88,11 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | 45 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
+| feature-pascal-complex-numbers-ucomplex | B | 45 | feature | complex numbers the FPC way: global operator overloading + ucomplex unit | — |
 | feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
+| feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
@@ -116,7 +118,7 @@ _none_
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
 
-## experimental (19)
+## experimental (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,6 +127,7 @@ _none_
 | feature-esoteric-cobol | A | 45 | feature | Esoteric probe: COBOL | — |
 | feature-esoteric-frontend-probes | A | 60 | feature | Esoteric/legacy frontend probes — umbrella (new category: "esoteric") | — |
 | feature-js-frontend-parked | A | 45 | feature | JavaScript frontend — PARKED (architectural wall on the stated goal) | — |
+| feature-pascal-schema-types | A | 30 | feature | schema types (ISO 10206 value-parameterized types) — experimental | — |
 | feature-r-frontend-parked | A | 45 | feature | R frontend — PARKED (dynamic-runtime language, not a math overlay) | — |
 | feature-rust-borrowed-slice-type | R | 45 | feature | Rust frontend — borrowed slice type (`&[T]`, generalized `&str`) | — |
 | feature-rust-corpus-chess | R | 0 | feature | Rust corpus: the own-written chess engine as Track R's real-world target | — |
@@ -175,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (575)
+## done (576)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -317,6 +320,7 @@ _none_
 | bug-cardinal-expr-promotion | A | 50 | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-else-multi-statement-parse-error | A | 50 | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | 50 | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
+| bug-case-of-string-segfault-and-label-validation | A | 62 | bug | case-of-string: SEGFAULTS at runtime (worse than the missing diagnostics) | — |
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
@@ -779,7 +783,6 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
-- [p 62] [A] bug-case-of-string-segfault-and-label-validation
 - [p 62] [P] feature-pascal-corpus-expansion
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
@@ -838,6 +841,7 @@ _none_
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [B] feature-pal-esp-posix-fd-semantics
 - [p 45] [A] feature-parallel-processing
+- [p 45] [B] feature-pascal-complex-numbers-ucomplex
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
@@ -851,9 +855,11 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
+- [p 40] [A] bug-pascal-unicodestring-widestring-type-missing
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
+- [p 35] [A] feature-pascal-otherwise-case-keyword
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
