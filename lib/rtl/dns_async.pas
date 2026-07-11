@@ -21,7 +21,15 @@ uses scheduler, platform, dns, dns_config, dns_wire_core, dns_wire_blocking;
   bounded by timeoutMs (PAL_NET_ETIMEDOUT when it lapses; < 0 = unbounded).
   Returns the DNS RCODE (0 = NOERROR, ips[0..count-1] filled), or a negative
   DNS_ERR_* / transport error. When the answer is an alias with no A records
-  (rcode 0, count 0), cname carries the target for chain chasing ('' else). }
+  (rcode 0, count 0), cname carries the target for chain chasing ('' else).
+  ttl (seconds) is the cache lifetime the response allows: the minimum answer
+  TTL for a positive answer, the RFC 2308 negative TTL for NXDOMAIN/NODATA, or
+  0 when nothing is cacheable (error / no SOA). }
+function DnsQueryAAsyncTTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
+
+{ DnsQueryAAsyncTTL without the ttl out-param (ttl dropped). }
 function DnsQueryAAsyncEx(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv4Array; var count: Integer; var cname: string; timeoutMs: Integer): Integer;
 
@@ -63,8 +71,9 @@ function DnsResolveHost6Async(const name: string; var ips: TDnsIpv6Array; var co
 
 implementation
 
-function DnsQueryAAsyncEx(nsHost: LongWord; nsPort: Integer; const name: string;
-  var ips: TDnsIpv4Array; var count: Integer; var cname: string; timeoutMs: Integer): Integer;
+function DnsQueryAAsyncTTL(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; var cname: string; var ttl: Integer;
+  timeoutMs: Integer): Integer;
 var
   sock, qlen, rcode, outId, qid, rc, i: Integer;
   n: Int64;
@@ -73,11 +82,12 @@ var
   fromAddr: LongWord;
   fromPort: Integer;
   localIps: TDnsIpv4Array;
-  localCount: Integer;
+  localCount, t: Integer;
   chase: string;
 begin
   count := 0;
   cname := '';
+  ttl := 0;
   sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
   if sock < 0 then begin Result := sock; Exit; end;
   rc := PalSetSocketNonBlocking(sock, 1);
@@ -121,13 +131,51 @@ begin
   for i := 0 to localCount - 1 do
     ips[i] := localIps[i];
   count := localCount;
-  if (rcode = 0) and (localCount = 0) then
+  if localCount > 0 then
   begin
+    { positive: cache for the shortest answer TTL }
+    t := DnsAnswerMinTTL(@rbuf[0], Integer(n));
+    if t > 0 then ttl := t;
+  end
+  else if rcode = 0 then
+  begin
+    { NODATA/alias: a CNAME with no address is chased (not cached here) }
     chase := '';
     if DnsExtractCname(@rbuf[0], Integer(n), chase) then
-      cname := chase;
+      cname := chase
+    else
+    begin
+      t := DnsNegativeTTL(@rbuf[0], Integer(n));   { NODATA negative TTL }
+      if t > 0 then ttl := t;
+    end;
+  end
+  else
+  begin
+    { NXDOMAIN etc.: negative TTL from the SOA }
+    t := DnsNegativeTTL(@rbuf[0], Integer(n));
+    if t > 0 then ttl := t;
   end;
   Result := rcode;
+end;
+
+function DnsQueryAAsyncEx(nsHost: LongWord; nsPort: Integer; const name: string;
+  var ips: TDnsIpv4Array; var count: Integer; var cname: string; timeoutMs: Integer): Integer;
+var
+  localIps: TDnsIpv4Array;
+  localCount, ttl, rc, i: Integer;
+  localCname: string;
+begin
+  count := 0;
+  cname := '';
+  localCount := 0;
+  ttl := 0;
+  localCname := '';
+  rc := DnsQueryAAsyncTTL(nsHost, nsPort, name, localIps, localCount, localCname, ttl, timeoutMs);
+  for i := 0 to localCount - 1 do
+    ips[i] := localIps[i];
+  count := localCount;
+  cname := localCname;
+  Result := rc;
 end;
 
 function DnsQueryAAsync(nsHost: LongWord; nsPort: Integer; const name: string;

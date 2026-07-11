@@ -4079,7 +4079,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_https_mock | grep -c '=ok')" = "6"
 	test "$$(/tmp/lib_https_mock | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas /tmp/lib_dns_async
-	test "$$(/tmp/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok')"
+	test "$$(/tmp/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas /tmp/lib_classes
 	test "$$(/tmp/lib_classes | grep -c '=ok')" = "21"
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"

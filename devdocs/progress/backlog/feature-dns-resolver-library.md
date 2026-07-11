@@ -361,3 +361,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   query functions (add a `var ttl` out-param threaded from DnsAnswerMinTTL/
   DnsNegativeTTL at the parse site) and a mock-server test proving a second
   lookup is served from cache without a second query.
+- 2026-07-11 — **cache wiring (decoupled) landed** (Track B): async A queries now
+  thread the response TTL out (`DnsQueryAAsyncTTL`; `DnsQueryAAsyncEx` kept as a
+  TTL-dropping wrapper), and a new unit `lib/rtl/dns_cached.pas`
+  (`DnsQueryAListCachedAsync`) ties dns_async queries to the dns_cache TTL cache:
+  cache-hit short-circuits the network, miss stores under the answer/negative
+  TTL. lib_dns_async grows a cache-server coroutine proving a second lookup is
+  served from cache (server sees exactly ONE query). **dns_cache is deliberately
+  NOT imported by dns_async/http** — doing so miscompiles http's managed strings
+  ([[bug-transitive-dns_cache-import-corrupts-managed-strings]], Track A); apps
+  opt into caching via `dns_cached`. `make lib-test` green (http intact). NEXT
+  after that Track A fix: fold caching into the DnsResolveHostAsync facade + the
+  blocking facade; CNAME-chase result caching; async TC->TCP fallback.

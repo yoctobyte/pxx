@@ -28,13 +28,14 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (86)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
+| bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -808,6 +809,7 @@ _none_
 - [p 56] [P] feature-pascal-delphi-generics-syntax
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
+- [p 54] [A] bug-transitive-dns_cache-import-corrupts-managed-strings
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess

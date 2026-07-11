@@ -3,13 +3,14 @@ program lib_dns_async;
   a loopback UDP DNS server coroutine answers a canned A record; a client
   coroutine resolves through DnsQueryAAsync. Both run on one thread, reactor-
   driven — proves async UDP + the DNS wire round-trip without external network. }
-uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_async;
+uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_cache, dns_async, dns_cached;
 
 const
   PORT = 28766;
   CPORT = 28767;   { chase server }
   DPORT = 28768;   { deaf server (never answers) — timeout check }
   SPORT = 28769;   { AAAA server }
+  KPORT = 28770;   { cache server (counts queries) }
 
 var
   gRcode: Integer;
@@ -22,6 +23,10 @@ var
   gTimeoutRc: Integer;
   gV6Rcode, gV6Count: Integer;
   gV6Ok, gV6ServerDone: Boolean;
+  gKQueries: Integer;          { how many queries the cache server actually got }
+  gK1Ip, gK2Ip: LongWord;
+  gK1Count, gK2Count: Integer;
+  gKServerDone: Boolean;
 
 procedure ServerCo(arg: Pointer);
 var
@@ -209,6 +214,67 @@ begin
              (ips[0][3] = $B8) and (ips[0][4] = 0) and (ips[0][15] = 1);
 end;
 
+{ Cache server: answers A queries with TTL=60 and 9.9.9.9, counting how many
+  queries arrive. Serves up to 2 so a bug that misses the cache is observable
+  (gKQueries would reach 2); a working cache leaves it at 1. }
+procedure CacheServerCo(arg: Pointer);
+var
+  sock, rc, q, i, rlen: Integer;
+  qbuf: array[0..511] of Byte;
+  resp: array[0..511] of Byte;
+  n: Int64; fromAddr: LongWord; fromPort: Integer;
+begin
+  sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  rc := PalBindIpv4(sock, PAL_NET_IP_LOOPBACK, KPORT);
+  rc := PalSetSocketNonBlocking(sock, 1);
+  for q := 1 to 2 do
+  begin
+    if not WaitReadableTimeout(sock, 800) then
+    begin
+      n := PalRecvFromIpv4(sock, @qbuf[0], 512, fromAddr, fromPort);
+      if n = PAL_NET_EAGAIN then Break;   { no second query -> cache worked }
+    end
+    else
+      n := PalRecvFromIpv4(sock, @qbuf[0], 512, fromAddr, fromPort);
+    if n < 17 then Break;
+    gKQueries := gKQueries + 1;
+    for i := 0 to Integer(n) - 1 do resp[i] := qbuf[i];
+    resp[2] := $81; resp[3] := $80;
+    resp[7] := 1;                    { an=1 }
+    rlen := Integer(n);
+    resp[rlen] := $C0; resp[rlen + 1] := $0C;
+    resp[rlen + 2] := 0; resp[rlen + 3] := DNS_TYPE_A;
+    resp[rlen + 4] := 0; resp[rlen + 5] := 1;
+    resp[rlen + 6] := 0; resp[rlen + 7] := 0; resp[rlen + 8] := 0; resp[rlen + 9] := 60;  { TTL 60 }
+    resp[rlen + 10] := 0; resp[rlen + 11] := 4;
+    resp[rlen + 12] := 9; resp[rlen + 13] := 9; resp[rlen + 14] := 9; resp[rlen + 15] := 9;
+    rlen := rlen + 16;
+    n := PalSendToIpv4(sock, @resp[0], rlen, fromAddr, fromPort);
+  end;
+  rc := PalSocketClose(sock);
+  gKServerDone := True;
+end;
+
+procedure CacheClientCo(arg: Pointer);
+var
+  cache: TDnsCache;
+  ns, ips: TDnsIpv4Array;
+  cnt, rcode, i: Integer;
+begin
+  DnsCacheInit(cache);
+  for i := 0 to DNS_MAX_IPS - 1 do begin ips[i] := 0; ns[i] := 0; end;
+  ns[0] := PAL_NET_IP_LOOPBACK;
+  { first lookup at t=1000ms — miss, queries the server, caches TTL 60s }
+  cnt := 0; rcode := 0;
+  DnsQueryAListCachedAsync(cache, ns, 1, KPORT, 'cached.x', 1000, ips, cnt, rcode, 2000);
+  gK1Count := cnt; if cnt > 0 then gK1Ip := ips[0];
+  { second lookup at t=5000ms (< 60s later) — must be a cache hit, no query }
+  for i := 0 to DNS_MAX_IPS - 1 do ips[i] := 0;
+  cnt := 0; rcode := 0;
+  DnsQueryAListCachedAsync(cache, ns, 1, KPORT, 'cached.x', 5000, ips, cnt, rcode, 2000);
+  gK2Count := cnt; if cnt > 0 then gK2Ip := ips[0];
+end;
+
 procedure SayBool(const tag: string; b: Boolean);
 begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
@@ -219,6 +285,7 @@ begin
   gChaseRcode := -999; gChaseCount := 0; gChaseIp := 0; gChaseServerDone := False;
   gTimeoutRc := -999;
   gV6Rcode := -999; gV6Count := 0; gV6Ok := False; gV6ServerDone := False;
+  gKQueries := 0; gK1Ip := 0; gK2Ip := 0; gK1Count := 0; gK2Count := 0; gKServerDone := False;
   Spawn(@ServerCo, nil);
   Spawn(@ClientCo, nil);
   Spawn(@ChaseServerCo, nil);
@@ -226,6 +293,8 @@ begin
   Spawn(@TimeoutClientCo, nil);
   Spawn(@V6ServerCo, nil);
   Spawn(@V6ClientCo, nil);
+  Spawn(@CacheServerCo, nil);
+  Spawn(@CacheClientCo, nil);
   RunUntilDone;
 
   SayBool('server-done', gServerDone);
@@ -241,4 +310,7 @@ begin
   SayBool('v6-rcode', gV6Rcode = 0);
   SayBool('v6-count', gV6Count = 1);
   SayBool('v6-ip', gV6Ok);
+  SayBool('cache-1st', (gK1Count = 1) and (gK1Ip = LongWord($09090909)));
+  SayBool('cache-2nd', (gK2Count = 1) and (gK2Ip = LongWord($09090909)));
+  SayBool('cache-1query', gKQueries = 1);   { second lookup served from cache }
 end.
