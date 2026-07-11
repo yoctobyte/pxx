@@ -15,10 +15,11 @@ _none_
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (2)
+## unfinished (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 
@@ -26,10 +27,12 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (86)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-esp-emit-obj-proc-fixup-non-iram | A | 50 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
+| bug-esp-idf-heap-linux-mmap-ecall | A | 60 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 55 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
@@ -70,7 +73,6 @@ _none_
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
-| feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
 | feature-gui-real-window-xvfb-smoke | B | 53 | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
@@ -800,6 +802,7 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
+- [p 60] [A] bug-esp-idf-heap-linux-mmap-ecall
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -818,12 +821,12 @@ _none_
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess
-- [p 53] [B] feature-esp-peripheral-callback-api
 - [p 53] [B] feature-gui-real-window-xvfb-smoke
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
+- [p 50] [A] bug-esp-emit-obj-proc-fixup-non-iram
 - [p 50] [A] bug-pascal-include-search-silent-miss
 - [p 50] [P] bug-pascal-scopedenums-ignored
 - [p 50] [C] feature-c-corpus-quickjs

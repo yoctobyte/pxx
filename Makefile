@@ -3963,6 +3963,13 @@ lib-test: pxx-stable-check
 	fi
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38')"
+	@echo "=== lib-test: esptimer (ESP-IDF timer callback surface) compiles to a riscv32 object with esp_timer imports ==="
+	$(PXX_STABLE) --target=riscv32 --platform=esp -Fulib/rtl -Fulib/rtl/platform/esp examples/esp32/timer-c3/main/main.pas /tmp/lib_esptimer_rv.o >/dev/null
+	@if command -v readelf >/dev/null 2>&1; then \
+	  for sym in esp_timer_create esp_timer_start_periodic esp_timer_stop esp_timer_delete; do \
+	    readelf -sW /tmp/lib_esptimer_rv.o | grep -q "UND $$sym" || { echo "esptimer object missing import: $$sym"; exit 1; }; \
+	  done; \
+	fi
 	@if command -v readelf >/dev/null 2>&1; then \
 	  echo "=== lib-test: esp32c3 (riscv32) PAL object imports lwIP socket symbols ==="; \
 	  $(PXX_STABLE) --target=riscv32 -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_esp_rv.o >/dev/null; \

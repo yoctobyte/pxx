@@ -1,0 +1,4 @@
+-march=rv32imc_zicsr_zifencei
+-mtune=esp-base
+"-specs=/home/rene/frankonpiler/examples/esp32/timer-c3/build/specs/picolibc.specs"
+-fno-rtti

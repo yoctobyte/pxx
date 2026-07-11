@@ -1,0 +1,2 @@
+source /home/rene/frankonpiler/examples/esp32/timer-c3/build/gdbinit/symbols
+source /home/rene/frankonpiler/examples/esp32/timer-c3/build/gdbinit/connect
