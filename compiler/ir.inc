@@ -3715,6 +3715,19 @@ begin
           miscompile). Reject it honestly. `a + b` array concat is a future feature
           (feature-dynarray-insert-delete / feature-copy-intrinsic). }
         Error('arithmetic operator not supported for dynamic arrays (`a + b` array concatenation is not implemented)')
+      else if (not CProgramMode) and
+              ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
+               (IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord)) and
+              ((Integer(ASTIVal[node]) = Ord(tkPlus)) or (Integer(ASTIVal[node]) = Ord(tkMinus)) or
+               (Integer(ASTIVal[node]) = Ord(tkStar)) or (Integer(ASTIVal[node]) = Ord(tkSlash)) or
+               (Integer(ASTIVal[node]) = Ord(tkDiv)) or (Integer(ASTIVal[node]) = Ord(tkMod))) then
+        { An arithmetic operator on a record operand with no registered overload
+          otherwise fell through to the scalar IR_BINOP, adding the records'
+          first qwords and producing garbage (or a wild pointer copy) at run
+          time. Reject it honestly — comparisons are left alone (method-pointer
+          `=`/`<>` are legitimate record compares), and C is exempt (struct
+          pointer/array arithmetic tags operands tyRecord legitimately). }
+        Error('no operator overload found for record operands (operator not declared, or its unit not compiled?)')
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
               (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
       begin

@@ -1327,7 +1327,7 @@ var
 begin
   Next; { consume 'operator' }
   opKind := CurTok.Kind;
-  if not (opKind in [tkPlus, tkMinus, tkStar, tkDiv, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) then
+  if not (opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) then
     Error('expected operator symbol after operator keyword');
   { Stay on operator token — do NOT call Next. TokPos → '(' }
 
@@ -1389,6 +1389,28 @@ begin
   end;
   isFunc := (i < TokCount) and (Tokens[i].Kind = tkColon);
 
+  { FPC named-result form: `operator + (a, b: T) z: T;` — the ident between ')'
+    and ':' names the result variable. Excise it from the token stream (leaving
+    the plain `): T` form) and bind it as an alias of Result for the body via
+    OpResultAlias (consumed in FindSym). An alias — not a copy-out epilogue —
+    so an early Exit still returns the value assigned so far. }
+  OpResultAlias := '';
+  if (not isFunc) and (i + 1 < TokCount) and (Tokens[i].Kind = tkIdent) and
+     (Tokens[i + 1].Kind = tkColon) then
+  begin
+    OpResultAlias := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+    for j := i to TokCount - 2 do
+    begin
+      Tokens[j].Kind := Tokens[j + 1].Kind;
+      Tokens[j].IVal := Tokens[j + 1].IVal;
+      Tokens[j].Line := Tokens[j + 1].Line;
+      Tokens[j].SOffset := Tokens[j + 1].SOffset;
+      Tokens[j].SLen := Tokens[j + 1].SLen;
+    end;
+    Dec(TokCount);
+    isFunc := True;
+  end;
+
   { Synthesize unique proc name __op__NN }
   synName := '__op__';
   AppendChar(synName, Chr(Ord('0') + OvrlCount div 10));
@@ -1426,6 +1448,7 @@ begin
   { Advance into the injected 'function/procedure' token }
   Next;
   ParseSubroutine;
+  OpResultAlias := '';
 
   { After ParseSubroutine, the proc is registered — look it up by synName }
   procIdx := FindProc(synName);
@@ -17402,6 +17425,17 @@ begin
             Next;                       { consume 'initialization' }
             PreScanPass := False;
             ParseInitializationSection(uname);
+            PreScanPass := True;
+          end
+          else if CaseEqual(CurTok.SVal, 'operator') then
+          begin
+            { operator defs rewrite the token stream and emit their body in
+              place, like the top-level decl loop. Without this dispatch the
+              `else Next` below silently skipped the whole definition, so no
+              overload was registered and `a + b` on records fell through to
+              a scalar binop (bug-unit-operator-def-silently-skipped). }
+            PreScanPass := False;
+            ParseOperatorDef;
             PreScanPass := True;
           end
           else if CaseEqual(CurTok.SVal, 'resourcestring') then

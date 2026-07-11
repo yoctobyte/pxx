@@ -1594,6 +1594,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_hex_char_code26)" = "$$(printf '65\n65\n65\n65\n255\nlo\nhi\nex')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload_ir26
 	test "$$(/tmp/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	./$(COMPILER) test/test_op_fpc_named_result.pas /tmp/test_op_fpc_named_result_ir26
+	test "$$(/tmp/test_op_fpc_named_result_ir26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	./$(COMPILER) test/test_op_unit_scope.pas /tmp/test_op_unit_scope_ir26
+	test "$$(/tmp/test_op_unit_scope_ir26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading_ir26
 	test "$$(/tmp/test_overloading_ir26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write_ir26
@@ -1849,6 +1853,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_overloading26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload26
 	test "$$(/tmp/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	./$(COMPILER) test/test_op_fpc_named_result.pas /tmp/test_op_fpc_named_result26
+	test "$$(/tmp/test_op_fpc_named_result26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
+	./$(COMPILER) test/test_op_unit_scope.pas /tmp/test_op_unit_scope26
+	test "$$(/tmp/test_op_unit_scope26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
 	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
 	test "$$(/tmp/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas /tmp/test_goto26

@@ -867,6 +867,10 @@ var
   OvrlRecId    : array[0..MAX_OP_OVERLOADS-1] of Integer;
   OvrlProcIdx  : array[0..MAX_OP_OVERLOADS-1] of Integer;
   OvrlCount    : Integer;
+  { FPC named-result operator form: `operator + (a, b: T) z: T;` — while the
+    operator body parses, z is an alias of Result (FindSym rewrites the name).
+    '' = no alias active. }
+  OpResultAlias : AnsiString;
   { Scratch output of ScanGenericFuncSig }
   GFSig_NParams : Integer;
   GFSig_RetType : TTypeKind;

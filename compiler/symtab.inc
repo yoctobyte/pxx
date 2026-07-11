@@ -1771,6 +1771,9 @@ function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
+  { Inside an FPC named-result operator body the declared result name is an
+    alias of Result (feature-pascal-operator-decl-fpc-compat). }
+  if (OpResultAlias <> '') and CaseEqual(lo, OpResultAlias) then lo := 'Result';
   { Exact-case match first, innermost scope out (preserves shadowing). A global
     variable declared textually after the current routine is hidden (decl-order
     gating, DeclOrderStrict) so it cannot bind — declare-before-use, FPC-parity.

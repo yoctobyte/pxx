@@ -6,10 +6,10 @@ prio: 44
 
 - **Type:** bug/gap (Pascal frontend, small) — Track P (shared parser.inc,
   A-gated)
-- **Status:** backlog — filed 2026-07-11 while scoping
+- **Status:** working
   [[feature-pascal-complex-numbers-ucomplex]]; widened same day after
   verifying the two compilers accept EXACTLY complementary syntax
-- **Owner:** —
+- **Owner:** fable-p
 
 ## Gap 1 — named-result form (the FPC-compat one)
 
