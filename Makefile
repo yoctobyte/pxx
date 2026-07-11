@@ -3624,9 +3624,10 @@ test-opt: $(COMPILER)
 	/tmp/pascal26-o2a -O2 $(COMPILER_SRC) /tmp/pascal26-o2b
 	/tmp/pascal26-o2b -O2 $(COMPILER_SRC) /tmp/pascal26-o2c
 	cmp /tmp/pascal26-o2b /tmp/pascal26-o2c
-	# -O3 carries the W1 operand scheduler (feature-opt-o3-register-pressure:
-	# binop mirror/scratch + leaf-index fold, x86-64 only). An -O3-built compiler
-	# rebuilding itself at -O3 must reach byte-identity too.
+	# -O2 now carries the W1 mirror / leaf-index fold / last-arg collapse
+	# (promoted 2026-07-11 after a 564-program -O0-vs differential). -O3 keeps
+	# the register-lifetime passes (r8-r13 scratch, loop/float residency); an
+	# -O3-built compiler rebuilding itself at -O3 must reach byte-identity too.
 	./$(COMPILER) -O3 $(COMPILER_SRC) /tmp/pascal26-o3a
 	/tmp/pascal26-o3a -O3 $(COMPILER_SRC) /tmp/pascal26-o3b
 	/tmp/pascal26-o3b -O3 $(COMPILER_SRC) /tmp/pascal26-o3c

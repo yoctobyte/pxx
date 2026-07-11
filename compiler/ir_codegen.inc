@@ -1977,9 +1977,9 @@ begin
           if nArgs > 6 then
             Error('indirect call with more than 6 parameters is not supported');
           IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
-          { -O3: the last arg's push/pop pair is back-to-back — keep it in rax
+          { -O2 (promoted from -O3 2026-07-11): the last arg's push/pop pair is back-to-back — keep it in rax
             and mov it into its register (same as the direct-call collapse). }
-          skipLastArg := (OptLevel >= 3) and (nArgs >= 1);
+          skipLastArg := (OptLevel >= 2) and (nArgs >= 1);
           argNode := IRB[node];
           while argNode <> -1 do
           begin
@@ -2467,13 +2467,13 @@ begin
             EmitDynArrayUnique(symIdx, elemSize);
         end;
 
-        { -O3 W1: a leaf index skips the push-base / eval-index / pop dance.
+        { -O2 W1 (promoted from -O3 2026-07-11): a leaf index skips the push-base / eval-index / pop dance.
           Constant index folds the whole element offset into one `add rax,disp`
           (or nothing for element 0); a side-effect-free scalar sym loads
           straight into rcx and scales there, leaving the base in rax untouched.
           Semantics identical: the InLValueWrite reset around the index
           evaluation is irrelevant for a const/plain-load index. }
-        if (OptLevel >= 3) and (IRKind[indexNode] = IR_CONST_INT) and (elemSize > 0) and
+        if (OptLevel >= 2) and (IRKind[indexNode] = IR_CONST_INT) and (elemSize > 0) and
            ((IRIVal[indexNode] - lo) * elemSize >= -2147483648) and
            ((IRIVal[indexNode] - lo) * elemSize <= 2147483647) then
         begin
@@ -2482,7 +2482,7 @@ begin
             EmitB($48); EmitB($05); EmitI32(Integer((IRIVal[indexNode] - lo) * elemSize)); { add rax, disp }
           end;
         end
-        else if (OptLevel >= 3) and LeafSymRcxLoadable(indexNode) then
+        else if (OptLevel >= 2) and LeafSymRcxLoadable(indexNode) then
         begin
           EmitLoadVarRcx(IRA[indexNode]);
           if lo <> 0 then
@@ -2833,11 +2833,11 @@ begin
           IREmitNode(left);
           EmitLoadVarRcx(IRA[right]);
         end
-        else if (OptLevel >= 3) and (not InLValueWrite) and
+        else if (OptLevel >= 2) and (not InLValueWrite) and
                 ((IRKind[left] = IR_CONST_INT) or
                  (LeafSymRcxLoadable(left) and ScratchSafeSubtree(right))) then
         begin
-          { -O3 W1 mirror: a LEAF left operand is loaded AFTER the complex right
+          { -O2 W1 mirror (promoted from -O3 2026-07-11): a LEAF left operand is loaded AFTER the complex right
             evaluates, killing the push/eval/mov/pop dance from the other side
             (2 stack ops + a shuffle collapse to one load). Register contract
             downstream is IDENTICAL: rax = left, rcx = right. Reorder legality:
@@ -3688,13 +3688,13 @@ begin
           else
           begin
             { Internal Pascal call: all args in integer registers by index. }
-            { -O3: the LAST argument's push/pop collapses — the register pops
+            { -O2 (promoted from -O3 2026-07-11): the LAST argument's push/pop collapses — the register pops
               run immediately after its evaluation, so it can stay in rax and
               take a single `mov <its reg>, rax` (nothing between the last
               eval and the pop loop emits code that touches rax; the hidden
               aggregate-dest eval happens after the pops). Non-variadic
               <=6-param register convention only. }
-            skipLastArg := (OptLevel >= 3) and (procIdx >= 0) and
+            skipLastArg := (OptLevel >= 2) and (procIdx >= 0) and
                            (not ProcVariadic[procIdx]) and
                            (Procs[procIdx].ParamCount >= 1) and
                            (Procs[procIdx].ParamCount <= 6);
@@ -5014,7 +5014,7 @@ begin
         { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
         procIdx := IRC[node];
         slot := Integer(IRIVal[node]);
-        skipLastArg := (OptLevel >= 3) and (Procs[procIdx].ParamCount >= 1) and
+        skipLastArg := (OptLevel >= 2) and (Procs[procIdx].ParamCount >= 1) and
                        (Procs[procIdx].ParamCount <= 6);
         argNode := IRA[node];
         pathIdx := 0;
@@ -5039,7 +5039,7 @@ begin
               EmitB($59);                                     { pop rcx (restore stack) }
             end;
           end;
-          { -O3: last arg's push/pop pair collapses to one mov (same as the
+          { -O2 (promoted from -O3 2026-07-11): last arg's push/pop pair collapses to one mov (same as the
             direct-call transform); register-convention dispatch only. }
           if not (skipLastArg and (IRB[argNode] = -1)) then
             EmitB($50); { push rax }
@@ -5258,11 +5258,11 @@ begin
               IREmitNode(cLeft);
               EmitLoadVarRcx(IRA[cRight]);
             end
-            else if (OptLevel >= 3) and (not InLValueWrite) and
+            else if (OptLevel >= 2) and (not InLValueWrite) and
                     ((IRKind[cLeft] = IR_CONST_INT) or
                      (LeafSymRcxLoadable(cLeft) and ScratchSafeSubtree(cRight))) then
             begin
-              { -O3 W1 mirror on the fused-compare operands — same legality
+              { -O2 W1 mirror on the fused-compare operands (promoted from -O3 2026-07-11) — same legality
                 argument as the IR_BINOP site (const left reorders freely;
                 leaf-sym left needs a side-effect-free right). }
               IREmitNode(cRight);

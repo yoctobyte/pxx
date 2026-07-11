@@ -278,3 +278,17 @@ architecture `devdocs/dev/optimization-architecture.md`.
    pop rdi 9.4k (cdecl/variadic staging), pop rax 14.9k (call-y binop
    dances at depth>2 / InLValueWrite contexts), pop rcx 14.2k (complex
    index/base dances).
+
+### 2026-07-11 — PROMOTED to -O2: mirror + leaf-index fold + last-arg collapse
+- The three mechanically-local W1 passes (no register-lifetime state) moved
+  from -O3 to the -O2 default after the promotion gate: **564-program corpus
+  -O0-vs-O2 differential clean** (4 flagged = harness noise: gtk pointer
+  output nondeterministic at -O0 too; lib_sockets port TIME_WAIT flake,
+  hangs identically at both levels), -O2/-O3 self-host fixedpoints
+  byte-identical, test-opt, make test, quick GREEN. Compiler reseeded
+  (2-step build can't converge across a codegen change).
+- Promoted-set effect at the new default: raytracer **1.07×**, self-compile
+  ~1.03×; mandelbrot ~1.01× (its wins live in the register passes).
+- **Still -O3-only** (register-lifetime schemes, need soak): r8/r9 scratch,
+  r12/r13 callee scratch, loop-local residency, float xmm residency —
+  worth another promotion pass after a few days of -O3 soak + T back up.
