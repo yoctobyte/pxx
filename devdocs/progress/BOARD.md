@@ -39,6 +39,7 @@ _none_
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
+| bug-tobject-param-truncated-32bit | A | 60 | bug | TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -68,7 +69,6 @@ _none_
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-eliah-ai-command-rail | B | 45 | feature | feature: Eliah AI command rail + console pane | — |
-| feature-eliah-component-tabbar | B | 45 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
@@ -178,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (596)
+## done (597)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -592,6 +592,7 @@ _none_
 | feature-dynarray-torture-test | A | 50 | feature | Dynamic-array torture test — make dynarray trustable | — |
 | feature-elf-rel-writer | A | 50 | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-eliah-component-palette | B | 50 | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
+| feature-eliah-component-tabbar | B | 45 | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-eliah-from-lfm | B | 50 | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
 | feature-eliah-ide | B | 50 | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-layout-tree | B | 50 | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
@@ -806,6 +807,7 @@ _none_
 - [p 65] [A] feature-signal-handlers
 - [p 65] [A] feature-zero-init-contract
 - [p 60] [A] bug-esp-idf-heap-linux-mmap-ecall
+- [p 60] [A] bug-tobject-param-truncated-32bit
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -846,7 +848,6 @@ _none_
 - [p 45] [A] feature-dynamic-soname-discovery
 - [p 45] [A] feature-dynarray-insert-delete-managed-elements
 - [p 45] [B] feature-eliah-ai-command-rail
-- [p 45] [B] feature-eliah-component-tabbar
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce

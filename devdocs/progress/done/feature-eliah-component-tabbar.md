@@ -5,7 +5,7 @@ prio: 45  # auto
 # feature: Eliah tabbed component bar (Lazarus-style, with icons)
 
 - **Type:** feature (Track B)
-- **Status:** working
+- **Status:** done
 - **Track:** B
 - **Parent:** feature-eliah-ide
 - **Opened:** 2026-06-24
@@ -76,3 +76,4 @@ surfaces a new icon with no IDE edit. gui_suite green; screenshot of the bar.
   - `make gui-test` fully green (incl. the 3 real-window xvfb cases).
   Remaining (cosmetic follow-up, not blocking): real per-component glyphs to
   replace the caption placeholders; finer tab groups beyond visual/non-visual.
+- 2026-07-12 — resolved, commit d20d35dc.
