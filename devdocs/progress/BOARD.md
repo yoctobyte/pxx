@@ -28,12 +28,13 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
+| bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -863,6 +864,7 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
+- [p 35] [A] bug-test-riscv32-thin-coverage
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-pascal-otherwise-case-keyword
 - [p 35] [A] feature-pascal-str-variable-width
