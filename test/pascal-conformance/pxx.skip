@@ -28,7 +28,6 @@ tarrconstr1.pp	unclassified: pascal26:12: error: undefined variable (TAB)
 tarrconstr5.pp	unclassified: Expected: >, but got: TArray (Kind: 1, Line: 14) | near: TStringArrayArray2  spe
 tarrconstr6.pp	unclassified: pascal26:24: error: undefined variable (TLongIntArray)
 tarrconstr7.pp	unclassified: pascal26:6: error: base type not found: IInterface ()
-tarrconstr8.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tclass10c.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass11a.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12a.pp	parser: mode-Delphi generics TFoo<T> syntax

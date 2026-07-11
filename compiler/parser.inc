@@ -2463,6 +2463,16 @@ begin
     end
     else
     begin
+      { `.member` directly on an ARRAY variable: arrays have no members in
+        pxx (FPC's arr.Create constructor is only valid on the TYPE, and even
+        that form is unsupported here). The old fall-through built a bogus
+        field access that crashed at runtime (tarrconstr8). Element access
+        `arr[i].field` takes the bracket branch above, strings take Length()
+        style intrinsics — neither reaches this check. }
+      if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+         Syms[ASTIVal[node]].IsArray and
+         not (Syms[ASTIVal[node]].TypeKind in [tyRecord, tyClass]) then
+        Error('an array variable has no members (use SetLength / index it)');
       Next;
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
       prevTok := TokPos - 1;
