@@ -44,6 +44,11 @@ examples/*/*
 examples/**/*.o
 examples/**/*.elf
 examples/**/*.map
+examples/**/*.a
+examples/**/*.bin
+# The whole IDF build tree (CMake caches, ninja logs, bootloader ...) — one
+# stray `git add <example dir>` must never sweep it in again.
+examples/esp32/*/build/
 
 # Release build output (tools/release.sh assembles dist/ each run; never commit it).
 /dist/
