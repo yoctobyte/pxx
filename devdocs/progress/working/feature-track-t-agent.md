@@ -5,6 +5,7 @@ blocked-by: [feature-track-t-watcher]
 # Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase
 
 - **Type:** feature (test infra / agent workflow). Track T (test infra).
+- **Owner:** fable-trackT (live: watcher + agent commits ongoing — see log)
 - **Opened:** 2026-07-07, from the Track T design discussion (user-approved).
 
 ## Concept
