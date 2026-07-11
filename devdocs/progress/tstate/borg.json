@@ -1550,10 +1550,10 @@
   "wall": 99.3
  },
  "last_bench": {
-  "date": "2026-07-11T09:56:54Z",
+  "date": "2026-07-11T10:18:53Z",
   "rc": 0,
   "rows": 12,
-  "sha": "294657064d691436e9cd42feeadcd29fb0421fbf"
+  "sha": "d2f3de2a30d94584bca1b3fa029ea2f540b04f55"
  },
  "last_full": {
   "date": "2026-07-11T10:13:11Z",
