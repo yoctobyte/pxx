@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (81)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -110,6 +110,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
+| task-fpc-skip-triage-wontfix-vs-gap | T | 20 | task | FPC conformance: triage the ~237 untriaged skips into gap: / wontfix: | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -174,7 +175,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (589)
+## done (590)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -722,6 +723,7 @@ _none_
 | feature-target-i386 | A | 50 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-tcomponent-tpersistent | B | 50 | feature | TComponent / TPersistent (FPC Classes owner-child surface) | — |
 | feature-terminal-ansi-library | B | 50 | feature | Terminal ANSI library | — |
+| feature-testmgr-fpc-compare-and-web-dashboard | T | 55 | feature | testmgr: FPC benchmark comparison + static web dashboard (bench, suites, FPC conformance) | — |
 | feature-testmgr-opt-tier-and-benchmarks | T | 60 | feature | testmgr: opt-level differential tier + tracked benchmark runs | — |
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
@@ -865,6 +867,7 @@ _none_
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [T] task-fpc-skip-triage-wontfix-vs-gap
 - [p 18] [P] bug-pascal-missing-diagnostics-fail-tests
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail

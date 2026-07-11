@@ -81,3 +81,14 @@ now**, agentic per-test review of FPC tests deferred to a follow-up.
 
 ## Log
 - 2026-07-11 — opened, building.
+- 2026-07-11 — resolved. Delivered: `--bench` `fpc` level + portable
+  `bench/portable/nbody.pas` (1530e179); `run_pascal_conformance.sh --report`
+  TSV + `twatch_web.py --static` dashboard/bench/conformance pages (0ceb1125);
+  idle-chain wiring that publishes `conformance.tsv` + regenerates the static
+  pages each bench, plus the `pxx.skip` gap/wontfix/untriaged taxonomy doc and
+  seeded pages (755a6bed). Confirmed native: quick GREEN, bench runs clean
+  (nbody fpc 64ms vs pxx-O2 565ms recorded; selfcompile fpc degrades cleanly —
+  compiler.pas no longer FPC-buildable on master). Follow-up filed for the
+  agentic per-test skip triage. NOTE: conformance.tsv only populates once the
+  watcher clone has the suite (`tools/install_lib_candidates.sh fpc-testsuite`)
+  and the daemon is restarted to load the new idle chain.
