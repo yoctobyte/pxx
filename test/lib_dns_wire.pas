@@ -10,6 +10,7 @@ var
   resp: array[0..60] of Byte;
   r6: array[0..56] of Byte;
   rc6: array[0..50] of Byte;
+  soa: array[0..63] of Byte;
   ips: TDnsIpv4Array;
   ips6: TDnsIpv6Array;
   cname: string;
@@ -48,10 +49,10 @@ begin
   resp[38] := 60;
   resp[40] := 4;
   resp[41] := 93; resp[42] := 184; resp[43] := 216; resp[44] := 34;
-  { answer 2: name ptr -> 12, A/IN, ttl 60, rdlen 4, 93.184.216.35 }
+  { answer 2: name ptr -> 12, A/IN, ttl 30, rdlen 4, 93.184.216.35 }
   resp[45] := $C0; resp[46] := $0C;
   resp[48] := 1; resp[50] := 1;
-  resp[54] := 60;
+  resp[54] := 30;
   resp[56] := 4;
   resp[57] := 93; resp[58] := 184; resp[59] := 216; resp[60] := 35;
 
@@ -62,6 +63,8 @@ begin
   writeln('count=', count);
   Show('ip0', ips[0] = LongWord($5DB8D822));
   Show('ip1', ips[1] = LongWord($5DB8D823));
+  { min TTL across the two answers = min(60, 30) = 30 }
+  Show('minttl', DnsAnswerMinTTL(@resp[0], 61) = 30);
 
   { ---- encode: AAAA query carries qtype 28 ---- }
   qlen := DnsBuildQuery('example.com', DNS_TYPE_AAAA, $4321, @q[0], 512);
@@ -109,4 +112,28 @@ begin
   rc6[49] := $C0; rc6[50] := 22;                   { ptr -> "test" label }
   cname := '';
   Show('cname', DnsExtractCname(@rc6[0], 51, cname) and (cname = 'real.test'));
+
+  { ---- negative TTL: NXDOMAIN with an SOA in the authority section ----
+    header: id, flags rcode=3, qd=1 an=0 ns=1 ar=0; question 'x'; authority SOA
+    with record TTL=500 and MINIMUM=200 => negative TTL = min(500,200) = 200. }
+  for i := 0 to 63 do soa[i] := 0;
+  soa[0] := $AB; soa[1] := $CD;
+  soa[2] := $81; soa[3] := $83;      { QR RD RA, rcode 3 (NXDOMAIN) }
+  soa[5] := 1;                        { qd=1 }
+  soa[9] := 1;                        { ns=1 (authority) }
+  { question: 01 'x' 00, qtype A, qclass IN }
+  soa[12] := 1; soa[13] := Ord('x'); soa[14] := 0;
+  soa[16] := 1; soa[18] := 1;         { qtype A (15-16), qclass IN (17-18) }
+  { authority RR at pos 19 }
+  soa[19] := $C0; soa[20] := $0C;     { name -> question }
+  soa[22] := DNS_TYPE_SOA;            { type SOA (21-22) }
+  soa[24] := 1;                       { class IN (23-24) }
+  { TTL (25-28) = 500 = 0x000001F4 }
+  soa[27] := 1; soa[28] := $F4;
+  soa[30] := 22;                      { rdlen (29-30) = 22 }
+  { rdata at 31: mname root(31)=0, rname root(32)=0, then 5 x u32 (33..52) }
+  { minimum is the 5th u32 -> bytes 49..52 = 200 = 0x000000C8 }
+  soa[52] := 200;
+  Show('negttl', DnsNegativeTTL(@soa[0], 53) = 200);
+  Show('negttl-none', DnsNegativeTTL(@resp[0], 61) = -1);   { no SOA in the A resp }
 end.

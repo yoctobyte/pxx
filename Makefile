@@ -3878,7 +3878,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net_timeout.pas /tmp/lib_net_timeout
 	test "$$(/tmp/lib_net_timeout)" = "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')"
 	$(PXX_STABLE) test/lib_dns_wire.pas /tmp/lib_dns_wire
-	test "$$(/tmp/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok')"
+	test "$$(/tmp/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nminttl=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok\nnegttl=ok\nnegttl-none=ok')"
 	$(PXX_STABLE) test/lib_dns_cache.pas /tmp/lib_dns_cache
 	test "$$(/tmp/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok')"
 	$(PXX_STABLE) test/lib_dns_config.pas /tmp/lib_dns_config

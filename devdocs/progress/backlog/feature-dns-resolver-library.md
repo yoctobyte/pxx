@@ -349,3 +349,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   wire the cache into the sync + async facades (PalMonotonicMillis + the answer
   TTL / SOA-minimum for negatives), which needs pulling the record's min-TTL out
   of the wire response (a small dns_wire_core add).
+- 2026-07-11 — **cache TTL extraction landed** (Track B): dns_wire_core gains
+  `DnsAnswerMinTTL` (minimum TTL over the A/AAAA answer RRs — the positive-cache
+  lifetime) and `DnsNegativeTTL` (RFC 2308: SOA MINIMUM in the authority
+  section, capped by the SOA record TTL — the negative-cache lifetime), plus a
+  `ReadU32` helper (Int64, unsigned-safe). lib_dns_wire extended with a
+  differing-TTL A response (min=30) and an NXDOMAIN+SOA packet (negTTL=200).
+  With [[feature-dns-resolver-library]]'s dns_cache this is the full caching
+  toolkit; **NEXT is the integration step** — a process-wide cache consulted by
+  the facade, which needs plumbing the parsed TTL out of the async/blocking
+  query functions (add a `var ttl` out-param threaded from DnsAnswerMinTTL/
+  DnsNegativeTTL at the parse site) and a mock-server test proving a second
+  lookup is served from cache without a second query.

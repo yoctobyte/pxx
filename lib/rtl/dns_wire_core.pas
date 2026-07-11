@@ -15,6 +15,7 @@ interface
 const
   DNS_TYPE_A     = 1;
   DNS_TYPE_CNAME = 5;
+  DNS_TYPE_SOA   = 6;
   DNS_TYPE_AAAA  = 28;
   DNS_CLASS_IN  = 1;
   DNS_FLAG_RD   = $0100;   { recursion desired }
@@ -57,6 +58,16 @@ function DnsParseResponseAAAA(buf: Pointer; len: Integer; var ips: TDnsIpv6Array
   CNAME answer is present or the packet is malformed. }
 function DnsExtractCname(buf: Pointer; len: Integer; var target: string): Boolean;
 
+{ Minimum TTL (seconds) across the A/AAAA answer records — the lifetime a
+  positive answer may be cached (a record set expires when its shortest TTL
+  does). Returns -1 when there is no address answer or the packet is malformed. }
+function DnsAnswerMinTTL(buf: Pointer; len: Integer): Integer;
+
+{ Negative-caching TTL (seconds) per RFC 2308: the SOA MINIMUM field of the SOA
+  record in the authority section, capped by that SOA record's own TTL. Returns
+  -1 when there is no SOA in the authority section or the packet is malformed. }
+function DnsNegativeTTL(buf: Pointer; len: Integer): Integer;
+
 { True if the response has the TC (truncated) header bit set, meaning the answer
   did not fit in the UDP datagram and the query must be retried over TCP. }
 function DnsTruncated(buf: Pointer; len: Integer): Boolean;
@@ -79,6 +90,14 @@ end;
 function ReadU16(buf: Pointer; pos: Integer): Integer;
 begin
   ReadU16 := (ByteAt(buf, pos) shl 8) or ByteAt(buf, pos + 1);
+end;
+
+{ 32-bit big-endian read as Int64 (TTLs are unsigned 32-bit; Int64 avoids the
+  sign trap on a >= 2^31 TTL, which the callers then clamp to Integer range). }
+function ReadU32(buf: Pointer; pos: Integer): Int64;
+begin
+  ReadU32 := (Int64(ByteAt(buf, pos)) shl 24) or (Int64(ByteAt(buf, pos + 1)) shl 16)
+          or (Int64(ByteAt(buf, pos + 2)) shl 8) or Int64(ByteAt(buf, pos + 3));
 end;
 
 { Advance past a domain name starting at pos. A compression pointer (top two
@@ -439,6 +458,123 @@ begin
       Exit;
     end;
     pos := pos + rdlen;
+  end;
+end;
+
+{ Clamp an unsigned-32 TTL (seconds) to a non-negative Integer. TTLs above
+  ~68 years are pinned to MaxLongInt — no cache keeps them anyway. }
+function ClampTTL(v: Int64): Integer;
+begin
+  if v < 0 then v := 0;
+  if v > 2147483647 then v := 2147483647;
+  ClampTTL := Integer(v);
+end;
+
+function DnsAnswerMinTTL(buf: Pointer; len: Integer): Integer;
+var
+  qd, an, pos, i: Integer;
+  atype, aclass, rdlen, found: Integer;
+  minTtl, ttl: Int64;
+begin
+  DnsAnswerMinTTL := -1;
+  if len < 12 then Exit;
+  qd := ReadU16(buf, 4);
+  an := ReadU16(buf, 6);
+  pos := 12;
+
+  for i := 1 to qd do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    pos := pos + 4;
+    if pos > len then Exit;
+  end;
+
+  found := 0;
+  minTtl := 0;
+  for i := 1 to an do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    if pos + 10 > len then Exit;
+    atype  := ReadU16(buf, pos);
+    aclass := ReadU16(buf, pos + 2);
+    ttl    := ReadU32(buf, pos + 4);
+    rdlen  := ReadU16(buf, pos + 8);
+    pos := pos + 10;
+    if pos + rdlen > len then Exit;
+    if ((atype = DNS_TYPE_A) or (atype = DNS_TYPE_AAAA)) and (aclass = DNS_CLASS_IN) then
+    begin
+      if (found = 0) or (ttl < minTtl) then minTtl := ttl;
+      found := 1;
+    end;
+    pos := pos + rdlen;
+  end;
+
+  if found = 1 then
+    DnsAnswerMinTTL := ClampTTL(minTtl);
+end;
+
+function DnsNegativeTTL(buf: Pointer; len: Integer): Integer;
+var
+  qd, an, ns, pos, i: Integer;
+  atype, aclass, rdlen, rdstart: Integer;
+  recTtl, soaMin, useTtl: Int64;
+  namePos: Integer;
+begin
+  DnsNegativeTTL := -1;
+  if len < 12 then Exit;
+  qd := ReadU16(buf, 4);
+  an := ReadU16(buf, 6);
+  ns := ReadU16(buf, 8);   { authority (NSCOUNT) — where the SOA lives }
+  pos := 12;
+
+  for i := 1 to qd do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    pos := pos + 4;
+    if pos > len then Exit;
+  end;
+  { skip the answer section wholesale }
+  for i := 1 to an do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    if pos + 10 > len then Exit;
+    rdlen := ReadU16(buf, pos + 8);
+    pos := pos + 10 + rdlen;
+    if pos > len then Exit;
+  end;
+
+  { authority section: find the SOA record }
+  for i := 1 to ns do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    if pos + 10 > len then Exit;
+    atype  := ReadU16(buf, pos);
+    aclass := ReadU16(buf, pos + 2);
+    recTtl := ReadU32(buf, pos + 4);
+    rdlen  := ReadU16(buf, pos + 8);
+    rdstart := pos + 10;
+    if rdstart + rdlen > len then Exit;
+    if (atype = DNS_TYPE_SOA) and (aclass = DNS_CLASS_IN) then
+    begin
+      { SOA rdata: MNAME, RNAME (two names), then 5 x u32 (serial, refresh,
+        retry, expire, minimum). Skip the two names, read the last u32. }
+      namePos := SkipName(buf, len, rdstart);
+      if namePos < 0 then Exit;
+      namePos := SkipName(buf, len, namePos);
+      if namePos < 0 then Exit;
+      if namePos + 20 > len then Exit;      { 5 x u32 = 20 bytes }
+      soaMin := ReadU32(buf, namePos + 16); { the MINIMUM field }
+      { RFC 2308: negative TTL = min(SOA.MINIMUM, SOA record TTL). }
+      if recTtl < soaMin then useTtl := recTtl else useTtl := soaMin;
+      DnsNegativeTTL := ClampTTL(useTtl);
+      Exit;
+    end;
+    pos := rdstart + rdlen;
   end;
 end;
 
