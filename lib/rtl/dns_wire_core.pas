@@ -63,6 +63,11 @@ function DnsExtractCname(buf: Pointer; len: Integer; var target: string): Boolea
   does). Returns -1 when there is no address answer or the packet is malformed. }
 function DnsAnswerMinTTL(buf: Pointer; len: Integer): Integer;
 
+{ Minimum TTL (seconds) across the CNAME answer records — the lifetime an
+  alias mapping may be cached. Returns -1 when there is no CNAME answer or the
+  packet is malformed. }
+function DnsCnameTTL(buf: Pointer; len: Integer): Integer;
+
 { Negative-caching TTL (seconds) per RFC 2308: the SOA MINIMUM field of the SOA
   record in the authority section, capped by that SOA record's own TTL. Returns
   -1 when there is no SOA in the authority section or the packet is malformed. }
@@ -513,6 +518,51 @@ begin
 
   if found = 1 then
     DnsAnswerMinTTL := ClampTTL(minTtl);
+end;
+
+function DnsCnameTTL(buf: Pointer; len: Integer): Integer;
+var
+  qd, an, pos, i: Integer;
+  atype, aclass, rdlen, found: Integer;
+  minTtl, ttl: Int64;
+begin
+  DnsCnameTTL := -1;
+  if len < 12 then Exit;
+  qd := ReadU16(buf, 4);
+  an := ReadU16(buf, 6);
+  pos := 12;
+
+  for i := 1 to qd do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    pos := pos + 4;
+    if pos > len then Exit;
+  end;
+
+  found := 0;
+  minTtl := 0;
+  for i := 1 to an do
+  begin
+    pos := SkipName(buf, len, pos);
+    if pos < 0 then Exit;
+    if pos + 10 > len then Exit;
+    atype  := ReadU16(buf, pos);
+    aclass := ReadU16(buf, pos + 2);
+    ttl    := ReadU32(buf, pos + 4);
+    rdlen  := ReadU16(buf, pos + 8);
+    pos := pos + 10;
+    if pos + rdlen > len then Exit;
+    if (atype = DNS_TYPE_CNAME) and (aclass = DNS_CLASS_IN) then
+    begin
+      if (found = 0) or (ttl < minTtl) then minTtl := ttl;
+      found := 1;
+    end;
+    pos := pos + rdlen;
+  end;
+
+  if found = 1 then
+    DnsCnameTTL := ClampTTL(minTtl);
 end;
 
 function DnsNegativeTTL(buf: Pointer; len: Integer): Integer;

@@ -297,10 +297,15 @@ begin
   end
   else if rcode = 0 then
   begin
-    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    { NODATA/alias: a CNAME with no address is chased; ttl then carries the
+      alias-mapping lifetime (the CNAME RR TTL) for the caller's cname cache }
     chase := '';
     if DnsExtractCname(@rbuf[0], rlen, chase) then
-      cname := chase
+    begin
+      cname := chase;
+      t := DnsCnameTTL(@rbuf[0], rlen);
+      if t > 0 then ttl := t;
+    end
     else
     begin
       t := DnsNegativeTTL(@rbuf[0], rlen);   { NODATA negative TTL }
@@ -439,10 +444,15 @@ begin
   end
   else if rcode = 0 then
   begin
-    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    { NODATA/alias: a CNAME with no address is chased; ttl then carries the
+      alias-mapping lifetime (the CNAME RR TTL) for the caller's cname cache }
     chase := '';
     if DnsExtractCname(@rbuf[0], rlen, chase) then
-      cname := chase
+    begin
+      cname := chase;
+      t := DnsCnameTTL(@rbuf[0], rlen);
+      if t > 0 then ttl := t;
+    end
     else
     begin
       t := DnsNegativeTTL(@rbuf[0], rlen);   { NODATA negative TTL }

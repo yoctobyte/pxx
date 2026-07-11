@@ -469,3 +469,22 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
     (5 new checks, 21 total).
   REMAINING: CNAME-chase result caching,
   `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
+- 2026-07-11 (night 6) — **CNAME-hop caching landed** (Track B): alias hops are
+  now cached too, so a repeat chase re-resolves without ANY query.
+  - `dns_wire_core`: `DnsCnameTTL` (min TTL over the CNAME answer RRs — the
+    alias-mapping cache lifetime).
+  - All four TTL query cores now return the CNAME RR TTL for alias answers
+    (previously ttl=0); `DnsQueryAListCachedAsync` guards its per-name store
+    with `cname = ''` so an alias is never mis-cached as NODATA.
+  - `dns_cache`: entries grow a `cname` target side; `DnsCachePutCname` /
+    `DnsCacheGetCname` under qtype DNS_TYPE_CNAME — one entry serves A and
+    AAAA chases (a CNAME applies to every query type). 4 offline checks.
+  - `dns.pas`: `DnsGlobalCacheGetCname`/`PutCname`; all four chases
+    (A/AAAA x blocking/async) do: addr-cache hit -> done; cname-cache hit ->
+    follow without query; miss -> query, then cache the alias mapping (CNAME
+    TTL) or the addr/negative answer.
+  - `test/lib_dns_cache_facade.pas` grown: a 2-query mock (CNAME TTL 60 ->
+    A TTL 60) dies after the first chase; the second chase must resolve both
+    hops from cache. Existing chase tests unaffected (their CNAMEs carry
+    TTL 0 = uncacheable).
+  REMAINING: `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.

@@ -28,6 +28,7 @@ type
     qtype:   Integer;
     ips:     TDnsIpv4Array;
     ips6:    TDnsIpv6Array;   { AAAA values (qtype DNS_TYPE_AAAA entries) }
+    cname:   string;          { alias target (qtype DNS_TYPE_CNAME entries) }
     count:   Integer;      { 0 = negative answer }
     rcode:   Integer;      { the cached DNS RCODE (0 NODATA / 3 NXDOMAIN / ...) }
     expiry:  Int64;        { absolute monotonic ms; entry dead once now >= this }
@@ -61,6 +62,14 @@ procedure DnsCachePut6(var c: TDnsCache; const name: string;
 function DnsCacheGet6(var c: TDnsCache; const name: string; nowMs: Int64;
   var ips6: TDnsIpv6Array; var count: Integer; var rcode: Integer): Boolean;
 
+{ CNAME entries: cache the alias mapping name -> target under qtype
+  DNS_TYPE_CNAME (a CNAME applies to every query type, so one entry serves
+  both A and AAAA chases). Same TTL/eviction semantics. }
+procedure DnsCachePutCname(var c: TDnsCache; const name, target: string;
+  nowMs, ttlMs: Int64);
+function DnsCacheGetCname(var c: TDnsCache; const name: string; nowMs: Int64;
+  var target: string): Boolean;
+
 { Number of live (unexpired) entries at nowMs — for tests / diagnostics. }
 function DnsCacheLiveCount(var c: TDnsCache; nowMs: Int64): Integer;
 
@@ -74,6 +83,7 @@ begin
     c.slots[i].used := False;
     c.slots[i].name := '';
     c.slots[i].qtype := 0;
+    c.slots[i].cname := '';
     c.slots[i].count := 0;
     c.slots[i].rcode := 0;
     c.slots[i].expiry := 0;
@@ -201,6 +211,43 @@ begin
         count := c.slots[i].count;
         rcode := c.slots[i].rcode;
         DnsCacheGet6 := True;
+      end
+      else
+        c.slots[i].used := False;   { reap the expired entry }
+      Exit;
+    end;
+end;
+
+procedure DnsCachePutCname(var c: TDnsCache; const name, target: string;
+  nowMs, ttlMs: Int64);
+var
+  idx: Integer;
+begin
+  if ttlMs <= 0 then Exit;   { do not cache an already-dead mapping }
+  idx := SlotFor(c, name, DNS_TYPE_CNAME);
+  c.slots[idx].used := True;
+  c.slots[idx].name := name;
+  c.slots[idx].qtype := DNS_TYPE_CNAME;
+  c.slots[idx].cname := target;
+  c.slots[idx].count := 0;
+  c.slots[idx].rcode := 0;
+  c.slots[idx].expiry := nowMs + ttlMs;
+end;
+
+function DnsCacheGetCname(var c: TDnsCache; const name: string; nowMs: Int64;
+  var target: string): Boolean;
+var
+  i: Integer;
+begin
+  target := '';
+  DnsCacheGetCname := False;
+  for i := 0 to DNS_CACHE_SLOTS - 1 do
+    if KeyMatch(c.slots[i], name, DNS_TYPE_CNAME) then
+    begin
+      if nowMs < c.slots[i].expiry then
+      begin
+        target := c.slots[i].cname;
+        DnsCacheGetCname := True;
       end
       else
         c.slots[i].used := False;   { reap the expired entry }

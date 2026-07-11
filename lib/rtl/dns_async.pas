@@ -300,10 +300,15 @@ begin
   end
   else if rcode = 0 then
   begin
-    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    { NODATA/alias: a CNAME with no address is chased; ttl then carries the
+      alias-mapping lifetime (the CNAME RR TTL) for the caller's cname cache }
     chase := '';
     if DnsExtractCname(@rbuf[0], Integer(n), chase) then
-      cname := chase
+    begin
+      cname := chase;
+      t := DnsCnameTTL(@rbuf[0], Integer(n));
+      if t > 0 then ttl := t;
+    end
     else
     begin
       t := DnsNegativeTTL(@rbuf[0], Integer(n));   { NODATA negative TTL }
@@ -429,12 +434,17 @@ begin
     crc := 0;
     if DnsGlobalCacheGet(cur, DNS_TYPE_A, localIps, localCount, crc) then
       rc := crc   { live cached answer (positive or negative) — no query }
+    else if DnsGlobalCacheGetCname(cur, cname) then
+      rc := 0     { cached alias hop — follow without a query }
     else
     begin
       ttl := 0;
       rc := DnsQueryAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
       if rc < 0 then begin Result := rc; Exit; end;
-      DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
+      if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+        DnsGlobalCachePutCname(cur, cname, ttl)   { alias: ttl = CNAME RR TTL }
+      else
+        DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
       cur := cname   { alias with no address — follow the target }
@@ -576,10 +586,15 @@ begin
   end
   else if rcode = 0 then
   begin
-    { NODATA/alias: a CNAME with no address is chased (not cached here) }
+    { NODATA/alias: a CNAME with no address is chased; ttl then carries the
+      alias-mapping lifetime (the CNAME RR TTL) for the caller's cname cache }
     chase := '';
     if DnsExtractCname(@rbuf[0], Integer(n), chase) then
-      cname := chase
+    begin
+      cname := chase;
+      t := DnsCnameTTL(@rbuf[0], Integer(n));
+      if t > 0 then ttl := t;
+    end
     else
     begin
       t := DnsNegativeTTL(@rbuf[0], Integer(n));   { NODATA negative TTL }
@@ -684,12 +699,17 @@ begin
     crc := 0;
     if DnsGlobalCacheGet6(cur, localIps, localCount, crc) then
       rc := crc   { live cached answer (positive or negative) — no query }
+    else if DnsGlobalCacheGetCname(cur, cname) then
+      rc := 0     { cached alias hop — follow without a query }
     else
     begin
       ttl := 0;
       rc := DnsQueryAAAAListAsyncTTL(ns, nsCount, nsPort, cur, localIps, localCount, cname, ttl, timeoutMs);
       if rc < 0 then begin Result := rc; Exit; end;
-      DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
+      if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+        DnsGlobalCachePutCname(cur, cname, ttl)   { alias: ttl = CNAME RR TTL }
+      else
+        DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
       cur := cname   { alias with no address — follow the target }
@@ -796,8 +816,10 @@ begin
     for j := 0 to localCount - 1 do ips[j] := localIps[j];
     count := localCount;
     rcode := rc;
-    { store positive/negative answers with a live TTL; ttl seconds -> ms }
-    if ttl > 0 then
+    { store positive/negative answers with a live TTL; ttl seconds -> ms.
+      An alias answer (cname set, no addresses) is NOT a NODATA — its ttl is
+      the alias-mapping lifetime, which this per-name cache does not store. }
+    if (ttl > 0) and (Length(cname) = 0) then
       DnsCachePut(c, name, DNS_TYPE_A, localIps, localCount, rc, nowMs, Int64(ttl) * 1000);
   end;
   Result := rc;

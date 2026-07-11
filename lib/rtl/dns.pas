@@ -72,6 +72,11 @@ function DnsGlobalCacheGet6(const name: string;
 procedure DnsGlobalCachePut6(const name: string;
   const ips: TDnsIpv6Array; count, rcode, ttlSec: Integer);
 
+{ CNAME siblings: cache/look up the alias mapping name -> target (one entry
+  serves A and AAAA chases — a CNAME applies to every query type). }
+function DnsGlobalCacheGetCname(const name: string; var target: string): Boolean;
+procedure DnsGlobalCachePutCname(const name, target: string; ttlSec: Integer);
+
 implementation
 
 var
@@ -166,6 +171,30 @@ begin
   DnsCachePut6(gCache, name, ips, count, rcode, PalMonotonicMillis, Int64(ttlSec) * 1000);
 end;
 
+function DnsGlobalCacheGetCname(const name: string; var target: string): Boolean;
+var
+  localTarget: string;
+begin
+  target := '';
+  DnsGlobalCacheGetCname := False;
+  if gCacheOff then Exit;
+  EnsureCache;
+  localTarget := '';
+  if DnsCacheGetCname(gCache, name, PalMonotonicMillis, localTarget) then
+  begin
+    target := localTarget;
+    DnsGlobalCacheGetCname := True;
+  end;
+end;
+
+procedure DnsGlobalCachePutCname(const name, target: string; ttlSec: Integer);
+begin
+  if gCacheOff then Exit;
+  if ttlSec <= 0 then Exit;
+  EnsureCache;
+  DnsCachePutCname(gCache, name, target, PalMonotonicMillis, Int64(ttlSec) * 1000);
+end;
+
 function DnsResolveHostEx(const hostsText: string; nsHost: LongWord; nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 var
@@ -251,6 +280,8 @@ begin
     crc := 0;
     if DnsGlobalCacheGet(cur, DNS_TYPE_A, localIps, localCount, crc) then
       rc := crc   { live cached answer (positive or negative) — no query }
+    else if DnsGlobalCacheGetCname(cur, cname) then
+      rc := 0     { cached alias hop — follow without a query }
     else
     begin
       ttl := 0;
@@ -260,7 +291,10 @@ begin
         DnsResolveChase := rc;
         Exit;
       end;
-      DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
+      if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+        DnsGlobalCachePutCname(cur, cname, ttl)   { alias: ttl = CNAME RR TTL }
+      else
+        DnsGlobalCachePut(cur, DNS_TYPE_A, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
     begin
@@ -298,6 +332,8 @@ begin
     crc := 0;
     if DnsGlobalCacheGet6(cur, localIps, localCount, crc) then
       rc := crc   { live cached answer (positive or negative) — no query }
+    else if DnsGlobalCacheGetCname(cur, cname) then
+      rc := 0     { cached alias hop — follow without a query }
     else
     begin
       ttl := 0;
@@ -307,7 +343,10 @@ begin
         DnsResolveChase6 := rc;
         Exit;
       end;
-      DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
+      if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
+        DnsGlobalCachePutCname(cur, cname, ttl)   { alias: ttl = CNAME RR TTL }
+      else
+        DnsGlobalCachePut6(cur, localIps, localCount, rc, ttl);
     end;
     if (rc = 0) and (localCount = 0) and (Length(cname) > 0) then
     begin

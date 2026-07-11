@@ -10,6 +10,7 @@ var
   ips: TDnsIpv4Array;
   ips6: TDnsIpv6Array;
   cnt, rc, i: Integer;
+  cand: string;
 
 procedure Show(const tag: string; pass: Boolean);
 begin
@@ -105,4 +106,18 @@ begin
   DnsCachePut6(c, 'gone6.test', ips6, 0, 3, 1000, 300);   { negative NXDOMAIN }
   Show('v6-neg', DnsCacheGet6(c, 'gone6.test', 1100, ips6, cnt, rc)
     and (cnt = 0) and (rc = 3));
+
+  { ---- CNAME entries: hit, coexistence with A/AAAA, expiry, ttl<=0 noop ---- }
+  DnsCacheInit(c);
+  DnsCachePutCname(c, 'www.test', 'real.test', 1000, 500);   { expires at 1500 }
+  Zero(ips); ips[0] := 5;
+  DnsCachePut(c, 'www.test', DNS_TYPE_A, ips, 1, 0, 1000, 500);
+  cand := '';
+  Show('cn-hit', DnsCacheGetCname(c, 'www.test', 1200, cand) and (cand = 'real.test'));
+  Zero(ips);
+  Show('cn-coexist', DnsCacheGet(c, 'www.test', DNS_TYPE_A, 1200, ips, cnt, rc)
+    and (cnt = 1) and (ips[0] = 5));
+  Show('cn-expired', not DnsCacheGetCname(c, 'www.test', 1500, cand));
+  DnsCachePutCname(c, 'dead.test', 'x.test', 1000, 0);
+  Show('cn-ttl-noop', not DnsCacheGetCname(c, 'dead.test', 1000, cand));
 end.

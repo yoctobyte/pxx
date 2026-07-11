@@ -3920,7 +3920,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_dns_wire.pas /tmp/lib_dns_wire
 	test "$$(/tmp/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nminttl=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok\nnegttl=ok\nnegttl-none=ok')"
 	$(PXX_STABLE) test/lib_dns_cache.pas /tmp/lib_dns_cache
-	test "$$(/tmp/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok')"
+	test "$$(/tmp/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
 	$(PXX_STABLE) test/lib_dns_config.pas /tmp/lib_dns_config
 	test "$$(/tmp/lib_dns_config)" = "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok\nex-count=3\nex-search=2\nex-s0=ok\nex-s1=ok\nex-ndots=2\nex-domain=ok\nc-rel0=ok\nc-rel1=ok\nc-rel2=ok\nc-rel3=ok\nc-abs0=ok\nc-abs1=ok\nc-root0=ok\nc-root1=ok\nip6-full=ok\nip6-comp=ok\nip6-loop=ok\nip6-any=ok\nip6-tail=ok\nip6-v4=ok\nip6-caps=ok\nip6-badgap=ok\nip6-badlen=ok\nip6-badlong=ok\nip6-badgrp=ok\nip6-badzone=ok\nip6-badcolon=ok\nip6-gapfull=ok\nip6-notv4=ok\nh6-loop=ok\nh6-host=ok\nh6-skip4=ok\nh6-miss=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_resolve.pas /tmp/lib_dns_resolve
@@ -3936,7 +3936,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_chase.pas /tmp/lib_dns_chase
 	test "$$(/tmp/lib_dns_chase)" = "$$(printf 'rcode=0\ncount=1\nchased=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_cache_facade.pas /tmp/lib_dns_cache_facade
-	test "$$(/tmp/lib_dns_cache_facade)" = "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok')"
+	test "$$(/tmp/lib_dns_cache_facade)" = "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok\nc1=0\nc1-ip=ok\nc2=0\nc2-cached=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas /tmp/lib_dns_aaaa
 	test "$$(/tmp/lib_dns_aaaa)" = "$$(printf 'rcode=0\ncount=1\nip6=ok\nrcode6c=0\ncount6c=1\nchased6=ok')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas /tmp/lib_dns_buildguard
