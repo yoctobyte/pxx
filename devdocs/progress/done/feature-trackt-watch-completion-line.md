@@ -31,3 +31,6 @@ needs to tail those files and print new rows; no daemon change needed.
 ## Gate
 Track T tooling gate: behavior verified against a scratch state dir;
 `tools/testmgr.py --tier quick` unaffected (no testmgr change).
+
+## Log
+- 2026-07-11 — resolved, commit b3c8bdcb.

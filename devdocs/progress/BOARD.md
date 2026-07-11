@@ -176,7 +176,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (573)
+## done (574)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -714,6 +714,7 @@ _none_
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
 | feature-track-t-watcher | T | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
+| feature-trackt-watch-completion-line | T | 55 | feature | trackt watch: print timestamped completion line per finished suite run | — |
 | feature-transcendental-math | A | 50 | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
