@@ -5,7 +5,7 @@ prio: 40
 # unicodestring/widestring: types not really supported (decls "work", semantics don't)
 
 - **Type:** bug / gap (Pascal frontend) — Track P
-- **Status:** working
+- **Status:** done
   [[bug-case-of-string-segfault-and-label-validation]]
 - **Owner:** opus-a
 
@@ -42,3 +42,6 @@ case-of-string (works free once the type maps to tyAnsiString), indexing
 `make test` + self-host fixedpoint. Re-run
 `tools/run_pascal_conformance.sh --only 'tcase*'` — expect the 20
 unicodestring skip entries to burn.
+
+## Log
+- 2026-07-11 — resolved, commit a0956e62.
