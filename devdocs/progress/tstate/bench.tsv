@@ -59,3 +59,15 @@
 2026-07-11T10:45:38Z	borg	d06b06aad7d8	selfcompile	-O0	5274.2
 2026-07-11T10:45:38Z	borg	d06b06aad7d8	selfcompile	-O2	3972.7
 2026-07-11T10:45:38Z	borg	d06b06aad7d8	selfcompile	-O3	4072.1
+2026-07-11T10:57:05Z	borg	3a9669af0a53	mandelbrot	-O0	114.0
+2026-07-11T10:57:05Z	borg	3a9669af0a53	mandelbrot	-O2	113.9
+2026-07-11T10:57:05Z	borg	3a9669af0a53	mandelbrot	-O3	114.1
+2026-07-11T10:57:05Z	borg	3a9669af0a53	raytracer	-O0	15094.9
+2026-07-11T10:57:05Z	borg	3a9669af0a53	raytracer	-O2	9082.7
+2026-07-11T10:57:05Z	borg	3a9669af0a53	raytracer	-O3	8383.0
+2026-07-11T10:57:05Z	borg	3a9669af0a53	sieve	-O0	114.1
+2026-07-11T10:57:05Z	borg	3a9669af0a53	sieve	-O2	114.0
+2026-07-11T10:57:05Z	borg	3a9669af0a53	sieve	-O3	114.1
+2026-07-11T10:57:05Z	borg	3a9669af0a53	selfcompile	-O0	5324.4
+2026-07-11T10:57:05Z	borg	3a9669af0a53	selfcompile	-O2	3773.2
+2026-07-11T10:57:05Z	borg	3a9669af0a53	selfcompile	-O3	3871.7
