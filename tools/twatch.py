@@ -807,6 +807,12 @@ def main():
                     if r is False:      # old sha: its testmgr has no tier
                         st["last_opt"]["note"] = "unsupported"   # opt yet —
                     save_state(clone, host, st)                  # don't wedge
+                    # publish the last_opt bookkeeping: a bare save_state
+                    # leaves the clone dirty and the dirty-pause check wedges
+                    # every following cycle (observed 2026-07-11)
+                    clone.publish("tstate(%s): opt %s %s"
+                                  % (host, tested[:12],
+                                     "done" if r else "unsupported"))
                 did_work = True
             elif tested and CONF.get("idle_bench") and \
                     (st.get("last_full") or {}).get("sha") == tested and \
