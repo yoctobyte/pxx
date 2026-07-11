@@ -28,12 +28,11 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (81)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
-| bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -175,7 +174,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (588)
+## done (589)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -460,6 +459,7 @@ _none_
 | bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
+| bug-transitive-dns_cache-import-corrupts-managed-strings | A | 54 | bug | Transitive `uses dns_cache` corrupts managed-string codegen in an importer | — |
 | bug-tthread-execute-writeln-crash | A | 50 | bug | TThread Execute that writes (writeln) crashes nondeterministically | — |
 | bug-typed-const-array-of-string-broken | A | 50 | bug | Typed-constant `array of string` is broken (segfault ≤2 elems, bogus error ≥3) | — |
 | bug-uclass-field-window-stale-base | A | 60 | bug | bug: UClass field window base goes stale under shells-then-fields registration | — |
@@ -806,7 +806,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
-- [p 54] [A] bug-transitive-dns_cache-import-corrupts-managed-strings
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess

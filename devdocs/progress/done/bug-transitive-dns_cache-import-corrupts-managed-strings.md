@@ -7,7 +7,7 @@ prio: 54  # auto — silent managed-string corruption from a unit-graph position
 - **Type:** bug (frontend/codegen — unit compilation / managed strings)
 - **Track:** A. Filed from Track B (dns cache wiring) — hand off, do not fix
   under B/E.
-- **Status:** working
+- **Status:** done
 - **Owner:** trackA-e-bugs
 
 ## Symptom
@@ -69,3 +69,6 @@ slot; ANY interface const in the unit reproduced it. Fixed by resetting
 (pinned v197 prints 1, fixed prints 136) — deterministic, unlike the
 alignment-dependent http graph. Track B may now revert the dns_cached
 workaround and import dns_cache from dns_async directly if preferred.
+
+## Log
+- 2026-07-11 — resolved, commit ab7924ad.
