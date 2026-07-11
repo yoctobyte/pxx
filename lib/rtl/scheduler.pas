@@ -60,6 +60,14 @@ const
   CO_STK = 65536;   { default per-coroutine heap stack }
   CO_CANARY = $C0DECAFE;  { 32-bit so it round-trips through one machine word on i386 too }
 
+{ gettid — per-thread reactor keying. Inlined (not via palthread) so single-
+  threaded scheduler users aren't forced onto the --threadsafe runtime by a
+  thread-creation dependency. }
+{$ifdef CPUX86_64} const SYS_gettid = 186; {$endif}
+{$ifdef CPU_I386}  const SYS_gettid = 224; {$endif}
+{$ifdef CPU_AARCH64} const SYS_gettid = 178; {$endif}
+{$ifdef CPU_ARM32} const SYS_gettid = 224; {$endif}
+
 { Reactor flags are identical across all Linux targets; only the syscall
   numbers and the epoll_event layout vary per arch. }
 const
@@ -141,30 +149,73 @@ type
 type
   PW = ^NativeInt;  { pointer-sized machine-word access at an address }
 
+const
+  MAX_REACTORS = 16;   { independent reactors — one per OS thread / core }
+
+type
+  TReactor = record
+    coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
+    coStk   : array[0..MAX_CO-1] of Int64;       { heap stack base (for FreeMem) }
+    coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
+    coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
+    coArg   : array[0..MAX_CO-1] of Pointer;
+    coCount : Integer;
+    curCo   : Integer;                           { running coroutine, -1 = scheduler }
+    schedSp : Int64;                             { scheduler's own saved sp }
+    gEntry  : TCoroEntry;                        { handoff to CoStart }
+    gArg    : Pointer;
+    epfd    : Integer;                           { epoll instance, 0 = not created }
+    tid     : Int64;                             { owning thread id, 0 = free slot }
+    used    : Integer;                           { 1 = attached to a thread }
+  end;
+  PReactor = ^TReactor;
+
 var
-  coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
-  coStk   : array[0..MAX_CO-1] of Int64;       { heap stack base (for FreeMem) }
-  coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
-  coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
-  coArg   : array[0..MAX_CO-1] of Pointer;
-  coCount : Integer;
-  curCo   : Integer;                           { running coroutine, -1 = scheduler }
-  schedSp : Int64;                             { scheduler's own saved sp }
-  gEntry  : TCoroEntry;                        { handoff to CoStart }
-  gArg    : Pointer;
-  epfd    : Integer;                           { epoll instance, -1 = not created }
+  reactors : array[0..MAX_REACTORS-1] of TReactor;
+  regLock  : Integer;   { atomic spinlock guarding slot attachment (0=free 1=held) }
+
+function SelfTid: Int64;
+begin
+  SelfTid := __pxxrawsyscall(SYS_gettid, 0, 0, 0, 0, 0, 0);
+end;
+
+{ Resolve the calling thread's reactor, attaching a fresh slot on first use.
+  Per-thread state without threadvar, keyed on the kernel tid. The fast path
+  (already attached) is lock-free; attachment is guarded by a tiny atomic
+  spinlock (contended only briefly at worker-thread startup). }
+function CurR: PReactor;
+var me, ignore: Int64; i, slot: Integer;
+begin
+  me := SelfTid;
+  for i := 0 to MAX_REACTORS - 1 do
+    if (reactors[i].used = 1) and (reactors[i].tid = me) then
+    begin CurR := @reactors[i]; Exit; end;
+  while __pxxatomic_cas(@regLock, 0, 1) <> 0 do ;   { acquire }
+  slot := 0;
+  for i := 0 to MAX_REACTORS - 1 do
+    if reactors[i].used = 0 then begin slot := i; Break; end;
+  reactors[slot].coCount := 0;
+  reactors[slot].curCo   := -1;
+  reactors[slot].epfd    := 0;
+  reactors[slot].tid     := me;
+  reactors[slot].used    := 1;
+  ignore := __pxxatomic_xchg(@regLock, 0);          { release }
+  CurR := @reactors[slot];
+end;
 
 { First-entry trampoline. Runs on the coroutine's own stack the first time the
   scheduler switches into it; the scheduler set gEntry/gArg just before. After
   the body returns, mark done and switch back — this never returns. }
 procedure CoStart;
-var e: TCoroEntry; a: Pointer;
+var e: TCoroEntry; a: Pointer; r: PReactor;
 begin
-  e := gEntry;
-  a := gArg;
+  r := CurR;
+  e := r^.gEntry;
+  a := r^.gArg;
   e(a);
-  coState[curCo] := 2;
-  __pxxcoswitch(@coSp[curCo], @schedSp);
+  r := CurR;                 { same thread; re-resolve after the body ran }
+  r^.coState[r^.curCo] := 2;
+  __pxxcoswitch(@r^.coSp[r^.curCo], @r^.schedSp);
 end;
 
 { Build the initial saved-state frame the first CoSwitch-in pops. The slot order
@@ -178,9 +229,10 @@ begin
 end;
 
 procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
-var id: Integer; stk, top: Int64;
+var id: Integer; stk, top: Int64; r: PReactor;
 begin
-  id := coCount; Inc(coCount);
+  r := CurR;
+  id := r^.coCount; Inc(r^.coCount);
   stk := Int64(GetMem(stackBytes));
   PW(stk)^ := CO_CANARY;          { overflow guard at the low end of the stack }
   top := stk + stackBytes;
@@ -226,17 +278,19 @@ begin
 {$endif}
 {$endif}
 {$endif}
-  coSp[id]    := top;
-  coStk[id]   := stk;
-  coState[id] := 1;
-  coEntry[id] := entry;
-  coArg[id]   := arg;
+  r^.coSp[id]    := top;
+  r^.coStk[id]   := stk;
+  r^.coState[id] := 1;
+  r^.coEntry[id] := entry;
+  r^.coArg[id]   := arg;
 end;
 
 { Suspend the current coroutine, returning control to the scheduler. }
 procedure CoYield;
+var r: PReactor;
 begin
-  __pxxcoswitch(@coSp[curCo], @schedSp);
+  r := CurR;
+  __pxxcoswitch(@r^.coSp[r^.curCo], @r^.schedSp);
 end;
 
 { Mark fd non-blocking so read/write return EAGAIN instead of blocking the whole
@@ -251,16 +305,17 @@ end;
   then yield. On resume the fd is removed from the set (one-shot add/del).
   Portable across all four targets via the per-arch SYS_* numbers. }
 procedure WaitIO(fd, events: Integer);
-var ev: TEpollEvent; rc: Int64;
+var ev: TEpollEvent; rc: Int64; r: PReactor;
 begin
-  if epfd = 0 then
-    epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
+  r := CurR;
+  if r^.epfd = 0 then
+    r^.epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
   ev.events := events;
-  ev.data := curCo;
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
-  coState[curCo] := 3;                         { io-blocked }
-  __pxxcoswitch(@coSp[curCo], @schedSp);       { -> scheduler }
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
+  ev.data := r^.curCo;
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
+  r^.coState[r^.curCo] := 3;                   { io-blocked }
+  __pxxcoswitch(@r^.coSp[r^.curCo], @r^.schedSp);   { -> scheduler }
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
 end;
 
 procedure WaitReadable(fd: Integer); begin WaitIO(fd, EPOLLIN);  end;
@@ -306,6 +361,7 @@ var
   tfd: Integer;
   ev: TEpollEvent;
   rc, got, buf: Int64;
+  r: PReactor;
 begin
   if ms < 0 then
   begin
@@ -313,18 +369,19 @@ begin
     WaitReadableTimeout := True;
     Exit;
   end;
-  if epfd = 0 then
-    epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
+  r := CurR;
+  if r^.epfd = 0 then
+    r^.epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
   tfd := ArmOneShotTimer(ms);
   { park on BOTH fds; whichever readies first wakes this coroutine }
   ev.events := EPOLLIN;
-  ev.data := curCo;
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, tfd, Int64(@ev), 0, 0);
-  coState[curCo] := 3;                         { io-blocked }
-  __pxxcoswitch(@coSp[curCo], @schedSp);       { -> scheduler }
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
-  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, tfd, 0, 0, 0);
+  ev.data := r^.curCo;
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, tfd, Int64(@ev), 0, 0);
+  r^.coState[r^.curCo] := 3;                   { io-blocked }
+  __pxxcoswitch(@r^.coSp[r^.curCo], @r^.schedSp);   { -> scheduler }
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_DEL, tfd, 0, 0, 0);
   { non-blocking read: 8 bytes = the timer fired first (or simultaneously) }
   got := __pxxrawsyscall(SYS_read, tfd, Int64(@buf), 8, 0, 0, 0);
   rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
@@ -338,30 +395,32 @@ procedure RunUntilDone;
 var i, anyRunnable, anyBlocked: Integer;
     n, k, cid: Integer;
     evs: array[0..MAX_CO-1] of TEpollEvent;
+    r: PReactor;
 begin
+  r := CurR;
   repeat
     anyRunnable := 0;
-    for i := 0 to coCount - 1 do
-      if coState[i] = 1 then
+    for i := 0 to r^.coCount - 1 do
+      if r^.coState[i] = 1 then
       begin
         anyRunnable := 1;
-        curCo := i;
-        gEntry := coEntry[i];
-        gArg := coArg[i];
-        __pxxcoswitch(@schedSp, @coSp[i]);   { run i until it yields or finishes }
-        if coState[i] = 2 then
+        r^.curCo := i;
+        r^.gEntry := r^.coEntry[i];
+        r^.gArg := r^.coArg[i];
+        __pxxcoswitch(@r^.schedSp, @r^.coSp[i]);   { run i until it yields/finishes }
+        if r^.coState[i] = 2 then
         begin
-          if PW(coStk[i])^ <> CO_CANARY then
+          if PW(r^.coStk[i])^ <> CO_CANARY then
           begin
             writeln('fatal: coroutine stack overflow (canary clobbered)');
             Halt(217);
           end;
-          FreeMem(Pointer(coStk[i]));
+          FreeMem(Pointer(r^.coStk[i]));
         end;
       end;
     anyBlocked := 0;
-    for i := 0 to coCount - 1 do
-      if coState[i] = 3 then anyBlocked := 1;
+    for i := 0 to r^.coCount - 1 do
+      if r^.coState[i] = 3 then anyBlocked := 1;
     if (anyRunnable = 0) and (anyBlocked = 1) then
     begin
       { Nothing to run but coroutines wait on I/O: block here until an fd is
@@ -369,25 +428,25 @@ begin
         x86 uses epoll_wait; aarch64/arm32 only have epoll_pwait (sigmask=0,
         sigsetsize=0). }
 {$ifdef CPUX86_64}
-      n := Integer(__pxxrawsyscall(SYS_epoll_wait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+      n := Integer(__pxxrawsyscall(SYS_epoll_wait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
 {$ifdef CPU_I386}
-      n := Integer(__pxxrawsyscall(SYS_epoll_wait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+      n := Integer(__pxxrawsyscall(SYS_epoll_wait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
 {$ifdef CPU_AARCH64}
-      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
 {$ifdef CPU_ARM32}
-      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
       for k := 0 to n - 1 do
       begin
         cid := Integer(evs[k].data);
-        coState[cid] := 1;
+        r^.coState[cid] := 1;
       end;
     end;
   until (anyRunnable = 0) and (anyBlocked = 0);
-  curCo := -1;
+  r^.curCo := -1;
 end;
 
 end.
