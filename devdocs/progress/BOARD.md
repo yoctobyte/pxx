@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -97,7 +97,6 @@ _none_
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-selfhost-guard-ir-unsupported | A | 60 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-testmgr-enroll-c-cross-conformance | T | 45 | feature | testmgr: enroll the C cross-conformance matrix + lua-cross in the full tier | — |
@@ -177,7 +176,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (586)
+## done (587)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -701,6 +700,7 @@ _none_
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
 | feature-rv32-asm-emitter | A | 50 | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
 | feature-sat-solver-library | B | 50 | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
+| feature-selfhost-guard-ir-unsupported | A | 60 | feature | Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile) | — |
 | feature-setlength-var-array-param-abi | A | 50 | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | A | 50 | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | 50 | feature | Single (32-bit float) first-class on the internal-call ABI | — |
@@ -803,7 +803,6 @@ _none_
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
-- [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland

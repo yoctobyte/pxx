@@ -5,7 +5,7 @@ prio: 60  # auto
 # Self-host guard: reject IR_UNSUPPORTED at compile time (fail loud, not miscompile)
 
 - **Type:** feature (compiler — self-host safety) — Track A
-- **Status:** working
+- **Status:** done
   remaining = flip to default once Track R coordinated (still gated, see risk)
 - **Opened:** 2026-07-04 (from root-causing bug-selfhost-multifn-ifelse-miscompile)
 
@@ -81,3 +81,4 @@ error would break those Rust programs/tests and block Track R's in-flight work
   `IR_UNSUPPORTED` (that 0 is itself the acceptance evidence); the historical
   trigger (Rust `else if`, bug-selfhost-multifn-ifelse-miscompile) is already
   fixed on Track R.
+- 2026-07-11 — resolved, commit 2b6c621f.
