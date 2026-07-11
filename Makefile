@@ -1412,6 +1412,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_case_range26)" = "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
 	./$(COMPILER) test/test_case_of_string.pas /tmp/test_case_of_string26
 	test "$$(/tmp/test_case_of_string26)" = "$$(printf '1\n2\n3\n0\n0\n4\n0\n2\n1\n2')"
+	./$(COMPILER) test/test_case_otherwise.pas /tmp/test_case_otherwise26
+	test "$$(/tmp/test_case_otherwise26)" = "$$(printf 'one\nother 7\nstill-other')"
 	! ./$(COMPILER) --strict-case test/test_case_label_dup_error.pas /tmp/test_case_label_dup26 > /tmp/test_case_label_dup.log 2>&1
 	./$(COMPILER) test/test_case_label_dup_error.pas /tmp/test_case_label_dup_lax26 > /dev/null 2>&1   # lax default: first-match, must COMPILE
 	grep -q "duplicate or overlapping case label" /tmp/test_case_label_dup.log

@@ -9374,7 +9374,11 @@ begin
 
   while (not (CurTok.Kind in [tkEnd, tkEOF])) and not hasElse do
   begin
-    if CurTok.Kind = tkElse then
+    { `otherwise` (ISO 10206; FPC default mode) = soft-keyword synonym of
+      `else` here. Only special at branch-start inside case, so a variable
+      named `otherwise` stays usable everywhere else. }
+    if (CurTok.Kind = tkElse) or
+       ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'otherwise')) then
     begin
       hasElse := True;
       Next;

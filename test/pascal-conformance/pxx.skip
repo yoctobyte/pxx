@@ -175,7 +175,6 @@ tstring5.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
 tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
 tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
-tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	parser: extended-record features in unit (pascal26:12 unexpected token via unit driver)
 tgeneric77.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')

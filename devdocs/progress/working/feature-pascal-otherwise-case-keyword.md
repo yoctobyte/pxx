@@ -5,9 +5,9 @@ prio: 35
 # `otherwise` as case-else soft keyword (FPC default-mode parity)
 
 - **Type:** feature (Pascal frontend, small) — Track P
-- **Status:** backlog — filed 2026-07-11 (user-approved) out of the tcase
+- **Status:** working
   conformance burn-down in [[bug-case-of-string-segfault-and-label-validation]]
-- **Owner:** —
+- **Owner:** opus-fruit
 
 ## What
 
