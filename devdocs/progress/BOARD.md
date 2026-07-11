@@ -28,16 +28,13 @@ _none_
 
 _none_
 
-## backlog (88)
+## backlog (85)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-inline-array-field-const-bound | A | 48 | bug | Inline record-field `array[0..CONST - 1]` fails to parse (const-EXPRESSION bound) | — |
-| bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
-| bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 46 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
-| bug-property-setter-resolution-uses-order | A | 52 | bug | Class-typed property WRITE mis-parses ("Expected: [") depending on uses order | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
@@ -181,7 +178,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (581)
+## done (584)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -410,12 +407,14 @@ _none_
 | bug-nested-comment-breaks-fpc-brace | A | 50 | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
+| bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-object-ref-array-identity-in-method | A | 50 | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-open-array-copy-temp-leak | A | 50 | bug | Open-array copy temp leaked a heap block per call | — |
 | bug-open-array-ctor-statement-call | A | 50 | bug | Array constructor `[...]` as open-array arg fails at a statement-level call | — |
 | bug-operator-result-inferred-var | A | 50 | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-overload-resolution-by-type | A | 50 | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
+| bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
 | bug-paramless-self-recursion-silent-result-read | A | 50 | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | bug-paramstr-inline-argstr | A | 50 | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
@@ -430,6 +429,7 @@ _none_
 | bug-proc-typed-call-const-record-arg | A | 50 | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-procedure-typed-procvalue | A | 50 | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | bug-procptr-record-field-call | A | 50 | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
+| bug-property-setter-resolution-uses-order | A | 52 | bug | Class-typed property WRITE mis-parses ("Expected: [") depending on uses order | — |
 | bug-r-directive-toggle-treated-as-resource | A | 50 | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-read-preserves-line-remainder | A | 50 | bug | `read` consumes a whole line like `readln` | — |
 | bug-read-write-reserved-as-method-names | A | 50 | bug | `Read` / `Write` can't be used as method names (reserved) | — |
@@ -806,7 +806,6 @@ _none_
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 56] [P] feature-pascal-delphi-generics-syntax
-- [p 55] [A] bug-nilpy-str-param-length-index
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 53] [A] feature-asm-textual-emit-mode
@@ -817,7 +816,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 52] [A] bug-property-setter-resolution-uses-order
 - [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-game-library-candidate-suite
@@ -826,7 +824,6 @@ _none_
 - [p 48] [A] bug-inline-array-field-const-bound
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 46] [P] bug-pascal-missing-diagnostics-fail-tests
-- [p 45] [A] bug-overload-resolution-record-identity
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring

@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** bug (Pascal frontend, overload matching) — Track P (shared
   parser.inc/symtab.inc, A-gated)
-- **Status:** working
+- **Status:** done
   [[feature-lib-vecmath]] (probe below), pre-existing (stable v197)
 - **Owner:** opus-a
 
@@ -49,3 +49,6 @@ MulMV3/MulMV4…) instead of clean overloads; de-suffix when this lands.
 `make test` + self-host fixedpoint byte-identical (matcher is shared core).
 Tests: record-type overload dispatch (both orders of declaration), record
 vs class overload, negative: ambiguous call still errors.
+
+## Log
+- 2026-07-11 — resolved, commit a28ee812.
