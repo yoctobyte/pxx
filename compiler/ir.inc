@@ -1838,6 +1838,135 @@ begin
   end;
 end;
 
+{ ===== Pascal case-statement label validation ============================
+  Runs at AN_CASE lowering, before any IR is emitted. Checks every label
+  against the selector's type (string vs ordinal), rejects inverted ranges
+  (lo > hi) and any duplicate/overlapping label pair — FPC rejects all of
+  these at compile time (bug-case-of-string-segfault-and-label-validation). }
+
+{ Lexicographic 3-way compare; orders string labels exactly the way the
+  runtime comparison (EmitAnsiStrCmp3Reg et al.) orders them: byte-wise on
+  the common prefix, then by length. }
+function CaseStrCmp3(const a, b: AnsiString): Integer;
+var i, n: Integer;
+begin
+  n := Length(a);
+  if Length(b) < n then n := Length(b);
+  i := 1;
+  while i <= n do
+  begin
+    if a[i] <> b[i] then
+    begin
+      if Ord(a[i]) < Ord(b[i]) then Result := -1 else Result := 1;
+      Exit;
+    end;
+    Inc(i);
+  end;
+  if Length(a) < Length(b) then Result := -1
+  else if Length(a) > Length(b) then Result := 1
+  else Result := 0;
+end;
+
+{ One label's [lo,hi] interval (hi = lo for a plain label), typed per the
+  selector. Also the type check: a string selector needs string-constant
+  labels (a char literal counts — its source span is preserved so the
+  lowering can rebuild the literal); an ordinal selector rejects multi-char
+  string labels. }
+procedure CaseLabelBounds(lab: Integer; isStr: Boolean;
+                          var lo, hi: Int64; var slo, shi: AnsiString);
+begin
+  if isStr then
+  begin
+    if (not IsConstStrLitNode(lab)) or
+       ((ASTKind[lab] = AN_INT_LIT) and (ASTSLen[lab] = 0)) then
+      Error('case of string: label must be a string constant');
+    slo := ConstStrLitValue(lab);
+    shi := slo;
+    if ASTRight[lab] <> -1 then
+    begin
+      if (not IsConstStrLitNode(ASTRight[lab])) or
+         ((ASTKind[ASTRight[lab]] = AN_INT_LIT) and (ASTSLen[ASTRight[lab]] = 0)) then
+        Error('case of string: label must be a string constant');
+      shi := ConstStrLitValue(ASTRight[lab]);
+    end;
+    if CaseStrCmp3(slo, shi) > 0 then
+      Error('case range: lower bound is greater than upper bound');
+  end
+  else
+  begin
+    if ASTKind[lab] = AN_STR_LIT then
+      Error('case label does not match the ordinal selector type');
+    lo := ASTIVal[lab];
+    hi := lo;
+    if ASTRight[lab] <> -1 then
+    begin
+      if ASTKind[ASTRight[lab]] = AN_STR_LIT then
+        Error('case label does not match the ordinal selector type');
+      hi := ASTIVal[ASTRight[lab]];
+    end;
+    if lo > hi then
+      Error('case range: lower bound is greater than upper bound');
+  end;
+end;
+
+{ O(n^2) pairwise overlap check straight over the AST branch chain (no label
+  arrays -- a case can be arbitrarily large). branchSeqHead = AN_SEQ chain of
+  AN_PAIR(labels, stmt); the else branch has labels = -1. }
+procedure IRValidateCaseLabels(branchSeqHead: Integer; isStr: Boolean);
+var
+  bs, ln, bs2, ln2: Integer;
+  lo, hi, lo2, hi2: Int64;
+  slo, shi, slo2, shi2: AnsiString;
+  clash: Boolean;
+begin
+  lo := 0; hi := 0; lo2 := 0; hi2 := 0;
+  bs := branchSeqHead;
+  while bs <> -1 do
+  begin
+    if ASTLeft[bs] = -1 then ln := -1        { empty chain / else branch }
+    else ln := ASTLeft[ASTLeft[bs]];
+    while (ln <> -1) and (ASTLeft[ln] <> -1) do
+    begin
+      CaseLabelBounds(ASTLeft[ln], isStr, lo, hi, slo, shi);
+      { against every label after this one }
+      ln2 := ASTRight[ln];
+      bs2 := bs;
+      while bs2 <> -1 do
+      begin
+        while (ln2 <> -1) and (ASTLeft[ln2] <> -1) do
+        begin
+          CaseLabelBounds(ASTLeft[ln2], isStr, lo2, hi2, slo2, shi2);
+          if isStr then
+            clash := not ((CaseStrCmp3(shi, slo2) < 0) or (CaseStrCmp3(shi2, slo) < 0))
+          else
+            clash := not ((hi < lo2) or (hi2 < lo));
+          if clash then
+            Error('duplicate or overlapping case label');
+          ln2 := ASTRight[ln2];
+        end;
+        bs2 := ASTRight[bs2];
+        if bs2 = -1 then ln2 := -1
+        else if ASTLeft[bs2] = -1 then ln2 := -1
+        else ln2 := ASTLeft[ASTLeft[bs2]];
+      end;
+      ln := ASTRight[ln];
+    end;
+    bs := ASTRight[bs];
+  end;
+end;
+
+{ The IR constant for one case-label value node: a string-case label becomes
+  IR_CONST_STR from its preserved source span (char literals kept theirs, so
+  a length-1 label still rebuilds); an ordinal label the usual IR_CONST_INT.
+  Type mismatches were already rejected by IRValidateCaseLabels. }
+function IRCaseLabelConst(lab: Integer; isStr: Boolean): Integer;
+begin
+  if isStr then
+    Result := IRAppend(IR_CONST_STR, ASTSOffset[lab], ASTSLen[lab], -1, 0, Ord(tyString))
+  else
+    Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[lab], Ord(tyInteger));
+end;
+
 function IsClassDescOrSelf(c, target: Integer): Boolean;
 { True if class c is `target` or transitively descends it (closed-world walk of
   the compile-time parent chain). Drives the is/as VMT-set test. }
@@ -2308,6 +2437,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
     dynLenTmp, dynLenPi: Integer;
+    caseIsStr: Boolean;
 begin
   if node = -1 then
   begin
@@ -4998,11 +5128,18 @@ begin
         IROptDeadCode off for bodies containing the computed jump. See
         devdocs/dev/optimization-architecture.md §2 (O1 safety policy). }
       selectorValNode := IRLowerAST(ASTLeft[node]);
+      { A string-typed selector switches every label test from the ordinal
+        path to full-string comparisons: labels stay string literals
+        (IR_CONST_STR rebuilt from the preserved source span) and ranges are
+        lexicographic (s >= lo) and (s <= hi). Char selectors keep the
+        ordinal path. (bug-case-of-string-segfault-and-label-validation) }
+      caseIsStr := IntToTypeKind(IRTk[selectorValNode]) in [tyString, tyAnsiString];
+      IRValidateCaseLabels(ASTRight[node], caseIsStr);
       endLabel := IRNewLabel;
-      
+
       first := -1;
       last := -1;
-      
+
       branchSeq := ASTRight[node];
       while branchSeq <> -1 do
       begin
@@ -5027,19 +5164,17 @@ begin
           labelNode := labelsHead;
           while labelNode <> -1 do
           begin
-            cv := ASTIVal[ASTLeft[labelNode]];
             if ASTRight[ASTLeft[labelNode]] <> -1 then
             begin
               { Range label lo..hi: enter the body when lo <= selector <= hi.
                 Skip to elseLabel (this label-test's exit) when either bound
                 fails; reaching the unconditional jump means in-range. }
-              hi := ASTIVal[ASTRight[ASTLeft[labelNode]]];
               elseLabel := IRNewLabel;
-              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
+              constValNode := IRCaseLabelConst(ASTLeft[labelNode], caseIsStr);
               cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkGe), 0, Ord(tyBoolean));
               condJmpNode := IRAppend(IR_JUMP_IF_FALSE, elseLabel, cmpNode, -1, 0, 0);
               if first < 0 then first := condJmpNode;
-              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, hi, Ord(tyInteger));
+              constValNode := IRCaseLabelConst(ASTRight[ASTLeft[labelNode]], caseIsStr);
               cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkLe), 0, Ord(tyBoolean));
               IRAppend(IR_JUMP_IF_FALSE, elseLabel, cmpNode, -1, 0, 0);
               IRAppend(IR_JUMP, clauseBodyLabel, -1, -1, 0, 0);
@@ -5047,7 +5182,7 @@ begin
             end
             else
             begin
-              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
+              constValNode := IRCaseLabelConst(ASTLeft[labelNode], caseIsStr);
               cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkNeq), 0, Ord(tyBoolean));
               condJmpNode := IRAppend(IR_JUMP_IF_FALSE, clauseBodyLabel, cmpNode, -1, 0, 0);
               if first < 0 then first := condJmpNode;

@@ -1371,7 +1371,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_cross_ptr_arith.pas /tmp/test_ptr_arith26
 	test "$$(/tmp/test_ptr_arith26)" = "$$(printf 'deref=44\nparen=44\nplus1=55\nminus1=33\nplus0=44\nminus2=22\nvarneg=11\nfn+2=66\nfn-4=0\nsweep=308')"
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_case_range26
-	test "$$(/tmp/test_case_range26)" = "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
+	test "$$(/tmp/test_case_range26)" = "$$(printf 'ints=8436\nchars=306\nbucket=LLLMMMMHHH')"
+	./$(COMPILER) test/test_case_of_string.pas /tmp/test_case_of_string26
+	test "$$(/tmp/test_case_of_string26)" = "$$(printf '1\n2\n3\n0\n0\n4\n0\n2\n1\n2')"
+	! ./$(COMPILER) test/test_case_label_dup_error.pas /tmp/test_case_label_dup26 > /tmp/test_case_label_dup.log 2>&1
+	grep -q "duplicate or overlapping case label" /tmp/test_case_label_dup.log
+	! ./$(COMPILER) test/test_case_range_inverted_error.pas /tmp/test_case_range_inv26 > /tmp/test_case_range_inv.log 2>&1
+	grep -q "case range: lower bound is greater than upper bound" /tmp/test_case_range_inv.log
 	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_global_init26
 	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=TRUE\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_typed_const26

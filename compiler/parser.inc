@@ -8698,6 +8698,9 @@ begin
       while labelNode <> -1 do
       begin
         valNode := ASTLeft[labelNode];
+        if (ASTKind[valNode] = AN_STR_LIT) or
+           ((ASTRight[valNode] <> -1) and (ASTKind[ASTRight[valNode]] = AN_STR_LIT)) then
+          Error('stackless generator: case-of-string around a yield is not supported');
         cv := ASTIVal[valNode];
         if ASTRight[valNode] <> -1 then
         begin
@@ -9050,12 +9053,66 @@ begin
   Result := node;
 end;
 
+{ One case-label constant. Selector type is unknown until IR lowering, so a
+  string literal keeps its full text: length-1 -> char-ordinal AN_INT_LIT with
+  the source span preserved (ASTSOffset/ASTSLen, so a string-typed selector can
+  still rebuild the literal), any other length (incl. empty) -> AN_STR_LIT.
+  The IR lowering (ir.inc AN_CASE) picks the char/ordinal or string path from
+  the selector's type and validates label kinds against it. }
+function ParseCaseLabelValue(const what: AnsiString): Integer;
+var node, si, prevTok: Integer; neg: Boolean;
+begin
+  neg := False;
+  if CurTok.Kind = tkMinus then
+  begin
+    neg := True;
+    Next;
+    if CurTok.Kind <> tkInteger then Error(what + ' must be constant');
+  end;
+  if CurTok.Kind = tkInteger then
+  begin
+    node := AllocNode(AN_INT_LIT);
+    if neg then ASTIVal[node] := -CurTok.IVal
+    else ASTIVal[node] := CurTok.IVal;
+  end
+  else if CurTok.Kind = tkString then
+  begin
+    prevTok := TokPos - 1;
+    if Length(CurTok.SVal) = 1 then
+    begin
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := Ord(CurTok.SVal[1]);
+      ASTTk[node] := Ord(tyChar);
+    end
+    else
+    begin
+      node := AllocNode(AN_STR_LIT);
+      ASTTk[node] := Ord(tyString);
+    end;
+    ASTSOffset[node] := Tokens[prevTok].SOffset;
+    ASTSLen[node] := Tokens[prevTok].SLen;
+  end
+  else if CurTok.Kind = tkIdent then
+  begin
+    si := FindSym(CurTok.SVal);
+    if (si >= 0) and (Syms[si].Kind = skConst) then
+    begin
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := Syms[si].ConstVal;
+      if Syms[si].TypeKind = tyChar then ASTTk[node] := Ord(tyChar);
+    end
+    else Error(what + ' must be constant');
+  end
+  else Error('expected ' + what);
+  Next;
+  Result := node;
+end;
+
 function ParseCaseStatementAST: Integer;
 var
   condNode, branchSeq, lastBranch, branchPair, labelsHead, lastLabel, labelValNode: Integer;
-  stmtNode, node, si, hiNode: Integer;
+  stmtNode, node: Integer;
   hasElse: Boolean;
-  cv, cvHi: Int64;
   elseLast, elseStmt, wdPos: Integer;
 begin
   ParseExpr; condNode := CurASTNode;
@@ -9115,47 +9172,13 @@ begin
       labelsHead := AllocNode(AN_ARG);
       lastLabel := labelsHead;
       repeat
-        if CurTok.Kind = tkInteger then cv := CurTok.IVal
-        else if CurTok.Kind = tkString then
-        begin
-          if Length(CurTok.SVal) = 0 then Error('case string label must not be empty');
-          cv := Ord(CurTok.SVal[1]);
-        end
-        else if CurTok.Kind = tkIdent then
-        begin
-          si := FindSym(CurTok.SVal);
-          if (si >= 0) and (Syms[si].Kind = skConst) then cv := Syms[si].ConstVal
-          else Error('case label must be constant');
-        end
-        else Error('expected case label');
-        Next;
+        labelValNode := ParseCaseLabelValue('case label');
 
-        labelValNode := AllocNode(AN_INT_LIT);
-        ASTIVal[labelValNode] := cv;
-
-        { Range label `lo..hi`: stash hi in a second AN_INT_LIT hung off
-          ASTRight of the value node; the IR lowering reads it as a [lo,hi]
+        { Range label `lo..hi`: stash hi in a second value node hung off
+          ASTRight of the lo node; the IR lowering reads it as a [lo,hi]
           inclusive range test instead of a single equality. }
         if Eat(tkDotDot) then
-        begin
-          if CurTok.Kind = tkInteger then cvHi := CurTok.IVal
-          else if CurTok.Kind = tkString then
-          begin
-            if Length(CurTok.SVal) = 0 then Error('case string label must not be empty');
-            cvHi := Ord(CurTok.SVal[1]);
-          end
-          else if CurTok.Kind = tkIdent then
-          begin
-            si := FindSym(CurTok.SVal);
-            if (si >= 0) and (Syms[si].Kind = skConst) then cvHi := Syms[si].ConstVal
-            else Error('case range upper bound must be constant');
-          end
-          else Error('expected case range upper bound');
-          Next;
-          hiNode := AllocNode(AN_INT_LIT);
-          ASTIVal[hiNode] := cvHi;
-          ASTRight[labelValNode] := hiNode;
-        end;
+          ASTRight[labelValNode] := ParseCaseLabelValue('case range upper bound');
 
         if ASTLeft[lastLabel] = -1 then
           ASTLeft[lastLabel] := labelValNode

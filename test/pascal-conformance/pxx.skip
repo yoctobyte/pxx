@@ -9,6 +9,12 @@
 # negative tests that pxx now compiles instead of rejecting — those were
 # previously "passing" only because the mandatory-header error rejected them
 # for the wrong reason (see bug-pascal-missing-diagnostics-fail-tests).
+# Re-audit 2026-07-11b (case-of-string lowering + case-label validation,
+# bug-case-of-string-segfault-and-label-validation): 238 pass / 278
+# skip-listed / 34 auto-gated. Burned the tcase cluster (21 entries incl. all
+# exit=139 segfaults + the {%FAIL} label-validation tests); the 26 tcase
+# entries that remain hinge on the missing unicodestring type, unit-only
+# sources, enum parsing, or the `otherwise` clause — not on case handling.
 tarray11.pp	runtime: exit code 30 (want 0)
 tarray12.pp	unclassified: pascal26:44: error: base type not found: IInterface ()
 tarray13.pp	unclassified: pascal26:23: error: undefined variable (DynArraySize)
@@ -24,12 +30,6 @@ tarrconstr5.pp	unclassified: Expected: >, but got: TArray (Kind: 1, Line: 14) | 
 tarrconstr6.pp	unclassified: pascal26:24: error: undefined variable (TLongIntArray)
 tarrconstr7.pp	unclassified: pascal26:6: error: base type not found: IInterface ()
 tarrconstr8.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tcase1.pp	unclassified: pascal26:18: error: expected case label ()
-tcase45_2.pp	runtime: exit code 1 (want 0)
-tcase46_2.pp	runtime: exit code 1 (want 0)
-tcase47_2.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase48_2.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase50.pp	unclassified: pascal26:10: error: case label must be constant ()
 tclass10c.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass11a.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12a.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -196,51 +196,6 @@ tarray1.pp	unclassified: pascal26:2: error: class reference to a class with no R
 tarray3.pp	unclassified: Expected: begin, but got: ABCD (Kind: 3, Line: 13)
 tarray6.pp	unclassified: pascal26:6: error: local var-section initializer not supported; use `var x := value;` ()
 tarray8.pp	unclassified: pascal26:18: error: undefined variable (uniquestring)
-tcase0.pp	runtime: exit code 15 (want 0)
-tcase10.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase11.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase12.pp	runtime: exit code 139 (want 0)
-tcase13.pp	runtime: exit code 1 (want 0)
-tcase14.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase15.pp	runtime: exit code 139 (want 0)
-tcase16.pp	runtime: exit code 139 (want 0)
-tcase17.pp	unclassified: pascal26:22: error: case string label must not be empty ()
-tcase18.pp	unclassified: pascal26:22: error: case string label must not be empty ()
-tcase19.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
-tcase20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase22.pp	runtime: exit code 1 (want 0)
-tcase23.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase24.pp	runtime: exit code 1 (want 0)
-tcase25.pp	runtime: exit code 1 (want 0)
-tcase26.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase27.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase28.pp	runtime: exit code 139 (want 0)
-tcase29.pp	runtime: exit code 1 (want 0)
-tcase3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase30.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase31.pp	runtime: exit code 139 (want 0)
-tcase32.pp	runtime: exit code 139 (want 0)
-tcase33.pp	unclassified: pascal26:22: error: case string label must not be empty ()
-tcase34.pp	unclassified: pascal26:22: error: case string label must not be empty ()
-tcase35.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase36.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase38.pp	runtime: exit code 1 (want 0)
-tcase39.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase40.pp	runtime: exit code 1 (want 0)
-tcase41.pp	runtime: exit code 1 (want 0)
-tcase42.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase43.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase44.pp	runtime: exit code 1 (want 0)
-tcase45.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase48.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
-tcase5.pp	runtime: exit code 1 (want 0)
-tcase6.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tcase7.pp	runtime: exit code 1 (want 0)
-tcase8.pp	runtime: exit code 1 (want 0)
-tcase9.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tclass13a.pp	unclassified: Expected: ), but got:  (Kind: 81, Line: 12)
 tclass13c.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tclass13d.pp	unclassified: Expected: :, but got:  (Kind: 64, Line: 7)
@@ -312,3 +267,29 @@ tstring2.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring5.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
 tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
 tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
+tcase0.pp	unclassified: unicodestring case selector — unicodestring type not supported (case-of-string itself works, see bug-case-of-string-segfault-and-label-validation)
+tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
+tcase12.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase13.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase14.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase15.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase16.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase17.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase18.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase24.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase25.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase28.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase29.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase30.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase31.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase32.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase33.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase34.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase40.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase41.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase44.pp	unclassified: unicodestring case selector — unicodestring type not supported
+tcase45.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase48.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
