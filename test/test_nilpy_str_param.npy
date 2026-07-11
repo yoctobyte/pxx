@@ -1,0 +1,42 @@
+# Regression: bug-nilpy-str-param-length-index — a str-annotated parameter
+# must behave as a full string inside the body.
+# Face 1: Length(param); Face 2: param[i] indexing; Face 3: scanning loop
+# combining both (was an IR codegen ICE / variant-tag miscompile);
+# plus `-> None` procedure defs and calling them as statements.
+
+def flen(line: str) -> int:
+    n = Length(line)
+    return n
+
+def fidx(line: str) -> str:
+    c = line[1]
+    return c
+
+def tok(line: str, want: int) -> str:
+    n = Length(line)
+    i = 1
+    idx = 0
+    cur = ""
+    out = ""
+    while i <= n + 1:
+        c = " "
+        if i <= n:
+            c = line[i]
+        if c == " ":
+            if cur != "":
+                idx = idx + 1
+                if idx == want:
+                    out = cur
+                cur = ""
+        else:
+            cur = cur + c
+        i = i + 1
+    return out
+
+def shout(msg: str) -> None:
+    print(msg + "!")
+
+print(flen("ab"))
+print(fidx("ab"))
+print(tok("ab cd ef", 2))
+shout("ok")

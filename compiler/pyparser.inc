@@ -145,6 +145,19 @@ begin
       Result := tyInteger;
     Exit;
   end;
+  { string ⊕ char (e.g. `res = res + c`) stays a string — widening to variant
+    here would poison the local: a variant scalar-loaded on `return` yields
+    its tag word, not the payload. }
+  if ((a = tyString) or (a = tyAnsiString)) and (b = tyChar) then
+  begin
+    Result := a;
+    Exit;
+  end;
+  if (a = tyChar) and ((b = tyString) or (b = tyAnsiString)) then
+  begin
+    Result := b;
+    Exit;
+  end;
   if PyVariantScalar(a) and PyVariantScalar(b) then
   begin
     Result := tyVariant;
@@ -277,7 +290,7 @@ begin
 end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name: AnsiString;
+var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name, lo: AnsiString;
 begin
   Result := tyUnknown;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
@@ -301,10 +314,20 @@ begin
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
            not IsClassType(name) then
         begin
-          procIdx := FindProc(name);
-          if procIdx >= 0 then tk := Procs[procIdx].RetType
-          else tk := PyDefReturnType(name);
-          if tk = tyUnknown then tk := tyVariant;
+          { Shared-parser builtins are not Procs; without this they would fall
+            through to tyVariant and poison the local's type (a variant local
+            scalar-loaded on `return` yields its TAG, not the value). }
+          lo := LowerCase(name);
+          if (lo = 'length') or (lo = 'ord') or (lo = 'pos') then tk := tyInteger
+          else if lo = 'chr' then tk := tyChar
+          else if lo = 'copy' then tk := tyString
+          else
+          begin
+            procIdx := FindProc(name);
+            if procIdx >= 0 then tk := Procs[procIdx].RetType
+            else tk := PyDefReturnType(name);
+            if tk = tyUnknown then tk := tyVariant;
+          end;
           i := i + 1; depth := 0;
           while i < endIdx do
           begin
@@ -327,6 +350,25 @@ begin
         begin
           si := FindSym(name);
           if si >= 0 then tk := Syms[si].TypeKind;
+        end;
+        { Subscript form `name[...]` on a string yields a char; skip the
+          bracket group so the index expression's int does not widen the
+          result to variant. }
+        if ((tk = tyString) or (tk = tyAnsiString)) and (i + 1 < endIdx) and
+           (Tokens[i + 1].Kind = tkLBrack) then
+        begin
+          tk := tyChar;
+          i := i + 1; depth := 0;
+          while i < endIdx do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(depth)
+            else if Tokens[i].Kind = tkRBrack then
+            begin
+              Dec(depth);
+              if depth = 0 then Break;
+            end;
+            Inc(i);
+          end;
         end;
       end;
     end;
@@ -803,7 +845,7 @@ procedure PyParseDef;
 var name: AnsiString; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyEnd, bodyNode: Integer;
-    retType: TTypeKind;
+    retType: TTypeKind; isProc: Boolean;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
   Next;
@@ -826,14 +868,17 @@ begin
   Expect(tkRParen, ')');
   Expect(tkMinus, '- in ->');
   Expect(tkGt, '> in ->');
-  retType := PyParseType;
+  { `-> None` declares a procedure (no Result). }
+  isProc := CurTok.Kind = tkNil;
+  if isProc then begin retType := tyInteger; Next; end
+  else retType := PyParseType;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
   bodyEnd := PyFindBodyEnd(bodyStart);
 
-  procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
+  procIdx := RegisterProc(name, not isProc, retType, nparams, pnames, ptypes);
   Procs[procIdx].BodyAddr := CodeLen;
   savedSC := SymCount;
   savedFS := FrameSize;
@@ -845,8 +890,11 @@ begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
-  idx := AllocVar('Result', retType);
-  Procs[procIdx].RetSymIdx := idx;
+  if not isProc then
+  begin
+    idx := AllocVar('Result', retType);
+    Procs[procIdx].RetSymIdx := idx;
+  end;
   PyCollectLocals(bodyStart, bodyEnd);
   for i := 0 to PyLocalCount - 1 do
     if FindSym(PyLocals[i].Name) < 0 then AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
@@ -856,6 +904,7 @@ begin
   for i := 0 to nparams - 1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
+    if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
     EmitB($89);
     case i of
       0: EmitB($BD);

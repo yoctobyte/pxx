@@ -7,9 +7,9 @@ prio: 55  # auto — hard-blocks feature-demo-portable-userland phase 1 (any str
 - **Type:** bug (frontend — Nil-Python; obeys Track A's gate like the Pascal
   frontend)
 - **Track:** A (`compiler/pyparser.inc` / NilPy str-param lowering)
-- **Status:** backlog — filed 2026-07-10 while scoping the portable-userland
+- **Status:** working
   shell ([[feature-demo-portable-userland]] phase 1).
-- **Owner:** —
+- **Owner:** opus-a
 
 ## Symptom (three faces, one root)
 A `str`-annotated function parameter is not a working string inside the body.

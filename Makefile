@@ -203,6 +203,10 @@ test-nilpy: $(COMPILER)
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
+	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
+	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\na\ncd\nok!')"
+	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
+	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 
 test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING

@@ -6614,7 +6614,10 @@ begin
         CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
       end
-      else if (procIdx >= 0) and Procs[procIdx].IsFunc and (Tokens[TokPos].Kind = tkLParen) then
+      { NilPy: a `-> None` def is a procedure; its call statement flows through
+        the expression parser (PyParseStatement's fallthrough), so accept
+        proc calls here in NilPy mode only. Pascal keeps rejecting proc-in-expr. }
+      else if (procIdx >= 0) and (Procs[procIdx].IsFunc or isNilPy) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
         Expect(tkLParen, '(');
