@@ -7,8 +7,8 @@ prio: 48  # auto — narrow parser gap; named-alias sidesteps it, but it's a rea
 - **Type:** bug (frontend — parser, inline array-type in a record field)
 - **Track:** A (`parser.inc` array-type / record-field parsing). Filed from
   Track B (dns_cache) — hand off, do not fix under B/E.
-- **Status:** backlog — filed 2026-07-11.
-- **Owner:** —
+- **Status:** working
+- **Owner:** trackA-e-bugs
 
 ## Symptom
 An **inline anonymous array field** whose subrange high bound is a **constant

@@ -12724,30 +12724,25 @@ begin
         if CurTok.Kind = tkLBrack then
         begin
           Next;
-          if CurTok.Kind = tkInteger then
+          { Const-EXPRESSION bounds (`0..N - 1`), not just literals — same
+            ConstEval the named array-type path uses
+            (bug-inline-array-field-const-bound). }
+          loVal := ConstEval;
+          Expect(tkDotDot, '..');
+          hiVal := ConstEval;
+          arrLen := hiVal - loVal + 1;
+          { N-D field: collect dim0 then any comma dims. }
+          fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+          while CurTok.Kind = tkComma do
           begin
-            loVal := CurTok.IVal;
-            Next;
+            Eat(tkComma);
+            tdLo := ConstEval;
             Expect(tkDotDot, '..');
-            if CurTok.Kind = tkInteger then
-            begin
-              hiVal := CurTok.IVal;
-              arrLen := hiVal - loVal + 1;
-              Next;
-            end;
-            { N-D field: collect dim0 then any comma dims. }
-            fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
-            while CurTok.Kind = tkComma do
-            begin
-              Eat(tkComma);
-              if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
-              Expect(tkDotDot, '..');
-              if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
-              if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
-              tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
-              arrLen := arrLen * tdDimSpan[fNDims];
-              Inc(fNDims);
-            end;
+            tdHi := ConstEval;
+            if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+            tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+            arrLen := arrLen * tdDimSpan[fNDims];
+            Inc(fNDims);
           end;
           Expect(tkRBrack, ']');
           Expect(tkOf, 'of');
@@ -13768,30 +13763,25 @@ begin
               if CurTok.Kind = tkLBrack then
               begin
                 Next;
-                if CurTok.Kind = tkInteger then
+                { Const-EXPRESSION bounds (`0..N - 1`), not just literals —
+                  same ConstEval the named array-type path uses
+                  (bug-inline-array-field-const-bound). }
+                loVal := ConstEval;
+                Expect(tkDotDot, '..');
+                hiVal := ConstEval;
+                arrLen := hiVal - loVal + 1;
+                { N-D field: collect dim0 then any comma dims. }
+                fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+                while CurTok.Kind = tkComma do
                 begin
-                  loVal := CurTok.IVal;
-                  Next;
+                  Eat(tkComma);
+                  tdLo := ConstEval;
                   Expect(tkDotDot, '..');
-                  if CurTok.Kind = tkInteger then
-                  begin
-                    hiVal := CurTok.IVal;
-                    arrLen := hiVal - loVal + 1;
-                    Next;
-                  end;
-                  { N-D field: collect dim0 then any comma dims. }
-                  fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
-                  while CurTok.Kind = tkComma do
-                  begin
-                    Eat(tkComma);
-                    if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
-                    Expect(tkDotDot, '..');
-                    if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
-                    if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
-                    tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
-                    arrLen := arrLen * tdDimSpan[fNDims];
-                    Inc(fNDims);
-                  end;
+                  tdHi := ConstEval;
+                  if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+                  tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+                  arrLen := arrLen * tdDimSpan[fNDims];
+                  Inc(fNDims);
                 end;
                 Expect(tkRBrack, ']');
                 Expect(tkOf, 'of');
