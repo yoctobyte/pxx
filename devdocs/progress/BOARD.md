@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,7 @@ _none_
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-testmgr-enroll-c-cross-conformance | T | 45 | feature | testmgr: enroll the C cross-conformance matrix + lua-cross in the full tier | — |
+| feature-testmgr-opt-tier-and-benchmarks | T | 60 | feature | testmgr: opt-level differential tier + tracked benchmark runs | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -789,6 +790,7 @@ _none_
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] feature-selfhost-guard-ir-unsupported
+- [p 60] [T] feature-testmgr-opt-tier-and-benchmarks
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [P] bug-pascal-headerless-program
 - [p 56] [P] feature-pascal-delphi-generics-syntax
