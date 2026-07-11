@@ -164,7 +164,7 @@ class Clone:
 
 
 # ---------------------------------------------------------------- testing --
-def run_gate(clone, tier, job_glob=None, abort_check=None):
+def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
     """Run the CLONE's testmgr (self-versioned with the tested tree).
 
     abort_check: optional callable polled every ~30s; returning True SIGINTs
@@ -216,6 +216,27 @@ def run_gate(clone, tier, job_glob=None, abort_check=None):
                     proc.wait()
                 return None, "aborted"
     if not os.path.exists(rep_path):
+        # testmgr died before reporting. One likely cause: a STALE seed
+        # binary that cannot compile HEAD's sources (e.g. a since-fixed
+        # compiler bug rejects new valid code — WsPos incident 2026-07-11).
+        # Recovery: reseed from the committed pinned stable and retry once;
+        # without this the watcher wedges retesting the same SHA forever.
+        if not _reseeded and proc.returncode:
+            print("twatch: no report (rc=%s) — reseeding compiler from "
+                  "pinned stable and retrying once" % proc.returncode,
+                  flush=True)
+            try:
+                if os.path.exists(comp):
+                    os.unlink(comp)        # unlink works even while running
+                subprocess.run(["make", "--no-print-directory",
+                                "seed-from-stable"],
+                               cwd=clone.path, check=True)
+                os.utime(comp, (0, 0))     # backdate: see CRITICAL above
+            except (OSError, subprocess.CalledProcessError) as e:
+                print("twatch: reseed failed (%s)" % e, flush=True)
+                return None, proc.returncode
+            return run_gate(clone, tier, job_glob=job_glob,
+                            abort_check=abort_check, _reseeded=True)
         return None, proc.returncode       # testmgr died before reporting
     with open(rep_path) as f:
         return json.load(f), proc.returncode
