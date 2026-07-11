@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,7 +87,6 @@ _none_
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
-| feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
@@ -173,7 +172,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (593)
+## done (594)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -677,6 +676,7 @@ _none_
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
+| feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |
@@ -865,7 +865,6 @@ _none_
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [A] bug-test-riscv32-thin-coverage
 - [p 35] [C] feature-c-esp-conformance-coverage
-- [p 35] [A] feature-pascal-str-variable-width
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets

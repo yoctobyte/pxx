@@ -5,7 +5,7 @@ prio: 35
 # Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`)
 
 - **Type:** gap (Pascal frontend) — Track P
-- **Status:** working
+- **Status:** done
   ([[feature-pascal-complex-numbers-ucomplex]])
 - **Owner:** opus-fruit
 
@@ -32,3 +32,6 @@ expressions.
 
 `make test` + self-host fixedpoint. Tests: Str and writeln with variable
 width and precision, negative width behavior matching FPC.
+
+## Log
+- 2026-07-11 — resolved, commit fcea64ce.
