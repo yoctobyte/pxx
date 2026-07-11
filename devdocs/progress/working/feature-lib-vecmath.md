@@ -5,10 +5,10 @@ prio: 42
 # vecmath library: TVec2/3/4 + TMat with operator overloads — Track B
 
 - **Type:** feature (library) — Track B
-- **Status:** backlog — user-requested 2026-07-11 ("same for vector and
+- **Status:** working
   bignum — nice library legwork that is testable, and we all love more
   tests"), sibling of [[feature-pascal-complex-numbers-ucomplex]]
-- **Owner:** —
+- **Owner:** fable-p
 
 ## What
 
