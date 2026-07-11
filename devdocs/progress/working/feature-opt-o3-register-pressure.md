@@ -255,3 +255,11 @@ architecture `devdocs/dev/optimization-architecture.md`.
   mandelbrot holds 1.20×, self-compile 1.04-1.05×.
 - Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
   quick GREEN.
+
+### 2026-07-11 — W1 slice 3b: last-arg collapse extended to virtual + indirect calls
+- Same transform as the direct-call collapse, applied to IR_VIRTUAL_CALL
+  (register-convention dispatch, <=6 params) and IR_CALL_IND's internal path.
+  cdecl indirect calls and the >6-param stack conventions unchanged. Matters
+  for OO/method-pointer-heavy user code rather than the compiler itself.
+- Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
+  quick GREEN.

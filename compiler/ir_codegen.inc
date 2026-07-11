@@ -1977,14 +1977,27 @@ begin
           if nArgs > 6 then
             Error('indirect call with more than 6 parameters is not supported');
           IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
+          { -O3: the last arg's push/pop pair is back-to-back — keep it in rax
+            and mov it into its register (same as the direct-call collapse). }
+          skipLastArg := (OptLevel >= 3) and (nArgs >= 1);
           argNode := IRB[node];
           while argNode <> -1 do
           begin
             IREmitNode(IRA[argNode]);
-            EmitB($50);                              { push rax }
+            if not (skipLastArg and (IRB[argNode] = -1)) then
+              EmitB($50);                            { push rax }
             argNode := IRB[argNode];
           end;
-          for i := nArgs - 1 downto 0 do
+          if skipLastArg then
+            case nArgs - 1 of
+              0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+              1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
+              2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
+              3: begin EmitB($48); EmitB($89); EmitB($C1); end; { mov rcx, rax }
+              4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
+              5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+            end;
+          for i := nArgs - 1 - Ord(skipLastArg) downto 0 do
             case i of
               0: EmitB($5F);                          { pop rdi }
               1: EmitB($5E);                          { pop rsi }
@@ -5001,6 +5014,8 @@ begin
         { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
         procIdx := IRC[node];
         slot := Integer(IRIVal[node]);
+        skipLastArg := (OptLevel >= 3) and (Procs[procIdx].ParamCount >= 1) and
+                       (Procs[procIdx].ParamCount <= 6);
         argNode := IRA[node];
         pathIdx := 0;
         while argNode <> -1 do
@@ -5024,12 +5039,25 @@ begin
               EmitB($59);                                     { pop rcx (restore stack) }
             end;
           end;
-          EmitB($50); { push rax }
+          { -O3: last arg's push/pop pair collapses to one mov (same as the
+            direct-call transform); register-convention dispatch only. }
+          if not (skipLastArg and (IRB[argNode] = -1)) then
+            EmitB($50); { push rax }
           argNode := IRB[argNode];
           Inc(pathIdx);
         end;
         if Procs[procIdx].ParamCount <= 6 then
-          for i := Procs[procIdx].ParamCount - 1 downto 0 do
+        begin
+          if skipLastArg then
+            case Procs[procIdx].ParamCount - 1 of
+              0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+              1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
+              2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
+              3: begin EmitB($48); EmitB($89); EmitB($C1); end; { mov rcx, rax }
+              4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
+              5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+            end;
+          for i := Procs[procIdx].ParamCount - 1 - Ord(skipLastArg) downto 0 do
             case i of
               0: EmitB($5F); { pop rdi  (Self) }
               1: EmitB($5E); { pop rsi }
@@ -5037,7 +5065,8 @@ begin
               3: EmitB($59); { pop rcx }
               4: begin EmitB($41); EmitB($58); end; { pop r8 }
               5: begin EmitB($41); EmitB($59); end; { pop r9 }
-            end
+            end;
+        end
         else
         begin
           { All-stack convention: Self (param 0) is the deepest pushed slot;
