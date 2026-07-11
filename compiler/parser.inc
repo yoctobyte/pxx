@@ -17634,13 +17634,27 @@ begin
     outside a routine body — main body + pre-scan), strict by default. }
   CurBodyHdrTok    := $7FFFFFFF;
   DeclOrderStrict  := not LaxDeclOrder;   { strict by default; --lax-decl-order / {$DECLORDER OFF} opts out }
-  Expect(tkProgram, 'program');
-  if CurTok.Kind = tkEOF then Error('expected program name');
-  DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }
-  Next;  { program name can be any identifier (even keyword) }
-  if CurTok.Kind = tkLParen then
-    begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
-  Eat(tkSemicolon);
+  { The `program Name;` header is OPTIONAL, matching FPC (and Turbo Pascal
+    back to 1.0, where the heading was decorative) — a source that opens
+    directly with uses/type/var/const/begin/... is a valid program
+    (bug-pascal-headerless-program; 111 FPC-conformance tests hit this).
+    A file that opens with `unit` is a unit compiled as a program: pxx is a
+    whole-program compiler with no .ppu model, so say that plainly instead
+    of "expected program". }
+  if CurTok.Kind = tkUnit then
+    Error('this file is a unit, not a program — compile a program that uses it (pxx has no standalone-unit output)');
+  if CurTok.Kind = tkProgram then
+  begin
+    Next;
+    if CurTok.Kind = tkEOF then Error('expected program name');
+    DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }
+    Next;  { program name can be any identifier (even keyword) }
+    if CurTok.Kind = tkLParen then
+      begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
+    Eat(tkSemicolon);
+  end
+  else
+    DbgProgName := 'program';    { headerless: anonymous main subprogram for -g }
 
   { Reserve BSS[0..7] for initial rsp (argv access) }
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);

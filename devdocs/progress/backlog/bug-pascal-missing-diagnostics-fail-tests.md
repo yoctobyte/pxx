@@ -29,3 +29,18 @@ turns out deep.
 
 ## Gate
 `make test` + self-host byte-identical; burn the skip-list entries.
+
+## 2026-07-11 — 24 more exposed by the headerless-program fix
+
+The mandatory `program` header was accidentally rejecting 24 headerless
+`{%FAIL}` negative tests before their actual invalid construct was ever
+reached. With bug-pascal-headerless-program fixed, pxx now COMPILES them —
+each is a real missing-diagnostic gap. From the conformance run (skiplist
+reason "missing diagnostic: accepts invalid code"):
+
+tcase3/6/9/10/11/19/20/23/26/27/35/36/39/42/43 (case-of-string validation:
+overlapping/inverted ranges, duplicate labels), tclass13c, tenum2, tforin20,
+tgeneric13/14/20/21, toperatorerror, tover3.
+
+The tcase cluster is the bulk: case-statement label validation (duplicate
+labels, inverted ranges) is simply not checked today.

@@ -6,9 +6,9 @@ prio: 58  # auto — 111 conformance tests behind it, biggest single unlock
 
 - **Type:** bug (Pascal frontend, dialect fidelity)
 - **Track:** P (shared `parser.inc` — A-gated, sole-A confirmation before edit)
-- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+- **Status:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** fable-O
 
 ## Symptom
 `Expected: program, but got: var/type/uses/const (Kind: N, Line: N)` — pxx

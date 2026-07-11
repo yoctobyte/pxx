@@ -2,7 +2,13 @@
 # One test per line: name.pp<TAB>reason. Burn down ticket by ticket; anything
 # not passing, not auto-gated, and not listed here = FAIL.
 # Baseline audit 2026-07-10: 222 pass / 294 skip-listed / 34 auto-gated (of 550 curated).
-tarray10.pp	parser: program header required (FPC allows headerless program)
+# Re-audit 2026-07-11 (headerless-program fix, suite re-fetched): 213 pass /
+# 303 skip-listed / 34 auto-gated. The header fix green-lit 13 formerly
+# failing tests and un-blocked 111 header-required skips (15 pass outright,
+# rest re-listed with their real first error); it also EXPOSED 24 {%FAIL}
+# negative tests that pxx now compiles instead of rejecting — those were
+# previously "passing" only because the mandatory-header error rejected them
+# for the wrong reason (see bug-pascal-missing-diagnostics-fail-tests).
 tarray11.pp	runtime: exit code 30 (want 0)
 tarray12.pp	unclassified: pascal26:44: error: base type not found: IInterface ()
 tarray13.pp	unclassified: pascal26:23: error: undefined variable (DynArraySize)
@@ -11,65 +17,27 @@ tarray15.pp	unclassified: pascal26:31: error: dynamic array initializer not supp
 tarray16.pp	parser: mode-Delphi generics TFoo<T> syntax
 tarray17.pp	unclassified: Expected: :=, but got:  (Kind: 124, Line: 32) | near: Halt     a >>>
 tarray18.pp	parser: mode-Delphi generics TFoo<T> syntax
-tarray1.pp	parser: program header required (FPC allows headerless program)
 tarray2.pp	unclassified: pascal26:57: error: dereferenced value is not a pointer ()
-tarray3.pp	parser: program header required (FPC allows headerless program)
-tarray6.pp	parser: program header required (FPC allows headerless program)
 tarray7.pp	unclassified: Expected: ], but got:  (Kind: 82, Line: 45) | near: average  a    >>>
-tarray8.pp	parser: program header required (FPC allows headerless program)
 tarrconstr1.pp	unclassified: pascal26:12: error: undefined variable (TAB)
 tarrconstr5.pp	unclassified: Expected: >, but got: TArray (Kind: 1, Line: 14) | near: TStringArrayArray2  spe
 tarrconstr6.pp	unclassified: pascal26:24: error: undefined variable (TLongIntArray)
 tarrconstr7.pp	unclassified: pascal26:6: error: base type not found: IInterface ()
 tarrconstr8.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tcase0.pp	parser: program header required (FPC allows headerless program)
-tcase12.pp	parser: program header required (FPC allows headerless program)
-tcase13.pp	parser: program header required (FPC allows headerless program)
-tcase14.pp	parser: program header required (FPC allows headerless program)
-tcase15.pp	parser: program header required (FPC allows headerless program)
-tcase16.pp	parser: program header required (FPC allows headerless program)
-tcase17.pp	parser: program header required (FPC allows headerless program)
-tcase18.pp	parser: program header required (FPC allows headerless program)
 tcase1.pp	unclassified: pascal26:18: error: expected case label ()
-tcase22.pp	parser: program header required (FPC allows headerless program)
-tcase24.pp	parser: program header required (FPC allows headerless program)
-tcase25.pp	parser: program header required (FPC allows headerless program)
-tcase28.pp	parser: program header required (FPC allows headerless program)
-tcase29.pp	parser: program header required (FPC allows headerless program)
-tcase2.pp	parser: program header required (FPC allows headerless program)
-tcase30.pp	parser: program header required (FPC allows headerless program)
-tcase31.pp	parser: program header required (FPC allows headerless program)
-tcase32.pp	parser: program header required (FPC allows headerless program)
-tcase33.pp	parser: program header required (FPC allows headerless program)
-tcase34.pp	parser: program header required (FPC allows headerless program)
-tcase38.pp	parser: program header required (FPC allows headerless program)
-tcase40.pp	parser: program header required (FPC allows headerless program)
-tcase41.pp	parser: program header required (FPC allows headerless program)
-tcase44.pp	parser: program header required (FPC allows headerless program)
 tcase45_2.pp	runtime: exit code 1 (want 0)
-tcase45.pp	parser: program header required (FPC allows headerless program)
 tcase46_2.pp	runtime: exit code 1 (want 0)
-tcase46.pp	parser: program header required (FPC allows headerless program)
 tcase47_2.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase47.pp	parser: program header required (FPC allows headerless program)
 tcase48_2.pp	unclassified: pascal26:19: error: case string label must not be empty ()
-tcase48.pp	parser: program header required (FPC allows headerless program)
 tcase50.pp	unclassified: pascal26:10: error: case label must be constant ()
-tcase5.pp	parser: program header required (FPC allows headerless program)
-tcase7.pp	parser: program header required (FPC allows headerless program)
-tcase8.pp	parser: program header required (FPC allows headerless program)
 tclass10c.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass11a.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12a.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12c.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass12d.pp	unclassified: pascal26:21: error: undefined variable (SomeValue)
-tclass13a.pp	parser: program header required (FPC allows headerless program)
-tclass13b.pp	parser: program header required (FPC allows headerless program)
-tclass13d.pp	parser: program header required (FPC allows headerless program)
 tclass13.pp	parser: mode-Delphi generics TFoo<T> syntax
 tclass15.pp	unclassified: pascal26:458: error: unexpected character ()
 tclass16.pp	parser: mode-Delphi generics TFoo<T> syntax
-tclass3.pp	parser: program header required (FPC allows headerless program)
 tclass5.pp	unclassified: pascal26:30: error: undefined variable (fail)
 tclass9.pp	unclassified: pascal26:27: error: undefined variable (FSomeClassVar)
 tclassinfo1.pp	unclassified: pascal26:8: error: undefined variable (TObject)
@@ -80,10 +48,8 @@ tdefault2.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tdefault4.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tdefault5.pp	unclassified: pascal26:458: error: unexpected character ()
 tdefault6.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tenum1.pp	parser: program header required (FPC allows headerless program)
 tenum3.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 12) | near: third   TRange1  first >
 tenum4.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tenum6.pp	parser: program header required (FPC allows headerless program)
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
 terecs10.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs11.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -97,25 +63,11 @@ terecs3.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
 terecs8.pp	parser: mode-Delphi generics TFoo<T> syntax
 terecs9.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-terecs_u1.pp	parser: program header required (FPC allows headerless program)
-texception10.pp	parser: program header required (FPC allows headerless program)
 texception1.pp	parser: mode-Delphi generics TFoo<T> syntax
-texception2.pp	parser: program header required (FPC allows headerless program)
-texception3.pp	parser: program header required (FPC allows headerless program)
 tforin11.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tforin12.pp	parser: program header required (FPC allows headerless program)
-tforin13.pp	parser: program header required (FPC allows headerless program)
-tforin14.pp	parser: program header required (FPC allows headerless program)
-tforin15.pp	parser: program header required (FPC allows headerless program)
-tforin16.pp	parser: program header required (FPC allows headerless program)
-tforin17.pp	parser: program header required (FPC allows headerless program)
-tforin19.pp	parser: program header required (FPC allows headerless program)
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
-tforin23.pp	parser: program header required (FPC allows headerless program)
 tforin24.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tforin25.pp	parser: mode-Delphi generics TFoo<T> syntax
-tforin26.pp	parser: program header required (FPC allows headerless program)
-tforin27.pp	parser: program header required (FPC allows headerless program)
 tforin28.pp	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
 tforin2.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tforin3.pp	runtime: exit code 139 (want 0)
@@ -130,18 +82,10 @@ tgenconstraint37.pp	unclassified: Expected: end, but got:  (Kind: 78, Line: 18) 
 tgenconstraint38.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgenconstraint39.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgeneric102.pp	unclassified: pascal26:15: error: expected generic class name ()
-tgeneric103.pp	parser: program header required (FPC allows headerless program)
 tgeneric106.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric107.pp	parser: inline specialize expression
-tgeneric10.pp	parser: program header required (FPC allows headerless program)
-tgeneric11.pp	parser: program header required (FPC allows headerless program)
-tgeneric12.pp	parser: program header required (FPC allows headerless program)
 tgeneric15.pp	unclassified: pascal26:17: error: base type not found: specialize ()
 tgeneric16.pp	unclassified: pascal26:18: error: base type not found: specialize ()
-tgeneric17.pp	parser: program header required (FPC allows headerless program)
-tgeneric19.pp	parser: program header required (FPC allows headerless program)
-tgeneric1.pp	parser: program header required (FPC allows headerless program)
-tgeneric22.pp	parser: program header required (FPC allows headerless program)
 tgeneric23.pp	unclassified: pascal26:6: error: uses: unit source not found: fgl ()
 tgeneric24.pp	parser: generic record/array/procvar templates
 tgeneric25.pp	parser: generic record/array/procvar templates
@@ -156,7 +100,6 @@ tgeneric36.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric37.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric38.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric39.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric3.pp	parser: program header required (FPC allows headerless program)
 tgeneric40.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric41.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric42.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -174,7 +117,6 @@ tgeneric53.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric54.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric56.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
 tgeneric59.pp	unclassified: pascal26:11: error: expected name ()
-tgeneric5.pp	parser: program header required (FPC allows headerless program)
 tgeneric60.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric61.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric62.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -185,13 +127,9 @@ tgeneric66.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric67.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric68.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric69.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric6.pp	parser: program header required (FPC allows headerless program)
 tgeneric70.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric76.pp	parser: program header required (FPC allows headerless program)
-tgeneric77.pp	parser: program header required (FPC allows headerless program)
 tgeneric78.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric79.pp	parser: generic record/array/procvar templates
-tgeneric7.pp	parser: program header required (FPC allows headerless program)
 tgeneric80.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric81.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric82.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -199,19 +137,15 @@ tgeneric86.pp	parser: generic record/array/procvar templates
 tgeneric87.pp	parser: generic record/array/procvar templates
 tgeneric88.pp	parser: generic record/array/procvar templates
 tgeneric89.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric8.pp	parser: program header required (FPC allows headerless program)
 tgeneric90.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgeneric91.pp	unclassified: pascal26:31: error: undefined variable (Self)
-tgeneric92.pp	parser: program header required (FPC allows headerless program)
 tgeneric93.pp	unclassified: pascal26:0: error: conditional directive: declared requires (NAME) ()
 tgeneric94.pp	parser: generic record/array/procvar templates
 tgeneric95.pp	parser: generic record/array/procvar templates
 tgeneric97.pp	unclassified: pascal26:14: error: undefined variable (LowerCase)
 tgeneric99.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgeneric9.pp	parser: program header required (FPC allows headerless program)
 tgenfunc10.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tgenfunc12.pp	parser: mode-Delphi generics TFoo<T> syntax
-tgenfunc15.pp	parser: program header required (FPC allows headerless program)
 tgenfunc19.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc1.pp	parser: inline specialize expression
 tgenfunc23.pp	parser: inline specialize expression
@@ -223,11 +157,6 @@ tgenfunc6.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc7.pp	parser: mode-Delphi generics TFoo<T> syntax
 tgenfunc8.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tgenfunc9.pp	parser: mode-Delphi generics TFoo<T> syntax
-tint641.pp	parser: program header required (FPC allows headerless program)
-tint642.pp	parser: program header required (FPC allows headerless program)
-tint643.pp	parser: program header required (FPC allows headerless program)
-tinterface4.pp	parser: program header required (FPC allows headerless program)
-tinterface6.pp	parser: program header required (FPC allows headerless program)
 tmoperator10.pp	parser: mode-Delphi generics TFoo<T> syntax
 tmoperator11.pp	parser: mode-Delphi generics TFoo<T> syntax
 tmoperator1.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -239,18 +168,11 @@ tmoperator7.pp	parser: mode-Delphi generics TFoo<T> syntax
 tmoperator8.pp	parser: mode-Delphi generics TFoo<T> syntax
 tmoperator9.pp	parser: mode-Delphi generics TFoo<T> syntax
 tobject1.pp	rtl: ExitCode variable missing
-tobject2.pp	parser: program header required (FPC allows headerless program)
-tobject4.pp	parser: program header required (FPC allows headerless program)
 tobject5.pp	unclassified: pascal26:8: error: undefined variable (TObject)
 tobject6.pp	parser: mode-Delphi generics TFoo<T> syntax
 tobject7.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator11.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 toperator12.pp	parser: mode-Delphi generics TFoo<T> syntax
-toperator1.pp	parser: program header required (FPC allows headerless program)
-toperator2.pp	parser: program header required (FPC allows headerless program)
-toperator3.pp	parser: program header required (FPC allows headerless program)
-toperator4.pp	parser: program header required (FPC allows headerless program)
-toperator6.pp	parser: program header required (FPC allows headerless program)
 toperator78.pp	unclassified: pascal26:4: error: operator overloading: LongInt is not a record or class type (
 toperator89.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 toperator91.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -258,30 +180,8 @@ toperator93.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator94.pp	parser: mode-Delphi generics TFoo<T> syntax
 toperator9.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tover1.pp	runtime: exit code 1 (want 0)
-tover2.pp	parser: program header required (FPC allows headerless program)
-tover4.pp	parser: program header required (FPC allows headerless program)
-tprocvar1.pp	parser: program header required (FPC allows headerless program)
-tprocvar2.pp	parser: program header required (FPC allows headerless program)
-tprocvar3.pp	parser: program header required (FPC allows headerless program)
-tprop1.pp	parser: program header required (FPC allows headerless program)
 tpropdef.pp	parser: mode-Delphi generics TFoo<T> syntax
-tprop.pp	parser: program header required (FPC allows headerless program)
-trange2.pp	parser: program header required (FPC allows headerless program)
-trange3.pp	parser: program header required (FPC allows headerless program)
-trange4.pp	parser: program header required (FPC allows headerless program)
-trange5.pp	parser: program header required (FPC allows headerless program)
-tsealed4.pp	parser: program header required (FPC allows headerless program)
-tsealed6.pp	parser: program header required (FPC allows headerless program)
 tset1.pp	unclassified: pascal26:36: error: undefined variable (RandSeed)
-tset2a.pp	parser: program header required (FPC allows headerless program)
-tset2b.pp	parser: program header required (FPC allows headerless program)
-tset2c.pp	parser: program header required (FPC allows headerless program)
-tset2d.pp	parser: program header required (FPC allows headerless program)
-tset2.pp	parser: program header required (FPC allows headerless program)
-tset3.pp	parser: program header required (FPC allows headerless program)
-tset4.pp	parser: program header required (FPC allows headerless program)
-tset5a.pp	parser: program header required (FPC allows headerless program)
-tset7.pp	parser: program header required (FPC allows headerless program)
 tsetsize.pp	unclassified: ConstEval error at SrcLine 256: SVal = Pred Kind = 1 TokPos = 20
 tstatic1.pp	parser: mode-Delphi generics TFoo<T> syntax
 tstatic2.pp	parser: mode-Delphi generics TFoo<T> syntax
@@ -289,10 +189,126 @@ tstatic5.pp	unclassified: pascal26:33: error: undefined variable (FSomethingStat
 tstring10.pp	unclassified: pascal26:16: error: undefined variable (flush)
 tstring11.pp	unclassified: Mismatch in MatchProcCall: name = Test1, nArgs = 1
 tstring1.pp	runtime: exit code 139 (want 0)
-tstring2.pp	parser: program header required (FPC allows headerless program)
 tstring3.pp	unclassified: pascal26:15: error: array constant: expected a string or char literal ()
 tstring4.pp	rtl: ExitCode variable missing
-tstring5.pp	parser: program header required (FPC allows headerless program)
-tstring7.pp	parser: program header required (FPC allows headerless program)
-tstring8.pp	parser: program header required (FPC allows headerless program)
 tstring9.pp	runtime: exit code 2 (want 0)
+tarray1.pp	unclassified: pascal26:2: error: class reference to a class with no RTTI (no published members?) ()
+tarray3.pp	unclassified: Expected: begin, but got: ABCD (Kind: 3, Line: 13)
+tarray6.pp	unclassified: pascal26:6: error: local var-section initializer not supported; use `var x := value;` ()
+tarray8.pp	unclassified: pascal26:18: error: undefined variable (uniquestring)
+tcase0.pp	runtime: exit code 15 (want 0)
+tcase10.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase11.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase12.pp	runtime: exit code 139 (want 0)
+tcase13.pp	runtime: exit code 1 (want 0)
+tcase14.pp	unclassified: pascal26:19: error: case string label must not be empty ()
+tcase15.pp	runtime: exit code 139 (want 0)
+tcase16.pp	runtime: exit code 139 (want 0)
+tcase17.pp	unclassified: pascal26:22: error: case string label must not be empty ()
+tcase18.pp	unclassified: pascal26:22: error: case string label must not be empty ()
+tcase19.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
+tcase20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase22.pp	runtime: exit code 1 (want 0)
+tcase23.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase24.pp	runtime: exit code 1 (want 0)
+tcase25.pp	runtime: exit code 1 (want 0)
+tcase26.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase27.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase28.pp	runtime: exit code 139 (want 0)
+tcase29.pp	runtime: exit code 1 (want 0)
+tcase3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase30.pp	unclassified: pascal26:19: error: case string label must not be empty ()
+tcase31.pp	runtime: exit code 139 (want 0)
+tcase32.pp	runtime: exit code 139 (want 0)
+tcase33.pp	unclassified: pascal26:22: error: case string label must not be empty ()
+tcase34.pp	unclassified: pascal26:22: error: case string label must not be empty ()
+tcase35.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase36.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase38.pp	runtime: exit code 1 (want 0)
+tcase39.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase40.pp	runtime: exit code 1 (want 0)
+tcase41.pp	runtime: exit code 1 (want 0)
+tcase42.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase43.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase44.pp	runtime: exit code 1 (want 0)
+tcase45.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase46.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase47.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase48.pp	unclassified: pascal26:5: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tcase5.pp	runtime: exit code 1 (want 0)
+tcase6.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tcase7.pp	runtime: exit code 1 (want 0)
+tcase8.pp	runtime: exit code 1 (want 0)
+tcase9.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tclass13a.pp	unclassified: Expected: ), but got:  (Kind: 81, Line: 12)
+tclass13c.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tclass13d.pp	unclassified: Expected: :, but got:  (Kind: 64, Line: 7)
+tclass3.pp	unclassified: pascal26:26: error: inherited call argument count mismatch ()
+tenum1.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
+tenum2.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tenum6.pp	runtime: exit code 1 (want 0)
+terecs_u1.pp	unclassified: pascal26:2: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+texception10.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 32)
+texception2.pp	unclassified: Expected: :, but got: do (Kind: 19, Line: 25)
+texception3.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
+tforin12.pp	unclassified: pascal26:5: error: too many array initializer elements ()
+tforin13.pp	unclassified: pascal26:6: error: for-in: expected a generator, enum type, or iterable variable ()
+tforin14.pp	unclassified: Expected: ), but got:  (Kind: 80, Line: 20)
+tforin15.pp	unclassified: Expected: begin, but got: Integer (Kind: 57, Line: 12)
+tforin16.pp	unclassified: pascal26:6: error: for-in: not a generator, enum type, or iterable variable ()
+tforin17.pp	unclassified: pascal26:5: error: for-in: expected a generator, enum type, or iterable variable ()
+tforin19.pp	unclassified: pascal26:6: error: for-in: expected a generator, enum type, or iterable variable ()
+tforin20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tforin26.pp	unclassified: pascal26:2: error: expected name ()
+tforin27.pp	unclassified: pascal26:5: error: expected name ()
+tgeneric1.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
+tgeneric10.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
+tgeneric103.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tgeneric11.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
+tgeneric13.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tgeneric14.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tgeneric20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tgeneric21.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tgeneric3.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
+tgeneric5.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 7)
+tgeneric6.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
+tgeneric7.pp	runtime: exit code 0 (want 201)
+tgeneric76.pp	unclassified: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tgeneric77.pp	unclassified: pascal26:4: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tgeneric8.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
+tgeneric9.pp	runtime: exit code 1 (want 0)
+tgeneric92.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 7)
+tgenfunc15.pp	unclassified: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+tint642.pp	unclassified: pascal26:33: error: undefined variable (hexstr)
+tint643.pp	unclassified: Expected: :, but got: do (Kind: 19, Line: 53)
+tinterface4.pp	unclassified: pascal26:3: error: uses: unit source not found: variants ()
+tinterface6.pp	unclassified: pascal26:22: error: typed string constant: expected a string or char literal ()
+tobject2.pp	unclassified: Expected: begin, but got: x (Kind: 1, Line: 7)
+tobject4.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 16)
+toperator1.pp	unclassified: Expected: =, but got:  (Kind: 80, Line: 10)
+toperator2.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+toperator3.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+toperator4.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
+toperator6.pp	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
+toperatorerror.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tover3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tover4.pp	runtime: exit code 1 (want 0)
+tprocvar1.pp	unclassified: pascal26:36: error: nested routine: expected name ()
+tprocvar2.pp	unclassified: ConstEval error at SrcLine 38: SVal = dummy Kind = 1 TokPos = 77
+tprocvar3.pp	unclassified: pascal26:38: error: nested routine: expected name ()
+tprop.pp	unclassified: pascal26:6: error: uses: unit source not found: variants ()
+tprop1.pp	unclassified: Expected: begin, but got: property (Kind: 97, Line: 17)
+trange2.pp	runtime: exit code 1 (want 0)
+trange3.pp	runtime: exit code 139 (want 0)
+trange5.pp	unclassified: pascal26:97: error: undefined variable (lo)
+tsealed4.pp	unclassified: Expected: :, but got: abstract (Kind: 1, Line: 6)
+tsealed6.pp	unclassified: Expected: begin, but got: abstract (Kind: 1, Line: 6)
+tset2a.pp	unclassified: Expected: ), but got:  (Kind: 63, Line: 16)
+tset2b.pp	unclassified: Expected: ), but got:  (Kind: 63, Line: 16)
+tset2c.pp	unclassified: Expected: ), but got:  (Kind: 63, Line: 16)
+tset2d.pp	unclassified: Expected: ), but got:  (Kind: 63, Line: 16)
+tstring2.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
+tstring5.pp	unclassified: pascal26:52: error: undefined variable (exitcode)
+tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
+tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
