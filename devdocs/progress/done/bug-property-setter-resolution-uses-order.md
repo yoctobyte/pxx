@@ -7,7 +7,7 @@ prio: 52  # auto — blocks the GL demo (sole demos-dashboard FAIL); order-depen
 - **Type:** bug (frontend — shared symbol resolution / property-setter lookup)
 - **Track:** A (`parser.inc` / `symtab.inc` property + unit-scope resolution).
   Filed from Track B/E (GL demo triage) — hand off, do not fix under B/E.
-- **Status:** working
+- **Status:** done
 - **Owner:** opus-a
 
 ## Symptom
@@ -67,3 +67,6 @@ can hit it.
 `make test` + self-host byte-identical. Add a `.pas` regression mirroring the
 repro (a class-typed property write behind a multi-unit uses graph);
 `examples/gl/triangle.pas` compiling under `make demos` is the end-to-end check.
+
+## Log
+- 2026-07-11 — resolved, commit dcfbac67.
