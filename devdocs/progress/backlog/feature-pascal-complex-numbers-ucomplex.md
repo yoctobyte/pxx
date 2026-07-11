@@ -12,7 +12,7 @@ prio: 45
   the feature was missing; corrected 2026-07-11 after verifying a complex
   `*`/`+` overload chain compiles and runs on pxx today.)
 - **Status:** backlog — user-requested 2026-07-11
-- **Depends on:** [[feature-pascal-operator-slash-overload]] for natural
+- **Depends on:** [[feature-pascal-operator-decl-fpc-compat]] for natural
   `z1 / z2` syntax (declarable op set today lacks `/`) — can land with a
   `cdiv` function first and switch when that P one-liner lands.
 - **Owner:** —

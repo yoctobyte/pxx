@@ -94,7 +94,7 @@ _none_
 | feature-pascal-corpus-expansion | P | 62 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
-| feature-pascal-operator-slash-overload | A | 40 | feature | operator `/` overload not declarable (use site already resolves it) | — |
+| feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -856,13 +856,13 @@ _none_
 - [p 45] [A] feature-xtensa-stack-args-over-6-words
 - [p 45] [A] meta-multithreading
 - [p 45] [B+C] wish-compile-gnu-pascal
+- [p 44] [A] feature-pascal-operator-decl-fpc-compat
 - [p 44] [P] task-pascal-conformance-long-tail
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [B] feature-lib-bignum-operators
 - [p 42] [B] feature-lib-vecmath
 - [p 40] [A] bug-pascal-unicodestring-widestring-type-missing
 - [p 40] [A] feature-c-package-namespace-decision
-- [p 40] [A] feature-pascal-operator-slash-overload
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-pascal-otherwise-case-keyword
