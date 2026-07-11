@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-11T12:05:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aa033724499977c5be6c924998da7a26217af15b",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-11T12:15:27Z",
    "fixed": [],
    "new_red": [],
@@ -401,17 +393,21 @@
    "sha": "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-11T21:46:51Z",
+   "fixed": [
+    "test-smoke#11"
+   ],
+   "new_red": [],
+   "sha": "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#00": "pass",
   "test-aarch64#01": "pass",
   "test-aarch64#02": "pass",
@@ -1491,11 +1487,6 @@
   "test-i386#98": "pass",
   "test-i386#99": "pass",
   "test-lua#00": "pass",
-  "test-opt#00": "pass",
-  "test-opt#01": "pass",
-  "test-opt#02": "pass",
-  "test-opt#03": "pass",
-  "test-opt#04": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1526,7 +1517,7 @@
   "test-smoke#08": "pass",
   "test-smoke#09": "pass",
   "test-smoke#10": "pass",
-  "test-smoke#11": "fail",
+  "test-smoke#11": "pass",
   "test-sqlite-threads-aarch64#00": "pass",
   "test-sqlite-threads-arm32#00": "pass",
   "test-sqlite-threads-i386#00": "pass",
@@ -1549,11 +1540,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-11T21:44:46Z",
+  "date": "2026-07-11T21:46:51Z",
   "sha": "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0",
-  "tier": "native",
-  "verdict": "RED",
-  "wall": 57.7
+  "tier": "full",
+  "verdict": "GREEN",
+  "wall": 113.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1563,33 +1554,15 @@
   "sha": "7b95a7470ebc8305926c9090a682b31cd584e9bb"
  },
  "last_full": {
-  "date": "2026-07-11T21:09:53Z",
-  "sha": "7b95a7470ebc8305926c9090a682b31cd584e9bb",
+  "date": "2026-07-11T21:46:51Z",
+  "sha": "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 111.9
+  "wall": 113.0
  },
  "last_opt": {
   "date": "2026-07-11T21:12:08Z",
   "sha": "7b95a7470ebc8305926c9090a682b31cd584e9bb"
  },
- "open_regressions": [
-  {
-   "bad": "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0",
-   "good": "7b95a7470ebc8305926c9090a682b31cd584e9bb",
-   "job": "test-smoke#11",
-   "opened": "2026-07-11T21:44:46Z",
-   "range": [
-    "ec7e4f87e43799b956a702fd33d7784b3f647dc6",
-    "0aa573ba094df9fff2fd1d527d4e5041b6a60a85",
-    "bbda984ac098a3c37a2428ab2d924be0e5e3086a",
-    "bddb8e22980bd602c9bc3fffac4804c972e9cb24",
-    "cbfc071068b57409596aeb5b771efeb654cd2f96",
-    "cfc6cd169fe0555e47121c822f9c1c1ead0fe0df",
-    "9f175a58282f2fcb2b5a9d14c3baae26ea2101c6",
-    "163ffea562fa3ae292765bc5ecf21fd2a0f45ac0"
-   ],
-   "src": "compiler/compiler.pas test/bootstrap_features.pas"
-  }
- ]
+ "open_regressions": []
 }
