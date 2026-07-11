@@ -3,7 +3,7 @@ program lib_dns_async;
   a loopback UDP DNS server coroutine answers a canned A record; a client
   coroutine resolves through DnsQueryAAsync. Both run on one thread, reactor-
   driven — proves async UDP + the DNS wire round-trip without external network. }
-uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_cache, dns_async;
+uses scheduler, platform, dns_wire_core, dns_wire_blocking, dns_cache, dns_async, asyncnet;
 
 const
   PORT = 28766;
@@ -11,6 +11,7 @@ const
   DPORT = 28768;   { deaf server (never answers) — timeout check }
   SPORT = 28769;   { AAAA server }
   KPORT = 28770;   { cache server (counts queries) }
+  TPORT = 28771;   { truncation server pair: UDP says TC, TCP serves the answer }
 
 var
   gRcode: Integer;
@@ -27,6 +28,9 @@ var
   gK1Ip, gK2Ip: LongWord;
   gK1Count, gK2Count: Integer;
   gKServerDone: Boolean;
+  gTcRcode, gTcCount: Integer;
+  gTcIp1, gTcIp2: LongWord;
+  gTcUdpDone, gTcTcpDone: Boolean;
 
 procedure ServerCo(arg: Pointer);
 var
@@ -275,6 +279,100 @@ begin
   gK2Count := cnt; if cnt > 0 then gK2Ip := ips[0];
 end;
 
+{ Truncation pair (TPORT): the UDP side answers any query with an empty
+  response carrying the TC bit; the TCP side accepts one connection, reads the
+  2-byte-length-prefixed query, and serves the real answer (two A records,
+  9.9.9.1 and 9.9.9.2, TTL 60) length-prefixed. The resolver must fall back
+  from UDP to TCP on the reactor. }
+procedure TcUdpServerCo(arg: Pointer);
+var
+  sock, rc, i, qlen: Integer;
+  qbuf: array[0..1535] of Byte;
+  resp: array[0..1535] of Byte;
+  n: Int64; fromAddr: LongWord; fromPort: Integer;
+begin
+  sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_DGRAM, 0);
+  rc := PalBindIpv4(sock, PAL_NET_IP_LOOPBACK, TPORT);
+  rc := PalSetSocketNonBlocking(sock, 1);
+  WaitReadable(sock);
+  n := PalRecvFromIpv4(sock, @qbuf[0], 1536, fromAddr, fromPort);
+  qlen := Integer(n);
+  for i := 0 to qlen - 1 do resp[i] := qbuf[i];
+  resp[2] := $83;            { QR=1, TC=1, RD=1 }
+  resp[3] := $80;            { RA=1, RCODE=0 }
+  resp[6] := $00; resp[7] := $00;   { ANCOUNT = 0 — the truncated stub }
+  rc := Integer(PalSendToIpv4(sock, @resp[0], qlen, fromAddr, fromPort));
+  rc := PalSocketClose(sock);
+  gTcUdpDone := True;
+end;
+
+procedure TcTcpServerCo(arg: Pointer);
+var
+  lfd, cfd, i, qlen, off, got: Integer;
+  pfx: array[0..1] of Byte;
+  qbuf: array[0..1535] of Byte;
+  resp: array[0..1599] of Byte;
+  n: Int64;
+begin
+  lfd := TcpListen(TPORT);
+  cfd := TcpAccept(lfd);
+  got := 0;
+  while got < 2 do
+  begin
+    n := TcpRecv(cfd, @pfx[got], 2 - got);
+    if n <= 0 then begin TcpClose(cfd); TcpClose(lfd); Exit; end;
+    got := got + Integer(n);
+  end;
+  qlen := (Integer(pfx[0]) shl 8) or Integer(pfx[1]);
+  got := 0;
+  while got < qlen do
+  begin
+    n := TcpRecv(cfd, @qbuf[got], qlen - got);
+    if n <= 0 then begin TcpClose(cfd); TcpClose(lfd); Exit; end;
+    got := got + Integer(n);
+  end;
+  { echo the query, flip to an answer with two A records }
+  for i := 0 to qlen - 1 do resp[i] := qbuf[i];
+  resp[2] := $81; resp[3] := $80;
+  resp[6] := $00; resp[7] := $02;   { ANCOUNT = 2 }
+  off := qlen;
+  for i := 0 to 1 do
+  begin
+    resp[off]   := $C0; resp[off+1] := $0C;
+    resp[off+2] := $00; resp[off+3] := $01;   { TYPE A }
+    resp[off+4] := $00; resp[off+5] := $01;   { CLASS IN }
+    resp[off+6] := $00; resp[off+7] := $00;
+    resp[off+8] := $00; resp[off+9] := $3C;   { TTL = 60 }
+    resp[off+10] := $00; resp[off+11] := $04; { RDLENGTH = 4 }
+    resp[off+12] := 9; resp[off+13] := 9; resp[off+14] := 9; resp[off+15] := Byte(i + 1);
+    off := off + 16;
+  end;
+  pfx[0] := (off shr 8) and $FF;
+  pfx[1] := off and $FF;
+  n := TcpSend(cfd, @pfx[0], 2);
+  n := TcpSend(cfd, @resp[0], off);
+  TcpClose(cfd);
+  TcpClose(lfd);
+  gTcTcpDone := True;
+end;
+
+procedure TcClientCo(arg: Pointer);
+var
+  ips: TDnsIpv4Array;
+  cnt: Integer;
+  cname: string;
+begin
+  cnt := 0;
+  cname := '';
+  gTcRcode := DnsQueryAAsyncEx(PAL_NET_IP_LOOPBACK, TPORT, 'big.x', ips, cnt, cname, 3000);
+  gTcCount := cnt;
+  if cnt > 1 then
+  begin
+    gTcIp1 := ips[0];
+    gTcIp2 := ips[1];
+  end;
+end;
+
 procedure SayBool(const tag: string; b: Boolean);
 begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
@@ -286,6 +384,10 @@ begin
   gTimeoutRc := -999;
   gV6Rcode := -999; gV6Count := 0; gV6Ok := False; gV6ServerDone := False;
   gKQueries := 0; gK1Ip := 0; gK2Ip := 0; gK1Count := 0; gK2Count := 0; gKServerDone := False;
+  gTcRcode := -999; gTcCount := 0; gTcIp1 := 0; gTcIp2 := 0;
+  gTcUdpDone := False; gTcTcpDone := False;
+  Spawn(@TcUdpServerCo, nil);
+  Spawn(@TcTcpServerCo, nil);
   Spawn(@ServerCo, nil);
   Spawn(@ClientCo, nil);
   Spawn(@ChaseServerCo, nil);
@@ -295,6 +397,7 @@ begin
   Spawn(@V6ClientCo, nil);
   Spawn(@CacheServerCo, nil);
   Spawn(@CacheClientCo, nil);
+  Spawn(@TcClientCo, nil);
   RunUntilDone;
 
   SayBool('server-done', gServerDone);
@@ -313,4 +416,9 @@ begin
   SayBool('cache-1st', (gK1Count = 1) and (gK1Ip = LongWord($09090909)));
   SayBool('cache-2nd', (gK2Count = 1) and (gK2Ip = LongWord($09090909)));
   SayBool('cache-1query', gKQueries = 1);   { second lookup served from cache }
+  SayBool('tc-udp-done', gTcUdpDone);
+  SayBool('tc-tcp-done', gTcTcpDone);
+  SayBool('tc-rcode', gTcRcode = 0);
+  SayBool('tc-count', gTcCount = 2);
+  SayBool('tc-ips', (gTcIp1 = LongWord($09090901)) and (gTcIp2 = LongWord($09090902)));
 end.

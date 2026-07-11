@@ -53,6 +53,12 @@ procedure CoSleep(ms: Integer);
   timeout. ms < 0 waits unbounded (plain WaitReadable, always True). }
 function WaitReadableTimeout(fd, ms: Integer): Boolean;
 
+{ Writable sibling: parks until fd is writable OR ms milliseconds elapse.
+  Same both-ready caveat (attempt the operation once on False); ms < 0 =
+  plain WaitWritable, always True. Used for bounded nonblocking connect
+  (EINPROGRESS -> wait -> SO_ERROR check). }
+function WaitWritableTimeout(fd, ms: Integer): Boolean;
+
 implementation
 
 const
@@ -363,28 +369,26 @@ begin
   rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
 end;
 
-function WaitReadableTimeout(fd, ms: Integer): Boolean;
+{ Shared body of WaitReadableTimeout / WaitWritableTimeout: park on fd (for
+  the given epoll events) and a one-shot timerfd; True = fd readied first. }
+function WaitIOTimeout(fd, events, ms: Integer): Boolean;
 var
   tfd: Integer;
-  ev: TEpollEvent;
+  ev, tev: TEpollEvent;
   rc, got, buf: Int64;
   r: PReactor;
 begin
-  if ms < 0 then
-  begin
-    WaitReadable(fd);
-    WaitReadableTimeout := True;
-    Exit;
-  end;
   r := CurR;
   if r^.epfd = 0 then
     r^.epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
   tfd := ArmOneShotTimer(ms);
   { park on BOTH fds; whichever readies first wakes this coroutine }
-  ev.events := EPOLLIN;
+  ev.events := events;
   ev.data := r^.curCo;
+  tev.events := EPOLLIN;   { the timerfd is always a read wait }
+  tev.data := r^.curCo;
   rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
-  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, tfd, Int64(@ev), 0, 0);
+  rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_ADD, tfd, Int64(@tev), 0, 0);
   r^.coState[r^.curCo] := 3;                   { io-blocked }
   __pxxcoswitch(@r^.coSp[r^.curCo], @r^.schedSp);   { -> scheduler }
   rc := __pxxrawsyscall(SYS_epoll_ctl, r^.epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
@@ -392,7 +396,29 @@ begin
   { non-blocking read: 8 bytes = the timer fired first (or simultaneously) }
   got := __pxxrawsyscall(SYS_read, tfd, Int64(@buf), 8, 0, 0, 0);
   rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
-  WaitReadableTimeout := got <> 8;
+  WaitIOTimeout := got <> 8;
+end;
+
+function WaitReadableTimeout(fd, ms: Integer): Boolean;
+begin
+  if ms < 0 then
+  begin
+    WaitReadable(fd);
+    WaitReadableTimeout := True;
+    Exit;
+  end;
+  WaitReadableTimeout := WaitIOTimeout(fd, EPOLLIN, ms);
+end;
+
+function WaitWritableTimeout(fd, ms: Integer): Boolean;
+begin
+  if ms < 0 then
+  begin
+    WaitWritable(fd);
+    WaitWritableTimeout := True;
+    Exit;
+  end;
+  WaitWritableTimeout := WaitIOTimeout(fd, EPOLLOUT, ms);
 end;
 
 { Round-robin every runnable coroutine; when none are runnable but some are

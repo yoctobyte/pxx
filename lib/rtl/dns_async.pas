@@ -7,11 +7,10 @@ unit dns_async;
   Call from inside a coroutine; drive with RunUntilDone.
 
   resolv.conf / hosts are read synchronously (small local files, no async file
-  I/O); only the network round-trip is async. Parity with the blocking facade:
-  per-query timeout (reactor timerfd), multi-nameserver retry, glibc search/
-  ndots candidates, CNAME chain chase. Still IPv4 A records only, and a
-  truncated (TC) response does not yet retry over TCP (later slice — needs the
-  async stream-connect path). }
+  I/O); only the network round-trip is async. Full parity with the blocking
+  facade: per-query timeout (reactor timerfd), multi-nameserver retry, glibc
+  search/ndots candidates, CNAME chain chase (A and AAAA), and a truncated (TC)
+  response retries over TCP on the reactor (bounded connect/send/recv waits). }
 
 interface
 
@@ -61,8 +60,8 @@ function DnsResolveChaseAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
 function DnsResolveHostAsync(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 
 { Async AAAA (IPv6) query to an explicit nameserver, timeout-bounded like the A
-  path. Addresses come back 16 bytes each (network byte order). TCP fallback is
-  not applied here yet (mirrors the sync AAAA slice). }
+  path. Addresses come back 16 bytes each (network byte order); a truncated
+  response retries over TCP like the A path. }
 function DnsQueryAAAAAsync(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
@@ -104,6 +103,126 @@ function DnsQueryAListCachedAsync(var c: TDnsCache; const ns: TDnsIpv4Array;
   var ips: TDnsIpv4Array; var count: Integer; var rcode: Integer; timeoutMs: Integer): Integer;
 
 implementation
+
+{ Read exactly `need` bytes from a nonblocking stream socket on the reactor,
+  each wait bounded by timeoutMs. Returns True only if all bytes arrived. }
+function RecvNAsync(sock: Integer; buf: Pointer; need, timeoutMs: Integer): Boolean;
+var
+  got: Integer;
+  n: Int64;
+begin
+  got := 0;
+  while got < need do
+  begin
+    n := PalRecv(sock, Pointer(Int64(buf) + got), need - got);
+    if n = PAL_NET_EAGAIN then
+    begin
+      if not WaitReadableTimeout(sock, timeoutMs) then
+      begin
+        { both-ready race: try once more before treating as a timeout }
+        n := PalRecv(sock, Pointer(Int64(buf) + got), need - got);
+        if n = PAL_NET_EAGAIN then begin RecvNAsync := False; Exit; end;
+        if n <= 0 then begin RecvNAsync := False; Exit; end;
+        got := got + Integer(n);
+      end;
+    end
+    else if n <= 0 then
+    begin
+      RecvNAsync := False;
+      Exit;
+    end
+    else
+      got := got + Integer(n);
+  end;
+  RecvNAsync := True;
+end;
+
+{ DNS over TCP on the reactor (the truncated-response fallback): bounded
+  nonblocking connect, send the 2-byte-length-prefixed query, read the
+  length-prefixed response into respBuf. Every wait is bounded by timeoutMs.
+  Returns the response length (capped at respMax) or a negative PAL/timeout
+  error. Mirror of the blocking DnsQueryTcp. }
+function DnsQueryTcpAsync(nsHost: LongWord; nsPort: Integer; queryBuf: Pointer; qlen: Integer;
+  respBuf: Pointer; respMax, timeoutMs: Integer): Integer;
+var
+  sock, rc, rlen, off: Integer;
+  lenpfx: array[0..1] of Byte;
+  n: Int64;
+begin
+  sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  if sock < 0 then begin DnsQueryTcpAsync := sock; Exit; end;
+  rc := PalSetSocketNonBlocking(sock, 1);
+  rc := PalConnectIpv4(sock, nsHost, nsPort);
+  if rc = PAL_NET_EINPROGRESS then
+  begin
+    if not WaitWritableTimeout(sock, timeoutMs) then
+    begin
+      rc := PalSocketClose(sock);
+      DnsQueryTcpAsync := PAL_NET_ETIMEDOUT;
+      Exit;
+    end;
+    rc := PalGetSockError(sock);
+    if rc <> 0 then
+    begin
+      rc := PalSocketClose(sock);
+      DnsQueryTcpAsync := PAL_NET_ECONNREFUSED;
+      Exit;
+    end;
+  end
+  else if rc < 0 then
+  begin
+    rc := PalSocketClose(sock);
+    DnsQueryTcpAsync := PAL_NET_ECONNREFUSED;
+    Exit;
+  end;
+
+  { send the 2-byte length prefix, then the query (bounded waits on EAGAIN) }
+  lenpfx[0] := (qlen shr 8) and $FF;
+  lenpfx[1] := qlen and $FF;
+  off := -2;   { negative offset = still inside the prefix }
+  while off < qlen do
+  begin
+    if off < 0 then
+      n := PalSend(sock, @lenpfx[2 + off], -off)
+    else
+      n := PalSend(sock, Pointer(Int64(queryBuf) + off), qlen - off);
+    if n = PAL_NET_EAGAIN then
+    begin
+      if not WaitWritableTimeout(sock, timeoutMs) then
+      begin
+        rc := PalSocketClose(sock);
+        DnsQueryTcpAsync := PAL_NET_ETIMEDOUT;
+        Exit;
+      end;
+    end
+    else if n <= 0 then
+    begin
+      rc := PalSocketClose(sock);
+      DnsQueryTcpAsync := -1;
+      Exit;
+    end
+    else
+      off := off + Integer(n);
+  end;
+
+  { length-prefixed response }
+  if not RecvNAsync(sock, @lenpfx[0], 2, timeoutMs) then
+  begin
+    rc := PalSocketClose(sock);
+    DnsQueryTcpAsync := PAL_NET_ETIMEDOUT;
+    Exit;
+  end;
+  rlen := (Integer(lenpfx[0]) shl 8) or Integer(lenpfx[1]);
+  if rlen > respMax then rlen := respMax;
+  if not RecvNAsync(sock, respBuf, rlen, timeoutMs) then
+  begin
+    rc := PalSocketClose(sock);
+    DnsQueryTcpAsync := PAL_NET_ETIMEDOUT;
+    Exit;
+  end;
+  rc := PalSocketClose(sock);
+  DnsQueryTcpAsync := rlen;
+end;
 
 function DnsQueryAAsyncTTL(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv4Array; var count: Integer; var cname: string; var ttl: Integer;
@@ -154,6 +273,14 @@ begin
   end;
   rc := PalSocketClose(sock);
   if n <= 0 then begin Result := DNS_ERR_SHORT; Exit; end;
+
+  { Truncated (TC) answer: retry the same query over TCP on the reactor
+    (no datagram size limit). The query bytes in qbuf are reused. }
+  if DnsTruncated(@rbuf[0], Integer(n)) then
+  begin
+    n := DnsQueryTcpAsync(nsHost, nsPort, @qbuf[0], qlen, @rbuf[0], 1536, timeoutMs);
+    if n < 0 then begin Result := Integer(n); Exit; end;
+  end;
 
   { Parse into locals, then copy out — never forward a var param into another
     routine's var param (feature-riscv32-var-param-forwarding). }
@@ -422,6 +549,14 @@ begin
   end;
   rc := PalSocketClose(sock);
   if n <= 0 then begin Result := DNS_ERR_SHORT; Exit; end;
+
+  { Truncated (TC) answer: retry the same query over TCP on the reactor
+    (no datagram size limit). The query bytes in qbuf are reused. }
+  if DnsTruncated(@rbuf[0], Integer(n)) then
+  begin
+    n := DnsQueryTcpAsync(nsHost, nsPort, @qbuf[0], qlen, @rbuf[0], 1536, timeoutMs);
+    if n < 0 then begin Result := Integer(n); Exit; end;
+  end;
 
   { Parse into locals, then copy out (no var->var forwarding). }
   localCount := 0;

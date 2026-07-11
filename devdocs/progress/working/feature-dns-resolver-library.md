@@ -453,3 +453,19 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
     entrypoints (A/AAAA x blocking/async) now share the one cache.
   REMAINING: CNAME-chase result caching, async TC->TCP fallback,
   `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
+- 2026-07-11 (night 5) — **async TC->TCP fallback landed** (Track B):
+  - `scheduler`: `WaitWritableTimeout` (bounded EPOLLOUT wait; shared body
+    `WaitIOTimeout` factored out of `WaitReadableTimeout`) — enables bounded
+    nonblocking connect on the reactor.
+  - `dns_async`: `DnsQueryTcpAsync` (reactor mirror of the blocking
+    `DnsQueryTcp`: bounded connect + SO_ERROR check via `PalGetSockError`,
+    length-prefixed send with bounded EAGAIN waits, `RecvNAsync` exact-read) —
+    both async UDP query cores (A `DnsQueryAAsyncTTL` and AAAA
+    `DnsQueryAAAAAsyncTTL`) now retry a truncated (TC) response over TCP,
+    completing async/blocking facade parity.
+  - `test/lib_dns_async.pas` grown: a truncation pair on one port (UDP
+    coroutine answers TC+ANCOUNT=0, TCP coroutine via asyncnet serves the real
+    2-answer response length-prefixed); resolver must come back with both IPs
+    (5 new checks, 21 total).
+  REMAINING: CNAME-chase result caching,
+  `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
