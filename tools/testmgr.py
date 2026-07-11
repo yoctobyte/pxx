@@ -495,7 +495,9 @@ class Manager:
                          "elapsed": round(time.monotonic() - j.t0, 1),
                          "exp": round(self.job_weight(j), 1)}
                         for j in sorted(self.running, key=lambda j: j.t0)],
-            "red": red})
+            "red": red,
+            "red_src": {j.name: j.src for j in self.jobs
+                        if j.status in ("fail", "timeout") and j.src}})
 
     def learn(self, job):
         """EWMA the passing run into the per-box metrics store."""

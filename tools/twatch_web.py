@@ -61,7 +61,8 @@ async function tick(){
     document.getElementById('eta').textContent=v.eta||'?';
     document.getElementById('sha').textContent=(l.watch.sha||'').slice(0,12);
     document.getElementById('tier').textContent=v.tier;
-    document.getElementById('reds').textContent=v.red.length?('RED: '+v.red.join(', ')):'';}
+    document.getElementById('reds').textContent=v.red.length?('RED: '+v.red.map(
+      n=>(v.red_src&&v.red_src[n])?n+' ('+v.red_src[n]+')':n).join(', ')):'';}
 }
 async function once(){
   const h=await j('/api/history');

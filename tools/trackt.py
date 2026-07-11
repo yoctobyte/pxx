@@ -231,9 +231,12 @@ def render_live(clone, w, live, last_reds):
         sys.stdout.flush()
         return last_reds
     reds = live.get("red", [])
+    srcs = live.get("red_src", {})
     for r in reds:
         if r not in last_reds:
-            print("\r\033[K  %sRED %s%s" % (RED, r, OFF))
+            src = srcs.get(r, "")
+            print("\r\033[K  %sRED %s%s%s" % (
+                RED, r, OFF, "  " + DIM + src + OFF if src else ""))
     pct = live.get("pct", 0)
     bar = ""
     if ISATTY:
