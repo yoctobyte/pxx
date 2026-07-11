@@ -329,3 +329,11 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   with the blocking facade except TC->TCP fallback and AAAA (noted). Test
   lib_dns_async grown: coroutine chase server (CNAME then A) + deaf-server
   200ms timeout scenario. `make lib-test` green vs stable v197.
+- 2026-07-11 — **async AAAA landed** (Track B): `DnsQueryAAAAAsync` +
+  `DnsQueryAAAAListAsync` + `dns.DnsResolveHost6Async` — reactor/timeout dance
+  shared with the async A path, AAAA parse via `DnsParseResponseAAAA`, glibc
+  search/ndots candidates in the facade. lib_dns_async grown with a coroutine
+  AAAA server (2001:db8::1) + client. `make lib-test` green vs v197. REMAINING:
+  async TC->TCP fallback, negative-response caching, hosts-file IPv6 + AAAA
+  CNAME chase, and the `dns_libc`/`dns_resolved`/`dns_esp` backends + profile
+  selection.
