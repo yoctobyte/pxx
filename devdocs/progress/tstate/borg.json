@@ -1552,10 +1552,11 @@
   "wall": 110.1
  },
  "last_bench": {
-  "date": "2026-07-11T12:26:02Z",
+  "conf_rows": 550,
+  "date": "2026-07-11T13:20:47Z",
   "rc": 0,
-  "rows": 12,
-  "sha": "0d3a531d2f9b6b428bb965eb82173d34c7ee01d8"
+  "rows": 16,
+  "sha": "394fa3cc2c205d7e825728ed3a90ec7d3a2bba51"
  },
  "last_full": {
   "date": "2026-07-11T13:14:38Z",
