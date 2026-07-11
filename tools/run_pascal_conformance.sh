@@ -27,6 +27,10 @@ set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 CC="$ROOT/compiler/pascal26"
+# FPC-parity flags: strict diagnostics that are opt-in in the PXX dialect
+# (lax first-match case labels are a deliberate divergence -- see pxx.skip
+# "dialect-pass" entries and devdocs ticket bug-pascal-missing-diagnostics-fail-tests).
+CCFLAGS="--strict-case"
 SUITE="$ROOT/library_candidates/fpc-testsuite/tests/test"
 SHARD_I=0; SHARD_N=1
 ALL=0; ONLY=""; REPORT=""
@@ -170,10 +174,10 @@ EOF
     uname="${name%.pp}"
     cp "$src" "$WORK/$uname.pas"
     printf 'program drv_%s;\nuses %s;\nbegin\nend.\n' "$uname" "$uname" > "$WORK/drv_$uname.pas"
-    ( cd "$WORK" && timeout "$TIMEOUT_S" "$CC" "drv_$uname.pas" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+    ( cd "$WORK" && timeout "$TIMEOUT_S" "$CC" $CCFLAGS "drv_$uname.pas" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
     norun=1
   else
-    ( cd "$SUITE" && timeout "$TIMEOUT_S" "$CC" "$name" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
+    ( cd "$SUITE" && timeout "$TIMEOUT_S" "$CC" $CCFLAGS "$name" "$bin" ) > "$WORK/cc.log" 2>&1 || compile_ok=1
   fi
 
   if [ "$expect_fail" = "1" ]; then

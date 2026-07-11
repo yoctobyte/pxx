@@ -1889,7 +1889,7 @@ begin
         Error('case of string: label must be a string constant');
       shi := ConstStrLitValue(ASTRight[lab]);
     end;
-    if CaseStrCmp3(slo, shi) > 0 then
+    if StrictCase and (CaseStrCmp3(slo, shi) > 0) then
       Error('case range: lower bound is greater than upper bound');
   end
   else
@@ -1904,7 +1904,7 @@ begin
         Error('case label does not match the ordinal selector type');
       hi := ASTIVal[ASTRight[lab]];
     end;
-    if lo > hi then
+    if StrictCase and (lo > hi) then
       Error('case range: lower bound is greater than upper bound');
   end;
 end;
@@ -1928,26 +1928,32 @@ begin
     while (ln <> -1) and (ASTLeft[ln] <> -1) do
     begin
       CaseLabelBounds(ASTLeft[ln], isStr, lo, hi, slo, shi);
-      { against every label after this one }
-      ln2 := ASTRight[ln];
-      bs2 := bs;
-      while bs2 <> -1 do
+      { against every label after this one -- FPC-parity duplicate/overlap
+        rejection is opt-in (--strict-case); the lax dialect keeps first-match
+        semantics for overlapping labels. The CaseLabelBounds walk above stays
+        unconditional: it carries the selector-type checks the lowering needs. }
+      if StrictCase then
       begin
-        while (ln2 <> -1) and (ASTLeft[ln2] <> -1) do
+        ln2 := ASTRight[ln];
+        bs2 := bs;
+        while bs2 <> -1 do
         begin
-          CaseLabelBounds(ASTLeft[ln2], isStr, lo2, hi2, slo2, shi2);
-          if isStr then
-            clash := not ((CaseStrCmp3(shi, slo2) < 0) or (CaseStrCmp3(shi2, slo) < 0))
-          else
-            clash := not ((hi < lo2) or (hi2 < lo));
-          if clash then
-            Error('duplicate or overlapping case label');
-          ln2 := ASTRight[ln2];
+          while (ln2 <> -1) and (ASTLeft[ln2] <> -1) do
+          begin
+            CaseLabelBounds(ASTLeft[ln2], isStr, lo2, hi2, slo2, shi2);
+            if isStr then
+              clash := not ((CaseStrCmp3(shi, slo2) < 0) or (CaseStrCmp3(shi2, slo) < 0))
+            else
+              clash := not ((hi < lo2) or (hi2 < lo));
+            if clash then
+              Error('duplicate or overlapping case label');
+            ln2 := ASTRight[ln2];
+          end;
+          bs2 := ASTRight[bs2];
+          if bs2 = -1 then ln2 := -1
+          else if ASTLeft[bs2] = -1 then ln2 := -1
+          else ln2 := ASTLeft[ASTLeft[bs2]];
         end;
-        bs2 := ASTRight[bs2];
-        if bs2 = -1 then ln2 := -1
-        else if ASTLeft[bs2] = -1 then ln2 := -1
-        else ln2 := ASTLeft[ASTLeft[bs2]];
       end;
       ln := ASTRight[ln];
     end;

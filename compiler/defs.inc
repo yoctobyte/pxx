@@ -967,6 +967,7 @@ var
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;
+  StrictCase : Boolean;  { --strict-case / {$STRICT_CASE ON}: FPC-parity case-label validation -- reject inverted ranges and duplicate/overlapping labels. Default off: PXX's dialect keeps first-match semantics for overlapping labels and treats an inverted range as never-matching. Label TYPE checks are always on. }
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }

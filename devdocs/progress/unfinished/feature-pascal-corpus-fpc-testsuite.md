@@ -78,3 +78,14 @@ Infra + baseline + cluster tickets landed (see above). Burn-down of the two big
 parser clusters edits shared `parser.inc` — needs the sole-A confirmation an
 E+B+P agent doesn't have. Resume: grab a cluster ticket, confirm sole-A, burn
 skip-list entries.
+
+## Note 2026-07-11 — dialect-pass category + strict-case sweep
+pxx.skip now distinguishes `dialect-pass` (PXX lax by design / FPC-impl-limit
+tests — NOT bugs, do not burn: tgeneric14/20/30, tgenconstraint38/39, tenum2,
+tover3) from `accepts-invalid` (real missing diagnostics, rainy-day). The
+sweep runs the compiler with `--strict-case` (FPC-parity case-label
+diagnostics; PXX's default keeps lax first-match labels). tclass13c
+(TRootClass.Integer nested-type member) is PARKED by user call — needs a
+per-class nested-type registry, near-zero value; revisit only if nested-type
+lookups matter elsewhere. Triage details in
+bug-pascal-missing-diagnostics-fail-tests.

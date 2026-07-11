@@ -433,6 +433,13 @@ begin
       StrictOverload := True;
       Inc(i);
     end
+    else if option = '--strict-case' then
+    begin
+      { FPC-parity case-label diagnostics (inverted ranges, duplicate/
+        overlapping labels). PXX's lax default keeps first-match semantics. }
+      StrictCase := True;
+      Inc(i);
+    end
     else if option = '--threadsafe' then
     begin
       ThreadSafeMode := True;
@@ -558,7 +565,7 @@ begin
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-case] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

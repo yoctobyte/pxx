@@ -15,7 +15,7 @@ begin
   c := 0;
   for i := Ord('a') to Ord('z') do
     case Chr(i) of
-      'a'..'e', 'f': c := c + 1;
+      'a'..'e', 'y': c := c + 1;   { deliberate overlap with 'x'..'z': lax dialect = first-match ('y' lands here); --strict-case rejects }
       'x'..'z': c := c + 100;
     end;
   writeln('chars=', c);

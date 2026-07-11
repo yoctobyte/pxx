@@ -64,3 +64,46 @@ tgeneric13/14/20/21, toperatorerror, tover3.
 
 The tcase cluster is the bulk: case-statement label validation (duplicate
 labels, inverted ranges) is simply not checked today.
+
+## Triage 2026-07-11 (user review) — bug vs by-design
+
+User call: PXX is more lax **by design**; a `{%FAIL}` test passing is only a
+bug when pxx's semantics are undefined/silently wrong. Split of the 15 that
+remained:
+
+**Not bugs — retagged `dialect-pass` in pxx.skip (do not burn):**
+- tgeneric14 — %fail encodes an FPC *implementation* limit ("assembler
+  symbols not global"), not a language rule. pxx passing is correct.
+- tgeneric20, tgeneric30 — generic method impl without `<T>`: pxx's generics
+  surface deliberately accepts the stripped form (3d71edcf).
+- tgenconstraint38/39 — generic constraints unenforced: pure compile-time
+  safety net, runtime semantics well-defined. FPC-strict candidate.
+- tenum2 — inc(enum) past range: lax enum-as-ordinal model, deterministic.
+- tover3 — overload ambiguity: pxx ranks deterministically (longint for a
+  cardinal arg, verified) by design; FPC-parity ambiguity error belongs to
+  the existing `--strict-overload`, not the default.
+
+**Real gaps — keep `accepts-invalid`, useful reminder tests, rainy-day:**
+- tenum4 — `{$SCOPEDENUMS}` silently ignored → duplicate member name
+  resolves to the wrong enum → wrong ordinals at runtime with no error.
+  Worst of the list: implement the directive or reject it.
+- tgeneric55/56, tdefault11/12, tgeneric13 — bare unspecialized template as
+  a var type / Default() arg / type argument: the variable's type is
+  undefined. One template-registry lookup at type resolution (registry
+  exists since 3d71edcf) likely burns all five.
+- tgeneric21 — nested generic-in-generic declaration, semantics unverified.
+
+**Parked (user call):** tclass13c — `TRootClass.Integer` nested-type member,
+needs a per-class nested-type registry; near-zero value. Also noted in
+feature-pascal-corpus-fpc-testsuite.
+
+## Case-label validation moved behind --strict-case (2026-07-11)
+
+86cf34ea's duplicate/overlap + inverted-range errors were stricter than the
+dialect intends: overlapping labels previously worked with first-match
+semantics. Reverted the default to lax (first-match; inverted range = never
+matches) and gated the FPC-parity errors behind the new `--strict-case` /
+`{$STRICT_CASE ON}` (pattern of --strict-overload). Selector-TYPE checks stay
+unconditional (the string/ordinal lowering depends on them). The conformance
+sweep now passes --strict-case, so the burned tcase {%FAIL} tests stay green;
+test_cross_case_range got its deliberate 'y'/'x'..'z' overlap back.

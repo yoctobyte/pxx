@@ -12,6 +12,15 @@
 # An untagged reason reads as "untriaged" (the historical entries below). Filling
 # these tags is deliberate per-test review (agentic pass, own follow-up ticket);
 # add a tag when you've actually decided which bucket a test belongs in.
+# Two conventions ride on those tags (triage 2026-07-11, see
+# bug-pascal-missing-diagnostics-fail-tests):
+#   wontfix: dialect-pass — ...   PXX deliberately accepts what a {%FAIL} test
+#       rejects (lax by design, or the test encodes an FPC implementation
+#       limit). NOT a bug; do not burn. Future FPC-strict-mode candidates
+#       (meta-dialect-extensions-and-fpc-strict). The sweep itself already
+#       runs --strict-case; these are divergences with no strict flag yet.
+#   gap: accepts-invalid — ...    real missing diagnostic; useful reminder
+#       test, burn when the cluster's machinery lands (rainy-day).
 # Baseline audit 2026-07-10: 222 pass / 294 skip-listed / 34 auto-gated (of 550 curated).
 # Re-audit 2026-07-11 (headerless-program fix, suite re-fetched): 213 pass /
 # 303 skip-listed / 34 auto-gated. The header fix green-lit 13 formerly
@@ -42,11 +51,11 @@ tclass15.pp	unclassified: pascal26:458: error: unexpected character ()
 tclass5.pp	unclassified: pascal26:30: error: undefined variable (fail)
 tclass9.pp	unclassified: pascal26:27: error: undefined variable (FSomeClassVar)
 tclassinfo1.pp	unclassified: pascal26:8: error: undefined variable (TObject)
-tdefault12.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
+tdefault12.pp	gap: accepts-invalid — Default(unspecialized template): undefined type, real gap (template-registry check)
 tdefault1.pp	unclassified: pascal26:8: error: uses: unit source not found: variants ()
 tdefault5.pp	unclassified: pascal26:458: error: unexpected character ()
 tenum3.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 12) | near: third   TRange1  first >
-tenum4.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
+tenum4.pp	gap: accepts-invalid — $SCOPEDENUMS silently ignored: wrong ordinals at runtime, worst of the cluster
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
@@ -59,8 +68,8 @@ tforin5.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tforin8.pp	unclassified: pascal26:11: error: base type not found: IEnumerator ()
 tforin9.pp	unclassified: Expected: end, but got: enumerator (Kind: 1, Line: 14) | near:  function StepFor
 tgenconstraint37.pp	unclassified: Expected: end, but got:  (Kind: 78, Line: 18) | near:  class  ITestInterface  in
-tgenconstraint38.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
-tgenconstraint39.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
+tgenconstraint38.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
+tgenconstraint39.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
 tgeneric102.pp	unclassified: pascal26:15: error: expected generic class name ()
 tgeneric107.pp	parser: inline specialize expression
 tgeneric15.pp	unclassified: pascal26:17: error: base type not found: specialize ()
@@ -70,7 +79,7 @@ tgeneric24.pp	parser: generic record/array/procvar templates
 tgeneric25.pp	parser: generic record/array/procvar templates
 tgeneric27.pp	parser: generic record/array/procvar templates
 tgeneric33.pp	parser: generic record/array/procvar templates
-tgeneric56.pp	accepts-invalid: %FAIL test compiles (missing diagnostic)
+tgeneric56.pp	gap: accepts-invalid — bare unspecialized template as var type: undefined type (template-registry check)
 tgeneric59.pp	unclassified: pascal26:11: error: expected name ()
 tgeneric79.pp	parser: generic record/array/procvar templates
 tgeneric86.pp	parser: generic record/array/procvar templates
@@ -109,7 +118,7 @@ tclass13a.pp	unclassified: Expected: ), but got:  (Kind: 81, Line: 12)
 tclass13d.pp	unclassified: Expected: :, but got:  (Kind: 64, Line: 7)
 tclass3.pp	unclassified: pascal26:26: error: inherited call argument count mismatch ()
 tenum1.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
-tenum2.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tenum2.pp	wontfix: dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
 tenum6.pp	runtime: exit code 1 (want 0)
 texception10.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 32)
 texception2.pp	unclassified: Expected: :, but got: do (Kind: 19, Line: 25)
@@ -126,10 +135,10 @@ tforin27.pp	unclassified: pascal26:5: error: expected name ()
 tgeneric1.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
 tgeneric10.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
 tgeneric11.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
-tgeneric13.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tgeneric14.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tgeneric20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
-tgeneric21.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tgeneric13.pp	gap: accepts-invalid — unspecialized generic as type argument — real gap (template-registry check; see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
+tgeneric14.pp	wontfix: dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
+tgeneric20.pp	wontfix: dialect-pass — generic method impl without <T> marker — PXX's generics surface deliberately accepts the stripped form (3d71edcf); not a bug
+tgeneric21.pp	gap: accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
 tgeneric3.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 8)
 tgeneric5.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 7)
 tgeneric6.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
@@ -145,7 +154,7 @@ tobject2.pp	unclassified: Expected: begin, but got: x (Kind: 1, Line: 7)
 tobject4.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 16)
 toperator1.pp	unclassified: Expected: =, but got:  (Kind: 80, Line: 10)
 toperator6.pp	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
-tover3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
+tover3.pp	wontfix: dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 tover4.pp	runtime: exit code 1 (want 0)
 tprocvar1.pp	unclassified: pascal26:36: error: nested routine: expected name ()
 tprocvar2.pp	unclassified: ConstEval error at SrcLine 38: SVal = dummy Kind = 1 TokPos = 77
@@ -167,7 +176,7 @@ tstring7.pp	unclassified: pascal26:14: error: undefined variable (runerror)
 tstring8.pp	unclassified: pascal26:9: error: undefined variable (strpos)
 tcase2.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 3)
 tcase50.pp	parser: ExtendedPascal `otherwise` case clause not supported
-tclass13c.pp	missing diagnostic: accepts invalid code — TRootClass.Integer nested-type member; needs a per-class nested-type registry (legit nested types TTest.TRecord pass by name fall-through, see tdefault8)
+tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	parser: extended-record features in unit (pascal26:12 unexpected token via unit driver)
 tgeneric77.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
 tgenfunc15.pp	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
@@ -201,7 +210,7 @@ tgeneric105.pp	mode-delphi generics adjacent: pascal26:4: error: this file is a 
 tgeneric106.pp	mode-delphi generics adjacent: Expected: :, but got:  (Kind: 66, Line: 9)
 tgeneric28.pp	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
 tgeneric29.pp	mode-delphi generics adjacent: pascal26:7: error: generic templates must be class declarations ()
-tgeneric30.pp	mode-delphi generics adjacent: compiles but %FAIL expected (missing diagnostic)
+tgeneric30.pp	wontfix: dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 tgeneric34.pp	mode-delphi generics adjacent: pascal26:6: error: generic templates must be class declarations ()
 tgeneric35.pp	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
 tgeneric37.pp	mode-delphi generics adjacent: pascal26:15: error: generic templates must be class declarations ()
