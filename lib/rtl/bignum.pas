@@ -37,7 +37,81 @@ function BigSubSigned(const a, b: TBigInt): TBigInt;     { signed a - b }
 procedure BigDivMod(const a, b: TBigInt; var q, r: TBigInt);  { trunc-toward-zero: q*b + r = a, sign(r)=sign(a) }
 function BigModPow(const base, exp, m: TBigInt): TBigInt;     { (base^exp) mod m, exp >= 0 }
 
+{ Operator layer — thin wrappers over the signed function API above
+  (feature-lib-bignum-operators). TBigInt is a managed record (dynarray
+  limbs), so chained operator expressions (`c := a * b + a`) deliberately
+  exercise the managed-temp lifetime path. No `/` overload: TBigInt is an
+  integer type, use div/mod. }
+operator + (a, b: TBigInt) r: TBigInt;
+operator - (a, b: TBigInt) r: TBigInt;
+operator * (a, b: TBigInt) r: TBigInt;
+operator div (a, b: TBigInt) q: TBigInt;
+operator mod (a, b: TBigInt) r: TBigInt;
+operator = (a, b: TBigInt) eq: Boolean;
+operator <> (a, b: TBigInt) ne: Boolean;
+operator < (a, b: TBigInt) lt: Boolean;
+operator <= (a, b: TBigInt) le: Boolean;
+operator > (a, b: TBigInt) gt: Boolean;
+operator >= (a, b: TBigInt) ge: Boolean;
+
 implementation
+
+operator + (a, b: TBigInt) r: TBigInt;
+begin
+  r := BigAddSigned(a, b);
+end;
+
+operator - (a, b: TBigInt) r: TBigInt;
+begin
+  r := BigSubSigned(a, b);
+end;
+
+operator * (a, b: TBigInt) r: TBigInt;
+begin
+  r := BigMul(a, b);
+end;
+
+operator div (a, b: TBigInt) q: TBigInt;
+var rem: TBigInt;
+begin
+  BigDivMod(a, b, q, rem);
+end;
+
+operator mod (a, b: TBigInt) r: TBigInt;
+var quo: TBigInt;
+begin
+  BigDivMod(a, b, quo, r);
+end;
+
+operator = (a, b: TBigInt) eq: Boolean;
+begin
+  eq := BigCompare(a, b) = 0;
+end;
+
+operator <> (a, b: TBigInt) ne: Boolean;
+begin
+  ne := BigCompare(a, b) <> 0;
+end;
+
+operator < (a, b: TBigInt) lt: Boolean;
+begin
+  lt := BigCompare(a, b) < 0;
+end;
+
+operator <= (a, b: TBigInt) le: Boolean;
+begin
+  le := BigCompare(a, b) <= 0;
+end;
+
+operator > (a, b: TBigInt) gt: Boolean;
+begin
+  gt := BigCompare(a, b) > 0;
+end;
+
+operator >= (a, b: TBigInt) ge: Boolean;
+begin
+  ge := BigCompare(a, b) >= 0;
+end;
 
 { Drop trailing (most-significant) zero limbs; empty list represents zero. }
 procedure Normalize(var a: TBigInt);

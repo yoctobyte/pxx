@@ -5,9 +5,9 @@ prio: 42
 # bignum operator layer: TBigInt + - * div mod comparisons — Track B
 
 - **Type:** feature (library) — Track B
-- **Status:** backlog — user-requested 2026-07-11, sibling of
+- **Status:** working
   [[feature-lib-vecmath]] / [[feature-pascal-complex-numbers-ucomplex]]
-- **Owner:** —
+- **Owner:** fable-p
 
 ## What
 
