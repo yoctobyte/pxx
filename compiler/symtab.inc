@@ -3570,6 +3570,34 @@ end;
   Anonymous inline `record ... end` types match structurally (a pxx
   extension) — and each textual occurrence mints a fresh rec id (prescan vs
   body parse!), so identity must never discriminate them. }
+{ True when record ri (transitively) contains a Text/TextFile field — the RTL
+  `text` record — so Default() and similar can reject it (FPC forbids file
+  types there). Depth-guarded against pathological nesting. }
+function RecContainsTextRecDepth(ri, depth: Integer): Boolean;
+var textId, ci, fb, i: Integer;
+begin
+  Result := False;
+  if depth > 8 then Exit;
+  textId := IsRecordType('text');
+  if textId = REC_NONE then Exit;
+  if ri = textId then begin Result := True; Exit; end;
+  if ri < REC_UCLASS_BASE then Exit;
+  ci := ri - REC_UCLASS_BASE;
+  fb := UClsFBase[ci];
+  for i := 0 to UClsFCount[ci] - 1 do
+    if (UFldRec_[fb + i] <> REC_NONE) and (UFldRec_[fb + i] <> ri) and
+       RecContainsTextRecDepth(UFldRec_[fb + i], depth + 1) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+function RecContainsTextRec(ri: Integer): Boolean;
+begin
+  Result := RecContainsTextRecDepth(ri, 0);
+end;
+
 function RecIdsDistinctNamed(a, b: Integer): Boolean;
 begin
   Result := False;

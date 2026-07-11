@@ -4396,6 +4396,17 @@ begin
         { Default(T): zero value of the type — ordinals/pointers/chars in v1
           (records/strings later). `default` lexes as its own token. }
         Next; Expect(tkLParen, '(');
+        { FPC-parity diagnostics: Default() is not defined for file types —
+          neither TextFile itself nor a record that (transitively) contains one
+          (bug-pascal-missing-diagnostics-fail-tests / tdefault2, tdefault6). }
+        if CurTok.Kind = tkIdent then
+        begin
+          if CaseEqual(CurTok.SVal, 'text') or CaseEqual(CurTok.SVal, 'textfile') then
+            Error('Default: file types are not allowed');
+          i := IsRecordType(CurTok.SVal);
+          if (i <> REC_NONE) and RecContainsTextRec(i) then
+            Error('Default: the record type contains a file field');
+        end;
         node := AllocNode(AN_INT_LIT);
         ASTIVal[node] := 0;
         ASTTk[node] := Ord(tyInt64);
@@ -8028,6 +8039,13 @@ begin
   else if Syms[contSym].IsArray then elemTk := Ord(Syms[contSym].ElemType)
   else begin Error('for-in: variable is not a string or array'); elemTk := Ord(tyInteger); end;
 
+  { FPC-parity: iterating a STRING yields Char — a non-char ordinal loop var
+    (`for b: byte in s`) is a type error, not an implicit Ord() conversion
+    (bug-pascal-missing-diagnostics-fail-tests / tforin11). }
+  if isString and (Syms[varIdx].TypeKind <> tyAuto) and
+     (Syms[varIdx].TypeKind <> tyChar) then
+    Error('for-in over a string: the loop variable must be of type Char');
+
   { Inline `for var x in coll`: backfill x's inferred type from the
     container's element type before the body is parsed, so a use of x
     inside the body resolves (feature-inline-loop-var-rio). }
@@ -11510,7 +11528,20 @@ begin
         Result := tySet;
         Exit;
       end;
-      if CaseEqual(lo, 'ansistring') or
+      if CaseEqual(lo, 'textfile') and (IsRecordType('text') <> REC_NONE) then
+      begin
+        { FPC: TextFile = Text. Resolve to the RTL `text` record — previously
+          the unknown name fell through to a 4-byte integer slot. }
+        LastTypeRecId := IsRecordType('text');
+        Result := tyRecord;
+      end
+      else if CaseEqual(lo, 'file') then
+        { untyped `file` / `file of T`: no file-variable model in pxx (the
+          textfile RTL covers Text I/O). Reject at the type reference instead
+          of silently minting an integer-sized slot
+          (bug-pascal-missing-diagnostics-fail-tests / tdefault4). }
+        Error('file types are not supported (use TextFile for text I/O)')
+      else if CaseEqual(lo, 'ansistring') or
          CaseEqual(lo, 'unicodestring') or CaseEqual(lo, 'widestring') then
       begin
         { unicodestring/widestring: pragmatic alias to the native string type

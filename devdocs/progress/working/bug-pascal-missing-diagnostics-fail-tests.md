@@ -6,9 +6,9 @@ prio: 46  # auto — 13 %FAIL conformance tests accepted; each is a missing chec
 
 - **Type:** bug umbrella (Pascal frontend, missing diagnostics)
 - **Track:** P
-- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+- **Status:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** opus-a
 
 ## Symptom
 13 curated `{ %FAIL }` tests — programs the reference compiler must REJECT —

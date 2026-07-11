@@ -405,6 +405,16 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_overload_record_identity26)" = "$$(printf '11.0\n37.0\nvec2\nthing')"
 	./$(COMPILER) test/test_unicodestring_alias.pas /tmp/test_unicodestring_alias26
 	test "$$(/tmp/test_unicodestring_alias26)" = "$$(printf 'abc\nhello\n5\ne\neq\nhello!\n2')"
+	./$(COMPILER) test/test_missing_diagnostics_fail.pas /tmp/test_missing_diagnostics26
+	test "$$(/tmp/test_missing_diagnostics26)" = "$$(printf 'textfile=text\nTRUE')"
+	! ./$(COMPILER) test/test_default_textfile_fail.pas /tmp/test_dtf26 > /tmp/test_dtf.log 2>&1
+	grep -q "Default: file types are not allowed" /tmp/test_dtf.log
+	! ./$(COMPILER) test/test_file_type_fail.pas /tmp/test_ftf26 > /tmp/test_ftf.log 2>&1
+	grep -q "file types are not supported" /tmp/test_ftf.log
+	! ./$(COMPILER) test/test_default_filefield_fail.pas /tmp/test_dff26 > /tmp/test_dff.log 2>&1
+	grep -q "record type contains a file field" /tmp/test_dff.log
+	! ./$(COMPILER) test/test_forin_string_char_fail.pas /tmp/test_fsc26 > /tmp/test_fsc.log 2>&1
+	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
