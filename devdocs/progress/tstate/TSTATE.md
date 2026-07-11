@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `7b95a7470ebc` | 2026-07-11T21:12:04Z | GREEN (opt) | 125.4s | `7b95a7470ebc` GREEN |
+| borg | `163ffea562fa` | 2026-07-11T21:44:46Z | RED (native) | 57.7s | `7b95a7470ebc` GREEN |
 
 ## Open regressions
-- none
+- **test-smoke#11** — compiler/compiler.pas test/bootstrap_features.pas (borg): bad `163ffea562fa`, last good `7b95a7470ebc`, 8 commit(s) in range
