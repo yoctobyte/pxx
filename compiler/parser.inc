@@ -7094,6 +7094,15 @@ begin
   end;
 end;
 
+{ Enum type index of an expression node, or -1. Ident-level only: enum
+  identity lives on the SYMBOL (SymEnumId, tagged at var decls). }
+function NodeEnumIdOf(node: Integer): Integer;
+begin
+  Result := -1;
+  if (node >= 0) and (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
+    Result := SymEnumId[ASTIVal[node]];
+end;
+
 procedure ParseExpr;
 var op: TTokenKind; left, right, node, isci: Integer; isIsTest: Boolean;
 begin
@@ -7156,6 +7165,13 @@ begin
     left := CurASTNode;
     ParseSimpleExpr;
     right := CurASTNode;
+    { FPC-parity: an ENUM operand cannot compare against a pointer — there is
+      no implicit conversion between them (toperatorerror). Detection is
+      ident-level (SymEnumId is tagged at var decls), so complex expressions
+      stay unchecked — this is a diagnostic, not a type system. }
+    if (NodeEnumIdOf(left) >= 0) and (IntToTypeKind(ASTTk[right]) = tyPointer) or
+       (NodeEnumIdOf(right) >= 0) and (IntToTypeKind(ASTTk[left]) = tyPointer) then
+      Error('cannot compare an enum with a pointer');
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
   end;
@@ -9023,6 +9039,8 @@ begin
     fsym := FindEnumType(CurTok.SVal);
     if fsym >= 0 then
     begin
+      if EnumTypeHasHoles[fsym] then
+        Error('for-in: the enum has non-contiguous values (explicit ordinals) — iteration order is undefined');
       Next;
       Result := ParseForInEnumTypeAST(varIdx, fsym);
       Exit;
@@ -9753,6 +9771,7 @@ begin
     valueNode := CurASTNode;
     
     idx := AllocVar(names[0], tk);
+    if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
     if isArr then
     begin
       Syms[idx].IsArray := True;
@@ -9794,6 +9813,7 @@ begin
     for i := 0 to n - 1 do
     begin
       idx := AllocVar(names[i], tk);
+      if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
       if isArr then
       begin
         Syms[idx].IsArray := True;
@@ -11927,6 +11947,7 @@ begin
 	      for i := 0 to n-1 do
 	      begin
 	        idx := AllocVar(names[i], tk);
+	        if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
 	        if (tk = tyRecord) or (tk = tyClass) then
 	        begin
 	          Syms[idx].RecName := LastTypeRecId;
@@ -12868,7 +12889,12 @@ begin
           if CurTok.Kind = tkEq then
           begin
             Next;                 { consume '=' }
+            hiVal := ordinal;     { the implicit next ordinal }
             ordinal := ConstEval; { explicit ordinal value }
+            { A jump off the implicit 0..n-1 sequence makes the enum
+              non-contiguous — for-in over the TYPE is then invalid (FPC,
+              tforin20) and ordinal<->position no longer coincide. }
+            if ordinal <> hiVal then EnumTypeHasHoles[etid] := True;
           end;
           AddEnumVal(enumNOff, enumNLen);
           AddConst(enumNm, tyInteger, ordinal);

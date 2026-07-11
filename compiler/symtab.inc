@@ -285,6 +285,7 @@ begin
   EnumTypeNOff[Result] := noff;
   EnumTypeNLen[Result] := nlen;
   EnumTypeValBase[Result] := EnumValCount;
+  EnumTypeHasHoles[Result] := False;
   EnumTypeValCount[Result] := 0;
   EnumTypeRTTIOff[Result] := -1;
   Inc(EnumTypeCount);
@@ -1919,6 +1920,7 @@ begin
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
+  SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymPtrDepth[SymCount] := 0;
@@ -2022,6 +2024,7 @@ begin
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
+  SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymPtrDepth[SymCount] := 0;
@@ -2132,6 +2135,7 @@ begin
   { Match AllocVar: reset recycled parallel-array fields (see AllocDynArray). }
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
+  SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymPtrDepth[SymCount] := 0;
@@ -2198,6 +2202,7 @@ begin
     occupied this slot) invisible to FindSym ('undefined variable'). }
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
+  SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymPtrDepth[SymCount] := 0;

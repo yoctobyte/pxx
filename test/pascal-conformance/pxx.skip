@@ -206,7 +206,6 @@ tforin15.pp	unclassified: Expected: begin, but got: Integer (Kind: 57, Line: 12)
 tforin16.pp	unclassified: pascal26:6: error: for-in: not a generator, enum type, or iterable variable ()
 tforin17.pp	unclassified: pascal26:5: error: for-in: expected a generator, enum type, or iterable variable ()
 tforin19.pp	unclassified: pascal26:6: error: for-in: expected a generator, enum type, or iterable variable ()
-tforin20.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tforin26.pp	unclassified: pascal26:2: error: expected name ()
 tforin27.pp	unclassified: pascal26:5: error: expected name ()
 tgeneric1.pp	unclassified: Expected: >, but got:  (Kind: 69, Line: 4)
@@ -238,7 +237,6 @@ toperator2.pp	unclassified: pascal26:1: error: this file is a unit, not a progra
 toperator3.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 toperator4.pp	unclassified: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no standalone-
 toperator6.pp	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
-toperatorerror.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tover3.pp	missing diagnostic: accepts invalid code ({%FAIL} test compiles; exposed by headerless-program fix — see bug-pascal-missing-diagnostics-fail-tests)
 tover4.pp	runtime: exit code 1 (want 0)
 tprocvar1.pp	unclassified: pascal26:36: error: nested routine: expected name ()

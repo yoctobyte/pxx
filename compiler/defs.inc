@@ -1055,6 +1055,7 @@ var
   SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymElemProcSig : array[0..MAX_SYMS-1] of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
+  SymEnumId : array[0..MAX_SYMS-1] of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
   SymPtrDepth : array[0..MAX_SYMS-1] of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
@@ -1909,6 +1910,7 @@ var
   EnumTypeValBase : array[0..MAX_ENUMTYPE-1] of Integer;  { into EnumVal* arrays }
   EnumTypeValCount: array[0..MAX_ENUMTYPE-1] of Integer;
   EnumTypeRTTIOff : array[0..MAX_ENUMTYPE-1] of Integer;  { Data[] off, -1 }
+  EnumTypeHasHoles: array[0..MAX_ENUMTYPE-1] of Boolean;   { explicit `= N` broke 0..n-1 contiguity — for-in over the type is invalid (FPC) }
   EnumTypeCount   : Integer;
   EnumValNOff     : array[0..MAX_ENUMVAL-1] of Integer;   { value name in TokChars }
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
