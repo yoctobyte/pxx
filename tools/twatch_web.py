@@ -84,6 +84,36 @@ def read_runs(tdir):
     return runs, regs, reports
 
 
+CROSS_TARGETS = ("i386", "arm32", "aarch64", "riscv32", "riscv64",
+                 "arm", "xtensa", "riscv")
+
+
+def read_jobs(tdir):
+    """The last full tier's per-job status map from <host>.json, grouped by job
+    family (the part before '#'). Returns {host: {family: Counter(verdict)}}
+    plus the recorded last_full meta. Lets the dashboard show that `full` really
+    spans the cross matrix — and flag a target that silently drops to ~0 jobs."""
+    out, meta = {}, {}
+    if not os.path.isdir(tdir):
+        return out, meta
+    for fn in sorted(os.listdir(tdir)):
+        if not fn.endswith(".json"):
+            continue
+        d = _rj(os.path.join(tdir, fn))
+        jobs = d.get("jobs")
+        if not isinstance(jobs, dict) or not jobs:
+            continue
+        host = d.get("host") or fn[:-5]
+        fam = {}
+        for k, v in jobs.items():
+            g = k.split("#")[0]
+            fam.setdefault(g, {})
+            fam[g][v] = fam[g].get(v, 0) + 1
+        out[host] = fam
+        meta[host] = d.get("last_full") or {}
+    return out, meta
+
+
 def read_bench(tdir):
     """bench.tsv -> list of {date,host,sha,workload,level,ms}."""
     rows = []
@@ -164,12 +194,67 @@ def render_dashboard(tdir, links):
     rep_html = "<br>".join(
         "<a href='reports/%s'>%s</a>" % (html.escape(n), html.escape(n))
         for n in reversed(reports[-30:])) or "none"
+    cov = render_coverage(tdir)
     body = ("<h1>Track T dashboard</h1>%s"
             "<h2>Open regressions</h2><div>%s</div>"
+            "%s"
             "<h2>Recent runs</h2><table>%s</table>"
             "<h2>Reports</h2><div>%s</div>"
-            % ("".join(cards), reg_html, runtab, rep_html))
+            % ("".join(cards), reg_html, cov, runtab, rep_html))
     return _page("Track T dashboard", body, links)
+
+
+def render_coverage(tdir):
+    """`full` tier per-target job coverage — proves it spans the cross matrix
+    and surfaces a target that has silently dropped to near-zero jobs."""
+    jobs, meta = read_jobs(tdir)
+    if not jobs:
+        return ""
+    out = []
+    for host in sorted(jobs):
+        fam = jobs[host]
+
+        def bucket(g):
+            for t in CROSS_TARGETS:
+                if ("-%s" % t) in g or g.endswith(t):
+                    return "cross"
+            return "native"
+        # core per-arch suites (test-i386, test-aarch64, …) — the ones that
+        # should carry the fuller Pascal battery. Flag one "thin" only relative
+        # to its peers, so a target silently dropping stands out; the 1-job aux
+        # checks (sqlite-threads-<arch>) are cross but never peer-comparable.
+        core = {g: sum(fam[g].values()) for g in fam
+                if bucket(g) == "cross" and "sqlite" not in g}
+        core_max = max(core.values()) if core else 0
+        rows = ""
+        ntot = ctot = 0
+        for g in sorted(fam, key=lambda g: (bucket(g) == "native", g)):
+            v = fam[g]
+            n = sum(v.values())
+            b = bucket(g)
+            if b == "cross":
+                ctot += n
+            else:
+                ntot += n
+            bad = v.get("fail", 0) + v.get("red", 0)
+            cls = "fail" if bad else "pass"
+            thin = " ⚠ thin" if g in core and core_max and n < core_max / 4 else ""
+            rows += ("<tr><td><code>%s</code><td>%s<td class='num %s'>%d"
+                     "<td class=dim>%s%s</tr>" % (
+                         html.escape(g), b, cls, n,
+                         html.escape(", ".join("%s:%d" % (k, v[k])
+                                     for k in sorted(v))), thin))
+        m = meta.get(host, {})
+        out.append(
+            "<h2>Tier coverage — %s <span class=dim>(last full %s, %ss, %s)</span></h2>"
+            "<p class=dim>native jobs %d · cross jobs %d across the qemu matrix. "
+            "A cross target dropping to ~0 (or ⚠ thin) means it stopped being "
+            "exercised.</p>"
+            "<table><tr><th>job family<th>kind<th class=num>jobs<th>verdicts</tr>"
+            "%s</table>" % (
+                html.escape(host), html.escape(m.get("sha", "")[:12]),
+                m.get("wall", "?"), m.get("verdict", "?"), ntot, ctot, rows))
+    return "".join(out)
 
 
 def render_bench(tdir, links):
