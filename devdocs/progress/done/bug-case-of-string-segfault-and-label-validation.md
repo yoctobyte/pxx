@@ -64,4 +64,4 @@ A's no-concurrent-edit rule). New positive tests for case-of-string equality
 + ranges; negative tests for duplicate/inverted labels.
 
 ## Log
-- 2026-07-11 — resolved, commit 3edb8f1b.
+- 2026-07-11 — resolved, commit 86cf34ea (pre-rebase 3edb8f1b).
