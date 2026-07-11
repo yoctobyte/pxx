@@ -5,10 +5,30 @@ prio: 65  # auto
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — **pxx-compiled lua is FUNCTIONAL: runs
-  control flow, recursion, closures, generic-for, string lib, table.sort,
-  metatables + operator overloading, pcall/error. Only floating-point remains
-  broken.**).
+- **Status:** DONE — resolved 2026-07-11. **Whole M0–M5 arc complete.** The
+  "only floating-point remains broken" note below is STALE (2026-06-28,
+  superseded); all float bug tickets landed in `done/` and both lua and sqlite
+  now run float correctly.
+- **Reconciliation 2026-07-11 (Track E ticket maintenance — verified native,
+  pinned compiler `stable_linux_amd64/default/pinned`):**
+  - **M4 lua — GREEN.** `make test-lua` all 6 corpus programs PASS incl.
+    `numeric.lua` (float: `3.14`, `1.5+2.5`, `2^10`, `7/2`, `%.2f`,
+    `math.sqrt`, stdev). Fetched `lua-5.4.7` via
+    `tools/install_lib_candidates.sh lua`.
+  - **M5 sqlite — GREEN.** `test/csqlite_extended_test.c` compiles + runs:
+    CREATE/INDEX, plain + prepared-statement INSERT, transactions, float
+    columns (balance 1500.5 → 2000.75), NULL handling, SELECT. Fetched
+    `sqlite-3.46.0` amalgamation; built libc-free against `lib/crtl`.
+  - Linked bringup tickets `task-sqlite-libc-free-runtime-bringup` and
+    `bug-c-sqlite-suite-runtime-segfault` already in `done/`; every `bug-c-*float*`
+    ticket in `done/`.
+  - **Residual (tracked elsewhere, NOT blocking this ticket):** sqlite
+    `--threadsafe` only on x86-64/i386 (PAL atomics/clone not yet on
+    arm32/aarch64/riscv32) — see `test-sqlite-threads` skip note in Makefile.
+    File any new cross-target gap as its own Track A ticket.
+- **Prior status (historical):** backlog (active arc — pxx-compiled lua is
+  FUNCTIONAL: control flow, recursion, closures, generic-for, string lib,
+  table.sort, metatables + operator overloading, pcall/error).
 - **Session 2026-06-28 cleanup (Track A+B+C) — SQLite in-memory extended smoke
   runs.** The stale VdbeCursor/bitfield crash diagnosis was disproved by direct
   full-amalgamation layout probes: PXX and GCC agree on `VdbeCursor`
