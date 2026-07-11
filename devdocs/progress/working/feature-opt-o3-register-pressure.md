@@ -241,3 +241,17 @@ architecture `devdocs/dev/optimization-architecture.md`.
   unlock it). Cumulative -O3: mandelbrot 1.21×, self-compile 1.05×.
 - Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
   quick GREEN.
+
+### 2026-07-11 — W1 slice 3 LANDED behind -O3: last-call-argument push/pop collapse
+- Internal (non-variadic, <=6-param) calls push every arg then pop them into
+  the SysV registers; the LAST argument's push/pop pair is back-to-back — it
+  now stays in rax and takes a single `mov <its reg>, rax` (nothing between
+  the last eval and the pop loop touches rax; the hidden aggregate-dest eval
+  runs after the pops). Variadic and >6-param stack-convention calls
+  unchanged.
+- **Measured:** self-compile image `pop rdi` 31.1k → 9.4k, `push rax`
+  75.8k → 44.9k, total instructions 890.8k → 860.5k (**−8.5% vs -O2**
+  cumulative). Runtime: raytracer 1.04× → **1.09×** (call-heavy code),
+  mandelbrot holds 1.20×, self-compile 1.04-1.05×.
+- Gates: -O2/-O3 fixedpoints byte-identical, test-opt green, make test green,
+  quick GREEN.

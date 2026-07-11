@@ -1596,7 +1596,7 @@ end;
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
-    cmpUnsigned, isAnsiStr, savedLValueWrite: Boolean;
+    cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg: Boolean;
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -3675,6 +3675,16 @@ begin
           else
           begin
             { Internal Pascal call: all args in integer registers by index. }
+            { -O3: the LAST argument's push/pop collapses — the register pops
+              run immediately after its evaluation, so it can stay in rax and
+              take a single `mov <its reg>, rax` (nothing between the last
+              eval and the pop loop emits code that touches rax; the hidden
+              aggregate-dest eval happens after the pops). Non-variadic
+              <=6-param register convention only. }
+            skipLastArg := (OptLevel >= 3) and (procIdx >= 0) and
+                           (not ProcVariadic[procIdx]) and
+                           (Procs[procIdx].ParamCount >= 1) and
+                           (Procs[procIdx].ParamCount <= 6);
             argNode := IRB[node];
             i := 0;
             while argNode <> -1 do
@@ -3696,7 +3706,8 @@ begin
                   end;
                 end;
               end;
-              EmitB($50); { push rax }
+              if not (skipLastArg and (IRB[argNode] = -1)) then
+                EmitB($50); { push rax (last arg stays in rax at -O3) }
               argNode := IRB[argNode];
               Inc(i);
             end;
@@ -3725,7 +3736,17 @@ begin
               wrong (topmost) args into the registers and leak the rest
               (bug-many-param-call-corruption). }
             else if Procs[procIdx].ParamCount <= 6 then
-              for i := Procs[procIdx].ParamCount - 1 downto 0 do
+            begin
+              if skipLastArg then
+                case Procs[procIdx].ParamCount - 1 of
+                  0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+                  1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
+                  2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
+                  3: begin EmitB($48); EmitB($89); EmitB($C1); end; { mov rcx, rax }
+                  4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
+                  5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                end;
+              for i := Procs[procIdx].ParamCount - 1 - Ord(skipLastArg) downto 0 do
                 case i of
                   0: EmitB($5F); { pop rdi }
                   1: EmitB($5E); { pop rsi }
@@ -3734,6 +3755,7 @@ begin
                   4: begin EmitB($41); EmitB($58); end; { pop r8 }
                   5: begin EmitB($41); EmitB($59); end; { pop r9 }
                 end;
+            end;
             if RetViaHiddenDest(Procs[procIdx].RetType) then
             begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
