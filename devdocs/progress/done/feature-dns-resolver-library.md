@@ -5,7 +5,7 @@ prio: 60  # auto
 # DNS resolver library (`dns.pas`) with selectable backends
 
 - **Type:** feature (Track B networking / resolver policy)
-- **Status:** working
+- **Status:** done
 - **Owner:** opus-night
 - **Opened:** 2026-06-21 (DNS design discussion)
 - **Relation:** follows `feature-pal-network-datagram-poll-errno`; feeds
@@ -500,3 +500,14 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   profile/define selection — needs a design decision on libc linkage for
   Pascal-emitted executables (static extern vs dlopen), so it is a candidate
   for its own follow-up ticket.
+- 2026-07-11 (night, close) — **ticket RESOLVED at 96456a43.** The dns_wire
+  resolver vertical is complete: packet codec, /etc/hosts (IPv4+IPv6) /
+  resolv.conf / /etc/services config, blocking + async transports with UDP ->
+  TCP truncation fallback on both, glibc search/ndots candidates, CNAME
+  chasing (A and AAAA), a process-wide TTL cache (positive / negative /
+  CNAME-hop, A and AAAA, shared by all four chase entrypoints), IPv6 literals,
+  and DnsResolveHost / DnsResolveHost6 / DnsResolveService (+ async siblings).
+  Never public DNS without explicit opt-in, throughout. The remaining
+  design-gated work (dns_libc / dns_resolved / dns_esp backends + profile
+  selection) moved to [[feature-dns-backends-selection]].
+- 2026-07-11 — resolved, commit 96456a43.

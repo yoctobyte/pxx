@@ -25,7 +25,7 @@ _none_
 
 _none_
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,7 @@ _none_
 | feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
-| feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
+| feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -76,6 +76,7 @@ _none_
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | O | 60 | feature | Inline routine expansion (`inline;`) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
+| feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
@@ -172,7 +173,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (594)
+## done (595)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -579,6 +580,7 @@ _none_
 | feature-demo-video-player | E | 50 | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-demo-vm | E | 50 | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | A | 50 | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | 50 | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-dynarray-insert-delete | A | 50 | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
@@ -799,7 +801,6 @@ _none_
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
 - [p 60] [A] feature-cdecl-indirect-cross-targets
-- [p 60] [B] feature-dns-resolver-library
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [B+C] feature-game-library-candidate-suite
 - [p 60] [A] feature-inline-asm-xtensa
@@ -862,9 +863,11 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 40] [A] feature-c-package-namespace-decision
+- [p 40] [B] feature-dns-backends-selection
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [A] bug-test-riscv32-thin-coverage
 - [p 35] [C] feature-c-esp-conformance-coverage
+- [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
