@@ -411,3 +411,18 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   async TC->TCP fallback, hosts-file IPv6 + AAAA CNAME chase, AAAA caching
   (cache keyed by qtype already; the AAAA paths just don't thread TTL yet),
   and the `dns_libc`/`dns_resolved`/`dns_esp` backends + profile selection.
+- 2026-07-11 (night 2) — **IPv6 literals + hosts-file IPv6 landed** (Track B):
+  - `dns_config`: `DnsParseIpv6` (full + `::`-compressed forms, embedded
+    dotted-quad tail `::ffff:1.2.3.4`; rejects zone ids, double gap, oversized
+    groups, wrong counts) and `DnsLookupHosts6` (`<ipv6> <host> [aliases...]`
+    lines; IPv4 lines skipped). Pure/offline; 19 new checks in
+    `test/lib_dns_config.pas`.
+  - Both AAAA facades (`dns.DnsResolveHost6`, `dns_async.DnsResolveHost6Async`)
+    now short-circuit on an IPv6 literal and consult /etc/hosts IPv6 lines
+    before the nameservers ("files dns" parity with the A path).
+  - Compiler gap found while writing it: nested routine cannot capture a
+    fixed-size array local — filed [[feature-nested-routine-fixed-array-capture]]
+    (Track A); worked around by flattening the helper.
+  REMAINING (unchanged otherwise): CNAME-chase result caching, async TC->TCP
+  fallback, AAAA CNAME chase + AAAA caching, `dns_libc`/`dns_resolved`/`dns_esp`
+  backends + profile selection.

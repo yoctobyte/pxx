@@ -36,9 +36,9 @@ function DnsResolveChase(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 
 { AAAA (IPv6) sibling of DnsResolveHost: same "files dns" policy and search
-  candidates, addresses come back as 16-byte network-order TDnsIpv6. /etc/hosts
-  IPv6 lines are not consulted yet (dns_config parses IPv4 hosts only) — a
-  hosts miss goes straight to the nameservers. }
+  candidates, addresses come back as 16-byte network-order TDnsIpv6. An IPv6
+  literal short-circuits without network; /etc/hosts IPv6 lines are consulted
+  before the nameservers. }
 function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 
 { Process-wide facade answer cache (dns_cache, keyed on monotonic time):
@@ -300,14 +300,35 @@ end;
 
 function DnsResolveHost6(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 var
-  resolvText: string;
+  resolvText, hostsText: string;
   ns: TDnsIpv4Array;
   localIps: TDnsIpv6Array;
   search: TDnsSearchArray;
   nsCount, searchCount, ndots, localCount, rc, i, j, idx: Integer;
   cand: string;
+  lit6: TDnsIpv6;
 begin
   count := 0;
+
+  { an IPv6 literal needs no network }
+  if DnsParseIpv6(name, 1, Length(name), lit6) then
+  begin
+    for j := 0 to 15 do ips[0][j] := lit6[j];
+    count := 1;
+    DnsResolveHost6 := 0;
+    Exit;
+  end;
+
+  { "files" first — an /etc/hosts IPv6 entry wins over any nameserver. }
+  rc := ReadFileText(PChar('/etc/hosts'), hostsText, 65536);
+  if DnsLookupHosts6(hostsText, name, lit6) then
+  begin
+    for j := 0 to 15 do ips[0][j] := lit6[j];
+    count := 1;
+    DnsResolveHost6 := 0;
+    Exit;
+  end;
+
   rc := ReadFileText(PChar('/etc/resolv.conf'), resolvText, 8192);
 
   nsCount := 0;

@@ -70,9 +70,9 @@ function DnsQueryAAAAAsync(nsHost: LongWord; nsPort: Integer; const name: string
 function DnsQueryAAAAListAsync(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
   const name: string; var ips: TDnsIpv6Array; var count: Integer; timeoutMs: Integer): Integer;
 
-{ Async AAAA sibling of dns.DnsResolveHost6: resolv.conf nameservers + glibc
-  search/ndots candidates. /etc/hosts IPv6 lines and AAAA CNAME chasing are not
-  consulted yet (same limits as the sync facade). }
+{ Async AAAA sibling of dns.DnsResolveHost6: IPv6-literal shortcut, /etc/hosts
+  IPv6 lines, then resolv.conf nameservers + glibc search/ndots candidates.
+  AAAA CNAME chasing is not applied yet (same limit as the sync facade). }
 function DnsResolveHost6Async(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 
 { Cached A query for an exact name against the nameserver list. Consults `c` at
@@ -442,14 +442,35 @@ end;
 
 function DnsResolveHost6Async(const name: string; var ips: TDnsIpv6Array; var count: Integer): Integer;
 var
-  resolvText: string;
+  resolvText, hostsText: string;
   ns: TDnsIpv4Array;
   localIps: TDnsIpv6Array;
   search: TDnsSearchArray;
   nsCount, searchCount, ndots, localCount, rc, i, j, idx: Integer;
   cand: string;
+  lit6: TDnsIpv6;
 begin
   count := 0;
+
+  { an IPv6 literal needs no network }
+  if DnsParseIpv6(name, 1, Length(name), lit6) then
+  begin
+    for j := 0 to 15 do ips[0][j] := lit6[j];
+    count := 1;
+    Result := 0;
+    Exit;
+  end;
+
+  { "files" first — an /etc/hosts IPv6 entry wins over any nameserver. }
+  rc := ReadFileText(PChar('/etc/hosts'), hostsText, 65536);
+  if DnsLookupHosts6(hostsText, name, lit6) then
+  begin
+    for j := 0 to 15 do ips[0][j] := lit6[j];
+    count := 1;
+    Result := 0;
+    Exit;
+  end;
+
   rc := ReadFileText(PChar('/etc/resolv.conf'), resolvText, 8192);
   nsCount := 0;
   searchCount := 0;

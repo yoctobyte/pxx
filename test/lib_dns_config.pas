@@ -7,6 +7,7 @@ uses dns_wire_core, dns_config;
 
 var
   ip: LongWord;
+  ip6: TDnsIpv6;
   ns: TDnsIpv4Array;
   search: TDnsSearchArray;
   count, searchCount, ndots, i: Integer;
@@ -15,6 +16,23 @@ var
 procedure Show(const tag: string; pass: Boolean);
 begin
   if pass then writeln(tag, '=ok') else writeln(tag, '=bad');
+end;
+
+{ ip6 equals the 8 given 16-bit groups? }
+function G6(const a: TDnsIpv6; g0, g1, g2, g3, g4, g5, g6v, g7: Integer): Boolean;
+var
+  g: array[0..7] of Integer;
+  k: Integer;
+begin
+  g[0] := g0; g[1] := g1; g[2] := g2; g[3] := g3;
+  g[4] := g4; g[5] := g5; g[6] := g6v; g[7] := g7;
+  G6 := True;
+  for k := 0 to 7 do
+    if (Integer(a[k * 2]) shl 8) or Integer(a[k * 2 + 1]) <> g[k] then
+    begin
+      G6 := False;
+      Exit;
+    end;
 end;
 
 begin
@@ -87,4 +105,36 @@ begin
   { trailing dot = absolute, exactly one candidate }
   Show('c-root0', DnsQueryCandidate('a.b.', search, searchCount, ndots, 0, cand) and (cand = 'a.b'));
   Show('c-root1', not DnsQueryCandidate('a.b.', search, searchCount, ndots, 1, cand));
+
+  { ---- IPv6 literal parsing ---- }
+  Show('ip6-full', DnsParseIpv6('2001:0db8:0000:0000:0000:0000:0000:0001', 1, 39, ip6)
+    and G6(ip6, $2001, $0DB8, 0, 0, 0, 0, 0, 1));
+  Show('ip6-comp', DnsParseIpv6('2001:db8::1', 1, 11, ip6)
+    and G6(ip6, $2001, $0DB8, 0, 0, 0, 0, 0, 1));
+  Show('ip6-loop', DnsParseIpv6('::1', 1, 3, ip6) and G6(ip6, 0, 0, 0, 0, 0, 0, 0, 1));
+  Show('ip6-any', DnsParseIpv6('::', 1, 2, ip6) and G6(ip6, 0, 0, 0, 0, 0, 0, 0, 0));
+  Show('ip6-tail', DnsParseIpv6('1:2:3:4:5:6::', 1, 13, ip6) and G6(ip6, 1, 2, 3, 4, 5, 6, 0, 0));
+  Show('ip6-v4', DnsParseIpv6('::ffff:192.168.1.10', 1, 19, ip6)
+    and G6(ip6, 0, 0, 0, 0, 0, $FFFF, $C0A8, $010A));
+  Show('ip6-caps', DnsParseIpv6('FE80::AbCd', 1, 10, ip6)
+    and G6(ip6, $FE80, 0, 0, 0, 0, 0, 0, $ABCD));
+  Show('ip6-badgap', not DnsParseIpv6('1::2::3', 1, 7, ip6));
+  Show('ip6-badlen', not DnsParseIpv6('1:2:3:4:5:6:7', 1, 13, ip6));
+  Show('ip6-badlong', not DnsParseIpv6('1:2:3:4:5:6:7:8:9', 1, 17, ip6));
+  Show('ip6-badgrp', not DnsParseIpv6('12345::1', 1, 8, ip6));
+  Show('ip6-badzone', not DnsParseIpv6('fe80::1%eth0', 1, 12, ip6));
+  Show('ip6-badcolon', not DnsParseIpv6('1:2:3:4:5:6:7:', 1, 14, ip6));
+  Show('ip6-gapfull', not DnsParseIpv6('1:2:3:4:5:6:7:8::', 1, 17, ip6));
+  Show('ip6-notv4', not DnsParseIpv6('1.2.3.4', 1, 7, ip6));
+
+  { ---- /etc/hosts IPv6 lines ---- }
+  hosts := '127.0.0.1 localhost'#10 +
+           '::1 localhost ip6-localhost'#10 +
+           '2001:db8::42 six.example alias6'#10 +
+           '192.168.1.10 myhost myhost.local';
+  Show('h6-loop', DnsLookupHosts6(hosts, 'ip6-localhost', ip6) and G6(ip6, 0, 0, 0, 0, 0, 0, 0, 1));
+  Show('h6-host', DnsLookupHosts6(hosts, 'SIX.example', ip6)
+    and G6(ip6, $2001, $0DB8, 0, 0, 0, 0, 0, $42));
+  Show('h6-skip4', not DnsLookupHosts6(hosts, 'myhost', ip6));
+  Show('h6-miss', not DnsLookupHosts6(hosts, 'nope', ip6));
 end.
