@@ -8,12 +8,11 @@ unit vecmath;
   feature-pascal-operator-decl-fpc-compat):
   - Operator overload dispatch keys on the LEFT operand's record type, ONE
     overload per operator per type. So per vec type: `+ - ` are vec op vec,
-    `* /` are vec op SCALAR; componentwise product is VMul2/3/4. For
-    matrices `*` is mat*mat; matrix-vector product is MulMV3/MulMV4.
+    `* /` are vec op SCALAR; componentwise product is VMul. For
+    matrices `*` is mat*mat; matrix-vector product is MulMV.
     scalar*vec (scalar on the left) is not registrable — write v * s.
-  - Overload resolution does not discriminate record types yet, so function
-    names are suffixed by dimension (Dot2/Dot3/Dot4, ...); de-suffix when
-    that bug is fixed. }
+  - Functions overload cleanly on record identity (Dot/Norm/Lerp/... for
+    TVec2/3/4) since bug-overload-resolution-record-identity was fixed. }
 
 interface
 
@@ -55,7 +54,7 @@ operator * (a: TVec4; s: Double) r: TVec4;
 operator / (a: TVec4; s: Double) r: TVec4;
 operator = (a, b: TVec4) eq: Boolean;
 
-{ matrix operators: mat*mat; use MulMV3/MulMV4 for mat*vec }
+{ matrix operators: mat*mat; use MulMV for mat*vec }
 operator + (a, b: TMat3) r: TMat3;
 operator - (a, b: TMat3) r: TMat3;
 operator * (a, b: TMat3) r: TMat3;
@@ -72,25 +71,25 @@ function Vec3(ax, ay, az: Double): TVec3;
 function Vec4(ax, ay, az, aw: Double): TVec4;
 
 { vector functions }
-function Dot2(const a, b: TVec2): Double;
-function Dot3(const a, b: TVec3): Double;
-function Dot4(const a, b: TVec4): Double;
+function Dot(const a, b: TVec2): Double;
+function Dot(const a, b: TVec3): Double;
+function Dot(const a, b: TVec4): Double;
 function Cross(const a, b: TVec3): TVec3;
-function VMul2(const a, b: TVec2): TVec2;    { componentwise product }
-function VMul3(const a, b: TVec3): TVec3;
-function VMul4(const a, b: TVec4): TVec4;
-function NormSq2(const a: TVec2): Double;
-function NormSq3(const a: TVec3): Double;
-function NormSq4(const a: TVec4): Double;
-function Norm2(const a: TVec2): Double;
-function Norm3(const a: TVec3): Double;
-function Norm4(const a: TVec4): Double;
-function Normalize2(const a: TVec2): TVec2;
-function Normalize3(const a: TVec3): TVec3;
-function Normalize4(const a: TVec4): TVec4;
-function Lerp2(const a, b: TVec2; t: Double): TVec2;
-function Lerp3(const a, b: TVec3; t: Double): TVec3;
-function Lerp4(const a, b: TVec4; t: Double): TVec4;
+function VMul(const a, b: TVec2): TVec2;    { componentwise product }
+function VMul(const a, b: TVec3): TVec3;
+function VMul(const a, b: TVec4): TVec4;
+function NormSq(const a: TVec2): Double;
+function NormSq(const a: TVec3): Double;
+function NormSq(const a: TVec4): Double;
+function Norm(const a: TVec2): Double;
+function Norm(const a: TVec3): Double;
+function Norm(const a: TVec4): Double;
+function Normalize(const a: TVec2): TVec2;
+function Normalize(const a: TVec3): TVec3;
+function Normalize(const a: TVec4): TVec4;
+function Lerp(const a, b: TVec2; t: Double): TVec2;
+function Lerp(const a, b: TVec3; t: Double): TVec3;
+function Lerp(const a, b: TVec4; t: Double): TVec4;
 
 { matrix functions }
 function Mat3Identity: TMat3;
@@ -102,12 +101,12 @@ function Mat3RotateZ(angle: Double): TMat3;
 function Mat4RotateX(angle: Double): TMat4;
 function Mat4RotateY(angle: Double): TMat4;
 function Mat4RotateZ(angle: Double): TMat4;
-function Transpose3(const a: TMat3): TMat3;
-function Transpose4(const a: TMat4): TMat4;
-function Det3(const a: TMat3): Double;
-function Det4(const a: TMat4): Double;
-function MulMV3(const a: TMat3; const v: TVec3): TVec3;
-function MulMV4(const a: TMat4; const v: TVec4): TVec4;
+function Transpose(const a: TMat3): TMat3;
+function Transpose(const a: TMat4): TMat4;
+function Det(const a: TMat3): Double;
+function Det(const a: TMat4): Double;
+function MulMV(const a: TMat3; const v: TVec3): TVec3;
+function MulMV(const a: TMat4; const v: TVec4): TVec4;
 
 implementation
 
@@ -305,17 +304,17 @@ end;
 
 { ---- vector functions ---- }
 
-function Dot2(const a, b: TVec2): Double;
+function Dot(const a, b: TVec2): Double;
 begin
   Result := a.x * b.x + a.y * b.y;
 end;
 
-function Dot3(const a, b: TVec3): Double;
+function Dot(const a, b: TVec3): Double;
 begin
   Result := a.x * b.x + a.y * b.y + a.z * b.z;
 end;
 
-function Dot4(const a, b: TVec4): Double;
+function Dot(const a, b: TVec4): Double;
 begin
   Result := a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 end;
@@ -327,87 +326,87 @@ begin
   Result.z := a.x * b.y - a.y * b.x;
 end;
 
-function VMul2(const a, b: TVec2): TVec2;
+function VMul(const a, b: TVec2): TVec2;
 begin
   Result.x := a.x * b.x; Result.y := a.y * b.y;
 end;
 
-function VMul3(const a, b: TVec3): TVec3;
+function VMul(const a, b: TVec3): TVec3;
 begin
   Result.x := a.x * b.x; Result.y := a.y * b.y; Result.z := a.z * b.z;
 end;
 
-function VMul4(const a, b: TVec4): TVec4;
+function VMul(const a, b: TVec4): TVec4;
 begin
   Result.x := a.x * b.x; Result.y := a.y * b.y;
   Result.z := a.z * b.z; Result.w := a.w * b.w;
 end;
 
-function NormSq2(const a: TVec2): Double;
+function NormSq(const a: TVec2): Double;
 begin
   Result := a.x * a.x + a.y * a.y;
 end;
 
-function NormSq3(const a: TVec3): Double;
+function NormSq(const a: TVec3): Double;
 begin
   Result := a.x * a.x + a.y * a.y + a.z * a.z;
 end;
 
-function NormSq4(const a: TVec4): Double;
+function NormSq(const a: TVec4): Double;
 begin
   Result := a.x * a.x + a.y * a.y + a.z * a.z + a.w * a.w;
 end;
 
-function Norm2(const a: TVec2): Double;
+function Norm(const a: TVec2): Double;
 begin
-  Result := Sqrt(NormSq2(a));
+  Result := Sqrt(NormSq(a));
 end;
 
-function Norm3(const a: TVec3): Double;
+function Norm(const a: TVec3): Double;
 begin
-  Result := Sqrt(NormSq3(a));
+  Result := Sqrt(NormSq(a));
 end;
 
-function Norm4(const a: TVec4): Double;
+function Norm(const a: TVec4): Double;
 begin
-  Result := Sqrt(NormSq4(a));
+  Result := Sqrt(NormSq(a));
 end;
 
-function Normalize2(const a: TVec2): TVec2;
+function Normalize(const a: TVec2): TVec2;
 var n: Double;
 begin
-  n := Norm2(a);
+  n := Norm(a);
   if n = 0.0 then Result := a
   else Result := a / n;
 end;
 
-function Normalize3(const a: TVec3): TVec3;
+function Normalize(const a: TVec3): TVec3;
 var n: Double;
 begin
-  n := Norm3(a);
+  n := Norm(a);
   if n = 0.0 then Result := a
   else Result := a / n;
 end;
 
-function Normalize4(const a: TVec4): TVec4;
+function Normalize(const a: TVec4): TVec4;
 var n: Double;
 begin
-  n := Norm4(a);
+  n := Norm(a);
   if n = 0.0 then Result := a
   else Result := a / n;
 end;
 
-function Lerp2(const a, b: TVec2; t: Double): TVec2;
+function Lerp(const a, b: TVec2; t: Double): TVec2;
 begin
   Result := a + (b - a) * t;
 end;
 
-function Lerp3(const a, b: TVec3; t: Double): TVec3;
+function Lerp(const a, b: TVec3; t: Double): TVec3;
 begin
   Result := a + (b - a) * t;
 end;
 
-function Lerp4(const a, b: TVec4; t: Double): TVec4;
+function Lerp(const a, b: TVec4; t: Double): TVec4;
 begin
   Result := a + (b - a) * t;
 end;
@@ -483,7 +482,7 @@ begin
   Result.m[4] := s; Result.m[5] := c;
 end;
 
-function Transpose3(const a: TMat3): TMat3;
+function Transpose(const a: TMat3): TMat3;
 var row, col: Integer;
 begin
   for row := 0 to 2 do
@@ -491,7 +490,7 @@ begin
       Result.m[col * 3 + row] := a.m[row * 3 + col];
 end;
 
-function Transpose4(const a: TMat4): TMat4;
+function Transpose(const a: TMat4): TMat4;
 var row, col: Integer;
 begin
   for row := 0 to 3 do
@@ -499,14 +498,14 @@ begin
       Result.m[col * 4 + row] := a.m[row * 4 + col];
 end;
 
-function Det3(const a: TMat3): Double;
+function Det(const a: TMat3): Double;
 begin
   Result := a.m[0] * (a.m[4] * a.m[8] - a.m[5] * a.m[7])
           - a.m[1] * (a.m[3] * a.m[8] - a.m[5] * a.m[6])
           + a.m[2] * (a.m[3] * a.m[7] - a.m[4] * a.m[6]);
 end;
 
-function Det4(const a: TMat4): Double;
+function Det(const a: TMat4): Double;
 { Laplace expansion along row 0 over 3x3 minors. }
   function Minor(r0, r1, r2, c0, c1, c2: Integer): Double;
   begin
@@ -521,14 +520,14 @@ begin
           - a.m[3] * Minor(1, 2, 3, 0, 1, 2);
 end;
 
-function MulMV3(const a: TMat3; const v: TVec3): TVec3;
+function MulMV(const a: TMat3; const v: TVec3): TVec3;
 begin
   Result.x := a.m[0] * v.x + a.m[1] * v.y + a.m[2] * v.z;
   Result.y := a.m[3] * v.x + a.m[4] * v.y + a.m[5] * v.z;
   Result.z := a.m[6] * v.x + a.m[7] * v.y + a.m[8] * v.z;
 end;
 
-function MulMV4(const a: TMat4; const v: TVec4): TVec4;
+function MulMV(const a: TMat4; const v: TVec4): TVec4;
 begin
   Result.x := a.m[0] * v.x + a.m[1] * v.y + a.m[2] * v.z + a.m[3] * v.w;
   Result.y := a.m[4] * v.x + a.m[5] * v.y + a.m[6] * v.z + a.m[7] * v.w;
