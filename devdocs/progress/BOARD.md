@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (88)
+## backlog (89)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ _none_
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-testmgr-enroll-c-cross-conformance | T | 45 | feature | testmgr: enroll the C cross-conformance matrix + lua-cross in the full tier | — |
+| feature-testmgr-memory-cap | T | 65 | feature | testmgr: cap its own memory in a cgroup scope + swap-aware admission | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -825,6 +826,7 @@ _none_
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
+- [p 65] [T] feature-testmgr-memory-cap
 - [p 65] [A] feature-zero-init-contract
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
