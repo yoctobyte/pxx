@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T14:07:03Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "15f50987daf4bc91d66f2a1383e88ab5100b145e",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T14:13:40Z",
    "fixed": [],
    "new_red": [],
@@ -448,6 +440,14 @@
    "new_red": [],
    "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T22:09:09Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "76afad24abbda7ce21050754fbe88a74160e0fae",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1377,6 +1377,7 @@
   "test-core#src:test/test_rtti.pas": "pass",
   "test-core#src:test/test_rtti_emit.pas@1": "pass",
   "test-core#src:test/test_rtti_emit.pas@2": "pass",
+  "test-core#src:test/test_rtti_method_reflection_b254.pas": "pass",
   "test-core#src:test/test_rtti_reg.pas": "pass",
   "test-core#src:test/test_rust_advanced.rs": "pass",
   "test-core#src:test/test_rust_assoc_fns.rs": "pass",
@@ -1666,11 +1667,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T22:01:32Z",
-  "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
-  "tier": "opt",
+  "date": "2026-07-12T22:09:09Z",
+  "sha": "76afad24abbda7ce21050754fbe88a74160e0fae",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 99.6
+  "wall": 66.4
  },
  "last_bench": {
   "conf_rows": 550,
