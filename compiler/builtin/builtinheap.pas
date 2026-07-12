@@ -135,10 +135,29 @@ const
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
 
+const
+  { Segregated free lists. Every allocation is already rounded up to a multiple of
+    8, and the header at [p-8] stores that exact rounded size — so a freed block's
+    size class is recoverable on free, and a bin holds blocks of EXACTLY one size.
+
+    That is what makes alloc O(1): pop the head of bin[size], no walk, no
+    size-mismatch reuse (first-fit used to hand a 200-byte block to a 16-byte
+    request and never split it). Blocks of the same size also end up clustered,
+    so locality comes for free — no profiling needed, the size is known at the
+    call site.
+
+    Sizes above the cap keep the old single first-fit list, whose walk is now over
+    the RARE big blocks only. 64 bins x one word = 512 bytes of BSS, which the
+    ESP static-arena build can afford too. }
+  HEAP_BIN_MAX   = 512;                     { largest size with its own bin }
+  HEAP_BIN_COUNT = HEAP_BIN_MAX div 8;      { 64: classes 8,16,...,512 }
+
 var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
-  FreeList : Int64;   { head of the free list (payload address), 0 = empty }
+  FreeList : Int64;   { head of the LARGE (> HEAP_BIN_MAX) free list, 0 = empty }
+  { bin[i] holds blocks of exactly (i+1)*8 bytes. BSS-zeroed = all empty. }
+  FreeBins : array[0..HEAP_BIN_COUNT-1] of Int64;
 {$ifdef PXX_TS_SOFTLOCK}
   { --threadsafe on targets without x86-64's hand-emitted lock blobs (i386):
     a userspace spinlock guarding the allocator state (FreeList/HeapPtr/
@@ -216,6 +235,7 @@ end;
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
+  bin: Integer;
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore: Int64;
 {$endif}
@@ -228,26 +248,28 @@ begin
   if size <= 0 then size := 8;
   size := ((size + 7) div 8) * 8;          { round up to 8 }
 
-  { First-fit reuse: free-list nodes are payload addresses; the size header is
-    at [cur-8] and the next link at [cur]. A reused block holds stale bytes, so
-    zero the requested span — callers (managed refcount/length headers, zeroed
-    dynarray/instance slots) assume fresh memory is zero, like a bump block off
-    a fresh mmap page. }
-  prev := 0;
-  cur := FreeList;
-  while cur <> 0 do
+  { Free-list nodes are payload addresses; the size header is at [cur-8] and the
+    next link is parked in the payload at [cur]. A reused block holds stale bytes,
+    so zero the span before handing it back — callers (managed refcount/length
+    headers, zeroed dynarray/instance slots) assume fresh memory is zero, exactly
+    like a bump block off a fresh mmap page. }
+
+  { O(1) reuse for the common sizes: bin[class] holds blocks of EXACTLY this size,
+    so the head is always an exact fit and there is nothing to walk. }
+  if size <= HEAP_BIN_MAX then
   begin
-    if PWord(cur - 8)^ >= size then
+    bin := Integer(size div 8) - 1;
+    cur := FreeBins[bin];
+    if cur <> 0 then
     begin
-      if prev = 0 then FreeList := PWord(cur)^
-      else PWord(prev)^ := PWord(cur)^;
+      FreeBins[bin] := PWord(cur)^;        { pop }
       i := 0;
       while i < size do
       begin
         PWord(cur + i)^ := 0;
-        i := i + SizeOf(NativeInt);      { PWord writes one machine word: 8 on
-                                           64-bit, 4 on 32-bit — must match the
-                                           step or half the span is skipped }
+        i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
+                                             64-bit, 4 on 32-bit — must match the
+                                             step or half the span is skipped }
       end;
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
@@ -255,8 +277,34 @@ begin
 {$endif}
       Exit;
     end;
-    prev := cur;
-    cur := PWord(cur)^;
+  end
+  else
+  begin
+    { Large blocks keep the old first-fit list. The walk survives only here, where
+      the blocks are rare. }
+    prev := 0;
+    cur := FreeList;
+    while cur <> 0 do
+    begin
+      if PWord(cur - 8)^ >= size then
+      begin
+        if prev = 0 then FreeList := PWord(cur)^
+        else PWord(prev)^ := PWord(cur)^;
+        i := 0;
+        while i < size do
+        begin
+          PWord(cur + i)^ := 0;
+          i := i + SizeOf(NativeInt);
+        end;
+        Result := Pointer(cur);
+{$ifdef PXX_TS_SOFTLOCK}
+        PXXHeapSpin := 0;
+{$endif}
+        Exit;
+      end;
+      prev := cur;
+      cur := PWord(cur)^;
+    end;
   end;
 
   { Bump from the current arena, mapping a new one when it can't fit.
@@ -290,7 +338,8 @@ end;
 
 procedure PXXFree(p: Pointer);
 var
-  addr: Int64;
+  addr, sz: Int64;
+  bin: Integer;
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore: Int64;
 {$endif}
@@ -302,8 +351,21 @@ begin
   while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
     tsIgnore := tsIgnore + 1;
 {$endif}
-  PWord(addr)^ := FreeList;                 { next link in the payload }
-  FreeList := addr;
+  { The header carries the block's exact (already 8-rounded) size, so its size
+    class is recoverable here — that is what lets alloc skip the walk entirely.
+    Both pushes are O(1); the next link lives in the payload at [addr]. }
+  sz := PWord(addr - 8)^;
+  if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
+  begin
+    bin := Integer(sz div 8) - 1;
+    PWord(addr)^ := FreeBins[bin];
+    FreeBins[bin] := addr;
+  end
+  else
+  begin
+    PWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
+    FreeList := addr;
+  end;
 {$ifdef PXX_TS_SOFTLOCK}
   PXXHeapSpin := 0;
 {$endif}

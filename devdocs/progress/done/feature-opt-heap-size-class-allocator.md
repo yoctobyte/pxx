@@ -7,9 +7,9 @@ prio: 52  # auto — real alloc-path win for alloc-heavy programs; independent o
 - **Type:** feature (runtime — allocator) — **Track O** (Optimization lane;
   file-ownership **Track A** — `compiler/builtin/builtinheap.pas` is core runtime
   the compiler itself links, so it carries A's self-host + cross gate).
-- **Status:** backlog — filed 2026-07-10.
+- **Status:** working
 - **Opened:** 2026-07-10 (optimization campaign, heap-locality discussion).
-- **Owner:** —
+- **Owner:** agent-O-heap
 
 ## Problem — one global first-fit free list
 
@@ -85,3 +85,37 @@ green (sqlite `:memory:` + file-VFS, lua), and the 5 libc-free cross targets
 [[feature-opt-o3-register-pressure]] (sibling optimization ticket, orthogonal —
 that one is stack/codegen, this is heap/runtime) · umbrella
 [[feature-optimization-levels]].
+
+## Landed 2026-07-13
+
+Implemented as specified: `FreeBins[0..63]`, one bin per exact 8-byte class up to
+`HEAP_BIN_MAX = 512`. Alloc pops `bin[size div 8 - 1]` — O(1), exact fit, no walk.
+Free reads the size from the header at `[p-8]` (it is already the rounded size, so
+the class is recoverable) and pushes — O(1). Sizes above the cap keep the old
+single first-fit list, whose walk now only ever covers the rare big blocks. 64 bins
+x one word = 512 bytes of BSS, which the ESP static-arena build affords.
+
+**Measured** (same HEAD, only `builtinheap.pas` differing — two compilers built and
+timed against each other, so this is not confounded by other changes):
+
+| workload | old | new | |
+| --- | ---: | ---: | --- |
+| alloc/free churn (3000 live slots x 300 rounds, sizes spread over the binned range) | 0.16 s | 0.12 s | **1.33x** |
+| compiler self-compile | 3.81 s | 3.57 s | **~6% faster** |
+
+Self-compile is the one that pays the rent — pin time is the stated bottleneck.
+
+### One deliberate behaviour change (contract, not a bug)
+Reuse is now **exact-fit**. First-fit used to hand a freed 128-byte block to a
+64-byte request and never split it: reuse, but at the cost of an O(n) walk AND
+permanent internal fragmentation. Exact-fit wastes nothing and the larger block
+simply waits for a request of its own size — which is the steady state of any real
+workload. `test/test_freemem.pas` asserted the OLD behaviour, so it was rewritten to
+the new contract and extended: exact-fit reuse, no size-mismatch reuse, data intact
+across reuse, and the large (> 512) first-fit path still serving a smaller large
+request.
+
+### Gate
+`make test` green, self-host byte-identical, `testmgr --tier full` 1203/1203 (the
+alloc-heavy sqlite/lua corpora and all cross targets included — good evidence for an
+allocator change).

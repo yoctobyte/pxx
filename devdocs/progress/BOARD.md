@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (93)
+## backlog (92)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -91,7 +91,6 @@ _none_
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -189,7 +188,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (654)
+## done (655)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -704,6 +703,7 @@ _none_
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
+| feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
 | feature-opt-imm-fold-binop | O | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
@@ -893,7 +893,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [C] bug-c-generic-long-vs-int-on-32bit
 - [p 50] [C] bug-c-lshift-promotion-aarch64
 - [p 50] [A] bug-c-struct-byval-varargs-32bit

@@ -2002,7 +2002,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26
-	test "$$(/tmp/test_freemem26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	test "$$(/tmp/test_freemem26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_new_dispose.pas /tmp/test_new_dispose26
 	test "$$(/tmp/test_new_dispose26)" = "$$(printf '1234\n16\n1')"
 	./$(COMPILER) test/test_reallocmem.pas /tmp/test_reallocmem26
