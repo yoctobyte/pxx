@@ -13837,7 +13837,18 @@ begin
       else
       begin
         v := ConstEval;
-        AddConst(name, tyInteger, v);
+        { Widen to Int64 when the value does not fit a 32-bit Integer. The value
+          itself always survived (ConstVal is an Int64); it was the declared TYPE
+          that collapsed, so the 32-bit backends materialized only the low word
+          and sign-extended it — `const K = UInt64($FFFFFFFF00000001)` loaded as
+          1 on i386/arm32/riscv32 while being right on x86-64, where every
+          register is 64 bits wide and the truncation could not show
+          (bug-64bit-named-const-truncated-32bit-targets). Small constants stay
+          tyInteger so nothing else moves. }
+        if (v > 2147483647) or (v < -2147483648) then
+          AddConst(name, tyInt64, v)
+        else
+          AddConst(name, tyInteger, v);
       end;
     end;
     SkipHintDirectives;   { const K = v deprecated; }

@@ -315,6 +315,10 @@ test-threads: $(COMPILER)
 	# placeholder -> 1000-element overrun) + N-D whole-array assign
 	./$(COMPILER) test/test_array_var_param_assign.pas /tmp/test_avpa26
 	test "$$(/tmp/test_avpa26 | tail -1)" = "ARRAY VAR PARAM ASSIGN OK"
+	# 64-bit named constants (were declared tyInteger -> truncated on 32-bit
+	# targets). Only meaningful cross; x86-64 passed even when broken.
+	./$(COMPILER) test/test_const64.pas /tmp/test_const64_26
+	test "$$(/tmp/test_const64_26 | tail -1)" = "CONST64 OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/test_atomic64_26
 	test "$$(/tmp/test_atomic64_26 | tail -1)" = "ATOMIC64 OK"
@@ -3983,6 +3987,10 @@ lib-test: pxx-stable-check
 	# fingerprint is identical on every target iff the two agree bit for bit.
 	$(PXX_STABLE) test/lib_wideint.pas /tmp/lib_wideint
 	test "$$(/tmp/lib_wideint)" = "$$(printf 'sweep=16730136239701361245\nWIDEINT OK')"
+	# P-256 field arithmetic (Montgomery/CIOS, 4x64 saturated limbs) checked
+	# differentially against bignum's TBigInt mod-p arithmetic
+	$(PXX_STABLE) -Fulib/rtl test/lib_p256field.pas /tmp/lib_p256field
+	test "$$(/tmp/lib_p256field | tail -1)" = "P256FIELD OK"
 	$(PXX_STABLE) test/lib_bignum_ops.pas /tmp/lib_bignum_ops
 	test "$$(/tmp/lib_bignum_ops)" = "$$(printf 'chain=999999999999999999940000000000000001234499999999999999925930\ndiv=10000000000000000000100000000000000012352\nmod=12394\nidentity=yes\nf50=30414093201713378043612608166064768844377641568960512000000000000\np512=13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084096\nnegsub=-999999999999999999999999987655\nbackagain=12345\nzero=yes\nlt=TRUE TRUE FALSE\nle=TRUE TRUE FALSE\ngt=TRUE TRUE FALSE\nge=TRUE TRUE FALSE\neq=TRUE FALSE\nne=TRUE FALSE\nnegdiv=-2 -1\nnegidentity=yes')"
 	$(PXX_STABLE) test/lib_vecmath.pas /tmp/lib_vecmath
@@ -4229,7 +4237,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + wideint + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
