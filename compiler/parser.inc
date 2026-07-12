@@ -1928,6 +1928,16 @@ begin
   end;
 end;
 
+function IsVarArgLvalueCast(n: Integer): Boolean;
+{ FPC "variable typecast" as a var/out argument: `Cardinal(FTokenLength)` —
+  an AN_PTR_CAST over a plain lvalue. The address is the operand's
+  (IRLowerAddress peels the cast). Pascal Script's ParseToken call. }
+begin
+  Result := (n >= 0) and (ASTKind[n] = AN_PTR_CAST) and (ASTLeft[n] >= 0) and
+            ((ASTKind[ASTLeft[n]] = AN_IDENT) or (ASTKind[ASTLeft[n]] = AN_FIELD) or
+             (ASTKind[ASTLeft[n]] = AN_INDEX) or (ASTKind[ASTLeft[n]] = AN_DEREF));
+end;
+
 function ByRefArgStartsExpression: Boolean;
 { True when the next by-ref/array argument cannot be a bare variable lvalue:
   not an ident at all, or an ident that names no symbol and is followed by
@@ -7545,7 +7555,7 @@ begin
           if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
           begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
-                    (ASTKind[exprNode] = AN_DEREF) or
+                    (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
                     (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
               { A record param passed by-ref may bind a non-lvalue temporary (e.g.
@@ -7558,7 +7568,7 @@ begin
               if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
-                Error('by-reference argument must be a variable');
+  Error('by-reference argument must be a variable');
             end;
           end;
           currArg := ASTRight[currArg];
@@ -9238,7 +9248,7 @@ begin
   ASTTk[freeCall] := Ord(tyInteger);
 
   thenSeq := freeCall;
-  if FindUMeth(ci, 'Destroy') >= 0 then
+  if (ci >= 0) and (FindUMeth(ci, 'Destroy') >= 0) then
     thenSeq := chainSeq(GenMakeMethodCall0(CloneAST(objNode), ci, 'Destroy'), chainSeq(freeCall, -1));
 
   { if expr <> nil then thenSeq }
@@ -11384,15 +11394,26 @@ begin
           x := x +/- step. }
         if CaseEqual(name, 'Inc') then i := Ord(tkInc) else i := Ord(tkDec);
         Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkIdent then Error('expected variable');
-        argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-
-        { Parse the FULL target lvalue (consuming any .field / [i] / ^ selectors)
-          BEFORE the optional step and ')'. Inc/Dec accept any assignable lvalue,
-          exactly like a `var` parameter — a bare-symbol-only parse choked on
-          `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1 (an implicit-Self
-          field): ParseLValueAST resolves it (and still errors on a true unknown). }
-        valNode := ParseLValueAST(argIdx, identTokIdx);
+        { A cast-deref/typecast target `Dec(Byte(p^), 32)` / `Dec(Integer(x))`
+          (Pascal Script) — a type keyword (Byte/Integer/...) or a
+          not-yet-a-symbol ident followed by '(' starts a cast expression
+          whose value is an lvalue; ParseExpr yields the addressable node. }
+        if (CurTok.Kind in [tkInteger_T, tkLongWord_T, tkBoolean_T, tkChar_T]) or
+           ByRefArgStartsExpression then
+        begin
+          ParseExpr; valNode := CurASTNode;
+        end
+        else if CurTok.Kind <> tkIdent then Error('expected variable')
+        else
+        begin
+          argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+          { Parse the FULL target lvalue (consuming any .field / [i] / ^
+            selectors) BEFORE the optional step and ')'. Inc/Dec accept any
+            assignable lvalue, exactly like a `var` parameter — a bare-symbol
+            parse choked on `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1
+            (implicit-Self field): ParseLValueAST resolves it. }
+          valNode := ParseLValueAST(argIdx, identTokIdx);
+        end;
 
         if Eat(tkComma) then
         begin
@@ -12013,7 +12034,7 @@ begin
                (ASTKind[exprNode] <> AN_VARREC_ARRAY) and (ASTKind[exprNode] <> AN_ARRAY_CTOR) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
-                      (ASTKind[exprNode] = AN_DEREF)) then
+                      (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode)) then
               begin
                 { A `const` OR plain by-value record param accepts a non-lvalue
                   temporary (>8-byte records are by-ref only for ABI; the callee
@@ -12107,6 +12128,28 @@ begin
               (and [i]). Mirrors the read path (AN_CLASS_CAST); the field offset
               resolves against TClass via ResolveNodeRec. Precedes the
               pointer-alias cast below, which would mis-handle a class name. }
+            if CaseEqual(name, 'TObject') and (FindUClass(name) < 0) and
+               (Tokens[TokPos].Kind = tkLParen) then
+            begin
+              { `TObject(expr).Free;` — cast to the implicit root as a
+                statement (Pascal Script's TPSList.Clear). Retag + the
+                builtin Free desugar (no Destroy — the root has none). }
+              Next; Expect(tkLParen, '(');
+              ParseExpr;
+              Expect(tkRParen, ')');
+              ASTTk[CurASTNode] := Ord(tyClass);
+              if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+                 (Tokens[TokPos].Kind = tkIdent) and
+                 CaseEqual(GetTokenStr(TokPos), 'Free') and
+                 (Tokens[TokPos+1].Kind in [tkSemicolon, tkEnd, tkElse]) then
+              begin
+                Next; Next;   { '.', 'Free' }
+                node := GenMakeFreeObjectExpr(CurASTNode, -1);
+                Result := node; Exit;
+              end
+              else
+                Error('TObject(...) as a statement supports only .Free');
+            end;
             if IsClassType(name) and (Tokens[TokPos].Kind = tkLParen) then
             begin
               smci := FindUClass(name);

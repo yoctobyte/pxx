@@ -438,6 +438,12 @@ test-core: $(COMPILER)
 	# writeln of ShortString params (bug-pascal-writeln-shortstring-param)
 	./$(COMPILER) --mimic-fpc test/test_writeln_shortstring_param.pas /tmp/test_wsp26
 	test "$$(/tmp/test_wsp26)" = "$$(printf 'got=HELLO len=5\nm=WORLD')"
+	# FPC variable typecast var args + type-keyword Dec targets
+	./$(COMPILER) --mimic-fpc test/test_varcast_and_dec.pas /tmp/test_vcd26
+	test "$$(/tmp/test_vcd26)" = "$$(printf '42\n65')"
+	# TObject(expr).Free statement
+	./$(COMPILER) --mimic-fpc test/test_tobject_cast_free.pas /tmp/test_tocf26
+	test "$$(/tmp/test_tocf26)" = "ok"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

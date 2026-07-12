@@ -254,6 +254,11 @@ function DeleteFile(const FileName: string): Boolean;
 function GetTempDir: string;
 function GetTempFileName(const Dir, Prefix: string): string;
 
+{ Free an object reference and nil it (FPC SysUtils). Frees the instance
+  memory; a user Destroy is NOT dispatched (matches the builtin root Free —
+  PXX has no RTTI destructor dispatch from an untyped reference yet). }
+procedure FreeAndNil(var Obj: TObject);
+
 type
   TTextLineBreakStyle = (tlbsLF, tlbsCRLF, tlbsCR);
 
@@ -1364,6 +1369,15 @@ end;
 function GetTempDir: string;
 begin
   Result := '/tmp/';
+end;
+
+procedure FreeAndNil(var Obj: TObject);
+begin
+  if Pointer(Obj) <> nil then
+  begin
+    FreeMem(Pointer(Obj));
+    Obj := nil;
+  end;
 end;
 
 function GetTempFileName(const Dir, Prefix: string): string;

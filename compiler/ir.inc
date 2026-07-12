@@ -707,6 +707,17 @@ begin
   end;
   { address-of a compound literal: emit its init statements, then yield the
     temp's address (the temp IS an lvalue). }
+  { A same-size lvalue TYPECAST as a var argument (FPC's "variable typecast":
+    `ParseToken(..., Cardinal(FTokenLength), ...)` in Pascal Script) — the
+    address is the underlying lvalue's; the cast changes only the static
+    view. Peel the cast and recurse. }
+  if (ASTKind[node] = AN_PTR_CAST) and (ASTLeft[node] >= 0) and
+     ((ASTKind[ASTLeft[node]] = AN_IDENT) or (ASTKind[ASTLeft[node]] = AN_FIELD) or
+      (ASTKind[ASTLeft[node]] = AN_INDEX) or (ASTKind[ASTLeft[node]] = AN_DEREF)) then
+  begin
+    Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
   if ASTKind[node] = AN_COMPOUND_LITERAL then
   begin
     IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
