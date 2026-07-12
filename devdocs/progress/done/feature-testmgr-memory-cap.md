@@ -95,4 +95,4 @@ anon *is* the refault storm) and installing `earlyoom` as a system-wide
 backstop. Neither belongs in the repo; testmgr must not depend on them.
 
 ## Log
-- 2026-07-12 — resolved, commit HEAD.
+- 2026-07-12 — resolved, commit c7b78389.
