@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T12:55:41Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f030f885b4d69114979eeac6e8c61f933cc6722b",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T13:03:03Z",
    "fixed": [],
    "new_red": [],
@@ -446,6 +438,14 @@
    "new_red": [],
    "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T20:34:12Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2e6af610149fb14ffe532ada83fa1026dfb2df6b",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1072,6 +1072,7 @@
   "test-core#src:test/test_class_methods.pas": "pass",
   "test-core#src:test/test_class_of.pas": "pass",
   "test-core#src:test/test_class_str.pas": "pass",
+  "test-core#src:test/test_class_var_section_b244.pas": "pass",
   "test-core#src:test/test_classref.pas": "pass",
   "test-core#src:test/test_collections.pas": "pass",
   "test-core#src:test/test_comment_directive.pas": "pass",
@@ -1266,6 +1267,7 @@
   "test-core#src:test/test_metaclass_descendant.pas": "pass",
   "test-core#src:test/test_metaclass_getclass.pas": "pass",
   "test-core#src:test/test_methcall.pas": "pass",
+  "test-core#src:test/test_method_default_param_b246.pas": "pass",
   "test-core#src:test/test_method_implicit_field.pas": "pass",
   "test-core#src:test/test_method_named_result.pas": "pass",
   "test-core#src:test/test_method_read_write_unqualified.pas": "pass",
@@ -1410,6 +1412,7 @@
   "test-core#src:test/test_strict_overload.pas": "pass",
   "test-core#src:test/test_string_concat.pas": "pass",
   "test-core#src:test/test_string_copy_intrinsic.pas": "pass",
+  "test-core#src:test/test_string_default_param_b245.pas": "pass",
   "test-core#src:test/test_string_delete_insert.pas": "pass",
   "test-core#src:test/test_string_ordering.pas": "pass",
   "test-core#src:test/test_string_sized.pas": "pass",
@@ -1651,11 +1654,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T19:13:50Z",
-  "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
-  "tier": "opt",
+  "date": "2026-07-12T20:34:12Z",
+  "sha": "2e6af610149fb14ffe532ada83fa1026dfb2df6b",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 83.3
+  "wall": 61.9
  },
  "last_bench": {
   "conf_rows": 550,
