@@ -1531,6 +1531,7 @@ var
   CPExpandedArg24, CPExpandedArg25, CPExpandedArg26, CPExpandedArg27, CPExpandedArg28, CPExpandedArg29, CPExpandedArg30, CPExpandedArg31,
   CPExpandedArg32 : AnsiString;
   PackRecordsVal : Integer;
+  ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -1657,6 +1658,7 @@ var
   LoadFileBuf : array[0..STRING_CAP-1] of Byte;
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
+  TokScopedEnums : array[0..MAX_TOKENS-1] of Boolean;  { {$SCOPEDENUMS} state at each token }
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
   CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
   TokCount   : Integer;
@@ -1921,9 +1923,11 @@ var
   EnumTypeValCount: array[0..MAX_ENUMTYPE-1] of Integer;
   EnumTypeRTTIOff : array[0..MAX_ENUMTYPE-1] of Integer;  { Data[] off, -1 }
   EnumTypeHasHoles: array[0..MAX_ENUMTYPE-1] of Boolean;   { explicit `= N` broke 0..n-1 contiguity — for-in over the type is invalid (FPC) }
+  EnumTypeScoped  : array[0..MAX_ENUMTYPE-1] of Boolean;   { {$SCOPEDENUMS ON}: members visible only as TEnum.member }
   EnumTypeCount   : Integer;
   EnumValNOff     : array[0..MAX_ENUMVAL-1] of Integer;   { value name in TokChars }
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
+  EnumValOrd      : array[0..MAX_ENUMVAL-1] of Integer;   { member ordinal (explicit `= N` honored) }
   EnumValCount    : Integer;
 
   { Class variables (`class var x: T`): one shared global storage slot per class,

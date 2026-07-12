@@ -4727,6 +4727,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
+    seEtid, seOrd: Integer;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -5592,6 +5593,27 @@ begin
         CurASTNode := ParseInheritedCallAST;
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         Exit;
+      end;
+      { `TEnum.member` — scoped-enum member access (also legal on unscoped
+        enums, FPC parity; bug-pascal-scopedenums-ignored). Folds to the
+        member's ordinal. Guarded on the name not being a real symbol so a
+        record var shadowing an enum type name keeps the field path. }
+      if (qUnit < 0) and (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+         (FindSym(name) < 0) then
+      begin
+        seEtid := FindEnumType(name);
+        if (seEtid >= 0) and
+           FindEnumMemberOrd(seEtid, GetTokenStr(TokPos+1), seOrd) then
+        begin
+          Next; Next; Next;   { TEnum, '.', member }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := seOrd;
+          ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+          LastExprTk := tyInteger;
+          Exit;
+        end;
       end;
       { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
       if CaseEqual(name, 'sizeof') then
@@ -7786,7 +7808,7 @@ function ConstEvalFactor: Int64;
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
-    cName: AnsiString; cQUnit: Integer; hasConstCast, hlHigh: Boolean; sofTk: TTypeKind;
+    cName: AnsiString; cQUnit, ceOrd: Integer; hasConstCast, hlHigh: Boolean; sofTk: TTypeKind;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -7834,6 +7856,16 @@ begin
     if sofTk = tyRecord then r := RecSize(LastTypeRecId)
     else r := TypeSize(sofTk);
     Expect(tkRParen, ')');
+  end
+  else if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+          (FindEnumType(CurTok.SVal) >= 0) and
+          FindEnumMemberOrd(FindEnumType(CurTok.SVal), GetTokenStr(TokPos+1), ceOrd) then
+  begin
+    { `TEnum.member` in a constant expression (case labels, const decls) —
+      scoped-enum access; folds to the ordinal. }
+    r := ceOrd;
+    Next; Next; Next;   { TEnum, '.', member }
   end
   else if (CurTok.Kind = tkIdent) and
           (CaseEqual(CurTok.SVal, 'high') or CaseEqual(CurTok.SVal, 'low')) and
@@ -9798,6 +9830,17 @@ begin
       node := AllocNode(AN_INT_LIT);
       ASTIVal[node] := Syms[si].ConstVal;
       if Syms[si].TypeKind = tyChar then ASTTk[node] := Ord(tyChar);
+    end
+    else if (si < 0) and (TokPos + 1 < TokCount) and
+            (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+            (FindEnumType(CurTok.SVal) >= 0) and
+            FindEnumMemberOrd(FindEnumType(CurTok.SVal), GetTokenStr(TokPos+1), prevTok) then
+    begin
+      { `TEnum.member` case label (scoped enums) — prevTok reused for the
+        member ordinal. The trailing Next below consumes the member name. }
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := prevTok;
+      Next; Next;   { TEnum, '.' }
     end
     else Error(what + ' must be constant');
   end
@@ -13778,6 +13821,8 @@ begin
       if CurTok.Kind = tkLParen then
       begin
         etid := RegisterEnumType(tnOff, tnLen);
+        { {$SCOPEDENUMS ON} at this token: members only under TEnum.member }
+        EnumTypeScoped[etid] := TokScopedEnums[TokPos-1];
         Next; ordinal := 0;
         done := False;
         while (CurTok.Kind = tkIdent) and not done do
@@ -13798,8 +13843,9 @@ begin
               tforin20) and ordinal<->position no longer coincide. }
             if ordinal <> hiVal then EnumTypeHasHoles[etid] := True;
           end;
-          AddEnumVal(enumNOff, enumNLen);
-          AddConst(enumNm, tyInteger, ordinal);
+          AddEnumVal(enumNOff, enumNLen, ordinal);
+          if not EnumTypeScoped[etid] then
+            AddConst(enumNm, tyInteger, ordinal);
           Inc(ordinal);
           if not Eat(tkComma) then done := True;
         end;

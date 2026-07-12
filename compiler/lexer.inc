@@ -653,6 +653,7 @@ begin
                               and always works. }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
+  ScopedEnumsVal := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
@@ -1400,6 +1401,16 @@ begin
       else if CaseEqual(name, 'off') then StrictCase := False
       else Error('strict_case requires on or off');
     end
+    else if CaseEqual(command, 'scopedenums') then
+    begin
+      { {$SCOPEDENUMS ON}: enum members declare only under the type scope
+        (TEnum.member); the bare name stays unregistered
+        (bug-pascal-scopedenums-ignored / fpc tenum4). Stamped per token
+        (TokScopedEnums) since directives run in the lex pass. }
+      if CaseEqual(name, 'on') then ScopedEnumsVal := True
+      else if CaseEqual(name, 'off') then ScopedEnumsVal := False
+      else Error('scopedenums requires on or off');
+    end
     else if CaseEqual(command, 'threadsafe') then
     begin
       if CaseEqual(name, 'on') then
@@ -2003,6 +2014,7 @@ begin
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
     TokPackRecords[TokCount] := PackRecordsVal;
+    TokScopedEnums[TokCount] := ScopedEnumsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     Tokens[TokCount].SOffset := TokCharLen;
@@ -2047,6 +2059,7 @@ begin
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
     TokPackRecords[TokCount] := PackRecordsVal;
+    TokScopedEnums[TokCount] := ScopedEnumsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     Tokens[TokCount].SOffset := TokCharLen;

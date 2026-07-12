@@ -8,8 +8,8 @@ prio: 50
 - **Track:** P — promoted out of the compat umbrella per the escape rule
   (silent wrong behavior ≠ parity nicety; see
   [[bug-pascal-missing-diagnostics-fail-tests]] triage 2026-07-11).
-- **Status:** backlog — filed 2026-07-11.
-- **Owner:** —
+- **Status:** working
+- **Owner:** opus-p
 
 ## Symptom (verified at v200)
 

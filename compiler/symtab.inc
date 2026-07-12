@@ -286,17 +286,33 @@ begin
   EnumTypeNLen[Result] := nlen;
   EnumTypeValBase[Result] := EnumValCount;
   EnumTypeHasHoles[Result] := False;
+  EnumTypeScoped[Result] := False;
   EnumTypeValCount[Result] := 0;
   EnumTypeRTTIOff[Result] := -1;
   Inc(EnumTypeCount);
 end;
 
-procedure AddEnumVal(noff, nlen: Integer);
+procedure AddEnumVal(noff, nlen, ordVal: Integer);
 begin
   if EnumValCount >= MAX_ENUMVAL then Error('too many enum values');
   EnumValNOff[EnumValCount] := noff;
   EnumValNLen[EnumValCount] := nlen;
+  EnumValOrd[EnumValCount] := ordVal;
   Inc(EnumValCount);
+end;
+
+function FindEnumMemberOrd(etid: Integer; const name: AnsiString; var ordOut: Integer): Boolean;
+{ Member lookup within one enum type (TEnum.member resolution). }
+var i: Integer;
+begin
+  Result := False;
+  for i := EnumTypeValBase[etid] to EnumTypeValBase[etid] + EnumTypeValCount[etid] - 1 do
+    if CaseEqual(GetTokenStrFromRaw(EnumValNOff[i], EnumValNLen[i]), name) then
+    begin
+      ordOut := EnumValOrd[i];
+      Result := True;
+      Exit;
+    end;
 end;
 
 function FindUClass(const name: AnsiString): Integer;

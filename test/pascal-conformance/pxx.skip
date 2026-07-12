@@ -55,7 +55,7 @@ tdefault12.pp	gap: accepts-invalid — Default(unspecialized template): undefine
 tdefault1.pp	unclassified: pascal26:8: error: uses: unit source not found: variants ()
 tdefault5.pp	unclassified: pascal26:458: error: unexpected character ()
 tenum3.pp	unclassified: Expected: begin, but got:  (Kind: 82, Line: 12) | near: third   TRange1  first >
-tenum4.pp	gap: accepts-invalid — $SCOPEDENUMS silently ignored: wrong ordinals at runtime, worst of the cluster
+tenum4.pp	gap: accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEnum.member works); residual: the En1 := first assign needs the enum-identity type check (tenum2 cluster) to reject
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()

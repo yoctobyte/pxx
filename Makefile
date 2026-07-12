@@ -414,6 +414,9 @@ test-core: $(COMPILER)
 	# open-array args from record fields + indirect-call writeback + High(rec.fieldarr)
 	./$(COMPILER) test/test_open_array_field_args.pas /tmp/test_open_array_field26
 	test "$$(/tmp/test_open_array_field26)" = "$$(printf '15 3\nhb=3 hd=15\ndirect: 42\nhb=3 hd=15\nindirect: 74\nhb=3 hd=15\nwith: 106')"
+	# {$SCOPEDENUMS}: scoped members + TEnum.member access (bug-pascal-scopedenums-ignored)
+	./$(COMPILER) test/test_scopedenums.pas /tmp/test_scopedenums26
+	test "$$(/tmp/test_scopedenums26)" = "$$(printf '0\n2\n1\ncase-ok')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
