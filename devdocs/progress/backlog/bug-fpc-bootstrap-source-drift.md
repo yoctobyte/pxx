@@ -4,7 +4,8 @@ prio: 45
 
 # bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility
 
-- **Type:** bug — **Track A (compiler core)**, filed by Track T
+- **Type:** bug — **Track A (compiler core)**
+- **Filed by:** the Track T watcher agent
 - **Found:** 2026-07-12 by the new FPC-bootstrap canary (`fpc-bootstrap#00`)
 
 ## Symptom

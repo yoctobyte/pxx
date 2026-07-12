@@ -4,7 +4,8 @@ prio: 50
 
 # bug: _Generic picks `int` where the operand is `long` on 32-bit targets
 
-- **Type:** bug — **Track C (C frontend)**, filed by Track T
+- **Type:** bug — **Track C (C frontend)**
+- **Filed by:** the Track T watcher agent
 - **Found:** 2026-07-12, by newly enrolling the C cross-conformance matrix in
   testmgr's full tier ([[feature-testmgr-enroll-c-cross-conformance]])
 

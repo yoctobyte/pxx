@@ -4,7 +4,8 @@ prio: 50
 
 # bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c)
 
-- **Type:** bug — **Track A (backend / ABI)**, filed by Track T
+- **Type:** bug — **Track A (backend / ABI)**
+- **Filed by:** the Track T watcher agent
 - **Found:** 2026-07-12, by newly enrolling the C cross-conformance matrix in
   testmgr's full tier ([[feature-testmgr-enroll-c-cross-conformance]])
 

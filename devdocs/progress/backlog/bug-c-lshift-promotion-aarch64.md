@@ -4,8 +4,9 @@ prio: 50
 
 # bug: left-shift result type / integer promotion wrong on aarch64 (00200.c)
 
-- **Type:** bug — **Track C (C frontend)** (promotion semantics; may turn out to
-  be a Track A codegen issue — see below), filed by Track T
+- **Type:** bug — **Track C (C frontend)**
+- **Filed by:** the Track T watcher agent. Promotion semantics, so it starts in
+  C; may turn out to be a codegen issue for the owning backend (see below).
 - **Found:** 2026-07-12, by newly enrolling the C cross-conformance matrix in
   testmgr's full tier ([[feature-testmgr-enroll-c-cross-conformance]])
 

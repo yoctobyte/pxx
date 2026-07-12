@@ -4,7 +4,8 @@ prio: 40
 
 # bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test)
 
-- **Type:** bug (test hygiene) — **Track C (C frontend)**, filed by Track T
+- **Type:** bug (test hygiene) — **Track C (C frontend)**
+- **Filed by:** the Track T watcher agent
 - **Found:** 2026-07-12, while fixing testmgr's private-scratch rewrite
 
 ## Problem

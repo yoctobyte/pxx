@@ -34,14 +34,14 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-generic-long-vs-int-on-32bit | T | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
+| bug-c-generic-long-vs-int-on-32bit | C | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
-| bug-c-struct-byval-varargs-32bit | T | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
+| bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
-| bug-fpc-bootstrap-source-drift | T | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
+| bug-fpc-bootstrap-source-drift | A | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
-| bug-test-hardcoded-tmp-so-path | T | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
+| bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -859,14 +859,14 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
-- [p 50] [T] bug-c-generic-long-vs-int-on-32bit
+- [p 50] [C] bug-c-generic-long-vs-int-on-32bit
 - [p 50] [C] bug-c-lshift-promotion-aarch64
-- [p 50] [T] bug-c-struct-byval-varargs-32bit
+- [p 50] [A] bug-c-struct-byval-varargs-32bit
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [T] bug-fpc-bootstrap-source-drift
+- [p 45] [A] bug-fpc-bootstrap-source-drift
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -902,7 +902,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [T] bug-test-hardcoded-tmp-so-path
+- [p 40] [C] bug-test-hardcoded-tmp-so-path
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
