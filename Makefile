@@ -2046,11 +2046,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_c_gtk.pas /tmp/test_c_gtk26
 	test "$$(/tmp/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_c_gtk_call.pas /tmp/test_c_gtk_call26
-	xvfb-run /tmp/test_c_gtk_call26
+	xvfb-run -a /tmp/test_c_gtk_call26
 	./$(COMPILER) test/test_c_gtk_types.pas /tmp/test_c_gtk_types26
-	xvfb-run /tmp/test_c_gtk_types26
+	xvfb-run -a /tmp/test_c_gtk_types26
 	./$(COMPILER) test/test_c_gtk_window.pas /tmp/test_c_gtk_window26
-	xvfb-run /tmp/test_c_gtk_window26
+	xvfb-run -a /tmp/test_c_gtk_window26
 	./$(COMPILER) test/test_c_header_case_sensitive_import.pas /tmp/test_c_header_case_sensitive_import26
 	test "$$(/tmp/test_c_header_case_sensitive_import26)" = "77"
 	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26

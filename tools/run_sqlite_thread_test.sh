@@ -39,8 +39,14 @@ if [ -n "$qemu" ] && ! command -v "$qemu" >/dev/null 2>&1; then
   exit 0
 fi
 
-bin="/tmp/csqlite_thread_test26_$ARCH"
-err="/tmp/cstt_$ARCH.err"
+# Private scratch: the old fixed /tmp/csqlite_thread_test26_$ARCH is shared by
+# every checkout on the box, so two concurrent runs (dev tree + watcher clone)
+# clobber each other's binary mid-build — seen as phantom "not libc-free" /
+# output-mismatch reds. testmgr exports TESTMGR_TMP for exactly this.
+tmpd="$(mktemp -d "${TESTMGR_TMP:-/tmp}/cstt_${ARCH}.XXXXXX")" || exit 2
+trap 'rm -rf "$tmpd"' EXIT INT TERM
+bin="$tmpd/csqlite_thread_test26_$ARCH"
+err="$tmpd/cstt_$ARCH.err"
 echo "test-sqlite-threads: building threadsafe sqlite ($ARCH) ..."
 # shellcheck disable=SC2086 — $tgt is deliberately empty for x86_64
 if ! "$CC" --threadsafe $tgt -Ilib/crtl/include -Ilib/crtl/src -I"$SQLITE_SRC" \
