@@ -40,6 +40,18 @@ The tricky part vs TGuid: a class needs a VMT slot table + a constructor
 proc with a synthesized body. Look at how metaclass New / GenMakeFreeObject
 build instances for the allocation shape.
 
+## Slice 1 landed (2026-07-12, opus-p)
+
+Instantiation works: `var o: TObject; o := TObject.Create; o.Free`, and a
+child instance assigns to a TObject ref. RegisterBuiltinTObject mints the
+root row (fieldless, VMT slot); the `class(TObject)` parent guard forces the
+implicit-root model so no VMT relocates (an early real-parent version RED'd
+test-core + cross ARC — fixed). Test: test_builtin_tobject.
+
+**Remaining:** RTTI-backed root methods — GetHashCode (= PtrInt(self)),
+Equals (pointer compare), ClassName / UnitName / InstanceSize / ClassInfo —
+for tobject5/tclassinfo1. Needs the RTTI-on-IR surface; separate slice.
+
 ## Gate
 
 `make test` + self-host byte-identical; a compile-run test
