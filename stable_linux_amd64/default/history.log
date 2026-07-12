@@ -199,3 +199,4 @@
 2026-07-11T12:16:32Z  v199  9e93e19f5204e3b337157c9bf7603b11ee40a5f83a506809ceaed3111b9ca254  58efb1eccbff5677724ac99f88c4c88c47257e6e  tickets: resolve bug-transitive-dns_cache-import-corrupts-managed-strings
 2026-07-11T13:10:35Z  v200  89fb978d7dd93e2b5f3cde9b84929b8dba95ceda336b87e0e796b0e5444bd92d  404e26759d0007a93d8b79f3923464409d1bbb25  conformance: map dialect-pass/accepts-invalid onto gap:/wontfix: taxonomy
 2026-07-11T17:55:54Z  v201  e43879a7462e59dc936d7a2c2cf95a2e0f381985c48915c2aec4ea79c8689b4f  fcea64ce6e1ec271ccd305464d94ccff136bc5d7  pfront: Str/write width and precision accept variable expressions
+2026-07-12T05:11:41Z  v202  ec01b7abdb3f260fd131114547f5142f0fdb00708114ebbdf7f32f51b7b82676  6ba5ce001d5290d8ed4472f07e9f24c1329cc411  tickets: resolve bug-pascal-directive-inside-paren-star-comment
