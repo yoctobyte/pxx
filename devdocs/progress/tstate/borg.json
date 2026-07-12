@@ -1586,13 +1586,12 @@
  },
  "open_regressions": [
   {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
+   "bad": "0bf6792715bc1dbcf4b398142b39fd747ccc023b",
    "good": "d6cec2355b790fccb2bbc18cfbc4bc081873b293",
    "job": "test-core#131",
    "opened": "2026-07-12T04:25:50Z",
    "range": [
-    "0bf6792715bc1dbcf4b398142b39fd747ccc023b",
-    "83006e927e35b02e76728c3a292e08dbcc0b792e"
+    "0bf6792715bc1dbcf4b398142b39fd747ccc023b"
    ],
    "src": "test/cmath_sqrt_correctly_rounded_b240.c"
   },
