@@ -201,3 +201,4 @@
 2026-07-11T17:55:54Z  v201  e43879a7462e59dc936d7a2c2cf95a2e0f381985c48915c2aec4ea79c8689b4f  fcea64ce6e1ec271ccd305464d94ccff136bc5d7  pfront: Str/write width and precision accept variable expressions
 2026-07-12T05:11:41Z  v202  ec01b7abdb3f260fd131114547f5142f0fdb00708114ebbdf7f32f51b7b82676  6ba5ce001d5290d8ed4472f07e9f24c1329cc411  tickets: resolve bug-pascal-directive-inside-paren-star-comment
 2026-07-12T07:43:57Z  v203  73db52d80030bc1ef71f96b8ae8dddbb653d4a771db995df4b2d5709d4f5a337  8d1e694a9d8d4d8c639603644f260dd467fe9e9f  tickets: resolve nested-variant-record + cast-deref-varparam; synapse log — HTTP chain green
+2026-07-12T11:07:34Z  v204  9b56a2d9dd1ea758ffcf2a2cba2694fa7e1f3c75b71b94cbb89323b0aec0a159  a584b097dc392cbc80870d25a364271397fb1243  pascal frontend + RTL: ftpsend compiles — with-statement upgrades, named-array consts, more
