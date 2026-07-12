@@ -433,6 +433,9 @@ test-core: $(COMPILER)
 	# published-method RTTI: discover by name, bind, and RUN (feature-rtti-method-reflection)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_rtti_method_reflection_b254.pas /tmp/test_rtti_method_reflection_b25426
 	test "$$(/tmp/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE')"
+	# TObject.GetInterface: GUID lookup over the class interface table (feature-tobject-getinterface-guid-table)
+	./$(COMPILER) test/test_getinterface_guid_b257.pas /tmp/test_getinterface_guid_b25726
+	test "$$(/tmp/test_getinterface_guid_b25726)" = "$$(printf 'qualified=TRUE\ncall=42\nmiss=FALSE\nbare=TRUE\ncall2=42')"
 	# FPC spelling: TObject.MethodAddress/MethodName with NO uses; a user method shadows
 	./$(COMPILER) test/test_tobject_methodaddress_b256.pas /tmp/test_tobject_methodaddress_b25626
 	test "$$(/tmp/test_tobject_methodaddress_b25626)" = "$$(printf 'found-alpha=TRUE\nname-of-it=TestAlpha\ncase-insensitive=TRUE\nfound-inherited=TRUE\nfound-private=FALSE\nfound-missing=FALSE\nname-of-nil=[]\nran TestAlpha\nshadowed=zzz\nshadow-nil=TRUE')"

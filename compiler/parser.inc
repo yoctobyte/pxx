@@ -2008,6 +2008,112 @@ begin
   Result := 3;
 end;
 
+function HexDigitVal(c: Char): Integer;
+begin
+  if (c >= '0') and (c <= '9') then Result := Ord(c) - Ord('0')
+  else if (c >= 'a') and (c <= 'f') then Result := Ord(c) - Ord('a') + 10
+  else if (c >= 'A') and (c <= 'F') then Result := Ord(c) - Ord('A') + 10
+  else Result := -1;
+end;
+
+procedure ParseGuidLiteral(ci: Integer; const s: AnsiString);
+{ Record an interface's `['{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}']` as the 16 raw
+  bytes in TGuid MEMORY order — D1 is a little-endian u32, D2/D3 little-endian u16,
+  D4 the remaining 8 bytes in written order. That is what a runtime `TGuid` looks
+  like in memory, so GetInterface can compare the compile-time blob against the
+  caller's TGuid byte for byte with no marshalling.
+
+  A malformed literal is ignored rather than an error: the GUID is optional, and a
+  source that carries a broken one still compiled before this. }
+var
+  hex: AnsiString;
+  i, hi, lo, n: Integer;
+  b: array[0..15] of Byte;
+begin
+  hex := '';
+  for i := 1 to Length(s) do
+  begin
+    if HexDigitVal(s[i]) >= 0 then hex := hex + s[i]
+    else if (s[i] <> '{') and (s[i] <> '}') and (s[i] <> '-') then Exit;  { junk }
+  end;
+  if Length(hex) <> 32 then Exit;
+
+  { pack the 32 hex digits into 16 big-endian bytes first }
+  for i := 0 to 15 do
+  begin
+    hi := HexDigitVal(hex[i * 2 + 1]);
+    lo := HexDigitVal(hex[i * 2 + 2]);
+    if (hi < 0) or (lo < 0) then Exit;
+    b[i] := Byte(hi * 16 + lo);
+  end;
+
+  n := ci * 16;
+  { D1: u32, byte-swapped to little-endian }
+  UClsGuidB[n + 0] := b[3]; UClsGuidB[n + 1] := b[2];
+  UClsGuidB[n + 2] := b[1]; UClsGuidB[n + 3] := b[0];
+  { D2: u16 }
+  UClsGuidB[n + 4] := b[5]; UClsGuidB[n + 5] := b[4];
+  { D3: u16 }
+  UClsGuidB[n + 6] := b[7]; UClsGuidB[n + 7] := b[6];
+  { D4: 8 bytes, written order }
+  for i := 0 to 7 do UClsGuidB[n + 8 + i] := b[8 + i];
+  UClsHasGuid[ci] := True;
+end;
+
+function GenMakeGetInterfaceCall(objNode: Integer): Integer;
+{ Rewrite `<obj>.GetInterface(IID, Obj)` (and the bare, implicit-Self form) to
+  __pxxGetInterface(<obj>, @IID, @Obj). CurTok must be on the '('.
+
+  Both arguments go by ADDRESS. An AN_ADDR over a by-ref parameter auto-derefs in
+  IRLowerAddress and yields the CALLER's address, so this is correct whether the
+  argument is a plain variable (`var o: IFoo; obj.GetInterface(g, o)`) or an untyped
+  `out` parameter being forwarded — which is exactly testutils' shape:
+
+      function TNoRefCountObject.QueryInterface(constref IID: TGUID; out Obj): HResult;
+      begin
+        if GetInterface(IID, Obj) then ...
+
+  Returns -1 when the builtin helper is not linked, so the caller can fall through
+  to its normal "no such method" handling. }
+var
+  pi, callNode, a1, a2, addr1, addr2: Integer;
+begin
+  Result := -1;
+  pi := FindProc('__pxxGetInterface');
+  if pi < 0 then Exit;
+
+  Expect(tkLParen, '(');
+
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := pi;
+  ASTTk[callNode] := Ord(Procs[pi].RetType);
+
+  a1 := AllocNode(AN_ARG);            { arg 0 = the instance }
+  ASTLeft[a1] := objNode;
+  ASTLeft[callNode] := a1;
+
+  ParseExpr;                          { IID }
+  addr1 := AllocNode(AN_ADDR);
+  ASTLeft[addr1] := CurASTNode;
+  ASTTk[addr1] := Ord(tyPointer);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := addr1;
+  ASTRight[a1] := a2;
+
+  Expect(tkComma, ',');
+
+  ParseExpr;                          { Obj }
+  addr2 := AllocNode(AN_ADDR);
+  ASTLeft[addr2] := CurASTNode;
+  ASTTk[addr2] := Ord(tyPointer);
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := addr2;
+  ASTRight[a2] := a1;
+
+  Expect(tkRParen, ')');
+  Result := callNode;
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 
@@ -2450,6 +2556,29 @@ begin
       begin
         selfClassCi := CurSelfClass - REC_UCLASS_BASE;
         fldIdx := FindUField(selfClassCi, fieldName);
+      end;
+
+      { Bare `GetInterface(IID, Obj)` inside a method — implicit Self, which is how
+        testutils' QueryInterface calls it. Only when the class has no method of that
+        name, so a user's own GetInterface still wins. }
+      if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and
+         (Procs[CurProc].ParamCount > 0) and
+         CaseEqual(fieldName, 'GetInterface') and (CurTok.Kind = tkLParen) and
+         (FindUMeth(CurSelfClass - REC_UCLASS_BASE, 'GetInterface') < 0) and
+         (FindProc('__pxxGetInterface') >= 0) then
+      begin
+        selfIdx := Procs[CurProc].Params[0].SymIdx;
+        selfNode := AllocNode(AN_IDENT);
+        ASTIVal[selfNode] := selfIdx;
+        ASTTk[selfNode] := Ord(tyClass);
+        fldIdx := GenMakeGetInterfaceCall(selfNode);
+        if fldIdx >= 0 then
+        begin
+          tk := tyBoolean;
+          recName := REC_NONE;
+          Result := fldIdx;
+          Exit;
+        end;
       end;
 
       { Bare `class var` name inside a method body (fpcunit's `Inc(AssertCount)`).
@@ -3448,6 +3577,23 @@ begin
         the __pxxMethodAddress / __pxxMethodName helpers in the builtin unit (pulled
         by the token pre-scan). Only when the class has NO method of that name, so a
         user's own MethodAddress still wins. }
+      { obj.GetInterface(IID, Obj) — the GUID lookup, same builtin-shadowing rule }
+      if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
+         (Tokens[TokPos].Kind = tkLParen) and
+         CaseEqual(fieldName, 'GetInterface') and
+         (FindProc('__pxxGetInterface') >= 0) then
+      begin
+        Next;                        { consume 'GetInterface' }
+        mcallNode := GenMakeGetInterfaceCall(node);
+        if mcallNode >= 0 then
+        begin
+          tk := tyBoolean;
+          recName := REC_NONE;
+          Result := mcallNode;
+          Exit;
+        end;
+      end;
+
       if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind = tkLParen) and
          (CaseEqual(fieldName, 'MethodAddress') or CaseEqual(fieldName, 'MethodName')) then
@@ -14720,9 +14866,18 @@ begin
             UMthVirSlot[UMthCount - 1] := UClsMCount[ci] - 1;
             UMthIsStatic[UMthCount - 1] := False;
           end;
-        { optional GUID literal ['{...}'] — parsed and ignored (v1) }
+        { optional GUID literal ['{...}'] — RECORDED (it used to be skipped). It is
+          the key TObject.GetInterface looks an interface up by at runtime, so
+          discarding it left nothing to search. Anything that is not a well-formed
+          '{8-4-4-4-12}' string is still skipped, exactly as before. }
         if CurTok.Kind = tkLBrack then
         begin
+          if (CurTok.Kind = tkLBrack) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkString) then
+          begin
+            Next;                          { now on the string literal }
+            ParseGuidLiteral(ci, CurTok.SVal);
+          end;
           while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
           Expect(tkRBrack, ']');
         end;
@@ -19920,7 +20075,8 @@ begin
       that name shadows at the call site, leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname')) and
+       (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname') or
+        CaseEqual(GetTokenStr(i), 'getinterface')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /

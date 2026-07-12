@@ -32,6 +32,7 @@ type
   HResult = LongInt;
 
   IInterface = interface
+    ['{00000000-0000-0000-C000-000000000046}']   { the canonical IUnknown GUID }
     function QueryInterface(constref IID: TGuid; out Obj): HResult;
     function _AddRef: Integer;
     function _Release: Integer;

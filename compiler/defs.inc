@@ -120,7 +120,8 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 80;  { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields }
+  RTTI_CLS_SIZE    = 96;  { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces }
+  RTTI_IFACE_SIZE  = 24;  { {GUID:16 bytes, IMT pointer:8} — the table TObject.GetInterface searches }
   RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
   RTTI_METH_SIZE   = 16;  { name,code }
   RTTI_FIELD_SIZE  = 16;  { name,offset (published fields, for streamed child->field wiring) }
@@ -1884,6 +1885,13 @@ var
   UClsAliasCi   : array[0..MAX_TYPEALIAS-1] of Integer;
   UClsAliasCount : Integer;
   UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
+  { An interface's GUID literal (`['{...}']`), which the parser used to discard.
+    Stored as the 16 raw bytes in TGuid memory order (D1:u32, D2:u16, D3:u16,
+    D4:8 bytes), so a compile-time blob and a runtime `TGuid` compare byte for byte.
+    Needed by TObject.GetInterface, which looks an interface up BY GUID at runtime —
+    with nothing recorded there was nothing to look up. }
+  UClsHasGuid : array[0..MAX_UCLASS-1] of Boolean;
+  UClsGuidB   : array[0..MAX_UCLASS*16-1] of Byte;
   UClsCaseSensFields : array[0..MAX_UCLASS-1] of Boolean; { field names match case-SENSITIVELY (C structs/unions; C distinguishes `b` and `B`). Default off = case-insensitive Pascal fields. }
   UClsCount  : Integer;
 

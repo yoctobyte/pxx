@@ -53,6 +53,27 @@ begin
   TokSliceStr := s;
 end;
 
+function ClassImplementsGuidedInterface(ci: Integer): Boolean;
+{ True if this class (or an ancestor) has an IMT for an interface that carries a
+  GUID. Such a class needs an RTTI header even with NO published members, because
+  TObject.GetInterface reaches its interface table through that header — without
+  this a plain `class(TObject, IFoo)` would be invisible to a GUID lookup. }
+var i, curr: Integer;
+begin
+  ClassImplementsGuidedInterface := False;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    for i := 0 to IMTCount - 1 do
+      if (IMTClass[i] = curr) and UClsHasGuid[IMTIntf[i]] then
+      begin
+        ClassImplementsGuidedInterface := True;
+        Exit;
+      end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function ClassHasPublished(ci: Integer): Boolean;
 { True if this class OR any ancestor declares a published member. A class that
   only inherits published members is still streamable (GetClass must find it),
@@ -242,8 +263,8 @@ begin
 end;
 
 procedure EmitRTTI;
-var ci, i, k, base, cnt, hdr, strIdx, etid: Integer;
-    propCount, methCount, fieldCount, firstOff: Integer;
+var ci, i, j, k, base, cnt, hdr, strIdx, etid: Integer;
+    propCount, methCount, fieldCount, ifaceCount, firstOff, entryOff: Integer;
     regEntries, entryPos: Integer;
     nm: AnsiString;
 begin
@@ -260,7 +281,8 @@ begin
     { Pass 1: reserve a header per published class so forward type refs resolve. }
     for ci := 0 to UClsCount - 1 do
     begin
-      if (not UClsIsRecord[ci]) and ClassHasPublished(ci) then
+      if (not UClsIsRecord[ci]) and
+         (ClassHasPublished(ci) or ClassImplementsGuidedInterface(ci)) then
       begin
         UClsRTTIOff[ci] := DataLen;
         DataPutZeros(RTTI_CLS_SIZE);
@@ -361,6 +383,37 @@ begin
       end;
       PatchDataU64(hdr + 64, fieldCount);
       if fieldCount > 0 then AddDataPtrFix(hdr + 72, firstOff);
+
+      { Interface table (OWN entries; GetInterface walks the parent chain itself, as
+        it does for methods). One 24-byte entry per implemented interface that
+        carries a GUID: the 16 raw GUID bytes inline, then a pointer to that
+        (class, interface) IMT. This is what makes a GUID lookup possible at all —
+        the IMTs already existed, but nothing keyed them by GUID.
+
+        Same contiguous-reserve-then-fill discipline as the prop/meth/field arrays:
+        the entries must be laid out before anything else appends to Data[], or the
+        runtime's entry[i] stride breaks. }
+      ifaceCount := 0;
+      for i := 0 to IMTCount - 1 do
+        if (IMTClass[i] = ci) and UClsHasGuid[IMTIntf[i]] then Inc(ifaceCount);
+      firstOff := -1;
+      if ifaceCount > 0 then
+      begin
+        firstOff := DataLen;
+        DataPutZeros(ifaceCount * RTTI_IFACE_SIZE);
+        k := 0;
+        for i := 0 to IMTCount - 1 do
+          if (IMTClass[i] = ci) and UClsHasGuid[IMTIntf[i]] then
+          begin
+            entryOff := firstOff + k * RTTI_IFACE_SIZE;
+            for j := 0 to 15 do
+              Data[entryOff + j] := UClsGuidB[IMTIntf[i] * 16 + j];
+            AddDataPtrFix(entryOff + 16, IMTOff[i]);
+            Inc(k);
+          end;
+      end;
+      PatchDataU64(hdr + 80, ifaceCount);
+      if ifaceCount > 0 then AddDataPtrFix(hdr + 88, firstOff);
     end;
   end;
 

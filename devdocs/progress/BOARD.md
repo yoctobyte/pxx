@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (92)
+## backlog (91)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -114,7 +114,6 @@ _none_
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
-| feature-tobject-getinterface-guid-table | A | 50 | feature | TObject.GetInterface(IID, out obj) — needs an interface GUID table | — |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-web-track-w-bootstrap | A | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
@@ -188,7 +187,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (656)
+## done (657)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -775,6 +774,7 @@ _none_
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
+| feature-tobject-getinterface-guid-table | A | 50 | feature | TObject.GetInterface(IID, out obj) — needs an interface GUID table | — |
 | feature-track-t-watcher | T | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
 | feature-trackt-watch-completion-line | T | 55 | feature | trackt watch: print timestamped completion line per finished suite run | — |
 | feature-transcendental-math | A | 50 | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
@@ -900,7 +900,6 @@ _none_
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro
-- [p 50] [A] feature-tobject-getinterface-guid-table
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-riscv32-p256field-coredump
