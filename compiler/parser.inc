@@ -14433,6 +14433,11 @@ begin
           repeat
             if CurTok.Kind <> tkIdent then Error('expected base class or interface name');
             tmpCi := FindUClass(CurTok.SVal);
+            { TObject is a registered builtin class row now, so exclude it from
+              the parent lookup by name — a real-parent link would relocate
+              every `class(TObject)` VMT and break the implicit-root model
+              (and the COM/ARC synthesis for TInterfacedObject). }
+            if CaseEqual(CurTok.SVal, 'TObject') then tmpCi := -1;
             if (tmpCi < 0) and
                (CaseEqual(CurTok.SVal, 'TObject') or CaseEqual(CurTok.SVal, 'TInterfacedObject')) then
             begin
@@ -19213,6 +19218,23 @@ begin
   UClsAlign[ci] := 4;
 end;
 
+procedure RegisterBuiltinTObject;
+{ System.TObject as a minimal instantiable class (var o: TObject;
+  o := TObject.Create). Zero fields, no user methods — the VMT-pointer slot
+  at offset 0 (size = one pointer). Auto-Create (fieldless-class path) and the
+  builtin obj.Free desugar serve construction/destruction; RTTI-backed methods
+  (ClassName/GetHashCode/...) are a separate ticket. Kept an IMPLICIT parent
+  for every other class (the `class(TObject)` guard checks by name), so this
+  adds a usable row without relocating any VMT. feature-pascal-builtin-tobject-class. }
+var ci: Integer;
+begin
+  if FindUClass('TObject') >= 0 then Exit;
+  ci := AddUClass(TokCharsAppend('TObject'), 7);
+  UClsIsRecord[ci] := False;
+  UClsSize_[ci] := TARGET_PTR_SIZE;   { VMT pointer slot at offset 0 }
+  UClsAlign[ci] := TARGET_PTR_SIZE;
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
@@ -19286,6 +19308,7 @@ begin
     cross-bootstrap, stabilize, manual — opts out without per-site Makefile flags. }
   if PasDefineExists('PXX_NODEFAULTRTL') then NoDefaultRtl := True;
   RegisterBuiltinTGuid;
+  RegisterBuiltinTObject;
   { Only pull the implicit textfile surface when the source actually references
     the file type. Scanning the already-lexed token stream up front for a bare
     `Text`/`TextFile`/`IOResult` identifier (any position — var/param/field/

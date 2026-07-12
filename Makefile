@@ -450,6 +450,9 @@ test-core: $(COMPILER)
 	# builtin TGuid (System type) resolves without a uses
 	./$(COMPILER) --mimic-fpc test/test_builtin_tguid.pas /tmp/test_tguid26
 	test "$$(/tmp/test_tguid26)" = "$$(printf '132096 192 70 16')"
+	# builtin TObject class: var o: TObject; o := TObject.Create
+	./$(COMPILER) --mimic-fpc test/test_builtin_tobject.pas /tmp/test_tobj26
+	test "$$(/tmp/test_tobj26)" = "$$(printf 'FALSE\n42\nFALSE')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
