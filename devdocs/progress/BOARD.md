@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (86)
+## backlog (87)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,6 +109,7 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
+| regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-arm32-00 | T | 70 | regression | regression: test-sqlite-threads-arm32#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-i386-00 | T | 70 | regression | regression: test-sqlite-threads-i386#00 red at 83006e927e35 (auto-filed by twatch) | — |
@@ -813,6 +814,7 @@ _none_
 
 - [p 70] [T] regression-test-core-665
 - [p 70] [T] regression-test-core-666
+- [p 70] [T] regression-test-core-676
 - [p 70] [T] regression-test-sqlite-threads-aarch64-00
 - [p 70] [T] regression-test-sqlite-threads-arm32-00
 - [p 70] [T] regression-test-sqlite-threads-i386-00

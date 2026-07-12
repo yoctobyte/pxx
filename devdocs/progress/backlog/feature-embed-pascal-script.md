@@ -108,3 +108,19 @@ frozen-string param is by-ref for ABI, the managed→frozen conversion
 produces a non-lvalue, and the by-ref argument check rejects it. Needs the
 const-frozen-string param path to materialize a conversion temp (mirror the
 const-record temp rule) — parser/ir slice, file/pick up next session.
+
+## Probe log 2026-07-12 (later, opus-p)
+
+**uPSUtils compiles** (walls 4-8): FPC variable typecast as var arg
+(Cardinal(len)), Dec(Byte(p^),32) cast-deref/type-keyword targets,
+TObject(x).Free statement, FreeAndNil, managed→ShortString param conversion.
+
+**uPSCompiler wall:** `IUnknown_Guid: TGuid = (D1:0; ...; D4:($C0,...))` — pxx
+has NO builtin **TGuid** record (it's a System type; interfaces reference it).
+The array-valued-field record const shape itself now works (LANDED,
+test_record_const_array_field — TGuid's D4 array field). What's missing is
+the builtin TGuid type + interface-GUID semantics. `-dPS_NOINTERFACES` skips
+the GUID consts and reaches the next wall (uPSCompiler:1963, a `Decl.Params`
+shape). Pascal Script core (uPSCompiler+uPSRuntime) is a multi-wall haul
+past this — needs builtin TGuid, ole2/Variant surface (uPSRuntime uses ole2),
+and more. Parked; uPSUtils is the concrete milestone reached.

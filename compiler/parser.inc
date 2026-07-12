@@ -13656,13 +13656,39 @@ begin
             Expect(tkColon, ':');
             fTk := RecFieldType(cRec, fName);
             if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
-            if isLocalConst then
+            if RecFieldIsArray(cRec, fName) and (CurTok.Kind = tkLParen) then
+            begin
+              { Array-valued field: `D4: ($C0, 0, ..., $46)` (TGuid). Each
+                element is a `sym.field[k] := v` init (Kind 7 — the emitter
+                builds FIELD then INDEX). Global-only for now. }
+              if isLocalConst then Error('array-valued field in a LOCAL record constant is not supported');
+              Next;   { consume '(' }
+              cElem := 0;
+              while CurTok.Kind <> tkRParen do
+              begin
+                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                PendingInitSym[PendingInitCount]  := cIdx;
+                PendingInitElem[PendingInitCount] := -1;
+                PendingInitFOff[PendingInitCount] := fNameOff;
+                PendingInitFLen[PendingInitCount] := fNameLen;
+                PendingInitKind[PendingInitCount] := 7;
+                PendingInitValAux[PendingInitCount] := cElem;
+                PendingInitVal[PendingInitCount]  := ParseInitVal;
+                PendingInitTk[PendingInitCount]   := Ord(fTk);
+                Inc(PendingInitCount);
+                Inc(cElem);
+                if not Eat(tkComma) then Break;
+              end;
+              Expect(tkRParen, ')');
+            end
+            else if isLocalConst then
             begin
               if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
               LocalInitSym[LocalInitCount]  := cIdx;
               LocalInitElem[LocalInitCount] := -1;
               LocalInitFOff[LocalInitCount] := fNameOff;
               LocalInitFLen[LocalInitCount] := fNameLen;
+              LocalInitKind[LocalInitCount] := 0;
               LocalInitVal[LocalInitCount]  := ParseInitVal;
               LocalInitTk[LocalInitCount]   := Ord(fTk);
               Inc(LocalInitCount);
@@ -13674,6 +13700,7 @@ begin
               PendingInitElem[PendingInitCount] := -1;
               PendingInitFOff[PendingInitCount] := fNameOff;
               PendingInitFLen[PendingInitCount] := fNameLen;
+              PendingInitKind[PendingInitCount] := 0;
               PendingInitVal[PendingInitCount]  := ParseInitVal;
               PendingInitTk[PendingInitCount]   := Ord(fTk);
               Inc(PendingInitCount);
@@ -19051,6 +19078,20 @@ begin
       ASTSLen[valNode] := PendingInitFLen[i];
       target := valNode;
       ASTTk[target] := PendingInitTk[i];
+    end;
+
+    if PendingInitKind[i] = 7 then
+    begin
+      { Array-valued record-const field element: `sym.field[ValAux] := v`.
+        The FIELD target was just built above; index into it (TGuid's D4). }
+      idxLit := AllocNode(AN_INT_LIT);
+      ASTIVal[idxLit] := PendingInitValAux[i];
+      ASTTk[idxLit] := Ord(tyInteger);
+      valNode := AllocNode(AN_INDEX);
+      ASTLeft[valNode] := target;
+      ASTRight[valNode] := idxLit;
+      ASTTk[valNode] := PendingInitTk[i];
+      target := valNode;
     end;
 
     if PendingInitElem[i] = -2 then

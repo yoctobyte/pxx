@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# TObject(expr).Free statement
 	./$(COMPILER) --mimic-fpc test/test_tobject_cast_free.pas /tmp/test_tocf26
 	test "$$(/tmp/test_tocf26)" = "ok"
+	# array-valued field in a typed record constant (TGuid D4 shape)
+	./$(COMPILER) --mimic-fpc test/test_record_const_array_field.pas /tmp/test_rcaf26
+	test "$$(/tmp/test_rcaf26)" = "$$(printf '132096 192 70')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
