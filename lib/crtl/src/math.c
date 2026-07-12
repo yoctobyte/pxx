@@ -135,10 +135,45 @@ double scalbn(double x, int e) { return ldexp(x, e); }
 /* finite <=> x - x == 0 (inf - inf and nan - nan are NaN, NaN != 0). */
 int isfinite(double x) { double d = x - x; return d == d && d == 0.0; }
 
-/* -0.0 detected via 1/x = -inf; avoids copysign (no crtl body — it maps to a
-   Pascal builtin only where <math.h> is in the TU, and this file must also
-   compile standalone). */
-int signbit(double x) { return x < 0.0 || (x == 0.0 && 1.0 / x < 0.0); }
+/* IEEE bit-level sign/inf/next helpers. copysign/nextafter/isinf have NO
+   Pascal RTL counterpart for the case-insensitive extern bind (unlike
+   sin/floor/exp), so without C bodies here any caller silently picked up a
+   libc DT_NEEDED — the same trap isnan had. Bit-punning through a pointer
+   cast (verified against the C frontend); handles NaN and +/-0 exactly. */
+double copysign(double x, double y) {
+  unsigned long long xb = *(unsigned long long *)&x;
+  unsigned long long yb = *(unsigned long long *)&y;
+  xb = (xb & 0x7FFFFFFFFFFFFFFFull) | (yb & 0x8000000000000000ull);
+  return *(double *)&xb;
+}
+
+int isinf(double x) {
+  unsigned long long b = *(unsigned long long *)&x;
+  return (b & 0x7FFFFFFFFFFFFFFFull) == 0x7FF0000000000000ull;
+}
+
+/* Next representable double after x toward y (C99). Magnitude-ordered bit
+   walk: same-sign doubles order like their bit patterns; stepping the bits
+   by 1 is exactly one ULP, crossing zero flips through +/-0. */
+double nextafter(double x, double y) {
+  unsigned long long xb, ax;
+  if (x != x || y != y) return x + y;   /* NaN in -> NaN out */
+  if (x == y) return y;
+  xb = *(unsigned long long *)&x;
+  ax = xb & 0x7FFFFFFFFFFFFFFFull;
+  if (ax == 0) {                        /* +/-0: smallest subnormal toward y */
+    xb = (y > 0.0) ? 1ull : 0x8000000000000001ull;
+  } else if ((x < y) == !(xb >> 63)) {
+    xb += 1;                            /* away from zero */
+  } else {
+    xb -= 1;                            /* toward zero */
+  }
+  return *(double *)&xb;
+}
+
+int signbit(double x) {
+  return (int)(*(unsigned long long *)&x >> 63);
+}
 
 double nan(const char *tag) { (void)tag; return 0.0 / 0.0; }
 
@@ -154,9 +189,8 @@ double remainder(double x, double y) {
   double r = fmod(x, y);
   double ar = fabs(r);
   if (2.0 * ar > ay ||
-      (2.0 * ar == ay && fmod(trunc(fabs(x) / ay), 2.0) != 0.0)) {
-    if (r > 0.0) r -= ay; else r += ay;   /* copysign(ay, r), inline */
-  }
+      (2.0 * ar == ay && fmod(trunc(fabs(x) / ay), 2.0) != 0.0))
+    r -= copysign(ay, r);
   return r;
 }
 
@@ -178,8 +212,7 @@ double acosh(double x) { return log(x + sqrt(x * x - 1.0)); }
 
 double asinh(double x) {
   /* sign-symmetric; the log form loses the sign for negative x */
-  double r = log(fabs(x) + sqrt(x * x + 1.0));
-  return x < 0.0 ? -r : r;
+  return copysign(log(fabs(x) + sqrt(x * x + 1.0)), x);
 }
 
 double atanh(double x) { return 0.5 * log((1.0 + x) / (1.0 - x)); }
