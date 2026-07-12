@@ -341,3 +341,12 @@ NEXT WALL: `Move(Pointer(Value)^, Pointer(@Result[l+1])^, x-1)`
 (synautil.pas:1477) — the Move builtin's argument parser rejects a deref of
 a Pointer(...) cast ("expected comma or close parenthesis"). Shared-parser
 / builtin arg lowering — needs its own focused ticket when picked up.
+
+### 2026-07-12 (later 2): untyped Pointer(p)^ expression form FIXED; wall = method by-ref args
+`Pointer(expr)^` now parses (builtin-cast branch grew a deref postfix,
+modeled as a Byte lvalue — address-identical for untyped params;
+test_ptr_untyped_deref in test-core). synautil advances to
+`Stream.read(PAnsiChar(Result)^, Len)` — the METHOD-call by-ref argument
+path still resolves bare idents only: filed
+[[bug-cast-deref-as-varparam-arg]] (Track P, prio 50). That is now the
+single wall in front of the whole synautil compile.

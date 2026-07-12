@@ -1679,6 +1679,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_pchar_to_string.pas /tmp/test_pchar_to_string26
 	test "$$(/tmp/test_pchar_to_string26)" = "$$(printf '3\n3\nabc\n3')"
+	./$(COMPILER) test/test_ptr_untyped_deref.pas /tmp/test_ptr_untyped_deref26
+	test "$$(/tmp/test_ptr_untyped_deref26)" = "$$(printf 'move=TRUE\nfill=TRUE')"
 	./$(COMPILER) -Fulib/rtl test/test_on_binderless.pas /tmp/test_on_binderless26
 	test "$$(/tmp/test_on_binderless26)" = "hits=11"
 	./$(COMPILER) -Fulib/rtl test/test_dynlib.pas /tmp/test_dynlib_stub26

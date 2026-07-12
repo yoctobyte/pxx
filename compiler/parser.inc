@@ -6545,6 +6545,21 @@ begin
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -1; { indicates built-in cast }
             ASTTk[node]   := Ord(castTk);
+            { `Pointer(expr)^` — FPC's untyped deref, legal where only the
+              ADDRESS matters (an untyped var/const argument: synautil's
+              `Move(Pointer(Value)^, ...)` is the driving consumer). There is
+              no pointee type, so model the deref as a Byte lvalue — the
+              address is identical and untyped params take the address. }
+            if (castTk = tyPointer) and (CurTok.Kind = tkCaret) then
+            begin
+              Next;
+              indexNode := AllocNode(AN_DEREF);
+              ASTLeft[indexNode] := node;
+              ASTTk[indexNode] := Ord(tyUInt8);
+              CurASTNode := indexNode;
+              LastExprTk := tyUInt8;
+              Exit;
+            end;
             CurASTNode    := node;
             LastExprTk    := castTk;
             Exit;
