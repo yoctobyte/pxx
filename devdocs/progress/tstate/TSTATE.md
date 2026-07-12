@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `aaa58e72c1e8` | 2026-07-12T18:48:28Z | GREEN (native) | 68.2s | `b97ff72d38c2` RED |
+| borg | `aaa58e72c1e8` | 2026-07-12T18:51:29Z | RED (full) | 171.8s | `aaa58e72c1e8` RED |
 
 ## Open regressions
 - **test-c-conformance-aarch64#shard1/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
@@ -12,3 +12,15 @@
 - **test-c-conformance-i386#shard5/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
 - **test-c-conformance-riscv32#shard2/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
 - **test-c-conformance-riscv32#shard5/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-arm32#src:test/test_asyncecho.pas** — test/test_asyncecho.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-arm32#src:test/test_channel.pas** — test/test_channel.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-arm32#src:test/test_reactor.pas** — test/test_reactor.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-arm32#src:test/test_scheduler.pas** — test/test_scheduler.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-arm32#src:test/test_scheduler_exc.pas** — test/test_scheduler_exc.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-arm32#src:test/test_timer.pas** — test/test_timer.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_asyncecho.pas** — test/test_asyncecho.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_channel.pas** — test/test_channel.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_reactor.pas** — test/test_reactor.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_scheduler.pas** — test/test_scheduler.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_scheduler_exc.pas** — test/test_scheduler_exc.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
+- **test-i386#src:test/test_timer.pas** — test/test_timer.pas tools/run_target.sh (borg): bad `aaa58e72c1e8`, last good `aaa58e72c1e8`, 0 commit(s) in range
