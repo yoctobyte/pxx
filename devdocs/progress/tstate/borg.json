@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T12:49:15Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f030f885b4d69114979eeac6e8c61f933cc6722b",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T12:52:35Z",
    "fixed": [],
    "new_red": [],
@@ -434,18 +426,33 @@
    "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T19:12:20Z",
+   "fixed": [
+    "test-arm32#src:test/test_asyncecho.pas",
+    "test-arm32#src:test/test_channel.pas",
+    "test-arm32#src:test/test_reactor.pas",
+    "test-arm32#src:test/test_scheduler.pas",
+    "test-arm32#src:test/test_scheduler_exc.pas",
+    "test-arm32#src:test/test_timer.pas",
+    "test-i386#src:test/test_asyncecho.pas",
+    "test-i386#src:test/test_channel.pas",
+    "test-i386#src:test/test_reactor.pas",
+    "test-i386#src:test/test_scheduler.pas",
+    "test-i386#src:test/test_scheduler_exc.pas",
+    "test-i386#src:test/test_timer.pas"
+   ],
+   "new_red": [],
+   "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -564,9 +571,9 @@
   "test-arm32#src:test/test_asm_arm32.pas": "pass",
   "test-arm32#src:test/test_asm_arm32_sum.asm": "pass",
   "test-arm32#src:test/test_async_sl.pas": "pass",
-  "test-arm32#src:test/test_asyncecho.pas": "fail",
+  "test-arm32#src:test/test_asyncecho.pas": "pass",
   "test-arm32#src:test/test_call_result_member.pas": "pass",
-  "test-arm32#src:test/test_channel.pas": "fail",
+  "test-arm32#src:test/test_channel.pas": "pass",
   "test-arm32#src:test/test_class_of.pas": "pass",
   "test-arm32#src:test/test_classref.pas": "pass",
   "test-arm32#src:test/test_collections.pas": "pass",
@@ -649,17 +656,17 @@
   "test-arm32#src:test/test_methodptr.pas": "pass",
   "test-arm32#src:test/test_nested_dynarray_setlen.pas": "pass",
   "test-arm32#src:test/test_not_int64_expr.pas": "pass",
-  "test-arm32#src:test/test_reactor.pas": "fail",
+  "test-arm32#src:test/test_reactor.pas": "pass",
   "test-arm32#src:test/test_readln.pas": "pass",
   "test-arm32#src:test/test_record_temp_byval_arg.pas": "pass",
   "test-arm32#src:test/test_rtti.pas": "pass",
-  "test-arm32#src:test/test_scheduler.pas": "fail",
-  "test-arm32#src:test/test_scheduler_exc.pas": "fail",
+  "test-arm32#src:test/test_scheduler.pas": "pass",
+  "test-arm32#src:test/test_scheduler_exc.pas": "pass",
   "test-arm32#src:test/test_set_runtime.pas": "pass",
   "test-arm32#src:test/test_single_in_aggregate.pas": "pass",
   "test-arm32#src:test/test_streaming.pas": "pass",
   "test-arm32#src:test/test_streaming_enumset.pas": "pass",
-  "test-arm32#src:test/test_timer.pas": "fail",
+  "test-arm32#src:test/test_timer.pas": "pass",
   "test-arm32#src:test/test_uint32_write.pas": "pass",
   "test-arm32#src:test/test_uint64_ops.pas": "pass",
   "test-asm#src:compiler/compiler.pas": "pass",
@@ -1476,11 +1483,11 @@
   "test-i386#src:test/test_asm_386.pas": "pass",
   "test-i386#src:test/test_asm_386_sum.asm": "pass",
   "test-i386#src:test/test_async_sl.pas": "pass",
-  "test-i386#src:test/test_asyncecho.pas": "fail",
+  "test-i386#src:test/test_asyncecho.pas": "pass",
   "test-i386#src:test/test_atomic_counter.pas": "pass",
   "test-i386#src:test/test_atomic_i386.pas": "pass",
   "test-i386#src:test/test_call_result_member.pas": "pass",
-  "test-i386#src:test/test_channel.pas": "fail",
+  "test-i386#src:test/test_channel.pas": "pass",
   "test-i386#src:test/test_class_of.pas": "pass",
   "test-i386#src:test/test_classref.pas": "pass",
   "test-i386#src:test/test_collections.pas": "pass",
@@ -1561,27 +1568,22 @@
   "test-i386#src:test/test_not_int64_expr.pas": "pass",
   "test-i386#src:test/test_palthread.pas": "pass",
   "test-i386#src:test/test_proctype.pas": "pass",
-  "test-i386#src:test/test_reactor.pas": "fail",
+  "test-i386#src:test/test_reactor.pas": "pass",
   "test-i386#src:test/test_readln.pas": "pass",
   "test-i386#src:test/test_rtti.pas": "pass",
-  "test-i386#src:test/test_scheduler.pas": "fail",
-  "test-i386#src:test/test_scheduler_exc.pas": "fail",
+  "test-i386#src:test/test_scheduler.pas": "pass",
+  "test-i386#src:test/test_scheduler_exc.pas": "pass",
   "test-i386#src:test/test_set_runtime.pas": "pass",
   "test-i386#src:test/test_stackless_gen.pas": "pass",
   "test-i386#src:test/test_streaming.pas": "pass",
   "test-i386#src:test/test_streaming_enumset.pas": "pass",
   "test-i386#src:test/test_threadsafe_i386_stress.pas": "pass",
-  "test-i386#src:test/test_timer.pas": "fail",
+  "test-i386#src:test/test_timer.pas": "pass",
   "test-i386#src:test/test_tthread.pas": "pass",
   "test-i386#src:test/test_tthread_sync.pas": "pass",
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1638,11 +1640,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T19:09:23Z",
+  "date": "2026-07-12T19:12:20Z",
   "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 71.6
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 169.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1652,11 +1654,11 @@
   "sha": "c55e013bd39769ae00d341cd6cc4b37b5c94141e"
  },
  "last_full": {
-  "date": "2026-07-12T18:57:57Z",
-  "sha": "c55e013bd39769ae00d341cd6cc4b37b5c94141e",
+  "date": "2026-07-12T19:12:20Z",
+  "sha": "d0bb640f7b72fc10d5a52a90f215974a84d5c3f1",
   "tier": "full",
   "verdict": "RED",
-  "wall": 204.2
+  "wall": 169.8
  },
  "last_opt": {
   "date": "2026-07-12T18:59:54Z",
@@ -1725,114 +1727,6 @@
    "opened": "2026-07-12T17:39:01Z",
    "range": [],
    "src": "tools/run_c_conformance.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_asyncecho.pas",
-   "name": "test-arm32#98",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_asyncecho.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_channel.pas",
-   "name": "test-arm32#63",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_channel.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_reactor.pas",
-   "name": "test-arm32#97",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_reactor.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_scheduler.pas",
-   "name": "test-arm32#60",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_scheduler.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_scheduler_exc.pas",
-   "name": "test-arm32#61",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_scheduler_exc.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-arm32#src:test/test_timer.pas",
-   "name": "test-arm32#96",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_timer.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_asyncecho.pas",
-   "name": "test-i386#98",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_asyncecho.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_channel.pas",
-   "name": "test-i386#64",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_channel.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_reactor.pas",
-   "name": "test-i386#97",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_reactor.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_scheduler.pas",
-   "name": "test-i386#62",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_scheduler.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_scheduler_exc.pas",
-   "name": "test-i386#63",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_scheduler_exc.pas tools/run_target.sh"
-  },
-  {
-   "bad": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "good": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
-   "job": "test-i386#src:test/test_timer.pas",
-   "name": "test-i386#96",
-   "opened": "2026-07-12T18:51:29Z",
-   "range": [],
-   "src": "test/test_timer.pas tools/run_target.sh"
   }
  ]
 }
