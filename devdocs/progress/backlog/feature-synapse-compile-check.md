@@ -393,3 +393,14 @@ LoadFromStream/SaveToStream/Assign/AddStrings, writable TStream.Size).
 - `synachar` — needs iconv/charset tables (IconvArr); big, separate slice.
 - Runtime breadth: only the GET path smoke-tested; SMTP/POP3 compile-only.
 - synacode runtime values (Base64/MD5) STILL unverified (carried over).
+
+## Update 2026-07-12 (later, opus-p)
+
+- **ftpsend compiles** (dateutils/strutils shim units, TFileStream,
+  with-statement upgrades — see commits 73a2f234^..632af8cb).
+- **synacode runtime VERIFIED byte-exact vs FPC**: EncodeBase64/DecodeBase64,
+  MD5('abc'), SHA1('abc'), Crc32('123456789'), EncodeURL. Chasing this found
+  3 silent codegen bugs (const-open-array field args, indirect-call
+  open-array writeback, High(rec.fieldarray)) — fixed in 632af8cb.
+- Remaining: synachar (iconv tables), HMAC/QuotedPrintable etc. unverified,
+  SMTP/POP3/FTP runtime untested (need live/loopback servers).
