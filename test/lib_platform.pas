@@ -16,6 +16,9 @@ begin
   if PalHasFiles then writeln('files');
   if PalHasSockets then writeln('sockets');
   if PalHasThreads then writeln('threads');
+  { PalHasDynlib is BUILD-dependent (True only with -dPXX_DYNLIB_LIBC, when
+    dlopen actually works) — the default libc-free build reports False, so no
+    'dynlib' line is expected here. See feature-real-dynlib-loader. }
   if PalHasDynlib then writeln('dynlib');
   PalDelete(PChar('/tmp/pxx_pal_platform.txt'));
   PalDelete(PChar('/tmp/pxx_pal_platform_renamed.txt'));

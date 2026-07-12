@@ -3906,7 +3906,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_bitset.pas /tmp/lib_bitset
 	test "$$(/tmp/lib_bitset)" = "$$(printf 'TRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nTRUE\nFALSE\nFALSE\nFALSE\nTRUE\nFALSE\n6\n5 10 70 150 \n4\n-1\n10\n70')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas /tmp/lib_platform
-	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38')"
+	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net.pas /tmp/lib_platform_net
 	test "$$(/tmp/lib_platform_net)" = "$$(printf 'tcp=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net_udp.pas /tmp/lib_platform_net_udp

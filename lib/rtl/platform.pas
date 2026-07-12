@@ -69,6 +69,12 @@ function PalHasSockets: Boolean;
 function PalHasThreads: Boolean;
 function PalHasDynlib: Boolean;
 
+{ Dynamic loader (policy: libc-free default -> honest nil/0 stubs; posix with
+  -dPXX_DYNLIB_LIBC -> dlopen/dlsym/dlclose. PalHasDynlib reports which). }
+function PalDlOpen(name: PChar): Pointer;
+function PalDlSym(handle: Pointer; sym: PChar): Pointer;
+function PalDlClose(handle: Pointer): Integer;
+
 function PalUnsupported: Integer;
 
 function PalOpen(path: PChar; flags, mode: Integer): Integer;
@@ -158,6 +164,21 @@ end;
 function PalHasDynlib: Boolean;
 begin
   Result := PalBackendHasDynlib;
+end;
+
+function PalDlOpen(name: PChar): Pointer;
+begin
+  Result := PalBackendDlOpen(name);
+end;
+
+function PalDlSym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := PalBackendDlSym(handle, sym);
+end;
+
+function PalDlClose(handle: Pointer): Integer;
+begin
+  Result := PalBackendDlClose(handle);
 end;
 
 function PalUnsupported: Integer;

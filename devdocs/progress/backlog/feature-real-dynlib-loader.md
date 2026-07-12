@@ -109,3 +109,17 @@ return). A dlsym'd C function with float args now calls correctly through a
 `function(...): R; cdecl` pointer (sqrt/pow/ldexp verified). Remaining: stack
 spill (>6 int / >8 float), by-value structs, varargs; and porting the indirect
 cdecl path to the other targets. (a) PAL primitives and (d) Synapse SSL still open.
+
+## Update (2026-07-12): follow-up (a) DONE — PAL primitives + truthful capability
+
+`PalDlOpen`/`PalDlSym`/`PalDlClose` factored into the PAL (posix backend: real
+dlopen/dlsym/dlclose behind `-dPXX_DYNLIB_LIBC`, honest nil/0 stubs otherwise;
+ESP backend: always stubs). `dynlibs.pas` is now a thin FPC-surface over PAL
+with no ifdefs or externs of its own. **PalBackendHasDynlib reconciled:** it
+was unconditionally True on posix while the default build's loader was a stub —
+now it reports whether LoadLibrary actually works (True only with the define),
+and `lib_platform`'s expected output dropped its 'dynlib' line accordingly
+(the compile-time PXX_HAS_DYNLIB define is unchanged — that gates the surface,
+not the runtime loader). test_dynlib green in both modes; make lib-test green.
+Remaining: (b) other-target run verification, (d) Synapse SSL end-to-end
+(gated on the jedi.inc lexer bug, see bug-pascal-directive-inside-paren-star-comment).

@@ -12,6 +12,14 @@ function PalBackendHasSockets: Boolean;
 function PalBackendHasThreads: Boolean;
 function PalBackendHasDynlib: Boolean;
 
+{ Dynamic loader primitives. Real only with -dPXX_DYNLIB_LIBC (dlopen/dlsym/
+  dlclose via libc.so.6 — the binary then links libc, which the syscall-only
+  core avoids, so it stays opt-in). Without the define these are honest nil/0
+  stubs and PalBackendHasDynlib reports False. }
+function PalBackendDlOpen(name: PChar): Pointer;
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+function PalBackendDlClose(handle: Pointer): Integer;
+
 function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
 function PalBackendRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -232,10 +240,63 @@ begin
   Result := True;
 end;
 
+{$ifdef PXX_DYNLIB_LIBC}
+
+const
+  PAL_RTLD_NOW = 2;   { resolve all symbols at load time (Linux/glibc) }
+
+{ dlopen/dlsym/dlclose live in libc.so.6 on modern glibc (>= 2.34; the old
+  separate libdl is now an empty stub). The compiler emits the dynamic-link
+  machinery (PT_INTERP, dynsym, GOT) for any `external '<soname>'` routine —
+  which is exactly why these declarations sit behind the define. }
+function c_dlopen(name: PChar; flag: Integer): Pointer; cdecl; external 'libc.so.6' name 'dlopen';
+function c_dlsym(handle: Pointer; symbol: PChar): Pointer; cdecl; external 'libc.so.6' name 'dlsym';
+function c_dlclose(handle: Pointer): Integer; cdecl; external 'libc.so.6' name 'dlclose';
+
 function PalBackendHasDynlib: Boolean;
 begin
   Result := True;
 end;
+
+function PalBackendDlOpen(name: PChar): Pointer;
+begin
+  Result := c_dlopen(name, PAL_RTLD_NOW);
+end;
+
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := c_dlsym(handle, sym);
+end;
+
+function PalBackendDlClose(handle: Pointer): Integer;
+begin
+  Result := c_dlclose(handle);
+end;
+
+{$else}
+
+function PalBackendHasDynlib: Boolean;
+begin
+  { No loader in the libc-free build; opt in with -dPXX_DYNLIB_LIBC. }
+  Result := False;
+end;
+
+function PalBackendDlOpen(name: PChar): Pointer;
+begin
+  Result := nil;
+end;
+
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := nil;
+end;
+
+function PalBackendDlClose(handle: Pointer): Integer;
+begin
+  Result := 0;
+end;
+
+{$endif}
 
 function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
 begin

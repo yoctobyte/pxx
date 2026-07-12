@@ -11,6 +11,9 @@ function PalBackendHasFiles: Boolean;
 function PalBackendHasSockets: Boolean;
 function PalBackendHasThreads: Boolean;
 function PalBackendHasDynlib: Boolean;
+function PalBackendDlOpen(name: PChar): Pointer;
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+function PalBackendDlClose(handle: Pointer): Integer;
 
 function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
 function PalBackendRead(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -197,6 +200,22 @@ end;
 function PalBackendHasDynlib: Boolean;
 begin
   Result := False;
+end;
+
+{ No dynamic loader on ESP — honest stubs (mirrors the posix no-define shape). }
+function PalBackendDlOpen(name: PChar): Pointer;
+begin
+  Result := nil;
+end;
+
+function PalBackendDlSym(handle: Pointer; sym: PChar): Pointer;
+begin
+  Result := nil;
+end;
+
+function PalBackendDlClose(handle: Pointer): Integer;
+begin
+  Result := 0;
 end;
 
 function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
