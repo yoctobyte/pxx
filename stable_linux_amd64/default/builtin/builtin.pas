@@ -39,6 +39,24 @@ function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
 procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
 procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
 
+{ Published-method RTTI, backing FPC's `TObject.MethodAddress(name)` and
+  `TObject.MethodName(addr)` with no `uses` (the parser rewrites those calls; see
+  ParseLValueAST). FPC declares them on TObject in System, and fcl-fpcunit finds its
+  Test* methods with `Self.MethodAddress(FName)`.
+
+  The instance reaches its class RTTI through the backlink the compiler reserves one
+  word BEFORE the VMT: [instance+0] is the VMT address, so the blob is at
+  [[instance+0] - 8]. Blob layout is fixed by the RTTI_* constants in defs.inc:
+  +0 name, +8 parent, +48 methCount, +56 meths; a method entry is 16 bytes
+  {name, code}. Names are INTERNED FROZEN STRINGS — the pointer targets an 8-byte
+  length prefix with the chars at +8, NOT a bare char*.
+
+  Own and inherited methods both resolve (the parent chain is walked). Matching is
+  case-insensitive, as in FPC. nil / '' when there is no match. The richer surface
+  (enumerate, bind-and-call) lives in the RTL's `rtti` unit. }
+function __pxxMethodAddress(Instance: Pointer; const Name: AnsiString): Pointer;
+function __pxxMethodName(Instance: Pointer; Address: Pointer): AnsiString;
+
 { Bare `Abs(x)` / `Sqr(x)` lower to these (see ParseFactor) so the System
   intrinsics work with no `uses` and the argument is evaluated once (the naive
   e*e / if e<0 fold would double-evaluate a side-effecting argument). }
@@ -467,6 +485,108 @@ begin
     for j := 1 to m do
       if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
     if ok then begin Result := i; Exit; end;
+  end;
+end;
+
+type
+  PPxxPtr_ = ^Pointer;
+  PPxxInt_ = ^NativeInt;
+
+const
+  PXX_RTTI_PARENT    = 8;
+  PXX_RTTI_METHCOUNT = 48;
+  PXX_RTTI_METHS     = 56;
+  PXX_RTTI_METHSIZE  = 16;
+
+function __pxxRttiOf(Instance: Pointer): Pointer;
+{ The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
+  publishes nothing (no blob is emitted for it). }
+var vmt: Pointer;
+begin
+  Result := nil;
+  if Instance = nil then Exit;
+  vmt := PPxxPtr_(Instance)^;
+  if vmt = nil then Exit;
+  Result := PPxxPtr_(PtrUInt(vmt) - 8)^;
+end;
+
+function __pxxRttiName(P: Pointer): AnsiString;
+{ Blob names are interned FROZEN strings: 8-byte length prefix, chars at +8. }
+var n, i: NativeInt; pc: PChar; s: AnsiString;
+begin
+  s := '';
+  if P <> nil then
+  begin
+    n := PPxxInt_(P)^;
+    if (n > 0) and (n < 1024) then
+    begin
+      pc := PChar(PtrUInt(P) + 8);
+      i := 0;
+      while i < n do
+      begin
+        s := s + pc^;
+        pc := PChar(PtrUInt(pc) + 1);
+        i := i + 1;
+      end;
+    end;
+  end;
+  Result := s;
+end;
+
+function __pxxSameNameCI(const a, b: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if Length(a) <> Length(b) then Exit;
+  for i := 1 to Length(a) do
+    if __pxxUpCase(a[i]) <> __pxxUpCase(b[i]) then Exit;
+  Result := True;
+end;
+
+function __pxxMethodAddress(Instance: Pointer; const Name: AnsiString): Pointer;
+var rtti, meths, e: Pointer; cnt, i: Integer;
+begin
+  Result := nil;
+  rtti := __pxxRttiOf(Instance);
+  while rtti <> nil do
+  begin
+    cnt := Integer(PPxxInt_(PtrUInt(rtti) + PXX_RTTI_METHCOUNT)^);
+    meths := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_METHS)^;
+    if (cnt > 0) and (meths <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        if __pxxSameNameCI(__pxxRttiName(PPxxPtr_(e)^), Name) then
+        begin
+          Result := PPxxPtr_(PtrUInt(e) + 8)^;
+          Exit;
+        end;
+      end;
+    rtti := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_PARENT)^;
+  end;
+end;
+
+function __pxxMethodName(Instance: Pointer; Address: Pointer): AnsiString;
+var rtti, meths, e: Pointer; cnt, i: Integer;
+begin
+  Result := '';
+  if Address = nil then Exit;
+  rtti := __pxxRttiOf(Instance);
+  while rtti <> nil do
+  begin
+    cnt := Integer(PPxxInt_(PtrUInt(rtti) + PXX_RTTI_METHCOUNT)^);
+    meths := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_METHS)^;
+    if (cnt > 0) and (meths <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(PtrUInt(meths) + PtrUInt(i * PXX_RTTI_METHSIZE));
+        if PPxxPtr_(PtrUInt(e) + 8)^ = Address then
+        begin
+          Result := __pxxRttiName(PPxxPtr_(e)^);
+          Exit;
+        end;
+      end;
+    rtti := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_PARENT)^;
   end;
 end;
 
