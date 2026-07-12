@@ -71,11 +71,13 @@ Cross where a backend/runtime is touched.
 - 2026-07-12 — **PARKED (unfinished).** The next wall is not syntax: it is runtime
   reflection. Remaining, in order:
   1. `TObject.GetInterface(IID, out obj)` — testutils' `QueryInterface` calls it.
-     Own ticket needed (pxx interfaces are CORBA; no GUID table exists).
-  2. **RTTI published-method enumeration** — the actual payoff, and what test
-     discovery is built on. Split out as [[feature-rtti-method-reflection]], which
-     records the blob layout (the method table already EXISTS in the RTTI blob;
-     only the runtime API and an instance->RTTI backlink are missing).
+     Filed as [[feature-tobject-getinterface-guid-table]]. This is now the ONLY
+     remaining compile blocker in testutils.
+  2. ~~RTTI published-method enumeration~~ — **DONE**
+     ([[feature-rtti-method-reflection]]): the instance->RTTI backlink, the RTL
+     `rtti` unit (enumerate / find / bind-and-call), and FPC's own spelling
+     `TObject.MethodAddress` / `MethodName` working with no `uses`. Test discovery,
+     the whole point of this rung, now has its engine.
   3. `TFPList` and the rest of the FPC container surface fpcunit leans on.
 
   Nothing is half-applied: every compiler change above is committed, gated
