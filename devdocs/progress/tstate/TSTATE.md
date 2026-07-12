@@ -2,7 +2,14 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `96b6bac331d9` | 2026-07-12T17:36:16Z | GREEN (native) | 60.7s | `3f5aa914cac5` GREEN |
+| borg | `96b6bac331d9` | 2026-07-12T17:39:01Z | RED (full) | 146.5s | `96b6bac331d9` RED |
 
 ## Open regressions
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `96b6bac331d9`, last good `3f5aa914cac5`, 27 commit(s) in range
+- **test-c-conformance-aarch64#shard1/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-arm32#shard2/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-arm32#shard5/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-i386#shard2/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-i386#shard5/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-riscv32#shard2/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
+- **test-c-conformance-riscv32#shard5/6** — tools/run_c_conformance.sh (borg): bad `96b6bac331d9`, last good `96b6bac331d9`, 0 commit(s) in range
