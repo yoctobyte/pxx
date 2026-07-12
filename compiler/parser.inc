@@ -1741,9 +1741,25 @@ begin
   begin
     if Procs[procIdx].ParamCount <> 1 then
       Error('this operator must take exactly one parameter');
+    { FPC forbids conversion operators between two BUILT-IN ordinal types
+      (toperator90's Explicit LongInt -> Boolean %fail): a standard
+      conversion already exists. A string/record/class/float on either side
+      makes it a legal user conversion (tgenfunc8's LongInt <-> String). }
+    if ((opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT)) and
+       (recId = REC_NONE) and TypeIsOrdinal(IntToTypeKind(opTypeKind)) and
+       TypeIsOrdinal(Procs[procIdx].RetType) then
+      Error('impossible operator overload: a standard conversion between these types exists');
   end
-  else if Procs[procIdx].ParamCount <> 2 then
-    Error('binary operator must take exactly two parameters');
+  else
+  begin
+    if Procs[procIdx].ParamCount <> 2 then
+      Error('binary operator must take exactly two parameters');
+    { FPC forbids overloading a BINARY symbol operator when the operation is
+      predefined for the operand types — at least one operand must be a
+      record/class (toperator13..68 %fails: +,-,<,= on LongInt/AnsiString). }
+    if recId = REC_NONE then
+      Error('impossible operator overload: this operation is predefined for built-in operand types');
+  end;
   RegisterOpOverload(opKey, opTypeKind, recId, procIdx);
   if scalarTk2 <> tyUnknown then
     RegisterOpOverload(opKey, Ord(scalarTk2), REC_NONE, procIdx);
