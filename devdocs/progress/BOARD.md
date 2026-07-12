@@ -28,11 +28,10 @@ _none_
 
 _none_
 
-## backlog (90)
+## backlog (89)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-cast-deref-as-varparam-arg | A | 50 | bug | `PChar(s)^` / cast-derefs rejected as var/untyped method-call arguments | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
@@ -183,7 +182,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (600)
+## done (602)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -326,6 +325,7 @@ _none_
 | bug-case-else-multi-statement-parse-error | A | 50 | bug | Bug: `case ... else <stmt1>; <stmt2>; ... end` (multi-statement else, no begin/end) fails to parse | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | 50 | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-case-of-string-segfault-and-label-validation | A | 62 | bug | case-of-string: SEGFAULTS at runtime (worse than the missing diagnostics) | — |
+| bug-cast-deref-as-varparam-arg | A | 50 | bug | `PChar(s)^` / cast-derefs rejected as var/untyped method-call arguments | — |
 | bug-char-literal-concat-in-const-expr | A | 50 | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | 50 | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-chr-builtin-shadows-param-name | A | 50 | bug | Bug: `Chr` as parameter name treated as built-in function | — |
@@ -425,6 +425,7 @@ _none_
 | bug-paramstr-inline-argstr | A | 50 | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
+| bug-pascal-nested-variant-record-tagged | A | 55 | bug | Nested variant parts with a tagged discriminant (`case f: T of` inside a variant arm) | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
 | bug-pchar-to-string-implicit-conv | A | 50 | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
@@ -840,7 +841,6 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
-- [p 50] [A] bug-cast-deref-as-varparam-arg
 - [p 50] [A] bug-pascal-include-search-silent-miss
 - [p 50] [P] bug-pascal-scopedenums-ignored
 - [p 50] [A] feature-nilpy-collections-and-string-methods

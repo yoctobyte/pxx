@@ -363,3 +363,33 @@ cast-deref-as-varparam-arg (prio 50) and nested-variant-record-tagged
 (prio 55). Runtime caveat once compiling: synacode's DecodeBase64/MD5 had
 const-table codegen corruption historically (Track A fixes since landed in
 done/) — re-verify values, don't assume.
+
+## Session log 2026-07-12 (opus-p, Track P+B)
+
+**HTTP chain GREEN end-to-end.** `synsock`, `synautil`, `synaip`, `asn1util`,
+`synacode`, `blcksock`, `httpsend`, `smtpsend`, `pop3send` all compile with
+`--mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix`.
+Runtime smoke: `THTTPSend.HTTPMethod('GET', 'http://example.com/')` → 200,
+559 bytes, body matched — over our own sockets/DNS RTL, no libc.
+
+Parser fixes this session (commits 541f8fda, 2b2a0c29, +HTTP-chain commit):
+nested variant records w/ tagged discriminant (TVarSin, SizeOf=28 = FPC),
+cast-deref by-ref args (PChar(s)^), qualified type refs (sockets.Tin6_addr),
+const concat of named char consts (CRLF = CR + LF), metaclass const/var init
+(TSSLClass = TSSLNone), class aliases (TOptionList = TList), FField.Free /
+property.Free, @obj.field, f(...)^ untyped deref, SizeOf(obj.field),
+System.X-beats-param, proc-property invocation, MAX_METHFIX 8192, and the
+CRITICAL AllocParam SymBlockId recycling bug (on-handler poisoned the next
+routine's params — pre-existing in v202).
+
+RTL additions: sockets (fpGetPeerName/fp{Set,Get}SockOpt/fpIoctl, in6 union
+arms, NetAddrToStr(6)/StrToNetAddr(6), HostToNet/NetToHost), netdb shim over
+lib/rtl/dns, unix.GetHostName, sysutils (GetTempFileName, SetString,
+StrToInt64Def, LastDelimiter, AdjustLineBreaks), classes (TStrings
+LoadFromStream/SaveToStream/Assign/AddStrings, writable TStream.Size).
+
+**Remaining:**
+- `ftpsend` — needs a `dateutils` RTL unit (MonthDays/EncodeDate helpers).
+- `synachar` — needs iconv/charset tables (IconvArr); big, separate slice.
+- Runtime breadth: only the GET path smoke-tested; SMTP/POP3 compile-only.
+- synacode runtime values (Base64/MD5) STILL unverified (carried over).

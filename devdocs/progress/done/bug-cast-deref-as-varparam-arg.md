@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (Pascal frontend — call-argument lvalue path) — **Track P**
   (shared parser, A's gate)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, next Synapse wall after the untyped-Pointer-deref
   expression fix ([[feature-synapse-compile-check]]).
 
@@ -46,3 +46,6 @@ wall of the whole Synapse compile.
   the method-call argument paths (the address of the deref is passed).
 - The repro above compiles and round-trips 'abc' through the stream.
 - Self-host byte-identical; test covers method + plain forms.
+
+## Log
+- 2026-07-12 — resolved, commit 541f8fda.

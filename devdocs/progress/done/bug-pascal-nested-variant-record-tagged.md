@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug / feature gap (Pascal frontend — record parser) — **Track P**
   (shared parser, A's gate)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, the synsock wall of [[feature-synapse-compile-check]]
   ("expected field name in variant part").
 
@@ -56,3 +56,6 @@ remaining walls in front of the entire Synapse stack.
 - Layout matches FPC (all arms overlay at the variant start; record size =
   max arm end; packed respected) — verify with SizeOf(TVarSin) against FPC.
 - synsock.pas compiles past line 435; self-host byte-identical.
+
+## Log
+- 2026-07-12 — resolved, commit 541f8fda.
