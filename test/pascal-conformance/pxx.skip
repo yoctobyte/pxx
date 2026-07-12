@@ -59,12 +59,12 @@ tenum4.pp	gap: accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEn
 tenumerators1.pp	unclassified: Expected: :=, but got:  (Kind: 78, Line: 60) | near:  end  Enumerator  Free >>> 
 terecs6.pp	unclassified: pascal26:458: error: unexpected character ()
 tforin1.pp	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
-tforin24.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
+tforin24.pp	gap: operator Enumerator not dispatched by for-in (named form parses now)
 tforin28.pp	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
-tforin2.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
+tforin2.pp	gap: operators on NON-record operand types (String) + for-in Enumerator dispatch
 tforin3.pp	runtime: exit code 139 (want 0)
 tforin4.pp	unclassified: pascal26:23: error: for-in: not a generator, enum type, or iterable variable ()
-tforin5.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
+tforin5.pp	gap: operator Enumerator not dispatched by for-in (named form parses now)
 tforin8.pp	unclassified: pascal26:11: error: base type not found: IEnumerator ()
 tforin9.pp	unclassified: Expected: end, but got: enumerator (Kind: 1, Line: 14) | near:  function StepFor
 tgenconstraint37.pp	unclassified: Expected: end, but got:  (Kind: 78, Line: 18) | near:  class  ITestInterface  in
@@ -84,13 +84,12 @@ tgeneric93.pp	unclassified: pascal26:0: error: conditional directive: declared r
 tgeneric94.pp	gap: generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
 tgeneric95.pp	gap: specialize inside a generic routine signature (`expected name` at line 16)
 tgeneric97.pp	unclassified: pascal26:14: error: undefined variable (LowerCase)
-tgenfunc10.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
+tgenfunc10.pp	gap: operators on NON-record operand types (LongInt)
 tgenfunc1.pp	parser: inline specialize expression
 tgenfunc23.pp	parser: inline specialize expression
-tgenfunc8.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
+tgenfunc8.pp	gap: operators on NON-record operand types (LongInt)
 tobject1.pp	rtl: ExitCode variable missing
 tobject5.pp	unclassified: pascal26:8: error: undefined variable (TObject)
-toperator11.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 toperator78.pp	unclassified: pascal26:4: error: operator overloading: LongInt is not a record or class type (
 toperator89.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 toperator9.pp	parser: named/class operator (Initialize/Finalize/Explicit...)

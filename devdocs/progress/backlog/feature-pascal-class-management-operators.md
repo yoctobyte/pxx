@@ -6,9 +6,9 @@ prio: 48  # auto — 8 conformance tests
 
 - **Type:** feature (Pascal frontend, operator overloading)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+- **Status:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** opus-p
 
 ## Symptom
 `error: expected operator symbol after operator keyword` — pxx parses only
@@ -30,3 +30,26 @@ Track A ticket when reached.
 
 ## Gate
 `make test` + self-host byte-identical; burn the skip-list entries.
+
+## Slice 1 landed (2026-07-12, opus-p)
+
+Named operators on RECORD/CLASS operands parse + dispatch:
+- `operator :=` / `Implicit` — implicit conversion at assignment (ir.inc
+  AN_ASSIGN rewrites the RHS to the conversion call when types differ and the
+  overload's result type matches the LHS).
+- `operator Explicit` — fires at value casts (both the ident castTk branch and
+  the tkInteger_T branch in ParseFactor).
+- `operator Inc/Dec` — the Inc(x)/Dec(x) statements desugar to x := Op(x)
+  (single-operand form only, like FPC).
+- `Enumerator` + management ops parse+register but are NOT dispatched yet.
+Conformance: toperator11 burns. Test: test/test_named_operators.pas.
+
+**Remaining:**
+- operators on NON-record operand types (String/LongInt operands —
+  tforin2, tgenfunc8/10, tassignmentoperator1): needs the OvrlType table +
+  dispatch to accept scalar tks (recId REC_NONE), and the scalar binop hot
+  path to consult it.
+- `operator Enumerator` dispatch in for-in (tforin2/5/24).
+- `class operator` INSIDE advanced records (tmoperator*) — member-decl parse
+  plus the Initialize/Finalize lifetime EVENTS, which are IR work → file the
+  Track A ticket when picked up.

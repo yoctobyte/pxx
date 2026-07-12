@@ -3923,6 +3923,28 @@ begin
         if (varIdx >= 0) and (varIdx < SymCount) then
           lhsTk := Syms[varIdx].TypeKind;
       end;
+      { `operator :=(a: TFoo): TDst` / Implicit — a record/class RHS assigned
+        to a DIFFERENT-typed target converts through the overload
+        (toperator11's `i := a`). Rewrite RHS to the conversion CALL and fall
+        through to the ordinary assign of the result type. }
+      if ((IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord) or
+          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass)) and
+         (lhsTk <> tyUnknown) and (lhsTk <> tyAuto) and
+         (IntToTypeKind(ASTTk[ASTRight[node]]) <> lhsTk) then
+      begin
+        varIdx := FindOpOverload(Ord(tkAssign), ASTTk[ASTRight[node]],
+                                 ResolveNodeRec(ASTRight[node]));
+        if (varIdx >= 0) and (Procs[varIdx].RetType = lhsTk) then
+        begin
+          leftAddr := AllocNode(AN_ARG);
+          ASTLeft[leftAddr] := ASTRight[node];
+          slFldRec := AllocNode(AN_CALL);
+          ASTIVal[slFldRec] := varIdx;
+          ASTTk[slFldRec] := Ord(Procs[varIdx].RetType);
+          ASTLeft[slFldRec] := leftAddr;
+          ASTRight[node] := slFldRec;
+        end;
+      end;
       lhsStoreTk := lhsTk;
       if ASTKind[ASTLeft[node]] = AN_FIELD then
       begin

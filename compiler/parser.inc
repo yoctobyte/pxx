@@ -1548,6 +1548,7 @@ end;
 procedure ParseOperatorDef;
 var
   opKind: TTokenKind;
+  opKey: Integer;
   synName: AnsiString;
   typeName: AnsiString;
   recId: Integer;
@@ -1560,7 +1561,26 @@ var
 begin
   Next; { consume 'operator' }
   opKind := CurTok.Kind;
-  if not (opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) then
+  opKey := -1;
+  if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+    opKey := Ord(opKind)
+  else if opKind = tkAssign then
+    { `operator :=(src): TDst` — implicit conversion at assignment }
+    opKey := Ord(tkAssign)
+  else if opKind = tkIdent then
+  begin
+    { Named operators (FPC): Implicit = the := form; Explicit fires at
+      value casts; Inc/Dec at the Inc()/Dec() statements. Enumerator and
+      the management operators (Initialize/Finalize/AddRef/Copy) are
+      parsed+registered but not yet dispatched (lifetime events are a
+      Track A slice). }
+    if CaseEqual(CurTok.SVal, 'implicit') then opKey := Ord(tkAssign)
+    else if CaseEqual(CurTok.SVal, 'explicit') then opKey := OPK_EXPLICIT
+    else if CaseEqual(CurTok.SVal, 'inc') then opKey := OPK_INC
+    else if CaseEqual(CurTok.SVal, 'dec') then opKey := OPK_DEC
+    else if CaseEqual(CurTok.SVal, 'enumerator') then opKey := OPK_ENUMERATOR;
+  end;
+  if opKey < 0 then
     Error('expected operator symbol after operator keyword');
   { Stay on operator token — do NOT call Next. TokPos → '(' }
 
@@ -1686,7 +1706,7 @@ begin
   { After ParseSubroutine, the proc is registered — look it up by synName }
   procIdx := FindProc(synName);
   if procIdx < 0 then Error('operator: internal error, proc not found after parse');
-  RegisterOpOverload(Ord(opKind), opTypeKind, recId, procIdx);
+  RegisterOpOverload(opKey, opTypeKind, recId, procIdx);
 end;
 
 { Linear (row-major) index of an N-D fixed array element, built from AST nodes so
@@ -5398,6 +5418,24 @@ begin
       begin
         op := Ord(CurTok.Kind);
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        { `operator Explicit(a: TFoo): Integer` — an Integer(recordValue)
+          cast with a matching Explicit overload is the conversion CALL
+          (toperator11), not the value-pun. }
+        if ((IntToTypeKind(ASTTk[CurASTNode]) = tyRecord) or
+            (IntToTypeKind(ASTTk[CurASTNode]) = tyClass)) then
+        begin
+          i := FindOpOverload(OPK_EXPLICIT, ASTTk[CurASTNode], ResolveNodeRec(CurASTNode));
+          if (i >= 0) and TypeIsOrdinal(Procs[i].RetType) then
+          begin
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+            node := AllocNode(AN_CALL); ASTIVal[node] := i;
+            ASTTk[node] := Ord(Procs[i].RetType);
+            ASTLeft[node] := argSeq;
+            CurASTNode := node;
+            LastExprTk := Procs[i].RetType;
+            Exit;
+          end;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
@@ -6969,6 +7007,26 @@ begin
             Expect(tkLParen, '(');
             ParseExpr;
             Expect(tkRParen, ')');
+            { `operator Explicit(a: TFoo): Integer` — a value cast of a
+              record/class operand with a matching Explicit overload is the
+              conversion CALL, not a reinterpret (toperator11's Integer(a)). }
+            if ((IntToTypeKind(ASTTk[CurASTNode]) = tyRecord) or
+                (IntToTypeKind(ASTTk[CurASTNode]) = tyClass)) then
+            begin
+              sci := FindOpOverload(OPK_EXPLICIT, ASTTk[CurASTNode], ResolveNodeRec(CurASTNode));
+              if (sci >= 0) and (Procs[sci].RetType = castTk) then
+              begin
+                argSeq := AllocNode(AN_ARG);
+                ASTLeft[argSeq] := CurASTNode;
+                node := AllocNode(AN_CALL);
+                ASTIVal[node] := sci;
+                ASTTk[node] := Ord(castTk);
+                ASTLeft[node] := argSeq;
+                CurASTNode := node;
+                LastExprTk := castTk;
+                Exit;
+              end;
+            end;
             node := AllocNode(AN_PTR_CAST);
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -1; { indicates built-in cast }
@@ -11211,6 +11269,32 @@ begin
         end;
         Expect(tkRParen, ')');
 
+        { `operator Inc/Dec(a: TFoo): TFoo` overload on a record/class operand
+          (toperator11): Inc(x) desugars to x := IncOp(x). Step form excluded
+          (FPC's operator Inc takes one operand). }
+        smpii := -1;
+        if (IntToTypeKind(ASTTk[valNode]) = tyRecord) or
+           (IntToTypeKind(ASTTk[valNode]) = tyClass) then
+        begin
+          if i = Ord(tkInc) then
+            smpii := FindOpOverload(OPK_INC, ASTTk[valNode], ResolveNodeRec(valNode))
+          else
+            smpii := FindOpOverload(OPK_DEC, ASTTk[valNode], ResolveNodeRec(valNode));
+        end;
+        if smpii >= 0 then
+        begin
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := valNode;
+          opNode := AllocNode(AN_CALL);
+          ASTIVal[opNode] := smpii;
+          ASTTk[opNode] := Ord(Procs[smpii].RetType);
+          ASTLeft[opNode] := argSeq;
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := CloneAST(valNode);
+          ASTRight[node] := opNode;
+        end
+        else
+        begin
         opNode := AllocNode(AN_BINOP);
         if i = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
         ASTLeft[opNode] := valNode;
@@ -11219,6 +11303,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode;
         ASTRight[node] := opNode;
+        end;
       end
       else if CaseEqual(name, 'FreeMem') and (FindProc(name) < 0) and
               (FindSym(name) < 0) and (Tokens[TokPos].Kind = tkLParen) then

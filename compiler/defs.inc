@@ -101,6 +101,14 @@ const
   cgStruct = 17; cgPtr = 18; cgArray = 19; cgFunc = 20;
   MAX_RESOURCES   = 16;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  { Named-operator keys for the OvrlOp* overload table — outside the
+    TTokenKind range so they never collide with symbol operators
+    (feature-pascal-class-management-operators). `operator :=`/Implicit
+    register under Ord(tkAssign). }
+  OPK_EXPLICIT   = 1001;
+  OPK_INC        = 1002;
+  OPK_DEC        = 1003;
+  OPK_ENUMERATOR = 1004;
   MAX_METHFIX     = 8192;  { code-address relocations into Data[] (VMT + RTTI) — blcksock's deep virtual hierarchy blew 1024 }
 
   { RTTI property kinds (OUR codes; streaming-grade subset) }
