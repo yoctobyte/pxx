@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (95)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -126,6 +126,13 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard2-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard2-6 | T | 70 | regression | regression: test-c-conformance-i386#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard5-6 | T | 70 | regression | regression: test-c-conformance-i386#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard2-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard5-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -835,6 +842,13 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-c-conformance-aarch64-shard1-6
+- [p 70] [T] regression-test-c-conformance-arm32-shard2-6
+- [p 70] [T] regression-test-c-conformance-arm32-shard5-6
+- [p 70] [T] regression-test-c-conformance-i386-shard2-6
+- [p 70] [T] regression-test-c-conformance-i386-shard5-6
+- [p 70] [T] regression-test-c-conformance-riscv32-shard2-6
+- [p 70] [T] regression-test-c-conformance-riscv32-shard5-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels

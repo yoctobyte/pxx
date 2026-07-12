@@ -58,6 +58,15 @@ Still to answer within that bar (descriptions, not guarantees):
 - Release mechanics: install path, `SHA256SUMS` + signature ([[feature-release-checksums-repro]]),
   docs that match reality.
 
+**WHY the bar is high (user, 2026-07-12): the landscape shifted — this is not 1995.**
+Back then a "0.1" compiler was a tarball for hackers who *expected* to patch your Makefile and
+would mail you a diff; the version number bought real forgiveness. Today the audience has zero
+patience and infinite alternatives: a first-run failure is a permanent bounce, not a bug report.
+And the asymmetry is brutal — one bad thread becomes the durable search result, while a good
+release merely accumulates quietly. **A 0.x label no longer buys forgiveness: it says "early",
+but the reader still expects it to WORK.** Hence: if we publish, it must be genuinely usable and
+reasonably stable. That is the whole justification for a 1.0-grade bar under a 0.x number.
+
 **Tone: understatement with receipts.** Modesty's failure mode is underselling until nobody
 looks. State the facts flatly and let them work — "it compiles itself to a byte-identical binary,
 and it builds SQLite without libc on an ESP32" needs no adjectives; it is *more* impressive
