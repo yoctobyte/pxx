@@ -72,6 +72,7 @@ type
     function GetSize: Int64; virtual;
     function GetPosition: Int64; virtual;
     procedure SetPosition(const Pos: Int64); virtual;
+    procedure SetSize64(const NewSize: Int64); virtual;
   public
     function Read(var Buffer; Count: Longint): Longint; virtual; abstract;
     function Write(const Buffer; Count: Longint): Longint; virtual; abstract;
@@ -80,7 +81,7 @@ type
     procedure WriteBuffer(const Buffer; Count: Longint);
     function CopyFrom(Source: TStream; Count: Int64): Int64;
     property Position: Int64 read GetPosition write SetPosition;
-    property Size: Int64 read GetSize;
+    property Size: Int64 read GetSize write SetSize64;
   end;
 
   TMemoryStream = class(TStream)
@@ -91,6 +92,7 @@ type
     procedure EnsureCapacity(needed: Int64);
   protected
     function GetSize: Int64; override;
+    procedure SetSize64(const NewSize: Int64); override;
   public
     function Read(var Buffer; Count: Longint): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
@@ -142,6 +144,10 @@ type
     function IndexOf(const S: string): Integer; virtual;
     function GetText: string;
     procedure SetText(const Value: string);
+    procedure LoadFromStream(Stream: TStream);
+    procedure SaveToStream(Stream: TStream);
+    procedure Assign(Source: TStrings); virtual;
+    procedure AddStrings(Source: TStrings);
     property Count: Integer read GetCount;
     property Strings[Index: Integer]: string read Get write Put; default;
     property Objects[Index: Integer]: TObject read GetObject write PutObject;
@@ -183,6 +189,16 @@ end;
 procedure TStream.SetPosition(const Pos: Int64);
 begin
   Seek(Pos, soBeginning);
+end;
+
+procedure TStream.SetSize64(const NewSize: Int64);
+begin
+  { base: not resizable (FPC's default raises; keep it a no-op error-free stub) }
+end;
+
+procedure TMemoryStream.SetSize64(const NewSize: Int64);
+begin
+  SetSize(NewSize);
 end;
 
 function TStream.GetSize: Int64;
@@ -511,6 +527,46 @@ begin
       line := line + c;
   end;
   if line <> '' then Add(line);
+end;
+
+procedure TStrings.Assign(Source: TStrings);
+var i: Integer;
+begin
+  Clear;
+  if Source = nil then Exit;
+  for i := 0 to Source.Count - 1 do
+    AddObject(Source.Strings[i], Source.Objects[i]);
+end;
+
+procedure TStrings.AddStrings(Source: TStrings);
+var i: Integer;
+begin
+  if Source = nil then Exit;
+  for i := 0 to Source.Count - 1 do
+    AddObject(Source.Strings[i], Source.Objects[i]);
+end;
+
+procedure TStrings.LoadFromStream(Stream: TStream);
+var
+  buf: AnsiString;
+  n: Integer;
+begin
+  { read the stream's remaining bytes from Position and parse as lines }
+  n := Stream.Size - Stream.Position;
+  if n < 0 then n := 0;
+  SetLength(buf, n);
+  if n > 0 then
+    Stream.Read(PChar(buf)^, n);
+  SetText(buf);
+end;
+
+procedure TStrings.SaveToStream(Stream: TStream);
+var
+  buf: AnsiString;
+begin
+  buf := GetText;
+  if Length(buf) > 0 then
+    Stream.Write(PChar(buf)^, Length(buf));
 end;
 
 { ============================ TStringList ============================ }

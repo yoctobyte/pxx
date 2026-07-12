@@ -101,7 +101,7 @@ const
   cgStruct = 17; cgPtr = 18; cgArray = 19; cgFunc = 20;
   MAX_RESOURCES   = 16;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
-  MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
+  MAX_METHFIX     = 8192;  { code-address relocations into Data[] (VMT + RTTI) — blcksock's deep virtual hierarchy blew 1024 }
 
   { RTTI property kinds (OUR codes; streaming-grade subset) }
   RTTI_KIND_INT    = 0;   { integer / ordinal / boolean / sized ints }

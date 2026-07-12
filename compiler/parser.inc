@@ -2110,6 +2110,39 @@ begin
         recName := UFldRec_[fldIdx];
         ASTTk[fieldNode] := Ord(tk);
         node := fieldNode;
+        { Indirect call through a PROCEDURAL-typed property, unqualified inside
+          a method: OnStatus(Self, ...) with `property OnStatus: THook read
+          FOnStatus` (blcksock's DoStatus). Same shape as the bare proc-field
+          call above, over the backing field. }
+        if (CurTok.Kind = tkLParen) and (not UFldIsArray[fldIdx]) and
+           ((tk = tyPointer) or (tk = tyRecord)) and (UFldProcSig[fldIdx] >= 0) then
+        begin
+          fldSigPi := UFldProcSig[fldIdx];
+          isMethodPtr := (tk = tyRecord);
+          Expect(tkLParen, '(');
+          argsHead2 := -1; lastArg2 := -1;
+          while CurTok.Kind <> tkRParen do
+          begin
+            ParseExpr;
+            argSeq2 := AllocNode(AN_ARG);
+            ASTLeft[argSeq2] := CurASTNode;
+            if argsHead2 = -1 then argsHead2 := argSeq2
+            else ASTRight[lastArg2] := argSeq2;
+            lastArg2 := argSeq2;
+            if CurTok.Kind = tkComma then Next
+            else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+          end;
+          Expect(tkRParen, ')');
+          callIndNode := AllocNode(AN_CALL_IND);
+          ASTLeft[callIndNode]  := argsHead2;
+          ASTRight[callIndNode] := fieldNode;
+          ASTIVal[callIndNode]  := fldSigPi;
+          ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
+          if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+          node := callIndNode;
+          tk := Procs[fldSigPi].RetType;
+          recName := ProcRetRecId[fldSigPi];
+        end;
       end
       else if UPropReadMLen[pri] > 0 then
       begin
@@ -5869,6 +5902,15 @@ begin
         idx := FindSymInUnit(name, qUnit);
         procIdx := FindProcInUnit(name, qUnit);
       end
+      else if qUnit = -2 then
+      begin
+        { `System.X`: the builtin/global must win over any same-named
+          local/param — Synapse's `System.Length(buf)` inside
+          SendBufferTo(...; Length: Integer). Leave idx unbound so the
+          builtin branches below take the name. }
+        idx := -1;
+        procIdx := FindProc(name);
+      end
       else
       begin
         idx := FindSym(name);
@@ -6056,7 +6098,8 @@ begin
         bug-hard-keyword-intrinsics-block-identifier-use). A user routine of
         the same name shadows it, and a plain `length` not followed by `(`
         resolves as an ordinary identifier via the normal paths below. }
-      if CaseEqual(name, 'Length') and (procIdx < 0) and (FindSym(name) < 0) and
+      if CaseEqual(name, 'Length') and (procIdx < 0) and
+         ((qUnit = -2) or (FindSym(name) < 0)) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -6374,6 +6417,24 @@ begin
           node := ParseClassRecordSelectors(node, REC_UCLASS_BASE + ci, tk);
         CurASTNode := node;
         LastExprTk := tk;
+        Exit;
+      end;
+
+      { TObject(expr) — cast to the IMPLICIT root class (no UCls row exists for
+        the builtin TObject unless the user declared one, which the branch
+        above catches). Classes are pointers, so this is a pure static retag;
+        the value then feeds `is` / `as` / class casts (blcksock's
+        `TObject(SocketList[n]) is TBlockSocket`). No member selectors — the
+        root has none. }
+      if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) and
+         CaseEqual(name, 'TObject') and (FindUClass(name) < 0) then
+      begin
+        Next;                  { consume 'TObject' }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        Expect(tkRParen, ')');
+        ASTTk[CurASTNode] := Ord(tyClass);
+        LastExprTk := tyClass;
         Exit;
       end;
 
@@ -11643,6 +11704,22 @@ begin
               begin
                 smci := CurSelfClass - REC_UCLASS_BASE;
                 smmii := FindUField(smci, name);
+                if smmii < 0 then
+                begin
+                  { a read-FIELD property counts too — `FullResult.Free;` with
+                    `property FullResult: TStringList read FFullResult`
+                    (pop3send.Destroy): resolve the backing field. }
+                  smpii := FindUProp(smci, name);
+                  if (smpii >= 0) and (UPropReadFLen[smpii] > 0) then
+                  begin
+                    castFieldName := '';
+                    for i := 0 to UPropReadFLen[smpii] - 1 do
+                      AppendChar(castFieldName, TokChars[UPropReadFOff[smpii] + i]);
+                    smmii := FindUField(smci, castFieldName);
+                  end;
+                end
+                else
+                  smpii := -1;
                 if (smmii >= 0) and (UFldTk[smmii] = Ord(tyClass)) and
                    (UFldRec_[smmii] >= REC_UCLASS_BASE) and
                    (FindUMeth(UFldRec_[smmii] - REC_UCLASS_BASE, 'Free') < 0) then
@@ -11650,9 +11727,15 @@ begin
                   smSelfIdx := Procs[CurProc].Params[0].SymIdx;
                   castPrevTok := TokPos - 1;   { the field-name token }
                   Next; Next; Next;   { consume field, '.', 'Free' }
-                  node := GenMakeFreeObjectField(smSelfIdx,
-                    Tokens[castPrevTok].SOffset, Tokens[castPrevTok].SLen,
-                    UFldRec_[smmii] - REC_UCLASS_BASE);
+                  if (smpii >= 0) and (UPropReadFLen[smpii] > 0) then
+                    { property form: the FIELD's own span names the lvalue }
+                    node := GenMakeFreeObjectField(smSelfIdx,
+                      UPropReadFOff[smpii], UPropReadFLen[smpii],
+                      UFldRec_[smmii] - REC_UCLASS_BASE)
+                  else
+                    node := GenMakeFreeObjectField(smSelfIdx,
+                      Tokens[castPrevTok].SOffset, Tokens[castPrevTok].SLen,
+                      UFldRec_[smmii] - REC_UCLASS_BASE);
                   Result := node; Exit;
                 end;
               end;

@@ -243,6 +243,15 @@ function DeleteFile(const FileName: string): Boolean;
 function GetTempDir: string;
 function GetTempFileName(const Dir, Prefix: string): string;
 
+type
+  TTextLineBreakStyle = (tlbsLF, tlbsCRLF, tlbsCR);
+
+{ Normalize every CR / LF / CRLF run to the requested break style (FPC
+  SysUtils; Synapse's httpsend headers use tlbsCRLF). The 1-arg form uses the
+  platform default — LF on this POSIX-only RTL. }
+function AdjustLineBreaks(const S: AnsiString): AnsiString;
+function AdjustLineBreaks(const S: AnsiString; Style: TTextLineBreakStyle): AnsiString;
+
 { System.SetString (FPC): size S to Len and copy Len chars from Buf (when
   non-nil). Lives here until the compiler grows it as a builtin. }
 procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
@@ -1341,6 +1350,39 @@ begin
     Result := base + IntToStr(n);
     Inc(n);
   until not FileExists(Result);
+end;
+
+function AdjustLineBreaks(const S: AnsiString; Style: TTextLineBreakStyle): AnsiString;
+var
+  i: Integer;
+  nl: AnsiString;
+begin
+  case Style of
+    tlbsCRLF: nl := #13#10;
+    tlbsCR:   nl := #13;
+  else
+    nl := #10;
+  end;
+  Result := '';
+  i := 1;
+  while i <= Length(S) do
+  begin
+    if S[i] = #13 then
+    begin
+      Result := Result + nl;
+      if (i < Length(S)) and (S[i + 1] = #10) then Inc(i);
+    end
+    else if S[i] = #10 then
+      Result := Result + nl
+    else
+      Result := Result + S[i];
+    Inc(i);
+  end;
+end;
+
+function AdjustLineBreaks(const S: AnsiString): AnsiString;
+begin
+  Result := AdjustLineBreaks(S, tlbsLF);
 end;
 
 procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
