@@ -2959,7 +2959,16 @@ begin
 {$endif}
           Inc(j);
         end;
-        if (Length(fname) > 0) and (j <= Length(src)) then
+        if (Length(fname) = 1) and ((fname[1] = '+') or (fname[1] = '-')) or
+           ((Length(fname) > 0) and (fname[1] = '%')) then
+        begin
+          { NOT an include: `{$I+}` / `{$I-}` IO-checking switches and
+            `{$I %MACRO%}` compile-time info macros — leave them in the text
+            for the lexer (the hard miss-error below must not fire on them). }
+          AppendChar(IncExpanded, src[i]);
+          Inc(i);
+        end
+        else if (Length(fname) > 0) and (j <= Length(src)) then
         begin
           if fname[1] = '/' then
             fullPath := fname
