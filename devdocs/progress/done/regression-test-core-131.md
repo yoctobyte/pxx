@@ -23,3 +23,12 @@ pascal26:145: error: call to undeclared function: copysign ()
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (2026-07-12, opus-night)
+Already fixed the same night, pre-ticket: the red window (83006e9) caught the
+brief state where crtl math.c called `copysign` (no crtl body → undeclared
+in the standalone-src compile mode). The fix (inline sign logic; part of the
+lexer-fix commit chain, landed by 6ba5ce00/v202) removed every copysign use;
+watcher shows everything through 33f5b545 GREEN (full) and the job passes at
+HEAD. Closing.
+- 2026-07-12 — resolved, commit f4d985ea.

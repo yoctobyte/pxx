@@ -28,10 +28,11 @@ _none_
 
 _none_
 
-## backlog (84)
+## backlog (90)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-cast-deref-as-varparam-arg | A | 50 | bug | `PChar(s)^` / cast-derefs rejected as var/untyped method-call arguments | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 50 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 60 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
@@ -112,6 +113,11 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
+| regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-sqlite-threads-arm32-00 | T | 70 | regression | regression: test-sqlite-threads-arm32#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-sqlite-threads-i386-00 | T | 70 | regression | regression: test-sqlite-threads-i386#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | task-fpc-skip-triage-wontfix-vs-gap | T | 20 | task | FPC conformance: triage the ~237 untriaged skips into gap: / wontfix: | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
@@ -177,7 +183,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (599)
+## done (600)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -763,6 +769,7 @@ _none_
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| regression-test-core-131 | T | 70 | regression | regression: test-core#131 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
 | regression-test-core-602 | T | 70 | regression | regression: test-core#602 red at 4dfde8f92cb4 (auto-filed by twatch) | — |
 | regression-test-core-603 | T | 70 | regression | regression: test-core#603 red at 3615126067aa (auto-filed by twatch) | — |
@@ -800,6 +807,11 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-sqlite-threads-aarch64-00
+- [p 70] [T] regression-test-sqlite-threads-arm32-00
+- [p 70] [T] regression-test-sqlite-threads-i386-00
+- [p 70] [T] regression-test-sqlite-threads-x86-64-00
+- [p 70] [T] regression-test-zlib-00
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels
@@ -829,6 +841,7 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
+- [p 50] [A] bug-cast-deref-as-varparam-arg
 - [p 50] [A] bug-esp-emit-obj-proc-fixup-non-iram
 - [p 50] [A] bug-pascal-include-search-silent-miss
 - [p 50] [P] bug-pascal-scopedenums-ignored
