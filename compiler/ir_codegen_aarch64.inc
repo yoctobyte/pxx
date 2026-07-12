@@ -1159,6 +1159,18 @@ begin
           EmitI32($F9400000);            { ldr x0, [x0] }
       end;
 
+    IR_MULHI:
+      begin
+        { Unsigned 64x64->128, high half. Same operand dance as an integer
+          binop: a in x0, b in x1. }
+        IREmitNodeAarch64(IRA[node]);
+        EmitI32($F81F0FE0); { str x0, [sp, #-16]! (a) }
+        IREmitNodeAarch64(IRB[node]);
+        EmitI32($AA0003E1); { mov x1, x0 (b) }
+        EmitI32($F84107E0); { ldr x0, [sp], #16 (a) }
+        EmitI32($9BC17C00); { umulh x0, x0, x1 }
+      end;
+
     IR_BINOP:
       begin
         left := IRA[node];

@@ -101,6 +101,7 @@ begin
     IR_YIELD: Result := 'yield';
     IR_CALL_IND: Result := 'call_ind';
     IR_CONST_DATA: Result := 'const_data';
+    IR_MULHI: Result := 'mulhi';
   else
     Result := 'unknown';
   end;
@@ -457,6 +458,12 @@ begin
 
       IR_CONST_DATA:
         begin end;
+
+      IR_MULHI:
+        begin
+          IRRequireNode(IRA[i], 'mulhi a');
+          IRRequireNode(IRB[i], 'mulhi b');
+        end;
 
     else
       Error('unknown IR opcode');
@@ -3557,6 +3564,19 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_ATOMIC, first, -1, -1, ASTIVal[node], ASTTk[node]);
+    end;
+
+    AN_MULHI:
+    begin
+      { Unsigned 64x64->128, high half. Only the 64-bit targets have the
+        instruction (x86-64 `mul`, aarch64 `umulh`); the 32-bit ones would need a
+        multi-limb expansion, so reject here rather than in six backends. Portable
+        code goes through lib/rtl's MulHiU64, which picks the Pascal fallback when
+        CPU64 is not defined. }
+      if not ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)) then
+        Error('__pxxmulhi_u64 requires a 64-bit target (x86-64 / aarch64); use MulHiU64 from lib/rtl for a portable path');
+      Result := IRAppend(IR_MULHI, IRLowerAST(ASTLeft[node]),
+                  IRLowerAST(ASTRight[node]), -1, 0, ASTTk[node]);
     end;
 
     AN_YIELD:

@@ -298,6 +298,11 @@ const
   ATOMIC_CAS64  = 4;
   ATOMIC_ADD64  = 5;
 
+  AN_MULHI         = 82; { __pxxmulhi_u64(a, b): Left = a, Right = b. Unsigned
+                           64x64->128 multiply, high half. Lowers to IR_MULHI on
+                           the 64-bit targets; IRLowerAST errors on the 32-bit
+                           ones (no widening multiply exists there). }
+
   AN_COMPOUND_LITERAL = 81; { C99 compound literal (T)[brace-list] as an expression.
                            IVal = hidden record temp sym; Left = init statement chain
                            (AN_SEQ of CMakeZeroLocal + CInitLocalAggregate stores over
@@ -403,6 +408,7 @@ const
   IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
   MAX_LOOPSYM_SCAN = 64; { -O3 loop-residency: cap on distinct syms tallied inside a body's loop ranges (LoopResidencyAssign); overflow just means later syms are not residency candidates. }
   IR_CONST_DATA    = 68; { generic data-reference constant: IRIVal = Data[] offset OR a negative dataref sentinel (RECORD_RTTI/CLASSREF/SYM_RTTI bases, resolved by the pre-link fixup pass). Value = absolute data address in the accumulator. Lets IR-level CALLS pass descriptor addresses (e.g. a record layout descriptor to PXXDynArrayRetainImmediate) instead of needing a bespoke per-backend op. }
+  IR_MULHI         = 69; { __pxxmulhi_u64(a, b): IRA = a, IRB = b. UNSIGNED widening 64x64->128 multiply, yielding the HIGH 64 bits in the accumulator (the low half is an ordinary tkStar multiply). x86-64 = `mul r64` (RDX:RAX), aarch64 = `umulh`. 64-BIT TARGETS ONLY -- IRLowerAST rejects it on the 32-bit targets, which have no such instruction, so the 32-bit backends never see this op and need no case. Callers get a portable path via lib/rtl's MulHiU64 wrapper ({$IFDEF CPU64} intrinsic {$ELSE} Pascal fallback). Exists so bignum/field arithmetic can use saturated 64-bit limbs instead of a reduced radix. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

@@ -1808,6 +1808,20 @@ begin
         IREmitCodeCall(CloneStubAddr);
       end;
 
+    IR_MULHI:
+      begin
+        { Unsigned 64x64->128; keep the high half. `mul r64` is fixed-operand:
+          rax * rcx -> rdx:rax, so rdx is the result and rax the discarded low
+          half. }
+        IREmitNode(IRA[node]);
+        EmitB($50);                                    { push rax (a) }
+        IREmitNode(IRB[node]);
+        EmitB($48); EmitB($89); EmitB($C1);            { mov rcx, rax (b) }
+        EmitB($58);                                    { pop rax (a) }
+        EmitB($48); EmitB($F7); EmitB($E1);            { mul rcx -> rdx:rax }
+        EmitB($48); EmitB($89); EmitB($D0);            { mov rax, rdx (high half) }
+      end;
+
     IR_ATOMIC:
       begin
         { 32-bit atomic read-modify-write on addr^. Args evaluated left-to-right

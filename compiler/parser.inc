@@ -6186,6 +6186,27 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxmulhi_u64') then
+      begin
+        { __pxxmulhi_u64(a, b): the HIGH 64 bits of the unsigned 128-bit product
+          a*b (the low half is an ordinary a*b). Lowers to IR_MULHI -- x86-64
+          `mul`, aarch64 `umulh`. 64-bit targets only; lowering rejects the
+          32-bit ones. Portable callers use lib/rtl's MulHiU64 wrapper. }
+        node := AllocNode(AN_MULHI);
+        ASTTk[node] := Ord(tyUInt64);
+        Next; { consume the intrinsic name }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        ASTLeft[node] := CurASTNode;
+        Expect(tkComma, ',');
+        ParseExpr;
+        ASTRight[node] := CurASTNode;
+        Expect(tkRParen, ')');
+        LastExprTk := tyUInt64;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__pxxatomic_xchg') or CaseEqual(name, '__pxxatomic_cas')
          or CaseEqual(name, '__pxxatomic_add')
          or CaseEqual(name, '__pxxatomic_xchg64') or CaseEqual(name, '__pxxatomic_cas64')

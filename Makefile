@@ -308,6 +308,9 @@ test-threads: $(COMPILER)
 	grep -q "only" /tmp/test_threadsafe_riscv32_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
+	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
+	./$(COMPILER) test/test_mulhi.pas /tmp/test_mulhi26
+	test "$$(/tmp/test_mulhi26 | tail -1)" = "MULHI OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/test_atomic64_26
 	test "$$(/tmp/test_atomic64_26 | tail -1)" = "ATOMIC64 OK"
