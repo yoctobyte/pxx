@@ -5,7 +5,7 @@ prio: 55  # cold-start insurance: cheap to run, expensive to discover late
 # testmgr: FPC-bootstrap canary — catch seed rot before it matters
 
 - **Type:** feature / regression coverage — **Track T** (`tools/testmgr.py`)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-12, found by accident while building a Track A change.
 
 ## Symptom
@@ -67,3 +67,6 @@ stock master too, and look like the cross-job shared-artifact hazard testmgr.py
 documents at line 301 — one job builds `libspill.so` / `liblazycasing.so` into
 its own scratch dir, the consumer job runs with a different scratch and cannot
 dlopen it. Worth its own Track T ticket if it isn't already known.
+
+## Log
+- 2026-07-12 — resolved, commit 6ec9cefb.

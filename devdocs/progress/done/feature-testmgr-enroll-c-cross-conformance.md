@@ -47,3 +47,6 @@ So the watcher's full tier will report RED until those land. That is the honest
 state and the whole point of enrolling — the matrix "found 3 real backend gaps on
 day one" per this ticket, and it just did so again. Nothing gates dev pushes on
 `full` (quick + self-host is the push bar), and tstate is the truth.
+
+## Log
+- 2026-07-12 — resolved, commit 6ec9cefb.

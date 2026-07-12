@@ -6,7 +6,7 @@ prio: 20
 
 - **Type:** task (testing infra / frontend audit) — **Track T** files it; the
   per-test verdicts are P/B/A knowledge but the tagging lives in T's skip list.
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-11 (follow-up to
   [[feature-testmgr-fpc-compare-and-web-dashboard]])
 - **Owner:** —
@@ -45,3 +45,4 @@ retagged skip list, and the dashboard reflects the split on the next idle bench.
 
 ## Log
 - 2026-07-11 — filed.
+- 2026-07-12 — resolved, commit 9114ea42.

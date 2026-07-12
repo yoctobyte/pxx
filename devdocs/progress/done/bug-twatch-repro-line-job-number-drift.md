@@ -49,3 +49,6 @@ the source path is already unique for the unit-test jobs, and jobs with no src
 
 `tools/testmgr.py --tier full` green; a filed ticket's repro line must still
 select the right job after a test is inserted above it.
+
+## Log
+- 2026-07-12 — resolved, commit 6ec9cefb.
