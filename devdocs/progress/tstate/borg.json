@@ -1587,13 +1587,10 @@
  "open_regressions": [
   {
    "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "7bf9e80393edab6a1799c5009f660fa19d4c11b5",
+   "good": "a568e1a3ac72972717ded062fc0cdb84bdf3fe21",
    "job": "test-core#131",
    "opened": "2026-07-12T04:25:50Z",
    "range": [
-    "83b80c6ae190d6eaed18dec19ea055a3f75c227b",
-    "485182baebe5a244c326d83d44b532bbbc12f2b4",
-    "a568e1a3ac72972717ded062fc0cdb84bdf3fe21",
     "e752978b24999f5ed7ad22323706530b2d295cd3",
     "d6cec2355b790fccb2bbc18cfbc4bc081873b293",
     "0bf6792715bc1dbcf4b398142b39fd747ccc023b",

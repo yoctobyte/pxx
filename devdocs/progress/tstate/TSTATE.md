@@ -5,7 +5,7 @@
 | borg | `83006e927e35` | 2026-07-12T04:30:08Z | GREEN (opt) | 125.4s | `83006e927e35` RED |
 
 ## Open regressions
-- **test-core#131** — test/cmath_sqrt_correctly_rounded_b240.c (borg): bad `83006e927e35`, last good `7bf9e80393ed`, 7 commit(s) in range
+- **test-core#131** — test/cmath_sqrt_correctly_rounded_b240.c (borg): bad `83006e927e35`, last good `a568e1a3ac72`, 4 commit(s) in range
 - **test-sqlite-threads-aarch64#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
 - **test-sqlite-threads-arm32#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
 - **test-sqlite-threads-i386#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
