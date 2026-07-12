@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T13:19:37Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T13:26:22Z",
    "fixed": [],
    "new_red": [],
@@ -444,6 +436,14 @@
    "new_red": [],
    "sha": "aecb0de8900104095ad25931bd462aaadf846431",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T21:06:27Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "05dbf96d6929bab8b891edbd54cf93af5cfd8eac",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1214,6 +1214,7 @@
   "test-core#src:test/test_int_to_float.pas": "pass",
   "test-core#src:test/test_interface_arc.pas": "pass",
   "test-core#src:test/test_interface_arc_exc.pas": "pass",
+  "test-core#src:test/test_interface_constref_cdecl_b249.pas": "pass",
   "test-core#src:test/test_interfaces.pas": "pass",
   "test-core#src:test/test_interfaces_as.pas": "pass",
   "test-core#src:test/test_interfaces_inherit.pas": "pass",
@@ -1654,11 +1655,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T20:59:30Z",
-  "sha": "aecb0de8900104095ad25931bd462aaadf846431",
-  "tier": "opt",
+  "date": "2026-07-12T21:06:27Z",
+  "sha": "05dbf96d6929bab8b891edbd54cf93af5cfd8eac",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 101.0
+  "wall": 64.9
  },
  "last_bench": {
   "conf_rows": 550,
