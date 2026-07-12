@@ -5,7 +5,7 @@ prio: 65  # froze the dev box once (2026-07-12); one hard reset is enough
 # testmgr: cap its own memory in a cgroup scope + swap-aware admission
 
 - **Type:** feature / robustness — **Track T** (`tools/testmgr.py`)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, after an opt-tier run wedged the box (hard reset).
 
 ## Symptom
@@ -93,3 +93,6 @@ Out of scope, host-side (user did these on 2026-07-12): `vm.swappiness=10`
 (60 pushed 2.3 GB of idle anon into swap while 11 GB RAM sat free — that swapped
 anon *is* the refault storm) and installing `earlyoom` as a system-wide
 backstop. Neither belongs in the repo; testmgr must not depend on them.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
