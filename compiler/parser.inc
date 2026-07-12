@@ -16263,9 +16263,10 @@ var
   hasDefault : Boolean; defaultVal : Int64;
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
+  pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
   pDimLo    : array[0..95] of Integer;
   pDimSpan  : array[0..95] of Integer;
-  paramNDims, paramDynDepth, paramAi, pdi: Integer;
+  paramNDims, paramDynDepth, paramAi, pdi, paramFixedLen: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
@@ -16409,6 +16410,7 @@ begin
       isArr := False;
       paramNDims := 0;
       paramDynDepth := 0;
+      paramFixedLen := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -16437,6 +16439,17 @@ begin
             psSpan[pdi] := ArrTypeDimSpan[paramAi * MAX_ARR_DIMS + pdi];
           end;
         end;
+        { Named FIXED array type param: remember how many elements it really has
+          (Lo/Hi are the FLATTENED bounds, so this is the total for N-D too).
+          AllocParam stamps ArrLen := 1000 on every array param — the open-array
+          "length unknown" placeholder — and the whole-array assign path sizes
+          its IR_COPY_REC from ArrLen. Without this, `r := tmp` where r is a
+          `var r: TFixed` param copied 1000 elements over a 4-element array and
+          smashed the caller's frame (bug-array-assign-to-var-param). A true
+          open array (`array of T`) has no named type here and keeps the
+          placeholder, which is correct: its length genuinely is not known. }
+        if not ArrTypeIsDyn[paramAi] then
+          paramFixedLen := ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1;
         Next;
       end
       else if CurTok.Kind = tkArray then
@@ -16488,6 +16501,7 @@ begin
         pdefaultval[i] := defaultVal;
         pNDims[i] := paramNDims;
         pDynDepth[i] := paramDynDepth;
+        pFixedLen[i] := paramFixedLen;
         for pdi := 0 to paramNDims - 1 do
         begin
           pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
@@ -17011,6 +17025,14 @@ begin
         SymArrDimSpan[idx * MAX_ARR_DIMS + pdi] := pDimSpan[i * MAX_ARR_DIMS + pdi];
       end;
     end;
+    { Named FIXED 1-D array param: record its true element count, overriding
+      AllocParam's open-array placeholder (ArrLen := 1000). The whole-array
+      assign path sizes its IR_COPY_REC from ArrLen, so the placeholder made
+      `r := tmp` (r a var param) copy 1000 elements over a 4-element array
+      (bug-array-assign-to-var-param). Dyn-array params set ArrLen := -1 above
+      and must not be touched. }
+    if (pFixedLen[i] > 0) and (pDynDepth[i] = 0) then
+      Syms[idx].ArrLen := pFixedLen[i];
     if parr[i] and (ptypes[i] = tyRecord) then
     begin
       { Open array of records (e.g. `array of const`): the slot holds a dyn-array

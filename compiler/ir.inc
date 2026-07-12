@@ -4219,7 +4219,11 @@ begin
               (ASTIVal[ASTLeft[node]] >= 0) and
               Syms[ASTIVal[ASTLeft[node]]].IsArray and
               (Syms[ASTIVal[ASTLeft[node]]].ArrLen >= 0) and
-              (SymArrNDims[ASTIVal[ASTLeft[node]]] <= 1) and
+              { N-D arrays are stored flat and ArrLen is the FLATTENED element
+                count, so one IR_COPY_REC of ArrLen*elemSize copies the whole
+                thing — the old `<= 1` guard sent `b := a` on a 2-D array to the
+                scalar store path instead, which moved a single element's width
+                and left the rest garbage (bug-nd-array-assign-copies-garbage). }
               (SymElemDynDepth[ASTIVal[ASTLeft[node]]] = 0) and
               (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyAnsiString) and
               (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and

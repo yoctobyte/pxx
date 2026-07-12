@@ -311,6 +311,10 @@ test-threads: $(COMPILER)
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas /tmp/test_mulhi26
 	test "$$(/tmp/test_mulhi26 | tail -1)" = "MULHI OK"
+	# whole-array assign to a var param (copy sized from the open-array
+	# placeholder -> 1000-element overrun) + N-D whole-array assign
+	./$(COMPILER) test/test_array_var_param_assign.pas /tmp/test_avpa26
+	test "$$(/tmp/test_avpa26 | tail -1)" = "ARRAY VAR PARAM ASSIGN OK"
 	# M2 final slice: 64-bit atomics + TConditionVariable
 	./$(COMPILER) --threadsafe test/test_atomic64.pas /tmp/test_atomic64_26
 	test "$$(/tmp/test_atomic64_26 | tail -1)" = "ATOMIC64 OK"
