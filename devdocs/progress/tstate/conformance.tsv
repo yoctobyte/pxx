@@ -129,7 +129,7 @@ pass	tdefault9.pp	tdefault	-
 skip	tenum1.pp	tenum	untriaged	unclassified: Expected: begin, but got: (Kind: 82, Line: 3)
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
 skip	tenum3.pp	tenum	untriaged	unclassified: Expected: begin, but got: (Kind: 82, Line: 12) | near: third TRange1 first >
-skip	tenum4.pp	tenum	gap	accepts-invalid — $SCOPEDENUMS silently ignored: wrong ordinals at runtime, worst of the cluster
+skip	tenum4.pp	tenum	gap	accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEnum.member works); residual: the En1 := first assign needs the enum-identity type check (tenum2 cluster) to reject
 pass	tenum5.pp	tenum	-	
 skip	tenum6.pp	tenum	untriaged	runtime: exit code 1 (want 0)
 skip	tenumerators1.pp	tenum	untriaged	unclassified: Expected: :=, but got: (Kind: 78, Line: 60) | near: end Enumerator Free >>>
