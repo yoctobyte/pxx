@@ -9,7 +9,9 @@ blocked-by: [decide-1-0-scope-promise]
 - **Track:** W (website) — with Track D (docs) touchpoints
 - **Status:** backlog — designed 2026-07-12.
 - **Owner:** —
-- **Blocked-by:** decide-1-0-scope-promise  (the *launch* is gated; the *visibility* work is not)
+- **Blocked-by:** decide-1-0-scope-promise
+- **Note:** the *launch* is what that blocker gates. The *visibility* work below is NOT blocked
+  — start it now.
 - **Related:** [[docs-devnotes-ai-assisted-build]], [[feature-web-track-w-bootstrap]]
 
 ## The core distinction

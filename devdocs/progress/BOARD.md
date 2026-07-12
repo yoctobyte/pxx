@@ -102,7 +102,7 @@ _none_
 | feature-pascal-corpus-fpjson | P | 58 | feature | Pascal corpus: fcl-json — polymorphic TJSONData hierarchy + RTTI streaming | feature-pascal-corpus-fpcunit |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
-| feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, launch at 1.0 | (the, decide-1-0-scope-promise, gated;, is, launch, not), the, visibility, work |
+| feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, launch at 1.0 | decide-1-0-scope-promise |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
@@ -928,13 +928,5 @@ _none_
 
 - **2** — feature-pascal-corpus-fpcunit
 - **2** — feature-web-track-w-bootstrap
-- **1** — (the
 - **1** — decide-1-0-scope-promise
 - **1** — feature-pascal-corpus-fpjson
-- **1** — gated;
-- **1** — is
-- **1** — launch
-- **1** — not)
-- **1** — the
-- **1** — visibility
-- **1** — work
