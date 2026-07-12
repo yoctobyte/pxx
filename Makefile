@@ -392,6 +392,12 @@ test-core: $(COMPILER)
 	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)
 	./$(COMPILER) test/test_nested_variant_record.pas /tmp/test_nested_variant_record26
 	test "$$(/tmp/test_nested_variant_record26)" = "$$(printf '28\n2\n8080\nTRUE\n7')"
+	# cast-deref (PChar(s)^) as by-ref method arg (bug-cast-deref-as-varparam-arg)
+	./$(COMPILER) test/test_cast_deref_varparam.pas /tmp/test_cast_deref_varparam26
+	test "$$(/tmp/test_cast_deref_varparam26)" = "$$(printf 'abc 3')"
+	# on-handler binder must not poison the next routine's params (stale SymBlockId)
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_on_handler_next_proc_params.pas /tmp/test_on_handler_npp26
+	test "$$(/tmp/test_on_handler_npp26)" = "$$(printf 'purging\nTRUE 7')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

@@ -4109,6 +4109,19 @@ begin
       end;
     end;
   end
+  else if (tk = tyPointer) and (CurTok.Kind = tkCaret) then
+  begin
+    { Deref of an UNTYPED-pointer-returning call: `f(args)^` — legal where
+      only the ADDRESS matters (untyped var/const args: blcksock's
+      `Move(..., IncPoint(Buffer, rl)^, l)`). No pointee type, so model the
+      deref as a Byte lvalue, same as the Pointer(expr)^ untyped deref. }
+    Next;
+    sub := AllocNode(AN_DEREF);
+    ASTLeft[sub] := node;
+    ASTTk[sub] := Ord(tyUInt8);
+    node := sub;
+    tk := tyUInt8;
+  end
   else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) then
     { Member access on a class/record-returning call result: f(args).field[…]. }
     node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk);
@@ -4514,7 +4527,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
-    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase: Integer; szElemTk: TTypeKind;
+    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -4636,7 +4649,28 @@ begin
         Next;            { consume '.' (CurTok = method name) }
         if CurTok.Kind <> tkIdent then Error('expected method name after @obj.');
         mmi := FindUMeth(ci, CurTok.SVal);
-        if mmi < 0 then Error('@obj.method: unknown method');
+        if mmi < 0 then
+        begin
+          { @obj.field — ADDRESS of an instance field (blcksock's
+            `buf := @Value.Value`). AN_ADDR over the field lvalue. }
+          mmi := FindUField(ci, CurTok.SVal);
+          if mmi < 0 then Error('@obj.method: unknown method or field');
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := idx;
+          ASTTk[valNode] := Ord(tyClass);
+          node := AllocNode(AN_FIELD);
+          ASTLeft[node] := valNode;
+          ASTSOffset[node] := Tokens[TokPos-1].SOffset;
+          ASTSLen[node] := Tokens[TokPos-1].SLen;
+          ASTTk[node] := UFldTk[mmi];
+          Next;   { consume field name }
+          valNode := AllocNode(AN_ADDR);
+          ASTLeft[valNode] := node;
+          ASTTk[valNode] := Ord(tyPointer);
+          CurASTNode := valNode;
+          LastExprTk := tyPointer;
+          Exit;
+        end;
         valNode := AllocNode(AN_IDENT);   { object value = the instance pointer }
         ASTIVal[valNode] := idx;
         ASTTk[valNode] := Ord(tyClass);
@@ -5508,7 +5542,34 @@ begin
                   sci := FindSym(name);
                   if sci >= 0 then
                   begin
-                    if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
+                    if (Tokens[TokPos].Kind = tkDot) and (Syms[sci].RecName >= 0) and
+                       (not Syms[sci].IsArray) then
+                    begin
+                      { SizeOf(obj.field[.field..]) — walk the selector chain
+                        (never evaluating, like every SizeOf operand) and
+                        report the FINAL field's size (blcksock's
+                        SizeOf(Value.Value)). Scalar/record/class fields; an
+                        array field is out of scope and errors below. }
+                      szRec := Syms[sci].RecName;
+                      szElemTk := tyUnknown;
+                      Next;   { consume the identifier; CurTok = '.' }
+                      while CurTok.Kind = tkDot do
+                      begin
+                        Next;   { consume '.'; CurTok = field name }
+                        if CurTok.Kind <> tkIdent then Error('SizeOf: expected field name');
+                        szElemTk := RecFieldType(szRec, CurTok.SVal);
+                        if szElemTk = tyUnknown then Error('SizeOf: unknown field');
+                        szRec := RecFieldRecId(szRec, CurTok.SVal);
+                        if Tokens[TokPos].Kind = tkDot then Next;   { deeper chain }
+                      end;
+                      { CurTok = the last field name; the shared trailing Next
+                        below moves past it to the ')'. }
+                      if (szElemTk = tyRecord) and (szRec >= 0) then
+                        prevTok := RecSize(szRec)
+                      else
+                        prevTok := TypeSize(szElemTk);
+                    end
+                    else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
                        (SymArrNDims[sci] <= 1) then
                     begin
                       { SizeOf(arr[i]): the index expression's VALUE is never

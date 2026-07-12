@@ -2042,6 +2042,12 @@ begin
     named-array param index with the old N-D dims (silent stride corruption;
     bug-transitive-dns_cache-import-corrupts-managed-strings). }
   SymArrNDims[SymCount] := 0;
+  { Same recycled-slot landmine for the lazy-var block id: a param reusing the
+    slot of a popped MID-BLOCK local (an on-handler binder, a lifted temp)
+    inherited that dead block and IsBlockVisible filtered the param out of
+    FindSym — every routine following a `try..except on E: ... do` lost its
+    params (blcksock's SetLinger, bug-on-handler-poisons-next-proc-params). }
+  SymBlockId[SymCount] := CurBlockId;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
@@ -2282,6 +2288,7 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
+  SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
