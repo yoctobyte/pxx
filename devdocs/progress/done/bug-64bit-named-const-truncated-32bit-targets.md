@@ -5,7 +5,7 @@ prio: 80  # silent wrong VALUES on every 32-bit target, incl. ESP32 (riscv32/xte
 # 64-bit named constants are truncated to 32 bits on the 32-bit targets
 
 - **Type:** bug (constant lowering) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, hit by Track B: `lib/rtl/p256field.pas` computed
   garbage on i386/arm32/riscv32 while being bit-exact on x86-64/aarch64.
 
@@ -72,3 +72,6 @@ backends materialize the full value.
   target — same output as x86-64.
 - Regression test in `test/`, run cross.
 - self-host byte-identical; `make test` green.
+
+## Log
+- 2026-07-12 — resolved, commit b1ff20f3.
