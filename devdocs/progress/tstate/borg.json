@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T13:07:30Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2e08399339f17ecd7f47d4e3722259445588898e",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T13:14:50Z",
    "fixed": [],
    "new_red": [],
@@ -444,6 +436,14 @@
    "new_red": [],
    "sha": "2e6af610149fb14ffe532ada83fa1026dfb2df6b",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T20:54:40Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aecb0de8900104095ad25931bd462aaadf846431",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1069,6 +1069,7 @@
   "test-core#src:test/test_class_is_as.pas": "pass",
   "test-core#src:test/test_class_methods.pas": "pass",
   "test-core#src:test/test_class_of.pas": "pass",
+  "test-core#src:test/test_class_overload_directive_b247.pas": "pass",
   "test-core#src:test/test_class_str.pas": "pass",
   "test-core#src:test/test_class_var_section_b244.pas": "pass",
   "test-core#src:test/test_classref.pas": "pass",
@@ -1268,6 +1269,7 @@
   "test-core#src:test/test_method_default_param_b246.pas": "pass",
   "test-core#src:test/test_method_implicit_field.pas": "pass",
   "test-core#src:test/test_method_named_result.pas": "pass",
+  "test-core#src:test/test_method_overload_types_b248.pas": "pass",
   "test-core#src:test/test_method_read_write_unqualified.pas": "pass",
   "test-core#src:test/test_method_shadows_unit_proc.pas": "pass",
   "test-core#src:test/test_methodptr.pas": "pass",
@@ -1652,11 +1654,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T20:39:00Z",
-  "sha": "2e6af610149fb14ffe532ada83fa1026dfb2df6b",
-  "tier": "opt",
+  "date": "2026-07-12T20:54:40Z",
+  "sha": "aecb0de8900104095ad25931bd462aaadf846431",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 89.4
+  "wall": 65.5
  },
  "last_bench": {
   "conf_rows": 550,
