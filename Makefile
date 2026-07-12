@@ -1226,6 +1226,12 @@ test-core: $(COMPILER)
 	# (bug-c-unary-minus-no-integer-promotion)
 	./$(COMPILER) test/cunary_minus_promote_b253.c /tmp/cunary_minus_promote_b25326
 	/tmp/cunary_minus_promote_b25326; test "$$?" = "42"
+	# sizeof(us + 0) is 4, not 2 — the symbol fast path must not swallow a whole
+	# expression (bug-c-binary-op-no-integer-promotion-sizeof)
+	./$(COMPILER) test/csizeof_promoted_expr_b255.c /tmp/csizeof_promoted_expr_b25526
+	/tmp/csizeof_promoted_expr_b25526; test "$$?" = "42"
+	./$(COMPILER) --target=i386 test/csizeof_promoted_expr_b255.c /tmp/csizeof_promoted_expr_b255_386
+	/tmp/csizeof_promoted_expr_b255_386; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

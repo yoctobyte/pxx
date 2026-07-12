@@ -1500,6 +1500,40 @@ end;
   CurTok is the `sizeof` identifier. Folds a type operand to its size; an
   identifier operand to its symbol's size; otherwise a conservative pointer
   size (full expression-type sizing arrives with the type system). }
+function CSizeofIdentOperandIsWhole: Boolean;
+{ True when the sizeof operand that starts at the current identifier IS just that
+  identifier — optionally with `.field` / `->field` / `[index]` selectors — and
+  nothing more, i.e. the next token at operand level is the closing ')'.
+
+  ParseCSizeof has a fast path that sizes an operand straight from its SYMBOL. It
+  fired on any leading identifier and never checked that the expression ended
+  there, so `sizeof(us + 0)` measured `us` alone and reported 2 instead of 4: the
+  integer promotions (an `unsigned short + int` IS an int) were silently skipped.
+  `sizeof(-us)` was right only because it does not begin with an identifier.
+
+  Bracket contents are skipped wholesale — `sizeof(a[i+1])` is still a simple
+  operand; the `+` there is an index expression, not an operator on the operand.
+  A '(' at operand level (a call, `sizeof(f(x))`) is NOT simple: its type comes
+  from the expression, so it must take the general path.
+  See bug-c-binary-op-no-integer-promotion-sizeof. }
+var i, depth: Integer;
+begin
+  Result := False;
+  i := TokPos - 1;          { the identifier itself (CurTok) }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(depth)
+    else if Tokens[i].Kind = tkRBrack then Dec(depth)
+    else if depth = 0 then
+    begin
+      if Tokens[i].Kind = tkRParen then begin Result := True; Exit; end;
+      if (Tokens[i].Kind <> tkIdent) and (Tokens[i].Kind <> tkDot) then Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos: Integer; tk, elemTk: TTypeKind; fieldName: AnsiString;
 begin
@@ -1568,7 +1602,7 @@ begin
         length in SLen (escapes already folded). }
       sz := Tokens[TokPos - 1].SLen + 1;
     end
-    else if CurTok.Kind = tkIdent then
+    else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
       si := FindSym(CurTok.SVal);
       if si >= 0 then

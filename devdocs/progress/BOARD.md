@@ -31,11 +31,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (92)
+## backlog (91)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-binary-op-no-integer-promotion-sizeof | C | 45 | bug | `sizeof(us + 0)` reports 2, not 4 — binary ops skip the integer promotions | — |
 | bug-c-generic-long-vs-int-on-32bit | C | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
@@ -188,7 +187,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (653)
+## done (654)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -223,6 +222,7 @@ _none_
 | bug-c-anonymous-member-designated-init | C | 40 | bug | C anonymous struct/union member braced-designated init (`-fms-extensions`) | — |
 | bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
+| bug-c-binary-op-no-integer-promotion-sizeof | C | 45 | bug | `sizeof(us + 0)` reports 2, not 4 — binary ops skip the integer promotions | — |
 | bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
 | bug-c-builtin-va-copy | C | 50 | bug | C: __builtin_va_copy not supported (blocks tcc libtcc.c) | — |
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
@@ -899,7 +899,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [C] bug-c-binary-op-no-integer-promotion-sizeof
 - [p 45] [A] bug-riscv32-p256field-coredump
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
