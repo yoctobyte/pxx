@@ -24,3 +24,16 @@ xvfb-run: error: Xvfb failed to start
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (Track T, 2026-07-12)
+
+**Not a compiler regression — test-infra flake.** Log tail is
+`xvfb-run: error: Xvfb failed to start`, after the test binary already built ok.
+The gtk recipes (Makefile `test-core`) called bare `xvfb-run`, which pins
+servernum :99. borg runs two testmgr checkouts (dev tree + watcher clone), so
+whoever grabbed :99 first won and the other's gtk jobs died. testmgr's `{"xvfb"}`
+exclusive resource only serializes jobs *within* one run, not across runs.
+
+Reproduced by occupying :99 and running the old recipe (same error verbatim);
+`xvfb-run -a` passes. Fixed in fe462098. All four gtk jobs green at HEAD.
+- 2026-07-12 — resolved, commit fe462098.
