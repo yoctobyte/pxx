@@ -190,15 +190,15 @@ pass	tforin20.pp	tforin	-
 pass	tforin21.pp	tforin	-	
 pass	tforin22.pp	tforin	-	
 pass	tforin23.pp	tforin	-	
-skip	tforin24.pp	tforin	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	tforin24.pp	tforin	gap	operator Enumerator not dispatched by for-in (named form parses now)
 skip	tforin25.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: :, but got: FIndex (Kind: 1, Line: 10)
 skip	tforin26.pp	tforin	untriaged	unclassified: pascal26:2: error: expected name ()
 skip	tforin27.pp	tforin	untriaged	unclassified: pascal26:5: error: expected name ()
 skip	tforin28.pp	tforin	untriaged	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
-skip	tforin2.pp	tforin	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	tforin2.pp	tforin	gap	operators on NON-record operand types (String) + for-in Enumerator dispatch
 skip	tforin3.pp	tforin	untriaged	runtime: exit code 139 (want 0)
 skip	tforin4.pp	tforin	untriaged	unclassified: pascal26:23: error: for-in: not a generator, enum type, or iterable variable ()
-skip	tforin5.pp	tforin	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	tforin5.pp	tforin	gap	operator Enumerator not dispatched by for-in (named form parses now)
 skip	tforin6.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
 skip	tforin7.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
 skip	tforin8.pp	tforin	untriaged	unclassified: pascal26:11: error: base type not found: IEnumerator ()
@@ -350,7 +350,7 @@ skip	tgeneric97.pp	tgeneric	untriaged	unclassified: pascal26:14: error: undefine
 pass	tgeneric98.pp	tgeneric	-	
 skip	tgeneric99.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: TTest (Kind: 1, Line: 17)
 skip	tgeneric9.pp	tgeneric	untriaged	runtime: exit code 1 (want 0)
-skip	tgenfunc10.pp	tgenfunc	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	tgenfunc10.pp	tgenfunc	gap	operators on NON-record operand types (LongInt)
 pass	tgenfunc11.pp	tgenfunc	-	
 skip	tgenfunc12.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 7)
 pass	tgenfunc13.pp	tgenfunc	-	
@@ -368,7 +368,7 @@ skip	tgenfunc4.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :,
 skip	tgenfunc5.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 9)
 skip	tgenfunc6.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 9)
 skip	tgenfunc7.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
-skip	tgenfunc8.pp	tgenfunc	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	tgenfunc8.pp	tgenfunc	gap	operators on NON-record operand types (LongInt)
 skip	tgenfunc9.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
 pass	tint641.pp	tint64	-	
 skip	tint642.pp	tint64	untriaged	unclassified: pascal26:33: error: undefined variable (hexstr)
@@ -402,7 +402,7 @@ skip	tobject7.pp	tobject	untriaged	mode-delphi generics adjacent: Expected: begi
 auto	tobject8.pp	tobject	-	opt
 auto	tobject9.pp	tobject	-	opt
 pass	toperator10.pp	toperator	-	
-skip	toperator11.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+pass	toperator11.pp	toperator	-	
 skip	toperator12.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 10)
 pass	toperator13.pp	toperator	-	
 pass	toperator14.pp	toperator	-	
