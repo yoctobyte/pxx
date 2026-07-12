@@ -35,6 +35,7 @@ type
   compatibility and ignored (CLOCK_REALTIME carries no zone). Returns 0 on
   success, -1 on failure. }
 function fpgettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
 
 implementation
 
@@ -53,6 +54,27 @@ begin
   {$ifdef CPU_I386}  Result := 265; {$endif}
   {$ifdef CPU_AARCH64} Result := 113; {$endif}
   {$ifdef CPU_ARM32} Result := 263; {$endif}
+end;
+
+{ settimeofday(2). Fails with -1 (EPERM) for unprivileged callers — exactly
+  what Synapse's SetUTTime expects on an ordinary box. }
+function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+var
+  ts: TKernelTimeSpec;
+  n: Int64;
+begin
+  Result := -1;
+  if tp = nil then Exit;
+  { clock_settime(CLOCK_REALTIME) is the modern syscall shape; build the
+    timespec from the caller's timeval. }
+  ts.Sec := tp^.tv_sec;
+  ts.Nsec := tp^.tv_usec * 1000;
+{$ifdef CPUX86_64}
+  n := __pxxrawsyscall(227, 0, Int64(@ts), 0, 0, 0, 0);   { clock_settime }
+{$else}
+  n := -1;   { other targets: report failure until a consumer needs it }
+{$endif}
+  if n = 0 then Result := 0;
 end;
 
 function fpgettimeofday(tp: ptimeval; tzp: ptimezone): cint;

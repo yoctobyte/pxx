@@ -30,6 +30,27 @@ type
     fractional part — the standard FPC/Delphi representation. }
   TDateTime = Double;
 
+  { FPC TTimeStamp: Time = milliseconds since midnight, Date = days since
+    0001-01-01 (Trunc(dt) + DateDelta). }
+  TTimeStamp = record
+    Time: Integer;
+    Date: Integer;
+  end;
+
+const
+  { Days from the TDateTime epoch (1899-12-30) to the Unix epoch (1970-01-01). }
+  UnixDateDelta = 25569;
+
+  { Days from 0001-01-01 to the TDateTime epoch (FPC SysUtils.DateDelta). }
+  DateDelta = 693594;
+
+  { FPC SysUtils.MonthDays[IsLeapYear(y)][month]. }
+  MonthDays: array[False..True, 1..12] of Word = (
+    (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31),
+    (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31));
+
+type
+
   Exception = class
     FMessage: string;
     FHelpContext: Integer;
@@ -68,6 +89,18 @@ function StrToInt(const s: AnsiString): Integer;
 function UpCase(c: Char): Char;
 function UpperCase(const s: AnsiString): AnsiString;
 function LowerCase(const s: AnsiString): AnsiString;
+{ FPC Ansi* variants: locale-aware there, plain ASCII here (this RTL is
+  byte/ASCII throughout — same shape Synapse expects for header tokens). }
+function AnsiUpperCase(const s: AnsiString): AnsiString;
+function AnsiLowerCase(const s: AnsiString): AnsiString;
+
+var
+  { FPC locale format settings, fixed POSIX/C defaults here (no locale layer).
+    Writable vars like FPC so code may override (Synapse rewrites time strings
+    with TimeSeparator). }
+  TimeSeparator: Char;
+  DateSeparator: Char;
+  DecimalSeparator: Char;
 
 { Float -> string. FloatToStr gives a compact representation; FloatToStrF
   gives fixed-point with precision digits after the decimal point. }
@@ -168,6 +201,38 @@ function EncodeDate(Year, Month, Day: Word): TDateTime;
 procedure DecodeDate(aDate: TDateTime; out Year, Month, Day: Word);
 function EncodeTime(Hour, Min, Sec, MSec: Word): TDateTime;
 procedure DecodeTime(aTime: TDateTime; out Hour, Min, Sec, MSec: Word);
+
+{ 1..7, 1 = Sunday (FPC/Delphi convention). The epoch day 0 (1899-12-30) was
+  a Saturday = 7. First consumer: Synapse synautil's RFC-822 date rendering
+  (feature-synapse-compile-check). }
+function DayOfWeek(DateTime: TDateTime): Integer;
+
+{ Gregorian leap-year test (FPC SysUtils.IsLeapYear). }
+function IsLeapYear(Year: Word): Boolean;
+
+{ FPC-style date/time formatting, the subset real code uses (Synapse's RFC-822
+  / ISO-8601 / message-id renderers are the driving consumers): tokens
+  yyyy yy mm m dd d hh h nn n ss s zzz z (case-insensitive), "..." and '...'
+  quoted literals, everything else copied through. AM/PM and locale-name
+  tokens (mmm/ddd) are NOT implemented — extend when a consumer needs them. }
+function FormatDateTime(const Fmt: string; DateTime: TDateTime): string;
+
+{ Parse "hh[:nn[:ss]]" (TimeSeparator-separated) into a time-of-day fraction.
+  Raises Exception on malformed input (FPC raises EConvertError; callers like
+  Synapse just catch Exception). No AM/PM, no milliseconds — extend on demand. }
+function StrToTime(const S: string): TDateTime;
+
+{ Wall-clock now as a TDateTime (CLOCK_REALTIME via the PAL; UTC — this RTL
+  has no timezone database, matching its POSIX/C fixed-locale stance). }
+function Now: TDateTime;
+
+function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
+
+{ File predicates over the PAL (FPC SysUtils). FileExists is True only for
+  non-directories, DirectoryExists only for directories, matching FPC. }
+function FileExists(const FileName: string): Boolean;
+function DirectoryExists(const Dir: string): Boolean;
+function DeleteFile(const FileName: string): Boolean;
 
 implementation
 
@@ -366,6 +431,16 @@ begin
     if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
     Result[i] := c;
   end;
+end;
+
+function AnsiUpperCase(const s: AnsiString): AnsiString;
+begin
+  Result := UpperCase(s);
+end;
+
+function AnsiLowerCase(const s: AnsiString): AnsiString;
+begin
+  Result := LowerCase(s);
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
@@ -1132,6 +1207,168 @@ begin
   Result := (Hour * 3600000 + Min * 60000 + Sec * 1000 + MSec) / 86400000.0;
 end;
 
+function IsLeapYear(Year: Word): Boolean;
+begin
+  Result := ((Year mod 4 = 0) and (Year mod 100 <> 0)) or (Year mod 400 = 0);
+end;
+
+function DayOfWeek(DateTime: TDateTime): Integer;
+begin
+  { Pascal mod truncates toward zero, so pre-epoch dates come out <= 0 and
+    get folded back into 1..7. }
+  Result := 1 + ((Trunc(DateTime) - 1) mod 7);
+  if Result <= 0 then Result := Result + 7;
+end;
+
+{ zero-padded decimal of exactly width digits (enough for date fields) }
+function PadNum(v: Integer; width: Integer): string;
+var t: string;
+begin
+  t := IntToStr(v);
+  while Length(t) < width do t := '0' + t;
+  Result := t;
+end;
+
+
+function Now: TDateTime;
+var
+  sec, nsec: Int64;
+begin
+  Result := 0;
+  if PalRealtime(sec, nsec) <> 0 then Exit;
+  Result := UnixDateDelta + (sec + nsec / 1000000000.0) / 86400.0;
+end;
+
+function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
+var
+  h, mi, s, ms: Word;
+begin
+  DecodeTime(DateTime, h, mi, s, ms);
+  Result.Time := Integer(h) * 3600000 + Integer(mi) * 60000 + Integer(s) * 1000 + ms;
+  Result.Date := Trunc(DateTime) + DateDelta;
+end;
+
+function FileExists(const FileName: string): Boolean;
+var info: TPalFileStat;
+begin
+  Result := (PalStat(PChar(FileName), info) = 0) and not info.IsDir;
+end;
+
+function DirectoryExists(const Dir: string): Boolean;
+var info: TPalFileStat;
+begin
+  Result := (PalStat(PChar(Dir), info) = 0) and info.IsDir;
+end;
+
+function DeleteFile(const FileName: string): Boolean;
+begin
+  Result := PalDelete(PChar(FileName)) = 0;
+end;
+
+function StrToTime(const S: string): TDateTime;
+var
+  part: array[0..2] of Integer;
+  np, i, v, digits: Integer;
+  c: Char;
+begin
+  part[0] := 0; part[1] := 0; part[2] := 0;
+  np := 0;
+  v := 0;
+  digits := 0;
+  for i := 1 to Length(S) do
+  begin
+    c := S[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      v := v * 10 + (Ord(c) - Ord('0'));
+      digits := digits + 1;
+    end
+    else if (c = TimeSeparator) and (np < 2) and (digits > 0) then
+    begin
+      part[np] := v;
+      np := np + 1;
+      v := 0;
+      digits := 0;
+    end
+    else if c <> ' ' then
+      raise Exception.Create('StrToTime: invalid time string');
+  end;
+  if digits = 0 then raise Exception.Create('StrToTime: invalid time string');
+  part[np] := v;
+  if (part[0] > 23) or (part[1] > 59) or (part[2] > 59) then
+    raise Exception.Create('StrToTime: invalid time string');
+  Result := EncodeTime(part[0], part[1], part[2], 0);
+end;
+
+function FormatDateTime(const Fmt: string; DateTime: TDateTime): string;
+var
+  y, mo, d, h, mi, sec, ms: Word;
+  i, n, runLen: Integer;
+  c, q, lo: Char;
+begin
+  DecodeDate(DateTime, y, mo, d);
+  DecodeTime(DateTime, h, mi, sec, ms);
+  Result := '';
+  i := 1;
+  n := Length(Fmt);
+  while i <= n do
+  begin
+    c := Fmt[i];
+    if (c = '"') or (c = #39) then
+    begin
+      { quoted literal: copied verbatim to the closing quote }
+      q := c;
+      Inc(i);
+      while (i <= n) and (Fmt[i] <> q) do
+      begin
+        Result := Result + Fmt[i];
+        Inc(i);
+      end;
+      if i <= n then Inc(i);   { closing quote }
+    end
+    else
+    begin
+      lo := c;
+      if (lo >= 'A') and (lo <= 'Z') then lo := Chr(Ord(lo) + 32);
+      if (lo = 'y') or (lo = 'm') or (lo = 'd') or (lo = 'h') or
+         (lo = 'n') or (lo = 's') or (lo = 'z') then
+      begin
+        { token run: count same-letter repeats (case-insensitive) }
+        runLen := 0;
+        while i + runLen <= n do
+        begin
+          q := Fmt[i + runLen];
+          if (q >= 'A') and (q <= 'Z') then q := Chr(Ord(q) + 32);
+          if q <> lo then Break;
+          runLen := runLen + 1;
+        end;
+        case lo of
+          'y': if runLen >= 3 then Result := Result + PadNum(y, 4)
+               else Result := Result + PadNum(y mod 100, 2);
+          'm': if runLen >= 2 then Result := Result + PadNum(mo, 2)
+               else Result := Result + IntToStr(mo);
+          'd': if runLen >= 2 then Result := Result + PadNum(d, 2)
+               else Result := Result + IntToStr(d);
+          'h': if runLen >= 2 then Result := Result + PadNum(h, 2)
+               else Result := Result + IntToStr(h);
+          'n': if runLen >= 2 then Result := Result + PadNum(mi, 2)
+               else Result := Result + IntToStr(mi);
+          's': if runLen >= 2 then Result := Result + PadNum(sec, 2)
+               else Result := Result + IntToStr(sec);
+          'z': if runLen >= 3 then Result := Result + PadNum(ms, 3)
+               else Result := Result + IntToStr(ms);
+        end;
+        i := i + runLen;
+      end
+      else
+      begin
+        Result := Result + c;
+        Inc(i);
+      end;
+    end;
+  end;
+end;
+
 procedure DecodeTime(aTime: TDateTime; out Hour, Min, Sec, MSec: Word);
 var frac: Double; totalMSec: Int64;
 begin
@@ -1167,4 +1404,8 @@ begin
     end;
 end;
 
+initialization
+  TimeSeparator := ':';
+  DateSeparator := '-';
+  DecimalSeparator := '.';
 end.

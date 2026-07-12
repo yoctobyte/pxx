@@ -325,3 +325,19 @@ leaked NestedComments into every unit lexed after it — fixed per-unit),
 SEMANTICS: `undefined variable (DayOfWeek)` at synautil's date code — a
 lib/rtl sysutils surface gap (Track B, this ticket's own lane). The
 directive/lexer era of this ticket is over.
+
+### 2026-07-12 (later): RTL surface batch landed, next wall = Move(Pointer(v)^, ...)
+Iterated synautil's undefined-symbol walls at v202+HEAD:
+- sysutils: DayOfWeek, IsLeapYear, MonthDays (array[False..True,1..12]),
+  UnixDateDelta/DateDelta, FormatDateTime (y/m/d/h/n/s/z tokens + quoted
+  literals), StrToTime, Now (PalRealtime), TTimeStamp +
+  DateTimeToTimeStamp, AnsiUpper/LowerCase, TimeSeparator/DateSeparator/
+  DecimalSeparator vars (initialization), FileExists/DirectoryExists/
+  DeleteFile (PAL stat/delete).
+- baseunix: fpsettimeofday (clock_settime x86-64; -1 elsewhere).
+- parser: `on <Class> do` binderless except-handler form
+  (test_on_binderless in test-core).
+NEXT WALL: `Move(Pointer(Value)^, Pointer(@Result[l+1])^, x-1)`
+(synautil.pas:1477) — the Move builtin's argument parser rejects a deref of
+a Pointer(...) cast ("expected comma or close parenthesis"). Shared-parser
+/ builtin arg lowering — needs its own focused ticket when picked up.

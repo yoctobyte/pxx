@@ -9815,13 +9815,25 @@ begin
         if CurTok.Kind <> tkIdent then Error('on: expected handler variable');
         handlerName := CurTok.SVal;
         Next;
-        Expect(tkColon, ':');
-        if CurTok.Kind <> tkIdent then Error('on: expected class type');
-        className := CurTok.SVal;
+        if CurTok.Kind = tkColon then
+        begin
+          { `on E: TClass do` — named binder form. }
+          Next;
+          if CurTok.Kind <> tkIdent then Error('on: expected class type');
+          className := CurTok.SVal;
+          Next;
+        end
+        else
+        begin
+          { `on TClass do` — binderless FPC/Delphi form (Synapse synautil's
+            `except on Exception do ;`): the first ident IS the class; bind a
+            hidden variable so the handler machinery stays uniform. }
+          className := handlerName;
+          handlerName := '__on_anon';
+        end;
         ci := FindUClass(className);
         if ci < 0 then Error('on: unknown exception class');
         recId := REC_UCLASS_BASE + ci;
-        Next;
         Expect(tkDo, 'do');
         handlerVar := AllocVar(handlerName, tyClass);
         Syms[handlerVar].RecName := recId;
