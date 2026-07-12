@@ -905,7 +905,8 @@ begin
   end;
 end;
 
-procedure ParseGenericTemplateNamed(const templateName: AnsiString; delphiForm: Boolean); forward;
+procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
+function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 
 { mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
   captured, rewrite every later use of the Delphi surface into the objfpc
