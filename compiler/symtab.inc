@@ -1944,6 +1944,7 @@ begin
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
+  SymCLongRank[SymCount]  := 0;
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;

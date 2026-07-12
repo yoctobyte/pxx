@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** bug (correctness — silent wrong branch, no diagnostic)
 - **Track:** C — C frontend (`cparser.inc`); tag: compat
-- **Status:** backlog — opened 2026-07-12.
+- **Status:** done — fixed 2026-07-12.
 - **Owner:** —
 - **Surfaced by:** tstate `test-c-conformance-{i386,arm32,riscv32}#shard2,5` — `00219.c`.
 
@@ -73,3 +73,23 @@ C tests green + self-host byte-identical + cross (all four ILP32 targets).
 
 ## Log
 - 2026-07-12 — opened; root-caused to CGScalarKindOfTk collapsing long/int on ILP32.
+- 2026-07-12 — FIXED. A long RANK (0/1/2) now rides alongside TTypeKind wherever it
+  cannot carry the distinction: `SymCLongRank` per C symbol (set in the single
+  CAllocDeclVar funnel, mirroring SymPtrPointeeConst), `ASTCLongRank` per integer
+  literal (from the l/L suffix the lexer already counted into CAttrFlags and then
+  threw away), and `CExprLongRank` to propagate it through the usual arithmetic
+  conversions. `CGApplyLongRank` re-tags the descriptor on BOTH the controlling and
+  the association side — the association side collapsed too, which is why some cases
+  passed by association-order luck.
+
+  Scope was wider than the one conformance line suggested: an ILP32 `long` VARIABLE
+  and an `unsigned long` variable were equally broken, and LP64 had the mirror bug
+  (`_Generic(17LL, long:2, long long:3)` selected `long`). Cleared the three red
+  tstate jobs whose failure was 00219.c (i386#shard2, arm32#shard2, riscv32#shard2).
+
+  Not fixed, and NOT part of this bug — filed separately as they are distinct:
+  `00204.c` on i386 (shard5) and `00200.c` on aarch64 (shard1).
+
+  Regression: `test/cgeneric_long_rank_b250.c`, run in `make test` as BOTH a 64-bit
+  and a 32-bit binary (the 32-bit run is the one that matters). Associations are
+  deliberately listed out of order so a collapse cannot pass by luck.

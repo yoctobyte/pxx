@@ -25,6 +25,7 @@ begin
   ASTIVal[ASTNodeCount]    := 0;
   ASTSOffset[ASTNodeCount] := 0;
   ASTSLen[ASTNodeCount]    := 0;
+  ASTCLongRank[ASTNodeCount] := 0;
   ASTLeft[ASTNodeCount]    := -1;
   ASTRight[ASTNodeCount]   := -1;
   ASTTk[ASTNodeCount]      := 0;

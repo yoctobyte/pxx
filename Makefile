@@ -1201,6 +1201,13 @@ test-core: $(COMPILER)
 	/tmp/cfloat_nan_compare_b23226; test "$$?" = "42"
 	./$(COMPILER) test/cmath_domain_nan_b233.c /tmp/cmath_domain_nan_b23326
 	/tmp/cmath_domain_nan_b23326; test "$$?" = "42"
+	# _Generic must tell long from int (ILP32) and long long from long (LP64) —
+	# same width, different C type (bug-c-generic-long-vs-int-ilp32). Also run as
+	# a 32-bit binary, which is where long collapsed onto int.
+	./$(COMPILER) test/cgeneric_long_rank_b250.c /tmp/cgeneric_long_rank_b25026
+	/tmp/cgeneric_long_rank_b25026; test "$$?" = "42"
+	./$(COMPILER) --target=i386 test/cgeneric_long_rank_b250.c /tmp/cgeneric_long_rank_b250_386
+	/tmp/cgeneric_long_rank_b250_386; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

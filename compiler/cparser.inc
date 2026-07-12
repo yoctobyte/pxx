@@ -437,6 +437,68 @@ begin
   end;
 end;
 
+function CGApplyLongRank(baseKind, rank: Integer): Integer;
+{ Re-tag an integer descriptor with the C long rank TTypeKind could not carry
+  (0 = as-is, 1 = long, 2 = long long), preserving unsignedness. Only an int- or
+  long-shaped kind is re-tagged; char/short/float/pointer are returned untouched. }
+begin
+  Result := baseKind;
+  if rank < 1 then Exit;
+  if (baseKind = cgInt) or (baseKind = cgLong) or (baseKind = cgLLong) then
+  begin
+    if rank >= 2 then Result := cgLLong else Result := cgLong;
+  end
+  else if (baseKind = cgUInt) or (baseKind = cgULong) or (baseKind = cgULLong) then
+  begin
+    if rank >= 2 then Result := cgULLong else Result := cgULong;
+  end;
+end;
+
+function CExprLongRank(node: Integer): Integer;
+{ The C long rank of an expression, for _Generic only.
+
+  Needed for the usual arithmetic conversions: `i + 2L` is a `long` (C11 6.3.1.8 —
+  the operand of greater rank wins), but the result's TTypeKind on ILP32 is plain
+  tyInt32, so without this the sum reads as `int`. Ranks propagate through
+  arithmetic: max(left, right). A literal carries its l/L suffix rank, a symbol its
+  declared rank. Anything else is rank 0.
+
+  _Generic is unevaluated, so this affects type selection only, never codegen. }
+var lr, rr: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_INT_LIT:
+      Result := ASTCLongRank[node];
+    AN_IDENT:
+      if (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) then
+        Result := SymCLongRank[ASTIVal[node]];
+    AN_BINOP:
+      begin
+        { A SHIFT takes its type from the left operand alone (`1L << n` is long,
+          `1 << nL` is int), so never look at the right. }
+        if IntToTypeKind(ASTTk[node]) in [tyInteger, tyInt32, tyUInt32, tyInt64, tyUInt64] then
+        begin
+          if (ASTIVal[node] = Ord(tkShl)) or (ASTIVal[node] = Ord(tkShr)) then
+            Result := CExprLongRank(ASTLeft[node])
+          else if (ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus)) or
+                  (ASTIVal[node] = Ord(tkStar)) or (ASTIVal[node] = Ord(tkSlash)) or
+                  (ASTIVal[node] = Ord(tkMod)) or (ASTIVal[node] = Ord(tkAnd)) or
+                  (ASTIVal[node] = Ord(tkOr)) or (ASTIVal[node] = Ord(tkXor)) then
+          begin
+            { usual arithmetic conversions: the greater rank wins }
+            lr := CExprLongRank(ASTLeft[node]);
+            rr := CExprLongRank(ASTRight[node]);
+            if lr > rr then Result := lr else Result := rr;
+          end;
+          { comparisons and logical ops yield plain int — rank 0, the default }
+        end;
+      end;
+  end;
+  if Result > 2 then Result := 2;
+end;
+
 { Descriptor of a controlling expression (unevaluated). Handles the shapes a
   _Generic controlling expr takes; anything else falls back to its ASTTk. }
 function CExprCG(node: Integer): Integer;
@@ -479,15 +541,20 @@ begin
             CGRecA[Result] := Syms[sym].RecName;
           end
           else
-            Result := CGAlloc(CGScalarKindOfTk(Ord(Syms[sym].TypeKind)));
+            Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(Ord(Syms[sym].TypeKind)),
+                                              SymCLongRank[sym]));
         end
         else
           Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
       end;
     else
       { integer/char literals, arithmetic results, casts: the frontend already
-        computed the promoted result type into ASTTk. }
-      Result := CGAlloc(CGScalarKindOfTk(ASTTk[node]));
+        computed the promoted result type into ASTTk. The long rank rides alongside,
+        since TTypeKind cannot distinguish `17L` from `17` on ILP32 nor `17LL` from
+        `17L` on LP64 — and `i + 2L` is a long by the usual arithmetic conversions
+        even though its TTypeKind on ILP32 is a plain 32-bit int. }
+      Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(ASTTk[node]),
+                                        CExprLongRank(node)));
   end;
 end;
 
@@ -508,12 +575,13 @@ end;
 function ParseCGAssocType: Integer;
 var tk: TTypeKind;
     depth, i, baseKind, innermost, p, arrLen: Integer;
-    baseConst, longlong: Boolean;
+    baseConst, longlong, islong: Boolean;
 begin
   tk := ParseCDeclType;
   depth := CTypePtrDepth;
   baseConst := CTypeBaseConst;
   longlong := CTypeLongLong;
+  islong := CTypeLong;
   if (CTypeProcSig >= 0) and (tk = tyPointer) then
   begin
     { fn-pointer typedef (e.g. `fptr`): pointer-to-function. }
@@ -539,8 +607,12 @@ begin
   else
   begin
     baseKind := CGScalarKindOfTk(Ord(tk));
-    if longlong and (baseKind = cgLong) then baseKind := cgLLong
-    else if longlong and (baseKind = cgULong) then baseKind := cgULLong;
+    { The ASSOCIATION side collapses the same way the controlling side does: on
+      ILP32 a `long` association arrives as tyInt32 -> cgInt, indistinguishable from
+      `int`. Re-tag it from the long rank the declaration parser counted. On LP64
+      `long` is already tyInt64 -> cgLong, so this is a no-op there. }
+    if longlong then baseKind := CGApplyLongRank(baseKind, 2)
+    else if islong then baseKind := CGApplyLongRank(baseKind, 1);
     Result := CGAlloc(baseKind);
     CGConstA[Result] := baseConst;
   end;
@@ -622,6 +694,12 @@ begin
         if IntToTypeKind(ASTTk[node]) = tyUInt32 then ASTTk[node] := Ord(tyUInt64)
         else if IntToTypeKind(ASTTk[node]) in [tyInteger, tyInt32] then ASTTk[node] := Ord(tyInt64);
       end;
+      { The suffix also fixes the literal's C TYPE IDENTITY, which the width above
+        cannot express: `17L` on ILP32 stays 32-bit (right) but is not an `int`, and
+        `17LL` on LP64 is 64-bit like `long` but is not a `long`. _Generic must tell
+        them apart (bug-c-generic-long-vs-int-ilp32). }
+      if (CAttrFlags[TokPos - 1] and 32) <> 0 then ASTCLongRank[node] := 2
+      else if (CAttrFlags[TokPos - 1] and 16) <> 0 then ASTCLongRank[node] := 1;
       Next;
       Result := node;
     end;
@@ -2672,7 +2750,7 @@ var
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
-  CTypeBaseConst := False; CTypeLongLong := False;
+  CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdIsFnType := False;
@@ -2768,6 +2846,7 @@ begin
 
   CTypeIsVoid := isVoid;
   CTypeLongLong := (longCount >= 2);
+  CTypeLong     := (longCount = 1);
 
   if isVoid then
     Result := tyInteger          { placeholder; pointer suffix overrides below }
@@ -3124,6 +3203,15 @@ begin
     type of the ParseCDeclType that just produced `tk`. }
   if (Result >= 0) and (tk = tyPointer) then
     SymPtrPointeeConst[Result] := CTypeBaseConst;
+  { ...and the long RANK, which TTypeKind cannot carry: on ILP32 `long` is the same
+    tyInt32 as `int`, so without this _Generic silently picks the `int` association
+    (bug-c-generic-long-vs-int-ilp32). }
+  if Result >= 0 then
+  begin
+    if CTypeLongLong then SymCLongRank[Result] := 2
+    else if CTypeLong then SymCLongRank[Result] := 1
+    else SymCLongRank[Result] := 0;
+  end;
 end;
 
 function CAllocDeclArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;

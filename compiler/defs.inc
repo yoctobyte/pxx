@@ -1225,7 +1225,15 @@ var
   CGCount   : Integer;                            { next free pool slot (starts at 1); reset per _Generic }
   CTypeBaseConst : Boolean;  { last ParseCDeclType: the BASE type carried `const` (=> pointee-const once a star follows). Additive, C-mode only. }
   CTypeLongLong  : Boolean;  { last ParseCDeclType: base was `long long` (TTypeKind collapses it into tyInt64; _Generic needs the distinction). }
+  CTypeLong      : Boolean;  { last ParseCDeclType: base was exactly one `long` (on ILP32 TTypeKind collapses it onto tyInt32 = int; _Generic needs the distinction). }
   SymPtrPointeeConst : array[0..MAX_SYMS-1] of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
+  { C integer symbol's LONG RANK, for _Generic: 0 = none, 1 = `long`, 2 = `long long`.
+    TTypeKind cannot carry this. On ILP32 `long` is 32-bit, so it collapses onto the
+    same tyInt32 as `int`; on LP64 `long long` collapses onto the same tyInt64 as
+    `long`. Either way _Generic would silently pick the wrong association. The width
+    is not in question (sizeof is correct) — only the C-level type identity.
+    C-mode only: Pascal symbols keep rank 0 (AllocVar zeroes it). }
+  SymCLongRank : array[0..MAX_SYMS-1] of Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -1738,6 +1746,10 @@ var
   ASTIVal    : array[0..MAX_AST-1] of Int64;
   ASTSOffset : array[0..MAX_AST-1] of Integer;
   ASTSLen    : array[0..MAX_AST-1] of Integer;
+  { C integer LITERAL's long rank (0/1/2), from the l/L suffix the lexer already
+    counted into CAttrFlags. Same reason as SymCLongRank: `17L` on ILP32 and
+    `17LL` on LP64 both lose their identity in TTypeKind. C-mode only. }
+  ASTCLongRank : array[0..MAX_AST-1] of Integer;
   ASTLeft    : array[0..MAX_AST-1] of Integer;
   ASTRight   : array[0..MAX_AST-1] of Integer;
   ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
