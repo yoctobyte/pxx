@@ -5,7 +5,7 @@ prio: 60
 # TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines
 
 - **Type:** bug (codegen + overload matching — class model) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, found wiring the Eliah component tab bar (the
   identity search over `Sender` never matched).
 
@@ -65,3 +65,6 @@ the raw matcher dump is not a normal file:line diagnostic.
 - Eliah's `OnPaletteButton` workaround can revert to `Sender: TObject`.
 - Compile-run test covers: method + plain fn, identity compare, `is`/cast use.
 - Self-host byte-identical.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.

@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (Pascal frontend — const-eval) — **Track P** (edits the shared
   parser/const-eval, so it runs under A's gate + no-concurrent-edit rule)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11, first blocker of the New-ZenGL Pascal ladder
   ([[feature-game-library-candidate-suite]] slice C).
 
@@ -46,3 +46,6 @@ New-ZenGL Pascal ladder (every zgl unit pulls zgl_types via uses).
   `const x = High(...)`, case labels.
 - Compose with const operators (`shr`, `-`, ...) as in the ZenGL bound.
 - Self-host byte-identical; a compile-run test covers the forms above.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
