@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T07:15:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "541f8fda690fe25a418a266728e484fe7e33b079",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T07:28:12Z",
    "fixed": [],
    "new_red": [],
@@ -410,6 +402,14 @@
    "new_red": [],
    "sha": "2e08399339f17ecd7f47d4e3722259445588898e",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T13:14:50Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1379,6 +1379,7 @@
   "test-core#743": "pass",
   "test-core#744": "pass",
   "test-core#745": "pass",
+  "test-core#746": "pass",
   "test-core#75": "pass",
   "test-core#76": "pass",
   "test-core#77": "pass",
@@ -1577,11 +1578,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-12T13:07:30Z",
-  "sha": "2e08399339f17ecd7f47d4e3722259445588898e",
-  "tier": "opt",
+  "date": "2026-07-12T13:14:50Z",
+  "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 131.2
+  "wall": 66.0
  },
  "last_bench": {
   "conf_rows": 550,
