@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T13:42:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "893cec14d7079d62c55dd93b87274df5c95c998b",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T13:50:14Z",
    "fixed": [],
    "new_red": [],
@@ -445,6 +437,14 @@
    "sha": "512fd76fb4bb1c5ada93f28cdef4dedcb3a7ff01",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T21:44:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "4d2664947bbed8415180d8c68287f52834cb50dc",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -877,6 +877,8 @@
   "test-core#src:test/cpreproc_macro_arg_string_paren_b227.c": "pass",
   "test-core#src:test/cpreproc_macro_comment_continuation_b229.c": "pass",
   "test-core#src:test/cpreproc_stdc_version_predefine_b228.c": "pass",
+  "test-core#src:test/cprintf_ll_b252.c@1": "pass",
+  "test-core#src:test/cprintf_ll_b252.c@2": "pass",
   "test-core#src:test/cptr_array_decay_stride_b61.c": "pass",
   "test-core#src:test/cptr_b2.c": "pass",
   "test-core#src:test/cptr_deref_stride_b187.c": "pass",
@@ -948,6 +950,8 @@
   "test-core#src:test/cternary_ptr_null_b64.c": "pass",
   "test-core#src:test/cternary_string_ptr_b118.c": "pass",
   "test-core#src:test/cternary_struct_value_b141.c": "pass",
+  "test-core#src:test/ctruthy_int64_b251.c@1": "pass",
+  "test-core#src:test/ctruthy_int64_b251.c@2": "pass",
   "test-core#src:test/ctypedef_alias_fnptr_field_b89.c": "pass",
   "test-core#src:test/ctypedef_ptr_stride_b63.c": "pass",
   "test-core#src:test/ctypedef_shadow_local_b151.c": "pass",
@@ -1657,11 +1661,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T21:29:38Z",
-  "sha": "512fd76fb4bb1c5ada93f28cdef4dedcb3a7ff01",
-  "tier": "opt",
+  "date": "2026-07-12T21:44:30Z",
+  "sha": "4d2664947bbed8415180d8c68287f52834cb50dc",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 92.2
+  "wall": 62.4
  },
  "last_bench": {
   "conf_rows": 550,
