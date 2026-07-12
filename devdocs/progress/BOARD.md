@@ -15,7 +15,7 @@ _none_
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (4)
+## unfinished (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
+| feature-pascal-corpus-fpcunit | P | 55→58 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
 
 ## blocked (1)
 
@@ -30,10 +31,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (92)
+## backlog (93)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-generic-long-vs-int-ilp32 | C | 60 | bug | _Generic cannot tell `long` from `int` on ILP32 (silent wrong selection) | — |
 | bug-c-generic-long-vs-int-on-32bit | C | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
@@ -97,7 +99,6 @@ _none_
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
-| feature-pascal-corpus-fpcunit | P | 55→58 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
 | feature-pascal-corpus-fpjson | P | 58 | feature | Pascal corpus: fcl-json — polymorphic TJSONData hierarchy + RTTI streaming | feature-pascal-corpus-fpcunit |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
@@ -108,6 +109,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
+| feature-rtti-method-reflection | A | 58 | feature | TObject RTTI reflection: MethodAddress / MethodName / GetMethodList (+ instance->RTTI link) | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -187,7 +189,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (647)
+## done (648)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -436,6 +438,7 @@ _none_
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
+| bug-pascal-method-default-param-self-shift | P | 70 | bug | Method default parameters land on the WRONG slot (silent wrong values) | — |
 | bug-pascal-nested-variant-record-tagged | A | 55 | bug | Nested variant parts with a tagged discriminant (`case f: T of` inside a variant arm) | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
@@ -861,6 +864,7 @@ _none_
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
+- [p 60] [C] bug-c-generic-long-vs-int-ilp32
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -873,7 +877,7 @@ _none_
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 58] [P] feature-pascal-corpus-fpcunit (unblocks 2)
+- [p 58] [A] feature-rtti-method-reflection
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape

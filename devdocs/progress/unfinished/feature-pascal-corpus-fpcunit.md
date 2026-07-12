@@ -50,3 +50,34 @@ Cross where a backend/runtime is touched.
 
 ## Log
 - 2026-07-12 — opened, split out of [[feature-pascal-corpus-oop]].
+- 2026-07-12 — **parse-level walls all CLEARED.** fpcunit.pp + testutils.pp now get
+  through the parser end to end against `$(PXX_STABLE)`; what remains is runtime
+  surface, not syntax. Seven frontend bugs fell out of it, each with a regression:
+
+  | wall | fix | regression |
+  | --- | --- | --- |
+  | `class var` name list ate the next visibility word | parser | b244 |
+  | bare class var unresolved in a method (incl. static `class procedure`) | parser (CurMethClass) | b244 |
+  | string-literal default parameter (`msg: string = ''`) | parser + ir | b245 |
+  | method defaults written to the WRONG slot (pre-existing, silent) | parser | b246 |
+  | `overload` is a real token; class-body directive loop skipped it | parser | b247 |
+  | method + ctor overloads ignored ARGUMENT TYPES (pre-existing, silent) | parser + ir + 6 backends | b248 |
+  | `constref`, untyped `out` in an interface method, `cdecl` on a method, property hint directives | parser | b249 |
+
+  Two of those (b246, b248) were **silent wrong-code bugs on the shipping pinned
+  binary**, not new breakage — fpcunit just happened to be the first thing that
+  looked at them. `IInterface`/`IUnknown`/`HResult` now come from the RTL's Classes.
+
+- 2026-07-12 — **PARKED (unfinished).** The next wall is not syntax: it is runtime
+  reflection. Remaining, in order:
+  1. `TObject.GetInterface(IID, out obj)` — testutils' `QueryInterface` calls it.
+     Own ticket needed (pxx interfaces are CORBA; no GUID table exists).
+  2. **RTTI published-method enumeration** — the actual payoff, and what test
+     discovery is built on. Split out as [[feature-rtti-method-reflection]], which
+     records the blob layout (the method table already EXISTS in the RTTI blob;
+     only the runtime API and an instance->RTTI backlink are missing).
+  3. `TFPList` and the rest of the FPC container surface fpcunit leans on.
+
+  Nothing is half-applied: every compiler change above is committed, gated
+  (`make test` + self-host byte-identical + `--tier limited` cross) and pushed.
+  Resume by taking [[feature-rtti-method-reflection]] first.
