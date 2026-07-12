@@ -5,7 +5,7 @@ prio: 75  # silent memory corruption; trivially reachable from idiomatic code
 # Whole-array assignment TO a `var` array parameter segfaults
 
 - **Type:** bug (codegen / assignment lowering) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, hit by Track B while writing `lib/rtl/p256field.pas`
   (`FeInv` does `r := acc` where `r` is a `var` param).
 
@@ -67,3 +67,6 @@ a nearer-miss address would corrupt silently.
 - Aliasing still behaves (`Op(x, x, y)` — destination aliased with a source).
 - Regression test in `test/`; self-host byte-identical; cross-targets green.
 - `lib/rtl/p256field.pas` `FeInv` can go back to the idiomatic `r := acc`.
+
+## Log
+- 2026-07-12 — resolved, commit 1d53fd32.

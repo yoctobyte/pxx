@@ -189,7 +189,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (629)
+## done (631)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -204,6 +204,7 @@ _none_
 | bug-argstr-managed-dest-cross | A | 50 | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
 | bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | 50 | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
 | bug-arm32-writeln-longword-high-bit | A | 50 | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
+| bug-array-assign-to-var-param | A | 75 | bug | Whole-array assignment TO a `var` array parameter segfaults | — |
 | bug-array-const-too-many-elements-synapse | A | 50 | bug | `too many array constant elements` — Synapse `synautil` wall | — |
 | bug-array-ctor-statement-arg-after-dynarray-record-param | A | 50 | bug | Array-constructor statement-arg fails differently when a preceding param has a dynarray field | — |
 | bug-as-cast-inline-method-call | A | 50 | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
@@ -417,6 +418,7 @@ _none_
 | bug-multi-interface-method-corruption | A | 50 | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-named-dynarray-field-setlength | A | 50 | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-narrowing-typecast-rvalue-no-truncate | A | 50 | bug | Narrowing ordinal typecast doesn't truncate in rvalue position | — |
+| bug-nd-array-assign-copies-garbage | A | 75 | bug | Whole-array assignment of an N-D array copies garbage (no error, no crash) | — |
 | bug-nested-brace-comments | A | 50 | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | 50 | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |

@@ -5,7 +5,7 @@ prio: 75  # silently wrong data, no crash — the worst failure mode
 # Whole-array assignment of an N-D array copies garbage (no error, no crash)
 
 - **Type:** bug (codegen / assignment lowering) — **Track A**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, found while fixing [[bug-array-assign-to-var-param]]
   (the N-D case of that ticket's regression test failed for a *different*
   reason).
@@ -56,3 +56,6 @@ Drop the `<= 1` guard so N-D arrays take the same flat IR_COPY_REC path as 1-D.
 - Covered in `test/test_array_var_param_assign.pas` (the `TM` / `BumpM` case,
   which exercises N-D both local-to-local and through a `var` param).
 - `make test` green; self-host byte-identical.
+
+## Log
+- 2026-07-12 — resolved, commit 1d53fd32.
