@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-11T13:59:10Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "de0cfeeeaf7dd9632de79924dcef0bb6546a3b63",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-11T14:01:09Z",
    "fixed": [],
    "new_red": [],
@@ -403,6 +395,16 @@
    "sha": "7bf9e80393edab6a1799c5009f660fa19d4c11b5",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T04:25:50Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#131"
+   ],
+   "sha": "83006e927e35b02e76728c3a292e08dbcc0b792e",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -695,7 +697,7 @@
   "test-core#129": "pass",
   "test-core#13": "pass",
   "test-core#130": "pass",
-  "test-core#131": "pass",
+  "test-core#131": "fail",
   "test-core#132": "pass",
   "test-core#133": "pass",
   "test-core#134": "pass",
@@ -1351,6 +1353,7 @@
   "test-core#725": "pass",
   "test-core#726": "pass",
   "test-core#727": "pass",
+  "test-core#728": "pass",
   "test-core#73": "pass",
   "test-core#74": "pass",
   "test-core#75": "pass",
@@ -1551,11 +1554,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-12T04:12:49Z",
-  "sha": "7bf9e80393edab6a1799c5009f660fa19d4c11b5",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 112.0
+  "date": "2026-07-12T04:25:50Z",
+  "sha": "83006e927e35b02e76728c3a292e08dbcc0b792e",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 58.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1575,5 +1578,22 @@
   "date": "2026-07-12T04:12:53Z",
   "sha": "7bf9e80393edab6a1799c5009f660fa19d4c11b5"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
+   "good": "7bf9e80393edab6a1799c5009f660fa19d4c11b5",
+   "job": "test-core#131",
+   "opened": "2026-07-12T04:25:50Z",
+   "range": [
+    "83b80c6ae190d6eaed18dec19ea055a3f75c227b",
+    "485182baebe5a244c326d83d44b532bbbc12f2b4",
+    "a568e1a3ac72972717ded062fc0cdb84bdf3fe21",
+    "e752978b24999f5ed7ad22323706530b2d295cd3",
+    "d6cec2355b790fccb2bbc18cfbc4bc081873b293",
+    "0bf6792715bc1dbcf4b398142b39fd747ccc023b",
+    "83006e927e35b02e76728c3a292e08dbcc0b792e"
+   ],
+   "src": "test/cmath_sqrt_correctly_rounded_b240.c"
+  }
+ ]
 }
