@@ -1760,6 +1760,21 @@ begin
   Inc(PasUnitDirCount);
 end;
 
+procedure AddPasIncDir(const dir: AnsiString);
+{ -Fi<dir>: a {$I file} include search root (FPC parity;
+  bug-pascal-include-search-silent-miss). }
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasIncDirCount - 1 do
+    if PasIncDirs[j] = s then Exit;
+  if PasIncDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fi include directories');
+  PasIncDirs[PasIncDirCount] := s;
+  Inc(PasIncDirCount);
+end;
+
 { 1-based index of the first occurrence of `sub` in `s`, else 0. }
 function CPFindSub(const s, sub: AnsiString): Integer;
 var i, j, n, m: Integer; ok: Boolean;

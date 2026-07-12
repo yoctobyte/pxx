@@ -2827,7 +2827,7 @@ procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
   pre-pass only simulates enough state to avoid loading includes from inactive
   branches. }
 var
-  i, j, k, closePos, condCount, savedDefineCount, savedDefineCharLen: Integer;
+  i, j, k, incDi, closePos, condCount, savedDefineCount, savedDefineCharLen: Integer;
   fname, command, name, exprSource: AnsiString;
   cond, active: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
@@ -2970,6 +2970,26 @@ begin
           end;
           NormalizePath(fullPath);
           LoadFileCI(fullPath, IncIncluded);
+          { Search the -Fi include roots after the including file's dir
+            (FPC order). A miss everywhere is a hard error — the old silent
+            drop compiled with silently different configuration
+            (bug-pascal-include-search-silent-miss). Empty content doubles as
+            the miss signal, so a genuinely empty include file also errors;
+            an empty include is a no-op, put a comment in it if one is real. }
+          if (Length(IncIncluded) = 0) and (fname[1] <> '/') then
+            for incDi := 0 to PasIncDirCount - 1 do
+            begin
+              fullPath := PasIncDirs[incDi];
+              for k := 1 to Length(fname) do AppendChar(fullPath, fname[k]);
+              NormalizePath(fullPath);
+              LoadFileCI(fullPath, IncIncluded);
+              if Length(IncIncluded) > 0 then Break;
+            end;
+          if Length(IncIncluded) = 0 then
+          begin
+            ErrorIdent := fname;
+            Error('cannot open include file');
+          end;
           AppendString(IncExpanded, IncIncluded);
           i := j + 1;
         end

@@ -404,6 +404,10 @@ test-core: $(COMPILER)
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"
+	# {$I} -Fi search + hard error on miss (bug-pascal-include-search-silent-miss)
+	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas /tmp/test_include_fi26
+	test "$$(/tmp/test_include_fi26)" = "fi-ok"
+	! ./$(COMPILER) test/test_include_miss_fails.pas /tmp/test_include_miss26 2>/dev/null
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

@@ -1486,6 +1486,8 @@ var
     unit by name (the PAL backend-selection mechanism). }
   PasUnitDirs     : array[0..MAX_PAS_UNIT_DIRS-1] of AnsiString;
   PasUnitDirCount : Integer;
+  PasIncDirs      : array[0..MAX_PAS_UNIT_DIRS-1] of AnsiString;  { -Fi {$I} search roots }
+  PasIncDirCount  : Integer;
 
   { C preprocessor state. Macro text is pooled to avoid string-array BSS cost. }
   CPrepOut      : AnsiString;

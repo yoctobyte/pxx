@@ -166,6 +166,7 @@ begin
   EnableLazyVar := True;
   CIncludeDirCount := 0;
   PasUnitDirCount := 0;
+  PasIncDirCount := 0;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -477,6 +478,12 @@ begin
     begin
       { -Fu<dir> (FPC-style): add a Pascal-unit (`uses`) search root only. }
       AddPasUnitDir(PasOptionTail(option, 4));
+      Inc(i);
+    end
+    else if (Length(option) > 3) and (option[1] = '-') and (option[2] = 'F') and (option[3] = 'i') then
+    begin
+      { -Fi<dir> (FPC-style): add a {$I file} include search root. }
+      AddPasIncDir(PasOptionTail(option, 4));
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'I') then
