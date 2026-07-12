@@ -19,9 +19,24 @@ interface
   key `qxy` (64 bytes, Qx||Qy). `sig` is 64 bytes (r||s). }
 function EcdsaP256Verify(const qxy, msg, sig: AnsiString): Boolean;
 
+{ Public key Qx||Qy (64 bytes) from a 32-byte private scalar. '' on error. }
+function EcdsaP256PubFromPriv(const priv: AnsiString): AnsiString;
+
+{ Sign SHA-256(msg) with private scalar `priv` (32 bytes) and an explicit 32-byte
+  nonce `k32`. Returns 64-byte r||s, or '' if r=0/s=0 (retry with a new nonce).
+  NOTE: reusing or leaking k reveals the private key — the random-nonce wrapper
+  below is what callers should use. }
+function EcdsaP256SignK(const priv, msg, k32: AnsiString): AnsiString;
+
+{ Sign with a fresh CSPRNG nonce (getrandom). Returns 64-byte r||s, '' on failure. }
+function EcdsaP256Sign(const priv, msg: AnsiString): AnsiString;
+
+{ Generate a keypair: priv = 32 bytes, pub = 64 bytes (Qx||Qy). False on failure. }
+function EcdsaP256GenKey(var priv, pub: AnsiString): Boolean;
+
 implementation
 
-uses bignum, sha256, sysutils;
+uses bignum, sha256, sysutils, random;
 
 var
   P, N, A, B, GX, GY: TBigInt;
@@ -274,6 +289,82 @@ begin
   { valid iff (affx mod n) == r }
   BigDivMod(affx, N, q1, affxModN);
   Result := BigCompare(affxModN, r) = 0;
+end;
+
+function EcdsaP256PubFromPriv(const priv: AnsiString): AnsiString;
+var d, one, qxj, qyj, qzj, zinv, zinv2, zinv3, qx, qy, q, rem: TBigInt;
+begin
+  EcdsaP256PubFromPriv := '';
+  if Length(priv) <> 32 then Exit;
+  InitCurve;
+  d := BytesToBig(priv); BigDivMod(d, N, q, rem); d := rem;   { d mod n }
+  if BigIsZero(d) then Exit;
+  one := BigFromInt(1);
+  ScalarMul(qxj, qyj, qzj, BigToBytes(d, 32), GX, GY, one);   { Q = d*G }
+  if IsZero(qzj) then Exit;
+  zinv  := MInv(qzj, P);
+  zinv2 := MMul(zinv, zinv, P);
+  zinv3 := MMul(zinv2, zinv, P);
+  qx := MMul(qxj, zinv2, P);       { affine x = X/Z^2 }
+  qy := MMul(qyj, zinv3, P);       { affine y = Y/Z^3 }
+  EcdsaP256PubFromPriv := BigToBytes(qx, 32) + BigToBytes(qy, 32);
+end;
+
+function EcdsaP256SignK(const priv, msg, k32: AnsiString): AnsiString;
+var d, k, one, rx, ry, rz, zinv, zinv2, affx, r, e, kinv, rd, sum, s, q, rem: TBigInt;
+begin
+  EcdsaP256SignK := '';
+  if (Length(priv) <> 32) or (Length(k32) <> 32) then Exit;
+  InitCurve;
+  one := BigFromInt(1);
+  d := BytesToBig(priv); BigDivMod(d, N, q, rem); d := rem;
+  k := BytesToBig(k32);  BigDivMod(k, N, q, rem); k := rem;
+  if BigIsZero(k) then Exit;
+  { R = k*G ; r = R.x mod n }
+  ScalarMul(rx, ry, rz, BigToBytes(k, 32), GX, GY, one);
+  if IsZero(rz) then Exit;
+  zinv := MInv(rz, P); zinv2 := MMul(zinv, zinv, P); affx := MMul(rx, zinv2, P);
+  BigDivMod(affx, N, q, r);
+  if BigIsZero(r) then Exit;
+  { e = SHA-256(msg) mod n }
+  e := BytesToBig(Sha256(msg)); BigDivMod(e, N, q, rem); e := rem;
+  { s = k^-1 * (e + r*d) mod n }
+  kinv := MInv(k, N);
+  rd   := MMul(r, d, N);
+  sum  := MAdd(e, rd, N);
+  s    := MMul(kinv, sum, N);
+  if BigIsZero(s) then Exit;
+  EcdsaP256SignK := BigToBytes(r, 32) + BigToBytes(s, 32);
+end;
+
+function EcdsaP256Sign(const priv, msg: AnsiString): AnsiString;
+var k32, sig: AnsiString; tries: Integer;
+begin
+  EcdsaP256Sign := '';
+  for tries := 1 to 16 do
+  begin
+    SetLength(k32, 32);
+    if not OSEntropyBytes(@k32[1], 32) then Exit;
+    sig := EcdsaP256SignK(priv, msg, k32);
+    if sig <> '' then begin EcdsaP256Sign := sig; Exit; end;
+  end;
+end;
+
+function EcdsaP256GenKey(var priv, pub: AnsiString): Boolean;
+var tries: Integer; d, q, rem: TBigInt; p: AnsiString;
+begin
+  EcdsaP256GenKey := False;
+  InitCurve;
+  for tries := 1 to 16 do
+  begin
+    SetLength(p, 32);
+    if not OSEntropyBytes(@p[1], 32) then Exit;
+    d := BytesToBig(p); BigDivMod(d, N, q, rem); d := rem;
+    if BigIsZero(d) then Continue;
+    priv := BigToBytes(d, 32);
+    pub := EcdsaP256PubFromPriv(priv);
+    if pub <> '' then begin EcdsaP256GenKey := True; Exit; end;
+  end;
 end;
 
 end.
