@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (95)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +64,6 @@ _none_
 | feature-callconv-register-args | O | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
-| feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
@@ -120,12 +119,23 @@ _none_
 | feature-web-tracker-and-host-portability | A | 45 | feature | Public tracker on GitHub + host-portability rule (nothing lives only in a service) | feature-web-track-w-bootstrap |
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
-| feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-arm32-test-channel | T | 70 | regression | regression: test-arm32#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-arm32-test-reactor | T | 70 | regression | regression: test-arm32#src:test/test_reactor.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-arm32-test-scheduler-exc | T | 70 | regression | regression: test-arm32#src:test/test_scheduler_exc.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-arm32-test-scheduler | T | 70 | regression | regression: test-arm32#src:test/test_scheduler.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-arm32-test-timer | T | 70 | regression | regression: test-arm32#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-channel | T | 70 | regression | regression: test-i386#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-reactor | T | 70 | regression | regression: test-i386#src:test/test_reactor.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-scheduler-exc | T | 70 | regression | regression: test-i386#src:test/test_scheduler_exc.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-scheduler | T | 70 | regression | regression: test-i386#src:test/test_scheduler.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -190,7 +200,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (632)
+## done (634)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -590,6 +600,7 @@ _none_
 | feature-cross-selfhost-i386 | A | 50 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-cross-streaming-lfm | A | 50 | feature | Component streaming + LFM loading on the cross targets | — |
 | feature-cross-target-feature-parity | A | 50 | feature | Cross-target language-feature parity (Intel + ARM) | — |
+| feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
 | feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-declaration-prescan | A | 50 | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
@@ -782,6 +793,7 @@ _none_
 | feature-xtensa-asm-emitter | A | 50 | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-class-instantiation | A | 50 | feature | xtensa: class instantiation (VMT + ctor) not supported | — |
 | feature-xtensa-windowed-abi | A | 50 | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
+| feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | flaky-corpus-runner-shared-tmp-path | C | 55 | flaky | flaky: cJSON / lua corpus runners race on a shared /tmp input path under parallel testing | — |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
@@ -846,11 +858,21 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-test-arm32-test-asyncecho
+- [p 70] [T] regression-test-arm32-test-channel
+- [p 70] [T] regression-test-arm32-test-reactor
+- [p 70] [T] regression-test-arm32-test-scheduler
+- [p 70] [T] regression-test-arm32-test-scheduler-exc
+- [p 70] [T] regression-test-arm32-test-timer
+- [p 70] [T] regression-test-i386-test-asyncecho
+- [p 70] [T] regression-test-i386-test-channel
+- [p 70] [T] regression-test-i386-test-reactor
+- [p 70] [T] regression-test-i386-test-scheduler
+- [p 70] [T] regression-test-i386-test-scheduler-exc
+- [p 70] [T] regression-test-i386-test-timer
 - [p 65] [A] feature-c-corpus-expansion
-- [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
-- [p 65] [A] feature-zero-init-contract
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays

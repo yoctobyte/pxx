@@ -5,8 +5,8 @@ prio: 65  # auto
 # Zero-init contract — one library-owned managed-slot zeroing guarantee
 
 - **Type:** feature (refactor / hardening)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** agent-A-vindirect
 - **Opened:** 2026-06-16
 - **Priority:** prerequisite before more cross-target codegen (see Why now)
 
@@ -82,3 +82,45 @@ the seam instead of closing it.
 ## Log
 - 2026-06-16 — opened from the `not`-bug post-mortem (606abec). Framing: fix the
   seam, then the segfault class disappears — not "patch DecRef".
+- 2026-07-12 — resolved, commit a3d3c9a6.
+
+## RESOLVED 2026-07-12 (a3d3c9a6) — one owner, both halves
+
+**Compiler half** — `EmitZeroFrameSlot(frameOff, nBytes)` in `symtab.inc` is now
+the single producer of the "managed slot is nil before first use" guarantee.
+`parser.inc`'s prologue computes an extent and calls it; the per-target ladder is
+gone. Pointer-sized handle → one nil store. Larger extent (record with managed
+fields / variant / COM fat pointer / array of managed) → `PXXMemZero`, on EVERY
+target: xtensa and riscv32 no longer error with "managed aggregate locals not yet
+supported", and arm32's open-coded byte loop is gone. The array-of-dynarray-handles
+special case (per-element stores) folded into the ordinary extent — it only existed
+because the cross backends rejected the >pointer-sized path.
+
+Deliberate deviation from the literal acceptance text: x86-64 keeps `rep stosb`
+*inside* `EmitZeroFrameSlot`. It is the hardware memset, it is chosen at the one
+owning decision point, and it is not a second implementation of the invariant —
+funnelling every managed aggregate on the hot host target through a helper call
+would be a real prologue cost for zero contract benefit.
+
+**RTL half** — `PXXAlloc` now *states and produces* a zeroed payload on both paths.
+Free-list reuse already zeroed explicitly. The bump path relies on virgin arena
+memory, and `HeapMmap` now produces that instead of assuming it: `MAP_ANONYMOUS`
+gives it free on Linux, and the **ESP static arena is zeroed once on hand-out**
+rather than trusting that startup zeroed `.bss` — exactly the latent trap this
+ticket named ("any future bump-path change silently breaks the fresh-memory-is-zero
+assumption"). The invariant is written down at the bump path: anything that changes
+it must re-produce the guarantee there, not push it back onto callers.
+
+**Gate:** self-host byte-identical; testmgr quick + limited green; `make test-aarch64`
+and `make test-riscv32` green; managed-local cross tests (dynarray, string, record,
+variant, nested SetLength, collections, interfaces, managed-aggregate locals) match
+the x86-64 oracle on i386 / arm32 / aarch64 / riscv32.
+
+The i386 / arm32 suites currently stop at a **pre-existing, unrelated** red — the
+coroutine family (scheduler / scheduler-exc / reactor / timer / channel / asyncecho),
+auto-filed by Track T as regression-test-{i386,arm32}-test-scheduler et al. Verified
+not from this work: the affected binaries are byte-identical with this change stashed,
+and the pinned stable compiler builds a green test_scheduler while HEAD does not.
+
+The arm32 startup segfault the ticket predicted would "disappear at source" was
+already gone before this landed; nothing here is a `DecRef`-side workaround.
