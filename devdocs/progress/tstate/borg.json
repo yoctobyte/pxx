@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T07:43:47Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#665"
-   ],
-   "sha": "8d1e694a9d8d4d8c639603644f260dd467fe9e9f",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-12T07:46:00Z",
    "fixed": [
     "test-core#665"
@@ -411,17 +401,21 @@
    "sha": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T13:28:45Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#676"
+   ],
+   "sha": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#00": "pass",
   "test-aarch64#01": "pass",
   "test-aarch64#02": "pass",
@@ -1302,7 +1296,7 @@
   "test-core#673": "pass",
   "test-core#674": "pass",
   "test-core#675": "pass",
-  "test-core#676": "pass",
+  "test-core#676": "fail",
   "test-core#677": "pass",
   "test-core#678": "pass",
   "test-core#679": "pass",
@@ -1521,11 +1515,6 @@
   "test-i386#98": "pass",
   "test-i386#99": "pass",
   "test-lua#00": "pass",
-  "test-opt#00": "pass",
-  "test-opt#01": "pass",
-  "test-opt#02": "pass",
-  "test-opt#03": "pass",
-  "test-opt#04": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1579,11 +1568,11 @@
   "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-12T13:26:22Z",
+  "date": "2026-07-12T13:28:45Z",
   "sha": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 60.9
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 136.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1593,15 +1582,24 @@
   "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077"
  },
  "last_full": {
-  "date": "2026-07-12T13:17:00Z",
-  "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077",
+  "date": "2026-07-12T13:28:45Z",
+  "sha": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
   "tier": "full",
-  "verdict": "GREEN",
-  "wall": 121.2
+  "verdict": "RED",
+  "wall": 136.0
  },
  "last_opt": {
   "date": "2026-07-12T13:19:41Z",
   "sha": "01a36a1ac6cca5ef67a9cbdb6ff73db9d6be6077"
  },
- "open_regressions": []
+ "open_regressions": [
+  {
+   "bad": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
+   "good": "51f2a8a3258fd4b06d070a5136bb07487d63d2ae",
+   "job": "test-core#676",
+   "opened": "2026-07-12T13:28:45Z",
+   "range": [],
+   "src": "test/test_c_gtk_types.pas"
+  }
+ ]
 }
