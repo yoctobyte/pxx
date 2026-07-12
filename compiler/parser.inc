@@ -15535,13 +15535,27 @@ begin
         end; { end of non-shorthand body block }
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
 
-        UClsVMTOffset[ci] := DataLen;
         { Always reserve at least one slot so every class has a DISTINCT VMT
           address — that address is the per-class runtime identity used by is/as
           and stored at [instance+0]. Without this, classes with no virtual
           methods get 0-byte VMTs that all alias the same offset, so `obj is
           AnyClass` would match every class. The padding slot is never dispatched
           (the class has no virtuals), so it is harmless. }
+        { RTTI backlink, one word IMMEDIATELY BEFORE the VMT (EmitRTTI patches it).
+          [instance+0] holds the VMT address, and the RTTI blob points AT the VMT
+          (+24) but nothing pointed back — so an INSTANCE could not find its own
+          class RTTI, which is what published-method reflection needs. Putting it at
+          VMT-8 keeps UClsVMTOffset on slot 0, so every virtual slot index is
+          unchanged and is/as keep comparing VMT addresses exactly as before.
+          Stays 0 for a class with no RTTI blob (no published members). }
+        for i := 0 to 7 do
+        begin
+          if DataLen >= MAX_DATA then Error('data overflow');
+          Data[DataLen] := 0;
+          Inc(DataLen);
+        end;
+        UClsVMTOffset[ci] := DataLen;
+
         vmtSlots := UClsVirtCount[ci];
         if vmtSlots < 1 then vmtSlots := 1;
         for i := 0 to vmtSlots * 8 - 1 do

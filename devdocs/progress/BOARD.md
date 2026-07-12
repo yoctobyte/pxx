@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (93)
+## backlog (92)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -109,7 +109,6 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-rtti-method-reflection | A | 58 | feature | TObject RTTI reflection: MethodAddress / MethodName / GetMethodList (+ instance->RTTI link) | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -189,7 +188,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (652)
+## done (653)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -737,6 +736,7 @@ _none_
 | feature-rtl-image-bitmap-library | B | 50 | feature | RTL image bitmap library | — |
 | feature-rtl-terminal-raw-mode | B | 50 | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-rtti-layout-table | A | 50 | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
+| feature-rtti-method-reflection | A | 58 | feature | TObject RTTI reflection: MethodAddress / MethodName / GetMethodList (+ instance->RTTI link) | — |
 | feature-rust-frontend-skeleton | R | 60 | feature | Rust frontend — lexer/parser skeleton + entry point | — |
 | feature-rust-generics-trait-bounds | R | 65 | feature | Rust frontend — generics with trait bounds | — |
 | feature-rust-match-enum-payload | R | 60 | feature | Rust frontend — `match` pattern-bind + generalized tagged union | — |
@@ -880,7 +880,6 @@ _none_
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 58] [A] feature-rtti-method-reflection
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape

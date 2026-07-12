@@ -6,8 +6,8 @@ prio: 58
 
 - **Type:** feature (Track A — RTTI/runtime)
 - **Track:** A — core (rtti_emit.inc, parser builtins, VMT layout)
-- **Status:** backlog — opened 2026-07-12.
-- **Owner:** —
+- **Status:** working
+- **Owner:** agent-A-rtti
 - **Blocks:** [[feature-pascal-corpus-fpcunit]] (test discovery is RTTI-driven), and
   it is the same machinery [[project RTTI→streaming→LFM]] wants.
 
@@ -74,3 +74,35 @@ byte-identical or the layout change is wrong) + cross.
 ## Log
 - 2026-07-12 — opened. Split out of [[feature-pascal-corpus-fpcunit]] once the
   parse-level walls there were cleared and the RTTI layout was mapped.
+- 2026-07-13 — DONE. The instance->RTTI backlink landed exactly as sketched: a word
+  reserved immediately before the VMT, patched by EmitRTTI, so an instance finds its
+  blob at `[[instance+0] - 8]`. Slot indices and the is/as VMT-address identity are
+  untouched — self-host stayed byte-identical, and `--tier full` is 1200/1200.
+
+  Reserved in BOTH VMT-allocation sites (parser.inc and pyparser.inc); the NilPy
+  frontend builds classes too, and a missing backlink there would have read garbage.
+
+  New RTL unit `lib/rtl/rtti.pas`: GetClassRtti / GetRttiClassName,
+  PublishedMethodCount / Name / Address (own + inherited, walking the parent chain),
+  case-insensitive FindPublishedMethod, and BindPublishedMethod which returns a
+  CALLABLE `procedure of object`. That last one closes the loop from "a name in the
+  blob" to "run it" — it is the whole point.
+
+  Landmine worth knowing: blob names are INTERNED FROZEN STRINGS, not bare char* —
+  the pointer targets an 8-byte length prefix with the chars at +8. Reading it as a
+  C string yields empty/garbage. (There IS a NUL after the chars, so +8 also works
+  as a C string; the unit reads the prefix instead.)
+
+  Second landmine: casting a plain `record {Code, Self}` to a method-pointer type
+  does NOT produce a callable method pointer — it segfaults. Write the two words
+  through the method-pointer variable's own address (BindMethodPtr does this).
+
+  Regression: `test/test_rtti_method_reflection_b254.pas` — discovers own +
+  inherited published methods, refuses private ones, matches case-insensitively,
+  and CALLS the discovered methods.
+
+  NOT done, and deliberately separate: `TObject.GetInterface(IID, out obj)` (runtime
+  interface lookup by GUID — pxx interfaces are CORBA, there is no GUID table), and
+  the FPC-compatible spelling `TObject.MethodAddress/MethodName` as builtin methods
+  on TObject. fcl-fpcunit needs the former to compile; the reflection ENGINE it needs
+  now exists.

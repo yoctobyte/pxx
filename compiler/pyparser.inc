@@ -1040,6 +1040,13 @@ begin
     Inc(i);
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
+  { RTTI backlink word before the VMT — same layout the Pascal path reserves, so an
+    instance can reach its class RTTI at [[instance+0] - 8]. Keep the two in step. }
+  for i := 0 to 7 do
+  begin
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
   UClsVMTOffset[ci] := DataLen;
   for i := 0 to UClsVirtCount[ci] * 8 - 1 do
   begin

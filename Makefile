@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# published-method RTTI: discover by name, bind, and RUN (feature-rtti-method-reflection)
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_rtti_method_reflection_b254.pas /tmp/test_rtti_method_reflection_b25426
+	test "$$(/tmp/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"

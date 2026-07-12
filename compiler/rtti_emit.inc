@@ -289,6 +289,13 @@ begin
       if UClsVMTOffset[ci] >= 0 then
         AddDataPtrFix(hdr + 24, UClsVMTOffset[ci]);
 
+      { ...and the BACKLINK: the word reserved immediately before the VMT points at
+        this blob, so an INSTANCE can reach its class RTTI as [[instance+0] - 8].
+        The blob->VMT pointer above only goes one way, which is no use to code
+        holding an object. This is what published-method reflection dispatches on. }
+      if UClsVMTOffset[ci] >= 8 then
+        AddDataPtrFix(UClsVMTOffset[ci] - 8, hdr);
+
       { published properties (own). Reserve the whole array contiguously BEFORE
         filling: EmitPropInfo interns names (which append to Data[]), so records
         must be laid out first or the runtime's props[i] stride breaks. }
