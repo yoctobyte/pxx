@@ -2079,7 +2079,7 @@ begin
           si := IRA[left];
           IREmitNode386(IRA[valNode]);   { eax = new length }
           { ecx = buffer base address }
-          if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyString) then
+          if (Syms[si].Kind = skParam) and TypeIsFrozenString(Syms[si].TypeKind) then
             begin EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); end  { mov ecx, [ebp+off] = P }
           else if Syms[si].Kind = skGlobal then
             begin EmitB($B9); EmitGlobRef(Syms[si].Offset); end          { mov ecx, buffer addr }

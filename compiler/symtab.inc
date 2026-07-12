@@ -2897,9 +2897,12 @@ end;
 procedure EmitwriteStrVar(idx: Integer);
 { sys_write the string variable at Syms[idx] }
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
-    { param slot holds pointer P; length at [P], data at P+8 }
+    { param slot holds pointer P; length at [P], data at P+8. ALL frozen
+      string kinds — the `= tyString` key missed tyFixedString/tyShortString
+      params, which then read the slot as an inline string and dumped wild
+      memory (bug-pascal-writeln-shortstring-param). }
     EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
     EmitB($48); EmitB($8B); EmitB($16);                              { mov rdx, [P] = length }
     EmitB($48); EmitB($83); EmitB($C6); EmitB($08);                  { add rsi, 8 → P+8 }

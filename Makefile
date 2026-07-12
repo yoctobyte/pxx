@@ -435,6 +435,9 @@ test-core: $(COMPILER)
 	# managed arg -> const ShortString param conversion temp
 	./$(COMPILER) --mimic-fpc test/test_shortstring_param_conv.pas /tmp/test_ssparam26
 	test "$$(/tmp/test_ssparam26)" = "TRUE"
+	# writeln of ShortString params (bug-pascal-writeln-shortstring-param)
+	./$(COMPILER) --mimic-fpc test/test_writeln_shortstring_param.pas /tmp/test_wsp26
+	test "$$(/tmp/test_wsp26)" = "$$(printf 'got=HELLO len=5\nm=WORLD')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

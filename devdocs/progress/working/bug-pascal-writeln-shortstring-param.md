@@ -5,7 +5,7 @@ prio: 40
 # writeln of a ShortString/frozen-string PARAM prints wild memory
 
 - **Type:** bug (codegen — frozen-string by-ref param read) — **Track A**
-- **Status:** backlog — found 2026-07-12 probing Pascal Script
+- **Status:** working
   ([[feature-embed-pascal-script]]).
 
 ## Symptom

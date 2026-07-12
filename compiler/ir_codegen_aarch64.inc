@@ -1539,7 +1539,7 @@ begin
             Error('target aarch64: SetLength expects a string variable');
           si := IRA[left];
           EmitLoadVarAddrA64(si);              { x0 = buffer addr (or &slot for a string param) }
-          if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyString) and
+          if (Syms[si].Kind = skParam) and TypeIsFrozenString(Syms[si].TypeKind) and
              not Syms[si].IsArray then
             EmitI32($F9400000);                { ldr x0, [x0] = P (param slot holds the pointer) }
           EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (push buffer addr) }
