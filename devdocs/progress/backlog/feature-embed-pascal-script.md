@@ -124,3 +124,13 @@ the GUID consts and reaches the next wall (uPSCompiler:1963, a `Decl.Params`
 shape). Pascal Script core (uPSCompiler+uPSRuntime) is a multi-wall haul
 past this — needs builtin TGuid, ole2/Variant surface (uPSRuntime uses ole2),
 and more. Parked; uPSUtils is the concrete milestone reached.
+
+Update: **builtin TGuid landed** (RegisterBuiltinTGuid — System record,
+SizeOf 16); uPSCompiler advances past the GUID consts to uPSCompiler:1963,
+a `{$IFDEF CPU64}...Result := False` block (CPU64 IS defined; the wall is
+the surrounding record-field expression `Decl.Params[i].Mode` shape after
+include expansion — needs isolation). Full Pascal Script core remains a
+multi-wall haul (ole2/Variant for uPSRuntime, InvokeCall.inc assembly). The
+generally-useful spinoffs all landed: array-field record consts, builtin
+TGuid, variable typecasts as var args, cast-deref Dec targets,
+TObject(x).Free, managed→ShortString param conversion, FreeAndNil.
