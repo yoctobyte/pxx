@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `83006e927e35` | 2026-07-12T04:27:52Z | RED (full) | 104.0s | `83006e927e35` RED |
+| borg | `83006e927e35` | 2026-07-12T04:30:08Z | GREEN (opt) | 125.4s | `83006e927e35` RED |
 
 ## Open regressions
 - **test-core#131** — test/cmath_sqrt_correctly_rounded_b240.c (borg): bad `83006e927e35`, last good `7bf9e80393ed`, 7 commit(s) in range
