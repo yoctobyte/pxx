@@ -162,6 +162,10 @@ var
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
 function HeapMmap(len: Int64): Int64;
+{$ifdef PXX_ESP}
+var
+  espZ: Int64;
+{$endif}
 begin
   { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
     via the raw-syscall intrinsic so every target lowers it natively.
@@ -188,13 +192,23 @@ begin
 {$ifdef PXX_ESP}
   { Static arena: hand out the fixed buffer once (len is HEAP_ARENA here, so
     HeapEnd lines up). A second request means the arena is exhausted -> 0,
-    which faults on the next access, signalling out-of-memory. }
+    which faults on the next access, signalling out-of-memory.
+    Zero it on hand-out: an arena must be zero when PXXAlloc starts bumping
+    through it (see the zero-init contract on PXXAlloc). The Linux path gets
+    that free from MAP_ANONYMOUS; a static BSS buffer only gets it if startup
+    zeroed .bss, which is not this unit's to assume. Once per boot. }
   if EspArenaUsed <> 0 then
     Result := 0
   else
   begin
     EspArenaUsed := 1;
     Result := Int64(@EspArena[0]);
+    espZ := 0;
+    while espZ < len do
+    begin
+      PWord(Result + espZ)^ := 0;
+      espZ := espZ + SizeOf(NativeInt);
+    end;
   end;
 {$endif}
 end;
@@ -245,7 +259,18 @@ begin
     cur := PWord(cur)^;
   end;
 
-  { Bump from the current arena, mapping a new one when it can't fit. }
+  { Bump from the current arena, mapping a new one when it can't fit.
+
+    Zero-init contract — PXXAlloc returns a ZEROED payload on BOTH paths, so a
+    caller states one precondition and no more:
+      - free-list reuse: explicitly zeroed above (the block holds stale bytes);
+      - bump: the payload is virgin arena memory. HeapMmap *produces* a zeroed
+        arena (MAP_ANONYMOUS on Linux; the ESP static arena is zeroed on
+        hand-out), HeapPtr only ever moves forward, and a freed block never
+        comes back this way — it returns through FreeList, which zeroes.
+    Anything that changes the bump path (arena reuse, guard bytes, an arena from
+    a source that is not zero) must re-produce the guarantee here, not push it
+    back onto callers. }
   need := size + 8;                         { 8-byte size header + payload }
   if (HeapPtr = 0) or (HeapEnd - HeapPtr < need) then
   begin

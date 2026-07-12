@@ -5018,6 +5018,115 @@ begin
   end;
 end;
 
+{ ---- Zero-init contract (feature-zero-init-contract) ---------------------
+  The "a managed slot is nil before first use" guarantee has ONE owner in the
+  compiler: EmitZeroFrameSlot. Callers state the frame offset and the extent in
+  bytes; the machine sequence is this routine's business, nobody else's. The
+  extent may be any size — the >pointer-sized case routes to the RTL primitive
+  PXXMemZero, so there is no per-target "managed aggregates not supported" hole.
+  x86-64 keeps `rep stosb` inline (the hardware memset), which is the same
+  guarantee produced by the same owner, not a second implementation of it. }
+procedure EmitZeroFrameSlot(frameOff, nBytes: Integer);
+var helperPi: Integer;
+begin
+  if nBytes <= 0 then Exit;
+
+  if nBytes <= TARGET_PTR_SIZE then
+  begin
+    { Single pointer-sized handle (AnsiString / dyn-array): one nil store. }
+    if TargetArch = TARGET_I386 then
+      begin EmitB($C7); EmitB($85); EmitI32(frameOff); EmitI32(0); end  { mov dword [ebp+off], 0 }
+    else if TargetArch = TARGET_ARM32 then
+    begin
+      EmitLoadImmArm32(9, frameOff);
+      EmitI32($E08B9009);                        { add r9, fp, r9 }
+      EmitI32($E3A00000);                        { mov r0, #0 }
+      EmitI32($E5890000);                        { str r0, [r9] }
+    end
+    else if TargetArch = TARGET_AARCH64 then
+    begin
+      EmitLoadImmA64(9, frameOff);
+      EmitI32($8B0903A9);                        { add x9, x29, x9 }
+      EmitI32($F900013F);                        { str xzr, [x9] }
+    end
+    else if TargetArch = TARGET_XTENSA then
+    begin
+      EmitFrameAddrXtensa(reg_xtensa_a8, frameOff);
+      xtensa_movi(reg_xtensa_a9, 0);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+    end
+    else if TargetArch = TARGET_RISCV32 then
+    begin
+      EmitLoadImmRISCV32(reg_t0, frameOff);
+      rv32_add(reg_t0, reg_s0, reg_t0);
+      rv32_sw(reg_zero, reg_t0, 0);
+    end
+    else
+      begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(frameOff); EmitI32(0); end; { mov qword [rbp+off], 0 }
+    Exit;
+  end;
+
+  { Managed aggregate (record with managed fields / variant / COM fat pointer /
+    array of managed): zero the whole extent. }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($48); EmitB($8D); EmitB($BD); EmitI32(frameOff);   { lea rdi, [rbp+off] }
+    EmitB($48); EmitB($31); EmitB($C0);                      { xor rax, rax }
+    EmitB($48); EmitB($C7); EmitB($C1); EmitI32(nBytes);     { mov rcx, nBytes }
+    EmitB($F3); EmitB($AA);                                  { rep stosb }
+    Exit;
+  end;
+
+  helperPi := FindProc('PXXMemZero');
+  if helperPi < 0 then Error('compiler error: PXXMemZero not found');
+  if TargetArch = TARGET_I386 then
+  begin
+    EmitB($8D); EmitB($85); EmitI32(frameOff);   { lea eax, [ebp+off] }
+    EmitB($50);                                  { push dest (param 0, deepest) }
+    EmitB($68); EmitI32(nBytes);                 { push count }
+    EmitCallProc(helperPi);
+    EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    EmitLoadImmArm32(0, frameOff);
+    EmitI32($E08B0000);                          { add r0, fp, r0 (dest) }
+    EmitLoadImmArm32(1, nBytes);                 { r1 = count }
+    EmitCallProc(helperPi);
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitLoadImmA64(9, frameOff);
+    EmitI32($8B0903A0);                          { add x0, x29, x9 (dest) }
+    EmitLoadImmA64(1, nBytes);                   { x1 = count }
+    EmitCallProc(helperPi);
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    EmitLoadImmRISCV32(reg_t0, frameOff);
+    rv32_add(reg_a0, reg_s0, reg_t0);            { a0 = dest }
+    EmitLoadImmRISCV32(reg_a1, nBytes);          { a1 = count }
+    EmitCallProc(helperPi);
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    EmitFrameAddrXtensa(reg_xtensa_a8, frameOff);
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_mov(reg_xtensa_a10, reg_xtensa_a8);       { arg0 = dest }
+      EmitLoadConstXtensa(reg_xtensa_a11, nBytes);     { arg1 = count }
+    end
+    else
+    begin
+      xtensa_mov(reg_xtensa_a2, reg_xtensa_a8);        { arg0 = dest }
+      EmitLoadConstXtensa(reg_xtensa_a3, nBytes);      { arg1 = count }
+    end;
+    EmitCallProc(helperPi);
+  end
+  else
+    Error('compiler error: EmitZeroFrameSlot: unhandled target');
+end;
+
 { Stash the caller's hidden aggregate-result destination pointer (passed in the
   per-target indirect-result register) into the proc's dest-sym frame slot, right
   after the prologue and before the param-copy loop can clobber that register.

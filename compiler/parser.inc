@@ -17665,52 +17665,12 @@ begin
     if Syms[i].Kind = skLocal then
     begin
       { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
-        nil each pointer-sized slot so SetLength on an element does not release a
-        garbage "old" handle. Done as a per-element loop of pointer-sized stores
-        (not one multi-byte memset) so it works on every target — the cross
-        backends reject the >pointer-sized managed-aggregate zero path. }
-      if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
-      begin
-        for j := 0 to Syms[i].ArrLen - 1 do
-        begin
-          if TargetArch = TARGET_I386 then
-          begin
-            EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + j * TARGET_PTR_SIZE); EmitI32(0);
-          end
-          else if TargetArch = TARGET_ARM32 then
-          begin
-            EmitLoadImmArm32(9, Syms[i].Offset + j * TARGET_PTR_SIZE);
-            EmitI32($E08B9009);                                          { add r9, fp, r9 }
-            EmitI32($E3A00000);                                          { mov r0, #0 }
-            EmitI32($E5890000);                                          { str r0, [r9] }
-          end
-          else if TargetArch = TARGET_AARCH64 then
-          begin
-            EmitLoadImmA64(9, Syms[i].Offset + j * TARGET_PTR_SIZE);
-            EmitI32($8B0903A9);                                          { add x9, x29, x9 }
-            EmitI32($F900013F);                                          { str xzr, [x9] }
-          end
-          else if TargetArch = TARGET_XTENSA then
-          begin
-            EmitFrameAddrXtensa(reg_xtensa_a8, Syms[i].Offset + j * TARGET_PTR_SIZE);
-            xtensa_movi(reg_xtensa_a9, 0);
-            xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
-          end
-          else if TargetArch = TARGET_RISCV32 then
-          begin
-            EmitLoadImmRISCV32(reg_t0, Syms[i].Offset + j * TARGET_PTR_SIZE);
-            rv32_add(reg_t0, reg_s0, reg_t0);
-            rv32_sw(reg_zero, reg_t0, 0);
-          end
-          else
-          begin
-            EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + j * TARGET_PTR_SIZE); EmitI32(0);
-          end;
-        end;
-        Continue;
-      end;
+        nil every pointer-sized slot so SetLength on an element does not release
+        a garbage "old" handle. }
       zeroBytes := 0;
-      if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+      if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+        zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
+      else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
         zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
       else if Syms[i].TypeKind = tyAnsiString then
       begin
@@ -17732,90 +17692,8 @@ begin
           first overwrite / scope exit sees an empty slot, not stale stack bytes
           (a garbage IMT would dispatch _Release into nowhere). }
         zeroBytes := RecSize(Syms[i].RecName);
-      { i386: only pointer-sized managed handles (scalar AnsiString / dyn-array)
-        are supported; the larger managed aggregates (records/variants/arrays of
-        managed) are not on this target yet. }
-      if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_ARM32) then
-      begin
-        { Zero the full extent of a managed-aggregate local (record with managed
-          fields / variant / array of managed) so first use sees nil fields and
-          an ARC-correct copy releases nil, not stale stack bytes. Byte loop. }
-        EmitLoadImmArm32(0, Syms[i].Offset);
-        EmitI32($E08B0000);                  { add r0, fp, r0 (dest) }
-        EmitLoadImmArm32(1, zeroBytes);       { r1 = count }
-        EmitI32($E3A02000);                  { mov r2, #0 }
-        zfLoop := CodeLen;
-        EmitI32($E3510000);                  { cmp r1, #0 }
-        zfDone := CodeLen; EmitI32($0A000000); { beq done }
-        EmitI32($E5C02000);                  { strb r2, [r0] }
-        EmitI32($E2800001);                  { add r0, r0, #1 }
-        EmitI32($E2411001);                  { sub r1, r1, #1 }
-        EmitI32($EA000000 or ((((zfLoop - CodeLen) div 4) - 2) and $00ffffff)); { b loop }
-        Patch32(zfDone, $0A000000 or ((((CodeLen - zfDone) div 4) - 2) and $00ffffff));
-      end
-      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_AARCH64) then
-      begin
-        EmitLoadImmA64(9, Syms[i].Offset);
-        EmitI32($8B0903A0);                  { add x0, x29, x9 (dest) }
-        EmitLoadImmA64(1, zeroBytes);         { x1 = count }
-        helperPi := FindProc('PXXMemZero');
-        if helperPi < 0 then Error('compiler error: PXXMemZero not found');
-        EmitCallProc(helperPi);
-      end
-      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
-      begin
-        EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset); { lea eax, [ebp+off] }
-        EmitB($50);                                      { push dest }
-        EmitB($68); EmitI32(zeroBytes);                  { push count }
-        helperPi := FindProc('PXXMemZero');
-        if helperPi < 0 then Error('compiler error: PXXMemZero not found');
-        EmitCallProc(helperPi);
-        EmitB($81); EmitB($C4); EmitI32(8);              { add esp, 8 }
-      end
-      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
-        Error('target: managed aggregate locals not yet supported');
-      if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
-      begin
-        EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);  { mov dword [ebp+off], 0 }
-      end
-      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_ARM32) then
-      begin
-        EmitLoadImmArm32(9, Syms[i].Offset);
-        EmitI32($E08B9009);                                          { add r9, fp, r9 }
-        EmitI32($E3A00000);                                          { mov r0, #0 }
-        EmitI32($E5890000);                                          { str r0, [r9] }
-      end
-      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_AARCH64) then
-      begin
-        EmitLoadImmA64(9, Syms[i].Offset);
-        EmitI32($8B0903A9);                                          { add x9, x29, x9 }
-        EmitI32($F900013F);                                          { str xzr, [x9] }
-      end
-      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_XTENSA) then
-      begin
-        { Nil the pointer-sized managed handle so an uninitialised local reads as
-          nil (Length 0, scope-exit DecRef is a no-op rather than a wild free). }
-        EmitFrameAddrXtensa(reg_xtensa_a8, Syms[i].Offset);
-        xtensa_movi(reg_xtensa_a9, 0);
-        xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
-      end
-      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_RISCV32) then
-      begin
-        EmitLoadImmRISCV32(reg_t0, Syms[i].Offset);
-        rv32_add(reg_t0, reg_s0, reg_t0);
-        rv32_sw(reg_zero, reg_t0, 0);
-      end
-      else if zeroBytes = TARGET_PTR_SIZE then
-      begin
-        EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
-      end
-      else if (zeroBytes > 0) and (TargetArch = TARGET_X86_64) then
-      begin
-        EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[i].Offset);  { lea rdi, [rbp+off] }
-        EmitB($48); EmitB($31); EmitB($C0);                           { xor rax, rax }
-        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(zeroBytes);       { mov rcx, zeroBytes }
-        EmitB($F3); EmitB($AA);                                       { rep stosb }
-      end;
+      { One owner for the guarantee, every target, every size. }
+      EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
     end;
   { Routine-local typed constants: now that storage is allocated and managed
     locals are nil'd, emit the recorded initializer assignments into the
