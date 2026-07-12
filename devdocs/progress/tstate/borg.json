@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T12:22:57Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a38a53361acced55942b16f2601c3b58349a92e8",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T12:25:06Z",
    "fixed": [],
    "new_red": [],
@@ -422,6 +414,14 @@
    "new_red": [],
    "sha": "b97ff72d38c2830af180f30060b3e4562450b513",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T18:48:28Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1607,6 +1607,7 @@
   "test-threads#src:test/test_atomic64.pas": "pass",
   "test-threads#src:test/test_atomic_counter.pas": "pass",
   "test-threads#src:test/test_condvar.pas": "pass",
+  "test-threads#src:test/test_const64.pas": "pass",
   "test-threads#src:test/test_critsec_once.pas": "pass",
   "test-threads#src:test/test_event.pas": "pass",
   "test-threads#src:test/test_mulhi.pas": "pass",
@@ -1623,11 +1624,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T18:41:45Z",
-  "sha": "b97ff72d38c2830af180f30060b3e4562450b513",
-  "tier": "opt",
+  "date": "2026-07-12T18:48:28Z",
+  "sha": "aaa58e72c1e8b7c2a4af9f33d89e4e6ea524027e",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 104.1
+  "wall": 68.2
  },
  "last_bench": {
   "conf_rows": 550,
