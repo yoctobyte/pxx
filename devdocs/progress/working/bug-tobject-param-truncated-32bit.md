@@ -5,7 +5,7 @@ prio: 60
 # TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines
 
 - **Type:** bug (codegen + overload matching — class model) — **Track A**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, found wiring the Eliah component tab bar (the
   identity search over `Sender` never matched).
 

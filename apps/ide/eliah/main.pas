@@ -145,10 +145,7 @@ type
     procedure OnTreeClick(Sender: TObject);
     procedure OnErrorClick(Sender: TObject);
     procedure OnPlaceToggle(Sender: TObject);
-    { NOTE Sender is typed TButton, not TObject: a TObject-typed parameter
-      arrives 32-bit-truncated (bug-tobject-param-truncated-32bit), which
-      broke the identity search below. Concrete class params are fine. }
-    procedure OnPaletteButton(Sender: TButton);
+    procedure OnPaletteButton(Sender: TObject);
     procedure OnPickFromCaret(Sender: TObject);
     procedure OnWireOnClick(Sender: TObject);
     procedure OnPropClick(Sender: TObject);
@@ -828,7 +825,7 @@ end;
 
 { A component-bar button: select its palette row and make sure Place is armed
   (sticky, same as arming via the Place button). }
-procedure TEliahForm.OnPaletteButton(Sender: TButton);
+procedure TEliahForm.OnPaletteButton(Sender: TObject);
 var i: Integer;
 begin
   for i := 0 to Length(BarButtons) - 1 do

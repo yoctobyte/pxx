@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (Pascal frontend — const-eval) — **Track P** (edits the shared
   parser/const-eval, so it runs under A's gate + no-concurrent-edit rule)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-11, first blocker of the New-ZenGL Pascal ladder
   ([[feature-game-library-candidate-suite]] slice C).
 

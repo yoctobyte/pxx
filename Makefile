@@ -398,6 +398,12 @@ test-core: $(COMPILER)
 	# on-handler binder must not poison the next routine's params (stale SymBlockId)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_on_handler_next_proc_params.pas /tmp/test_on_handler_npp26
 	test "$$(/tmp/test_on_handler_npp26)" = "$$(printf 'purging\nTRUE 7')"
+	# TObject params: full 64-bit value + plain-routine match (bug-tobject-param-truncated-32bit)
+	./$(COMPILER) test/test_tobject_param_b243.pas /tmp/test_tobject_param_b24326
+	test "$$(/tmp/test_tobject_param_b24326)" = "$$(printf 'm-ident=TRUE\nm-cast=77\np-ident=TRUE\np-cast=77')"
+	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
+	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
+	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

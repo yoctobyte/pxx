@@ -3756,6 +3756,16 @@ begin
     Result := True;
     Exit;
   end;
+  { A class instance converts implicitly to a rooted object reference — the
+    builtin TObject / `object` param type is a tyPointer (elem tyClass), so a
+    `P(o: TObject)` plain routine must accept any tyClass argument, matching
+    the method path (bug-tobject-param-truncated-32bit, symptom 2). The
+    reverse (class param <- pointer arg) stays rejected. }
+  if (pType = tyPointer) and (aType = tyClass) then
+  begin
+    Result := True;
+    Exit;
+  end;
   Result := False;
 end;
 

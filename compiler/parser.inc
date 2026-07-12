@@ -4509,6 +4509,43 @@ end;
   Otherwise consume nothing and return False (the caller falls back to the
   High/Low-of-array-variable path). A name that resolves to a VARIABLE is left
   for that path. }
+function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
+{ Value twin of TryFoldHighLowType for the constant evaluator: CurTok sits on
+  the (candidate) type name inside High(...)/Low(...); on success the bound is
+  in v and the type name is consumed (bug-pascal-high-low-in-const-expr —
+  ZenGL's `array[0..High(LongWord) shr 1 - 1]`). }
+var btk: TTypeKind; etid, aliasIdx: Integer; nm: AnsiString;
+begin
+  Result := False;
+  if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
+     (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
+  begin
+    btk := ParseTypeKind;   { consumes the type token, disambiguating byte/word/etc }
+    Result := OrdinalTypeBound(btk, wantHigh, v);
+    Exit;
+  end;
+  if CurTok.Kind <> tkIdent then Exit;
+  nm := CurTok.SVal;
+  btk := OrdinalNameToTk(nm);
+  if btk = tyUnknown then
+  begin
+    aliasIdx := FindTypeAlias(nm);
+    if aliasIdx >= 0 then btk := IntToTypeKind(AliasTk[aliasIdx]);
+  end;
+  if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, v) then
+  begin
+    Next;
+    Result := True; Exit;
+  end;
+  etid := FindEnumType(nm);
+  if etid >= 0 then
+  begin
+    if wantHigh then v := EnumTypeValCount[etid] - 1 else v := 0;
+    Next;
+    Result := True; Exit;
+  end;
+end;
+
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
 var btk: TTypeKind; bv: Int64; etid, aliasIdx: Integer; nm: AnsiString;
 begin
@@ -7605,7 +7642,7 @@ function ConstEvalFactor: Int64;
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
-    cName: AnsiString; cQUnit: Integer; hasConstCast: Boolean; sofTk: TTypeKind;
+    cName: AnsiString; cQUnit: Integer; hasConstCast, hlHigh: Boolean; sofTk: TTypeKind;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -7652,6 +7689,20 @@ begin
     sofTk := ParseTypeKind;
     if sofTk = tyRecord then r := RecSize(LastTypeRecId)
     else r := TypeSize(sofTk);
+    Expect(tkRParen, ')');
+  end
+  else if (CurTok.Kind = tkIdent) and
+          (CaseEqual(CurTok.SVal, 'high') or CaseEqual(CurTok.SVal, 'low')) and
+          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { High(T)/Low(T) as a compile-time constant — array bounds and const
+      declarations (bug-pascal-high-low-in-const-expr). Type-name operands
+      only, mirroring the sizeof fold above; High(variable) stays a runtime
+      expression outside const contexts. }
+    hlHigh := CaseEqual(CurTok.SVal, 'high');
+    Next; Expect(tkLParen, '(');
+    if not TryConstHighLowValue(hlHigh, r) then
+      Error('High/Low in a constant expression: expected an ordinal type name');
     Expect(tkRParen, ')');
   end
   else if CurTok.Kind = tkIdent then
@@ -12174,7 +12225,19 @@ begin
             else
             begin
               LastTypeEnumId := FindEnumType(lo);
-              Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
+              if (LastTypeEnumId < 0) and CaseEqual(lo, 'tobject') then
+              begin
+                { Builtin root class with no user TObject row (a user-declared
+                  TObject won via IsClassType above): same rooted object
+                  reference as `object` — pointer-sized, elem tyClass. It used
+                  to fall through to tyInteger, silently TRUNCATING every
+                  `Sender: TObject` param to 32 bits
+                  (bug-tobject-param-truncated-32bit). }
+                LastTypePointerElemTk := tyClass;
+                Result := tyPointer;
+              end
+              else
+                Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
             end;
           end;
         end;
