@@ -64,7 +64,13 @@ implementation
 const
   MAX_CO = 64;
   CO_STK = 65536;   { default per-coroutine heap stack }
-  CO_CANARY = $C0DECAFE;  { 32-bit so it round-trips through one machine word on i386 too }
+  { Must round-trip through ONE SIGNED machine word: the guard is written and read
+    through PW = ^NativeInt, which is 32-bit and signed on i386/arm32/riscv32. A
+    value with the high bit set ($C0DECAFE) sign-extends to a negative on load and
+    can never compare equal to the constant, which is positive and — since named
+    constants above MaxInt are typed Int64 (89366847) — widened to 64 bits for the
+    comparison. So keep it below $80000000. }
+  CO_CANARY = $4C0DECAF;
 
 { gettid — per-thread reactor keying. Inlined (not via palthread) so single-
   threaded scheduler users aren't forced onto the --threadsafe runtime by a
