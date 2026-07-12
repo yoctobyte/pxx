@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `2b2a0c29fdc0` | 2026-07-12T07:32:18Z | GREEN (opt) | 104.6s | `2b2a0c29fdc0` GREEN |
+| borg | `8d1e694a9d8d` | 2026-07-12T07:43:47Z | RED (native) | 67.9s | `2b2a0c29fdc0` GREEN |
 
 ## Open regressions
-- none
+- **test-core#665** — test/test_c_gtk_window.pas (borg): bad `8d1e694a9d8d`, last good `2b2a0c29fdc0`, 7 commit(s) in range
