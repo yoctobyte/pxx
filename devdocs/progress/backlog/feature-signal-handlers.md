@@ -5,7 +5,7 @@ prio: 65  # auto
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** backlog
+- **Status:** partial — the **SIG_IGN slice landed** (`PalIgnoreSignal`, commit 3f5aa914: restorer-free, per-arch rt_sigaction, posix+esp, `test_pal_signal`). Full handler-with-callback (SA_RESTORER trampoline, SA_SIGINFO, graceful SIGINT/SIGTERM cleanup) remains open.
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
   [[decide-int-div-zero-behavior-unification]]).
