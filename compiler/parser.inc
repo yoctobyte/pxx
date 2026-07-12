@@ -19193,6 +19193,26 @@ begin
   end;
 end;
 
+procedure RegisterBuiltinTGuid;
+{ System.TGuid — pxx has no System unit, so mint the record unconditionally
+  (cheap: one UCls row) so interface GUID constants and any explicit TGuid
+  use resolve. Layout = FPC's: D1:LongWord, D2/D3:Word, D4:array[0..7] of Byte
+  (16 bytes). feature-embed-pascal-script's IUnknown_Guid shape. }
+var ci: Integer;
+begin
+  if FindUClass('TGuid') >= 0 then Exit;
+  ci := AddUClass(TokCharsAppend('TGuid'), 5);
+  UClsIsRecord[ci] := True;
+  AddUField(ci, TokCharsAppend('D1'), 2, 0, Ord(tyUInt32), REC_NONE);
+  AddUField(ci, TokCharsAppend('D2'), 2, 4, Ord(tyUInt16), REC_NONE);
+  AddUField(ci, TokCharsAppend('D3'), 2, 6, Ord(tyUInt16), REC_NONE);
+  AddUField(ci, TokCharsAppend('D4'), 2, 8, Ord(tyUInt8), REC_NONE);
+  UFldIsArray[UFldCount-1] := True;
+  UFldArrLen[UFldCount-1] := 8;
+  UClsSize_[ci] := 16;
+  UClsAlign[ci] := 4;
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
@@ -19265,6 +19285,7 @@ begin
     define travels with the source, so every self-build path — bootstrap,
     cross-bootstrap, stabilize, manual — opts out without per-site Makefile flags. }
   if PasDefineExists('PXX_NODEFAULTRTL') then NoDefaultRtl := True;
+  RegisterBuiltinTGuid;
   { Only pull the implicit textfile surface when the source actually references
     the file type. Scanning the already-lexed token stream up front for a bare
     `Text`/`TextFile`/`IOResult` identifier (any position — var/param/field/
