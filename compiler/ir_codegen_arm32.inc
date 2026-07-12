@@ -3375,8 +3375,15 @@ begin
       IR_JUMP_IF_FALSE:
         begin
           lblId := IRA[i];
-          IREmitNodeArm32(IRB[i]); { condition -> r0 }
-          EmitAsmArm32('cmp r0, #0');
+          IREmitNodeArm32(IRB[i]); { condition -> r0 (r1:r0 if 64-bit) }
+          { A 64-bit condition is r1:r0, so `cmp r0, #0` ignores the HIGH half and a
+            nonzero value whose low word is zero tested as FALSE
+            (bug-32bit-truthiness-high-half). `orrs` ORs both halves and sets the
+            flags, so Z is set iff the whole 64-bit value is zero. }
+          if Is64BitArm32(IntToTypeKind(IRTk[IRB[i]])) then
+            EmitI32($E1900001)   { orrs r0, r0, r1 — raw: the text emitter has no `orrs` }
+          else
+            EmitAsmArm32('cmp r0, #0');
           if LabelPositions[lblId] <> -1 then
             EmitAsmArm32(['beq %', LabelPositions[lblId] - CodeLen])
           else

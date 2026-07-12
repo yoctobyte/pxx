@@ -3902,7 +3902,17 @@ begin
       IR_JUMP_IF_FALSE:
         begin
           lblId := IRA[i];
-          IREmitNode386(IRB[i]);                     { condition -> eax }
+          IREmitNode386(IRB[i]);                     { condition -> eax (edx:eax if 64-bit) }
+          { A 64-bit condition lives in edx:eax, so `test eax, eax` alone ignores the
+            HIGH half: any nonzero value whose low dword happens to be zero (e.g.
+            0xabcd00000000) tested as FALSE. `while (v)` / `if (v)` / `(v) ? :` all
+            route through here, so this silently mis-branched — and crtl's printf
+            hit it, which is how it surfaced (bug-32bit-truthiness-high-half).
+            `or eax, edx` sets ZF iff BOTH halves are zero. }
+          if Is64Bit386(IntToTypeKind(IRTk[IRB[i]])) then
+          begin
+            EmitB($09); EmitB($D0);                  { or eax, edx }
+          end;
           EmitB($85); EmitB($C0);                    { test eax, eax }
           EmitB($0F); EmitB($84);                    { jz rel32 }
           if LabelPositions[lblId] <> -1 then

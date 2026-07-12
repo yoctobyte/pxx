@@ -1208,6 +1208,17 @@ test-core: $(COMPILER)
 	/tmp/cgeneric_long_rank_b25026; test "$$?" = "42"
 	./$(COMPILER) --target=i386 test/cgeneric_long_rank_b250.c /tmp/cgeneric_long_rank_b250_386
 	/tmp/cgeneric_long_rank_b250_386; test "$$?" = "42"
+	# a 64-bit value is a register PAIR on ILP32: `if (v)` must test BOTH halves
+	# (bug-32bit-truthiness-high-half). The 32-bit run is the one that matters.
+	./$(COMPILER) test/ctruthy_int64_b251.c /tmp/ctruthy_int64_b25126
+	/tmp/ctruthy_int64_b25126; test "$$?" = "42"
+	./$(COMPILER) --target=i386 test/ctruthy_int64_b251.c /tmp/ctruthy_int64_b251_386
+	/tmp/ctruthy_int64_b251_386; test "$$?" = "42"
+	# crtl printf must honour `ll`, not just count it (bug-crtl-printf-ll-ilp32)
+	./$(COMPILER) test/cprintf_ll_b252.c /tmp/cprintf_ll_b25226
+	/tmp/cprintf_ll_b25226; test "$$?" = "42"
+	./$(COMPILER) --target=i386 test/cprintf_ll_b252.c /tmp/cprintf_ll_b252_386
+	/tmp/cprintf_ll_b252_386; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

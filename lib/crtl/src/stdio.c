@@ -95,7 +95,9 @@ static FILE *__crtl_alloc_file(void) {
 /* ---- format engine -------------------------------------------------------- */
 
 /* Unsigned -> string, MSB-first, into `out`; returns digit count. */
-static int __crtl_utoa(char *out, unsigned long v, int base, int upper) {
+/* Takes unsigned long long, not unsigned long: on ILP32 a `long` is 32-bit, so a
+   %llx / %llu value would be truncated on the way in (bug-crtl-printf-ll-ilp32). */
+static int __crtl_utoa(char *out, unsigned long long v, int base, int upper) {
   char tmp[32];
   int n = 0, i, r;
   char d;
@@ -287,11 +289,14 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       else while (fmt[i] >= '0' && fmt[i] <= '9') { prec = prec * 10 + (fmt[i] - '0'); i++; }
     }
 
-    /* length modifiers — parsed for source compatibility (all read as long-or-
-       smaller through the GP save area on this ABI). `L` (long double) is
-       accepted and treated as double: pxx models long double AS double, and a
-       double is what the varargs slot carries — so %Lf/%Le/%Lg format like
-       %f/%e/%g (c-testsuite 00204). */
+    /* length modifiers. `ll` MUST be honoured, not merely counted: on ILP32 a
+       `long` is 32 bits, so reading a %llx argument with va_arg(ap, long) took
+       only the low half AND left the high half in the varargs slot, which the
+       NEXT conversion then consumed — one wrong value plus every later argument
+       shifted (bug-crtl-printf-ll-ilp32). On LP64 long == long long, which is why
+       this went unnoticed. `L` (long double) is accepted and treated as double:
+       pxx models long double AS double, and a double is what the varargs slot
+       carries — so %Lf/%Le/%Lg format like %f/%e/%g (c-testsuite 00204). */
     int lng = 0;
     while (fmt[i] == 'l' || fmt[i] == 'h' || fmt[i] == 'z' || fmt[i] == 'j' ||
            fmt[i] == 't' || fmt[i] == 'L') {
@@ -309,29 +314,37 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
     int neg = 0;
     const char *prefix = 0;
     int preflen = 0;
-    unsigned long uv;
-    long sv;
+    unsigned long long uv;
+    long long sv;
 
     if (k == 'd' || k == 'i') {
-      if (lng) sv = va_arg(ap, long); else sv = (long)va_arg(ap, int);
-      if (sv < 0) { neg = 1; uv = (unsigned long)(-sv); } else uv = (unsigned long)sv;
+      if (lng >= 2) sv = va_arg(ap, long long);
+      else if (lng == 1) sv = va_arg(ap, long);
+      else sv = (long long)va_arg(ap, int);
+      if (sv < 0) { neg = 1; uv = (unsigned long long)(-sv); } else uv = (unsigned long long)sv;
       nl = __crtl_utoa(num, uv, 10, 0);
       s = num;
       if (neg) { prefix = "-"; preflen = 1; }
       else if (plus) { prefix = "+"; preflen = 1; }
       else if (space) { prefix = " "; preflen = 1; }
     } else if (k == 'u') {
-      if (lng) uv = va_arg(ap, unsigned long); else uv = (unsigned long)va_arg(ap, unsigned int);
+      if (lng >= 2) uv = va_arg(ap, unsigned long long);
+      else if (lng == 1) uv = va_arg(ap, unsigned long);
+      else uv = (unsigned long long)va_arg(ap, unsigned int);
       nl = __crtl_utoa(num, uv, 10, 0); s = num;
     } else if (k == 'x' || k == 'X') {
-      if (lng) uv = va_arg(ap, unsigned long); else uv = (unsigned long)va_arg(ap, unsigned int);
+      if (lng >= 2) uv = va_arg(ap, unsigned long long);
+      else if (lng == 1) uv = va_arg(ap, unsigned long);
+      else uv = (unsigned long long)va_arg(ap, unsigned int);
       nl = __crtl_utoa(num, uv, 16, k == 'X'); s = num;
       if (alt && uv != 0) { prefix = (k == 'X') ? "0X" : "0x"; preflen = 2; }
     } else if (k == 'o') {
-      if (lng) uv = va_arg(ap, unsigned long); else uv = (unsigned long)va_arg(ap, unsigned int);
+      if (lng >= 2) uv = va_arg(ap, unsigned long long);
+      else if (lng == 1) uv = va_arg(ap, unsigned long);
+      else uv = (unsigned long long)va_arg(ap, unsigned int);
       nl = __crtl_utoa(num, uv, 8, 0); s = num;
     } else if (k == 'p') {
-      uv = (unsigned long)va_arg(ap, void *);
+      uv = (unsigned long long)(unsigned long)va_arg(ap, void *);
       nl = __crtl_utoa(num, uv, 16, 0); s = num;
       prefix = "0x"; preflen = 2;
     } else if (k == 'c') {

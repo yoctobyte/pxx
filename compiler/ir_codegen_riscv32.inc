@@ -2149,6 +2149,12 @@ begin
             unrelated code (chess perft counted 164). jal reaches +-1MB. }
           lblId := IRA[i];
           IREmitNodeRISCV32(IRB[i]);
+          { A 64-bit condition is a1:a0, so branching on a0 alone ignores the HIGH
+            half and a nonzero value whose low word is zero tested as FALSE
+            (bug-32bit-truthiness-high-half). Fold both halves into a0 first — it
+            is dead after the branch. }
+          if Is64BitRISCV32(IntToTypeKind(IRTk[IRB[i]])) then
+            rv32_or(reg_a0, reg_a0, reg_a1);
           EmitI32($00051463);                       { bne a0, zero, +8 }
           if LabelPositions[lblId] <> -1 then
             EmitI32(EncodeRISCVJAL(reg_zero, LabelPositions[lblId] - CodeLen))
