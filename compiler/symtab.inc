@@ -3772,6 +3772,15 @@ begin
     Result := True;
     Exit;
   end;
+  { A FROZEN-string parameter (ShortString / string[N]) accepts a managed or
+    frozen string (or char) argument — IRLowerCallArg converts through a
+    hidden frozen temp (Pascal Script's Const S: ShortString). }
+  if ((pType = tyFixedString) or (pType = tyShortString)) and
+     ((aType = tyAnsiString) or (aType = tyString) or (aType = tyChar)) then
+  begin
+    Result := True;
+    Exit;
+  end;
   { A class instance converts implicitly to a rooted object reference — the
     builtin TObject / `object` param type is a tyPointer (elem tyClass), so a
     `P(o: TObject)` plain routine must accept any tyClass argument, matching

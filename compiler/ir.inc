@@ -1394,6 +1394,37 @@ begin
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyString));
     Exit;
   end;
+  { A MANAGED string argument to a FROZEN-string parameter (Pascal Script's
+    `CheckReserved(FLastUpToken: TbtString, ...)` into `Const S: ShortString`):
+    the param wants a frozen slot ADDRESS, a managed handle is never the right
+    layout. Convert through a hidden frozen temp — the store coerces
+    managed -> frozen (the ordinary assignment path), the arg is the temp's
+    slot address. Applies to var/out too: the callee sees a temp, matching
+    FPC's implicit-conversion-then-by-ref-const semantics for `const`;
+    genuine var/out params keep erroring in the front end's lvalue check. }
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     TypeIsFrozenString(Procs[cpi].Params[pathIdx].TypeKind) and
+     (IntToTypeKind(ASTTk[argAST]) = tyAnsiString) then
+  begin
+    if Procs[cpi].Params[pathIdx].TypeKind = tyString then
+      tmpSym := AllocVar('', tyString)
+    else
+    begin
+      LastTypeStrCap := 255;   { ShortString / string[N] params: 255 covers }
+      tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
+    end;
+    { coerce via the ordinary ASSIGNMENT path (it owns managed->frozen):
+      synthesize `tmp := arg` as AST and lower it }
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(Procs[cpi].Params[pathIdx].TypeKind);
+    caSlCall := AllocNode(AN_ASSIGN);
+    ASTLeft[caSlCall] := caIdent;
+    ASTRight[caSlCall] := argAST;
+    IRLowerAST(caSlCall);
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+    Exit;
+  end;
   { `@obj.Method` given directly to a method-pointer parameter (`of object`
     record): materialise the 16-byte {Code, Data} pair into a hidden temp and
     pass its address — the record-param ABI. Mirrors the AN_ASSIGN methodref

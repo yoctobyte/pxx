@@ -432,6 +432,9 @@ test-core: $(COMPILER)
 	# const array-of-record named-field initializers + string-alias cast passthrough
 	./$(COMPILER) --mimic-fpc test/test_const_array_of_record.pas /tmp/test_const_arr_rec26
 	test "$$(/tmp/test_const_arr_rec26)" = "$$(printf 'AND=1\nOR=2\nXOR=3\n2')"
+	# managed arg -> const ShortString param conversion temp
+	./$(COMPILER) --mimic-fpc test/test_shortstring_param_conv.pas /tmp/test_ssparam26
+	test "$$(/tmp/test_ssparam26)" = "TRUE"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
