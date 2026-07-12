@@ -408,6 +408,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas /tmp/test_include_fi26
 	test "$$(/tmp/test_include_fi26)" = "fi-ok"
 	! ./$(COMPILER) test/test_include_miss_fails.pas /tmp/test_include_miss26 2>/dev/null
+	# with TFoo.Create: single evaluation + with-scoped property/method/Free
+	./$(COMPILER) test/test_with_class_create.pas /tmp/test_with_class_create26
+	test "$$(/tmp/test_with_class_create26)" = "$$(printf '21\n42\ncreates=1')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

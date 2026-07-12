@@ -19,7 +19,7 @@ unit classes;
 
 interface
 
-uses sysutils;   { CompareStr for Sort }
+uses sysutils, platform;   { CompareStr for Sort; PAL file API for TFileStream }
 
 type
   { ---- TPersistent: assignable base (FPC Classes surface) ---- }
@@ -100,6 +100,38 @@ type
     procedure Clear;
     procedure SetSize(NewSize: Int64);
     function Memory: Pointer;
+  end;
+
+const
+  { TFileStream open modes (FPC/Delphi). Share modes are accepted and ignored
+    — this RTL has no locking; the or-composition still type-checks. }
+  fmCreate        = $FF00;
+  fmOpenRead      = 0;
+  fmOpenWrite     = 1;
+  fmOpenReadWrite = 2;
+  fmShareCompat    = 0;
+  fmShareExclusive = $10;
+  fmShareDenyWrite = $20;
+  fmShareDenyRead  = $30;
+  fmShareDenyNone  = $40;
+
+type
+  TFileStream = class(TStream)
+  private
+    FHandle: Integer;
+    FFileName: string;
+  protected
+    function GetSize: Int64; override;
+    function GetPosition: Int64; override;
+    procedure SetPosition(const Pos: Int64); override;
+  public
+    constructor Create(const AFileName: string; Mode: Word);
+    destructor Destroy; override;
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    property Handle: Integer read FHandle;
+    property FileName: string read FFileName;
   end;
 
   { FPC TList mutation-notification hook. A descendant (e.g. TObjectList)
@@ -300,6 +332,74 @@ end;
 function TMemoryStream.Memory: Pointer;
 begin
   if Length(FData) > 0 then Result := @FData[0] else Result := nil;
+end;
+
+constructor TFileStream.Create(const AFileName: string; Mode: Word);
+var flags: Integer;
+begin
+  inherited Create;
+  FFileName := AFileName;
+  if (Mode and fmCreate) = fmCreate then
+    flags := PAL_OPEN_RDWR or PAL_OPEN_CREATE or PAL_OPEN_TRUNC
+  else
+    case Mode and 3 of
+      fmOpenWrite:     flags := PAL_OPEN_WRITE;
+      fmOpenReadWrite: flags := PAL_OPEN_RDWR;
+    else
+      flags := PAL_OPEN_READ;
+    end;
+  FHandle := PalOpen(PChar(AFileName), flags, 438);   { 0666 }
+  if FHandle < 0 then
+    raise Exception.Create('TFileStream: cannot open ' + AFileName);
+end;
+
+destructor TFileStream.Destroy;
+begin
+  if FHandle >= 0 then PalClose(FHandle);
+  FHandle := -1;
+  inherited Destroy;
+end;
+
+function TFileStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  Result := Longint(PalRead(FHandle, @Buffer, Count));
+  if Result < 0 then Result := 0;
+end;
+
+function TFileStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  Result := Longint(PalWrite(FHandle, @Buffer, Count));
+  if Result < 0 then Result := 0;
+end;
+
+function TFileStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var whence: Integer;
+begin
+  case Origin of
+    soCurrent: whence := PAL_SEEK_CUR;
+    soEnd:     whence := PAL_SEEK_END;
+  else
+    whence := PAL_SEEK_SET;
+  end;
+  Result := PalSeek(FHandle, Offset, whence);
+end;
+
+function TFileStream.GetSize: Int64;
+var cur: Int64;
+begin
+  cur := PalSeek(FHandle, 0, PAL_SEEK_CUR);
+  Result := PalSeek(FHandle, 0, PAL_SEEK_END);
+  PalSeek(FHandle, cur, PAL_SEEK_SET);
+end;
+
+function TFileStream.GetPosition: Int64;
+begin
+  Result := PalSeek(FHandle, 0, PAL_SEEK_CUR);
+end;
+
+procedure TFileStream.SetPosition(const Pos: Int64);
+begin
+  PalSeek(FHandle, Pos, PAL_SEEK_SET);
 end;
 
 { ============================ TList ============================ }

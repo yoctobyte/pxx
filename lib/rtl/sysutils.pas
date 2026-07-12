@@ -158,6 +158,7 @@ function CompareStr(const s1, s2: AnsiString): Integer;
 { Case-insensitive CompareStr; SameText is its = 0 form. }
 function CompareText(const s1, s2: AnsiString): Integer;
 function SameText(const s1, s2: AnsiString): Boolean;
+function AnsiSameText(const s1, s2: AnsiString): Boolean;
 
 { Strip leading / trailing chars <= ' '. }
 function TrimLeft(const s: AnsiString): AnsiString;
@@ -228,6 +229,8 @@ function StrToTime(const S: string): TDateTime;
 { Wall-clock now as a TDateTime (CLOCK_REALTIME via the PAL; UTC — this RTL
   has no timezone database, matching its POSIX/C fixed-locale stance). }
 function Now: TDateTime;
+function Date: TDateTime;
+function Time: TDateTime;
 
 function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
 
@@ -709,6 +712,11 @@ end;
 function SameText(const s1, s2: AnsiString): Boolean;
 begin
   Result := CompareText(s1, s2) = 0;
+end;
+
+function AnsiSameText(const s1, s2: AnsiString): Boolean;
+begin
+  Result := SameText(s1, s2);
 end;
 
 function TrimLeft(const s: AnsiString): AnsiString;
@@ -1302,6 +1310,16 @@ begin
   Result := 0;
   if PalRealtime(sec, nsec) <> 0 then Exit;
   Result := UnixDateDelta + (sec + nsec / 1000000000.0) / 86400.0;
+end;
+
+function Date: TDateTime;
+begin
+  Result := Trunc(Now);
+end;
+
+function Time: TDateTime;
+begin
+  Result := Frac(Now);
 end;
 
 function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;

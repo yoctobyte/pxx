@@ -763,6 +763,7 @@ procedure ParseLValue(const name: AnsiString); forward;
 procedure EmitArgvToAddr; forward;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
+function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
@@ -1864,6 +1865,50 @@ begin
       begin
         selfClassCi := recId - REC_UCLASS_BASE;
         fldIdx := FindUField(selfClassCi, fieldName);
+        if fldIdx < 0 then
+        begin
+          { with-scoped PROPERTY with a FIELD accessor — `with TFTPSend.Create
+            do ... Username := User` (ftpsend): rewrite to the backing field.
+            Write accessor when an assignment follows, read otherwise; method
+            accessors are out of scope here (fall through). }
+          pri := FindUProp(selfClassCi, fieldName);
+          if pri >= 0 then
+          begin
+            if (CurTok.Kind = tkAssign) and (UPropWriteFLen[pri] > 0) then
+            begin
+              propFOff := UPropWriteFOff[pri];
+              propFLen := UPropWriteFLen[pri];
+            end
+            else if UPropReadFLen[pri] > 0 then
+            begin
+              propFOff := UPropReadFOff[pri];
+              propFLen := UPropReadFLen[pri];
+            end
+            else
+              propFLen := 0;
+            if propFLen > 0 then
+            begin
+              methName := '';
+              for i := 0 to propFLen - 1 do
+                AppendChar(methName, TokChars[propFOff + i]);
+              fldIdx := FindUField(selfClassCi, methName);
+              if fldIdx >= 0 then
+              begin
+                fieldNode := AllocNode(AN_FIELD);
+                ASTLeft[fieldNode] := withNode;
+                { codegen re-resolves the field by its own span }
+                ASTSOffset[fieldNode] := propFOff;
+                ASTSLen[fieldNode] := propFLen;
+                tk := IntToTypeKind(UFldTk[fldIdx]);
+                recName := UFldRec_[fldIdx];
+                ASTTk[fieldNode] := Ord(tk);
+                node := fieldNode;
+                withResolved := True;
+                Break;
+              end;
+            end;
+          end;
+        end;
         if fldIdx >= 0 then
         begin
           fieldNode := AllocNode(AN_FIELD);
@@ -1874,6 +1919,59 @@ begin
           recName := UFldRec_[fldIdx];
           ASTTk[fieldNode] := Ord(tk);
           node := fieldNode;
+          withResolved := True;
+          Break;
+        end;
+        { with-scoped `Free;` with no user Free method — the builtin
+          TObject.Free desugar over the with operand (ftpsend's finally). }
+        if CaseEqual(fieldName, 'Free') and (CurTok.Kind in [tkSemicolon, tkEnd, tkElse]) and
+           (FindUMeth(selfClassCi, 'Free') < 0) then
+        begin
+          node := GenMakeFreeObjectExpr(CloneAST(withNode), selfClassCi);
+          tk := tyInteger;
+          recName := REC_NONE;
+          withResolved := True;
+          Break;
+        end;
+        { with-scoped METHOD, bare or with args — `with TFTPSend.Create do
+          ... if not Login then` (ftpsend). Self = the with operand (a
+          materialised temp for call operands, so evaluation is per-call of
+          the METHOD, not a re-Create). }
+        mmi := FindUMethArity(selfClassCi, fieldName, CountCallArgsAhead);
+        if mmi >= 0 then
+        begin
+          mpi := UMthProc_[mmi];
+          mselfArg := AllocNode(AN_ARG);
+          ASTLeft[mselfArg] := withNode;
+          if UMthVirSlot[mmi] >= 0 then
+          begin
+            mcallNode := AllocNode(AN_VIRTUAL_CALL);
+            ASTRight[mcallNode] := UMthVirSlot[mmi];
+          end
+          else
+            mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          ASTLeft[mcallNode] := mselfArg;
+          mlastArg := mselfArg;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            while CurTok.Kind <> tkRParen do
+            begin
+              ParseExpr;
+              margSeq := AllocNode(AN_ARG);
+              ASTLeft[margSeq] := CurASTNode;
+              ASTRight[mlastArg] := margSeq;
+              mlastArg := margSeq;
+              if CurTok.Kind = tkComma then Next
+              else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+            end;
+            Expect(tkRParen, ')');
+          end;
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          node := mcallNode;
           withResolved := True;
           Break;
         end;
@@ -4092,7 +4190,7 @@ begin
 end;
 
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
-var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok: Integer; fieldName: AnsiString;
+var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -4154,6 +4252,37 @@ begin
     ASTTk[sub] := Ord(tyUInt8);
     node := sub;
     tk := tyUInt8;
+  end
+  else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
+  begin
+    { Index a STRING-returning call: `Uppercase(s)[2]` (ftpsend's permission
+      chars). AN_INDEX needs an addressable base, so materialise the result
+      into a hidden temp first and yield `(tmp := call, tmp[i])` via AN_COMMA
+      (evaluate-left-yield-right). }
+    Next;
+    prevTok := AllocVar('', tyAnsiString);   { hidden temp (sym idx) }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := prevTok;
+    ASTTk[tmpN] := Ord(tyAnsiString);
+    sub := AllocNode(AN_ASSIGN);
+    ASTLeft[sub] := tmpN;
+    ASTRight[sub] := node;
+    node := sub;                             { the side-effect leg }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := prevTok;
+    ASTTk[tmpN] := Ord(tyAnsiString);
+    sub := AllocNode(AN_INDEX);
+    ASTLeft[sub] := tmpN;
+    ParseExpr;
+    ASTRight[sub] := CurASTNode;
+    Expect(tkRBrack, ']');
+    ASTTk[sub] := Ord(tyChar);
+    prevTok := AllocNode(AN_COMMA);
+    ASTLeft[prevTok] := node;
+    ASTRight[prevTok] := sub;
+    ASTTk[prevTok] := Ord(tyChar);
+    node := prevTok;
+    tk := tyChar;
   end
   else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) then
     { Member access on a class/record-returning call result: f(args).field[…]. }
@@ -8780,6 +8909,39 @@ begin
   Result := ifNode;
 end;
 
+function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer;
+{ `TClass(expr).Free;` — nil-guarded [Destroy;] FreeMem over an expression
+  value (ftpsend's `TFTPListRec(FList[n]).Free`). Each occurrence is a
+  CloneAST of the operand (the AST is a tree, not a DAG), so a side-effecting
+  operand re-evaluates — fine for the cast-of-lvalue statements this serves.
+  No nil write-back: there is no lvalue (FPC's Free never nils anyway). }
+var freeArg, freeCall, nilLit, cond, thenSeq, pairNode, ifNode: Integer;
+begin
+  freeArg := AllocNode(AN_ARG);
+  ASTLeft[freeArg] := CloneAST(objNode);
+  freeCall := AllocNode(AN_CALL);
+  ASTIVal[freeCall] := -Ord(tkFreeMem);
+  ASTLeft[freeCall] := freeArg;
+  ASTTk[freeCall] := Ord(tyInteger);
+
+  thenSeq := freeCall;
+  if FindUMeth(ci, 'Destroy') >= 0 then
+    thenSeq := chainSeq(GenMakeMethodCall0(CloneAST(objNode), ci, 'Destroy'), chainSeq(freeCall, -1));
+
+  { if expr <> nil then thenSeq }
+  nilLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nilLit] := 0;
+  ASTTk[nilLit] := Ord(tyPointer);
+  cond := GenMakeCmp(Ord(tkNeq), objNode, nilLit);
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenSeq;
+  ASTRight[pairNode] := -1;
+  ifNode := AllocNode(AN_IF);
+  ASTLeft[ifNode] := cond;
+  ASTRight[ifNode] := pairNode;
+  Result := ifNode;
+end;
+
 { Synthetic label: a GotoLabel slot with no name; AN_LABEL/AN_GOTO reference it
   directly via ASTIVal (ASTSOffset = -1 sentinel, see ir.inc). }
 function NewSyntheticLabel: Integer;
@@ -10168,10 +10330,33 @@ end;
 
 function ParseWithStatementAST: Integer;
 var
-  varNode, bodyNode: Integer;
+  varNode, bodyNode, wTmp, wAssign, wIdent, wSeq: Integer;
 begin
   ParseExpr;
   varNode := CurASTNode;
+
+  { A side-effecting with-operand (`with TFTPSend.Create do` — ftpsend's
+    helpers) must evaluate ONCE: every member access shares the operand node,
+    and a shared CALL node re-compiles (re-creating the object) per access.
+    Materialise class-typed call results into a hidden temp and let the body
+    reference the temp; the assignment is prepended to the result. }
+  wAssign := -1;
+  if (IntToTypeKind(ASTTk[varNode]) = tyClass) and
+     ((ASTKind[varNode] = AN_CALL) or (ASTKind[varNode] = AN_VIRTUAL_CALL) or
+      (ASTKind[varNode] = AN_CALL_IND)) then
+  begin
+    wTmp := AllocVar('', tyClass);
+    Syms[wTmp].RecName := ResolveNodeRec(varNode);
+    wIdent := AllocNode(AN_IDENT);
+    ASTIVal[wIdent] := wTmp;
+    ASTTk[wIdent] := Ord(tyClass);
+    wAssign := AllocNode(AN_ASSIGN);
+    ASTLeft[wAssign] := wIdent;
+    ASTRight[wAssign] := varNode;
+    varNode := AllocNode(AN_IDENT);
+    ASTIVal[varNode] := wTmp;
+    ASTTk[varNode] := Ord(tyClass);
+  end;
 
   if Eat(tkComma) then
   begin
@@ -10198,7 +10383,16 @@ begin
     Dec(WithStackDepth);
   end;
 
-  Result := bodyNode;
+  if wAssign >= 0 then
+  begin
+    wSeq := AllocNode(AN_SEQ);
+    ASTLeft[wSeq] := wAssign;
+    ASTRight[wSeq] := AllocNode(AN_SEQ);
+    ASTLeft[ASTRight[wSeq]] := bodyNode;
+    Result := wSeq;
+  end
+  else
+    Result := bodyNode;
 end;
 
 function ParseLazyVarDeclAST: Integer;
@@ -11578,6 +11772,17 @@ begin
               ASTIVal[valNode] := smci;
               ASTTk[valNode]   := Ord(tyClass);
               castTk := tyClass;
+              { `TClass(expr).Free;` — plain form only, like obj.Free above }
+              if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+                 (Tokens[TokPos].Kind = tkIdent) and
+                 CaseEqual(GetTokenStr(TokPos), 'Free') and
+                 (Tokens[TokPos+1].Kind in [tkSemicolon, tkEnd, tkElse]) and
+                 (FindUMeth(smci, 'Free') < 0) then
+              begin
+                Next; Next;   { consume '.', 'Free' }
+                node := GenMakeFreeObjectExpr(valNode, smci);
+                Result := node; Exit;
+              end;
               if CurTok.Kind in [tkDot, tkLBrack] then
                 valNode := ParseClassRecordSelectors(valNode, REC_UCLASS_BASE + smci, castTk);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
@@ -11738,7 +11943,7 @@ begin
                  (not UClsIsRecord[Syms[idx].RecName - REC_UCLASS_BASE]) and
                  (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
                  CaseEqual(GetTokenStr(TokPos+1), 'Free') and
-                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd]) and
+                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd, tkElse]) and
                  (FindUMeth(Syms[idx].RecName - REC_UCLASS_BASE, 'Free') < 0) then
               begin
                 Next; Next; Next;   { consume obj, '.', 'Free' }
@@ -11751,7 +11956,7 @@ begin
               if (idx < 0) and (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and
                  (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
                  CaseEqual(GetTokenStr(TokPos+1), 'Free') and
-                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd]) then
+                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd, tkElse]) then
               begin
                 smci := CurSelfClass - REC_UCLASS_BASE;
                 smmii := FindUField(smci, name);
@@ -11793,7 +11998,10 @@ begin
               Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
-                 (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) then
+                 (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) or
+                 { with-scoped `Free;` desugars to a nil-guarded IF — a
+                   statement, never an lvalue }
+                 (ASTKind[valNode] = AN_IF) then
                 node := valNode
               else
               begin
@@ -12681,7 +12889,7 @@ var name: AnsiString; v: Int64;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
-    scOff, scLen, si, sci2, cCi: Integer;
+    scOff, scLen, si, sci2, cCi, cAi: Integer;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
@@ -12714,8 +12922,40 @@ begin
         element types; string/float/record initializers remain a follow-up. }
       isLocalConst := CurProc >= 0;
       Next;
-      if CurTok.Kind = tkArray then
+      { A NAMED fixed-array type (`Action0: TLogonActions = (...)`, ftpsend)
+        takes the same array-constant path as the inline `array[..] of T`
+        form: load its dims/element from the ArrType tables. }
+      cAi := -1;
+      if CurTok.Kind = tkIdent then
       begin
+        cAi := FindArrayType(CurTok.SVal);
+        if (cAi >= 0) and ArrTypeIsDyn[cAi] then cAi := -1;
+      end;
+      if (CurTok.Kind = tkArray) or (cAi >= 0) then
+      begin
+        if cAi >= 0 then
+        begin
+          Next;   { consume the named array type }
+          cnNDims := ArrTypeNDims[cAi];
+          if cnNDims >= 2 then
+          begin
+            for cDi := 0 to cnNDims - 1 do
+            begin
+              cnDimLo[cDi]   := ArrTypeDimLo[cAi * MAX_ARR_DIMS + cDi];
+              cnDimSpan[cDi] := ArrTypeDimSpan[cAi * MAX_ARR_DIMS + cDi];
+            end;
+          end
+          else
+          begin
+            cnNDims := 1;
+            cnDimLo[0]   := ArrTypeLo[cAi];
+            cnDimSpan[0] := ArrTypeHi[cAi] - ArrTypeLo[cAi] + 1;
+          end;
+          cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
+          LastTypeRecId := ArrTypeElemRec[cAi];
+        end
+        else
+        begin
         Next;
         Expect(tkLBrack, '[');
         { One or more comma-separated dimensions, mirroring the var-section ND
@@ -12731,6 +12971,7 @@ begin
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
         cElemTk := ParseTypeKind;
+        end;
         if cnNDims = 1 then
         begin
           cLo := cnDimLo[0]; cFlatLen := cnDimSpan[0];
