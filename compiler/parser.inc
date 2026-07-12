@@ -6886,6 +6886,17 @@ begin
           Expect(tkLParen, '(');
           ParseExpr;
           Expect(tkRParen, ')');
+          if (AliasTk[aliasIdx] = Ord(tyAnsiString)) or
+             (AliasTk[aliasIdx] = Ord(tyString)) then
+          begin
+            { STRING-typed alias cast — `tbtstring(' ')` (Pascal Script):
+              a value-level no-op, NOT a pointer reinterpret. Keep the
+              operand node and its own string kind; consumers coerce
+              frozen<->managed as usual. Tagging it tyPointer made
+              Pos(tbtstring(' '), s) miss every string overload. }
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
           { A custom alias to ^Char/^AnsiChar (e.g. `type PC = ^Char; PC(s)`)
@@ -13338,7 +13349,71 @@ begin
         cDepth := 1; cElem := 0;
         while cDepth > 0 do
         begin
-          if CurTok.Kind = tkLParen then begin Next; Inc(cDepth); end
+          if (cDepth = 1) and (cElemTk = tyRecord) and (CurTok.Kind = tkLParen) and
+             (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+             (Tokens[TokPos+1].Kind = tkColon) then
+          begin
+            { Array-of-RECORD element with NAMED-field initializers —
+              `(name: 'AND'; c: CSTII_and)` (Pascal Script's keyword table).
+              Each field becomes a `sym[elem].field := value` init; the
+              emitter already combines Elem + FOff. }
+            if cElem >= cFlatLen then Error('too many array constant elements');
+            Next;   { consume '(' }
+            while CurTok.Kind <> tkRParen do
+            begin
+              if CurTok.Kind <> tkIdent then Error('expected field name in record constant');
+              fNameOff := Tokens[TokPos-1].SOffset;
+              fNameLen := Tokens[TokPos-1].SLen;
+              fName := CurTok.SVal;
+              Next;
+              Expect(tkColon, ':');
+              fTk := RecFieldType(Syms[cIdx].ElemRecName, fName);
+              if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
+              if isLocalConst then
+              begin
+                { local emitter has no field+string combo; strings global-only }
+                if TypeIsFrozenString(fTk) or (fTk = tyAnsiString) then
+                  Error('array-of-record constant with string fields must be global');
+                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+                LocalInitSym[LocalInitCount]  := cIdx;
+                LocalInitElem[LocalInitCount] := cLo + cElem;
+                LocalInitFOff[LocalInitCount] := fNameOff;
+                LocalInitFLen[LocalInitCount] := fNameLen;
+                LocalInitKind[LocalInitCount] := 0;
+                LocalInitVal[LocalInitCount]  := ParseInitVal;
+                LocalInitTk[LocalInitCount] := Ord(fTk);
+                Inc(LocalInitCount);
+              end
+              else
+              begin
+                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                PendingInitSym[PendingInitCount]  := cIdx;
+                PendingInitElem[PendingInitCount] := cLo + cElem;
+                PendingInitFOff[PendingInitCount] := fNameOff;
+                PendingInitFLen[PendingInitCount] := fNameLen;
+                if TypeIsFrozenString(fTk) or (fTk = tyAnsiString) then
+                begin
+                  if CurTok.Kind <> tkString then Error('record constant: expected a string literal');
+                  PendingInitKind[PendingInitCount]   := 1;
+                  PendingInitVal[PendingInitCount]    := Tokens[TokPos-1].SOffset;
+                  PendingInitValAux[PendingInitCount] := Tokens[TokPos-1].SLen;
+                  Next;
+                end
+                else
+                begin
+                  PendingInitKind[PendingInitCount] := 0;
+                  PendingInitVal[PendingInitCount]  := ParseInitVal;
+                end;
+                PendingInitTk[PendingInitCount] := Ord(fTk);
+                Inc(PendingInitCount);
+              end;
+              if not Eat(tkSemicolon) then Eat(tkComma);
+            end;
+            Expect(tkRParen, ')');
+            Eat(tkComma);
+            Inc(cElem);
+          end
+          else if CurTok.Kind = tkLParen then begin Next; Inc(cDepth); end
           else if CurTok.Kind = tkRParen then begin Next; Dec(cDepth); end
           else if CurTok.Kind = tkComma then Next
           else

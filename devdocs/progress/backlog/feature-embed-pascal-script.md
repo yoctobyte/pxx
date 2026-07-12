@@ -6,8 +6,8 @@ prio: 45  # auto
 
 - **Type:** feature / investigation (real-world compat target + feature)
 - **Track:** P (Pascal frontend) — rung of [[feature-pascal-corpus-expansion]]
-- **Status:** backlog
-- **Owner:** — (**Track B** — libraries; uses `$(PXX_STABLE)`, never rebuilds the
+- **Status:** working
+- **Owner:** opus-p
   compiler. Compiler gaps it surfaces → Track A tickets.)
 - **Opened:** 2026-06-26
 - **Upstream:** `github.com/remobjects/pascalscript` — pure Object Pascal,
@@ -89,3 +89,22 @@ When Track A fixes these, re-probe for the next wall.
   RTTI until [[feature-embed-dwscript-rtti]] tackles auto-bind).
 - Which `{$mode delphi}` / mimic-fpc corners it hits first (per-unit mode reset,
   interface delegation, variants).
+
+## Probe log 2026-07-12 (opus-p)
+
+Clone at github.com/remobjects/pascalscript, probe
+`--mimic-fpc -Fu<clone>/Source -Fulib/rtl -Fulib/rtl/platform/posix`,
+target unit uPSUtils. Walls burned this session:
+1. const array-of-RECORD with named-field element inits
+   (`(name: 'AND'; c: CSTII_and)` keyword table) — LANDED (parser,
+   test_const_array_of_record).
+2. `SysUtils.CurrToStr` / Currency — LANDED (sysutils shim: Currency=Double).
+3. `Pos(tbtstring(' '), s)` — string-typed ALIAS casts were pointer
+   reinterprets (arg matched nothing) — LANDED: value no-op passthrough.
+
+**Current wall:** `CheckReserved(FLastUpToken, CurrTokenId)` — a managed
+(tyAnsiString) field passed to a `Const S: ShortString` param: the const
+frozen-string param is by-ref for ABI, the managed→frozen conversion
+produces a non-lvalue, and the by-ref argument check rejects it. Needs the
+const-frozen-string param path to materialize a conversion temp (mirror the
+const-record temp rule) — parser/ir slice, file/pick up next session.

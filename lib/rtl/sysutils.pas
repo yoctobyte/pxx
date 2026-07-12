@@ -105,6 +105,14 @@ var
   DateSeparator: Char;
   DecimalSeparator: Char;
 
+type
+  { FPC Currency is a fixed-point 4-decimal Int64; this RTL models it as
+    Double (lossy past 2^52 — acceptable for the compat surface;
+    Pascal Script's CurrToStr). }
+  Currency = Double;
+
+function CurrToStr(C: Currency): AnsiString;
+
 { Float -> string. FloatToStr gives a compact representation; FloatToStrF
   gives fixed-point with precision digits after the decimal point. }
 function FloatToStr(value: Double): AnsiString;
@@ -568,6 +576,11 @@ begin
   end;
   if neg then s := '-' + s;
   Result := s;
+end;
+
+function CurrToStr(C: Currency): AnsiString;
+begin
+  Result := FloatToStr(C);
 end;
 
 function FloatToStrF(value: Double; precision: Integer): AnsiString;
