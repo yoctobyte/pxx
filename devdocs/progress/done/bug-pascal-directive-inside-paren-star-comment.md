@@ -6,7 +6,7 @@ prio: 65  # blocks BOTH the ZenGL ladder and the whole Synapse compile (jedi.inc
 
 - **Type:** bug (Pascal frontend — lexer/comment handling) — **Track P**
   (edits the shared `lexer.inc`, so A's gate + no-concurrent-edit rule)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-11, second blocker of the New-ZenGL Pascal ladder
   ([[feature-game-library-candidate-suite]] slice C).
 
@@ -85,3 +85,6 @@ zgl_gltypeconst advances to its real next wall (`uses X` — no X11 unit);
 Synapse synautil now parses ALL the way into semantics (`undefined variable
 DayOfWeek` — an RTL surface gap, Track B). Gate: 2-step self-host
 byte-identical + testmgr FULL 1131/1131 GREEN.
+
+## Log
+- 2026-07-12 — resolved, commit ee65eed0.

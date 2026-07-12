@@ -28,13 +28,12 @@ _none_
 
 _none_
 
-## backlog (85)
+## backlog (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 50 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 60 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
-| bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
@@ -178,7 +177,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (598)
+## done (599)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -418,6 +417,7 @@ _none_
 | bug-overload-resolution-record-identity | A | 45 | bug | overload resolution ignores record IDENTITY — wrong overload silently called | — |
 | bug-paramless-self-recursion-silent-result-read | A | 50 | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | bug-paramstr-inline-argstr | A | 50 | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
+| bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
@@ -800,7 +800,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 65] [A] bug-pascal-directive-inside-paren-star-comment
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels
