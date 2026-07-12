@@ -2739,8 +2739,6 @@ begin
 
     IR_CALL_IND:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target i386: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Same caller-cleanup cdecl
           push convention as IR_CALL; the callee address is evaluated last (args
           already on the stack, so a simple proc-var load can't disturb them)
@@ -2840,6 +2838,17 @@ begin
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
+        if IRCallDest[node] >= 0 then
+        begin
+          { Aggregate / frozen-string result: the hidden caller-destination goes
+            in ecx (the pxx indirect-result reg, what EmitAggregateDestStash
+            reads). The callee address is already in eax and the dest IR_LEA also
+            lands in eax, so park the callee on the stack across it. }
+          EmitB($50);                                { push eax (callee) }
+          IREmitNode386(IRCallDest[node]);           { eax = hidden destination }
+          EmitB($89); EmitB($C1);                    { mov ecx, eax }
+          EmitB($58);                                { pop eax (callee) }
+        end;
         EmitB($FF); EmitB($D0);                      { call eax }
         if argBytes > 0 then
         begin
@@ -2849,8 +2858,6 @@ begin
 
     IR_VIRTUAL_CALL:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target i386: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           cdecl: push args leftmost-deepest (Self is param 0, deepest), load the
           VMT pointer from [Self], call through [VMT + slot*8] (the data blob
@@ -2866,6 +2873,14 @@ begin
           EmitB($50);                                { push eax }
           Inc(argBytes, 4);
           argNode := IRB[argNode];
+        end;
+        if IRCallDest[node] >= 0 then
+        begin
+          { Aggregate / frozen-string result: load the hidden caller-destination
+            into ecx BEFORE the Self fetch — the dest IR_LEA lands in eax, which
+            the VMT dispatch below then reuses for Self. }
+          IREmitNode386(IRCallDest[node]);           { eax = hidden destination }
+          EmitB($89); EmitB($C1);                    { mov ecx, eax }
         end;
         EmitB($8B); EmitB($84); EmitB($24); EmitI32(argBytes - 4); { mov eax, [esp+disp] (Self) }
         EmitB($8B); EmitB($00);                      { mov eax, [eax] (VMT ptr) }

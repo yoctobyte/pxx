@@ -2508,6 +2508,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_aggregate_return.pas /tmp/test_i386_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_i386_aggret_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_aggret)" = "$$(/tmp/test_i386_aggret_x64)"
+	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
+	# (feature-cross-virtual-indirect-hidden-dest)
+	./$(COMPILER) --target=i386 test/test_cross_virtual_indirect_aggret.pas /tmp/test_i386_vindaggret
+	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas /tmp/test_i386_vindaggret_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_vindaggret)" = "$$(/tmp/test_i386_vindaggret_x64)"
 	./$(COMPILER) --target=i386 test/test_inheritance_dispatch.pas /tmp/test_i386_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_i386_cls_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cls)" = "$$(/tmp/test_i386_cls_x64)"
@@ -2801,6 +2806,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_aggret)" = "$$(/tmp/test_aarch64_aggret_x64)"
+	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
+	# (feature-cross-virtual-indirect-hidden-dest)
+	./$(COMPILER) --target=aarch64 test/test_cross_virtual_indirect_aggret.pas /tmp/test_aarch64_vindaggret
+	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas /tmp/test_aarch64_vindaggret_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_vindaggret)" = "$$(/tmp/test_aarch64_vindaggret_x64)"
 	./$(COMPILER) --target=aarch64 test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cls)" = "$$(/tmp/test_aarch64_cls_x64)"
@@ -3183,6 +3193,11 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggret)" = "$$(/tmp/test_arm32_aggret_x64)"
+	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
+	# (feature-cross-virtual-indirect-hidden-dest)
+	./$(COMPILER) --target=arm32 test/test_cross_virtual_indirect_aggret.pas /tmp/test_arm32_vindaggret
+	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas /tmp/test_arm32_vindaggret_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_vindaggret)" = "$$(/tmp/test_arm32_vindaggret_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_stackargs.pas /tmp/test_arm32_aggstk
 	./$(COMPILER) test/test_cross_aggregate_stackargs.pas /tmp/test_arm32_aggstk_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggstk)" = "$$(/tmp/test_arm32_aggstk_x64)"

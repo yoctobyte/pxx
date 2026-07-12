@@ -5,7 +5,7 @@ prio: 65  # auto
 # Aggregate / frozen-string result via virtual or indirect call — cross backends
 
 - **Type:** feature (codegen — cross targets) — Track A
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-06-30
 - **Origin:** the frozen-string reentrancy fix
   ([[bug-frozen-string-result-global-not-reentrant]]) routed frozen-string (and

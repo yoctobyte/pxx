@@ -2028,14 +2028,20 @@ begin
 
     IR_CALL_IND:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target aarch64: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Push the callee address first
           (deepest temp slot) so arg evaluation can't disturb it, push args, pop
-          args into x0..x7, pop the callee into x16, and `blr x16`. }
+          args into x0..x7, pop the callee into x16, and `blr x16`. An
+          aggregate / frozen-string result pushes its hidden caller-destination
+          deeper still and pops it into x8 (the AAPCS indirect-result register)
+          last, after the arg and callee pops. }
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
         if Procs[procIdx].ParamCount + Integer(IRC[node]) > 8 then
           Error('target aarch64: indirect call with more than 8 parameters not supported');
+        if IRCallDest[node] >= 0 then
+        begin
+          IREmitNodeAarch64(IRCallDest[node]);       { x0 = hidden destination }
+          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! (dest, deepest) }
+        end;
         IREmitNodeAarch64(IRA[node]);                { x0 = callee address }
         EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (callee) }
         argNode := IRB[node];
@@ -2050,19 +2056,27 @@ begin
         for i := nArgs - 1 downto 0 do
           EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
         EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
+        if IRCallDest[node] >= 0 then
+          EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
         EmitI32($D63F0200);                          { blr x16 }
       end;
 
     IR_VIRTUAL_CALL:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target aarch64: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Push args to 16-byte temps (Self = param 0, deepest), pop into x0..x7,
           load the VMT pointer from [Self], call through [VMT + slot*8]. The data
           blob keeps 8-byte slots, so the scaled ldr reads the full address. }
         procIdx := IRC[node];
         j := Integer(IRIVal[node]);                  { VMT slot }
+        if IRCallDest[node] >= 0 then
+        begin
+          { Aggregate / frozen-string result: hidden caller-destination pushed
+            deepest, popped into x8 after the args (the pop can't disturb x0=Self,
+            which the VMT load below needs). }
+          IREmitNodeAarch64(IRCallDest[node]);       { x0 = hidden destination }
+          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! (dest, deepest) }
+        end;
         argNode := IRA[node];
         nArgs := 0;
         while argNode <> -1 do
@@ -2076,6 +2090,8 @@ begin
           Error('target aarch64: virtual call with more than 8 parameters not supported');
         for i := nArgs - 1 downto 0 do
           EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+        if IRCallDest[node] >= 0 then
+          EmitI32($F84107E8);                        { ldr x8, [sp], #16 (hidden destination) }
         EmitI32($F9400009);                          { ldr x9, [x0] (VMT ptr) }
         EmitI32($F9400129 or (j shl 10));            { ldr x9, [x9, #slot*8] }
         EmitI32($D63F0120);                          { blr x9 }

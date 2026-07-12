@@ -890,7 +890,7 @@ end;
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
-  classIdx, elemSize, lo: Integer;
+  classIdx, elemSize, lo, nBlock: Integer;
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
@@ -2329,16 +2329,21 @@ begin
 
     IR_CALL_IND:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target arm32: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { Indirect call through a proc-typed value. Word-based args (<=4 words,
           one per scalar/pointer arg). Push the callee first (deepest), push args,
           load r0..r3 from the arg slots, load the callee into r9, drop the whole
           block, then `blx r9`. (Int64-by-value / managed args via a proc pointer
-          are not handled in v1.) }
+          are not handled in v1.) An aggregate / frozen-string result pushes its
+          hidden caller-destination deeper still (below the callee) and loads it
+          into r12 just before the call, like the direct-call path. }
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
+        if IRCallDest[node] >= 0 then
+        begin
+          IREmitNodeArm32(IRCallDest[node]);         { r0 = hidden destination }
+          EmitI32($E92D0001);                        { push {r0} (dest, deepest) }
+        end;
         IREmitNodeArm32(IRA[node]);                  { r0 = callee address }
-        EmitI32($E92D0001);                          { push {r0} (callee, deepest) }
+        EmitI32($E92D0001);                          { push {r0} (callee) }
         argNode := IRB[node];
         j := 0;
         nArgs := 0;
@@ -2377,13 +2382,20 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
+        { Block words above the args: callee at [sp+j*4], hidden dest (when
+          present) one word deeper at [sp+(j+1)*4]. }
+        if IRCallDest[node] >= 0 then nBlock := j + 2 else nBlock := j + 1;
+        if (j + 1) * 4 >= 4096 then
+          Error('target arm32: too many indirect-call argument words');
         if j <= 4 then
         begin
           for i := 0 to j - 1 do
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
           EmitI32($E59D9000 or (j * 4));             { ldr r9, [sp, #j*4] (callee) }
-          EmitLoadImmArm32(8, (j + 1) * 4);
-          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee) }
+          if IRCallDest[node] >= 0 then
+            EmitI32($E59DC000 or ((j + 1) * 4));     { ldr r12, [sp, #(j+1)*4] (hidden dest) }
+          EmitLoadImmArm32(8, nBlock * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee [+ dest]) }
           EmitI32($E12FFF39);                        { blx r9 }
         end
         else
@@ -2395,22 +2407,29 @@ begin
           for i := 0 to 3 do
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
           EmitI32($E59D9000 or (j * 4));             { ldr r9, [sp, #j*4] (callee) }
+          if IRCallDest[node] >= 0 then
+            EmitI32($E59DC000 or ((j + 1) * 4));     { ldr r12, [sp, #(j+1)*4] (hidden dest) }
           EmitI32($E12FFF39);                        { blx r9 }
-          EmitLoadImmArm32(8, (j + 1) * 4);
-          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee) }
+          EmitLoadImmArm32(8, nBlock * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args + callee [+ dest]) }
         end;
       end;
 
     IR_VIRTUAL_CALL:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target arm32: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Word-push args (Self = param 0, deepest), load r0..r3, drop the block,
           load the VMT pointer from [Self], call through [VMT + slot*8]. The data
-          blob keeps 8-byte slots; the 32-bit address is in the low word. }
+          blob keeps 8-byte slots; the 32-bit address is in the low word. An
+          aggregate / frozen-string result pushes its hidden caller-destination
+          below the args and loads it into r12 just before the dispatch. }
         procIdx := IRC[node];
         j := Integer(IRIVal[node]);                  { VMT slot }
+        if IRCallDest[node] >= 0 then
+        begin
+          IREmitNodeArm32(IRCallDest[node]);         { r0 = hidden destination }
+          EmitI32($E92D0001);                        { push {r0} (dest, deepest) }
+        end;
         argNode := IRA[node];
         nArgs := 0;                                  { total arg words }
         while argNode <> -1 do
@@ -2420,11 +2439,16 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
+        if IRCallDest[node] >= 0 then nBlock := nArgs + 1 else nBlock := nArgs;
+        if nArgs * 4 >= 4096 then
+          Error('target arm32: too many virtual-call argument words');
         if nArgs <= 4 then
         begin
           for i := 0 to nArgs - 1 do
             EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
-          EmitLoadImmArm32(8, nArgs * 4);
+          if IRCallDest[node] >= 0 then
+            EmitI32($E59DC000 or (nArgs * 4));       { ldr r12, [sp, #nArgs*4] (hidden dest) }
+          EmitLoadImmArm32(8, nBlock * 4);
           EmitI32($E08DD008);                        { add sp, sp, r8 (drop pushed words) }
           EmitI32($E5909000);                        { ldr r9, [r0] (VMT ptr) }
           EmitI32($E5999000 or (j * 8));             { ldr r9, [r9, #slot*8] }
@@ -2438,11 +2462,13 @@ begin
             above. Drop the whole block after the call returns. }
           for i := 0 to 3 do
             EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+          if IRCallDest[node] >= 0 then
+            EmitI32($E59DC000 or (nArgs * 4));       { ldr r12, [sp, #nArgs*4] (hidden dest) }
           EmitI32($E5909000);                        { ldr r9, [r0] (VMT ptr) }
           EmitI32($E5999000 or (j * 8));             { ldr r9, [r9, #slot*8] }
           EmitI32($E12FFF39);                        { blx r9 }
-          EmitLoadImmArm32(8, nArgs * 4);
-          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args) }
+          EmitLoadImmArm32(8, nBlock * 4);
+          EmitI32($E08DD008);                        { add sp, sp, r8 (drop args [+ dest]) }
         end;
       end;
 
