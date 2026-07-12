@@ -5,7 +5,7 @@ prio: 65  # froze the dev box once (2026-07-12); one hard reset is enough
 # testmgr: cap its own memory in a cgroup scope + swap-aware admission
 
 - **Type:** feature / robustness — **Track T** (`tools/testmgr.py`)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, after an opt-tier run wedged the box (hard reset).
 
 ## Symptom

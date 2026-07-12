@@ -96,6 +96,12 @@ CLASSES = {
     "opt":         {"est_mem": 700 << 20,  "timeout": 900},
 }
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
+SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this
+PSI_ADMIT = 20.0                # never admit above this memory PSI (some avg10)
+PSI_KILL = 45.0                 # kill+requeue the newest job above this PSI
+SCOPE_MAX_FRAC = 0.60           # cgroup MemoryMax = min(8G, this * MemTotal)
+SCOPE_MAX_ABS = 8 << 30
+SCOPE_SWAP_MAX = 1 << 30
 PROBE_REF = 0.35                # seconds: hello.pas compile on reference box
 TICK = 0.5
 
@@ -174,6 +180,36 @@ CORPUS_RE = re.compile(r"library_candidates/([^/\s\"']+)")
 # hygiene only, the OS reaps it
 RUN_TMP = "/tmp/testmgr-scratch-%d" % os.getpid()
 
+# A whole /tmp path token — including the bare DIRECTORY form.  The old plain
+# str.replace of "/tmp/" missed `LD_LIBRARY_PATH=/tmp`, so recipes that built a
+# .so into /tmp/libfoo.so (rewritten into private scratch) then pointed the
+# loader at /tmp (not rewritten) could not find their own library.  Those jobs
+# only passed on boxes where a stale /tmp/libfoo.so from an earlier serial
+# `make` happened to survive; on a freshly booted box they were red.
+# The lookahead keeps /tmpfoo and /tmp.bak alone.
+TMP_RE = re.compile(r"/tmp(?![\w.-])(?:/[A-Za-z0-9_.+-]+)*")
+
+
+def pinned_tmp_paths(lines):
+    """Literal /tmp paths hardcoded inside the SOURCES a job compiles.
+
+    A source that says `external '/tmp/liblazycasing.so'` bakes that path into
+    the binary, so the recipe line that builds the .so must keep writing there
+    — rewriting it into private scratch would just hide the library from the
+    loader.  Everything else in the job still gets privatized.
+
+    Reads the sources named by the recipe (Job.src is a truncated display
+    string, so it cannot be used here).
+    """
+    out = set()
+    for path in SRC_RE.findall("\n".join(lines)):
+        try:
+            with open(os.path.join(REPO, path), errors="replace") as f:
+                out.update(TMP_RE.findall(f.read()))
+        except OSError:
+            continue
+    return {p for p in out if p != "/tmp"}
+
 
 class Job:
     def __init__(self, target, index, lines):
@@ -211,11 +247,22 @@ class Job:
         # Rewrite happens ONLY here at execution; job.lines stays verbatim
         # for reports, and a human running the printed repro in plain /tmp
         # is fine — they're not racing themselves.
+        #
+        # EXCEPT paths a compiled SOURCE hardcodes.  test_c_lazycasing.pas has
+        # `external '/tmp/liblazycasing.so'` baked into the binary, so building
+        # that .so into our private scratch just means the loader can't find it.
+        # We cannot rewrite the source, so we leave exactly those literals in
+        # real /tmp and privatize everything else.  Track C ticket
+        # bug-test-hardcoded-tmp-so-path retires the last of them.
+        pinned = pinned_tmp_paths(self.lines)
         parts = ["cd %s || exit 1" % shlex.quote(REPO)]
         for ln in self.lines:
             if ln.strip().startswith("#"):
                 continue                      # recipe comment: shell no-op
-            parts.append("{\n%s\n} || exit $?" % ln.replace("/tmp/", RUN_TMP + "/"))
+            body = TMP_RE.sub(
+                lambda m: m.group(0) if m.group(0) in pinned
+                else RUN_TMP + m.group(0)[len("/tmp"):], ln)
+            parts.append("{\n%s\n} || exit $?" % body)
         return "\n".join(parts) + "\n"
 
 
@@ -302,7 +349,21 @@ def split_jobs(target, lines):
     # standalone `--job` repro runs the consumer with a fresh scratch dir
     # where the artifact never existed.  Shared scratch file = cross-job
     # dependency = must stay one job.
+    #
+    # One producer/consumer edge is invisible to a filename scan: a recipe
+    # builds /tmp/libfoo.so and a LATER line runs a binary with
+    # LD_LIBRARY_PATH=/tmp, naming the library nowhere — the loader finds it by
+    # soname.  So the consumer shares no /tmp *filename* with its producer and
+    # the two stay in different jobs with no ordering between them (seen
+    # 2026-07-12: test-core#555/#556 red on a freshly booted box, green
+    # everywhere a stale /tmp/libspill.so from an old serial `make` happened to
+    # survive).  Model the loader search path itself as the shared resource:
+    # every .so producer and every bare-/tmp LD_LIBRARY_PATH consumer in a
+    # target gets a synthetic token, which the union-find below merges as usual.
     tmp_re = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
+    so_prod_re = re.compile(r"-o\s+/tmp/\S+\.so\b")
+    loader_dir_re = re.compile(r"LD_LIBRARY_PATH=/tmp(?![\w./-])")
+    LOADER_DIR = "\0so-loader-dir"
     parent = list(range(len(groups)))
     def find(x):
         while parent[x] != x:
@@ -311,7 +372,11 @@ def split_jobs(target, lines):
         return x
     owner = {}
     for i, g in enumerate(groups):
-        for f in set(tmp_re.findall("\n".join(g))):
+        text = "\n".join(g)
+        toks = set(tmp_re.findall(text))
+        if so_prod_re.search(text) or loader_dir_re.search(text):
+            toks.add(LOADER_DIR)
+        for f in toks:
             if f in owner:
                 a, b = find(owner[f]), find(i)
                 if a != b:
@@ -357,12 +422,46 @@ def generate(tier):
 
 
 # -------------------------------------------------------------- sampling ---
-def mem_available():
+def meminfo():
+    """The /proc/meminfo fields we schedule against, in bytes."""
+    want = ("MemAvailable:", "MemTotal:", "SwapFree:", "SwapTotal:")
+    out = {}
     with open("/proc/meminfo") as f:
         for ln in f:
-            if ln.startswith("MemAvailable:"):
-                return int(ln.split()[1]) << 10
-    return 0
+            k = ln.split(":", 1)[0]
+            if ln.startswith(want):
+                out[k] = int(ln.split()[1]) << 10
+    return out
+
+
+def mem_available():
+    return meminfo().get("MemAvailable", 0)
+
+
+def mem_pressure():
+    """`some avg10` from /proc/pressure/memory: percent of the last 10s in
+    which at least one task stalled on memory.
+
+    This is the signal MemAvailable cannot give us.  A box that is swapping
+    hard still reports gigabytes "available" (MemAvailable counts reclaimable
+    page cache and knows nothing about swap), so reclaim looks healthy right
+    up to the point the desktop stops scheduling — that is how the 2026-07-12
+    freeze got past admission.  PSI measures the stall itself, so it rises
+    while the box is still saveable.  Returns 0.0 where PSI is unavailable
+    (pre-4.20 kernel, CONFIG_PSI off), which degrades us to the old behaviour
+    rather than blocking every job.
+    """
+    try:
+        with open("/proc/pressure/memory") as f:
+            for ln in f:
+                if ln.startswith("some "):
+                    for field in ln.split()[1:]:
+                        k, _, v = field.partition("=")
+                        if k == "avg10":
+                            return float(v)
+    except (OSError, ValueError):
+        pass
+    return 0.0
 
 
 def cpu_times():
@@ -382,6 +481,7 @@ class Manager:
         self.logdir = logdir
         self.running = []
         self.nproc = os.cpu_count() or 1
+        self.last_stall_msg = 0.0
         self.metrics = load_metrics()
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
@@ -505,7 +605,12 @@ class Manager:
         dur = max(0.05, (job.t1 - job.t0) / self.scale)
         cores = 1.0 if (job.t1 - job.t0) < 0.75 or job.cpu_sec <= 0 \
             else min(float(self.nproc), job.cpu_sec / (job.t1 - job.t0))
-        mem = job.peak_rss if job.peak_rss > 0 else (32 << 20)
+        # a job whose RSS never got sampled (finished inside a tick, or the
+        # /proc scan missed its children) must NOT learn a 32 MB footprint —
+        # that used to let a swarm of self-compile/optdiff shards, each really
+        # hundreds of MB, all pass admission at once.  Fall back to the class
+        # estimate, which is honest about the pascal26 BSS.
+        mem = job.peak_rss if job.peak_rss > 0 else CLASSES[job.cls]["est_mem"]
         m = self.metrics.get(job.name)
         if not m:
             self.metrics[job.name] = {"dur": round(dur, 2), "mem": mem,
@@ -529,11 +634,31 @@ class Manager:
         if (sum(j.exp_cores for j in self.running) + job.exp_cores
                 > self.nproc + 1):
             return False
+        # swap + PSI gates: MemAvailable stays optimistic on a swapping box
+        # (it ignores swap entirely), so these are the guards that actually
+        # see the refault storm coming.  Report the stall once per run rather
+        # than silently idling — a stuck-looking scheduler must say why.
+        mi = meminfo()
+        if mi.get("SwapTotal", 0) and mi.get("SwapFree", 0) < SWAP_FLOOR:
+            self.note_stall("swap low (%d MB free)" % (mi["SwapFree"] >> 20))
+            return False
+        psi = mem_pressure()
+        if psi > PSI_ADMIT:
+            self.note_stall("memory pressure (PSI some avg10 %.1f%%)" % psi)
+            return False
         # charge est_mem for jobs too young for their RSS to show up yet
         uncharged = sum(j.est_mem
                         for j in self.running if now - j.t0 < 5.0)
-        avail = mem_available() - uncharged
+        avail = mi.get("MemAvailable", 0) - uncharged
         return avail - job.est_mem > MEM_FLOOR
+
+    def note_stall(self, why):
+        """Print a memory-stall reason at most once every 30s."""
+        now = time.time()
+        if now - self.last_stall_msg < 30.0:
+            return
+        self.last_stall_msg = now
+        print("testmgr: admission held — %s" % why, flush=True)
 
     def deps_ready(self, job):
         for d in job.deps:
@@ -544,7 +669,12 @@ class Manager:
         return True
 
     def watchdog(self):
-        if mem_available() >= (MEM_FLOOR >> 1):
+        # two independent trips: the old MemAvailable floor (a box running out
+        # of RAM outright) and memory PSI (a box that is *thrashing* — plenty
+        # of MemAvailable on paper, but every task is stalling on refaults).
+        # The 2026-07-12 freeze only ever showed the second one.
+        psi = mem_pressure()
+        if mem_available() >= (MEM_FLOOR >> 1) and psi < PSI_KILL:
             return
         if len(self.running) <= 1:
             return          # single job: let its own timeout decide
@@ -558,8 +688,10 @@ class Manager:
             newest.requeued = True
             newest.status = "queued"
             self.queue.append(newest)
-            print("testmgr: memory pressure — killed %s, requeued" % newest.name,
-                  flush=True)
+            print("testmgr: memory pressure (%s) — killed %s, requeued"
+                  % ("PSI some avg10 %.1f%%" % psi if psi >= PSI_KILL
+                     else "MemAvailable %d MB" % (mem_available() >> 20),
+                     newest.name), flush=True)
 
     def teardown(self):
         for job in self.running:
@@ -890,6 +1022,53 @@ def run_bench():
 
 
 # ------------------------------------------------------------------ main ---
+def reexec_scoped():
+    """Re-exec ourselves inside a memory-capped systemd scope.
+
+    This is the guard that makes a desktop freeze structurally impossible: a
+    runaway job is killed by the kernel INSIDE our own cgroup, so the rest of
+    the box never enters reclaim.  It does not replace the admission/watchdog
+    heuristics — those keep the run healthy — it is the backstop for when they
+    are wrong (2026-07-12: they were, and the box needed a hard reset).
+
+    MemorySwapMax is the important half.  With swap uncapped, the cgroup does
+    not hit MemoryMax; it just pushes anon pages to disk and thrashes, which
+    is exactly the livelock we are trying to prevent — the kernel only OOMs
+    when reclaim FAILS, and swapping means reclaim keeps "succeeding".
+
+    Degrades to a plain unscoped run wherever systemd-run is unusable (no user
+    session, container, CI), so callers need no setup.
+    """
+    if os.environ.get("TESTMGR_SCOPED") == "1":
+        return
+    if not shutil.which("systemd-run"):
+        return
+    try:                        # is there a usable user session bus?
+        probe = subprocess.run(
+            ["systemd-run", "--user", "--scope", "--quiet", "true"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        if probe.returncode != 0:
+            return
+    except (OSError, subprocess.SubprocessError):
+        return
+    total = meminfo().get("MemTotal", 0)
+    if not total:
+        return
+    cap = min(SCOPE_MAX_ABS, int(total * SCOPE_MAX_FRAC))
+    os.environ["TESTMGR_SCOPED"] = "1"
+    print("testmgr: scoped — MemoryMax=%dM MemorySwapMax=%dM"
+          % (cap >> 20, SCOPE_SWAP_MAX >> 20), flush=True)
+    try:
+        os.execvp("systemd-run", [
+            "systemd-run", "--user", "--scope", "--quiet",
+            "-p", "MemoryMax=%d" % cap,
+            "-p", "MemorySwapMax=%d" % SCOPE_SWAP_MAX,
+            sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
+    except OSError:             # exec failed: run unscoped rather than not at all
+        os.environ.pop("TESTMGR_SCOPED", None)
+        print("testmgr: scope failed, running unscoped", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tier", choices=sorted(TIERS))
@@ -914,9 +1093,16 @@ def main():
     args = ap.parse_args()
 
     if args.bench:
+        # deliberately unscoped: --bench appends to the tracked timing series in
+        # tstate/bench.tsv, and it is serial, so it was never the thing that ate
+        # the box.  Don't perturb a history that spans hundreds of rows.
         return run_bench()
     if not args.tier:
         ap.error("--tier is required (unless --bench)")
+
+    # --list does no work; TESTMGR_NO_SCOPE=1 is the escape hatch (self-tests)
+    if not args.list and os.environ.get("TESTMGR_NO_SCOPE") != "1":
+        reexec_scoped()         # does not return if it scopes us
 
     build_compiler()
     jobs = generate(args.tier)
