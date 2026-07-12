@@ -50,6 +50,7 @@ function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
 function PalBackendMmapAnon(len: Int64): Pointer;
 function PalBackendMunmap(addr: Pointer; len: Int64): Integer;
+function PalBackendIgnoreSignal(sig: Integer): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -103,7 +104,7 @@ const
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
   SYS_mmap = 9; SYS_munmap = 11; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
-  SYS_getcwd = 79;
+  SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
 {$endif}
 {$ifdef CPU_I386}
@@ -119,7 +120,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
-  SYS_getcwd = 183;
+  SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
 {$endif}
 {$ifdef CPU_AARCH64}
@@ -133,7 +134,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
-  SYS_getcwd = 17;
+  SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -147,7 +148,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
   SYS_mmap = 192; SYS_munmap = 91; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
-  SYS_getcwd = 183;
+  SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
 {$endif}
 {$ifdef CPU_RISCV32}
@@ -165,7 +166,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
-  SYS_getcwd = 17;
+  SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
 {$endif}
   PAL_AT_FDCWD = -100;
@@ -344,6 +345,16 @@ end;
 function PalBackendClose(handle: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_close, handle, 0, 0, 0, 0, 0));
+end;
+
+function PalBackendIgnoreSignal(sig: Integer): Integer;
+var act: array[0..3] of Int64;   { {sa_handler=SIG_IGN, flags, restorer, mask} }
+begin
+  { SIG_IGN (=1) is never invoked, so no SA_RESTORER/trampoline is needed. The
+    4-Int64 layout gives handler=1, flags=0, restorer=0, mask=0 on both 32- and
+    64-bit. sigsetsize = 8 (kernel 64-bit sigset). }
+  act[0] := 1; act[1] := 0; act[2] := 0; act[3] := 0;
+  Result := Integer(__pxxrawsyscall(SYS_rt_sigaction, sig, Int64(@act[0]), 0, 8, 0, 0));
 end;
 
 function PalBackendDelete(path: PChar): Integer;

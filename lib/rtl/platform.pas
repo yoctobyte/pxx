@@ -86,6 +86,17 @@ function PalFlush(handle: Integer): Integer;
 function PalClose(handle: Integer): Integer;
 function PalDelete(path: PChar): Integer;
 function PalRename(oldPath, newPath: PChar): Integer;
+
+const
+  PAL_SIGINT  = 2;    { Ctrl-C }
+  PAL_SIGPIPE = 13;   { write to a closed peer }
+  PAL_SIGTERM = 15;   { kill / shutdown }
+
+{ Set a signal to be ignored (SIG_IGN). This is the safe, restorer-free case —
+  the kernel never invokes a handler, so no signal-return trampoline is needed.
+  Networking code ignores SIGPIPE so a closed peer yields an error, not death.
+  Returns 0 on success. No-op (0) on platforms without POSIX signals (ESP). }
+function PalIgnoreSignal(sig: Integer): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;
 function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
@@ -222,6 +233,11 @@ end;
 function PalClose(handle: Integer): Integer;
 begin
   Result := PalBackendClose(handle);
+end;
+
+function PalIgnoreSignal(sig: Integer): Integer;
+begin
+  Result := PalBackendIgnoreSignal(sig);
 end;
 
 function PalDelete(path: PChar): Integer;

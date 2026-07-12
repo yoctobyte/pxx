@@ -21,6 +21,7 @@ function PalBackendWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
 function PalBackendFlush(handle: Integer): Integer;
 function PalBackendClose(handle: Integer): Integer;
+function PalBackendIgnoreSignal(sig: Integer): Integer;
 function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
@@ -354,6 +355,11 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 {$endif}
+
+function PalBackendIgnoreSignal(sig: Integer): Integer;
+begin
+  Result := 0;   { FreeRTOS has no POSIX signals — nothing to ignore }
+end;
 
 function PalBackendDelete(path: PChar): Integer;
 begin
