@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (87)
+## backlog (86)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,7 +87,6 @@ _none_
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
-| feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
@@ -180,7 +179,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (606)
+## done (607)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -692,6 +691,7 @@ _none_
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
+| feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
@@ -844,7 +844,6 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 52] [O] feature-opt-heap-size-class-allocator
 - [p 50] [A] feature-nilpy-collections-and-string-methods
-- [p 50] [P] feature-pascal-generic-nonclass-templates
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib

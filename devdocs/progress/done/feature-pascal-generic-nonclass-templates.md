@@ -6,7 +6,7 @@ prio: 50  # auto — 10 conformance tests
 
 - **Type:** feature (Pascal frontend, generics)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** working
+- **Status:** done
   ([[feature-pascal-corpus-fpc-testsuite]]).
 - **Owner:** opus-p
 
@@ -22,3 +22,6 @@ templates`.
 
 ## Gate
 `make test` + self-host byte-identical; burn the skip-list entries.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
