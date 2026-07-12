@@ -8,7 +8,7 @@ prio: 50
 - **Track:** P — promoted out of the compat umbrella per the escape rule
   (silent wrong behavior ≠ parity nicety; see
   [[bug-pascal-missing-diagnostics-fail-tests]] triage 2026-07-11).
-- **Status:** working
+- **Status:** done
 - **Owner:** opus-p
 
 ## Symptom (verified at v200)
@@ -56,3 +56,6 @@ prio: 50
 `make test` + self-host byte-identical; negative test (bare member under
 scopedenums rejected) + positive test (TEnum1.first works) in `make test`;
 unskip tenum4 in the conformance sweep.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
