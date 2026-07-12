@@ -49,9 +49,14 @@ int main(void)
 	want(_Generic(1L << i, int : 1, long : 2, long long : 3), 2, 12);
 	want(_Generic(1 << l, int : 1, long : 2, long long : 3), 1, 13);
 
-	/* NOT covered here: `_Generic(l < 2L, int: ...)`. A C comparison yields `int`,
-	   but pxx types it as a boolean, so it matches no integer association at all —
-	   a separate pre-existing gap, unrelated to the long rank. */
+	/* A comparison, `!`, and the logical operators all yield an INT in C (6.5.8p6,
+	   6.5.3.3p5). The frontend tags them boolean internally, which used to match NO
+	   association at all — a hard "no matching association" error on valid C. */
+	want(_Generic(l < 2L, int : 1, long : 2), 1, 15);
+	want(_Generic(!i, int : 1, long : 2), 1, 16);
+	want(_Generic(i && 1, int : 1, long : 2), 1, 17);
+	want(_Generic(i || 0, int : 1, long : 2), 1, 18);
+	want(_Generic(ll > 0, int : 1, long : 2, long long : 3), 1, 19);
 
 	if (fail != 0)
 		return fail;

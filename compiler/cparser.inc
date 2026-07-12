@@ -420,6 +420,12 @@ end;
 function CGScalarKindOfTk(tkOrd: Integer): Integer;
 begin
   case IntToTypeKind(tkOrd) of
+    { C has no bool-valued expressions here: a comparison, `!`, and the logical
+      operators all yield an INT (C11 6.5.8p6, 6.5.3.3p5). The frontend tags them
+      tyBoolean internally, which left `_Generic(i < 2, int: ...)` matching NO
+      association at all — a hard "no matching association" error on valid C.
+      ParseCSizeof already maps this the same way (sizeof of a comparison is 4). }
+    tyBoolean:           Result := cgInt;
     tyChar:              Result := cgChar;
     tyInt8:              Result := cgSChar;
     tyUInt8:             Result := cgUChar;
