@@ -8596,6 +8596,58 @@ begin
     Result := GenMakeSeq(assignE, GenMakeSeq(whileNode, -1));
 end;
 
+{ for X in C do BODY where the container's TYPE has an `operator enumerator`
+  overload (tforin5): same protocol as GetEnumerator, but the enumerator
+  comes from the operator call:
+    __e := EnumOp(C);
+    while __e.MoveNext do begin X := __e.Current; BODY end;  [finally Free] }
+function ParseForInOpEnumeratorAST(varIdx, contSym, opPi: Integer): Integer;
+var
+  bodyNode, enumRec, enumIdx, eSym: Integer;
+  argSeq, geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
+  freeCall, tryNode: Integer;
+begin
+  if Syms[varIdx].TypeKind = tyAuto then
+    Error('for var .. in <operator enumerator>: declare the loop variable explicitly');
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  enumRec := ProcRetRecId[opPi];
+  if enumRec < REC_UCLASS_BASE then Error('for-in: operator enumerator must return a class/record');
+  enumIdx := enumRec - REC_UCLASS_BASE;
+
+  eSym := AllocVar('', tyClass);
+  Syms[eSym].RecName := enumRec;
+
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := GenMakeIdent(contSym, Syms[contSym].TypeKind);
+  geCall := AllocNode(AN_CALL);
+  ASTIVal[geCall] := opPi;
+  ASTTk[geCall] := Ord(Procs[opPi].RetType);
+  ASTLeft[geCall] := argSeq;
+  assignE := GenMakeAssign(GenMakeIdent(eSym, tyClass), geCall);
+
+  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'MoveNext');
+  curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
+  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
+
+  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := mnCall;
+  ASTRight[whileNode] := innerSeq;
+
+  if FindUMeth(enumIdx, 'Free') >= 0 then
+  begin
+    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'Free');
+    tryNode := AllocNode(AN_TRY_FINALLY);
+    ASTLeft[tryNode] := whileNode;
+    ASTRight[tryNode] := freeCall;
+    Result := GenMakeSeq(assignE, GenMakeSeq(tryNode, -1));
+  end
+  else
+    Result := GenMakeSeq(assignE, GenMakeSeq(whileNode, -1));
+end;
+
 { for X in <set var> do BODY iterates present members in ordinal order. Reuses
   the `in` membership operator over the element base-type range, so no knowledge
   of the 32-byte bitset layout is needed:
@@ -8776,6 +8828,23 @@ begin
   begin
     Result := ParseForInEnumeratorAST(varIdx, contSym, recId - REC_UCLASS_BASE);
     Exit;
+  end;
+
+  { `operator enumerator (c: TCont): TEnum` overload for the container type —
+    same duck-typed MoveNext/Current protocol over the operator's result. }
+  if not Syms[contSym].IsArray then
+  begin
+    if TypeIsFrozenString(Syms[contSym].TypeKind) or
+       (Syms[contSym].TypeKind = tyAnsiString) then
+      elemTk := FindOpOverload(OPK_ENUMERATOR, Ord(Syms[contSym].TypeKind), REC_NONE)
+    else
+      elemTk := FindOpOverload(OPK_ENUMERATOR, Ord(Syms[contSym].TypeKind),
+                               Syms[contSym].RecName);
+    if elemTk >= 0 then
+    begin
+      Result := ParseForInOpEnumeratorAST(varIdx, contSym, elemTk);
+      Exit;
+    end;
   end;
 
   contTk := Syms[contSym].TypeKind;

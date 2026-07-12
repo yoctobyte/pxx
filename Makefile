@@ -426,6 +426,9 @@ test-core: $(COMPILER)
 	# named operators :=/Explicit/Inc/Dec on records (feature-pascal-class-management-operators slice 1)
 	./$(COMPILER) test/test_named_operators.pas /tmp/test_named_operators26
 	test "$$(/tmp/test_named_operators26)" = "ok"
+	# operator enumerator drives for-in (feature-pascal-class-management-operators slice 2)
+	./$(COMPILER) test/test_operator_enumerator.pas /tmp/test_operator_enum26
+	test "$$(/tmp/test_operator_enum26)" = "$$(printf '10\n20\n30')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

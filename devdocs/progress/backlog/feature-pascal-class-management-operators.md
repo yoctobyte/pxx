@@ -44,6 +44,17 @@ Named operators on RECORD/CLASS operands parse + dispatch:
 - `Enumerator` + management ops parse+register but are NOT dispatched yet.
 Conformance: toperator11 burns. Test: test/test_named_operators.pas.
 
+## Slice 2 landed (2026-07-12, opus-p)
+
+`operator Enumerator` DISPATCHES in for-in: a class/record (or string-typed)
+container with a registered enumerator overload builds the same duck-typed
+MoveNext/Current[/Free] loop as GetEnumerator, over the operator call.
+Scalar operand types also register now (LongInt/String/...; String under
+both managed+frozen kinds), and conversion/unary operators enforce 1-param
+arity (binary = 2). Conformance: tforin5 + tassignmentoperator1 burn
+(3 total with toperator11). Tests: test_named_operators,
+test_operator_enumerator.
+
 **Remaining:**
 - operators on NON-record operand types (String/LongInt operands —
   tforin2, tgenfunc8/10, tassignmentoperator1): needs the OvrlType table +
