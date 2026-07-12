@@ -190,15 +190,15 @@ pass	tforin20.pp	tforin	-
 pass	tforin21.pp	tforin	-	
 pass	tforin22.pp	tforin	-	
 pass	tforin23.pp	tforin	-	
-skip	tforin24.pp	tforin	gap	operator Enumerator not dispatched by for-in (named form parses now)
+skip	tforin24.pp	tforin	gap	enumerator SELECTION by loop-var type (op-enumerator dispatches now, but the D:String loop needs TStrings.GetEnumerator to win over the object operator; exit 0 with wrong output — keep skipped)
 skip	tforin25.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: :, but got: FIndex (Kind: 1, Line: 10)
 skip	tforin26.pp	tforin	untriaged	unclassified: pascal26:2: error: expected name ()
 skip	tforin27.pp	tforin	untriaged	unclassified: pascal26:5: error: expected name ()
 skip	tforin28.pp	tforin	untriaged	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
-skip	tforin2.pp	tforin	gap	operators on NON-record operand types (String) + for-in Enumerator dispatch
+skip	tforin2.pp	tforin	gap	for-in over a CALL-result string container (getstring(s)) + string op-enumerator
 skip	tforin3.pp	tforin	untriaged	runtime: exit code 139 (want 0)
 skip	tforin4.pp	tforin	untriaged	unclassified: pascal26:23: error: for-in: not a generator, enum type, or iterable variable ()
-skip	tforin5.pp	tforin	gap	operator Enumerator not dispatched by for-in (named form parses now)
+pass	tforin5.pp	tforin	-	
 skip	tforin6.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
 skip	tforin7.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
 skip	tforin8.pp	tforin	untriaged	unclassified: pascal26:11: error: base type not found: IEnumerator ()
@@ -350,7 +350,7 @@ skip	tgeneric97.pp	tgeneric	untriaged	unclassified: pascal26:14: error: undefine
 pass	tgeneric98.pp	tgeneric	-	
 skip	tgeneric99.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: TTest (Kind: 1, Line: 17)
 skip	tgeneric9.pp	tgeneric	untriaged	runtime: exit code 1 (want 0)
-skip	tgenfunc10.pp	tgenfunc	gap	operators on NON-record operand types (LongInt)
+skip	tgenfunc10.pp	tgenfunc	gap	inline `specialize` expression inside generic function body
 pass	tgenfunc11.pp	tgenfunc	-	
 skip	tgenfunc12.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 7)
 pass	tgenfunc13.pp	tgenfunc	-	
@@ -368,7 +368,7 @@ skip	tgenfunc4.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :,
 skip	tgenfunc5.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 9)
 skip	tgenfunc6.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 9)
 skip	tgenfunc7.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
-skip	tgenfunc8.pp	tgenfunc	gap	operators on NON-record operand types (LongInt)
+skip	tgenfunc8.pp	tgenfunc	gap	generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 skip	tgenfunc9.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
 pass	tint641.pp	tint64	-	
 skip	tint642.pp	tint64	untriaged	unclassified: pascal26:33: error: undefined variable (hexstr)
@@ -404,12 +404,12 @@ auto	tobject9.pp	tobject	-	opt
 pass	toperator10.pp	toperator	-	
 pass	toperator11.pp	toperator	-	
 skip	toperator12.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 10)
-pass	toperator13.pp	toperator	-	
-pass	toperator14.pp	toperator	-	
-pass	toperator15.pp	toperator	-	
-pass	toperator16.pp	toperator	-	
-pass	toperator17.pp	toperator	-	
-pass	toperator18.pp	toperator	-	
+fail	toperator13.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator14.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator15.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator16.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator17.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator18.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator19.pp	toperator	-	
 skip	toperator1.pp	toperator	untriaged	unclassified: Expected: =, but got: (Kind: 80, Line: 10)
 pass	toperator20.pp	toperator	-	
@@ -431,40 +431,40 @@ pass	toperator34.pp	toperator	-
 pass	toperator35.pp	toperator	-	
 pass	toperator36.pp	toperator	-	
 pass	toperator37.pp	toperator	-	
-pass	toperator38.pp	toperator	-	
-pass	toperator39.pp	toperator	-	
+fail	toperator38.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator39.pp	toperator	-	accepted-invalid: %FAIL test compiled
 skip	toperator3.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
-pass	toperator40.pp	toperator	-	
-pass	toperator41.pp	toperator	-	
-pass	toperator42.pp	toperator	-	
-pass	toperator43.pp	toperator	-	
+fail	toperator40.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator41.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator42.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator43.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator44.pp	toperator	-	
 pass	toperator45.pp	toperator	-	
 pass	toperator46.pp	toperator	-	
 pass	toperator47.pp	toperator	-	
 pass	toperator48.pp	toperator	-	
-pass	toperator49.pp	toperator	-	
+fail	toperator49.pp	toperator	-	accepted-invalid: %FAIL test compiled
 skip	toperator4.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
 pass	toperator50.pp	toperator	-	
 pass	toperator51.pp	toperator	-	
 pass	toperator52.pp	toperator	-	
-pass	toperator53.pp	toperator	-	
+fail	toperator53.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator54.pp	toperator	-	
 pass	toperator55.pp	toperator	-	
-pass	toperator56.pp	toperator	-	
-pass	toperator57.pp	toperator	-	
+fail	toperator56.pp	toperator	-	accepted-invalid: %FAIL test compiled
+fail	toperator57.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator58.pp	toperator	-	
 pass	toperator59.pp	toperator	-	
 auto	toperator5.pp	toperator	-	version
-pass	toperator60.pp	toperator	-	
+fail	toperator60.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator61.pp	toperator	-	
 pass	toperator62.pp	toperator	-	
 pass	toperator63.pp	toperator	-	
-pass	toperator64.pp	toperator	-	
+fail	toperator64.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator65.pp	toperator	-	
 pass	toperator66.pp	toperator	-	
 pass	toperator67.pp	toperator	-	
-pass	toperator68.pp	toperator	-	
+fail	toperator68.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator69.pp	toperator	-	
 skip	toperator6.pp	toperator	untriaged	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
 pass	toperator70.pp	toperator	-	
@@ -489,7 +489,7 @@ pass	toperator87.pp	toperator	-
 pass	toperator88.pp	toperator	-	
 skip	toperator89.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
 pass	toperator8.pp	toperator	-	
-pass	toperator90.pp	toperator	-	
+fail	toperator90.pp	toperator	-	accepted-invalid: %FAIL test compiled
 skip	toperator91.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 12)
 pass	toperator92.pp	toperator	-	
 skip	toperator93.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 14)
