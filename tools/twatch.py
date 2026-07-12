@@ -277,10 +277,38 @@ def save_state(clone, host, st):
         f.write("\n")
 
 
+def reg_slug(sel):
+    """Ticket slug for a regression, derived from the STABLE selector.
+
+    `test-core#src:test/test_c_gtk_window.pas` -> regression-test-core-gtk-window.
+    Slugging the job NUMBER instead (the old behaviour) meant a renumbering
+    could file a second ticket for a test that already had one.
+    """
+    if "#src:" in sel:
+        target, path = sel.split("#src:", 1)
+        stem = os.path.splitext(os.path.basename(path))[0]
+        sel = "%s-%s" % (target, stem)
+    return "regression-" + re.sub(r"[^a-z0-9]+", "-", sel.lower()).strip("-")
+
+
+def job_key(j):
+    """Identity of a job ACROSS commits.
+
+    Not j["name"]: `test-core#665` is a positional index into the target's
+    recipe lines, so inserting one test renumbers every job after it — and then
+    this dict silently compares yesterday's #665 against a different test today,
+    manufacturing NEW-RED/FIXED pairs out of nothing.  testmgr publishes "sel"
+    (`test-core#src:test/foo.pas`), which names the job by the source it
+    compiles.  Fall back to the name for reports written by a testmgr older
+    than that field (bisect runs the CLONE's testmgr, at the commit under test).
+    """
+    return j.get("sel") or j["name"]
+
+
 def diff_jobs(prev_jobs, report):
     # "skip" (corpus tree absent on this box) is pass-equivalent: the job is
     # not applicable here, and mapping it to pass closes any open regression
-    now = {j["name"]: ("pass" if j["status"] == "skip" else j["status"])
+    now = {job_key(j): ("pass" if j["status"] == "skip" else j["status"])
            for j in report["jobs"]}
     new_red = sorted(n for n, s in now.items()
                      if s != "pass" and prev_jobs.get(n, "pass") == "pass")
@@ -308,9 +336,9 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
              "scale: %s" % report["scale"],
              "verdict: %s" % report["verdict"],
              "---", ""]
-    # job name -> source file(s), so a reader sees WHICH test without
-    # mapping job numbers back to Makefile lines (names shift with edits)
-    srcmap = {j["name"]: j.get("src", "") for j in report["jobs"]}
+    # stable key -> source file(s), so a reader sees WHICH test without
+    # mapping job numbers back to Makefile lines (numbers shift with edits)
+    srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     def label(n):
         return "%s — %s" % (n, srcmap[n]) if srcmap.get(n) else n
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
@@ -322,10 +350,10 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
     first = next((j for j in report["jobs"]
                   if j["status"] not in ("pass", "skip")), None)
     if first:
-        lines.append("## first failure: %s (%s)" % (label(first["name"]),
+        lines.append("## first failure: %s (%s)" % (label(job_key(first)),
                                                     first["status"]))
         lines.append("repro: `tools/testmgr.py --tier %s --job '%s'` at %s"
-                     % (report["tier"], first["name"], sha))
+                     % (report["tier"], job_key(first), sha))
         log = first.get("log")
         if log and os.path.exists(log):
             lines.append("```")
@@ -393,10 +421,15 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
 
     # open-regression bookkeeping
     regs = [r for r in st["open_regressions"] if r["job"] not in fixed]
-    srcmap = {j["name"]: j.get("src", "") for j in report["jobs"]}
+    srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
+    namemap = {job_key(j): j["name"] for j in report["jobs"]}
     for name in new_red:
         rng = clone.commits_between(parent, sha) if parent else [sha]
-        regs.append({"job": name, "src": srcmap.get(name, ""), "bad": sha,
+        # "job" is the stable selector; "name" is the positional name it had at
+        # this sha — kept ONLY as the bisect fallback for older commits, never
+        # as identity (see job_key).
+        regs.append({"job": name, "name": namemap.get(name, ""),
+                     "src": srcmap.get(name, ""), "bad": sha,
                      "good": parent, "range": rng, "opened": utcnow()})
     st["open_regressions"] = regs
 
@@ -448,30 +481,38 @@ PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
 
 def file_stub_tickets(clone, host, st, sha, new_red, report):
     """Face-1 auto-ticket: deterministic stub per NEW-RED job — repro command,
-    range, log tail.  No analysis (that's face 2); slug = job name, so a job
-    never gets a second ticket while one exists in any bucket."""
+    range, log tail.  No analysis (that's face 2); slug = the STABLE selector,
+    so a job never gets a second ticket while one exists in any bucket (and a
+    renumbering can no longer file a duplicate for a test already ticketed)."""
     filed = []
+    advisory = {job_key(j) for j in report["jobs"] if j.get("advisory")}
     for job in new_red:
-        slug = "regression-" + re.sub(r"[^a-z0-9]+", "-", job.lower()).strip("-")
+        slug = reg_slug(job)
         pdir = os.path.join(clone.path, "devdocs/progress")
         if any(os.path.exists(os.path.join(pdir, b, slug + ".md"))
                for b in PROGRESS_BUCKETS):
             continue
-        j = next((x for x in report["jobs"] if x["name"] == job), {})
+        j = next((x for x in report["jobs"] if job_key(x) == job), {})
         tail = ""
         if j.get("log") and os.path.exists(j["log"]):
             with open(j["log"], errors="replace") as f:
                 tail = f.read()[-2000:]
         reg = next((r for r in st["open_regressions"] if r["job"] == job), {})
         rel = os.path.join("devdocs/progress/backlog", slug + ".md")
+        # an advisory job is not part of anyone's gate: its red is a NOTICE for
+        # the track that owns the code (the FPC canary => Track A, compiler/**),
+        # so it must not carry regression priority or read as a stop-work.
+        kind = ("advisory (NOT a gate — nothing day-to-day depends on this "
+                "path; a notice for the owning track)" if job in advisory
+                else "regression")
         with open(os.path.join(clone.path, rel), "w") as f:
             f.write("""---
-prio: 70
+prio: %d
 ---
 
-# regression: %s red at %s (auto-filed by twatch)
+# %s: %s red at %s (auto-filed by twatch)
 
-- **Type:** regression (auto-filed by Track T watcher, host %s). Untriaged.
+- **Type:** %s (auto-filed by Track T watcher, host %s). Untriaged.
 - **Found:** %s
 - **Test source:** %s
 
@@ -489,7 +530,9 @@ by idle bisect; check tstate/TSTATE.md for the current range.
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-""" % (job, sha[:12], host, utcnow(),
+""" % (40 if job in advisory else 70,
+                "advisory" if job in advisory else "regression",
+                job, sha[:12], kind, host, utcnow(),
                 j.get("src") or "unknown (see repro commands)",
                 report["tier"], job, sha,
                 (reg.get("bad") or sha)[:12], (reg.get("good") or "unknown")[:12],
@@ -618,6 +661,18 @@ def bisect_step(clone, host, st, tier):
               (reg["job"], mid[:12], len(rng)), flush=True)
         clone.checkout(mid)
         report, _rc = run_gate(clone, tier, job_glob=reg["job"])
+        if report is None and "#src:" in reg["job"]:
+            # bisect runs the testmgr OF THE COMMIT UNDER TEST, and one older
+            # than the src: selector rejects it outright ("no jobs match").
+            # Retry such commits with the positional name we saw the job under.
+            # It is the wrong name if the range renumbered — but a possibly-off
+            # bisect step beats a bisect that cannot run at all, and this only
+            # applies to commits older than the selector itself.
+            legacy = reg.get("name")
+            if legacy:
+                print("twatch: %s predates src: selectors — retrying as %s"
+                      % (mid[:12], legacy), flush=True)
+                report, _rc = run_gate(clone, tier, job_glob=legacy)
         clone_head_back(clone)
         if report is None:
             return False

@@ -66,6 +66,13 @@ TIERS = {
         "test-c-conformance",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
+        # the 220-program c-testsuite battery per cross target, + lua on all
+        # four: this matrix found 3 real backend gaps on the day it landed,
+        # so the watcher should be the one running it (Track C asked for it in
+        # feature-testmgr-enroll-c-cross-conformance)
+        "test-c-conformance-i386", "test-c-conformance-aarch64",
+        "test-c-conformance-arm32", "test-c-conformance-riscv32",
+        "test-lua-cross",
         "test-lua", "test-cjson", "test-zlib",
         "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
         "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
@@ -95,6 +102,10 @@ CLASSES = {
     "conformance": {"est_mem": 1000 << 20, "timeout": 1200},
     "opt":         {"est_mem": 700 << 20,  "timeout": 900},
 }
+# tiers that carry the FPC cold-start canary (advisory; see fpc_canary_job).
+# Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
+# whole build, not an inner-loop cost.
+FPC_CANARY_TIERS = ("native", "limited", "full")
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this
 PSI_ADMIT = 20.0                # never admit above this memory PSI (some avg10)
@@ -228,6 +239,12 @@ class Job:
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         self.logpath = None
         self.requeued = False
+        self.sel = None           # stable selector; set by assign_selectors()
+        # advisory: reported, ticketed by twatch, but NOT part of the gate —
+        # its failure does not turn the run RED or change the exit code.  For
+        # coverage of paths nothing day-to-day depends on (the FPC cold-start
+        # seed), where a red is a notice to the owning track, not a stop-work.
+        self.advisory = False
         self.est_mem = CLASSES[self.cls]["est_mem"]   # refined from metrics
         self.exp_dur = None       # learned expected duration (scaled secs)
         self.exp_cores = 1.0      # learned cpu cores actually used
@@ -281,6 +298,104 @@ def extract_src(lines):
         return ""
     extra = " +%d" % (len(seen) - 2) if len(seen) > 2 else ""
     return " ".join(seen[:2]) + extra
+
+
+def job_sources(job):
+    """Every repo source path a job's recipe names (not the truncated src)."""
+    seen = []
+    for m in SRC_RE.finditer("\n".join(job.lines)):
+        if m.group(0) not in seen:
+            seen.append(m.group(0))
+    return seen
+
+
+def job_selector(job):
+    """The most durable --job selector for this job.
+
+    Prefer the first source it compiles (stable across renumbering); fall back
+    to the positional name for jobs that name no source (a few corpus/prologue
+    jobs), which is the best that exists for them.
+    """
+    # shard names (test-c-conformance#shard0/6, optdiff#shard3/8) are NOT
+    # positional indices into a recipe — they are already stable, and they say
+    # which shard, which src: cannot.  Keep them.
+    if "#shard" in job.name:
+        return job.name
+    srcs = job_sources(job)
+    if not srcs:
+        return job.name
+    # qualify with the target: the same test/foo.pas is compiled by test-core
+    # AND by every cross target, so a bare src: would select all of them.
+    return "%s#src:%s" % (job.target, srcs[0])
+
+
+def assign_selectors(jobs):
+    """Give every job a UNIQUE stable selector (job.sel).
+
+    A handful of sources are compiled more than once inside one target (hello.pas
+    at different flags, say), so the plain source selector is ambiguous for them
+    — and an ambiguous selector would merge two jobs' red/green history into one.
+    Suffix those with @1, @2 ... in recipe order.  That still only shifts if the
+    number of times THAT source appears in THAT target changes, which is a far
+    rarer event than "a test was inserted somewhere above" (the thing that
+    renumbers every positional name after it).
+    """
+    # Ambiguity is about what the selector SELECTS, not just which jobs share a
+    # first source: a job that merely mentions records.pas as a secondary source
+    # is still matched by src:test/records.pas.  So group by the actual match set.
+    srcs = {id(j): job_sources(j) for j in jobs}
+    groups = {}
+    for j in jobs:
+        base = job_selector(j)
+        if not base.startswith(j.target + "#src:"):
+            continue                          # no source: keeps its name
+        path = base.split("#src:", 1)[1]
+        groups[base] = [k for k in jobs
+                        if k.target == j.target and path in srcs[id(k)]]
+    for j in jobs:
+        base = job_selector(j)
+        grp = groups.get(base)
+        if grp is None or len(grp) == 1:
+            j.sel = base
+        else:
+            j.sel = "%s@%d" % (base, grp.index(j) + 1)
+
+
+def job_selected(job, sel):
+    """--job selector: `target#NN` glob, or the STABLE `src:<path>` form.
+
+    `test-core#665` is a positional index into the target's recipe lines, so
+    inserting a test renumbers every job after it.  That makes a job number
+    useless as a durable name: a ticket filed against test-core#665 pointed at
+    a different test by the time it was triaged the same day, and a bisect that
+    re-runs "#665" at an older commit is not even running the failing test.
+    `src:test/test_c_gtk_window.pas` selects the job that COMPILES that source,
+    and survives renumbering — it is what twatch records and bisects on.
+
+    Forms:
+      <target>#src:<path>[@N]  — the exact selector twatch records (job.sel)
+      src:<path>               — any target that compiles <path>
+      <target>#NN              — the positional name (fnmatch); still accepted,
+                                 but do not persist it anywhere
+    """
+    if job.sel and sel == job.sel:
+        return True
+    target, _, rest = sel.partition("#")
+    if rest.startswith("src:"):
+        if target != job.target:
+            return False
+        sel = rest
+    if sel.startswith("src:"):
+        pat = sel[4:]
+        if "@" in pat:
+            # an explicit @N names ONE job and we already failed the exact
+            # job.sel test above.  Do NOT fall back to matching the bare path:
+            # that would quietly select every sibling compile of that source.
+            # A stale @N therefore matches nothing, and testmgr says so.
+            return False
+        return any(fnmatch.fnmatch(s, pat) or s == pat
+                   for s in job_sources(job))
+    return fnmatch.fnmatch(job.name, sel)
 
 
 def classify(lines):
@@ -418,7 +533,37 @@ def generate(tier):
                     ["tools/optdiff.sh --shard %d/%d" % (i, OPT_SHARDS)])
             j.name = "optdiff#shard%d/%d" % (i, OPT_SHARDS)
             jobs.append(j)
+    if tier in FPC_CANARY_TIERS:
+        jobs.append(fpc_canary_job())
+    assign_selectors(jobs)
     return jobs
+
+
+def fpc_canary_job():
+    """`make bootstrap`'s FIRST line: does FPC still accept our own source?
+
+    The FPC seed is the cold-start path — the only way to rebuild the compiler
+    on a box with no blessed pascal26, and the escape hatch when a self-hosted
+    binary is lost.  Nothing day-to-day uses it, so it rots silently: master sat
+    broken for an unknown time (a forward decl whose parameter got renamed, a
+    routine that moved) because every normal build starts from the self-hosted
+    seed.  Each break is trivial the day it lands and archaeology a year later.
+
+    Compile-only: no fixedpoint, no bootstrap chain.  "FPC still accepts the
+    source" IS the signal.  ADVISORY — a red here is a notice for Track A
+    (it's compiler/** drift), not a gate on anyone's push.
+    """
+    out = "/tmp/p26_fpc_canary"                    # -> private scratch
+    cmd = " ".join([FPC_BIN] + FPC_FLAGS +
+                   ["-FU" + out + "_u", "-FE" + out + "_u",
+                    "-o" + out, COMPILER_SRC.strip('"')])
+    j = Job("fpc-bootstrap", 0,
+            ["mkdir -p %s_u && %s" % (out, cmd)])
+    j.name = "fpc-bootstrap#00"
+    j.cls = "selfhost"
+    j.advisory = True
+    j.est_mem = CLASSES["selfhost"]["est_mem"]
+    return j
 
 
 # -------------------------------------------------------------- sampling ---
@@ -731,10 +876,12 @@ class Manager:
             for job in self.reap():
                 dur = job.t1 - job.t0
                 mark = {"pass": "ok", "fail": "FAIL", "timeout": "TIMEOUT"}[job.status]
+                if job.advisory and job.status != "pass":
+                    mark = "NOTICE"
                 print("  [%4d/%d] %-7s %-28s %6.1fs" %
                       (self.done_count(), len(self.jobs), mark, job.name, dur),
                       flush=True)
-                if job.status != "pass":
+                if job.status != "pass" and not job.advisory:
                     failed = True
                     if self.args.fail_fast:
                         print("testmgr: fail-fast — tearing down", flush=True)
@@ -1084,8 +1231,10 @@ def main():
                     help="global wall-clock budget, seconds (default 3600)")
     ap.add_argument("--list", action="store_true", help="print job table and exit")
     ap.add_argument("--job", metavar="GLOB",
-                    help="run only jobs whose name matches (fnmatch); "
-                         "lets a watcher bisect one failing job in isolation")
+                    help="run only jobs whose name matches (fnmatch), or "
+                         "'src:<path>' to select by SOURCE FILE — stable across "
+                         "renumbering, unlike target#NN; lets a watcher bisect "
+                         "one failing job in isolation")
     ap.add_argument("--report-json", metavar="PATH",
                     help="write machine-readable per-job results (twatch)")
     ap.add_argument("--inject-hang", action="store_true",
@@ -1107,12 +1256,18 @@ def main():
     build_compiler()
     jobs = generate(args.tier)
     if args.job:
-        jobs = [j for j in jobs if fnmatch.fnmatch(j.name, args.job)]
+        jobs = [j for j in jobs if job_selected(j, args.job)]
         if not jobs:
             sys.exit("testmgr: no jobs match --job %r" % args.job)
         for j in jobs:      # deps may have been filtered out: drop them
             j.deps = [d for d in j.deps if d in jobs]
 
+    # the FPC canary skips (not fails) where FPC isn't installed — the watcher
+    # box need not have it, exactly like an unfetched corpus tree
+    if not shutil.which(FPC_BIN):
+        for j in jobs:
+            if j.target == "fpc-bootstrap":
+                j.status = "skip"
     # self-skip jobs whose corpus tree is absent (twatch-setup contract:
     # "corpus jobs self-skip"); recipes with their own guard never get here
     for j in jobs:
@@ -1172,9 +1327,14 @@ def main():
         if j.exp_dur and j.status == "pass" and dur > max(5.0, j.exp_dur * 4):
             note = "  SLOW (expected %.1fs)" % j.exp_dur
             slow.append(j.name)
+        # advisory reds are reported, but they are a NOTICE for the owning
+        # track — not part of the gate, and not "the first failure"
+        state = ("NOTICE" if j.advisory and j.status != "pass"
+                 else j.status.upper())
         print("  %-8s %-32s %-12s %6.1fs  %s%s" %
-              (j.status.upper(), j.name, j.cls, dur, j.src, note))
-        if j.status in ("fail", "timeout") and first_fail is None:
+              (state, j.name, j.cls, dur, j.src, note))
+        if j.status in ("fail", "timeout") and not j.advisory \
+                and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
     print("  %d/%d pass%s" % (npass, len(jobs) - nskip,
@@ -1196,7 +1356,12 @@ def main():
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
                "verdict": "GREEN" if rc == 0 else "RED",
                "slow": slow,
+               # "sel": the STABLE way to name this job again later (twatch
+               # bisects and files tickets on it).  j.name is a positional
+               # index that renumbers whenever a test is inserted above it.
                "jobs": [{"name": j.name, "cls": j.cls, "src": j.src,
+                         "sel": j.sel or j.name,
+                         "advisory": j.advisory,
                          "status": j.status,
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
