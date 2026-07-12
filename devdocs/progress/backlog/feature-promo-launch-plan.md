@@ -3,7 +3,7 @@ prio: 45
 blocked-by: [decide-1-0-scope-promise]
 ---
 
-# Promo & launch plan — visibility now, launch at 1.0
+# Promo & launch plan — visibility now, 0.1 beta next, the loud moment last
 
 - **Type:** feature (outreach)
 - **Track:** W (website) — with Track D (docs) touchpoints
@@ -14,13 +14,23 @@ blocked-by: [decide-1-0-scope-promise]
   — start it now.
 - **Related:** [[docs-devnotes-ai-assisted-build]], [[feature-web-track-w-bootstrap]]
 
-## The core distinction
-**Visibility ≠ launch.** They are different resources and must not be conflated.
+## The core distinction — THREE things, not two
+**Visibility ≠ release ≠ launch.** Different resources; do not conflate.
 - **Visibility** is continuous, cheap, compounding: devlog, a legible repo, occasional posts.
-  Start NOW. Staying invisible until 1.0 throws away years of compounding.
-- **Launch** is **one-shot**. There is roughly one "Show HN: pxx 1.0" and one first impression
-  with the compiler crowd. Spend it on something that survives an hour of hostile clicking.
-  **Launch at 1.0, not before.**
+  Start NOW. Staying invisible until a release throws away years of compounding.
+- **A release** is a working artifact, honestly labeled. **First one = 0.1 beta** (user call
+  2026-07-12 — see [[decide-1-0-scope-promise]]). Announce it *quietly*: devlog, Pascal forums,
+  own channels. Purpose = **rehearsal with real strangers**, to find out that `curl | sh` breaks
+  on a distro we never tested.
+- **The launch** is **one-shot** — the coordinated blast. There is roughly one first impression
+  with the compiler crowd. The scarce thing is **the moment, not the version number**: a 0.1 that
+  gets front-paged and then 404s on install burns it exactly as thoroughly as a bad 1.0 would.
+  So keep it in the pocket until a release has met real users.
+
+Sequence: **visibility now → 0.1 beta (quiet) → real feedback → fix the embarrassing stuff →
+the loud moment** (at 0.2, at 1.0, whenever it is earned). HN is perfectly happy with 0.x when
+you are honest about it; the risk was never the version number, it is the overclaim and the
+broken install.
 
 ## The hook (what the story actually is)
 "Another Pascal compiler" is a nostalgia item — that framing earns 40 upvotes from people who
@@ -58,7 +68,7 @@ within the hour). The honest answers, which are good ones:
 
 ## Plan
 
-### Now → 1.0 (compounding, near-zero cost)
+### Now → 0.1 beta (compounding, near-zero cost)
 1. **Devlog.** The raw material is a *byproduct* of the record we already keep (tickets, session
    notes, decision rationale). A periodic "what broke and how we fixed it" post is the highest-
    leverage channel for this project and the one that attracts the interested minds the user
@@ -69,7 +79,7 @@ within the hour). The honest answers, which are good ones:
    and running it. That is a sentence that stops a scroll.
 4. Docs + install must actually work — see the launch gate below.
 
-### At 1.0 (the one shot)
+### At the loud moment (the one shot — NOT necessarily 1.0)
 5. **Working install first.** A launch where `curl | sh` fails is a launch you do not get back.
 6. Coordinated, same day, midweek morning US time: Show HN + lobste.rs + r/programming +
    r/compilers (+ Pascal forums as secondary). **Be present in the comments all day** — for the
@@ -85,4 +95,8 @@ within the hour). The honest answers, which are good ones:
 
 ## Log
 - 2026-07-12 — designed. Take-off is expected to be slow and that is fine; the visibility work
-  compounds while 1.0 is built.
+  compounds meanwhile.
+- 2026-07-12 — **first official release is 0.1 beta** (user call). Split the plan three ways
+  (visibility / release / launch): a beta needs no compatibility promise, so it ships far sooner
+  and doubles as a rehearsal. The one-shot resource is the *moment*, not the version — so the
+  coordinated blast waits until a real release has met real strangers.
