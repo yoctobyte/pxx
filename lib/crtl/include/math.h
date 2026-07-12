@@ -65,6 +65,20 @@ extern float fminf(float a, float b);
 extern float fmaxf(float a, float b);
 extern double fmin(double a, double b);
 extern double fmax(double a, double b);
+
+/* C99 additions the QuickJS bring-up needs (feature-c-corpus-quickjs).
+ * isfinite/signbit are functions here, not type-generic macros — fine for
+ * double-typed call sites, which is all the corpus uses. */
+extern double scalbn(double x, int e);          /* == ldexp for binary FP */
+extern int    isfinite(double x);
+extern int    signbit(double x);
+extern double nan(const char *tag);
+extern double remainder(double x, double y);    /* IEEE remainder */
+extern double expm1(double x);
+extern double log1p(double x);
+extern double acosh(double x);
+extern double asinh(double x);
+extern double atanh(double x);
 extern float modff(float x, float *ip);
 
 /* HUGE_VAL: positive double overflow value used by lua for range checks. */

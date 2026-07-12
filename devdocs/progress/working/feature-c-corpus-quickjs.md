@@ -57,3 +57,34 @@ surface gaps first (crtl math/stdio breadth), cfront corners second.
 
 `make test-quickjs` advances; every compiler bug surfaced files as its own
 Track C/A ticket with a minimal repro, same as zlib/tcc.
+
+## Log
+
+- 2026-07-12 (opus-night, setup + first walls) — quickjs-ng v0.9.0 imported
+  (installer fetcher `quickjs`, pinned 670492dd, gitignored).
+  `test/quickjs/runner.c` = unity build (cutils/libunicode/libregexp/libbf/
+  quickjs.c) + a minimal embedder main; **gcc oracle green** (`1+2` -> 3,
+  `[1,2,3].map(x=>x*x)` -> [1,4,9]). pxx walls knocked in order:
+  1. **pthread once/cond missing in crtl** — added `pthread_once` (palsync
+     RunOnce) + full condvar surface (`pthread_cond_init/destroy/signal/
+     broadcast/wait/timedwait`, condattr accepted-and-ignored with the clock
+     note) over palsync's seq-futex TCondVar; new `PalFutexWaitTimeout` +
+     `CondWaitTimeout` in the PAL; `__pxx_pcond_*`/`__pxx_ponce` bridges in
+     palpthread; ETIMEDOUT in crtl errno.h. NOTE: a bridge call passing two
+     pointer-derefs to var params (`CondWait(c^, m^)`) trips "Mismatch in
+     MatchProcCall" when palpthread is auto-pulled from a C compile (fine
+     from Pascal) — bodies inlined in the bridge; parser quirk to minimise.
+  2. **gcc bit-scan builtins** — cfront renames `__builtin_clz/ctz/
+     popcount(+ll)` to `__pxx_builtin_*` crtl helpers (prototypes in crtl
+     stdlib.h, loop bodies in stdlib.c). No intrinsic lowering yet.
+  3. **C99 math gaps** — scalbn/isfinite/signbit/nan/remainder/expm1/log1p/
+     acosh/asinh/atanh added to crtl math (bring-up accuracy; remainder does
+     ties-to-even via fmod+parity).
+  Regression: `test/cquickjs_prereq.c` in test-core (exit 42; gcc parity
+  checked). Gate: 2-step self-host byte-identical, testmgr quick GREEN,
+  ctcc/inet C smokes 42.
+  **NEXT WALL: `alloca`** (quickjs.c:15175; JS_CallInternal arg frames +
+  libregexp capture stack) — needs a real dynamic-stack IR op, filed
+  [[feature-c-alloca-dynamic-stack]] (Track A, prio 55). A malloc shim is not
+  acceptable (every JS call would leak). Parked here until that lands; then
+  `make test-quickjs` (oracle diff) gets wired.

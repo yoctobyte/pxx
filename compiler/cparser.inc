@@ -941,6 +941,16 @@ begin
           Result := ASTLeft[argHead];
           Exit;
         end;
+        { gcc bit-scan builtins -> plain crtl helpers (prototypes in crtl
+          stdlib.h, bodies auto-pulled from crtl/src/stdlib.c). No intrinsic
+          lowering yet; first consumer: QuickJS cutils.h clz/ctz wrappers
+          (feature-c-corpus-quickjs). }
+        if name = '__builtin_clz' then name := '__pxx_builtin_clz32'
+        else if name = '__builtin_clzll' then name := '__pxx_builtin_clz64'
+        else if name = '__builtin_ctz' then name := '__pxx_builtin_ctz32'
+        else if name = '__builtin_ctzll' then name := '__pxx_builtin_ctz64'
+        else if name = '__builtin_popcount' then name := '__pxx_builtin_popcount32'
+        else if name = '__builtin_popcountll' then name := '__pxx_builtin_popcount64';
         procIdx := FindProc(name);
         if procIdx >= 0 then
         begin

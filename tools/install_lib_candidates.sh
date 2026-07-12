@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -49,6 +49,9 @@ CGLM_COMMIT="46f46e5dcb84bc5bfcc07675f026077272704f0c"   # master, 2026-07 snaps
 
 ENET_URL="https://github.com/lsalzman/enet"
 ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snapshot
+
+QUICKJS_URL="https://github.com/quickjs-ng/quickjs"
+QUICKJS_COMMIT="670492dd342dace0bb7bd6fbfbde8f0bc5651224"   # v0.9.0 release tag
 
 ZENGL_URL="https://github.com/seenkao/New-ZenGL"
 ZENGL_COMMIT="26f402516542286354d7c41e3b435d613b8c7812"   # HEAD, 2026-07 snapshot
@@ -347,8 +350,22 @@ EOF
   say "zengl -> $DEST/zengl"
 }
 
+fetch_quickjs() {
+  if present quickjs; then say "quickjs present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$QUICKJS_URL" quickjs "$QUICKJS_COMMIT"
+  cat > "$DEST/quickjs/PROVENANCE.md" <<EOF
+# QuickJS-ng Candidate (JavaScript engine, plain C)
+Upstream: ${QUICKJS_URL}
+Commit: ${QUICKJS_COMMIT} (v0.9.0)
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT.
+First probe: C corpus bring-up (feature-c-corpus-quickjs); the compiled qjs IS the JS story.
+EOF
+  say "quickjs -> $DEST/quickjs"
+}
+
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -363,6 +380,7 @@ EOF
     tcc)           fetch_tcc ;;
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
+    quickjs)       fetch_quickjs ;;
     *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess)" ;;
   esac
 done

@@ -34,6 +34,18 @@ function  __pxx_pthread_self: Int64;
 function  __pxx_pthread_create(h: PThreadHandle; entry: TThreadEntry; arg: Pointer): Int64;
 procedure __pxx_pthread_join(h: PThreadHandle);
 
+{ Condition variables + one-time init for crtl pthread_cond_*/pthread_once
+  (palsync TCondVar seq-futex + RunOnce). c/o point at the C structs whose
+  first word matches (pthread_cond_t.__seq / pthread_once_t int). timedwait
+  takes a RELATIVE nanosecond budget; returns 0 woken, 110 (ETIMEDOUT) on
+  expiry. }
+procedure __pxx_pcond_init(c: PCondVar);
+procedure __pxx_pcond_signal(c: PCondVar);
+procedure __pxx_pcond_broadcast(c: PCondVar);
+procedure __pxx_pcond_wait(c: PCondVar; m: PMutex);
+function  __pxx_pcond_timedwait(c: PCondVar; m: PMutex; ns: Int64): LongInt;
+procedure __pxx_ponce(ctl: Pointer; proc: TOnceProc);
+
 implementation
 
 procedure __pxx_pmutex_init(m: PMutex);   begin MutexInit(m^);   end;
@@ -62,6 +74,46 @@ end;
 procedure __pxx_pthread_join(h: PThreadHandle);
 begin
   PalThreadJoin(h^);
+end;
+
+procedure __pxx_pcond_init(c: PCondVar);      begin CondInit(c^);      end;
+procedure __pxx_pcond_signal(c: PCondVar);    begin CondSignal(c^);    end;
+procedure __pxx_pcond_broadcast(c: PCondVar); begin CondBroadcast(c^); end;
+
+{ NOTE: these two inline palsync's CondWait/CondWaitTimeout bodies instead of
+  calling them — a call passing TWO pointer-derefs to var params
+  (CondWait(c^, m^)) trips "Mismatch in MatchProcCall" when this unit is
+  auto-pulled from a C compile, though the same call compiles fine from
+  Pascal. Single-deref var args (MutexUnlock(m^)) are fine. Parser quirk to
+  minimise + file when it next bites. }
+procedure __pxx_pcond_wait(c: PCondVar; m: PMutex);
+var seq0, rc: Integer;
+begin
+  seq0 := c^.Seq;                 { snapshot before unlock: no lost wakeup }
+  MutexUnlock(m^);
+  rc := PalFutexWait(@c^.Seq, seq0);
+  MutexLock(m^);
+end;
+
+function __pxx_pcond_timedwait(c: PCondVar; m: PMutex; ns: Int64): LongInt;
+var seq0, rc: Integer;
+begin
+  seq0 := c^.Seq;
+  MutexUnlock(m^);
+  rc := PalFutexWaitTimeout(@c^.Seq, seq0, ns);
+  MutexLock(m^);
+  if rc = -110 then
+    __pxx_pcond_timedwait := 110   { ETIMEDOUT }
+  else
+    __pxx_pcond_timedwait := 0;
+end;
+
+type
+  POnceControl = ^TOnceControl;
+
+procedure __pxx_ponce(ctl: Pointer; proc: TOnceProc);
+begin
+  RunOnce(POnceControl(ctl)^, proc);
 end;
 
 end.

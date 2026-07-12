@@ -126,3 +126,51 @@ float modff(float x, float *ip) {
   *ip = (float)di;
   return (float)r;
 }
+
+/* ---- C99 additions for the QuickJS bring-up (feature-c-corpus-quickjs) --- */
+
+/* scalbn == ldexp for binary floating point. */
+double scalbn(double x, int e) { return ldexp(x, e); }
+
+/* finite <=> x - x == 0 (inf - inf and nan - nan are NaN, NaN != 0). */
+int isfinite(double x) { double d = x - x; return d == d && d == 0.0; }
+
+int signbit(double x) { return copysign(1.0, x) < 0.0; }
+
+double nan(const char *tag) { (void)tag; return 0.0 / 0.0; }
+
+/* IEEE remainder: r = x - n*y with n = nearest integer to x/y (ties to even).
+   Built on fmod; the halfway case picks the even quotient like glibc. */
+double remainder(double x, double y) {
+  double ay = fabs(y);
+  double r = fmod(x, y);
+  double ar = fabs(r);
+  if (2.0 * ar > ay ||
+      (2.0 * ar == ay && fmod(trunc(fabs(x) / ay), 2.0) != 0.0))
+    r -= copysign(ay, r);
+  return r;
+}
+
+/* expm1/log1p: series for tiny arguments (where exp(x)-1 cancels), the plain
+   formula elsewhere. Bring-up accuracy, not correctly-rounded. */
+double expm1(double x) {
+  if (fabs(x) < 1e-5)
+    return x + 0.5 * x * x + (x * x * x) / 6.0;
+  return exp(x) - 1.0;
+}
+
+double log1p(double x) {
+  if (fabs(x) < 1e-5)
+    return x - 0.5 * x * x + (x * x * x) / 3.0;
+  return log(1.0 + x);
+}
+
+double acosh(double x) { return log(x + sqrt(x * x - 1.0)); }
+
+double asinh(double x) {
+  /* sign-symmetric; the log form loses the sign for negative x */
+  double r = log(fabs(x) + sqrt(x * x + 1.0));
+  return copysign(r, x);
+}
+
+double atanh(double x) { return 0.5 * log((1.0 + x) / (1.0 - x)); }

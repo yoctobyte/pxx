@@ -62,6 +62,11 @@ function PalFutexWait(addr: Pointer; expected: Integer): Integer;
   all. Returns the number woken (raw syscall result). }
 function PalFutexWake(addr: Pointer; count: Integer): Integer;
 
+{ PalFutexWait bounded by a RELATIVE timeout in nanoseconds (ns < 0 = wait
+  unbounded). Returns the raw syscall result: 0 woken, -ETIMEDOUT (-110) on
+  expiry, -EAGAIN when addr^ <> expected. Backs pthread_cond_timedwait. }
+function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
+
 { Kernel thread id of the caller (gettid). }
 function PalThreadSelf: Int64;
 
@@ -129,6 +134,20 @@ const
 function PalFutexWait(addr: Pointer; expected: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_futex, Int64(addr), FUTEX_WAIT, expected, 0, 0, 0));
+end;
+
+function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
+var
+  ts: array[0..1] of NativeInt;   { struct timespec: tv_sec, tv_nsec (word-wide) }
+begin
+  if ns < 0 then
+  begin
+    Result := PalFutexWait(addr, expected);
+    Exit;
+  end;
+  ts[0] := NativeInt(ns div 1000000000);
+  ts[1] := NativeInt(ns mod 1000000000);
+  Result := Integer(__pxxrawsyscall(SYS_futex, Int64(addr), FUTEX_WAIT, expected, Int64(@ts[0]), 0, 0));
 end;
 
 function PalFutexWake(addr: Pointer; count: Integer): Integer;

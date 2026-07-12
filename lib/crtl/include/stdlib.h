@@ -49,4 +49,15 @@ int atexit(void (*func)(void));
 
 #define MB_CUR_MAX 1
 
+/* gcc bit-scan builtins, renamed by the C frontend (__builtin_clz ->
+ * __pxx_builtin_clz32, ...): cfront has no intrinsic lowering for them yet, so
+ * they resolve to these plain-C loops via the normal crtl auto-pull. Undefined
+ * for a zero argument, exactly like the gcc builtins. */
+int __pxx_builtin_clz32(unsigned int x);
+int __pxx_builtin_clz64(unsigned long long x);
+int __pxx_builtin_ctz32(unsigned int x);
+int __pxx_builtin_ctz64(unsigned long long x);
+int __pxx_builtin_popcount32(unsigned int x);
+int __pxx_builtin_popcount64(unsigned long long x);
+
 #endif

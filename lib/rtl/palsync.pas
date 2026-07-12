@@ -101,6 +101,10 @@ procedure CondInit(var c: TCondVar);
   before returning. Call with m HELD; may wake spuriously (loop on the
   predicate). }
 procedure CondWait(var c: TCondVar; var m: TMutex);
+{ As CondWait, bounded by a RELATIVE timeout in nanoseconds (ns < 0 waits
+  unbounded). False = the timeout elapsed with no signal (the mutex is still
+  re-acquired before returning, like pthread_cond_timedwait). }
+function CondWaitTimeout(var c: TCondVar; var m: TMutex; ns: Int64): Boolean;
 { Wake one waiter (no-op when none). Callable with or without m held. }
 procedure CondSignal(var c: TCondVar);
 { Wake every current waiter. }
@@ -242,6 +246,20 @@ begin
   MutexUnlock(m);
   PalFutexWait(@c.Seq, seq0);
   MutexLock(m);
+end;
+
+function CondWaitTimeout(var c: TCondVar; var m: TMutex; ns: Int64): Boolean;
+var
+  seq0, rc: Integer;
+begin
+  seq0 := c.Seq;
+  MutexUnlock(m);
+  rc := PalFutexWaitTimeout(@c.Seq, seq0, ns);
+  MutexLock(m);
+  { -ETIMEDOUT (-110) = the clock ran out; anything else (woken, stale seq
+    -EAGAIN, spurious -EINTR) counts as a wake — callers re-check their
+    predicate anyway. }
+  CondWaitTimeout := rc <> -110;
 end;
 
 procedure CondSignal(var c: TCondVar);

@@ -215,3 +215,41 @@ __crtl_time_t time(__crtl_time_t *t) { if (t) *t = 0; return 0; }
 
 /* long double == double in pxx: strtold forwards to strtod. */
 double strtold(const char *s, char **end) { return strtod(s, end); }
+
+/* ---- gcc bit-scan builtins (see stdlib.h; cfront renames __builtin_*) ----- */
+
+int __pxx_builtin_clz32(unsigned int x) {
+  int n = 0;
+  while (!(x & 0x80000000u)) { x <<= 1; n++; }
+  return n;
+}
+
+int __pxx_builtin_clz64(unsigned long long x) {
+  int n = 0;
+  while (!(x & 0x8000000000000000ull)) { x <<= 1; n++; }
+  return n;
+}
+
+int __pxx_builtin_ctz32(unsigned int x) {
+  int n = 0;
+  while (!(x & 1u)) { x >>= 1; n++; }
+  return n;
+}
+
+int __pxx_builtin_ctz64(unsigned long long x) {
+  int n = 0;
+  while (!(x & 1ull)) { x >>= 1; n++; }
+  return n;
+}
+
+int __pxx_builtin_popcount32(unsigned int x) {
+  int n = 0;
+  while (x) { n += (int)(x & 1u); x >>= 1; }
+  return n;
+}
+
+int __pxx_builtin_popcount64(unsigned long long x) {
+  int n = 0;
+  while (x) { n += (int)(x & 1ull); x >>= 1; }
+  return n;
+}

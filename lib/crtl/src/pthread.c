@@ -18,6 +18,12 @@ extern int       __pxx_pmutex_trylock(void *m);       /* 0 = acquired, 16 = EBUS
 extern long long __pxx_pthread_self(void);
 extern long long __pxx_pthread_create(void *h, void *(*start)(void *), void *arg);
 extern void      __pxx_pthread_join(void *h);
+extern void      __pxx_pcond_init(void *c);
+extern void      __pxx_pcond_signal(void *c);
+extern void      __pxx_pcond_broadcast(void *c);
+extern void      __pxx_pcond_wait(void *c, void *m);
+extern int       __pxx_pcond_timedwait(void *c, void *m, long long ns);
+extern void      __pxx_ponce(void *ctl, void (*proc)(void));
 
 /* ---- mutex ---- */
 
@@ -36,6 +42,48 @@ int pthread_mutex_trylock(pthread_mutex_t *m) { return __pxx_pmutex_trylock(m); 
 int pthread_mutexattr_init(pthread_mutexattr_t *a)            { (void)a; return 0; }
 int pthread_mutexattr_destroy(pthread_mutexattr_t *a)         { (void)a; return 0; }
 int pthread_mutexattr_settype(pthread_mutexattr_t *a, int t)  { (void)a; (void)t; return 0; }
+
+/* ---- once + condition variables (QuickJS js_once/js_cond surface) ---- */
+
+int pthread_once(pthread_once_t *guard, void (*init_routine)(void)) {
+  __pxx_ponce(guard, init_routine);
+  return 0;
+}
+
+int pthread_condattr_init(pthread_condattr_t *a)                { (void)a; return 0; }
+int pthread_condattr_destroy(pthread_condattr_t *a)             { (void)a; return 0; }
+int pthread_condattr_setclock(pthread_condattr_t *a, int clk)   { (void)a; (void)clk; return 0; }
+
+int pthread_cond_init(pthread_cond_t *c, const pthread_condattr_t *attr) {
+  (void)attr;
+  __pxx_pcond_init(c);
+  return 0;
+}
+int pthread_cond_destroy(pthread_cond_t *c)   { (void)c; return 0; }  /* futex: no teardown */
+int pthread_cond_signal(pthread_cond_t *c)    { __pxx_pcond_signal(c);    return 0; }
+int pthread_cond_broadcast(pthread_cond_t *c) { __pxx_pcond_broadcast(c); return 0; }
+
+int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
+  __pxx_pcond_wait(c, m);
+  return 0;
+}
+
+/* POSIX timedwait takes an ABSOLUTE deadline; palsync takes a relative
+ * nanosecond budget. Convert against the wall clock the caller measured on —
+ * QuickJS arms it with CLOCK_MONOTONIC "now + timeout", so subtracting the
+ * matching clock's now gives the intended relative budget. A deadline already
+ * in the past degrades to a zero-budget wait (immediate ETIMEDOUT unless
+ * signalled). */
+int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
+                           const struct timespec *abstime) {
+  struct timespec now;
+  long long ns;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  ns = (long long)(abstime->tv_sec - now.tv_sec) * 1000000000LL
+     + (long long)(abstime->tv_nsec - now.tv_nsec);
+  if (ns < 0) ns = 0;
+  return __pxx_pcond_timedwait(c, m, ns);
+}
 
 /* ---- identity ---- */
 

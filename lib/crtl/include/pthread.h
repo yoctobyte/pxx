@@ -5,17 +5,19 @@
  * lib/rtl/palpthread.pas. Project-owned; the SAME thread layer as native Pascal
  * TThread (meta-multithreading: one PAL, two consumers).
  *
- * Surface = exactly what SQLite (SQLITE_THREADSAFE=1, HOMEGROWN recursive mutex)
- * uses, plus create/join for real worker-thread tests: mutex, self/equal,
- * create/join. No condition variables, no TLS keys, no cancellation, no
- * scheduler attributes — SQLite references none of them under the homegrown
- * recursive-mutex config, and this is not a glibc libpthread ABI clone.
+ * Surface = what the corpus actually uses: mutex, self/equal, create/join
+ * (SQLite), plus pthread_once + condition variables (QuickJS js_once/js_cond,
+ * feature-c-corpus-quickjs) over palsync's RunOnce + seq-futex condvar. No TLS
+ * keys, no cancellation, no scheduler attributes; not a glibc libpthread ABI
+ * clone.
  *
  * Requires --threadsafe (x86-64/i386): create/join lower onto __pxxclone, which
  * the compiler rejects without the thread-safe heap/ARC/I-O runtime.
  */
 #ifndef _PXX_PTHREAD_H
 #define _PXX_PTHREAD_H
+
+#include <time.h>   /* struct timespec for pthread_cond_timedwait */
 
 /* Thread identity = the kernel tid; copyable by value, compared with ==. */
 typedef long pthread_t;
@@ -41,6 +43,32 @@ int  pthread_mutex_unlock(pthread_mutex_t *m);
 int  pthread_mutexattr_init(pthread_mutexattr_t *a);
 int  pthread_mutexattr_destroy(pthread_mutexattr_t *a);
 int  pthread_mutexattr_settype(pthread_mutexattr_t *a, int type);
+
+/* One-time initialisation (palsync RunOnce; glibc-compatible int guard). */
+typedef int pthread_once_t;
+#define PTHREAD_ONCE_INIT 0
+int pthread_once(pthread_once_t *guard, void (*init_routine)(void));
+
+/* Condition variable — palsync's seq-futex condvar (first word = the futex
+ * generation counter). Zeroed == valid, so {0} static init works. The clock
+ * attribute is accepted and ignored: timedwait measures a RELATIVE budget on
+ * the monotonic clock, which is what CLOCK_MONOTONIC callers (QuickJS) want;
+ * CLOCK_REALTIME absolute deadlines are approximated the same way. */
+typedef struct { int __seq; } pthread_cond_t;
+#define PTHREAD_COND_INITIALIZER { 0 }
+typedef struct { int __clock; } pthread_condattr_t;
+
+int pthread_condattr_init(pthread_condattr_t *a);
+int pthread_condattr_destroy(pthread_condattr_t *a);
+int pthread_condattr_setclock(pthread_condattr_t *a, int clock_id);
+
+int pthread_cond_init(pthread_cond_t *c, const pthread_condattr_t *attr);
+int pthread_cond_destroy(pthread_cond_t *c);
+int pthread_cond_signal(pthread_cond_t *c);
+int pthread_cond_broadcast(pthread_cond_t *c);
+int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m);
+int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
+                           const struct timespec *abstime);
 
 pthread_t pthread_self(void);
 int  pthread_equal(pthread_t a, pthread_t b);
