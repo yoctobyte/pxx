@@ -54,3 +54,4 @@ Error: /usr/bin/ppcx64 returned an error exitcode
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-12 — resolved, commit e40f9ea5.
