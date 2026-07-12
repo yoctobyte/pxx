@@ -393,46 +393,90 @@ end;
   toward zero, remainder takes the dividend's sign (FPC div/mod semantics).
   Quotient limbs found by binary search per position (correctness over speed). }
 procedure BigDivMod(const a, b: TBigInt; var q, r: TBigInt);
-var rem, qq, prod, shifted, dlimb: TBigInt; na, i: Integer; lo, hi, mid, d: Int64;
+var rem, qq, prod, shifted, dlimb, u, v: TBigInt;
+    na, nb, nu, nv, nr, i: Integer;
+    d, scale, btop, rtop, cur, remS: Int64;
 begin
-  qq := BigFromInt(0);
-  rem := BigFromInt(0);
-  na := Length(a.limbs);
+  na := Length(a.limbs); nb := Length(b.limbs);
   if BigIsZero(b) or (na = 0) then
   begin
-    q := BigFromInt(0);
-    r := BigFromInt(0);
+    q := BigFromInt(0); r := BigFromInt(0); Exit;
+  end;
+
+  { --- single-limb divisor: direct base-BASE long division (also the scale-back
+        path below). rem64*BASE + limb < 1e18, fits Int64. --- }
+  if nb = 1 then
+  begin
+    scale := b.limbs[0];
+    qq := BigFromInt(0); SetLength(qq.limbs, na);
+    remS := 0;
+    for i := na - 1 downto 0 do
+    begin
+      cur := remS * BIG_BASE + a.limbs[i];
+      qq.limbs[i] := cur div scale;
+      remS := cur mod scale;
+    end;
+    qq.neg := a.neg <> b.neg; Normalize(qq); q := qq;
+    rem := BigFromInt(remS); rem.neg := a.neg; Normalize(rem); r := rem;
     Exit;
   end;
 
-  SetLength(qq.limbs, na);
-  for i := 0 to na - 1 do qq.limbs[i] := 0;
+  { --- Knuth Algorithm D. Normalize so v's top limb >= BASE/2, which bounds the
+        top-limbs quotient estimate to within ~2 of the true digit (a couple of
+        cheap corrections instead of a 30-step binary search). --- }
+  scale := BIG_BASE div (b.limbs[nb - 1] + 1);
+  u := BigMulSmall(a, scale); u.neg := False;
+  v := BigMulSmall(b, scale); v.neg := False;
+  nu := Length(u.limbs); nv := Length(v.limbs);
+  btop := v.limbs[nv - 1];
 
-  i := na - 1;
+  qq := BigFromInt(0); SetLength(qq.limbs, nu);
+  for i := 0 to nu - 1 do qq.limbs[i] := 0;
+  rem := BigFromInt(0);
+
+  i := nu - 1;
   while i >= 0 do
   begin
-    { rem := rem * BASE + a.limbs[i]  (temps: see bug-nested-managed-return-call-arg) }
+    { rem := rem*BASE + u.limbs[i] }
     shifted := BigMulSmall(rem, BIG_BASE);
-    dlimb := BigFromInt(a.limbs[i]);
+    dlimb := BigFromInt(u.limbs[i]);
     rem := BigAdd(shifted, dlimb);
-    { largest d in [0, BASE-1] with |b|*d <= rem }
-    lo := 0; hi := BIG_BASE - 1;
-    while lo < hi do
+
+    nr := Length(rem.limbs);
+    if nr < nv then
+      d := 0
+    else
     begin
-      mid := (lo + hi + 1) div 2;
-      prod := BigMulSmall(b, mid);
-      prod.neg := False;
-      if BigCompareMag(prod, rem) <= 0 then lo := mid else hi := mid - 1;
+      if nr > nv then rtop := rem.limbs[nr - 1] * BIG_BASE + rem.limbs[nr - 2]
+      else rtop := rem.limbs[nr - 1];
+      d := rtop div btop;                        { >= true digit (Knuth q-hat) }
+      if d > BIG_BASE - 1 then d := BIG_BASE - 1;
+      while d > 0 do                             { correct down (<= 2 iters) }
+      begin
+        prod := BigMulSmall(v, d); prod.neg := False;
+        if BigCompareMag(prod, rem) <= 0 then Break;
+        d := d - 1;
+      end;
     end;
-    d := lo;
     qq.limbs[i] := d;
     if d > 0 then
     begin
-      prod := BigMulSmall(b, d);
-      prod.neg := False;
-      rem := BigSub(rem, prod);     { rem >= prod by construction }
+      prod := BigMulSmall(v, d); prod.neg := False;
+      rem := BigSub(rem, prod);
     end;
     i := i - 1;
+  end;
+
+  { rem is (a mod b) * scale; divide it back by the single-limb scale }
+  if scale > 1 then
+  begin
+    nr := Length(rem.limbs); remS := 0;
+    for i := nr - 1 downto 0 do
+    begin
+      cur := remS * BIG_BASE + rem.limbs[i];
+      rem.limbs[i] := cur div scale;
+      remS := cur mod scale;
+    end;
   end;
 
   qq.neg := a.neg <> b.neg;
