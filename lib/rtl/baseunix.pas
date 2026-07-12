@@ -37,6 +37,55 @@ type
 function fpgettimeofday(tp: ptimeval; tzp: ptimezone): cint;
 function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
 
+
+const
+  { Linux errno values under FPC BaseUnix's ESys* names — the set Synapse's
+    ssfpc.inc/synsock reference (feature-synapse-compile-check). x86-64/
+    generic-Linux numbering. }
+  ESysEINTR           = 4;
+  ESysEBADF           = 9;
+  ESysEACCES          = 13;
+  ESysEFAULT          = 14;
+  ESysEINVAL          = 22;
+  ESysEMFILE          = 24;
+  ESysEPIPE           = 32;
+  ESysEWOULDBLOCK     = 11;    { = EAGAIN on Linux }
+  ESysEINPROGRESS     = 115;
+  ESysEALREADY        = 114;
+  ESysENOTSOCK        = 88;
+  ESysEDESTADDRREQ    = 89;
+  ESysEMSGSIZE        = 90;
+  ESysEPROTOTYPE      = 91;
+  ESysENOPROTOOPT     = 92;
+  ESysEPROTONOSUPPORT = 93;
+  ESysESOCKTNOSUPPORT = 94;
+  ESysEOPNOTSUPP      = 95;
+  ESysEPFNOSUPPORT    = 96;
+  ESysEAFNOSUPPORT    = 97;
+  ESysEADDRINUSE      = 98;
+  ESysEADDRNOTAVAIL   = 99;
+  ESysENETDOWN        = 100;
+  ESysENETUNREACH     = 101;
+  ESysENETRESET       = 102;
+  ESysECONNABORTED    = 103;
+  ESysECONNRESET      = 104;
+  ESysENOBUFS         = 105;
+  ESysEISCONN         = 106;
+  ESysENOTCONN        = 107;
+  ESysESHUTDOWN       = 108;
+  ESysETOOMANYREFS    = 109;
+  ESysETIMEDOUT       = 110;
+  ESysECONNREFUSED    = 111;
+  ESysELOOP           = 40;
+  ESysENAMETOOLONG    = 36;
+  ESysEHOSTDOWN       = 112;
+  ESysEHOSTUNREACH    = 113;
+  ESysENOTEMPTY       = 39;
+  ESysEUSERS          = 87;
+  ESysEDQUOT          = 122;
+  ESysESTALE          = 116;
+  ESysEREMOTE         = 66;
+
 implementation
 
 { CLOCK_REALTIME = 0. Native-width timespec matches the kernel's per-arch

@@ -350,3 +350,16 @@ test_ptr_untyped_deref in test-core). synautil advances to
 path still resolves bare idents only: filed
 [[bug-cast-deref-as-varparam-arg]] (Track P, prio 50). That is now the
 single wall in front of the whole synautil compile.
+
+### 2026-07-12 (morning): full-unit probe matrix at HEAD + ESys errno batch
+| unit | state |
+|------|-------|
+| synafpc, synacode | **compile OK** |
+| synautil, synaip, asn1util, synachar | ONE wall: [[bug-cast-deref-as-varparam-arg]] (`Stream.read(PAnsiChar(x)^, …)` method by-ref arg) |
+| synsock, blcksock, httpsend, smtpsend, pop3send, ftpsend | were `ESysEINTR` ConstEval — **fixed** (42 ESys* errno consts added to lib/rtl/baseunix); now stop at [[bug-pascal-nested-variant-record-tagged]] (ssfpc.inc TVarSin) |
+
+So the ENTIRE Synapse stack is behind exactly TWO Track P parser tickets:
+cast-deref-as-varparam-arg (prio 50) and nested-variant-record-tagged
+(prio 55). Runtime caveat once compiling: synacode's DecodeBase64/MD5 had
+const-table codegen corruption historically (Track A fixes since landed in
+done/) — re-verify values, don't assume.
