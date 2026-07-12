@@ -539,6 +539,31 @@ def generate(tier):
     return jobs
 
 
+def corpus_warning(absent, njobs):
+    """The loud, actionable version of 'N jobs skipped'.
+
+    `absent` maps corpus tree -> how many jobs it silences (a job may name two
+    trees, so these do NOT sum to `njobs` — the headline count must be the
+    distinct-job one, or it contradicts the report's skip line).  Names the
+    trees and prints the exact fetch command, because the failure mode this
+    guards against is a box reporting GREEN for tests it never ran.
+    """
+    names = sorted(absent)
+    width = max(len(n) for n in names)
+    lines = ["",
+             "  " + "!" * 68,
+             "  !! CORPUS MISSING — %d job(s) will SKIP, not run." % njobs,
+             "  !! A green verdict here does NOT cover them.",
+             "  !!"]
+    for n in names:
+        lines.append("  !!   %-*s  %3d job(s)" % (width, n, absent[n]))
+    lines += ["  !!",
+              "  !! Fetch them (gitignored, nothing enters the repo):",
+              "  !!   tools/install_lib_candidates.sh %s" % " ".join(names),
+              "  " + "!" * 68, ""]
+    return "\n".join(lines)
+
+
 def fpc_canary_job():
     """`make bootstrap`'s FIRST line: does FPC still accept our own source?
 
@@ -1270,12 +1295,22 @@ def main():
                 j.status = "skip"
     # self-skip jobs whose corpus tree is absent (twatch-setup contract:
     # "corpus jobs self-skip"); recipes with their own guard never get here
+    absent, nabsent = {}, 0
     for j in jobs:
         missing = sorted({m for m in CORPUS_RE.findall("\n".join(j.lines))
                           if not os.path.isdir(
                               os.path.join(REPO, "library_candidates", m))})
         if missing:
             j.status = "skip"
+            nabsent += 1
+            for m in missing:
+                absent[m] = absent.get(m, 0) + 1
+    # A skipped corpus job is INVISIBLE in a green verdict — the run looks just
+    # as green as one that actually ran it.  That is how the i386/arm32/riscv32
+    # c-conformance reds hid on a box without c-testsuite.  So say it loudly,
+    # up front, with the one command that fixes it.
+    if absent:
+        print(corpus_warning(absent, nabsent), flush=True)
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]
     if args.inject_hang:
@@ -1339,6 +1374,11 @@ def main():
     npass = sum(1 for j in jobs if j.status == "pass")
     print("  %d/%d pass%s" % (npass, len(jobs) - nskip,
                               ", %d skip (corpus absent)" % nskip if nskip else ""))
+    # repeat the banner at the END too: on a 1000-job run the startup one has
+    # long scrolled away, and this is the line someone reads before believing
+    # a GREEN
+    if absent:
+        print(corpus_warning(absent, nabsent))
     if first_fail:
         print("\n-- first failure: %s (%s)%s --" %
               (first_fail.name, first_fail.status,

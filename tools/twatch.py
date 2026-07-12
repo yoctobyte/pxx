@@ -277,6 +277,53 @@ def save_state(clone, host, st):
         f.write("\n")
 
 
+# Corpus trees the full tier expects (same set twatch-setup.sh provisions, plus
+# fpc-testsuite for the Pascal conformance suite).  Jobs referencing an absent
+# tree SKIP — and a skipped job is invisible in a GREEN verdict, so a watcher
+# missing a corpus quietly publishes "green" for tests it never ran.  That is
+# how the i386/arm32/riscv32 c-conformance reds stayed hidden on a box without
+# c-testsuite.  A watcher must be loud about this on startup.
+CORPUS_EXPECTED = ("lua", "sqlite", "zlib", "c-testsuite", "tcc", "cjson",
+                   "tiny-regex-c", "fpc-testsuite")
+
+
+def missing_corpus(path):
+    return [t for t in CORPUS_EXPECTED
+            if not os.path.isdir(os.path.join(path, "library_candidates", t))]
+
+
+def warn_missing_corpus(path, fetch=False):
+    """Warn (or, with --fetch-corpus, just install) the absent corpus trees."""
+    missing = missing_corpus(path)
+    if not missing:
+        return
+    cmd = ["tools/install_lib_candidates.sh"] + missing
+    if fetch:
+        print("twatch: fetching missing corpus: %s" % " ".join(missing),
+              flush=True)
+        rc = subprocess.run(cmd, cwd=path).returncode
+        if rc == 0 and not missing_corpus(path):
+            print("twatch: corpus complete", flush=True)
+            return
+        print("twatch: corpus fetch failed (rc=%s) — continuing with gaps" % rc,
+              flush=True)
+        missing = missing_corpus(path)
+        if not missing:
+            return
+    bar = "!" * 72
+    print("\n  %s\n"
+          "  !! CORPUS MISSING on this watcher: %s\n"
+          "  !! Jobs touching these trees will SKIP — and a skipped job looks\n"
+          "  !! exactly like a passing one in a GREEN verdict. This watcher is\n"
+          "  !! publishing coverage it does not actually have.\n"
+          "  !!\n"
+          "  !! Fix (gitignored, nothing enters the repo):\n"
+          "  !!   cd %s && %s\n"
+          "  !! Or re-run twatch with --fetch-corpus to do it now.\n"
+          "  %s\n" % (bar, " ".join(missing), path, " ".join(cmd), bar),
+          flush=True)
+
+
 def reg_slug(sel):
     """Ticket slug for a regression, derived from the STABLE selector.
 
@@ -801,6 +848,10 @@ def main():
     ap.add_argument("--once", action="store_true",
                     help="single iteration (cron / smoke test)")
     ap.add_argument("--no-bisect", action="store_true")
+    ap.add_argument("--fetch-corpus", action="store_true",
+                    help="install any missing corpus trees at startup instead "
+                         "of just warning (jobs whose corpus is absent SKIP, "
+                         "and a skipped job is invisible in a GREEN verdict)")
     args = ap.parse_args()
 
     if args.status:
@@ -835,6 +886,8 @@ def main():
         args.debounce = conf["debounce"]
     if not args.no_bisect:
         args.no_bisect = conf["no_bisect"]
+
+    warn_missing_corpus(clone.path, fetch=args.fetch_corpus)
 
     errors = 0
     notest_logged = None
