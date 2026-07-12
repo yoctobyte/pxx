@@ -3824,10 +3824,9 @@ begin
             EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
             
             { Find constructor 'Create' of this class }
-            slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
-            if slot >= 0 then
+            cpi := IRResolveCtorProc(node, classIdx);
+            if cpi >= 0 then
             begin
-              cpi := UMthProc_[slot];
               
               { Push Self first }
               EmitB($57); { push rdi }

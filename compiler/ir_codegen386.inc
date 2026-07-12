@@ -1982,10 +1982,9 @@ begin
           { VMT pointer at offset 0 (4 bytes; the 8-byte reserved slot's high
             dword stays zero, matching the data-blob layout). }
           EmitB($C7); EmitB($00); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov dword [eax], VMT_addr }
-          j := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
-          if j < 0 then
+          p1 := IRResolveCtorProc(node, classIdx);   { overload-resolved ctor }
+          if p1 < 0 then
             Exit;                        { no ctor: instance pointer in eax }
-          p1 := UMthProc_[j];            { ctor proc index }
           EmitB($50);                    { push eax (Self = param 0, deepest) }
           argBytes := 4;
           argNode := IRB[node];          { size arg }

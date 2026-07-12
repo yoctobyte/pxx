@@ -1949,6 +1949,240 @@ begin
   end;
 end;
 
+function OverloadArgRank(pTk, aTk: TTypeKind): Integer;
+{ How good a fit an argument of type aTk is for a parameter of type pTk, lower is
+  better: 0 exact, 1 preferred conversion, 2 merely compatible, 3 impossible.
+
+  The ranking exists because TypesCompatible alone is too coarse to CHOOSE with: a
+  Char argument is compatible with Integer (both ordinal) AND with string, so a
+  first-match scan handed `P('x')` to `P(Integer)` and passed 120. FPC prefers the
+  string conversion for a character, and prefers numeric widening between numbers,
+  so those two get rank 1 and everything else compatible sinks to 2. }
+begin
+  if pTk = aTk then begin Result := 0; Exit; end;
+
+  { char -> string, and string flavour -> string flavour (a frozen tyString
+    literal onto a managed AnsiString param) }
+  if ((pTk = tyString) or (pTk = tyAnsiString)) and
+     ((aTk = tyString) or (aTk = tyAnsiString) or (aTk = tyChar)) then
+  begin Result := 1; Exit; end;
+
+  { numeric widening between non-character ordinals }
+  if TypeIsOrdinal(pTk) and TypeIsOrdinal(aTk) and
+     (pTk <> tyChar) and (aTk <> tyChar) then
+  begin Result := 1; Exit; end;
+
+  if TypesCompatible(pTk, aTk) then begin Result := 2; Exit; end;
+  Result := 3;
+end;
+
+function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
+{ TYPE-aware method overload selection.
+
+  FindUMethArity picks the first name match whose ARITY fits, so same-arity
+  overloads (`AssertEquals(string)` vs `AssertEquals(Integer)` — fpcunit is built
+  out of these) always ran the FIRST body no matter what was passed: silent wrong
+  code, no diagnostic.
+
+  Candidates = name matches up the parent chain whose arity accepts the call. With
+  0 or 1 candidate this IS FindUMethArity, so the single-method paths are
+  untouched. With more than one, the call's argument expressions are parsed
+  SPECULATIVELY to learn their types, the token stream is rewound to exactly where
+  it was, and the candidate whose parameters match wins — exact types first, then
+  TypesCompatible (which is what maps a tyString literal onto an `AnsiString`
+  param). See bug-pascal-method-overload-ignores-arg-types. }
+const MAX_OVL_CAND = 32;
+var
+  cand: array[0..MAX_OVL_CAND-1] of Integer;
+  argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
+  score, bestScore, rank: Integer;
+  ok: Boolean;
+  lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+
+  { 1. collect the arity-viable candidates }
+  nCand := 0;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    mbase := UClsMBase[curr];
+    cnt   := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
+      begin
+        want := nExplicitArgs;
+        if not UMthIsStatic[mbase + i] then want := want + 1;
+        if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
+        begin
+          cand[nCand] := mbase + i;
+          Inc(nCand);
+        end;
+      end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+
+  if nCand <= 1 then
+  begin
+    Result := FindUMethArity(ci, name, nExplicitArgs);
+    Exit;
+  end;
+
+  { 2. probe the argument types, then rewind. CurTok is Tokens[TokPos-1], so
+       restoring TokPos to that index and calling Next reproduces it exactly. }
+  savedCurIdx := TokPos - 1;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    lp := TokPos
+  else if CurTok.Kind = tkLParen then
+    lp := TokPos - 1
+  else
+    lp := -1;
+
+  nArgs := 0;
+  if (lp >= 0) and (nExplicitArgs > 0) then
+  begin
+    TokPos := lp + 1;
+    Next;
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) and
+          (nArgs < MAX_PROC_PARAMS) do
+    begin
+      ParseExpr;
+      argTk[nArgs] := IntToTypeKind(ASTTk[CurASTNode]);
+      Inc(nArgs);
+      if CurTok.Kind = tkComma then Next else Break;
+    end;
+  end;
+  TokPos := savedCurIdx;
+  Next;
+
+  if nArgs <> nExplicitArgs then
+  begin
+    { probe disagreed with the token-level count (an unsupported arg shape) —
+      keep the old behaviour rather than guess }
+    Result := FindUMethArity(ci, name, nExplicitArgs);
+    Exit;
+  end;
+
+  { 3. pick the candidate with the lowest total argument rank; ties keep the
+       first-declared one (FPC's own tie-break). A candidate with any impossible
+       argument is out. }
+  best := -1;
+  bestScore := 0;
+  for c := 0 to nCand - 1 do
+  begin
+    pi := UMthProc_[cand[c]];
+    base := 0;
+    if not UMthIsStatic[cand[c]] then base := 1;
+    ok := True;
+    score := 0;
+    for j := 0 to nArgs - 1 do
+    begin
+      rank := OverloadArgRank(Procs[pi].Params[base + j].TypeKind, argTk[j]);
+      if rank >= 3 then ok := False;
+      score := score + rank;
+    end;
+    if ok and ((best < 0) or (score < bestScore)) then
+    begin
+      best := cand[c];
+      bestScore := score;
+    end;
+  end;
+
+  if best < 0 then best := FindUMethArity(ci, name, nExplicitArgs);
+  Result := best;
+end;
+
+function FindUCtorOverloadArgs(ci: Integer; argsHead: Integer): Integer;
+{ Constructor overload selection from the ALREADY-PARSED argument list.
+
+  Unlike a method call, a ctor's args are parsed BEFORE the ctor is chosen, so the
+  argument types are sitting on the AST and no token probe is needed. Picking the
+  first `Create` by name (the old behaviour) meant an overloaded ctor set always
+  resolved to whichever Create was declared first — so `TFoo.Create('x')` against a
+  parameterless first Create died with "too many arguments", and a same-arity set
+  silently ran the wrong body. Same ranking as FindUMethOverloadAhead. }
+const MAX_OVL_CAND = 32;
+var
+  cand: array[0..MAX_OVL_CAND-1] of Integer;
+  argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  nCand, nArgs, i, j, c, pi, want, curr, mbase, cnt, best: Integer;
+  score, bestScore, rank, argSeq: Integer;
+  ok: Boolean;
+  lo, nm: AnsiString;
+begin
+  nm := 'create';
+  lo := ULower(nm);
+
+  nArgs := 0;
+  argSeq := argsHead;
+  while (argSeq <> -1) and (nArgs < MAX_PROC_PARAMS) do
+  begin
+    argTk[nArgs] := IntToTypeKind(ASTTk[ASTLeft[argSeq]]);
+    Inc(nArgs);
+    argSeq := ASTRight[argSeq];
+  end;
+
+  nCand := 0;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    mbase := UClsMBase[curr];
+    cnt   := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
+      begin
+        want := nArgs;
+        if not UMthIsStatic[mbase + i] then want := want + 1;
+        if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
+        begin
+          cand[nCand] := mbase + i;
+          Inc(nCand);
+        end;
+      end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+
+  if nCand = 0 then
+  begin
+    Result := FindUMeth(ci, 'create');
+    Exit;
+  end;
+
+  best := -1;
+  bestScore := 0;
+  for c := 0 to nCand - 1 do
+  begin
+    pi := UMthProc_[cand[c]];
+    ok := True;
+    score := 0;
+    for j := 0 to nArgs - 1 do
+    begin
+      rank := OverloadArgRank(Procs[pi].Params[1 + j].TypeKind, argTk[j]);
+      if rank >= 3 then ok := False;
+      score := score + rank;
+    end;
+    if ok and ((best < 0) or (score < bestScore)) then
+    begin
+      best := cand[c];
+      bestScore := score;
+    end;
+  end;
+
+  if best < 0 then best := cand[0];
+  Result := best;
+end;
+
 function IsVarArgLvalueCast(n: Integer): Boolean;
 { FPC "variable typecast" as a var/out argument: `Cardinal(FTokenLength)` —
   an AN_PTR_CAST over a plain lvalue. The address is the operand's
@@ -2117,7 +2351,7 @@ begin
           ... if not Login then` (ftpsend). Self = the with operand (a
           materialised temp for call operands, so evaluation is per-call of
           the METHOD, not a re-Create). }
-        mmi := FindUMethArity(selfClassCi, fieldName, CountCallArgsAhead);
+        mmi := FindUMethOverloadAhead(selfClassCi, fieldName, CountCallArgsAhead);
         if mmi >= 0 then
         begin
           mpi := UMthProc_[mmi];
@@ -3173,7 +3407,7 @@ begin
       begin
         mci := recName - REC_UCLASS_BASE;
         { overload-aware: pick the entry matching the call's arg count }
-        mmi := FindUMethArity(mci, fieldName, CountCallArgsAhead);
+        mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
       end;
       if mmi >= 0 then
       begin
@@ -4070,7 +4304,7 @@ begin
   if parentCi < 0 then Error('inherited call has no parent class');
   { overload-aware: `inherited Insert(i)` must pick the parent overload
     matching THIS call's arg count (CurTok = '(' or the follower) }
-  mmi := FindUMethArity(parentCi, name, CountCallArgsAhead);
+  mmi := FindUMethOverloadAhead(parentCi, name, CountCallArgsAhead);
   if mmi < 0 then Error('inherited method not found: ' + name);
   mpi := UMthProc_[mmi];
 
@@ -4297,7 +4531,7 @@ begin
       end;
 
       mmi := -1;
-      if ci >= 0 then mmi := FindUMethArity(ci, fieldName, CountCallArgsAhead);
+      if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then
       begin
         mpi := UMthProc_[mmi];
@@ -5235,7 +5469,7 @@ begin
           begin
             mci := baseRec - REC_UCLASS_BASE;
             if FindUProp(mci, fieldName) < 0 then
-              mmi := FindUMethArity(mci, fieldName, CountCallArgsAhead);
+              mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
           end;
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
           begin
@@ -7238,7 +7472,7 @@ begin
           (bug-tthread-execute-writeln-crash's true root cause). }
         if idx >= REC_UCLASS_BASE then
         begin
-          i := FindUMeth(idx - REC_UCLASS_BASE, 'create');
+          i := FindUCtorOverloadArgs(idx - REC_UCLASS_BASE, argsHead);
           if i >= 0 then
           begin
             mpi := UMthProc_[i];
@@ -7702,7 +7936,7 @@ begin
         if (idx < 0) and (procIdx < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
         begin
           ci := CurSelfClass - REC_UCLASS_BASE;
-          mmi := FindUMethArity(ci, name, CountCallArgsAhead);
+          mmi := FindUMethOverloadAhead(ci, name, CountCallArgsAhead);
           if mmi >= 0 then
           begin
             mpi := UMthProc_[mmi];
@@ -12147,7 +12381,7 @@ begin
           if (CurSelfClass >= REC_UCLASS_BASE) and (si < 0) then
           begin
             smci := CurSelfClass - REC_UCLASS_BASE;
-            smmii := FindUMethArity(smci, name, CountCallArgsAhead);
+            smmii := FindUMethOverloadAhead(smci, name, CountCallArgsAhead);
             if smmii >= 0 then
             begin
               smpii := UMthProc_[smmii];

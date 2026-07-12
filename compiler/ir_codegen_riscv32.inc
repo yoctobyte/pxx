@@ -1222,7 +1222,7 @@ begin
             Exit;                             { plain GetMem }
           EmitLoadDataRefRISCV32(reg_t1, UClsVMTOffset[j - REC_UCLASS_BASE]);
           rv32_sw(reg_t1, reg_a0, 0);         { [Self] = VMT }
-          j := FindUMeth(j - REC_UCLASS_BASE, 'create');
+          j := IRResolveCtorProc(node, j);      { overload-resolved ctor PROC }
           if j < 0 then
             Exit;                             { no ctor: instance in a0 }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { Self, deepest }
@@ -1243,7 +1243,7 @@ begin
           rv32_lw(reg_t1, reg_sp, (nArgs - 1) * 4);            { Self again }
           rv32_addi(reg_sp, reg_sp, nArgs * 4);
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);  { save Self }
-          EmitCallProc(UMthProc_[j]);
+          EmitCallProc(j);
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { Self }
           Exit;
         end;

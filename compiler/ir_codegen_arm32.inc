@@ -1578,10 +1578,9 @@ begin
             Exit;                        { plain GetMem: pointer in r0 }
           EmitLoadDataRefArm32(9, UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { r9 = VMT addr }
           EmitI32($E5809000);            { str r9, [r0] (VMT pointer) }
-          j := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
-          if j < 0 then
+          p1 := IRResolveCtorProc(node, classIdx);   { overload-resolved ctor }
+          if p1 < 0 then
             Exit;                        { no ctor: instance pointer in r0 }
-          p1 := UMthProc_[j];            { ctor proc index }
           EmitI32($E92D0001);            { push {r0} (Self = word 0, deepest) }
           nArgs := 1;                    { total arg words }
           argNode := IRB[node];          { size arg }

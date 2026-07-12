@@ -1756,6 +1756,12 @@ var
     and IR_CALL_IND have no free operand, so their dest node lives here (-1 = none).
     bug-frozen-string-result-global-not-reentrant. }
   IRCallDest : array[0..MAX_IR-1] of Integer;
+  { Class-instantiation IR_CALL (procIdx = -tkGetMem): the ctor proc the FRONTEND
+    picked by argument types. Every backend used to re-resolve the ctor itself with
+    a first-name-match FindUMeth(ci,'create'), which cannot see overloads, so an
+    overloaded ctor set always called whichever Create was declared first. -1 =
+    none selected, keep the old first-name-match. }
+  IRCtorProc : array[0..MAX_IR-1] of Integer;
   IRSetLenBaseRec : array[0..MAX_IR-1] of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
   { Pending open-array copy-out (writeback) for a static array passed to a
     `var`/`out` open-array parameter. The call site copies the static array into

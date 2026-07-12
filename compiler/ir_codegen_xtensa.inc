@@ -1353,7 +1353,7 @@ begin
             Exit;                               { plain GetMem }
           EmitLoadDataRefXtensa(reg_xtensa_a3, UClsVMTOffset[j - REC_UCLASS_BASE]);
           xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);   { [Self] = VMT }
-          j := FindUMeth(j - REC_UCLASS_BASE, 'create');
+          j := IRResolveCtorProc(node, j);      { overload-resolved ctor PROC }
           if j < 0 then
             Exit;                               { no ctor: instance in a2 }
           argBase := XtSpillDepth;
@@ -1374,7 +1374,7 @@ begin
           begin
             for i := 0 to nArgs - 1 do
               xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
-            EmitCallProc(UMthProc_[j]);
+            EmitCallProc(j);
             { Self survives in its sp-relative slot (sp is constant). }
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase);
             XtSpillDepth := argBase;
@@ -1385,7 +1385,7 @@ begin
               across the call so Self can be reloaded, then drop it. }
             for i := 0 to nArgs - 1 do
               xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
-            EmitCallProc(UMthProc_[j]);
+            EmitCallProc(j);
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, (nArgs - 1) * 4);  { Self }
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
           end;

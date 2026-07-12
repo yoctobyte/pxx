@@ -32,6 +32,7 @@ begin
   IRStmtRoot[IRCount] := False;
   IRLine[IRCount] := CurLowerLine;
   IRCallDest[IRCount] := -1;
+  IRCtorProc[IRCount] := -1;
   Result := IRCount;
   Inc(IRCount);
 end;
@@ -1090,6 +1091,23 @@ begin
   end
   else
     Result := IRAppend(IR_CALL, procIdx, firstArg, classIdx, 0, tk);
+end;
+
+function IRResolveCtorProc(node, classIdx: Integer): Integer;
+{ The ctor PROC a class-instantiation IR_CALL should call: the overload the
+  frontend resolved from the argument types, or — when it recorded none — the
+  legacy first-`Create`-by-name match. Every backend open-coded the latter, which
+  is blind to overloads, so `TFoo.Create('x')` ran a parameterless Create and
+  `TFoo.Create(1)` ran the string one. Shared here so all six backends agree. }
+begin
+  Result := -1;
+  if (node >= 0) and (node < IRCount) then Result := IRCtorProc[node];
+  if Result >= 0 then Exit;
+  if classIdx >= REC_UCLASS_BASE then
+  begin
+    Result := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+    if Result >= 0 then Result := UMthProc_[Result];
+  end;
 end;
 
 function IRNodePointerBase(node: Integer): Boolean;
@@ -4810,6 +4828,18 @@ begin
       end
       else
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+      { Class instantiation: carry the ctor the FRONTEND picked from the argument
+        types. Backends resolve the ctor with a first-name-match that cannot see
+        overloads, so without this an overloaded ctor set always ran whichever
+        Create was declared first (bug-pascal-ctor-overload-first-match). The ctor
+        args hang off the size arg: ASTLeft[node] = size AN_ARG, its ASTRight = the
+        ctor arg list. }
+      if (cpi = -Ord(tkGetMem)) and (classIdx >= REC_UCLASS_BASE) and
+         (ASTLeft[node] >= 0) then
+      begin
+        slot := FindUCtorOverloadArgs(classIdx - REC_UCLASS_BASE, ASTRight[ASTLeft[node]]);
+        if slot >= 0 then IRCtorProc[Result] := UMthProc_[slot];
+      end;
       { copy-OUT the open-array writebacks this call's args registered (a static
         array passed to a `var`/`out` open-array param): temp data -> static
         array, after the call. Emitted by the linear IR_COPY_REC driver in append

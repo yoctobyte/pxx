@@ -424,6 +424,9 @@ test-core: $(COMPILER)
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas /tmp/test_class_overload_directive_b24726
 	test "$$(/tmp/test_class_overload_directive_b24726)" = "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"
+	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
+	./$(COMPILER) test/test_method_overload_types_b248.pas /tmp/test_method_overload_types_b24826
+	test "$$(/tmp/test_method_overload_types_b24826)" = "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"
