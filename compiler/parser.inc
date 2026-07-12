@@ -14896,18 +14896,24 @@ begin
             isVirtual := False;
             isOverride := False;
             isAbstract := False;
-            while (CurTok.Kind = tkIdent) and
+            { `overload` is a real TOKEN (tkOverload), every other directive is a
+              plain identifier — so a tkIdent-only guard silently walked past it.
+              A lone trailing `overload;` then got skipped by luck, but
+              `reintroduce; overload; virtual;` left `virtual` to be read as a
+              FIELD name, which demands ':' and died on the ';'
+              (bug-pascal-class-body-overload-directive). }
+            while ((CurTok.Kind = tkIdent) and
                   (CaseEqual(CurTok.SVal, 'virtual') or
                    CaseEqual(CurTok.SVal, 'override') or
                    CaseEqual(CurTok.SVal, 'abstract') or
                    CaseEqual(CurTok.SVal, 'dynamic') or
                    CaseEqual(CurTok.SVal, 'inline') or
-                   CaseEqual(CurTok.SVal, 'overload') or
                    CaseEqual(CurTok.SVal, 'static') or
                    CaseEqual(CurTok.SVal, 'reintroduce') or
                    CaseEqual(CurTok.SVal, 'deprecated') or
                    CaseEqual(CurTok.SVal, 'platform') or
-                   CaseEqual(CurTok.SVal, 'experimental')) do
+                   CaseEqual(CurTok.SVal, 'experimental'))) or
+                  (CurTok.Kind = tkOverload) do
             begin
               { virtual/override/abstract drive dispatch; dynamic = virtual
                 (FPC: same semantics, different table — pxx has one VMT).

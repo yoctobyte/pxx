@@ -421,6 +421,9 @@ test-core: $(COMPILER)
 	# method defaults must not shift onto the previous slot (bug-pascal-method-default-param-self-shift)
 	./$(COMPILER) test/test_method_default_param_b246.pas /tmp/test_method_default_param_b24626
 	test "$$(/tmp/test_method_default_param_b24626)" = "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"
+	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
+	./$(COMPILER) test/test_class_overload_directive_b247.pas /tmp/test_class_overload_directive_b24726
+	test "$$(/tmp/test_class_overload_directive_b24726)" = "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"
