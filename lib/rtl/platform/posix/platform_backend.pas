@@ -68,6 +68,9 @@ function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
 function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
+function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
@@ -95,7 +98,7 @@ const
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
-  SYS_getsockopt=55; SYS_getsockname=51;
+  SYS_getsockopt=55; SYS_getsockname=51; SYS_getpeername=52; SYS_ioctl=16;
   SYS_sendto=44; SYS_recvfrom=45; SYS_ppoll=271;
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
@@ -110,7 +113,8 @@ const
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
   SC_SETSOCKOPT=14; SC_SHUTDOWN=13; SC_SENDTO=11; SC_RECVFROM=12;
-  SC_GETSOCKNAME=6; SC_GETSOCKOPT=15;
+  SC_GETSOCKNAME=6; SC_GETSOCKOPT=15; SC_GETPEERNAME=7;
+  SYS_ioctl=54;
   SYS_ppoll=309;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
@@ -124,7 +128,7 @@ const
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
-  SYS_getsockopt=209; SYS_getsockname=204;
+  SYS_getsockopt=209; SYS_getsockname=204; SYS_getpeername=205; SYS_ioctl=29;
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
@@ -138,7 +142,7 @@ const
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
-  SYS_getsockopt=295; SYS_getsockname=286;
+  SYS_getsockopt=295; SYS_getsockname=286; SYS_getpeername=287; SYS_ioctl=54;
   SYS_sendto=290; SYS_recvfrom=292; SYS_ppoll=336;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
@@ -156,7 +160,7 @@ const
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
-  SYS_getsockopt=209; SYS_getsockname=204;
+  SYS_getsockopt=209; SYS_getsockname=204; SYS_getpeername=205; SYS_ioctl=29;
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
@@ -758,6 +762,43 @@ begin
   if rc >= 0 then
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
   Result := Integer(rc);
+end;
+
+function PalBackendGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+var
+  sa: array[0..15] of Byte;
+  addrlen: Integer;
+  i: Integer;
+  rc: Int64;
+begin
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+{$ifdef CPU_I386}
+  rc := SockCall(SC_GETPEERNAME, handle, Int64(@sa[0]), Int64(@addrlen), 0, 0);
+{$else}
+  rc := __pxxrawsyscall(SYS_getpeername, handle, Int64(@sa[0]), Int64(@addrlen), 0, 0, 0);
+{$endif}
+  outAddr := 0;
+  outPort := 0;
+  if rc >= 0 then
+    ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+  Result := Integer(rc);
+end;
+
+function PalBackendGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
+var rc: Int64;
+begin
+{$ifdef CPU_I386}
+  rc := SockCall(SC_GETSOCKOPT, handle, level, optname, Int64(valPtr), Int64(lenPtr));
+{$else}
+  rc := __pxxrawsyscall(SYS_getsockopt, handle, level, optname, Int64(valPtr), Int64(lenPtr), 0);
+{$endif}
+  Result := Integer(rc);
+end;
+
+function PalBackendIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_ioctl, handle, cmd, Int64(argp), 0, 0, 0));
 end;
 
 function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;

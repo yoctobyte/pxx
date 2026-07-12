@@ -13,7 +13,7 @@ unit sockets;
 
 interface
 
-uses platform;
+uses platform, sysutils;
 
 type
   cint        = LongInt;
@@ -31,8 +31,19 @@ type
   Tin_addr = in_addr;
   pin_addr = ^in_addr;
 
-  { IPv6 address (declared for compat; not wired into fp*). }
-  Tin6_addr = record u6_addr8: array[0..15] of Byte; end;
+  { IPv6 address (declared for compat; not wired into fp*). Union of the
+    byte/word/dword views, matching FPC's in6_addr (Synapse's IN6_IS_ADDR_*
+    helpers read u6_addr16/u6_addr32). }
+  Tin6_addr = packed record
+    case Byte of
+      0: (u6_addr8:  array[0..15] of Byte);
+      1: (u6_addr16: array[0..7] of Word);
+      2: (u6_addr32: array[0..3] of cuint32);
+      3: (s6_addr8:  array[0..15] of Byte);
+      4: (s6_addr:   array[0..15] of Byte);
+      5: (s6_addr16: array[0..7] of Word);
+      6: (s6_addr32: array[0..3] of cuint32);
+  end;
   pin6_addr = ^Tin6_addr;
 
   { sockaddr_in — sin_port and sin_addr are network byte order. }
@@ -100,6 +111,9 @@ function htons(host: Word): Word;
 function ntohs(net: Word): Word;
 function htonl(host: cuint32): cuint32;
 function ntohl(net: cuint32): cuint32;
+{ FPC Sockets aliases over in_addr (netdb callers: HostToNet(he.Addr)). }
+function HostToNet(Host: in_addr): in_addr;
+function NetToHost(Net: in_addr): in_addr;
 
 { BSD socket calls over the PAL IPv4 primitives. fp* take a pointer to a
   TInetSockAddr (and its length) like FPC's Sockets. }
@@ -114,8 +128,21 @@ function fpSendTo(s: cint; msg: Pointer; len: cint; flags: cint; addr: PInetSock
 function fpRecvFrom(s: cint; buf: Pointer; len: cint; flags: cint; addr: PInetSockAddr; addrlen: pTSocklen): ssize_t;
 function fpShutdown(s: cint; how: cint): cint;
 function fpGetSockName(s: cint; name: PInetSockAddr; namelen: pTSocklen): cint;
+function fpGetPeerName(s: cint; name: PInetSockAddr; namelen: pTSocklen): cint;
+function fpSetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: TSocklen): cint;
+function fpGetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: pTSocklen): cint;
+function fpIoctl(s: cint; cmd: cint; data: Pointer): cint;
 function CloseSocket(s: cint): cint;
 function fpGetErrno: cint;
+
+{ Address <-> string conversions (FPC Sockets surface; Synapse's GetSinIP /
+  SetVarSin). in_addr/Tin6_addr are network byte order throughout. }
+function NetAddrToStr(Entry: in_addr): string;
+function StrToNetAddr(IP: string): in_addr;
+function NetAddrToStr6(Entry: Tin6_addr): string;
+function StrToNetAddr6(IP: string): Tin6_addr;
+function HostAddrToStr(Entry: in_addr): string;
+function StrToHostAddr(IP: string): in_addr;
 
 { select(2) descriptor-set ops + fpSelect over PAL ppoll. }
 procedure fpFD_ZERO(var fdset: TFDSet);
@@ -145,6 +172,16 @@ end;
 function ntohl(net: cuint32): cuint32;
 begin
   Result := htonl(net);
+end;
+
+function HostToNet(Host: in_addr): in_addr;
+begin
+  Result.s_addr := htonl(Host.s_addr);
+end;
+
+function NetToHost(Net: in_addr): in_addr;
+begin
+  Result.s_addr := ntohl(Net.s_addr);
 end;
 
 function fpSocket(domain, kind, protocol: cint): cint;
@@ -229,6 +266,201 @@ begin
     FillAddr(name, host, port);
     if namelen <> nil then namelen^ := SizeOf(TInetSockAddr);
   end;
+end;
+
+function NetAddrToStr(Entry: in_addr): string;
+var
+  x: cuint32;
+  i: Integer;
+begin
+  { network order in LE memory: first octet = low byte }
+  x := Entry.s_addr;
+  Result := '';
+  for i := 0 to 3 do
+  begin
+    if i > 0 then Result := Result + '.';
+    Result := Result + IntToStr((x shr (i * 8)) and $FF);
+  end;
+end;
+
+function StrToNetAddr(IP: string): in_addr;
+var
+  i, p, oct, shift: Integer;
+  x: cuint32;
+begin
+  Result.s_addr := 0;
+  x := 0;
+  oct := 0; shift := 0; p := 0;
+  for i := 1 to Length(IP) do
+  begin
+    if IP[i] = '.' then
+    begin
+      if (p > 3) or (oct > 255) then Exit;
+      x := x or (cuint32(oct) shl shift);
+      shift := shift + 8; Inc(p); oct := 0;
+    end
+    else if (IP[i] >= '0') and (IP[i] <= '9') then
+      oct := oct * 10 + (Ord(IP[i]) - Ord('0'))
+    else
+      Exit;
+  end;
+  if (p <> 3) or (oct > 255) then Exit;
+  x := x or (cuint32(oct) shl shift);
+  Result.s_addr := x;
+end;
+
+function NetAddrToStr6(Entry: Tin6_addr): string;
+var
+  g: array[0..7] of Integer;
+  i, zStart, zLen, bStart, bLen: Integer;
+  hex: string;
+begin
+  for i := 0 to 7 do
+    g[i] := (Integer(Entry.u6_addr8[i * 2]) shl 8) or Entry.u6_addr8[i * 2 + 1];
+  { longest zero-group run (>= 2) compresses to '::' }
+  bStart := -1; bLen := 0; zStart := -1; zLen := 0;
+  for i := 0 to 7 do
+    if g[i] = 0 then
+    begin
+      if zStart < 0 then begin zStart := i; zLen := 0; end;
+      Inc(zLen);
+      if zLen > bLen then begin bStart := zStart; bLen := zLen; end;
+    end
+    else
+      zStart := -1;
+  if bLen < 2 then bStart := -1;
+  Result := '';
+  i := 0;
+  while i <= 7 do
+  begin
+    if i = bStart then
+    begin
+      Result := Result + '::';
+      i := i + bLen;
+      continue;
+    end;
+    if (Length(Result) > 0) and (Result[Length(Result)] <> ':') then
+      Result := Result + ':';
+    hex := LowerCase(IntToHex(g[i], 1));
+    Result := Result + hex;
+    Inc(i);
+  end;
+  if Result = '' then Result := '::';
+end;
+
+function StrToNetAddr6(IP: string): Tin6_addr;
+var
+  i, gi, v, dcolon, n: Integer;
+  groups: array[0..7] of Integer;
+  tail: array[0..7] of Integer;
+  tn: Integer;
+  c: Char;
+  cur: Integer; curSet: Boolean;
+
+  procedure FlushGroup(var arr: array of Integer; var cnt: Integer);
+  begin
+    if not curSet then Exit;
+    if cnt < 8 then begin arr[cnt] := cur; Inc(cnt); end;
+    cur := 0; curSet := False;
+  end;
+
+begin
+  for i := 0 to 15 do Result.u6_addr8[i] := 0;
+  for i := 0 to 7 do begin groups[i] := 0; tail[i] := 0; end;
+  gi := 0; tn := 0; dcolon := -1;
+  cur := 0; curSet := False;
+  i := 1;
+  while i <= Length(IP) do
+  begin
+    c := IP[i];
+    if c = ':' then
+    begin
+      if (i < Length(IP)) and (IP[i + 1] = ':') then
+      begin
+        if dcolon >= 0 then Exit;   { two '::' — invalid }
+        if dcolon < 0 then
+        begin
+          FlushGroup(groups, gi);
+          dcolon := gi;
+        end;
+        Inc(i);
+      end
+      else if dcolon < 0 then
+        FlushGroup(groups, gi)
+      else
+        FlushGroup(tail, tn);
+    end
+    else
+    begin
+      v := -1;
+      if (c >= '0') and (c <= '9') then v := Ord(c) - Ord('0')
+      else if (c >= 'a') and (c <= 'f') then v := Ord(c) - Ord('a') + 10
+      else if (c >= 'A') and (c <= 'F') then v := Ord(c) - Ord('A') + 10
+      else Exit;   { '%zone' / '.' embedded v4 unsupported }
+      if curSet then cur := cur * 16 + v else cur := v;
+      curSet := True;
+      if cur > $FFFF then Exit;
+    end;
+    Inc(i);
+  end;
+  if dcolon < 0 then FlushGroup(groups, gi) else FlushGroup(tail, tn);
+  if dcolon < 0 then
+  begin
+    if gi <> 8 then Exit;
+  end
+  else
+  begin
+    { expand: groups[0..gi-1] :: tail[0..tn-1] }
+    if gi + tn > 7 then Exit;
+    n := 8 - tn;
+    for i := 0 to tn - 1 do groups[n + i] := tail[i];
+    for i := gi to n - 1 do groups[i] := 0;
+    gi := 8;
+  end;
+  for i := 0 to 7 do
+  begin
+    Result.u6_addr8[i * 2] := (groups[i] shr 8) and $FF;
+    Result.u6_addr8[i * 2 + 1] := groups[i] and $FF;
+  end;
+end;
+
+function HostAddrToStr(Entry: in_addr): string;
+var host: in_addr;
+begin
+  host.s_addr := htonl(Entry.s_addr);
+  Result := NetAddrToStr(host);
+end;
+
+function StrToHostAddr(IP: string): in_addr;
+begin
+  Result := StrToNetAddr(IP);
+  Result.s_addr := ntohl(Result.s_addr);
+end;
+
+function fpGetPeerName(s: cint; name: PInetSockAddr; namelen: pTSocklen): cint;
+var host: LongWord; port: Integer;
+begin
+  Result := cint(PalGetPeerNameIpv4(s, host, port));
+  if Result >= 0 then
+  begin
+    FillAddr(name, host, port);
+    if namelen <> nil then namelen^ := SizeOf(TInetSockAddr);
+  end;
+end;
+
+function fpSetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: TSocklen): cint;
+begin
+  Result := cint(PalSetSockOpt(s, level, optname, optval, optlen));
+end;
+
+function fpGetSockOpt(s: cint; level: cint; optname: cint; optval: Pointer; optlen: pTSocklen): cint;
+begin
+  Result := cint(PalGetSockOpt(s, level, optname, optval, optlen));
+end;
+
+function fpIoctl(s: cint; cmd: cint; data: Pointer): cint;
+begin
+  Result := cint(PalIoctl(s, cmd, data));
 end;
 
 function CloseSocket(s: cint): cint;

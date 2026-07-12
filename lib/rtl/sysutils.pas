@@ -80,6 +80,9 @@ function Trim(const s: AnsiString): AnsiString;
   StrToInt returns 0 on malformed. Leading spaces and a +/- sign are allowed. }
 function StrToIntDef(const s: AnsiString; def: Integer): Integer;
 function StrToInt(const s: AnsiString): Integer;
+function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
+{ Index of the LAST char of S that occurs in Delimiters, 0 if none (FPC). }
+function LastDelimiter(const Delimiters, S: AnsiString): Integer;
 
 { NOTE: no Val here -- `Val` is an intercepted builtin name and the builtin
   mis-lowers (wrong error code + segfault); a user Val is shadowed by it. See
@@ -234,6 +237,16 @@ function FileExists(const FileName: string): Boolean;
 function DirectoryExists(const Dir: string): Boolean;
 function DeleteFile(const FileName: string): Boolean;
 
+{ Temp-file naming (FPC SysUtils; Synapse's GetTempFile). No TMPDIR probe --
+  this RTL has no env access yet; '/tmp/' is the POSIX default. The name is
+  unique against FileExists at pick time (same guarantee FPC gives). }
+function GetTempDir: string;
+function GetTempFileName(const Dir, Prefix: string): string;
+
+{ System.SetString (FPC): size S to Len and copy Len chars from Buf (when
+  non-nil). Lives here until the compiler grows it as a builtin. }
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+
 implementation
 
 uses platform, platform_types;
@@ -355,6 +368,49 @@ end;
 function StrToInt(const s: AnsiString): Integer;
 begin
   Result := StrToIntDef(s, 0);
+end;
+
+function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
+var
+  v: Int64;
+  i, sign: Integer;
+  c: Char;
+  started: Boolean;
+begin
+  Result := def;
+  v := 0; sign := 1; i := 1; started := False;
+  while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
+  if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+  begin
+    if s[i] = '-' then sign := -1;
+    i := i + 1;
+  end;
+  while i <= Length(s) do
+  begin
+    c := s[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      v := v * 10 + (Ord(c) - Ord('0'));
+      started := True;
+    end
+    else
+      Exit;
+    i := i + 1;
+  end;
+  if started then Result := sign * v;
+end;
+
+function LastDelimiter(const Delimiters, S: AnsiString): Integer;
+var i, j: Integer;
+begin
+  for i := Length(S) downto 1 do
+    for j := 1 to Length(Delimiters) do
+      if S[i] = Delimiters[j] then
+      begin
+        Result := i;
+        Exit;
+      end;
+  Result := 0;
 end;
 
 function UpCase(c: Char): Char;
@@ -1263,6 +1319,38 @@ end;
 function DeleteFile(const FileName: string): Boolean;
 begin
   Result := PalDelete(PChar(FileName)) = 0;
+end;
+
+function GetTempDir: string;
+begin
+  Result := '/tmp/';
+end;
+
+function GetTempFileName(const Dir, Prefix: string): string;
+var
+  base: string;
+  n: Integer;
+begin
+  if Dir = '' then base := GetTempDir else base := Dir;
+  if (Length(base) > 0) and (base[Length(base)] <> '/') then
+    base := base + '/';
+  if Prefix = '' then base := base + 'TMP' else base := base + Prefix;
+  { seed from the monotonic clock so restarts don't retrace old names }
+  n := Integer(PalMonotonicMillis mod 100000);
+  repeat
+    Result := base + IntToStr(n);
+    Inc(n);
+  until not FileExists(Result);
+end;
+
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+var i: Integer;
+begin
+  if Len < 0 then Len := 0;
+  SetLength(S, Len);
+  if Buf = nil then Exit;
+  for i := 1 to Len do
+    S[i] := Buf[i - 1];
 end;
 
 function StrToTime(const S: string): TDateTime;

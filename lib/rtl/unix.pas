@@ -18,7 +18,27 @@ var
   { Seconds east of UTC for the local zone. 0 = UTC (see unit note). }
   Tzseconds: LongInt;
 
+{ Kernel hostname (FPC Unix.GetHostName). Read from procfs — no libc, no
+  uname syscall wiring needed; empty string when procfs is absent. }
+function GetHostName: string;
+
 implementation
+
+function GetHostName: string;
+var
+  f: TextFile;
+  s: string;
+begin
+  Result := '';
+  Assign(f, '/proc/sys/kernel/hostname');
+  {$I-}
+  Reset(f);
+  {$I+}
+  if IOResult <> 0 then Exit;
+  ReadLn(f, s);
+  Close(f);
+  Result := s;
+end;
 
 initialization
   Tzseconds := 0;

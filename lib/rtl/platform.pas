@@ -126,6 +126,9 @@ function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAdd
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
 function PalGetSockError(handle: Integer): Integer;
 function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
+function PalIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
 function PalAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 
 function PalMonotonicMillis: Int64;
@@ -424,6 +427,21 @@ end;
 function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 begin
   Result := PalBackendGetSockNameIpv4(handle, outAddr, outPort);
+end;
+
+function PalGetPeerNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+begin
+  Result := PalBackendGetPeerNameIpv4(handle, outAddr, outPort);
+end;
+
+function PalGetSockOpt(handle, level, optname: Integer; valPtr: Pointer; lenPtr: Pointer): Integer;
+begin
+  Result := PalBackendGetSockOpt(handle, level, optname, valPtr, lenPtr);
+end;
+
+function PalIoctl(handle: Integer; cmd: NativeInt; argp: Pointer): Integer;
+begin
+  Result := PalBackendIoctl(handle, cmd, argp);
 end;
 
 function PalAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
