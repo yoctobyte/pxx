@@ -105,6 +105,20 @@ timed against each other, so this is not confounded by other changes):
 
 Self-compile is the one that pays the rent — pin time is the stated bottleneck.
 
+**And the memory result is the bigger one — peak RSS, self-compile: 454 MB -> 209 MB,
+less than half.** Not what the ticket predicted (it argued locality, not footprint),
+so the mechanism is worth stating: first-fit would hand a large freed block to a small
+request without splitting it, so the block was consumed at a fraction of its size and
+was never again available at its real size — the heap kept bump-allocating fresh
+arena for the sizes it had already thrown away. Exact-fit reuses each class from its
+own bin, so the arena stops growing. Same-size clustering then touches far fewer
+pages on top.
+
+The alloc-churn microbench goes the other way by a trivial margin (896 KB -> 2176 KB):
+64 size classes each keep their own live set, so a workload that deliberately sprays
+every class holds a little more. Absolute cost ~1.2 MB, and it does not scale with the
+program — it is bounded by the number of classes.
+
 ### One deliberate behaviour change (contract, not a bug)
 Reuse is now **exact-fit**. First-fit used to hand a freed 128-byte block to a
 64-byte request and never split it: reuse, but at the cost of an O(n) walk AND
