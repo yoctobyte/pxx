@@ -97,7 +97,7 @@ skip	tclass13c.pp	tclass	gap	accepts-invalid — TRootClass.Integer nested-type 
 skip	tclass13d.pp	tclass	gap	`const` section inside a class (class constants / typed class consts)
 skip	tclass13.pp	tclass	wontfix	needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 pass	tclass14a.pp	tclass	-	
-pass	tclass14b.pp	tclass	-	
+fail	tclass14b.pp	tclass	-	accepted-invalid: %FAIL test compiled
 skip	tclass15.pp	tclass	gap	nested class type + Classes TCustomMemoryStream/SetPointer
 skip	tclass16.pp	tclass	gap	`class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
 pass	tclass17.pp	tclass	-	
