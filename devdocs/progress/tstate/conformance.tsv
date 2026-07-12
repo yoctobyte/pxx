@@ -266,17 +266,17 @@ skip	tgeneric20.pp	tgeneric	wontfix	dialect-pass — generic method impl without
 skip	tgeneric21.pp	tgeneric	gap	accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
 pass	tgeneric22.pp	tgeneric	-	
 skip	tgeneric23.pp	tgeneric	untriaged	unclassified: pascal26:6: error: uses: unit source not found: fgl ()
-skip	tgeneric24.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
-skip	tgeneric25.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
-pass	tgeneric26.pp	tgeneric	-	
-skip	tgeneric27.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
+pass	tgeneric24.pp	tgeneric	-	
+pass	tgeneric25.pp	tgeneric	-	
+fail	tgeneric26.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+skip	tgeneric27.pp	tgeneric	gap	enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
 skip	tgeneric28.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
 skip	tgeneric29.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:7: error: generic templates must be class declarations ()
 pass	tgeneric2.pp	tgeneric	-	
 skip	tgeneric30.pp	tgeneric	wontfix	dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 pass	tgeneric31.pp	tgeneric	-	
 pass	tgeneric32.pp	tgeneric	-	
-skip	tgeneric33.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
+pass	tgeneric33.pp	tgeneric	-	
 skip	tgeneric34.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:6: error: generic templates must be class declarations ()
 skip	tgeneric35.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
 pass	tgeneric36.pp	tgeneric	-	
@@ -326,25 +326,25 @@ auto	tgeneric75.pp	tgeneric	-	recompile
 skip	tgeneric76.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no
 skip	tgeneric77.pp	tgeneric	untriaged	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
 skip	tgeneric78.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
-skip	tgeneric79.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
+skip	tgeneric79.pp	tgeneric	gap	inline `class(specialize IGenericIntf<T>)` parent-list specialize (interface templates capture now)
 skip	tgeneric7.pp	tgeneric	untriaged	runtime: exit code 0 (want 201)
 skip	tgeneric80.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
 skip	tgeneric81.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
 skip	tgeneric82.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
-pass	tgeneric83.pp	tgeneric	-	
-pass	tgeneric84.pp	tgeneric	-	
-pass	tgeneric85.pp	tgeneric	-	
-skip	tgeneric86.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
-skip	tgeneric87.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
-skip	tgeneric88.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
+fail	tgeneric83.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+fail	tgeneric84.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+fail	tgeneric85.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+pass	tgeneric86.pp	tgeneric	-	
+pass	tgeneric87.pp	tgeneric	-	
+pass	tgeneric88.pp	tgeneric	-	
 skip	tgeneric89.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
 skip	tgeneric8.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 4)
 skip	tgeneric90.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
 skip	tgeneric91.pp	tgeneric	untriaged	unclassified: pascal26:31: error: undefined variable (Self)
 skip	tgeneric92.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 7)
 skip	tgeneric93.pp	tgeneric	untriaged	unclassified: pascal26:0: error: conditional directive: declared requires (NAME) ()
-skip	tgeneric94.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
-skip	tgeneric95.pp	tgeneric	untriaged	parser: generic record/array/procvar templates
+skip	tgeneric94.pp	tgeneric	gap	generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
+skip	tgeneric95.pp	tgeneric	gap	specialize inside a generic routine signature (`expected name` at line 16)
 pass	tgeneric96.pp	tgeneric	-	
 skip	tgeneric97.pp	tgeneric	untriaged	unclassified: pascal26:14: error: undefined variable (LowerCase)
 pass	tgeneric98.pp	tgeneric	-	
