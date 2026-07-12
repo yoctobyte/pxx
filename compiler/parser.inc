@@ -793,6 +793,16 @@ procedure FlushPendingNestedProcs; forward;
 { GetTokenStrFromRaw moved up to lexer.inc (before its lexer.inc use) for FPC
   declaration-order; see there. }
 
+function IsClassMemberStartWord(const s: AnsiString): Boolean;
+{ Soft keywords that open a class member or visibility section but lex as plain
+  identifiers (they are not reserved words). A name list inside a class body must
+  stop here instead of eating the word as another name. }
+begin
+  Result := CaseEqual(s, 'private') or CaseEqual(s, 'protected') or
+            CaseEqual(s, 'public') or CaseEqual(s, 'published') or
+            CaseEqual(s, 'constructor') or CaseEqual(s, 'destructor');
+end;
+
 function FindClassVar(ci: Integer; const name: AnsiString): Integer;
 { Class-variable lookup by (class ci, name), walking up the parent chain so a
   subclass sees an inherited `class var`. Returns the backing global var sym idx,
@@ -1876,9 +1886,19 @@ begin
     if (k >= MAX_PROC_PARAMS) or (not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k]) then
       Error('not enough arguments to ' + Procs[mpi].Name +
             ' (parameter ' + Procs[mpi].Params[k].Name + ' has no default)');
-    exprNode := AllocNode(AN_INT_LIT);
-    ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
-    ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + k] then
+    begin
+      exprNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + k];
+      ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
+      ASTTk[exprNode] := Ord(tyString);
+    end
+    else
+    begin
+      exprNode := AllocNode(AN_INT_LIT);
+      ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+      ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    end;
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := exprNode;
     if lastArg = -1 then ASTLeft[callNode] := argSeq
@@ -1963,6 +1983,7 @@ var
   methName: AnsiString;
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
+  cvIdx: Integer;
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   withResolved: Boolean;
@@ -2163,6 +2184,22 @@ begin
       begin
         selfClassCi := CurSelfClass - REC_UCLASS_BASE;
         fldIdx := FindUField(selfClassCi, fieldName);
+      end;
+
+      { Bare `class var` name inside a method body (fpcunit's `Inc(AssertCount)`).
+        Keyed on CurMethClass, not CurSelfClass, so it also resolves in a `class
+        procedure` — that is static, has no Self, and a class var needs none: its
+        storage is one shared global. An instance field of the same name wins,
+        matching FPC. }
+      cvIdx := -1;
+      if (fldIdx < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
+        cvIdx := FindClassVar(CurMethClass - REC_UCLASS_BASE, fieldName);
+      if cvIdx >= 0 then
+      begin
+        { Re-enter with the backing global resolved: the idx >= 0 path already
+          handles every suffix (index, field, deref) on it. }
+        Result := ParseLValueAST(cvIdx, identTokIdx);
+        Exit;
       end;
 
       if fldIdx >= 0 then
@@ -7222,9 +7259,19 @@ begin
               if not ProcParamHasDefault[mpi * MAX_PROC_PARAMS + (mlastArg + 1)] then
                 Error('not enough arguments to constructor ' + name +
                       '.Create (parameter ' + Procs[mpi].Params[mlastArg + 1].Name + ' has no default)');
-              exprNode := AllocNode(AN_INT_LIT);
-              ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
-              ASTTk[exprNode] := Ord(Procs[mpi].Params[mlastArg + 1].TypeKind);
+              if ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + (mlastArg + 1)] then
+              begin
+                exprNode := AllocNode(AN_STR_LIT);
+                ASTSOffset[exprNode] := ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
+                ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
+                ASTTk[exprNode] := Ord(tyString);
+              end
+              else
+              begin
+                exprNode := AllocNode(AN_INT_LIT);
+                ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + (mlastArg + 1)];
+                ASTTk[exprNode] := Ord(Procs[mpi].Params[mlastArg + 1].TypeKind);
+              end;
               argSeq := AllocNode(AN_ARG);
               ASTLeft[argSeq] := exprNode;
               if argsHead = -1 then
@@ -14230,8 +14277,13 @@ var
   mPUntyped: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefault: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefaultVal: array[0..MAX_PROC_PARAMS-1] of Int64;
+  mPDefaultIsStr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
   mDefaultVal: Int64;
+  mDefaultIsStr: Boolean;
+  mDefaultSOff, mDefaultSLen: Integer;
 begin
   Next;
   stopTypes := False;
@@ -14398,8 +14450,21 @@ begin
               else mTk := ParseTypeKind;
               { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
               mHasDefault := False; mDefaultVal := 0;
+              mDefaultIsStr := False; mDefaultSOff := 0; mDefaultSLen := 0;
               if CurTok.Kind = tkEq then
-              begin Next; mDefaultVal := ConstEval; mHasDefault := True; end;
+              begin
+                Next;
+                if CurTok.Kind = tkString then
+                begin
+                  mDefaultSOff := Tokens[TokPos-1].SOffset;
+                  mDefaultSLen := Tokens[TokPos-1].SLen;
+                  mDefaultIsStr := True;
+                  Next;
+                end
+                else
+                  mDefaultVal := ConstEval;
+                mHasDefault := True;
+              end;
               { `const` record/variant param = by-ref, matching ParseSubroutine
                 (sibling of the class-method fix; interface methods dispatch
                 indirectly, so the mismatch would corrupt the arg silently).
@@ -14407,7 +14472,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -14416,8 +14481,8 @@ begin
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
@@ -14430,6 +14495,9 @@ begin
             begin
               ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
               ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
+              ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+              ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
+              ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
             end;
           end;
           AddUMeth(ci, mnOff, mnLen, mpi);
@@ -14599,7 +14667,7 @@ begin
           if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkVar) then
           begin
             Next; Next;   { consume 'class' 'var' }
-            while CurTok.Kind = tkIdent do
+            while (CurTok.Kind = tkIdent) and (not IsClassMemberStartWord(CurTok.SVal)) do
             begin
               nFldNames := 0;
               repeat
@@ -14684,6 +14752,9 @@ begin
                 mIsUntyped := False;
                 mHasDefault := False;
                 mDefaultVal := 0;
+                mDefaultIsStr := False;
+                mDefaultSOff := 0;
+                mDefaultSLen := 0;
                 if CurTok.Kind <> tkColon then
                 begin
                   { Untyped method param (`var B` / `const B`, no type) — mirror the
@@ -14722,7 +14793,15 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    mDefaultVal := ConstEval;
+                    if CurTok.Kind = tkString then
+                    begin
+                      mDefaultSOff := Tokens[TokPos-1].SOffset;
+                      mDefaultSLen := Tokens[TokPos-1].SLen;
+                      mDefaultIsStr := True;
+                      Next;
+                    end
+                    else
+                      mDefaultVal := ConstEval;
                     mHasDefault := True;
                   end;
                 end;
@@ -14743,6 +14822,9 @@ begin
                   mPUntyped[i] := mIsUntyped;
                   mPDefault[i] := mHasDefault;
                   mPDefaultVal[i] := mDefaultVal;
+                  mPDefaultIsStr[i] := mDefaultIsStr;
+                  mPDefaultSOff[i] := mDefaultSOff;
+                  mPDefaultSLen[i] := mDefaultSLen;
                 end;
                 if not Eat(tkSemicolon) then mDoneArgs := True;
               end;
@@ -14767,6 +14849,9 @@ begin
                 mPUntyped[i] := mPUntyped[i-1];
                 mPDefault[i] := mPDefault[i-1];
                 mPDefaultVal[i] := mPDefaultVal[i-1];
+                mPDefaultIsStr[i] := mPDefaultIsStr[i-1];
+                mPDefaultSOff[i] := mPDefaultSOff[i-1];
+                mPDefaultSLen[i] := mPDefaultSLen[i-1];
               end;
               mPNames[0] := 'Self';
               mPTypes[0] := tyClass;
@@ -14775,6 +14860,9 @@ begin
               mPUntyped[0] := False;
               mPDefault[0] := False;
               mPDefaultVal[0] := 0;
+              mPDefaultIsStr[0] := False;
+              mPDefaultSOff[0] := 0;
+              mPDefaultSLen[0] := 0;
               mNParams := mNParams + 1;
             end;
 
@@ -14794,6 +14882,9 @@ begin
                 begin
                   ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
                   ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
+                  ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+                  ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
+                  ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
                 end;
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
@@ -16271,7 +16362,11 @@ var
   puntyped  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
   pdefault  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param has a default value (`b: Integer = 10`) }
   pdefaultval : array[0..MAX_PROC_PARAMS-1] of Int64;  { the constant-folded default ordinal }
+  pdefaultisstr : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a string literal (`s: string = ''`) }
+  pdefaultsoff : array[0..MAX_PROC_PARAMS-1] of Integer;
+  pdefaultslen : array[0..MAX_PROC_PARAMS-1] of Integer;
   hasDefault : Boolean; defaultVal : Int64;
+  defaultIsStr : Boolean; defaultSOff, defaultSLen : Integer;
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
@@ -16382,6 +16477,7 @@ begin
       isByRef := False;
       isConst := False;
       hasDefault := False; defaultVal := 0;
+      defaultIsStr := False; defaultSOff := 0; defaultSLen := 0;
       if (CurTok.Kind = tkVar) or
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
@@ -16485,11 +16581,20 @@ begin
       else
         tk := ParseTypeKind;
       { Default value: `b: Integer = 10`. Constant-folded; supplied at a call that
-        omits the (trailing) argument. }
+        omits the (trailing) argument. A STRING literal default (`s: string = ''`)
+        is not an ordinal — keep its text and rebuild an AN_STR_LIT at the call. }
       if CurTok.Kind = tkEq then
       begin
         Next;
-        defaultVal := ConstEval;
+        if CurTok.Kind = tkString then
+        begin
+          defaultSOff := Tokens[TokPos-1].SOffset;
+          defaultSLen := Tokens[TokPos-1].SLen;
+          defaultIsStr := True;
+          Next;
+        end
+        else
+          defaultVal := ConstEval;
         hasDefault := True;
       end;
       end;  { close the typed (has-colon) branch }
@@ -16510,6 +16615,9 @@ begin
         pconst[i] := isConst;
         pdefault[i] := hasDefault;
         pdefaultval[i] := defaultVal;
+        pdefaultisstr[i] := defaultIsStr;
+        pdefaultsoff[i] := defaultSOff;
+        pdefaultslen[i] := defaultSLen;
         pNDims[i] := paramNDims;
         pDynDepth[i] := paramDynDepth;
         pFixedLen[i] := paramFixedLen;
@@ -16727,6 +16835,15 @@ begin
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
+      { The default-value arrays shift with the params. Leaving them unshifted
+        wrote each default onto the PREVIOUS param's slot, so a method impl that
+        repeats its defaults silently gave `M(a: Integer = 1; b: Integer = 2)`
+        a=2 on a defaulted call (bug-pascal-method-default-param-self-shift). }
+      pdefault[i] := pdefault[i-1];
+      pdefaultval[i] := pdefaultval[i-1];
+      pdefaultisstr[i] := pdefaultisstr[i-1];
+      pdefaultsoff[i] := pdefaultsoff[i-1];
+      pdefaultslen[i] := pdefaultslen[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -16743,6 +16860,11 @@ begin
     pbyref[0] := False;
     pNDims[0] := 0;
     pDynDepth[0] := 0;
+    pdefault[0] := False;
+    pdefaultval[0] := 0;
+    pdefaultisstr[0] := False;
+    pdefaultsoff[0] := 0;
+    pdefaultslen[0] := 0;
     nparams := nparams + 1;
   end;
 
@@ -16858,6 +16980,9 @@ begin
             ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
             ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
             ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+            ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+            ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
+            ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
               ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
           end;
@@ -16982,6 +17107,7 @@ begin
 
     if not UMthIsStatic[mmi] then
       CurSelfClass := methOwnerRec;
+    CurMethClass := methOwnerRec;
 
     if UMthVirSlot[mmi] >= 0 then
     begin
@@ -17017,6 +17143,9 @@ begin
       clear the decl's ProcParamHasDefault. RegisterProc initializes False. }
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array
@@ -17885,6 +18014,7 @@ begin
   CurProc   := -1;
   CurBodyHdrTok := savedVisVarSeq;   { restore decl-order horizon (see all outside a body) }
   CurSelfClass := REC_NONE;
+  CurMethClass := REC_NONE;
   CurProcIsAsync := savedProcIsAsync;
   CurProcIsGenerator := savedGenIsGen;
   CurProcIsStackless := savedGenStackless;

@@ -6,8 +6,8 @@ prio: 55
 
 - **Type:** feature (Pascal frontend validation)
 - **Track:** P — tag: compat
-- **Status:** backlog — opened 2026-07-12.
-- **Owner:** —
+- **Status:** working
+- **Owner:** agent-A-fpcunit
 - **Parent:** [[feature-pascal-corpus-oop]]
 - **Unblocks:** [[feature-pascal-corpus-passrc]] (its tests are fpcunit-based), and every
   other FPC library whose suite is written against fpcunit.

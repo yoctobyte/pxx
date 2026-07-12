@@ -1153,6 +1153,9 @@ var
   ProcParamUntyped : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
   ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
   ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
+  ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
+  ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
+  ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
@@ -2008,6 +2011,11 @@ var
   NDIdxNode   : array[0..MAX_ARR_DIMS-1] of Integer; { parsed index exprs for a multidim ref }
 
   CurSelfClass : Integer;
+
+  { Owning class of the method body being parsed, set even for a STATIC method
+    (`class procedure`), which has no Self and so leaves CurSelfClass unset.
+    Only class-level members — a `class var` — are reachable through it. }
+  CurMethClass : Integer;
 
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;

@@ -412,6 +412,15 @@ test-core: $(COMPILER)
 	# TObject params: full 64-bit value + plain-routine match (bug-tobject-param-truncated-32bit)
 	./$(COMPILER) test/test_tobject_param_b243.pas /tmp/test_tobject_param_b24326
 	test "$$(/tmp/test_tobject_param_b24326)" = "$$(printf 'm-ident=TRUE\nm-cast=77\np-ident=TRUE\np-cast=77')"
+	# `class var` section ends at a visibility marker; bare class var in a (static) method
+	./$(COMPILER) test/test_class_var_section_b244.pas /tmp/test_class_var_section_b24426
+	test "$$(/tmp/test_class_var_section_b24426)" = "$$(printf 'hits=12\nviaobj=12\ntotal=19')"
+	# string-literal default parameter values (bug-pascal-string-default-param)
+	./$(COMPILER) test/test_string_default_param_b245.pas /tmp/test_string_default_param_b24526
+	test "$$(/tmp/test_string_default_param_b24526)" = "$$(printf 'a=1 msg=default len=7 taillen=0\na=2 msg=abc len=3 taillen=0\na=3 msg=abc len=3 taillen=2\nhi bob 3 len=2\nyo ann 3 len=2\nhey cid 9 len=3')"
+	# method defaults must not shift onto the previous slot (bug-pascal-method-default-param-self-shift)
+	./$(COMPILER) test/test_method_default_param_b246.pas /tmp/test_method_default_param_b24626
+	test "$$(/tmp/test_method_default_param_b24626)" = "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"

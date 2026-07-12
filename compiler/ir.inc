@@ -4760,17 +4760,43 @@ begin
         Inc(pathIdx);
       end;
       { Default parameters: a call that omitted trailing args supplies each
-        remaining param's constant default (ordinal/char/bool/enum). MatchProcCall
-        already accepted the shorter arity (ProcArityMatches). }
+        remaining param's constant default (ordinal/char/bool/enum, or a string
+        literal). MatchProcCall already accepted the shorter arity
+        (ProcArityMatches). }
       cpi := ASTIVal[node];
       if cpi >= 0 then
         while (pathIdx < Procs[cpi].ParamCount) and (pathIdx < MAX_PROC_PARAMS) and
               ProcParamHasDefault[cpi * MAX_PROC_PARAMS + pathIdx] do
         begin
-          argNode := IRAppend(IR_ARG,
-            IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
-                     Ord(Procs[cpi].Params[pathIdx].TypeKind)),
-            -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+          if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] then
+          begin
+            { The default is a FROZEN literal (inline length prefix). A managed
+              `string` param expects an AnsiString, so it needs the same hidden
+              managed temp an explicitly-written literal arg gets above —
+              IR_STORE_SYM performs the frozen -> managed conversion. Handing the
+              raw literal over instead makes Length() read the prefix as data. }
+            value := IRAppend(IR_CONST_STR, ProcParamDefaultSOff[cpi * MAX_PROC_PARAMS + pathIdx],
+                              ProcParamDefaultSLen[cpi * MAX_PROC_PARAMS + pathIdx], -1, 0,
+                              Ord(tyString));
+            if Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString then
+            begin
+              hiddenArgSym := AllocVar('', tyAnsiString);
+              SymIsHiddenArgTemp[hiddenArgSym] := True;
+              IRAppend(IR_DEFAULT_MEM,
+                IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+                -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+              IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+              value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+              argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+            end
+            else
+              argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyString));
+          end
+          else
+            argNode := IRAppend(IR_ARG,
+              IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
+                       Ord(Procs[cpi].Params[pathIdx].TypeKind)),
+              -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
           if first < 0 then first := argNode else IRB[last] := argNode;
           last := argNode;
           Inc(pathIdx);
