@@ -311,6 +311,22 @@ begin
     if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
     Inc(i);
   end;
+  { class-name alias (`TOptionList = TList;`) — resolve to the target row }
+  for i := 0 to UClsAliasCount - 1 do
+    if UNameMatch(UClsAliasNOff[i], UClsAliasNLen[i], lo) then
+    begin
+      Result := UClsAliasCi[i];
+      Exit;
+    end;
+end;
+
+procedure RegisterUClassAlias(noff, nlen, ci: Integer);
+begin
+  if UClsAliasCount >= MAX_TYPEALIAS then Error('too many class aliases');
+  UClsAliasNOff[UClsAliasCount] := noff;
+  UClsAliasNLen[UClsAliasCount] := nlen;
+  UClsAliasCi[UClsAliasCount]   := ci;
+  Inc(UClsAliasCount);
 end;
 
 function FindIMT(classCi, intfCi: Integer): Integer;

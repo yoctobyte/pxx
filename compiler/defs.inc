@@ -1837,6 +1837,13 @@ var
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
+  { Class-name aliases (`TOptionList = TList;`) — FindUClass resolves the alias
+    to the target class row, so every class-name consumer (var decls,
+    X.Create, casts, is/as) sees the alias transparently. }
+  UClsAliasNOff : array[0..MAX_TYPEALIAS-1] of Integer;
+  UClsAliasNLen : array[0..MAX_TYPEALIAS-1] of Integer;
+  UClsAliasCi   : array[0..MAX_TYPEALIAS-1] of Integer;
+  UClsAliasCount : Integer;
   UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
   UClsCaseSensFields : array[0..MAX_UCLASS-1] of Boolean; { field names match case-SENSITIVELY (C structs/unions; C distinguishes `b` and `B`). Default off = case-insensitive Pascal fields. }
   UClsCount  : Integer;

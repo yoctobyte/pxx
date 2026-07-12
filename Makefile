@@ -389,6 +389,9 @@ test-asm: $(COMPILER)
 	! grep -q "^    db " /tmp/test_asm_dis_self26.s
 
 test-core: $(COMPILER)
+	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)
+	./$(COMPILER) test/test_nested_variant_record.pas /tmp/test_nested_variant_record26
+	test "$$(/tmp/test_nested_variant_record26)" = "$$(printf '28\n2\n8080\nTRUE\n7')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

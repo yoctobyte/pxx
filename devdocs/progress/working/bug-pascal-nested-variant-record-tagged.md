@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug / feature gap (Pascal frontend — record parser) — **Track P**
   (shared parser, A's gate)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, the synsock wall of [[feature-synapse-compile-check]]
   ("expected field name in variant part").
 

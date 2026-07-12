@@ -1779,6 +1779,18 @@ begin
   end;
 end;
 
+function ByRefArgStartsExpression: Boolean;
+{ True when the next by-ref/array argument cannot be a bare variable lvalue:
+  not an ident at all, or an ident that names no symbol and is followed by
+  '(' — a type-cast lvalue like `PChar(s)^` / `Pointer(p)^` passed to a
+  var/untyped parameter (bug-cast-deref-as-varparam-arg). Such args go
+  through ParseExpr, whose cast/deref path yields an addressable node. }
+begin
+  if CurTok.Kind <> tkIdent then begin Result := True; Exit; end;
+  Result := (FindSym(CurTok.SVal) < 0) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkLParen);
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -2216,7 +2228,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then
+                if ByRefArgStartsExpression then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -2858,7 +2870,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then
+                if ByRefArgStartsExpression then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -2902,7 +2914,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then
+                if ByRefArgStartsExpression then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -2966,7 +2978,7 @@ begin
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
-                if CurTok.Kind <> tkIdent then
+                if ByRefArgStartsExpression then
                 begin
                   { non-ident by-ref/array arg (@obj.Method to a method-pointer
                     param, [..] literals, casts): parse as an expression }
@@ -3107,6 +3119,11 @@ begin
           { `[e0, e1, ...]` open-array/array-of-const literal argument
             (Exception.CreateFmt(Msg, [Data]) shape) }
           mexprNode := ParseVarRecLiteralAST
+        else if ByRefArgStartsExpression then
+        begin
+          { non-ident / cast-lvalue by-ref arg (PChar(s)^): full expression }
+          ParseExpr; mexprNode := CurASTNode;
+        end
         else
         begin
           if CurTok.Kind <> tkIdent then Error('expected variable');
@@ -3979,7 +3996,7 @@ begin
           begin
             if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
-              if CurTok.Kind <> tkIdent then
+              if ByRefArgStartsExpression then
               begin
                 { non-ident by-ref/array arg (@obj.Method to a method-pointer
                   param, [..] literals, casts): parse as an expression }
@@ -4810,7 +4827,7 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then
+                  if ByRefArgStartsExpression then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -4868,7 +4885,7 @@ begin
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then
+                  if ByRefArgStartsExpression then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -6488,6 +6505,20 @@ begin
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -2; { PChar adapter }
             ASTTk[node]   := Ord(tyPointer);
+            { `PChar(s)^` — deref of the cast: a char lvalue at the string's
+              first data byte (Synapse's `Stream.Write(PAnsiChar(Value)^, ...)`
+              — bug-cast-deref-as-varparam-arg). Mirrors the Pointer(expr)^
+              untyped-deref below; by-ref args take the address. }
+            if CurTok.Kind = tkCaret then
+            begin
+              Next;
+              indexNode := AllocNode(AN_DEREF);
+              ASTLeft[indexNode] := node;
+              ASTTk[indexNode] := Ord(tyChar);
+              CurASTNode := indexNode;
+              LastExprTk := tyChar;
+              Exit;
+            end;
             { PChar(s)[i]: index the cast result -> a char element. The shared
               postfix loop's AN_PTR_CAST branch reads AliasElemTk[ASTIVal], which
               the -2 adapter has no entry for, so handle the subscript here. }
@@ -6701,7 +6732,7 @@ begin
               begin
                 if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
                 begin
-                  if CurTok.Kind <> tkIdent then
+                  if ByRefArgStartsExpression then
                   begin
                     { non-ident by-ref/array arg (@obj.Method to a method-pointer
                       param, [..] literals, casts): parse as an expression }
@@ -8515,6 +8546,58 @@ begin
   ASTIVal[nilLit] := 0;
   ASTTk[nilLit] := Ord(tyPointer);
   cond := GenMakeCmp(Ord(tkNeq), GenMakeIdent(symIdx, tyClass), nilLit);
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenSeq;
+  ASTRight[pairNode] := -1;
+  ifNode := AllocNode(AN_IF);
+  ASTLeft[ifNode] := cond;
+  ASTRight[ifNode] := pairNode;
+  Result := ifNode;
+end;
+
+function GenMakeSelfClassFieldNode(selfIdx, fOff, fLen: Integer): Integer;
+{ Fresh `Self.field` AN_FIELD node (class-typed field named by its source
+  span). Each call mints new nodes — the free-desugar below references the
+  lvalue several times and the AST is a tree, not a DAG. }
+var fn: Integer;
+begin
+  fn := AllocNode(AN_FIELD);
+  ASTLeft[fn] := GenMakeIdent(selfIdx, tyClass);
+  ASTSOffset[fn] := fOff;
+  ASTSLen[fn] := fLen;
+  ASTTk[fn] := Ord(tyClass);
+  Result := fn;
+end;
+
+function GenMakeFreeObjectField(selfIdx, fOff, fLen, ci: Integer): Integer;
+{ `FField.Free;` on an implicit-Self class-typed field with no user Free
+  method: the field twin of GenMakeFreeObject above — nil-guarded
+  [Destroy;] FreeMem; field := nil. }
+var freeArg, freeCall, nilLit, nilAssign, cond, thenSeq, pairNode, ifNode: Integer;
+begin
+  { FreeMem(Self.field) }
+  freeArg := AllocNode(AN_ARG);
+  ASTLeft[freeArg] := GenMakeSelfClassFieldNode(selfIdx, fOff, fLen);
+  freeCall := AllocNode(AN_CALL);
+  ASTIVal[freeCall] := -Ord(tkFreeMem);
+  ASTLeft[freeCall] := freeArg;
+  ASTTk[freeCall] := Ord(tyInteger);
+
+  { Self.field := nil }
+  nilLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nilLit] := 0;
+  ASTTk[nilLit] := Ord(tyPointer);
+  nilAssign := GenMakeAssign(GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), nilLit);
+
+  thenSeq := chainSeq(freeCall, nilAssign);
+  if FindUMeth(ci, 'Destroy') >= 0 then
+    thenSeq := chainSeq(GenMakeMethodCall0(GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), ci, 'Destroy'), thenSeq);
+
+  { if Self.field <> nil then thenSeq }
+  nilLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nilLit] := 0;
+  ASTTk[nilLit] := Ord(tyPointer);
+  cond := GenMakeCmp(Ord(tkNeq), GenMakeSelfClassFieldNode(selfIdx, fOff, fLen), nilLit);
   pairNode := AllocNode(AN_PAIR);
   ASTLeft[pairNode] := thenSeq;
   ASTRight[pairNode] := -1;
@@ -11489,6 +11572,29 @@ begin
                 node := GenMakeFreeObject(idx);
                 Result := node; Exit;
               end;
+              { The implicit-Self FIELD twin: `FField.Free;` inside a method,
+                FField a class-typed field of the enclosing class (blcksock's
+                `FDelayedOptions.Free`). Same plain-form restriction. }
+              if (idx < 0) and (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and
+                 (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+                 CaseEqual(GetTokenStr(TokPos+1), 'Free') and
+                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd]) then
+              begin
+                smci := CurSelfClass - REC_UCLASS_BASE;
+                smmii := FindUField(smci, name);
+                if (smmii >= 0) and (UFldTk[smmii] = Ord(tyClass)) and
+                   (UFldRec_[smmii] >= REC_UCLASS_BASE) and
+                   (FindUMeth(UFldRec_[smmii] - REC_UCLASS_BASE, 'Free') < 0) then
+                begin
+                  smSelfIdx := Procs[CurProc].Params[0].SymIdx;
+                  castPrevTok := TokPos - 1;   { the field-name token }
+                  Next; Next; Next;   { consume field, '.', 'Free' }
+                  node := GenMakeFreeObjectField(smSelfIdx,
+                    Tokens[castPrevTok].SOffset, Tokens[castPrevTok].SLen,
+                    UFldRec_[smmii] - REC_UCLASS_BASE);
+                  Result := node; Exit;
+                end;
+              end;
               Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
@@ -11744,6 +11850,13 @@ begin
     else
     begin
       lo := CurTok.SVal;
+      { Unit-qualified type reference — `sockets.Tin6_addr` (Synapse's
+        `TInAddr6 = sockets.Tin6_addr`). Strip the qualifier and resolve the
+        member name like a bare type; ConsumeUnitQualifier consumes nothing
+        when the prefix is not a compiled unit. Types live in one global
+        table, so the qualifier only disambiguates the parse, not the lookup. }
+      if (CurTok.Kind = tkIdent) and (ConsumeUnitQualifier(lo) <> -1) then
+        ;   { lo is now the member name; CurTok sits on it }
       if CaseEqual(lo, 'set') then
       begin
         Next;
@@ -12262,12 +12375,28 @@ begin
 	      begin
 	        if isArr then Error('array initializer must be parenthesised');
 	        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-	        initVal := ParseInitVal;
+	        if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+	           (FindSym(CurTok.SVal) < 0) then
+	        begin
+	          { initialized metaclass var: `SSLImplementation: TSSLClass = TSSLNone;`
+	            (blcksock) — init kind 5, an AN_CLASSREF (VMT address) assignment;
+	            same shape as ParseConstSection's typed metaclass const. }
+	          initVal := FindUClass(CurTok.SVal);
+	          if initVal < 0 then Error('unknown class in initializer');
+	          Next;
+	          PendingInitKind[PendingInitCount] := 5;
+	          PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+	        end
+	        else
+	        begin
+	          initVal := ParseInitVal;
+	          PendingInitKind[PendingInitCount] := 0;
+	          PendingInitTk[PendingInitCount]   := Ord(tk);
+	        end;
 	        PendingInitSym[PendingInitCount]  := idx;
 	        PendingInitElem[PendingInitCount] := -1;
         PendingInitFOff[PendingInitCount] := -1;
 	        PendingInitVal[PendingInitCount]  := initVal;
-	        PendingInitTk[PendingInitCount]   := Ord(tk);
 	        Inc(PendingInitCount);
 	      end;
 	    end;
@@ -12345,7 +12474,7 @@ var name: AnsiString; v: Int64;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
-    scOff, scLen, si: Integer;
+    scOff, scLen, si, sci2, cCi: Integer;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
@@ -12567,8 +12696,47 @@ begin
         else
         begin
         cIdx := AllocVar(name, cTk);
+        if cTk = tyPointer then
+        begin
+          { metaclass / pointer typed const: keep the pointee info so uses
+            (SSLImplementation.Create) dispatch like a var of the type }
+          Syms[cIdx].PtrElemTk := LastTypePointerElemTk;
+          Syms[cIdx].PtrElemRec := LastTypePointerElemRec;
+        end;
         Expect(tkEq, '=');
-        if cTk = tyRecord then
+        if (cTk <> tyRecord) and (CurTok.Kind = tkIdent) and
+           IsClassType(CurTok.SVal) and (FindSym(CurTok.SVal) < 0) then
+        begin
+          { Metaclass typed const initialized with a class NAME —
+            `SSLImplementation: TSSLClass = TSSLNone;` (blcksock). Init kind 5:
+            the emitter builds an AN_CLASSREF (VMT address) assignment. }
+          cCi := FindUClass(CurTok.SVal);
+          if cCi < 0 then Error('unknown class in constant initializer');
+          Next;
+          if isLocalConst then
+          begin
+            if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+            LocalInitSym[LocalInitCount]  := cIdx;
+            LocalInitElem[LocalInitCount] := -1;
+            LocalInitFOff[LocalInitCount] := -1;
+            LocalInitKind[LocalInitCount] := 5;
+            LocalInitVal[LocalInitCount]  := cCi;
+            LocalInitTk[LocalInitCount]   := Ord(tyPointer);
+            Inc(LocalInitCount);
+          end
+          else
+          begin
+            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+            PendingInitSym[PendingInitCount]  := cIdx;
+            PendingInitElem[PendingInitCount] := -1;
+            PendingInitFOff[PendingInitCount] := -1;
+            PendingInitKind[PendingInitCount] := 5;
+            PendingInitVal[PendingInitCount]  := cCi;
+            PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+            Inc(PendingInitCount);
+          end;
+        end
+        else if cTk = tyRecord then
         begin
           { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
             named-field form). Each scalar field initializer is recorded as a
@@ -12619,6 +12787,7 @@ begin
           LocalInitSym[LocalInitCount]  := cIdx;
           LocalInitElem[LocalInitCount] := -1;
           LocalInitFOff[LocalInitCount] := -1;
+          LocalInitKind[LocalInitCount] := 0;   { slots are reused; clear a stale kind }
           LocalInitVal[LocalInitCount]  := ParseInitVal;
           LocalInitTk[LocalInitCount]   := Ord(cTk);
           Inc(LocalInitCount);
@@ -12629,6 +12798,7 @@ begin
           PendingInitSym[PendingInitCount]  := cIdx;
           PendingInitElem[PendingInitCount] := -1;
           PendingInitFOff[PendingInitCount] := -1;
+          PendingInitKind[PendingInitCount] := 0;
           PendingInitVal[PendingInitCount]  := ParseInitVal;
           PendingInitTk[PendingInitCount]   := Ord(cTk);
           Inc(PendingInitCount);
@@ -12649,35 +12819,43 @@ begin
         SetConstOff[SetConstCount]    := BakeSetConst;
         Inc(SetConstCount);
       end
-      else if CurTok.Kind = tkString then
+      else if (CurTok.Kind = tkString) or
+              ((CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0)) then
       begin
-        if Tokens[TokPos].Kind = tkPlus then
+        if (CurTok.Kind = tkIdent) or (Tokens[TokPos].Kind = tkPlus) then
         begin
-          { `+`-concatenation of string/char literals, e.g. `const T = #65 + #66`
-            or `'foo' + 'bar'`. #65 and 'A' both arrive as tkString tokens whose
-            decoded value is in SVal. Build the concatenated value into a fresh
-            TokChars span and point the string const at it; a use expands to an
-            AN_STR_LIT over that span, like a single literal
-            (bug-char-literal-concat-in-const-expr). }
+          { `+`-concatenation of string/char literals and NAMED string consts,
+            e.g. `const T = #65 + #66`, `'foo' + 'bar'`, or blcksock's
+            `CRLF = CR + LF` (CR/LF are prior #$0d/#$0a consts). #65 and 'A'
+            both arrive as tkString tokens whose decoded value is in SVal; a
+            named const contributes its recorded TokChars span. Build the
+            concatenated value into a fresh TokChars span and point the string
+            const at it; a use expands to an AN_STR_LIT over that span, like a
+            single literal (bug-char-literal-concat-in-const-expr). A single
+            named-const operand (`A = CR;`) shares the source span. }
           scOff := TokCharLen; scLen := 0;
-          for si := 1 to Length(CurTok.SVal) do
-          begin
-            if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
-            TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
-          end;
-          Next;
-          while CurTok.Kind = tkPlus do
-          begin
-            Next;
-            if CurTok.Kind <> tkString then
-              Error('const string concatenation: expected a string or char literal');
-            for si := 1 to Length(CurTok.SVal) do
+          repeat
+            if CurTok.Kind = tkString then
             begin
-              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
-              TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
-            end;
+              for si := 1 to Length(CurTok.SVal) do
+              begin
+                if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+                TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
+              end;
+            end
+            else if (CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0) then
+            begin
+              sci2 := FindStrConst(CurTok.SVal);
+              for si := StrConstSOff[sci2] to StrConstSOff[sci2] + StrConstSLen[sci2] - 1 do
+              begin
+                if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+                TokChars[TokCharLen] := TokChars[si]; Inc(TokCharLen); Inc(scLen);
+              end;
+            end
+            else
+              Error('const string concatenation: expected a string/char literal or string constant');
             Next;
-          end;
+          until not Eat(tkPlus);
           if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
           StrConstName[StrConstCount] := name;
           StrConstSOff[StrConstCount] := scOff;
@@ -12716,6 +12894,116 @@ begin
   end;
 end;
 
+{ Parse a variant part `case [tag:] T of c1,..: (fields); ...` into UCls
+  entry `ci`, starting with CurTok on the `case` keyword. All branches are a
+  union — their fields share the same base offset, and the record grows by
+  the largest branch. A branch body may itself end in a nested variant part
+  (`case f: T of` inside the parens — synsock's TVarSin), handled by direct
+  recursion; a tagged discriminant declares its tag as an ordinary field at
+  the variant offset; const case labels are skipped like any label list.
+  Stops (without consuming) at the record's `end` (top level) or the
+  enclosing branch's `)` (nested). Returns the field offset just past the
+  variant part (base + largest branch). Scalar / fixed-array / record branch
+  fields are supported. }
+function ParseRecordVariantPart(ci: Integer; isPackedRecord: Boolean;
+  startOff: Integer; var classAlign: Integer): Integer;
+var
+  variantBaseOff, variantMax, branchFieldOff, curOff: Integer;
+  arrLen, loVal, hiVal, fRec, fSize, fAlign, nFldNames, fni: Integer;
+  isArr: Boolean;
+  fTk: TTypeKind;
+  fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..15] of Integer;
+begin
+  curOff := startOff;
+  Next;   { consume 'case' }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
+  begin
+    { discriminant is also a real (tag) field: `case tag: T of` }
+    fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
+    Next; Next;   { tag name, ':' }
+    fTk := ParseTypeKind; fRec := LastTypeRecId;
+    if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+    fAlign := TypeAlign(fTk);
+    if isPackedRecord then fAlign := 1;
+    curOff := AlignTo(curOff, fAlign);
+    AddUField(ci, fldNOffs[0], fldNLens[0], curOff, Ord(fTk), fRec);
+    UFldIsArray[UFldCount-1] := False; UFldArrLen[UFldCount-1] := 1;
+    UFldDynDepth[UFldCount-1] := 0;
+    curOff := curOff + fSize;
+    if fAlign > classAlign then classAlign := fAlign;
+  end
+  else
+    ParseTypeKind;   { discriminant type only (no field) }
+  Expect(tkOf, 'of');
+  if isPackedRecord then
+    variantBaseOff := curOff   { packed: branches overlay right after the tag }
+  else
+    variantBaseOff := AlignTo(curOff, TARGET_PTR_SIZE);
+  variantMax := 0;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkRParen) and
+        (CurTok.Kind <> tkEOF) do
+  begin
+    { constant label list, e.g. `0, 1:` / `true:` / `AF_INET:` — skip to ':' }
+    while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkColon, ':');
+    Expect(tkLParen, '(');
+    branchFieldOff := variantBaseOff;
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+    begin
+      if CurTok.Kind = tkCase then
+      begin
+        { nested variant part — grammatically the last item of the branch }
+        branchFieldOff := ParseRecordVariantPart(ci, isPackedRecord,
+          branchFieldOff, classAlign);
+        break;
+      end;
+      if CurTok.Kind <> tkIdent then Error('expected field name in variant part');
+      fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
+      nFldNames := 1; Next;
+      while CurTok.Kind = tkComma do
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+        fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset; fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+        Inc(nFldNames); Next;
+      end;
+      Expect(tkColon, ':');
+      isArr := False; arrLen := 1;
+      if CurTok.Kind = tkArray then
+      begin
+        Next; Expect(tkLBrack, '[');
+        loVal := ConstEval; Expect(tkDotDot, '..'); hiVal := ConstEval;
+        arrLen := hiVal - loVal + 1;
+        Expect(tkRBrack, ']'); Expect(tkOf, 'of');
+        fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
+      end
+      else
+      begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
+      if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+      fAlign := TypeAlign(fTk);
+      if isPackedRecord then fAlign := 1;
+      if isArr then fSize := fSize * arrLen;
+      for fni := 0 to nFldNames - 1 do
+      begin
+        branchFieldOff := AlignTo(branchFieldOff, fAlign);
+        AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
+        UFldIsArray[UFldCount-1] := isArr;
+        UFldArrLen[UFldCount-1] := arrLen;
+        UFldDynDepth[UFldCount-1] := 0;
+        branchFieldOff := branchFieldOff + fSize;
+      end;
+      if fAlign > classAlign then classAlign := fAlign;
+      Eat(tkSemicolon);
+    end;
+    Expect(tkRParen, ')');
+    Eat(tkSemicolon);
+    if (branchFieldOff - variantBaseOff) > variantMax then
+      variantMax := branchFieldOff - variantBaseOff;
+  end;
+  Result := variantBaseOff + variantMax;
+end;
+
 { Parse a record body's fields into UCls entry `ci`, from just after the
   `record` keyword through its closing `end` (consumed). Shared by named
   records (ParseTypeSection) and anonymous inline records
@@ -12726,7 +13014,6 @@ procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean);
 var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
-  variantBaseOff, variantMax, branchFieldOff: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
@@ -12928,89 +13215,11 @@ begin
       Eat(tkSemicolon);
     end
     else if CurTok.Kind = tkCase then
-    begin
-      { Variant part: `case [tag: ] T of c1,..: (fields); ... end`. All
-        branches are a union — their fields share the same base offset, and
-        the record grows by the largest branch. (Previously `case` fell to
+      { Variant part — see ParseRecordVariantPart. (Previously `case` fell to
         the skip-`else` below, so branch fields were laid out sequentially
-        and r.i:=x; r.c read 0.) Scalar / fixed-array / record branch
-        fields are supported. }
-      Next;   { consume 'case' }
-      if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
-      begin
-        { discriminant is also a real (tag) field: `case tag: T of` }
-        fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
-        Next; Next;   { tag name, ':' }
-        fTk := ParseTypeKind; fRec := LastTypeRecId;
-        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
-        fAlign := TypeAlign(fTk);
-        if isPackedRecord then fAlign := 1;
-        curFieldOff := AlignTo(curFieldOff, fAlign);
-        AddUField(ci, fldNOffs[0], fldNLens[0], curFieldOff, Ord(fTk), fRec);
-        UFldIsArray[UFldCount-1] := False; UFldArrLen[UFldCount-1] := 1;
-        UFldDynDepth[UFldCount-1] := 0;
-        curFieldOff := curFieldOff + fSize;
-        if fAlign > classAlign then classAlign := fAlign;
-      end
-      else
-        ParseTypeKind;   { discriminant type only (no field) }
-      Expect(tkOf, 'of');
-      variantBaseOff := AlignTo(curFieldOff, TARGET_PTR_SIZE);
-      variantMax := 0;
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-      begin
-        { constant label list, e.g. `0, 1:` or `true:` — skip to ':' }
-        while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkEOF) do Next;
-        Expect(tkColon, ':');
-        Expect(tkLParen, '(');
-        branchFieldOff := variantBaseOff;
-        while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
-        begin
-          if CurTok.Kind <> tkIdent then Error('expected field name in variant part');
-          fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
-          nFldNames := 1; Next;
-          while CurTok.Kind = tkComma do
-          begin
-            Next;
-            if CurTok.Kind <> tkIdent then Error('expected field name after ","');
-            fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset; fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
-            Inc(nFldNames); Next;
-          end;
-          Expect(tkColon, ':');
-          isArr := False; arrLen := 1;
-          if CurTok.Kind = tkArray then
-          begin
-            Next; Expect(tkLBrack, '[');
-            loVal := ConstEval; Expect(tkDotDot, '..'); hiVal := ConstEval;
-            arrLen := hiVal - loVal + 1;
-            Expect(tkRBrack, ']'); Expect(tkOf, 'of');
-            fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
-          end
-          else
-          begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
-          if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
-          fAlign := TypeAlign(fTk);
-          if isPackedRecord then fAlign := 1;
-          if isArr then fSize := fSize * arrLen;
-          for fni := 0 to nFldNames - 1 do
-          begin
-            branchFieldOff := AlignTo(branchFieldOff, fAlign);
-            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec);
-            UFldIsArray[UFldCount-1] := isArr;
-            UFldArrLen[UFldCount-1] := arrLen;
-            UFldDynDepth[UFldCount-1] := 0;
-            branchFieldOff := branchFieldOff + fSize;
-          end;
-          if fAlign > classAlign then classAlign := fAlign;
-          Eat(tkSemicolon);
-        end;
-        Expect(tkRParen, ')');
-        Eat(tkSemicolon);
-        if (branchFieldOff - variantBaseOff) > variantMax then
-          variantMax := branchFieldOff - variantBaseOff;
-      end;
-      curFieldOff := variantBaseOff + variantMax;
-    end
+        and r.i:=x; r.c read 0.) }
+      curFieldOff := ParseRecordVariantPart(ci, isPackedRecord, curFieldOff,
+        classAlign)
     else
       Next;
   end;
@@ -14275,6 +14484,16 @@ begin
         ConstEval;                 { high bound }
         RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
       end
+      else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+              ((TokPos >= TokCount) or (Tokens[TokPos].Kind = tkSemicolon)) then
+      begin
+        { Class-name alias: `TOptionList = TList;` (blcksock). Registered in
+          the UClass alias table so FindUClass resolves the new name to the
+          SAME class row — var decls, X.Create, casts and is/as all see it. }
+        ci := FindUClass(CurTok.SVal);
+        RegisterUClassAlias(tnOff, tnLen, ci);
+        Next;
+      end
       else
       begin
         { Named simple type alias: PFoo = BaseType }
@@ -14959,6 +15178,13 @@ begin
       ASTSOffset[valNode] := LocalInitVal[i];
       ASTSLen[valNode] := LocalInitFLen[i];
       ASTTk[valNode] := Ord(tyString);
+    end
+    else if LocalInitKind[i] = 5 then
+    begin
+      { metaclass const init: class VMT address }
+      valNode := AllocNode(AN_CLASSREF);
+      ASTIVal[valNode] := LocalInitVal[i];
+      ASTTk[valNode] := Ord(tyPointer);
     end
     else
     begin
@@ -17997,6 +18223,13 @@ begin
       valNode := AllocNode(AN_FLOAT_LIT);
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := PendingInitTk[i];
+    end
+    else if PendingInitKind[i] = 5 then
+    begin
+      { metaclass const init: class VMT address }
+      valNode := AllocNode(AN_CLASSREF);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(tyPointer);
     end
     else
     begin

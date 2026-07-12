@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (Pascal frontend — call-argument lvalue path) — **Track P**
   (shared parser, A's gate)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, next Synapse wall after the untyped-Pointer-deref
   expression fix ([[feature-synapse-compile-check]]).
 
