@@ -1219,6 +1219,10 @@ test-core: $(COMPILER)
 	/tmp/cprintf_ll_b25226; test "$$?" = "42"
 	./$(COMPILER) --target=i386 test/cprintf_ll_b252.c /tmp/cprintf_ll_b252_386
 	/tmp/cprintf_ll_b252_386; test "$$?" = "42"
+	# unary minus applies the integer promotions: -(unsigned short) is a SIGNED int
+	# (bug-c-unary-minus-no-integer-promotion)
+	./$(COMPILER) test/cunary_minus_promote_b253.c /tmp/cunary_minus_promote_b25326
+	/tmp/cunary_minus_promote_b25326; test "$$?" = "42"
 	./$(COMPILER) test/carrow_on_array_call_rhs_b136.c /tmp/carrow_on_array_call_rhs_b13626
 	/tmp/carrow_on_array_call_rhs_b13626; test "$$?" = "42"
 	./$(COMPILER) test/csigned_arith_shift_right_b137.c /tmp/csigned_arith_shift_right_b13726

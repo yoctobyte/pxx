@@ -2030,7 +2030,13 @@ begin
       operand := ParseCUnary();
       node := AllocNode(AN_NEG);
       ASTLeft[node] := operand;
-      ASTTk[node] := ASTTk[operand];
+      { The integer promotions apply to the operand, so the RESULT of unary minus on
+        anything narrower than int is a SIGNED int — `-(unsigned short)1` is the int
+        -1, not an unsigned 65535. Copying the operand's type kept it unsigned, so
+        `-(us) < 0` compiled to an UNSIGNED compare and came out false (c-testsuite
+        00200, the sizeof/sign probe). Unary `~` already promotes this way; `-` was
+        the sibling that never got it. }
+      ASTTk[node] := Ord(CIntegerPromoteTk(IntToTypeKind(ASTTk[operand])));
       Result := node;
     end;
     tkPlus:
