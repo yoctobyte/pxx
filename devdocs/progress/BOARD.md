@@ -28,7 +28,7 @@ _none_
 
 _none_
 
-## backlog (89)
+## backlog (90)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ _none_
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-testmgr-enroll-c-cross-conformance | T | 45 | feature | testmgr: enroll the C cross-conformance matrix + lua-cross in the full tier | — |
+| feature-testmgr-fpc-bootstrap-canary | T | 55 | feature | testmgr: FPC-bootstrap canary — catch seed rot before it matters | — |
 | feature-testmgr-memory-cap | T | 65 | feature | testmgr: cap its own memory in a cgroup scope + swap-aware admission | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -842,6 +843,7 @@ _none_
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
+- [p 55] [T] feature-testmgr-fpc-bootstrap-canary
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess
