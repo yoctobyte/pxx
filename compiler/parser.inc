@@ -6215,6 +6215,21 @@ begin
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if (ASTKind[valNode] = AN_FIELD) and
+                RecFieldIsArray(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) and
+                (RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) >= 0) and
+                (RecFieldDynDepth(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) = 0) then
+        begin
+          { High of a whole fixed-size record/class FIELD array folds like the
+            plain-var case; the runtime Length path would read a [data-8]
+            header a raw field has none of, so High(ctx.Buffer) returned
+            garbage/-1 and synacode's SHA1 never zeroed its buffers. Field
+            arrays record only their COUNT (low bound normalised to 0). }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] :=
+            RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else
         begin
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);

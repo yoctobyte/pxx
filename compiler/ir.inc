@@ -1446,17 +1446,44 @@ begin
     function; re-testing whether the sign-extension fixes this cycle cured it.) }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      Procs[cpi].Params[pathIdx].IsArray and (not Procs[cpi].Params[pathIdx].IsRef) and
-     (ASTKind[argAST] = AN_IDENT) then
+     ((ASTKind[argAST] = AN_IDENT) or (ASTKind[argAST] = AN_FIELD)) then
   begin
-    caArgSym := ASTIVal[argAST];
-    if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
-       (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) then
+    { Determine the static-array source — a whole 1-D static array, either a
+      simple var or a record/class FIELD (synacode's Transform(State, BufLong):
+      the field form used to fall through to a raw headerless address, so the
+      callee's High() read garbage — the MD5 stack smash). Mirrors the var-path
+      resolution below. }
+    caArgSym := -1; caCount := -1; caElemTk := tyUnknown; caElemRec := REC_NONE;
+    if ASTKind[argAST] = AN_IDENT then
     begin
-      caElemTk := Syms[caArgSym].ElemType;
-      caElemRec := Syms[caArgSym].ElemRecName;
+      caArgSym := ASTIVal[argAST];
+      if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
+         (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) and
+         (SymArrNDims[caArgSym] <= 1) then
+      begin
+        caElemTk := Syms[caArgSym].ElemType;
+        caElemRec := Syms[caArgSym].ElemRecName;
+        caCount := Syms[caArgSym].ArrLen;
+      end;
+    end
+    else
+    begin
+      caRecName := ResolveNodeRec(ASTLeft[argAST]);
+      caField := GetASTIdentName(argAST);
+      if RecFieldIsArray(caRecName, caField) and
+         (RecFieldArrLen(caRecName, caField) >= 0) and
+         (RecFieldDynDepth(caRecName, caField) = 0) and
+         (RecFieldArrNDims(caRecName, caField) <= 1) then
+      begin
+        caElemTk := RecFieldType(caRecName, caField);
+        caElemRec := RecFieldRecId(caRecName, caField);
+        caCount := RecFieldArrLen(caRecName, caField);
+      end;
+    end;
+    if caCount >= 0 then
+    begin
       if not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
       begin
-        caCount := Syms[caArgSym].ArrLen;
         if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
         else caElemSz := TypeSize(caElemTk);
         if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
@@ -1504,7 +1531,7 @@ begin
           value := IRLowerAST(caSlCall);
           IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
           IRAppend(IR_COPY_REC, IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
-            IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
+            IRLowerAddress(argAST),
             -1, caCount * caElemSz, Ord(tyRecord));
           Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
           Exit;
@@ -1529,7 +1556,7 @@ begin
           IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
           Ord(tkPlus), 0, Ord(tyPointer));
         IRAppend(IR_COPY_REC, value,
-          IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
+          IRLowerAddress(argAST),
           -1, caCount * caElemSz, Ord(tyRecord));
         Result := IRAppend(IR_BINOP,
           IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
@@ -4715,6 +4742,7 @@ begin
         a 16-byte {Code@0, Data@8} record: load Self (Data) as arg0, call Code. }
       cpi := ASTIVal[node];
       first := -1; last := -1;
+      pendBase := PendOAWBCount;   { open-array copy-out writebacks (see AN_CALL) }
       if ASTSLen[node] = 1 then
       begin
         { Method pointer: prepend Self loaded from the record's Data field. }
@@ -4767,6 +4795,38 @@ begin
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
       if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
+      { copy-OUT the var/out open-array writebacks this call's args registered —
+        the direct AN_CALL path already flushes these; the indirect path never
+        did, so a static array / record field passed to a `var` open-array param
+        through a proc VARIABLE silently lost the callee's writes (synacode's
+        Transform(State, BufLong) — the MD5 wall). Same function-result spill
+        discipline as AN_CALL. }
+      if PendOAWBCount > pendBase then
+      begin
+        if (cpi >= 0) and Procs[cpi].IsFunc then
+        begin
+          value := AllocVar('', IntToTypeKind(ASTTk[node]));
+          IRAppend(IR_STORE_SYM, value, Result, -1, 0, ASTTk[node]);
+          while PendOAWBCount > pendBase do
+          begin
+            Dec(PendOAWBCount);
+            IRAppend(IR_COPY_REC,
+              IRLowerAddress(PendOAWBDest[PendOAWBCount]),
+              PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
+              -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
+          end;
+          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
+        end
+        else
+          while PendOAWBCount > pendBase do
+          begin
+            Dec(PendOAWBCount);
+            IRAppend(IR_COPY_REC,
+              IRLowerAddress(PendOAWBDest[PendOAWBCount]),
+              PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
+              -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
+          end;
+      end;
     end;
 
     AN_INTF_CALL:
