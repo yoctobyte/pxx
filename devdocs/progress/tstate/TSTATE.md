@@ -2,11 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `3db9cbaad744` | 2026-07-12T05:13:50Z | GREEN (native) | 69.7s | `83006e927e35` RED |
+| borg | `3db9cbaad744` | 2026-07-12T05:16:03Z | GREEN (full) | 127.1s | `3db9cbaad744` GREEN |
 
 ## Open regressions
-- **test-sqlite-threads-aarch64#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
-- **test-sqlite-threads-arm32#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
-- **test-sqlite-threads-i386#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
-- **test-sqlite-threads-x86_64#00** — tools/run_sqlite_thread_test.sh (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
-- **test-zlib#00** — tools/install_lib_candidates.sh test/example.c +1 (borg): bad `83006e927e35`, last good `83006e927e35`, 0 commit(s) in range
+- none

@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-11T14:11:57Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "310e031672deaa41fa388381482ff06244cf752a",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-11T14:13:36Z",
    "fixed": [],
    "new_red": [],
@@ -413,17 +405,25 @@
    "sha": "3db9cbaad7448f0891cb507290b36bb68665abd6",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T05:16:03Z",
+   "fixed": [
+    "test-sqlite-threads-aarch64#00",
+    "test-sqlite-threads-arm32#00",
+    "test-sqlite-threads-i386#00",
+    "test-sqlite-threads-x86_64#00",
+    "test-zlib#00"
+   ],
+   "new_red": [],
+   "sha": "3db9cbaad7448f0891cb507290b36bb68665abd6",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#00": "pass",
   "test-aarch64#01": "pass",
   "test-aarch64#02": "pass",
@@ -1504,11 +1504,6 @@
   "test-i386#98": "pass",
   "test-i386#99": "pass",
   "test-lua#00": "pass",
-  "test-opt#00": "pass",
-  "test-opt#01": "pass",
-  "test-opt#02": "pass",
-  "test-opt#03": "pass",
-  "test-opt#04": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#01": "pass",
   "test-riscv32#02": "pass",
@@ -1540,10 +1535,10 @@
   "test-smoke#09": "pass",
   "test-smoke#10": "pass",
   "test-smoke#11": "pass",
-  "test-sqlite-threads-aarch64#00": "fail",
-  "test-sqlite-threads-arm32#00": "fail",
-  "test-sqlite-threads-i386#00": "fail",
-  "test-sqlite-threads-x86_64#00": "fail",
+  "test-sqlite-threads-aarch64#00": "pass",
+  "test-sqlite-threads-arm32#00": "pass",
+  "test-sqlite-threads-i386#00": "pass",
+  "test-sqlite-threads-x86_64#00": "pass",
   "test-threads#00": "pass",
   "test-threads#01": "pass",
   "test-threads#02": "pass",
@@ -1559,14 +1554,14 @@
   "test-threads#12": "pass",
   "test-threads#13": "pass",
   "test-threads#14": "pass",
-  "test-zlib#00": "fail"
+  "test-zlib#00": "pass"
  },
  "last": {
-  "date": "2026-07-12T05:13:50Z",
+  "date": "2026-07-12T05:16:03Z",
   "sha": "3db9cbaad7448f0891cb507290b36bb68665abd6",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 69.7
+  "wall": 127.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1576,56 +1571,15 @@
   "sha": "83006e927e35b02e76728c3a292e08dbcc0b792e"
  },
  "last_full": {
-  "date": "2026-07-12T04:27:52Z",
-  "sha": "83006e927e35b02e76728c3a292e08dbcc0b792e",
+  "date": "2026-07-12T05:16:03Z",
+  "sha": "3db9cbaad7448f0891cb507290b36bb68665abd6",
   "tier": "full",
-  "verdict": "RED",
-  "wall": 104.0
+  "verdict": "GREEN",
+  "wall": 127.1
  },
  "last_opt": {
   "date": "2026-07-12T04:30:13Z",
   "sha": "83006e927e35b02e76728c3a292e08dbcc0b792e"
  },
- "open_regressions": [
-  {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "job": "test-sqlite-threads-aarch64#00",
-   "opened": "2026-07-12T04:27:52Z",
-   "range": [],
-   "src": "tools/run_sqlite_thread_test.sh"
-  },
-  {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "job": "test-sqlite-threads-arm32#00",
-   "opened": "2026-07-12T04:27:52Z",
-   "range": [],
-   "src": "tools/run_sqlite_thread_test.sh"
-  },
-  {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "job": "test-sqlite-threads-i386#00",
-   "opened": "2026-07-12T04:27:52Z",
-   "range": [],
-   "src": "tools/run_sqlite_thread_test.sh"
-  },
-  {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "job": "test-sqlite-threads-x86_64#00",
-   "opened": "2026-07-12T04:27:52Z",
-   "range": [],
-   "src": "tools/run_sqlite_thread_test.sh"
-  },
-  {
-   "bad": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "good": "83006e927e35b02e76728c3a292e08dbcc0b792e",
-   "job": "test-zlib#00",
-   "opened": "2026-07-12T04:27:52Z",
-   "range": [],
-   "src": "tools/install_lib_candidates.sh test/example.c +1"
-  }
- ]
+ "open_regressions": []
 }
