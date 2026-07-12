@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T13:54:31Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3c3f65d98b2d5882aa123664acafbf2899a667c7",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T14:01:34Z",
    "fixed": [],
    "new_red": [],
@@ -448,6 +440,14 @@
    "new_red": [],
    "sha": "4d2664947bbed8415180d8c68287f52834cb50dc",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-12T21:56:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -962,6 +962,7 @@
   "test-core#src:test/ctypedef_struct_b7.c": "pass",
   "test-core#src:test/ctypedef_sys_ssize_b92.c": "pass",
   "test-core#src:test/cuchar_struct_field_load_b70.c": "pass",
+  "test-core#src:test/cunary_minus_promote_b253.c": "pass",
   "test-core#src:test/cunion_field_offsets_b57.c": "pass",
   "test-core#src:test/cunion_global_init_b46.c": "pass",
   "test-core#src:test/cunion_ptr_chain_b53.c": "pass",
@@ -1665,11 +1666,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-12T21:49:22Z",
-  "sha": "4d2664947bbed8415180d8c68287f52834cb50dc",
-  "tier": "opt",
+  "date": "2026-07-12T21:56:49Z",
+  "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 103.5
+  "wall": 64.9
  },
  "last_bench": {
   "conf_rows": 550,
