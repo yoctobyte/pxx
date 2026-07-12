@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (Pascal frontend — include expansion) — **Track P** (the
   expansion pass lives in shared `elfwriter.inc` / lexer plumbing, so A's gate)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11, found on the New-ZenGL Pascal ladder
   ([[feature-game-library-candidate-suite]] slice C).
 
@@ -48,3 +48,6 @@ the same.
   document).
 - ZenGL units find `zgl_config.cfg` via `-Fi.../headers`; a test covers the
   error and the search order.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
