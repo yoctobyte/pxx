@@ -592,6 +592,12 @@ begin
     Exit;
   end;
 
+  { A local/param/global SYMBOL shadows a same-named unit (FPC scoping):
+    `function NetToHost(Net: in_addr)...` must keep `Net.s_addr` a record
+    field access even when unit net.pas is loaded — the qualifier greedily
+    ate the param and s_addr resolved against the unit (undefined). }
+  if FindSym(name) >= 0 then Exit;
+
   cand := name;
   bestUnit := -1; bestExtra := -1;
   { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }
