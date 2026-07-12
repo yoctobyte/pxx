@@ -268,7 +268,7 @@ pass	tgeneric22.pp	tgeneric	-
 skip	tgeneric23.pp	tgeneric	untriaged	unclassified: pascal26:6: error: uses: unit source not found: fgl ()
 pass	tgeneric24.pp	tgeneric	-	
 pass	tgeneric25.pp	tgeneric	-	
-fail	tgeneric26.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+skip	tgeneric26.pp	tgeneric	gap	accepts-invalid — type parameter in a variant part must be rejected (substitution model has no pre-specialization check)
 skip	tgeneric27.pp	tgeneric	gap	enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
 skip	tgeneric28.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
 skip	tgeneric29.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:7: error: generic templates must be class declarations ()
@@ -331,9 +331,9 @@ skip	tgeneric7.pp	tgeneric	untriaged	runtime: exit code 0 (want 201)
 skip	tgeneric80.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
 skip	tgeneric81.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
 skip	tgeneric82.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
-fail	tgeneric83.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
-fail	tgeneric84.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
-fail	tgeneric85.pp	tgeneric	-	accepted-invalid: %FAIL test compiled
+skip	tgeneric83.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
+skip	tgeneric84.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
+skip	tgeneric85.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
 pass	tgeneric86.pp	tgeneric	-	
 pass	tgeneric87.pp	tgeneric	-	
 pass	tgeneric88.pp	tgeneric	-	
@@ -404,12 +404,12 @@ auto	tobject9.pp	tobject	-	opt
 pass	toperator10.pp	toperator	-	
 pass	toperator11.pp	toperator	-	
 skip	toperator12.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 10)
-fail	toperator13.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator14.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator15.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator16.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator17.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator18.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator13.pp	toperator	-	
+pass	toperator14.pp	toperator	-	
+pass	toperator15.pp	toperator	-	
+pass	toperator16.pp	toperator	-	
+pass	toperator17.pp	toperator	-	
+pass	toperator18.pp	toperator	-	
 pass	toperator19.pp	toperator	-	
 skip	toperator1.pp	toperator	untriaged	unclassified: Expected: =, but got: (Kind: 80, Line: 10)
 pass	toperator20.pp	toperator	-	
@@ -431,40 +431,40 @@ pass	toperator34.pp	toperator	-
 pass	toperator35.pp	toperator	-	
 pass	toperator36.pp	toperator	-	
 pass	toperator37.pp	toperator	-	
-fail	toperator38.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator39.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator38.pp	toperator	-	
+pass	toperator39.pp	toperator	-	
 skip	toperator3.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
-fail	toperator40.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator41.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator42.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator43.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator40.pp	toperator	-	
+pass	toperator41.pp	toperator	-	
+pass	toperator42.pp	toperator	-	
+pass	toperator43.pp	toperator	-	
 pass	toperator44.pp	toperator	-	
 pass	toperator45.pp	toperator	-	
 pass	toperator46.pp	toperator	-	
 pass	toperator47.pp	toperator	-	
 pass	toperator48.pp	toperator	-	
-fail	toperator49.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator49.pp	toperator	-	
 skip	toperator4.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
 pass	toperator50.pp	toperator	-	
 pass	toperator51.pp	toperator	-	
 pass	toperator52.pp	toperator	-	
-fail	toperator53.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator53.pp	toperator	-	
 pass	toperator54.pp	toperator	-	
 pass	toperator55.pp	toperator	-	
-fail	toperator56.pp	toperator	-	accepted-invalid: %FAIL test compiled
-fail	toperator57.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator56.pp	toperator	-	
+pass	toperator57.pp	toperator	-	
 pass	toperator58.pp	toperator	-	
 pass	toperator59.pp	toperator	-	
 auto	toperator5.pp	toperator	-	version
-fail	toperator60.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator60.pp	toperator	-	
 pass	toperator61.pp	toperator	-	
 pass	toperator62.pp	toperator	-	
 pass	toperator63.pp	toperator	-	
-fail	toperator64.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator64.pp	toperator	-	
 pass	toperator65.pp	toperator	-	
 pass	toperator66.pp	toperator	-	
 pass	toperator67.pp	toperator	-	
-fail	toperator68.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator68.pp	toperator	-	
 pass	toperator69.pp	toperator	-	
 skip	toperator6.pp	toperator	untriaged	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
 pass	toperator70.pp	toperator	-	
@@ -489,7 +489,7 @@ pass	toperator87.pp	toperator	-
 pass	toperator88.pp	toperator	-	
 skip	toperator89.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
 pass	toperator8.pp	toperator	-	
-fail	toperator90.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator90.pp	toperator	-	
 skip	toperator91.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 12)
 pass	toperator92.pp	toperator	-	
 skip	toperator93.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 14)
