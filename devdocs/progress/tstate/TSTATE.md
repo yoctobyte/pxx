@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `e0232c1e10de` | 2026-07-12T14:13:40Z | GREEN (native) | 61.0s | `15f50987daf4` RED |
+| borg | `e0232c1e10de` | 2026-07-12T14:15:44Z | GREEN (full) | 116.0s | `e0232c1e10de` GREEN |
 
 ## Open regressions
-- **test-sqlite-threads-arm32#00** — tools/run_sqlite_thread_test.sh (borg): bad `15f50987daf4`, last good `15f50987daf4`, 0 commit(s) in range
+- none
