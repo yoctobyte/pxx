@@ -43,8 +43,9 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
 - **compat is a TAG (no letter): reference compatibility.** "Behave like the
   reference implementation" for any frontend — FPC/Delphi for P, gcc/ISO C
   for C, rustc for R, Zig for Z. One category spanning the whole spectrum:
-  compiling real-world code (fgl, Synapse, FPC itself, gcc-byte-identical
-  zlib) down to parity diagnostics, strict-mode flags (`--strict-case`,
+  compiling real-world code (fgl, Synapse, FPC itself, zlib whose compressed
+  OUTPUT matches a gcc-built zlib's byte for byte) down to parity diagnostics,
+  strict-mode flags (`--strict-case`,
   `--strict-overload`) and `{%FAIL}` conformance tests. Mirror image of X:
   X = *more* than the spec (experimental, unranked); compat = *exactly* the
   spec (stays ranked — the tag carries no priority, the `prio:` field does:
@@ -275,6 +276,24 @@ IR op / symtab field / backend change → **file a Track A ticket**, don't edit 
 under Z (keeps A's self-host gate safe, stops node-number / token collisions).
 Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
 destabilizing work behind a flag or incrementally, never a long-lived branch.
+
+## Claims discipline — TWO different "byte-identical", never conflate them
+Internal shorthand blurs these; **public-facing copy must not**. A compiler engineer
+will catch it in seconds and the correction costs more than the claim ever gained.
+
+| claim | what is identical | to what | kind |
+| --- | --- | --- | --- |
+| **self-host fixedpoint** | the **binary** | our own previous output | true binary reproducibility |
+| **zlib / C corpora vs the gcc oracle** | the **program's OUTPUT** (e.g. zlib's compressed stream) | the output of a gcc-**built** zlib | *behavioral* parity |
+
+We do **NOT** emit the same machine code as gcc and must never imply it. Say
+"zlib built with pxx produces compressed output byte-identical to a gcc-built
+zlib's", never "zlib byte-identical to gcc". Both claims are strong; they are
+strong for different reasons.
+
+Applies to: `docs/**`, the website, release notes, README, any promo/launch copy.
+Write public claims **uncompressed** — the qualifying words ("output", "oracle",
+"built with") carry the entire distinction, and terse styles drop them first.
 
 ## Workflow norms (all tracks)
 - **All tracks work directly on `master`** (no worktrees/clones). Commit in small

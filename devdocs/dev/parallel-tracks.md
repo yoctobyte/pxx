@@ -218,7 +218,9 @@ mkdocs / Docusaurus / Hugo / a custom puller can render it).
 `compat` is a work-tag (no letter, like X's mirror image): "behave like the
 reference implementation" for any frontend — FPC/Delphi for P, gcc/ISO C for
 C, rustc for R, Zig for Z. It spans compiling real-world code (fgl, Synapse,
-FPC itself, gcc-byte-identical zlib) down to parity diagnostics, the
+FPC itself, zlib whose compressed OUTPUT is byte-identical to a gcc-built
+zlib's — behavioral parity, NOT gcc codegen parity; see the precision note in
+CLAUDE.md) down to parity diagnostics, the
 per-feature strict flags (`--strict-case`, `--strict-overload`) and `{%FAIL}`
 conformance tests. Compat tickets stay in the ranked queue (the tag carries no
 priority — the `prio:` field does), inherit the owning frontend's file-lane
