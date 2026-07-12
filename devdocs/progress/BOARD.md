@@ -35,7 +35,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-generic-long-vs-int-ilp32 | C | 60 | bug | _Generic cannot tell `long` from `int` on ILP32 (silent wrong selection) | — |
+| bug-c-binary-op-no-integer-promotion-sizeof | C | 45 | bug | `sizeof(us + 0)` reports 2, not 4 — binary ops skip the integer promotions | — |
 | bug-c-generic-long-vs-int-on-32bit | C | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
@@ -189,11 +189,12 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (648)
+## done (652)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | audit-shared-global-reentrancy-thread-safety | A | 50 | audit | Audit: shared-global state — reentrancy & thread-safety | — |
+| bug-32bit-truthiness-high-half | A | 70 | bug | `if (v)` on a 64-bit value tested only the LOW half on every 32-bit target | — |
 | bug-64bit-named-const-truncated-32bit-targets | A | 80 | bug | 64-bit named constants are truncated to 32 bits on the 32-bit targets | — |
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
@@ -260,6 +261,7 @@ _none_
 | bug-c-function-pointer-struct-member | C | 50 | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
 | bug-c-function-returning-fnptr-declarator | C | 50 | bug | C functions returning function pointers: typedef'd return type + full declarator | — |
 | bug-c-function-returning-function-pointer-prototype-sqlite | C | 50 | bug | C: function returning function pointer prototype not registered | — |
+| bug-c-generic-long-vs-int-ilp32 | C | 60 | bug | _Generic cannot tell `long` from `int` on ILP32 (silent wrong selection) | — |
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
@@ -322,6 +324,7 @@ _none_
 | bug-c-typedef-name-as-uninitialized-local | C | 94 | bug | C: uninitialized local named same as an in-scope typedef mis-parses | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
+| bug-c-unary-minus-no-integer-promotion | C | 65 | bug | Unary minus did not apply the integer promotions (silent unsigned compare) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
@@ -355,6 +358,7 @@ _none_
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
+| bug-crtl-printf-ll-ilp32 | B | 65 | bug | crtl printf counted `ll` but never honoured it (arg truncation + shift on ILP32) | — |
 | bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
 | bug-downcast-inherited-property-wrong-offset | A | 50 | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | bug-dynarray-concat-silent-miscompile | A | 50 | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
@@ -864,7 +868,6 @@ _none_
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
-- [p 60] [C] bug-c-generic-long-vs-int-ilp32
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
@@ -897,6 +900,7 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [C] bug-c-binary-op-no-integer-promotion-sizeof
 - [p 45] [A] bug-riscv32-p256field-coredump
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
