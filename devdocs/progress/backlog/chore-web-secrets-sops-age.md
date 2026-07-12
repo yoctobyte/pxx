@@ -64,9 +64,9 @@ Printing checklist:
 - **Two copies, two physical locations** — paper's failure mode is fire/flood, not decay.
 - **Laser, not inkjet** (inkjet fades and runs if it ever gets damp).
 
-## Runbook — agent WALKS THE USER THROUGH THIS STEP BY STEP
-The user has explicitly asked to be guided at implementation time; do not just hand over a
-script. Confirm each step's output before moving on.
+## Runbook
+Execute interactively, confirming each step's output before moving to the next — this is a
+one-shot setup where a silent mistake surfaces months later, at restore time.
 
 ```bash
 # 1. install
@@ -98,4 +98,4 @@ works on the deploy host; the age key exists on paper in two locations **and has
 a from-paper restore**; the key is in zero git repos.
 
 ## Log
-- 2026-07-12 — designed with the user. Paper-over-USB was the user's call; correct, and adopted.
+- 2026-07-12 — designed. Paper-over-USB adopted (USB fails silently; paper doesn't).
