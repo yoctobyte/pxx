@@ -468,7 +468,7 @@ pass	toperator68.pp	toperator	-
 pass	toperator69.pp	toperator	-	
 skip	toperator6.pp	toperator	untriaged	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
 pass	toperator70.pp	toperator	-	
-pass	toperator71.pp	toperator	-	
+fail	toperator71.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator72.pp	toperator	-	
 pass	toperator73.pp	toperator	-	
 pass	toperator74.pp	toperator	-	
