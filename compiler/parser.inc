@@ -1549,6 +1549,7 @@ procedure ParseOperatorDef;
 var
   opKind: TTokenKind;
   opKey: Integer;
+  scalarTk, scalarTk2: TTypeKind;
   synName: AnsiString;
   typeName: AnsiString;
   recId: Integer;
@@ -1616,12 +1617,39 @@ begin
     tyClass made FindOpOverload miss for record operands, so `a + b` on records
     silently fell through to a scalar binop. }
   recId := IsRecordType(typeName);
+  scalarTk2 := tyUnknown;
   if recId = REC_NONE then
   begin
     ci := FindUClass(typeName);
-    if ci < 0 then Error('operator overloading: ' + typeName + ' is not a record or class type');
-    recId := REC_UCLASS_BASE + ci;
-    opTypeKind := Ord(tyClass);
+    if ci >= 0 then
+    begin
+      recId := REC_UCLASS_BASE + ci;
+      opTypeKind := Ord(tyClass);
+    end
+    else
+    begin
+      { SCALAR operand types (FPC allows operators on any type —
+        tgenfunc8's `operator := (aOther: LongInt): String`). Key the
+        registration on the type kind with recId REC_NONE. `String`
+        registers under BOTH the managed and frozen kinds — a string
+        expression types as either depending on origin. }
+      scalarTk := OrdinalNameToTk(typeName);
+      if scalarTk = tyUnknown then
+      begin
+        if CaseEqual(typeName, 'string') or CaseEqual(typeName, 'ansistring') then
+        begin
+          scalarTk := tyAnsiString;
+          scalarTk2 := tyString;
+        end
+        else if CaseEqual(typeName, 'single') then scalarTk := tySingle
+        else if CaseEqual(typeName, 'double') or CaseEqual(typeName, 'real') or
+                CaseEqual(typeName, 'extended') then scalarTk := tyDouble;
+      end;
+      if scalarTk = tyUnknown then
+        Error('operator overloading: ' + typeName + ' is not a supported operand type');
+      opTypeKind := Ord(scalarTk);
+      recId := REC_NONE;
+    end;
   end
   else
     opTypeKind := Ord(tyRecord);
@@ -1706,7 +1734,19 @@ begin
   { After ParseSubroutine, the proc is registered — look it up by synName }
   procIdx := FindProc(synName);
   if procIdx < 0 then Error('operator: internal error, proc not found after parse');
+  { Arity: conversion/unary named operators take exactly ONE parameter —
+    FPC rejects `operator :=(S1, S2: String)` (tassignmentoperator1 %fail). }
+  if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) or (opKey = OPK_INC) or
+     (opKey = OPK_DEC) or (opKey = OPK_ENUMERATOR) then
+  begin
+    if Procs[procIdx].ParamCount <> 1 then
+      Error('this operator must take exactly one parameter');
+  end
+  else if Procs[procIdx].ParamCount <> 2 then
+    Error('binary operator must take exactly two parameters');
   RegisterOpOverload(opKey, opTypeKind, recId, procIdx);
+  if scalarTk2 <> tyUnknown then
+    RegisterOpOverload(opKey, Ord(scalarTk2), REC_NONE, procIdx);
 end;
 
 { Linear (row-major) index of an N-D fixed array element, built from AST nodes so
@@ -11273,14 +11313,10 @@ begin
           (toperator11): Inc(x) desugars to x := IncOp(x). Step form excluded
           (FPC's operator Inc takes one operand). }
         smpii := -1;
-        if (IntToTypeKind(ASTTk[valNode]) = tyRecord) or
-           (IntToTypeKind(ASTTk[valNode]) = tyClass) then
-        begin
-          if i = Ord(tkInc) then
-            smpii := FindOpOverload(OPK_INC, ASTTk[valNode], ResolveNodeRec(valNode))
-          else
-            smpii := FindOpOverload(OPK_DEC, ASTTk[valNode], ResolveNodeRec(valNode));
-        end;
+        if i = Ord(tkInc) then
+          smpii := FindOpOverload(OPK_INC, ASTTk[valNode], ResolveNodeRec(valNode))
+        else
+          smpii := FindOpOverload(OPK_DEC, ASTTk[valNode], ResolveNodeRec(valNode));
         if smpii >= 0 then
         begin
           argSeq := AllocNode(AN_ARG);

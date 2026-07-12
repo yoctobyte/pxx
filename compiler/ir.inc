@@ -3927,9 +3927,7 @@ begin
         to a DIFFERENT-typed target converts through the overload
         (toperator11's `i := a`). Rewrite RHS to the conversion CALL and fall
         through to the ordinary assign of the result type. }
-      if ((IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord) or
-          (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass)) and
-         (lhsTk <> tyUnknown) and (lhsTk <> tyAuto) and
+      if (lhsTk <> tyUnknown) and (lhsTk <> tyAuto) and
          (IntToTypeKind(ASTTk[ASTRight[node]]) <> lhsTk) then
       begin
         varIdx := FindOpOverload(Ord(tkAssign), ASTTk[ASTRight[node]],

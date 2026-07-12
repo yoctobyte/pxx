@@ -84,10 +84,10 @@ tgeneric93.pp	unclassified: pascal26:0: error: conditional directive: declared r
 tgeneric94.pp	gap: generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
 tgeneric95.pp	gap: specialize inside a generic routine signature (`expected name` at line 16)
 tgeneric97.pp	unclassified: pascal26:14: error: undefined variable (LowerCase)
-tgenfunc10.pp	gap: operators on NON-record operand types (LongInt)
+tgenfunc10.pp	gap: inline `specialize` expression inside generic function body
 tgenfunc1.pp	parser: inline specialize expression
 tgenfunc23.pp	parser: inline specialize expression
-tgenfunc8.pp	gap: operators on NON-record operand types (LongInt)
+tgenfunc8.pp	gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 tobject1.pp	rtl: ExitCode variable missing
 tobject5.pp	unclassified: pascal26:8: error: undefined variable (TObject)
 toperator78.pp	unclassified: pascal26:4: error: operator overloading: LongInt is not a record or class type (
