@@ -417,6 +417,9 @@ test-core: $(COMPILER)
 	# {$SCOPEDENUMS}: scoped members + TEnum.member access (bug-pascal-scopedenums-ignored)
 	./$(COMPILER) test/test_scopedenums.pas /tmp/test_scopedenums26
 	test "$$(/tmp/test_scopedenums26)" = "$$(printf '0\n2\n1\ncase-ok')"
+	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
+	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas /tmp/test_virtual_call_string26
+	test "$$(/tmp/test_virtual_call_string26)" = "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

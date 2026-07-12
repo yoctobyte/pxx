@@ -4779,6 +4779,24 @@ begin
            (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
+        else if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+           (ASTKind[ASTLeft[item]] <> AN_DEREF) then
+        begin
+          { materialised managed-string arg through a proc variable: hidden
+            owning local, pass by borrow — see AN_CALL / AN_VIRTUAL_CALL }
+          hiddenArgSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_DEFAULT_MEM,
+            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+          value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+        end
         else
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
@@ -5581,7 +5599,46 @@ begin
           value := IRLowerAST(ASTLeft[item])
         else
           value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        { Same argument conversions as the direct AN_CALL path — the virtual
+          path skipped them all, so a frozen concat ('ping' + CRLF) handed to a
+          virtual method's AnsiString param arrived as a raw slot address
+          (garbage length; blcksock's SendString hang), and a string literal
+          to a Pointer param missed the +8 skip. }
+        if (not isRefArg) and (pathIdx > 0) and
+           (IntToTypeKind(IRTk[value]) = tyString) and
+           (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) then
+        begin
+          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+          value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+        end
+        else if (not isRefArg) and (pathIdx > 0) and
+           (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
+        else if (not isRefArg) and (pathIdx > 0) and
+           (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+           (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+           (ASTKind[ASTLeft[item]] <> AN_DEREF) then
+        begin
+          { materialised managed-string arg: bind to a hidden owning local and
+            pass by borrow (ARC coercion + no per-call leak) — see AN_CALL }
+          hiddenArgSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_DEFAULT_MEM,
+            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+          value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+        end
+        else
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
