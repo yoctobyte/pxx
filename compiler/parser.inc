@@ -920,7 +920,7 @@ procedure ParseGenericTemplateNamed(const templateName: AnsiString; delphiForm: 
   Guards: the name must match ti's, the `<...>` group must be a plain
   comma-separated list of type idents closed by `>`, and the arity must match
   — anything else (e.g. a real `a < b` comparison) is left untouched. }
-procedure DelphiRewriteGenericUses(ti, insertAt: Integer);
+procedure DelphiRewriteGenericUses(ti, insertAt: Integer; delphiPattern: Boolean);
 const MAX_DGEN_TUPLES = 512;
 var
   i, j, k, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
@@ -931,7 +931,7 @@ var
   seenLen: array[0..MAX_DGEN_TUPLES-1] of Integer;
   seenArg: array[0..MAX_DGEN_TUPLES*MAX_TEMPLATE_PARAMS-1] of TRawToken;
   ins: array[0..MAX_TEMPLATE_PARAMS*2+8] of TRawToken;
-  ok, isParamForm: Boolean;
+  ok, isParamForm, specB: Boolean;
   si: Integer;
 begin
   tname := Templates[ti].Name;
@@ -940,11 +940,23 @@ begin
   i := insertAt;
   while i < TokCount - 1 do
   begin
-    if (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkLt) and
-       CaseEqual(GetTokenStr(i), tname) then
+    { Pattern A (mode-Delphi only): bare `TFoo<Args>`. Pattern B (both modes):
+      INLINE `specialize TFoo<Args>` in a non-binder position (^specialize
+      pointer decls, `var x: specialize TFoo<T>`, typed consts — tgeneric33/
+      87/88). The binder form `X = specialize TFoo<...>;` stays with the
+      native ParseSpecialization path (previous token = '='). }
+    specB := (i + 2 < TokCount) and (Tokens[i].Kind = tkIdent) and
+             CaseEqual(GetTokenStr(i), 'specialize') and
+             (Tokens[i+1].Kind = tkIdent) and CaseEqual(GetTokenStr(i+1), tname) and
+             (Tokens[i+2].Kind = tkLt) and
+             ((i = 0) or (Tokens[i-1].Kind <> tkEq));
+    if specB or
+       (delphiPattern and (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkLt) and
+        CaseEqual(GetTokenStr(i), tname)) then
     begin
       { collect the <...> argument list }
-      ok := True; na := 0; j := i + 2;
+      ok := True; na := 0;
+      if specB then j := i + 3 else j := i + 2;
       while ok do
       begin
         if (j < TokCount) and (na < MAX_TEMPLATE_PARAMS) and
@@ -968,7 +980,11 @@ begin
             isParamForm := False;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
         if isParamForm then
-          RemoveTokens(i + 1, j - i)   { strip `<T>` — method impl reference }
+        begin
+          if not specB then
+            RemoveTokens(i + 1, j - i);   { strip `<T>` — method impl reference }
+          { specB paramform (inside a later generic body): leave untouched }
+        end
         else
         begin
           key := '';
@@ -994,6 +1010,8 @@ begin
           end;
           Tokens[i].SOffset := seenOff[si];
           Tokens[i].SLen := seenLen[si];
+          { for specB, Tokens[i] was the 'specialize' keyword ident — it
+            becomes the alias ident and the whole `TFoo<...>` tail goes }
           RemoveTokens(i + 1, j - i);
         end;
       end;
@@ -1199,8 +1217,7 @@ begin
     concrete use `TFoo<Args>` to a minted alias ident (registering the alias
     declaration tokens `alias = specialize TFoo<Args>;` right after this
     template), and strip `<T>` from method impls `procedure TFoo<T>.M`. }
-  if delphiForm then
-    DelphiRewriteGenericUses(TemplateCount - 1, finalCur);
+  DelphiRewriteGenericUses(TemplateCount - 1, finalCur, delphiForm);
 
   TokPos := finalCur;
   Next;
