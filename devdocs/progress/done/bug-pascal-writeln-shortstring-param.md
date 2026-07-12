@@ -5,7 +5,7 @@ prio: 40
 # writeln of a ShortString/frozen-string PARAM prints wild memory
 
 - **Type:** bug (codegen — frozen-string by-ref param read) — **Track A**
-- **Status:** working
+- **Status:** done
   ([[feature-embed-pascal-script]]).
 
 ## Symptom
@@ -37,3 +37,6 @@ printing a shortstring param.
 writeln(S) of a tyFixedString/tyShortString param prints the value on all
 paths (direct + after the managed→frozen conversion temp of 2026-07-12);
 compile-run test; self-host byte-identical.
+
+## Log
+- 2026-07-12 — resolved, commit HEAD.
