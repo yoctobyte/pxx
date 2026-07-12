@@ -1920,6 +1920,37 @@ end;
 { Count the arguments of the call whose NAME is CurTok (Tokens[TokPos] = '('
   when parenthesized): top-level commas + 1; 0 for `()` or no parens. Used to
   pick among method OVERLOADS before the signature-driven arg loop parses. }
+function IsCallConvDirectiveTok: Boolean;
+{ A calling-convention directive in a class-body member's directive list
+  (`function QueryInterface(...): HResult; virtual; cdecl;` — testutils). They are
+  plain identifiers, and pxx is a whole-program compiler with one internal
+  convention, so they are parse-and-ignore here (ParseSubroutine already accepts
+  them on the implementation side).
+
+  Guarded on a following ';' because these words are not reserved: a FIELD named
+  `register` is legal, and `register: Integer;` has a ':' next, so it stays a
+  field. A directive is always followed by the semicolon. }
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not (CaseEqual(CurTok.SVal, 'cdecl') or CaseEqual(CurTok.SVal, 'stdcall') or
+          CaseEqual(CurTok.SVal, 'safecall') or CaseEqual(CurTok.SVal, 'register') or
+          CaseEqual(CurTok.SVal, 'pascal') or CaseEqual(CurTok.SVal, 'mwpascal')) then Exit;
+  Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
+end;
+
+function IsConstParamTok: Boolean;
+{ `const` or FPC's `constref` opening a parameter group. constref is a plain
+  identifier, not a keyword. FPC defines it as const that is ALWAYS passed by
+  reference; pxx already passes const records/variants by reference (a TGUID is a
+  record), and for a scalar the distinction is unobservable to the callee, so it
+  maps onto const. testutils' IInterface.QueryInterface(constref IID: TGUID; ...)
+  is what needs it. }
+begin
+  Result := (CurTok.Kind = tkConst) or
+            ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constref'));
+end;
+
 function CountCallArgsAhead: Integer;
 var i, d: Integer;
 begin
@@ -14670,7 +14701,7 @@ begin
               mSawConst := False;
               if (CurTok.Kind = tkVar) or ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
               begin mIsByRef := True; Next; end
-              else if CurTok.Kind = tkConst then begin mSawConst := True; Next; end;
+              else if IsConstParamTok then begin mSawConst := True; Next; end;
               mStartIdx := mNParams; mDoneParam := False;
               while IsDeclNameTok and not mDoneParam do
               begin
@@ -14678,10 +14709,25 @@ begin
                 if not Eat(tkComma) then mDoneParam := True;
                 if CurTok.Kind = tkColon then mDoneParam := True;
               end;
-              Expect(tkColon, ':');
               mIsArr := False;
-              if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
-              else mTk := ParseTypeKind;
+              if CurTok.Kind <> tkColon then
+              begin
+                { Untyped INTERFACE-method param (`out Obj`, no type) — the
+                  class-method and standalone paths already allowed this; this one
+                  demanded a ':' unconditionally, so IInterface.QueryInterface's
+                  `out Obj` would not parse. By-ref, any arg type, address passed. }
+                if not (mIsByRef or mSawConst) then
+                  Error('untyped parameter requires var, const, or out');
+                mIsByRef := True;
+                mTk := tyPointer;
+                LastTypeRecId := REC_NONE;
+              end
+              else
+              begin
+                Expect(tkColon, ':');
+                if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
+                else mTk := ParseTypeKind;
+              end;
               { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
               mHasDefault := False; mDefaultVal := 0;
               mDefaultIsStr := False; mDefaultSOff := 0; mDefaultSLen := 0;
@@ -14972,7 +15018,7 @@ begin
                   mIsByRef := True;
                   Next;
                 end
-                else if CurTok.Kind = tkConst then
+                else if IsConstParamTok then
                 begin mSawConst := True; Next; end;
                 mStartIdx := mNParams;
                 mDoneParam := False;
@@ -15147,7 +15193,7 @@ begin
                    CaseEqual(CurTok.SVal, 'deprecated') or
                    CaseEqual(CurTok.SVal, 'platform') or
                    CaseEqual(CurTok.SVal, 'experimental'))) or
-                  (CurTok.Kind = tkOverload) do
+                  (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
             begin
               { virtual/override/abstract drive dispatch; dynamic = virtual
                 (FPC: same semantics, different table — pxx has one VMT).
@@ -15282,6 +15328,23 @@ begin
             if CurTok.Kind = tkDefault then
             begin
               propIsDefault := True;
+              Next;
+              Eat(tkSemicolon);
+            end;
+            { Trailing hint directives — `property Tests: TFPList read FTests;
+              deprecated;` (fpcunit). Parse-and-ignore, like the method path: they
+              only drive an FPC warning. Unconsumed, `deprecated` was read as the
+              next FIELD name and demanded a ':'. `deprecated` may carry a message
+              literal. }
+            while (CurTok.Kind = tkIdent) and
+                  (CaseEqual(CurTok.SVal, 'deprecated') or
+                   CaseEqual(CurTok.SVal, 'platform') or
+                   CaseEqual(CurTok.SVal, 'experimental') or
+                   CaseEqual(CurTok.SVal, 'unimplemented')) do
+            begin
+              if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+                 (Tokens[TokPos].Kind = tkString) then
+                Next; { skip the message literal (consumed by the Next below) }
               Next;
               Eat(tkSemicolon);
             end;
@@ -15702,7 +15765,7 @@ begin
             if (CurTok.Kind = tkVar) or
                ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
             begin mIsByRef := True; Next; end
-            else if CurTok.Kind = tkConst then
+            else if IsConstParamTok then
             begin mSawConst := True; Next; end;
             mStartIdx := mNParams;
             mDoneParam := False;
@@ -16724,7 +16787,7 @@ begin
         isByRef := True;
         Next;
       end
-      else if CurTok.Kind = tkConst then
+      else if IsConstParamTok then
       begin
         isConst := True;
         Next;

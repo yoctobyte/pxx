@@ -427,6 +427,9 @@ test-core: $(COMPILER)
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas /tmp/test_method_overload_types_b24826
 	test "$$(/tmp/test_method_overload_types_b24826)" = "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"
+	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
+	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas /tmp/test_high_low_const_expr26
 	test "$$(/tmp/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1')"

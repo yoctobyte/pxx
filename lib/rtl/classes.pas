@@ -22,6 +22,22 @@ interface
 uses sysutils, platform;   { CompareStr for Sort; PAL file API for TFileStream }
 
 type
+  { ---- IInterface: the root interface (FPC declares it in System) ----
+    FPC hands every unit IInterface/IUnknown and HResult from System. pxx has no
+    auto-injected System unit, so any FPC source that names them — fcl-fpcunit's
+    testutils (`TNoRefCountObject = class(TObject, IInterface)`) is the first —
+    finds nothing. Declared here because Classes is what such units already use.
+    pxx interfaces default to CORBA (no refcounting), so this adds the NAME and
+    the three reserved method slots without imposing COM lifetime management. }
+  HResult = LongInt;
+
+  IInterface = interface
+    function QueryInterface(constref IID: TGuid; out Obj): HResult;
+    function _AddRef: Integer;
+    function _Release: Integer;
+  end;
+  IUnknown = IInterface;
+
   { ---- TPersistent: assignable base (FPC Classes surface) ---- }
   TPersistent = class(TObject)
   protected
