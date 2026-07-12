@@ -5,7 +5,7 @@ prio: 65  # auto
 # Aggregate / frozen-string result via virtual or indirect call — cross backends
 
 - **Type:** feature (codegen — cross targets) — Track A
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Origin:** the frozen-string reentrancy fix
   ([[bug-frozen-string-result-global-not-reentrant]]) routed frozen-string (and
@@ -52,3 +52,32 @@ back in favour of an honest compile error.
 - A virtual and an indirect aggregate/frozen-string return compile + run on
   i386 / arm32 / aarch64 (oracle == x86-64); the clean-error guards removed; cross
   regression tests; self-host byte-identical.
+
+## Log
+- 2026-07-12 — resolved, commit 7f0c7442.
+
+## RESOLVED 2026-07-12 (7f0c7442) — i386 / arm32 / aarch64 all wired
+
+All six clean-error guards on the three OOP-capable cross backends are gone; the
+hidden caller-destination now travels on the virtual and indirect paths too.
+
+- **i386** — dest into `ecx`. Virtual: emit the dest IR_LEA *before* the Self
+  fetch (both land in eax, and the VMT dispatch reuses eax for Self). Indirect:
+  the callee address is also in eax, so it is parked on the stack across the dest
+  IR_LEA and popped back.
+- **arm32** — dest into `r12` (ip). Pushed as the deepest block word (below the
+  callee for indirect), loaded just before `blx`; the block size and post-call
+  `add sp` account for the extra word on both the <=4-word and >4-word paths.
+- **aarch64** — dest into `x8` (AAPCS indirect-result). Pushed deepest, popped
+  after the arg pops (so the pop cannot disturb x0 = Self).
+
+Test: `test/test_cross_virtual_indirect_aggret.pas` — virtual + indirect record
+and string returns, register-arg and stack-arg shapes, oracle == x86-64; wired
+into the i386 / aarch64 / arm32 suites. Gate: testmgr quick green, self-host
+byte-identical, `make test-i386` / `test-aarch64` / `test-arm32` all green.
+
+Pre-existing caps hit while writing the test (NOT part of this ticket, unchanged):
+x86-64 indirect calls allow <= 6 params; aarch64 virtual calls allow <= 8 arg
+words (Self included).
+
+riscv32 / xtensa keep their guards — bare-metal, no OOP dispatch exercised.
