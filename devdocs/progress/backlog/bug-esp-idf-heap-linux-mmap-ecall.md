@@ -1,5 +1,5 @@
 ---
-prio: 60
+prio: 35  # ESP parked (user 2026-07-12): Pascal has prio; still the top ESP ticket when resumed
 ---
 
 # ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes

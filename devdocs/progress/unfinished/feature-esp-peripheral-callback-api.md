@@ -120,3 +120,6 @@ This ticket builds the high-level layer that hides the SDK call **and** the
       this means hello-c3 also crashes if rebuilt today.
   - Parked (-> unfinished) until the heap ticket lands; then: qemu acceptance
     run, drop the interim iram;, then GPIO (slice 2) and ADC (slice 3).
+- 2026-07-12 — **ESP work parked by user decision: Pascal has prio.** The ESP
+  ticket family (this, the heap-mmap bug, the non-iram @proc fixup, the fd
+  semantics follow-up) is deprioritized until Pascal/compat work settles.
