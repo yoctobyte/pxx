@@ -16977,6 +16977,7 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  savedNestedComments: Boolean;
   unitNeedsText: Boolean;
 begin
   isPath := False;
@@ -17401,8 +17402,18 @@ begin
     { A unit's own CASESENSITIVE directive (processed during LexAppend below)
       applies to that unit only — saved here, restored after ParseUnit, so it
       does not leak into the including file. A unit with no directive inherits
-      the caller's mode. }
+      the caller's mode. Same per-unit scoping for the comment-nesting flag:
+      a unit's {$MODE DELPHI} / {$NESTEDCOMMENTS OFF} must not change how
+      LATER units' comments lex (Synapse's jedi.inc sets MODE DELPHI and
+      every lib/rtl unit lexed after it broke on nested-brace doc comments —
+      bug-unit-mode-directives-leak). }
     savedCaseMode := CaseSensitiveMode;
+    savedNestedComments := NestedComments;
+    { fresh per-unit default: FPC lexes each unit under its OWN mode — an
+      includer's {$MODE DELPHI} (NestedComments off) must not change how this
+      unit's comments nest. The unit's own MODE/NESTEDCOMMENTS directives
+      still apply to it, and the caller's state is restored below. }
+    NestedComments := True;
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
 
@@ -17469,6 +17480,7 @@ begin
     CurSrcBaseName := savedSrcBase;
     CurUnitDir := savedUnitDir;
     CaseSensitiveMode := savedCaseMode;
+    NestedComments := savedNestedComments;
     CurrentUnitIdx := savedCurrentUnitIdx;
     CurrentCLibrary := savedCurrentCLibrary;
   end;

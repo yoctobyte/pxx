@@ -42,12 +42,13 @@ int main(void) {
     pthread_once(&once_guard, once_cb);
     if (once_hits != 1) { printf("once\n"); return 1; }
 
-    /* condvar single-thread: signalled-before-timedwait must not deadlock; an
-       unsignalled timedwait must time out (relative ~1ms budget). */
+    /* condvar: an unsignalled timedwait with a deadline already in the past
+       must return ETIMEDOUT immediately (zero-budget wait). Keeps this test
+       libc-free: no clock_gettime call (crtl has no body for it — the
+       deadline math happens inside pthread.c via the Pascal PAL clock). */
     pthread_mutex_lock(&m);
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    ts.tv_nsec += 1000000;   /* +1ms */
-    if (ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
+    ts.tv_sec = 0;
+    ts.tv_nsec = 1;
     if (pthread_cond_timedwait(&c, &m, &ts) != 110 /* ETIMEDOUT */) {
         printf("timedwait\n"); return 1;
     }

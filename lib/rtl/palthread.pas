@@ -138,7 +138,7 @@ end;
 
 function PalFutexWaitTimeout(addr: Pointer; expected: Integer; ns: Int64): Integer;
 var
-  ts: array[0..1] of NativeInt;   { struct timespec: tv_sec, tv_nsec (word-wide) }
+  ts: array[0..1] of NativeInt;   { struct timespec: tv_sec then tv_nsec, word-wide }
 begin
   if ns < 0 then
   begin

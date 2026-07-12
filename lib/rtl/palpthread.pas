@@ -45,6 +45,10 @@ procedure __pxx_pcond_broadcast(c: PCondVar);
 procedure __pxx_pcond_wait(c: PCondVar; m: PMutex);
 function  __pxx_pcond_timedwait(c: PCondVar; m: PMutex; ns: Int64): LongInt;
 procedure __pxx_ponce(ctl: Pointer; proc: TOnceProc);
+{ Monotonic clock in nanoseconds (millisecond granularity) for the crtl
+  pthread_cond_timedwait deadline math — keeps crtl off libc clock_gettime,
+  which has no crtl body and would drag in a DT_NEEDED. }
+function  __pxx_pmonotonic_ns: Int64;
 
 implementation
 
@@ -114,6 +118,26 @@ type
 procedure __pxx_ponce(ctl: Pointer; proc: TOnceProc);
 begin
   RunOnce(POnceControl(ctl)^, proc);
+end;
+
+{ clock_gettime(CLOCK_MONOTONIC) via raw syscall, per-arch numbers mirroring
+  pxxcio's SysClockGettimeNr (riscv32 deliberately 0-stubbed there too). }
+function __pxx_pmonotonic_ns: Int64;
+var
+  ts: array[0..1] of NativeInt;   { kernel timespec: sec, nsec (word-wide) }
+  n: Integer;
+  r: Int64;
+begin
+  __pxx_pmonotonic_ns := 0;
+  n := -1;
+  {$ifdef CPUX86_64} n := 228; {$endif}
+  {$ifdef CPU_I386}  n := 265; {$endif}
+  {$ifdef CPU_AARCH64} n := 113; {$endif}
+  {$ifdef CPU_ARM32} n := 263; {$endif}
+  if n = -1 then Exit;
+  r := __pxxrawsyscall(n, 1, Int64(@ts[0]), 0, 0, 0, 0);   { 1 = CLOCK_MONOTONIC }
+  if r = 0 then
+    __pxx_pmonotonic_ns := Int64(ts[0]) * 1000000000 + Int64(ts[1]);
 end;
 
 end.

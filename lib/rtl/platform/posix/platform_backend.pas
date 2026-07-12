@@ -516,7 +516,7 @@ begin
 end;
 
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
-var ts: array[0..1] of NativeInt;   { struct timespec {tv_sec; tv_nsec}, native-word fields per arch }
+var ts: array[0..1] of NativeInt;   { struct timespec (tv_sec; tv_nsec), native-word fields per arch }
 begin
   ts[0] := NativeInt(sec); ts[1] := NativeInt(nsec);
   Result := Integer(__pxxrawsyscall(SYS_nanosleep, Int64(@ts[0]), 0, 0, 0, 0, 0));
@@ -531,7 +531,7 @@ begin
 end;
 
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
-var ts: array[0..3] of NativeInt;  { struct timespec[2] {atime, mtime} }
+var ts: array[0..3] of NativeInt;  { struct timespec[2] (atime, mtime) }
 begin
   ts[0] := NativeInt(atimeSec); ts[1] := 0;
   ts[2] := NativeInt(mtimeSec); ts[3] := 0;

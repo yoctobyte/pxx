@@ -2992,7 +2992,41 @@ begin
       begin
         if (k < Length(src)) and (src[k] = '{') and (src[k + 1] = '$') then
           Break;                            { real directive boundary }
-        if src[k] = '{' then
+        if src[k] = #39 then
+        begin
+          { String literal: a "{$...}" inside it is text, not a directive (an
+            unterminated literal ends at the newline, like the lexer). }
+          Inc(k);
+          while (k <= Length(src)) and (src[k] <> #39) and (src[k] <> #10) do Inc(k);
+          if k <= Length(src) then Inc(k);   { the closing quote / the newline }
+        end
+        else if (src[k] = '/') and (k < Length(src)) and (src[k + 1] = '/') then
+        begin
+          { Line comment: inert to the end of the line. }
+          while (k <= Length(src)) and (src[k] <> #10) do Inc(k);
+        end
+        else if (src[k] = '(') and (k < Length(src)) and (src[k + 1] = '*') then
+        begin
+          { Paren-star comment: EVERYTHING inside — including {$...} directives
+            — is comment text, mirroring the lexer's paren-star scanner (same-type
+            nesting per NestedComments; braces are delimiter-inert). Without
+            this, commented-out directive examples were expanded: ZenGL's
+            zgl_gltypeconst C-junk block and Synapse jedi.inc's doc comment
+            killed every unit (bug-pascal-directive-inside-paren-star-comment). }
+          j := 1;
+          Inc(k, 2);
+          while (k <= Length(src)) and (j > 0) do
+          begin
+            if (src[k] = '*') and (k < Length(src)) and (src[k + 1] = ')') then
+            begin Dec(j); Inc(k, 2); end
+            else if NestedComments and (src[k] = '(') and (k < Length(src)) and
+                    (src[k + 1] = '*') then
+            begin Inc(j); Inc(k, 2); end
+            else
+              Inc(k);
+          end;
+        end
+        else if src[k] = '{' then
         begin
           { Brace comment: skip to its matching close-brace, nesting on an inner
             directive-looking open-brace-dollar so its close-brace does not end

@@ -24,6 +24,7 @@ extern void      __pxx_pcond_broadcast(void *c);
 extern void      __pxx_pcond_wait(void *c, void *m);
 extern int       __pxx_pcond_timedwait(void *c, void *m, long long ns);
 extern void      __pxx_ponce(void *ctl, void (*proc)(void));
+extern long long __pxx_pmonotonic_ns(void);
 
 /* ---- mutex ---- */
 
@@ -76,11 +77,12 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
  * signalled). */
 int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m,
                            const struct timespec *abstime) {
-  struct timespec now;
-  long long ns;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  ns = (long long)(abstime->tv_sec - now.tv_sec) * 1000000000LL
-     + (long long)(abstime->tv_nsec - now.tv_nsec);
+  /* now from the Pascal PAL (monotonic; ms granularity) — crtl has no
+   * clock_gettime body, and calling one would mark it external-against-libc
+   * and give the binary a DT_NEEDED (breaking the libc-free contract). */
+  long long now_ns = __pxx_pmonotonic_ns();
+  long long ns = (long long)abstime->tv_sec * 1000000000LL
+               + (long long)abstime->tv_nsec - now_ns;
   if (ns < 0) ns = 0;
   return __pxx_pcond_timedwait(c, m, ns);
 }

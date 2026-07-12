@@ -135,9 +135,17 @@ double scalbn(double x, int e) { return ldexp(x, e); }
 /* finite <=> x - x == 0 (inf - inf and nan - nan are NaN, NaN != 0). */
 int isfinite(double x) { double d = x - x; return d == d && d == 0.0; }
 
-int signbit(double x) { return copysign(1.0, x) < 0.0; }
+/* -0.0 detected via 1/x = -inf; avoids copysign (no crtl body — it maps to a
+   Pascal builtin only where <math.h> is in the TU, and this file must also
+   compile standalone). */
+int signbit(double x) { return x < 0.0 || (x == 0.0 && 1.0 / x < 0.0); }
 
 double nan(const char *tag) { (void)tag; return 0.0 / 0.0; }
+
+/* NaN is the only value unequal to itself (float compares are IEEE-unordered
+   since b232). Body here keeps callers libc-free — the bare extern otherwise
+   resolves against libc and drags in a DT_NEEDED. */
+int isnan(double x) { return x != x; }
 
 /* IEEE remainder: r = x - n*y with n = nearest integer to x/y (ties to even).
    Built on fmod; the halfway case picks the even quotient like glibc. */
@@ -146,8 +154,9 @@ double remainder(double x, double y) {
   double r = fmod(x, y);
   double ar = fabs(r);
   if (2.0 * ar > ay ||
-      (2.0 * ar == ay && fmod(trunc(fabs(x) / ay), 2.0) != 0.0))
-    r -= copysign(ay, r);
+      (2.0 * ar == ay && fmod(trunc(fabs(x) / ay), 2.0) != 0.0)) {
+    if (r > 0.0) r -= ay; else r += ay;   /* copysign(ay, r), inline */
+  }
   return r;
 }
 
@@ -170,7 +179,7 @@ double acosh(double x) { return log(x + sqrt(x * x - 1.0)); }
 double asinh(double x) {
   /* sign-symmetric; the log form loses the sign for negative x */
   double r = log(fabs(x) + sqrt(x * x + 1.0));
-  return copysign(r, x);
+  return x < 0.0 ? -r : r;
 }
 
 double atanh(double x) { return 0.5 * log((1.0 + x) / (1.0 - x)); }

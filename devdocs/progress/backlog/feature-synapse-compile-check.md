@@ -316,3 +316,12 @@ splice). Same lexer bug the New-ZenGL ladder hit the same night —
 it walls BOTH corpora. Without --mimic-fpc the probe instead takes the
 Kylix path and stops at `uses libc` (expected). Next wall after the lexer
 fix is presumably the previously-noted "too many array constant elements".
+
+### 2026-07-12: lexer walls DOWN — next wall is RTL surface
+With bug-pascal-directive-inside-paren-star-comment resolved (both the
+expansion-pass comment bug AND a second find: jedi.inc's {$MODE DELPHI}
+leaked NestedComments into every unit lexed after it — fixed per-unit),
+`uses synautil --mimic-fpc` now parses the entire unit and fails on
+SEMANTICS: `undefined variable (DayOfWeek)` at synautil's date code — a
+lib/rtl sysutils surface gap (Track B, this ticket's own lane). The
+directive/lexer era of this ticket is over.

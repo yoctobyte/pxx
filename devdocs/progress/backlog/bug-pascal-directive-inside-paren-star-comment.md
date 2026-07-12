@@ -60,3 +60,28 @@ preprocessor lines with `&&` in a Khronos-generated ZenGL unit,
   [[project_nested_comment_brace_selfhost_landmine]] class of hazards: comment
   handling changes can desync the 2-step self-host — reseed, don't bisect).
 - A lexer test covers directive-in-(**)-comment and brace-in-(**)-comment.
+
+## Resolution (2026-07-12, opus-night)
+
+TWO distinct bugs were behind the symptom; both fixed:
+
+1. **Include-expansion pass processed directives inside comments/strings**
+   (`compiler/elfwriter.inc`): the pre-lex `{$include}` expansion scanned raw
+   text for `{$` with no awareness of `(* *)` comments, `//` line comments, or
+   string literals (it already skipped `{ }`). ZenGL's zgl_gltypeconst and the
+   tcmt repro died here. The scan now skips all three (mirroring the lexer's
+   comment rules; the main lexer's (* *) scanner was already correct).
+2. **{$MODE DELPHI} leaked NestedComments across units**
+   (`compiler/parser.inc` ParseUsesUnit): Synapse's jedi.inc sets MODE DELPHI
+   (NestedComments off) and every lib/rtl unit lexed AFTER it broke on
+   nested-brace doc comments ("unexpected character" at the first orphaned
+   `}`). Fix: per-unit scoping like the existing CaseSensitiveMode precedent —
+   caller state saved/restored AND the child starts from the FPC default
+   (True), since FPC lexes each unit under its own mode, not the includer's.
+
+Also defused two nested-brace doc comments in platform_backend.pas that only
+lexed by grace of NestedComments=on. Result: tcmt repro compiles; ZenGL
+zgl_gltypeconst advances to its real next wall (`uses X` — no X11 unit);
+Synapse synautil now parses ALL the way into semantics (`undefined variable
+DayOfWeek` — an RTL surface gap, Track B). Gate: 2-step self-host
+byte-identical + testmgr FULL 1131/1131 GREEN.
