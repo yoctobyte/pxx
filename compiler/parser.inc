@@ -3441,6 +3441,48 @@ begin
         { overload-aware: pick the entry matching the call's arg count }
         mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
       end;
+
+      { FPC's TObject.MethodAddress(name) / MethodName(addr): published-method RTTI,
+        available with no `uses` because FPC declares them on TObject in System.
+        fcl-fpcunit finds its tests with `Self.MethodAddress(FName)`. Rewritten to
+        the __pxxMethodAddress / __pxxMethodName helpers in the builtin unit (pulled
+        by the token pre-scan). Only when the class has NO method of that name, so a
+        user's own MethodAddress still wins. }
+      if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
+         (Tokens[TokPos].Kind = tkLParen) and
+         (CaseEqual(fieldName, 'MethodAddress') or CaseEqual(fieldName, 'MethodName')) then
+      begin
+        if CaseEqual(fieldName, 'MethodAddress') then
+          ci := FindProc('__pxxMethodAddress')
+        else
+          ci := FindProc('__pxxMethodName');
+        if ci >= 0 then
+        begin
+          Next;                  { consume the method name }
+          Expect(tkLParen, '(');
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := ci;
+          ASTTk[mcallNode] := Ord(Procs[ci].RetType);
+
+          { arg 0 = the instance }
+          margSeq := AllocNode(AN_ARG);
+          ASTLeft[margSeq] := node;
+          ASTLeft[mcallNode] := margSeq;
+
+          { arg 1 = the name (or the code address) }
+          ParseExpr;
+          mlastArg := AllocNode(AN_ARG);
+          ASTLeft[mlastArg] := CurASTNode;
+          ASTRight[margSeq] := mlastArg;
+
+          Expect(tkRParen, ')');
+          tk := Procs[ci].RetType;
+          recName := REC_NONE;
+          Result := mcallNode;
+          Exit;
+        end;
+      end;
+
       if mmi >= 0 then
       begin
         mpi := UMthProc_[mmi];
@@ -19870,6 +19912,15 @@ begin
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /
+      __pxxMethodName in the builtin unit (see ParseLValueAST) — FPC has them on
+      TObject in System, so they must work with no `uses`. A class with a method of
+      that name shadows at the call site, leaving the helpers unused. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /
