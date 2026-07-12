@@ -33,3 +33,12 @@ test-c-conformance-arm32: FAILURES: 00204.c(output)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-12 — resolved, commit 38d8cb5e.
+
+**Triage:** not a regression. `bad == last good == 96b6bac331d9`, 0 commits in
+range — this job was newly *enrolled* at `eb63555d` (cross-conformance matrix), so
+this is a first measurement of a pre-existing cross-target gap, not a break caused
+by a commit in range. The underlying bugs are tracked in their owning lanes:
+[[bug-c-generic-long-vs-int-on-32bit]] (00219), [[bug-c-lshift-promotion-aarch64]]
+(00200), [[bug-c-struct-byval-varargs-32bit]] (00204). The tests are still red;
+this stub is retired only because it duplicates those three.

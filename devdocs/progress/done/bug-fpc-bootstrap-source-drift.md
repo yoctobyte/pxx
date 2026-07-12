@@ -59,3 +59,6 @@ already accepts the source.
 green (canary passes), plus A's usual gate: `make test` + self-host fixedpoint
 byte-identical. A full `make bootstrap` from FPC is the real prize but the canary
 covers the drift that caused this.
+
+## Log
+- 2026-07-12 — resolved, commit e40f9ea5.

@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (94)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
-| bug-fpc-bootstrap-source-drift | A | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
@@ -126,13 +125,6 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-arm32-shard2-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard2-6 | T | 70 | regression | regression: test-c-conformance-i386#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard5-6 | T | 70 | regression | regression: test-c-conformance-i386#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-riscv32-shard2-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-riscv32-shard5-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -197,7 +189,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (621)
+## done (629)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -380,6 +372,7 @@ _none_
 | bug-forin-qualified-set-member-source | A | 50 | bug | `for-in` over a qualified set member source fails | — |
 | bug-forward-class-decl-with-later-base-loses-fields | A | 50 | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | 50 | bug | FPC bootstrap no longer compiles compiler source | — |
+| bug-fpc-bootstrap-source-drift | A | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
 | bug-fpc-seed-drift-forward-semicolon-enumtype | A | 45 | bug | FPC seed drift: compiler no longer FPC-compiles (3 spots) | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | 50 | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | 50 | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
@@ -795,6 +788,13 @@ _none_
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard2-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard2-6 | T | 70 | regression | regression: test-c-conformance-i386#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard5-6 | T | 70 | regression | regression: test-c-conformance-i386#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard2-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard5-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-core-131 | T | 70 | regression | regression: test-core#131 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
 | regression-test-core-602 | T | 70 | regression | regression: test-core#602 red at 4dfde8f92cb4 (auto-filed by twatch) | — |
@@ -842,13 +842,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-c-conformance-aarch64-shard1-6
-- [p 70] [T] regression-test-c-conformance-arm32-shard2-6
-- [p 70] [T] regression-test-c-conformance-arm32-shard5-6
-- [p 70] [T] regression-test-c-conformance-i386-shard2-6
-- [p 70] [T] regression-test-c-conformance-i386-shard5-6
-- [p 70] [T] regression-test-c-conformance-riscv32-shard2-6
-- [p 70] [T] regression-test-c-conformance-riscv32-shard5-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [A] feature-cross-virtual-indirect-hidden-dest
 - [p 65] [O] feature-optimization-levels
@@ -886,7 +879,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-fpc-bootstrap-source-drift
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
