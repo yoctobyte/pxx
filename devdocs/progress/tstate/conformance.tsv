@@ -1,31 +1,31 @@
 # status	name	category	tag	reason
 pass	tarray10.pp	tarray	-	
-skip	tarray11.pp	tarray	untriaged	runtime: exit code 30 (want 0)
-skip	tarray12.pp	tarray	untriaged	unclassified: pascal26:44: error: base type not found: IInterface ()
-skip	tarray13.pp	tarray	untriaged	unclassified: pascal26:23: error: undefined variable (DynArraySize)
-skip	tarray14.pp	tarray	untriaged	unclassified: pascal26:100: error: arithmetic operator not supported for dynamic arrays (`a +
-skip	tarray15.pp	tarray	untriaged	unclassified: pascal26:31: error: dynamic array initializer not supported ()
-skip	tarray16.pp	tarray	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 8)
-skip	tarray17.pp	tarray	untriaged	unclassified: Expected: :=, but got: (Kind: 124, Line: 32) | near: Halt a >>>
-skip	tarray18.pp	tarray	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 63, Line: 21)
+skip	tarray11.pp	tarray	gap	dynamic array of interfaces — refcount/lifetime on SetLength/copy (exit 30)
+skip	tarray12.pp	tarray	gap	IInterface/TInterfacedObject base + specialize TArray<T> as result type
+skip	tarray13.pp	tarray	gap	DynArraySize/DynArrayIndex/DynArraySetLength RTL helpers missing
+skip	tarray14.pp	tarray	gap	Concat() on dynamic arrays and array-of-array constructors
+skip	tarray15.pp	tarray	gap	dynamic-array typed constants/initializers (Nil, (), nested)
+skip	tarray16.pp	tarray	gap	dynamic-array const initializers ([1,2,3]) and delphi-mode generic function CheckArray<T>
+skip	tarray17.pp	tarray	gap	{$modeswitch arrayoperators} — dynarray + and += concatenation
+skip	tarray18.pp	tarray	gap	`class operator :=` / Explicit on records taking open `array of LongInt`
 pass	tarray19.pp	tarray	-	
-skip	tarray1.pp	tarray	untriaged	unclassified: pascal26:2: error: class reference to a class with no RTTI (no published members?) ()
+skip	tarray1.pp	tarray	gap	open-array constructor of class-of (metaclass) values `p([tc2])`
 pass	tarray20.pp	tarray	-	
-skip	tarray2.pp	tarray	untriaged	unclassified: pascal26:57: error: dereferenced value is not a pointer ()
-skip	tarray3.pp	tarray	untriaged	unclassified: Expected: begin, but got: ABCD (Kind: 3, Line: 13)
+skip	tarray2.pp	tarray	gap	array of const / TVarRec (vtype fields, VExtended^, VPointer)
+skip	tarray3.pp	tarray	gap	typed-const array-of-char from string literal, openstring {$P+}, char-array/string compare
 auto	tarray4.pp	tarray	-	knownrunerror
 pass	tarray5.pp	tarray	-	
-skip	tarray6.pp	tarray	untriaged	unclassified: pascal26:6: error: local var-section initializer not supported; use `var x := value;` ()
-skip	tarray7.pp	tarray	untriaged	unclassified: Expected: ], but got: (Kind: 82, Line: 45) | near: average a >>>
-skip	tarray8.pp	tarray	untriaged	unclassified: pascal26:18: error: undefined variable (uniquestring)
+skip	tarray6.pp	tarray	gap	local var-section initializers (`var S: AnsiString = 'abcd'`) + wide/ansi conversions
+skip	tarray7.pp	tarray	gap	open-array slice syntax a[lo..hi] passed to open-array param
+skip	tarray8.pp	tarray	gap	RTL `UniqueString` missing; also `out` open-array-of-string implicit init
 auto	tarray9.pp	tarray	-	opt
-skip	tarrconstr1.pp	tarrconstr	untriaged	unclassified: pascal26:12: error: undefined variable (TAB)
+skip	tarrconstr1.pp	tarrconstr	gap	Delphi dynamic-array constructor TAB.Create(...)
 pass	tarrconstr2.pp	tarrconstr	-	
 pass	tarrconstr3.pp	tarrconstr	-	
 pass	tarrconstr4.pp	tarrconstr	-	
-skip	tarrconstr5.pp	tarrconstr	untriaged	unclassified: Expected: >, but got: TArray (Kind: 1, Line: 14) | near: TStringArrayArray2 spe
-skip	tarrconstr6.pp	tarrconstr	untriaged	unclassified: pascal26:24: error: undefined variable (TLongIntArray)
-skip	tarrconstr7.pp	tarrconstr	untriaged	unclassified: pascal26:6: error: base type not found: IInterface ()
+skip	tarrconstr5.pp	tarrconstr	gap	inline specialize TArray<specialize TArray<String>> in type decl
+skip	tarrconstr6.pp	tarrconstr	gap	dynarray-type constructor TLongIntArray.Create + open-array overload pick
+skip	tarrconstr7.pp	tarrconstr	gap	IInterface/TInterfacedObject; array constructor of interfaces refcount
 pass	tarrconstr8.pp	tarrconstr	-	
 pass	tcase0.pp	tcase	-	
 pass	tcase10.pp	tcase	-	
@@ -49,7 +49,7 @@ pass	tcase26.pp	tcase	-
 pass	tcase27.pp	tcase	-	
 pass	tcase28.pp	tcase	-	
 pass	tcase29.pp	tcase	-	
-skip	tcase2.pp	tcase	untriaged	unclassified: Expected: begin, but got: (Kind: 82, Line: 3)
+skip	tcase2.pp	tcase	gap	subrange-of-enum type (workdays = mon..fri) and case over it
 pass	tcase30.pp	tcase	-	
 pass	tcase31.pp	tcase	-	
 pass	tcase32.pp	tcase	-	
@@ -83,58 +83,58 @@ pass	tcase8.pp	tcase	-
 pass	tcase9.pp	tcase	-	
 pass	tclass10a.pp	tclass	-	
 pass	tclass10b.pp	tclass	-	
-skip	tclass10c.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: f2 (Kind: 1, Line: 14)
+skip	tclass10c.pp	tclass	gap	`class var` block inside class visibility section; later section resets to plain fields
 pass	tclass10.pp	tclass	-	
-skip	tclass11a.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
+skip	tclass11a.pp	tclass	gap	nested class types inside a class (strict private / public `type` sections)
 pass	tclass11b.pp	tclass	-	
-skip	tclass12a.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
+skip	tclass12a.pp	tclass	gap	`strict private const` section inside class + static class procedure
 pass	tclass12b.pp	tclass	-	
-skip	tclass12c.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: private (Kind: 1, Line: 9)
-skip	tclass12d.pp	tclass	untriaged	unclassified: pascal26:21: error: undefined variable (SomeValue)
-skip	tclass13a.pp	tclass	untriaged	unclassified: Expected: ), but got: (Kind: 81, Line: 12)
+skip	tclass12c.pp	tclass	gap	class-local const/type/var sections, `type Integer` distinct type, property default
+skip	tclass12d.pp	tclass	gap	nested class const/type sections (class-scoped const SomeValue)
+skip	tclass13a.pp	tclass	gap	nested `type` sections inside classes (nested class overriding parent's)
 pass	tclass13b.pp	tclass	-	
 skip	tclass13c.pp	tclass	gap	accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
-skip	tclass13d.pp	tclass	untriaged	unclassified: Expected: :, but got: (Kind: 64, Line: 7)
-skip	tclass13.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 81, Line: 18)
+skip	tclass13d.pp	tclass	gap	`const` section inside a class (class constants / typed class consts)
+skip	tclass13.pp	tclass	wontfix	needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 pass	tclass14a.pp	tclass	-	
 pass	tclass14b.pp	tclass	-	
-skip	tclass15.pp	tclass	untriaged	unclassified: pascal26:458: error: unexpected character ()
-skip	tclass16.pp	tclass	untriaged	mode-delphi generics adjacent: Expected: :, but got: Test (Kind: 1, Line: 14)
+skip	tclass15.pp	tclass	gap	nested class type + Classes TCustomMemoryStream/SetPointer
+skip	tclass16.pp	tclass	gap	`class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
 pass	tclass17.pp	tclass	-	
 auto	tclass1.pp	tclass	-	version
 auto	tclass2.pp	tclass	-	version
-skip	tclass3.pp	tclass	untriaged	unclassified: pascal26:26: error: inherited call argument count mismatch ()
+skip	tclass3.pp	tclass	gap	bare `inherited;` forwarding the caller's arguments to the ancestor constructor
 auto	tclass4.pp	tclass	-	opt
-skip	tclass5.pp	tclass	untriaged	unclassified: pascal26:30: error: undefined variable (fail)
+skip	tclass5.pp	tclass	gap	class constructor `fail` + range-check error 210 semantics
 auto	tclass6.pp	tclass	-	version
 auto	tclass7.pp	tclass	-	version
 auto	tclass8.pp	tclass	-	version
-skip	tclass9.pp	tclass	untriaged	unclassified: pascal26:27: error: undefined variable (FSomeClassVar)
-skip	tclassinfo1.pp	tclass	untriaged	unclassified: pascal26:8: error: undefined variable (TObject)
+skip	tclass9.pp	tclass	gap	`class var` / `var` sections in class, class property with static method
+skip	tclassinfo1.pp	tclass	wontfix	TObject.ClassInfo = TypeInfo(TObject) — FPC RTTI/typeinfo internals
 pass	tdefault10.pp	tdefault	-	
 skip	tdefault11.pp	tdefault	gap	accepts-invalid — Default(unspecialized template), mode-delphi variant of tdefault12 (template-registry check)
 skip	tdefault12.pp	tdefault	gap	accepts-invalid — Default(unspecialized template): undefined type, real gap (template-registry check)
 pass	tdefault13.pp	tdefault	-	
 pass	tdefault14.pp	tdefault	-	
 auto	tdefault15.pp	tdefault	-	target=darwin
-skip	tdefault1.pp	tdefault	untriaged	unclassified: pascal26:8: error: uses: unit source not found: variants ()
+skip	tdefault1.pp	tdefault	wontfix	needs FPC `variants` unit as shipped (Default() over Variant types)
 pass	tdefault2.pp	tdefault	-	
 pass	tdefault3.pp	tdefault	-	
 pass	tdefault4.pp	tdefault	-	
-skip	tdefault5.pp	tdefault	untriaged	unclassified: pascal26:458: error: unexpected character ()
+skip	tdefault5.pp	tdefault	gap	Default() on record/object containing TextFile field (delphi mode)
 pass	tdefault6.pp	tdefault	-	
 pass	tdefault7.pp	tdefault	-	
 pass	tdefault8.pp	tdefault	-	
 pass	tdefault9.pp	tdefault	-	
-skip	tenum1.pp	tenum	untriaged	unclassified: Expected: begin, but got: (Kind: 82, Line: 3)
+skip	tenum1.pp	tenum	gap	subrange type over an enum (`weekend = sat..sun`) not parsed
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
-skip	tenum3.pp	tenum	untriaged	unclassified: Expected: begin, but got: (Kind: 82, Line: 12) | near: third TRange1 first >
+skip	tenum3.pp	tenum	gap	{$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
 skip	tenum4.pp	tenum	gap	accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEnum.member works); residual: the En1 := first assign needs the enum-identity type check (tenum2 cluster) to reject
 pass	tenum5.pp	tenum	-	
-skip	tenum6.pp	tenum	untriaged	runtime: exit code 1 (want 0)
-skip	tenumerators1.pp	tenum	untriaged	unclassified: Expected: :=, but got: (Kind: 78, Line: 60) | near: end Enumerator Free >>>
-skip	terecs10.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 74, Line: 9)
-skip	terecs11.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: type (Kind: 9, Line: 9)
+skip	tenum6.pp	tenum	gap	`Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool ('FALSE')
+skip	tenumerators1.pp	tenum	gap	Classes TList/TFPList GetEnumerator + custom enumerator classes
+skip	terecs10.pp	terecs	gap	default indexed property on a record (advanced records)
+skip	terecs11.pp	terecs	gap	nested type section inside a record (private type: class/record/object/interface/range)
 pass	terecs12a.pp	terecs	-	
 pass	terecs12b.pp	terecs	-	
 pass	terecs12c.pp	terecs	-	
@@ -145,30 +145,30 @@ pass	terecs13b.pp	terecs	-
 pass	terecs13c.pp	terecs	-	
 pass	terecs13d.pp	terecs	-	
 pass	terecs13.pp	terecs	-	
-skip	terecs14.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 15)
-skip	terecs15.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: X (Kind: 1, Line: 11)
-skip	terecs16.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: Create (Kind: 1, Line: 7)
+skip	terecs14.pp	terecs	gap	`class operator` set on records (Explicit, :=, =, In, comparison operators)
+skip	terecs15.pp	terecs	gap	record constructors with overloads (advanced records)
+skip	terecs16.pp	terecs	gap	record constructor (`constructor TRec.Create`) in advanced records
 pass	terecs17a.pp	terecs	-	
 pass	terecs17.pp	terecs	-	
 pass	terecs18a.pp	terecs	-	
 pass	terecs18.pp	terecs	-	
 pass	terecs19.pp	terecs	-	
 pass	terecs1.pp	terecs	-	
-skip	terecs20.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 14)
+skip	terecs20.pp	terecs	gap	`class threadvar` inside a record + threading RTL
 pass	terecs21.pp	terecs	-	
 pass	terecs2.pp	terecs	-	
-skip	terecs3.pp	terecs	untriaged	mode-delphi generics adjacent: Expected: :, but got: F1 (Kind: 1, Line: 12)
+skip	terecs3.pp	terecs	gap	advanced-record features from a unit — class var/const/nested type, static class methods
 pass	terecs4.pp	terecs	-	
 pass	terecs5.pp	terecs	-	
-skip	terecs6.pp	terecs	untriaged	unclassified: pascal26:458: error: unexpected character ()
+skip	terecs6.pp	terecs	gap	Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 pass	terecs7.pp	terecs	-	
-skip	terecs8.pp	terecs	untriaged	mode-delphi generics adjacent: pascal26:8: error: class var is not allowed in a record type ()
+skip	terecs8.pp	terecs	gap	`class var` in a record referencing its own type + class property
 pass	terecs9.pp	terecs	-	
-skip	terecs_u1.pp	terecs	untriaged	parser: extended-record features in unit (pascal26:12 unexpected token via unit driver)
-skip	texception10.pp	texception	untriaged	unclassified: Expected: :=, but got: (Kind: 78, Line: 32)
-skip	texception1.pp	texception	untriaged	mode-delphi generics adjacent: Expected: :, but got: do (Kind: 19, Line: 81)
-skip	texception2.pp	texception	untriaged	unclassified: Expected: :, but got: do (Kind: 19, Line: 25)
-skip	texception3.pp	texception	untriaged	unclassified: pascal26:52: error: undefined variable (exitcode)
+skip	terecs_u1.pp	terecs	gap	advanced records in units — nested type/const/var/class var sections, static class methods
+skip	texception10.pp	texception	gap	constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
+skip	texception1.pp	texception	gap	`on <ExceptionClass> do` handler without a variable name (bare `On TAObject do`)
+skip	texception2.pp	texception	gap	`on <class> do` handler without a variable name; float div-by-zero exception
+skip	texception3.pp	texception	gap	RTL `ExitCode` variable missing; try/finally with exit/break/continue
 auto	texception4.pp	texception	-	opt
 auto	texception5.pp	texception	-	version
 auto	texception6.pp	texception	-	version
@@ -177,32 +177,32 @@ auto	texception8.pp	texception	-	version
 auto	texception9.pp	texception	-	version
 pass	tforin10.pp	tforin	-	
 pass	tforin11.pp	tforin	-	
-skip	tforin12.pp	tforin	untriaged	unclassified: pascal26:5: error: too many array initializer elements ()
-skip	tforin13.pp	tforin	untriaged	unclassified: pascal26:6: error: for-in: expected a generator, enum type, or iterable variable ()
-skip	tforin14.pp	tforin	untriaged	unclassified: Expected: ), but got: (Kind: 80, Line: 20)
-skip	tforin15.pp	tforin	untriaged	unclassified: Expected: begin, but got: Integer (Kind: 57, Line: 12)
-skip	tforin16.pp	tforin	untriaged	unclassified: pascal26:6: error: for-in: not a generator, enum type, or iterable variable ()
-skip	tforin17.pp	tforin	untriaged	unclassified: pascal26:5: error: for-in: expected a generator, enum type, or iterable variable ()
+skip	tforin12.pp	tforin	gap	initializing array-of-char elements from string literals in an array const
+skip	tforin13.pp	tforin	gap	for-in over a set constructor with ranges (`for ch in ['a'..'c', ...]`)
+skip	tforin14.pp	tforin	gap	open-array constructor of array-typed records + for-in over open array
+skip	tforin15.pp	tforin	gap	`operator enumerator` (custom enumerator operator) not supported
+skip	tforin16.pp	tforin	gap	for-in over a string constant
+skip	tforin17.pp	tforin	gap	for-in over a string literal
 pass	tforin18.pp	tforin	-	
-skip	tforin19.pp	tforin	untriaged	unclassified: pascal26:6: error: for-in: expected a generator, enum type, or iterable variable ()
-skip	tforin1.pp	tforin	untriaged	unclassified: pascal26:21: error: for-in: not a generator, enum type, or iterable variable ()
+skip	tforin19.pp	tforin	gap	for-in over an empty set constructor `[]`
+skip	tforin1.pp	tforin	gap	for-in over subrange type / enum type / set (basic for-in forms)
 pass	tforin20.pp	tforin	-	
 pass	tforin21.pp	tforin	-	
 pass	tforin22.pp	tforin	-	
 pass	tforin23.pp	tforin	-	
 skip	tforin24.pp	tforin	gap	enumerator SELECTION by loop-var type (op-enumerator dispatches now, but the D:String loop needs TStrings.GetEnumerator to win over the object operator; exit 0 with wrong output — keep skipped)
-skip	tforin25.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: :, but got: FIndex (Kind: 1, Line: 10)
-skip	tforin26.pp	tforin	untriaged	unclassified: pascal26:2: error: expected name ()
-skip	tforin27.pp	tforin	untriaged	unclassified: pascal26:5: error: expected name ()
-skip	tforin28.pp	tforin	untriaged	unclassified: pascal26:9: error: for-in: expected a generator, enum type, or iterable variable
+skip	tforin25.pp	tforin	gap	for-in over record with GetEnumerator (advancedrecords enumerator support)
+skip	tforin26.pp	tforin	gap	user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
+skip	tforin27.pp	tforin	gap	user function named `Write` (builtin name shadowing) + for-in over dynamic array
+skip	tforin28.pp	tforin	gap	for-in over a set constructor literal [One, Three]
 skip	tforin2.pp	tforin	gap	for-in over a CALL-result string container (getstring(s)) + string op-enumerator
-skip	tforin3.pp	tforin	untriaged	runtime: exit code 139 (want 0)
-skip	tforin4.pp	tforin	untriaged	unclassified: pascal26:23: error: for-in: not a generator, enum type, or iterable variable ()
+skip	tforin3.pp	tforin	gap	for-in over class GetEnumerator returning nil (segfault, want clean run)
+skip	tforin4.pp	tforin	gap	for-in over function-returned and open/dynamic arrays with body mutation
 pass	tforin5.pp	tforin	-	
-skip	tforin6.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
-skip	tforin7.pp	tforin	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 12)
-skip	tforin8.pp	tforin	untriaged	unclassified: pascal26:11: error: base type not found: IEnumerator ()
-skip	tforin9.pp	tforin	untriaged	unclassified: Expected: end, but got: enumerator (Kind: 1, Line: 14) | near: function StepFor
+skip	tforin6.pp	tforin	gap	`operator enumerator` for a class, returning an `object`-type enumerator
+skip	tforin7.pp	tforin	gap	`enumerator MoveNext` / `enumerator Current` method+property directives
+skip	tforin8.pp	tforin	gap	IEnumerable/IEnumerator interfaces driving for-in
+skip	tforin9.pp	tforin	gap	`enumerator MoveNext/Current` directives + operator Enumerator
 pass	tgenconstraint10.pp	tgenconstraint	-	
 pass	tgenconstraint11.pp	tgenconstraint	-	
 pass	tgenconstraint12.pp	tgenconstraint	-	
@@ -213,7 +213,7 @@ pass	tgenconstraint16.pp	tgenconstraint	-
 pass	tgenconstraint17.pp	tgenconstraint	-	
 pass	tgenconstraint18.pp	tgenconstraint	-	
 pass	tgenconstraint19.pp	tgenconstraint	-	
-skip	tgenconstraint1.pp	tgenconstraint	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 78, Line: 50)
+skip	tgenconstraint1.pp	tgenconstraint	gap	Delphi generic constraint syntax (class/record/constructor/interface constraints)
 pass	tgenconstraint20.pp	tgenconstraint	-	
 pass	tgenconstraint21.pp	tgenconstraint	-	
 pass	tgenconstraint22.pp	tgenconstraint	-	
@@ -232,7 +232,7 @@ pass	tgenconstraint33.pp	tgenconstraint	-
 pass	tgenconstraint34.pp	tgenconstraint	-	
 pass	tgenconstraint35.pp	tgenconstraint	-	
 pass	tgenconstraint36.pp	tgenconstraint	-	
-skip	tgenconstraint37.pp	tgenconstraint	untriaged	unclassified: Expected: end, but got: (Kind: 78, Line: 18) | near: class ITestInterface in
+skip	tgenconstraint37.pp	tgenconstraint	gap	generic constraints on forward-declared class/interface (T: IInterface)
 skip	tgenconstraint38.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
 skip	tgenconstraint39.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
 pass	tgenconstraint3.pp	tgenconstraint	-	
@@ -245,57 +245,57 @@ pass	tgenconstraint8.pp	tgenconstraint	-
 pass	tgenconstraint9.pp	tgenconstraint	-	
 pass	tgeneric100.pp	tgeneric	-	
 pass	tgeneric101.pp	tgeneric	-	
-skip	tgeneric102.pp	tgeneric	untriaged	unclassified: pascal26:15: error: expected generic class name ()
-skip	tgeneric103.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:1: error: this file is a unit, not a program — compile a program that uses it (pxx has no
+skip	tgeneric102.pp	tgeneric	gap	specialize of generic class declared in another unit (inline class funcs)
+skip	tgeneric103.pp	tgeneric	gap	standalone `generic procedure Test<T>` + specialize; also unit-only compilation
 auto	tgeneric104.pp	tgeneric	-	recompile
-skip	tgeneric105.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:4: error: this file is a unit, not a program — compile a program that uses it (pxx has no
-skip	tgeneric106.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 9)
-skip	tgeneric107.pp	tgeneric	untriaged	parser: inline specialize expression
-skip	tgeneric10.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 8)
-skip	tgeneric11.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 4)
+skip	tgeneric105.pp	tgeneric	gap	%FAIL diagnostic — impl type params must match interface decl (TTest<S> vs <T>)
+skip	tgeneric106.pp	tgeneric	gap	generic class with `class var` procvar field of type G<T>, method-of-object
+skip	tgeneric107.pp	tgeneric	gap	inline specialize expression (specialize G<T>.Create as expression/procvar)
+skip	tgeneric10.pp	tgeneric	gap	objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization
+skip	tgeneric11.pp	tgeneric	gap	objfpc generic/specialize syntax; `specialize TList<_T>` as a param type
 pass	tgeneric12.pp	tgeneric	-	
 skip	tgeneric13.pp	tgeneric	gap	accepts-invalid — unspecialized generic as type argument — real gap (template-registry check; see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
 skip	tgeneric14.pp	tgeneric	wontfix	dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
-skip	tgeneric15.pp	tgeneric	untriaged	unclassified: pascal26:17: error: base type not found: specialize ()
-skip	tgeneric16.pp	tgeneric	untriaged	unclassified: pascal26:18: error: base type not found: specialize ()
+skip	tgeneric15.pp	tgeneric	gap	class inheriting from `specialize TStack<Integer>` as parent type
+skip	tgeneric16.pp	tgeneric	gap	generic class inheriting from specialize of another generic
 pass	tgeneric17.pp	tgeneric	-	
 pass	tgeneric18.pp	tgeneric	-	
 pass	tgeneric19.pp	tgeneric	-	
-skip	tgeneric1.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 4)
+skip	tgeneric1.pp	tgeneric	gap	objfpc `generic TList<_T> = class` / `specialize` syntax not parsed
 skip	tgeneric20.pp	tgeneric	wontfix	dialect-pass — generic method impl without <T> marker — PXX's generics surface deliberately accepts the stripped form (3d71edcf); not a bug
 skip	tgeneric21.pp	tgeneric	gap	accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
 pass	tgeneric22.pp	tgeneric	-	
-skip	tgeneric23.pp	tgeneric	untriaged	unclassified: pascal26:6: error: uses: unit source not found: fgl ()
+skip	tgeneric23.pp	tgeneric	wontfix	requires FPC `fgl` unit as shipped (TFPGList)
 pass	tgeneric24.pp	tgeneric	-	
 pass	tgeneric25.pp	tgeneric	-	
 skip	tgeneric26.pp	tgeneric	gap	accepts-invalid — type parameter in a variant part must be rejected (substitution model has no pre-specialization check)
 skip	tgeneric27.pp	tgeneric	gap	enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
-skip	tgeneric28.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric29.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:7: error: generic templates must be class declarations ()
+skip	tgeneric28.pp	tgeneric	gap	Delphi-syntax generic record and generic array of T (only generic classes supported)
+skip	tgeneric29.pp	tgeneric	gap	generic interface IGenericInterface<T>, generic record, generic array
 pass	tgeneric2.pp	tgeneric	-	
 skip	tgeneric30.pp	tgeneric	wontfix	dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 pass	tgeneric31.pp	tgeneric	-	
 pass	tgeneric32.pp	tgeneric	-	
 pass	tgeneric33.pp	tgeneric	-	
-skip	tgeneric34.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:6: error: generic templates must be class declarations ()
-skip	tgeneric35.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
+skip	tgeneric34.pp	tgeneric	gap	generic record with methods (TFoo<T> = record ... function)
+skip	tgeneric35.pp	tgeneric	gap	generic record overloading a same-named non-generic record
 pass	tgeneric36.pp	tgeneric	-	
-skip	tgeneric37.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:15: error: generic templates must be class declarations ()
-skip	tgeneric38.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:15: error: generic templates must be class declarations ()
-skip	tgeneric39.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
-skip	tgeneric3.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 8)
-skip	tgeneric40.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
-skip	tgeneric41.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:13: error: generic templates must be class declarations ()
+skip	tgeneric37.pp	tgeneric	gap	overloading generic records by type-param arity (TTest, TTest<T>, TTest<T,S>)
+skip	tgeneric38.pp	tgeneric	gap	generic interfaces overloaded by type-param arity
+skip	tgeneric39.pp	tgeneric	gap	generic procedure-type (procvar) declarations
+skip	tgeneric3.pp	tgeneric	gap	objfpc generic/specialize syntax with the generic declared in another unit
+skip	tgeneric40.pp	tgeneric	gap	generic array types overloaded by arity
+skip	tgeneric41.pp	tgeneric	gap	generic method-pointer (`procedure of object`) types
 pass	tgeneric42.pp	tgeneric	-	
-skip	tgeneric43.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric44.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric45.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric46.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric47.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric48.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:14: error: generic templates must be class declarations ()
+skip	tgeneric43.pp	tgeneric	gap	generic record overloading, generic declared before non-generic
+skip	tgeneric44.pp	tgeneric	gap	generic interface overloading, generic declared first
+skip	tgeneric45.pp	tgeneric	gap	generic procvar overloading, generic declared first
+skip	tgeneric46.pp	tgeneric	gap	generic array-type overloading, generic declared first
+skip	tgeneric47.pp	tgeneric	gap	generic `procedure of object` overloading, generic declared first
+skip	tgeneric48.pp	tgeneric	gap	mixed generic overloads by arity (class/record/interface/procvar/array)
 pass	tgeneric49.pp	tgeneric	-	
 pass	tgeneric4.pp	tgeneric	-	
-skip	tgeneric50.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:30: error: undefined variable (TTestInteger)
+skip	tgeneric50.pp	tgeneric	gap	hint directives (deprecated/platform/experimental) on generics and specializations
 pass	tgeneric51.pp	tgeneric	-	
 pass	tgeneric52.pp	tgeneric	-	
 pass	tgeneric53.pp	tgeneric	-	
@@ -304,106 +304,106 @@ skip	tgeneric55.pp	tgeneric	gap	accepts-invalid — bare unspecialized template 
 skip	tgeneric56.pp	tgeneric	gap	accepts-invalid — bare unspecialized template as var type: undefined type (template-registry check)
 pass	tgeneric57.pp	tgeneric	-	
 pass	tgeneric58.pp	tgeneric	-	
-skip	tgeneric59.pp	tgeneric	untriaged	unclassified: pascal26:11: error: expected name ()
-skip	tgeneric5.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 7)
-skip	tgeneric60.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 74, Line: 15)
-skip	tgeneric61.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 81, Line: 19)
-skip	tgeneric62.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: begin, but got: end (Kind: 6, Line: 17)
-skip	tgeneric63.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric64.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric65.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric66.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric67.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric68.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
+skip	tgeneric59.pp	tgeneric	gap	same generic name with different arity (TTest<T> vs TTest<T,S>) in delphi mode
+skip	tgeneric5.pp	tgeneric	gap	objfpc generic syntax + `typeinfo(_T)` intrinsic and typinfo unit
+skip	tgeneric60.pp	tgeneric	gap	nested non-generic record inside generic class, incl. out-of-line static method
+skip	tgeneric61.pp	tgeneric	gap	nested class inside generic class + out-of-line TTest<T>.TTestSub.Test impl
+skip	tgeneric62.pp	tgeneric	gap	nested `object` type inside generic class
+skip	tgeneric63.pp	tgeneric	gap	generic record with nested record type
+skip	tgeneric64.pp	tgeneric	gap	generic record with nested class type
+skip	tgeneric65.pp	tgeneric	gap	generic record with nested `object` type
+skip	tgeneric66.pp	tgeneric	gap	generic `object` type with nested record
+skip	tgeneric67.pp	tgeneric	gap	generic `object` type with nested class
+skip	tgeneric68.pp	tgeneric	gap	generic `object` type with nested `object`
 pass	tgeneric69.pp	tgeneric	-	
-skip	tgeneric6.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 4)
+skip	tgeneric6.pp	tgeneric	gap	objfpc generic syntax + nested record/pointer types inside a generic class
 pass	tgeneric70.pp	tgeneric	-	
 pass	tgeneric71.pp	tgeneric	-	
 pass	tgeneric72.pp	tgeneric	-	
 pass	tgeneric73.pp	tgeneric	-	
 auto	tgeneric74.pp	tgeneric	-	recompile
 auto	tgeneric75.pp	tgeneric	-	recompile
-skip	tgeneric76.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:3: error: this file is a unit, not a program — compile a program that uses it (pxx has no
-skip	tgeneric77.pp	tgeneric	untriaged	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
-skip	tgeneric78.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
+skip	tgeneric76.pp	tgeneric	gap	generic record with static class methods + specialized aliases (TPointEx<T>) unsupported
+skip	tgeneric77.pp	tgeneric	gap	generic record templates (`generic TPointEx<T> = record`), non-class generics
+skip	tgeneric78.pp	tgeneric	gap	generic class implementing specialized interface + method resolution clause
 skip	tgeneric79.pp	tgeneric	gap	inline `class(specialize IGenericIntf<T>)` parent-list specialize (interface templates capture now)
-skip	tgeneric7.pp	tgeneric	untriaged	runtime: exit code 0 (want 201)
-skip	tgeneric80.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
-skip	tgeneric81.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:9: error: generic templates must be class declarations ()
-skip	tgeneric82.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:10: error: generic templates must be class declarations ()
+skip	tgeneric7.pp	tgeneric	gap	generics across units + $R range-check state per unit (expects runtime error 201)
+skip	tgeneric80.pp	tgeneric	gap	generic records and overloaded generic/non-generic type name in same type block
+skip	tgeneric81.pp	tgeneric	gap	forward pointer to non-generic record coexisting with generic record overloads
+skip	tgeneric82.pp	tgeneric	gap	generic record type-name overloading by parameter count
 skip	tgeneric83.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
 skip	tgeneric84.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
 skip	tgeneric85.pp	tgeneric	gap	accepts-invalid — invalid generic record body accepted (pre-specialization checking)
 pass	tgeneric86.pp	tgeneric	-	
 pass	tgeneric87.pp	tgeneric	-	
 pass	tgeneric88.pp	tgeneric	-	
-skip	tgeneric89.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:8: error: generic templates must be class declarations ()
-skip	tgeneric8.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 4)
-skip	tgeneric90.pp	tgeneric	untriaged	mode-delphi generics adjacent: pascal26:12: error: generic templates must be class declarations ()
-skip	tgeneric91.pp	tgeneric	untriaged	unclassified: pascal26:31: error: undefined variable (Self)
-skip	tgeneric92.pp	tgeneric	untriaged	unclassified: Expected: >, but got: (Kind: 69, Line: 7)
-skip	tgeneric93.pp	tgeneric	untriaged	unclassified: pascal26:0: error: conditional directive: declared requires (NAME) ()
+skip	tgeneric89.pp	tgeneric	gap	pointer-to-specialization types (^TTest<LongInt>) not parsed
+skip	tgeneric8.pp	tgeneric	gap	objfpc generic syntax + inline methods over nested generic types
+skip	tgeneric90.pp	tgeneric	gap	pointer to specializations plus generic/non-generic record name overloading
+skip	tgeneric91.pp	tgeneric	gap	Self in class procedure of a generic class specialized cross-unit
+skip	tgeneric92.pp	tgeneric	gap	objfpc generic syntax + `with` over a generic type parameter record
+skip	tgeneric93.pp	tgeneric	gap	{$if declared(TName<,>)} generic-arity form of declared()
 skip	tgeneric94.pp	tgeneric	gap	generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
 skip	tgeneric95.pp	tgeneric	gap	specialize inside a generic routine signature (`expected name` at line 16)
 pass	tgeneric96.pp	tgeneric	-	
-skip	tgeneric97.pp	tgeneric	untriaged	unclassified: pascal26:14: error: undefined variable (LowerCase)
+skip	tgeneric97.pp	tgeneric	wontfix	expects FPC's internal specialized ClassName 'ttest<system.longint>'
 pass	tgeneric98.pp	tgeneric	-	
-skip	tgeneric99.pp	tgeneric	untriaged	mode-delphi generics adjacent: Expected: :, but got: TTest (Kind: 1, Line: 17)
-skip	tgeneric9.pp	tgeneric	untriaged	runtime: exit code 1 (want 0)
+skip	tgeneric99.pp	tgeneric	gap	unit-/class-qualified `specialize` syntax (ugeneric99.specialize TTest<...>)
+skip	tgeneric9.pp	tgeneric	gap	two-parameter generic `TMap<TK,TD>` specialization produces wrong result
 skip	tgenfunc10.pp	tgenfunc	gap	inline `specialize` expression inside generic function body
 pass	tgenfunc11.pp	tgenfunc	-	
-skip	tgenfunc12.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 7)
+skip	tgenfunc12.pp	tgenfunc	gap	generic methods with class/interface constraints and generic global functions
 pass	tgenfunc13.pp	tgenfunc	-	
 pass	tgenfunc14.pp	tgenfunc	-	
-skip	tgenfunc15.pp	tgenfunc	untriaged	parser: generic record/array/procvar templates (unit driver; 'generic templates must be class declarations')
+skip	tgenfunc15.pp	tgenfunc	gap	generic array type templates + generic method overloads with array-of-T params
 auto	tgenfunc16.pp	tgenfunc	-	opt
 pass	tgenfunc17.pp	tgenfunc	-	
 pass	tgenfunc18.pp	tgenfunc	-	
-skip	tgenfunc19.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: for (Kind: 20, Line: 12)
-skip	tgenfunc1.pp	tgenfunc	untriaged	parser: inline specialize expression
-skip	tgenfunc23.pp	tgenfunc	untriaged	parser: inline specialize expression
-skip	tgenfunc2.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 7)
-skip	tgenfunc3.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 9)
-skip	tgenfunc4.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 9)
-skip	tgenfunc5.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 9)
-skip	tgenfunc6.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 66, Line: 9)
-skip	tgenfunc7.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
+skip	tgenfunc19.pp	tgenfunc	gap	generic global function + class helper method resolution via specialize
+skip	tgenfunc1.pp	tgenfunc	gap	generic (standalone) functions + inline specialize call expression
+skip	tgenfunc23.pp	tgenfunc	gap	generic procedure overload on T vs array of T + inline specialize call
+skip	tgenfunc2.pp	tgenfunc	gap	generic (parameterized) standalone functions in mode delphi
+skip	tgenfunc3.pp	tgenfunc	gap	generic class functions (generic class function Add<T>) not supported
+skip	tgenfunc4.pp	tgenfunc	gap	delphi-mode generic class function with inline type args
+skip	tgenfunc5.pp	tgenfunc	gap	generic instance methods (objfpc generic function ... <T>)
+skip	tgenfunc6.pp	tgenfunc	gap	delphi-mode generic instance method Add<T>
+skip	tgenfunc7.pp	tgenfunc	gap	generic functions/methods imported from another unit and specialized
 skip	tgenfunc8.pp	tgenfunc	gap	generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
-skip	tgenfunc9.pp	tgenfunc	untriaged	mode-delphi generics adjacent: Expected: :, but got: function (Kind: 11, Line: 10)
+skip	tgenfunc9.pp	tgenfunc	gap	generic methods with private/protected visibility specialized from caller
 pass	tint641.pp	tint64	-	
-skip	tint642.pp	tint64	untriaged	unclassified: pascal26:33: error: undefined variable (hexstr)
-skip	tint643.pp	tint64	untriaged	unclassified: Expected: :, but got: do (Kind: 19, Line: 53)
+skip	tint642.pp	tint64	gap	RTL `HexStr` missing; qword arithmetic torture test
+skip	tint643.pp	tint64	gap	`on eintoverflow do` handler without a var name; qword overflow ($Q+) detection
 auto	tint644.pp	tint64	-	opt
 auto	tinterface1.pp	tinterface	-	version
 auto	tinterface2.pp	tinterface	-	version
 auto	tinterface3.pp	tinterface	-	version
-skip	tinterface4.pp	tinterface	untriaged	unclassified: pascal26:3: error: uses: unit source not found: variants ()
+skip	tinterface4.pp	tinterface	wontfix	needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 auto	tinterface5.pp	tinterface	-	version
-skip	tinterface6.pp	tinterface	untriaged	unclassified: pascal26:22: error: typed string constant: expected a string or char literal ()
-skip	tmoperator10.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 11)
-skip	tmoperator11.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Initialize (Kind: 1, Line: 10)
-skip	tmoperator1.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 14)
-skip	tmoperator2.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
-skip	tmoperator3.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
-skip	tmoperator4.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
-skip	tmoperator5.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
+skip	tinterface6.pp	tinterface	gap	interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
+skip	tmoperator10.pp	tmoperator	wontfix	probes TypInfo GetTypeData ElType/ElType2 RTTI layout of dyn array
+skip	tmoperator11.pp	tmoperator	gap	management operator class operator Initialize on records
+skip	tmoperator1.pp	tmoperator	gap	management operators Initialize/Finalize (advancedrecords)
+skip	tmoperator2.pp	tmoperator	gap	record Initialize/Finalize management operators with managed fields
+skip	tmoperator3.pp	tmoperator	gap	record management operators Initialize/Finalize lifecycle
+skip	tmoperator4.pp	tmoperator	gap	management operators across multiple record types
+skip	tmoperator5.pp	tmoperator	gap	management operators Initialize/Finalize invocation order
 pass	tmoperator6.pp	tmoperator	-	
-skip	tmoperator7.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 8)
-skip	tmoperator8.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 10)
-skip	tmoperator9.pp	tmoperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 12)
+skip	tmoperator7.pp	tmoperator	gap	management operators inside object/dynarray of records + class var
+skip	tmoperator8.pp	tmoperator	gap	management operators AddRef/Copy/Initialize/Finalize on records
+skip	tmoperator9.pp	tmoperator	gap	record management operators Initialize/Finalize called for locals
 auto	tobject10.pp	tobject	-	opt
-skip	tobject1.pp	tobject	untriaged	rtl: ExitCode variable missing
-skip	tobject2.pp	tobject	untriaged	unclassified: Expected: begin, but got: x (Kind: 1, Line: 7)
+skip	tobject1.pp	tobject	gap	object constructor `fail`, erroru/ExitCode RTL support
+skip	tobject2.pp	tobject	gap	old-style `object` types with virtual methods, constructor/destructor
 auto	tobject3.pp	tobject	-	opt
-skip	tobject4.pp	tobject	untriaged	unclassified: Expected: :=, but got: (Kind: 78, Line: 16)
-skip	tobject5.pp	tobject	untriaged	unclassified: pascal26:8: error: undefined variable (TObject)
-skip	tobject6.pp	tobject	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 9)
-skip	tobject7.pp	tobject	untriaged	mode-delphi generics adjacent: Expected: begin, but got: private (Kind: 1, Line: 9)
+skip	tobject4.pp	tobject	gap	direct destructor call as a statement (`o1.destroy;`) not parsed
+skip	tobject5.pp	tobject	gap	TObject.Equals/GetHashCode/UnitName/ToString RTL methods
+skip	tobject6.pp	tobject	gap	`object` type with nested type/class var/const sections and class property
+skip	tobject7.pp	tobject	gap	`object` with private nested type, typed const and static class property
 auto	tobject8.pp	tobject	-	opt
 auto	tobject9.pp	tobject	-	opt
 pass	toperator10.pp	toperator	-	
 pass	toperator11.pp	toperator	-	
-skip	toperator12.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 10)
+skip	toperator12.pp	toperator	gap	record class operator Implicit(integer): R (delphi-mode class operators)
 pass	toperator13.pp	toperator	-	
 pass	toperator14.pp	toperator	-	
 pass	toperator15.pp	toperator	-	
@@ -411,7 +411,7 @@ pass	toperator16.pp	toperator	-
 pass	toperator17.pp	toperator	-	
 pass	toperator18.pp	toperator	-	
 pass	toperator19.pp	toperator	-	
-skip	toperator1.pp	toperator	untriaged	unclassified: Expected: =, but got: (Kind: 80, Line: 10)
+skip	toperator1.pp	toperator	gap	operator overloading (+) on records declared in units; cross-unit operator resolution
 pass	toperator20.pp	toperator	-	
 pass	toperator21.pp	toperator	-	
 pass	toperator22.pp	toperator	-	
@@ -422,7 +422,7 @@ pass	toperator26.pp	toperator	-
 pass	toperator27.pp	toperator	-	
 pass	toperator28.pp	toperator	-	
 pass	toperator29.pp	toperator	-	
-skip	toperator2.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+skip	toperator2.pp	toperator	gap	unit-level `operator +` overload on records (global operator overloading)
 pass	toperator30.pp	toperator	-	
 pass	toperator31.pp	toperator	-	
 pass	toperator32.pp	toperator	-	
@@ -433,7 +433,7 @@ pass	toperator36.pp	toperator	-
 pass	toperator37.pp	toperator	-	
 pass	toperator38.pp	toperator	-	
 pass	toperator39.pp	toperator	-	
-skip	toperator3.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+skip	toperator3.pp	toperator	gap	unit-level `operator +` overload on records, mutually-used units
 pass	toperator40.pp	toperator	-	
 pass	toperator41.pp	toperator	-	
 pass	toperator42.pp	toperator	-	
@@ -444,7 +444,7 @@ pass	toperator46.pp	toperator	-
 pass	toperator47.pp	toperator	-	
 pass	toperator48.pp	toperator	-	
 pass	toperator49.pp	toperator	-	
-skip	toperator4.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...) (unit driver; pascal26:10)
+skip	toperator4.pp	toperator	gap	unit-level `operator +` overload on records with real fields
 pass	toperator50.pp	toperator	-	
 pass	toperator51.pp	toperator	-	
 pass	toperator52.pp	toperator	-	
@@ -466,7 +466,7 @@ pass	toperator66.pp	toperator	-
 pass	toperator67.pp	toperator	-	
 pass	toperator68.pp	toperator	-	
 pass	toperator69.pp	toperator	-	
-skip	toperator6.pp	toperator	untriaged	unclassified: pascal26:13: error: expected operator symbol after operator keyword ()
+skip	toperator6.pp	toperator	gap	`operator :=` implicit-conversion overload + qword/int64 overload selection
 pass	toperator70.pp	toperator	-	
 fail	toperator71.pp	toperator	-	accepted-invalid: %FAIL test compiled
 pass	toperator72.pp	toperator	-	
@@ -475,7 +475,7 @@ pass	toperator74.pp	toperator	-
 pass	toperator75.pp	toperator	-	
 pass	toperator76.pp	toperator	-	
 pass	toperator77.pp	toperator	-	
-skip	toperator78.pp	toperator	untriaged	unclassified: pascal26:4: error: operator overloading: LongInt is not a record or class type (
+skip	toperator78.pp	toperator	gap	global operator overloads on primitive/set types (**, ><, div, mod, and)
 pass	toperator79.pp	toperator	-	
 pass	toperator7.pp	toperator	-	
 pass	toperator80.pp	toperator	-	
@@ -487,44 +487,44 @@ pass	toperator85.pp	toperator	-
 pass	toperator86.pp	toperator	-	
 pass	toperator87.pp	toperator	-	
 pass	toperator88.pp	toperator	-	
-skip	toperator89.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	toperator89.pp	toperator	gap	overloading implicit assignment operator `:=` (global operator)
 pass	toperator8.pp	toperator	-	
 pass	toperator90.pp	toperator	-	
-skip	toperator91.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Explicit (Kind: 1, Line: 12)
+skip	toperator91.pp	toperator	gap	class operators Explicit/Implicit overloaded on ShortString[N] result types
 pass	toperator92.pp	toperator	-	
-skip	toperator93.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: Implicit (Kind: 1, Line: 14)
-skip	toperator94.pp	toperator	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 63, Line: 13)
+skip	toperator93.pp	toperator	gap	class operator Implicit returning String[80] shortstring type
+skip	toperator94.pp	toperator	gap	objfpc `class operator :=` implicit conversion to shortstring types
 pass	toperator95.pp	toperator	-	
-skip	toperator9.pp	toperator	untriaged	parser: named/class operator (Initialize/Finalize/Explicit...)
+skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
-skip	tover1.pp	tover	untriaged	runtime: exit code 1 (want 0)
+skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/widestring/pchar params
 pass	tover2.pp	tover	-	
 skip	tover3.pp	tover	wontfix	dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
-skip	tover4.pp	tover	untriaged	runtime: exit code 1 (want 0)
-skip	tprocvar1.pp	tprocvar	untriaged	unclassified: pascal26:36: error: nested routine: expected name ()
-skip	tprocvar2.pp	tprocvar	untriaged	unclassified: ConstEval error at SrcLine 38: SVal = dummy Kind = 1 TokPos = 77
-skip	tprocvar3.pp	tprocvar	untriaged	unclassified: pascal26:38: error: nested routine: expected name ()
-skip	tprop1.pp	tprop	untriaged	unclassified: Expected: begin, but got: property (Kind: 97, Line: 17)
+skip	tover4.pp	tover	gap	80-bit extended/cextended float type and overload resolution across single/double/extended
+skip	tprocvar1.pp	tprocvar	gap	method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars
+skip	tprocvar2.pp	tprocvar	gap	typed const procvar initialized with bare proc name (TP mode), procvar via move()
+skip	tprocvar3.pp	tprocvar	gap	delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
+skip	tprop1.pp	tprop	gap	global `property` section in a program (FPC-mode global properties)
 pass	tprop2.pp	tprop	-	
-skip	tpropdef.pp	tprop	untriaged	mode-delphi generics adjacent: Expected: :, but got: (Kind: 64, Line: 11)
-skip	tprop.pp	tprop	untriaged	unclassified: pascal26:6: error: uses: unit source not found: variants ()
+skip	tpropdef.pp	tprop	wontfix	depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
+skip	tprop.pp	tprop	wontfix	requires FPC `variants` unit / Variant type as FPC ships it
 auto	trange1.pp	trange	-	version
-skip	trange2.pp	trange	untriaged	runtime: exit code 1 (want 0)
-skip	trange3.pp	trange	untriaged	runtime: exit code 139 (want 0)
+skip	trange2.pp	trange	gap	{$R+} range-check errors on longint<->cardinal conversion raising exceptions
+skip	trange3.pp	trange	gap	{$R+} range checking on array indexes (currently segfaults instead of raising)
 pass	trange4.pp	trange	-	
-skip	trange5.pp	trange	untriaged	unclassified: pascal26:97: error: undefined variable (lo)
+skip	trange5.pp	trange	gap	`with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
 auto	trangeob.pp	trange	-	opt
 pass	tsealed1.pp	tsealed	-	
 pass	tsealed2.pp	tsealed	-	
 pass	tsealed3.pp	tsealed	-	
-skip	tsealed4.pp	tsealed	untriaged	unclassified: Expected: :, but got: abstract (Kind: 1, Line: 6)
+skip	tsealed4.pp	tsealed	gap	`class abstract` / `class sealed` modifiers (repeated) in class declarations
 pass	tsealed5.pp	tsealed	-	
-skip	tsealed6.pp	tsealed	untriaged	unclassified: Expected: begin, but got: abstract (Kind: 1, Line: 6)
-skip	tset1.pp	tset	untriaged	unclassified: pascal26:36: error: undefined variable (RandSeed)
-skip	tset2a.pp	tset	untriaged	unclassified: Expected: ), but got: (Kind: 63, Line: 16)
-skip	tset2b.pp	tset	untriaged	unclassified: Expected: ), but got: (Kind: 63, Line: 16)
-skip	tset2c.pp	tset	untriaged	unclassified: Expected: ), but got: (Kind: 63, Line: 16)
-skip	tset2d.pp	tset	untriaged	unclassified: Expected: ), but got: (Kind: 63, Line: 16)
+skip	tsealed6.pp	tsealed	gap	`object abstract` / `object sealed` modifiers in object declarations
+skip	tset1.pp	tset	gap	RTL `RandSeed` variable missing (Random seeding); rest is plain set ops
+skip	tset2a.pp	tset	gap	explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics
+skip	tset2b.pp	tset	gap	explicit enum ordinal values (dA:=8) + {$packset 2} packed-set semantics
+skip	tset2c.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 1} packed-set semantics
+skip	tset2d.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 2} packed-set semantics
 pass	tset2.pp	tset	-	
 pass	tset3.pp	tset	-	
 pass	tset4.pp	tset	-	
@@ -532,20 +532,20 @@ pass	tset5a.pp	tset	-
 auto	tset5.pp	tset	-	opt
 auto	tset6.pp	tset	-	opt
 pass	tset7.pp	tset	-	
-skip	tsetsize.pp	tset	untriaged	unclassified: ConstEval error at SrcLine 256: SVal = Pred Kind = 1 TokPos = 20
-skip	tstatic1.pp	tstatic	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 13)
-skip	tstatic2.pp	tstatic	untriaged	mode-delphi generics adjacent: Expected: :, but got: class (Kind: 29, Line: 13)
+skip	tsetsize.pp	tset	wontfix	asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
+skip	tstatic1.pp	tstatic	gap	class var + static class methods (inline static) in delphi mode
+skip	tstatic2.pp	tstatic	gap	class var with static class property and inherited access
 pass	tstatic3.pp	tstatic	-	
 pass	tstatic4.pp	tstatic	-	
-skip	tstatic5.pp	tstatic	untriaged	unclassified: pascal26:33: error: undefined variable (FSomethingStatic)
-skip	tstring10.pp	tstring	untriaged	unclassified: pascal26:16: error: undefined variable (flush)
-skip	tstring11.pp	tstring	untriaged	unclassified: Mismatch in MatchProcCall: name = Test1, nArgs = 1
-skip	tstring1.pp	tstring	untriaged	runtime: exit code 139 (want 0)
-skip	tstring2.pp	tstring	untriaged	unclassified: pascal26:52: error: undefined variable (exitcode)
-skip	tstring3.pp	tstring	untriaged	unclassified: pascal26:15: error: array constant: expected a string or char literal ()
-skip	tstring4.pp	tstring	untriaged	rtl: ExitCode variable missing
-skip	tstring5.pp	tstring	untriaged	unclassified: pascal26:52: error: undefined variable (exitcode)
+skip	tstatic5.pp	tstatic	gap	`class var` blocks and class properties in classes not implemented
+skip	tstring10.pp	tstring	gap	RTL `Flush(output)` missing; also punicodechar/unicodestring conversions
+skip	tstring11.pp	tstring	gap	overload resolution RawByteString vs UnicodeString (char/array/pchar args)
+skip	tstring1.pp	tstring	gap	shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
+skip	tstring2.pp	tstring	gap	RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
+skip	tstring3.pp	tstring	gap	typed-const array of short/ansistring initialized from char & resourcestring consts
+skip	tstring4.pp	tstring	wontfix	reads ansistring refcount/length header words — FPC internal string layout
+skip	tstring5.pp	tstring	gap	RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
 auto	tstring6.pp	tstring	-	version
-skip	tstring7.pp	tstring	untriaged	unclassified: pascal26:14: error: undefined variable (runerror)
-skip	tstring8.pp	tstring	untriaged	unclassified: pascal26:9: error: undefined variable (strpos)
-skip	tstring9.pp	tstring	untriaged	runtime: exit code 2 (want 0)
+skip	tstring7.pp	tstring	gap	RTL `RunError` procedure missing
+skip	tstring8.pp	tstring	gap	RTL `strings` unit StrPos (PChar routines)
+skip	tstring9.pp	tstring	gap	pchar / array-of-char assignment to string and widestring conversions
