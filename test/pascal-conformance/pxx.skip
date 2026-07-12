@@ -75,20 +75,18 @@ tgeneric107.pp	parser: inline specialize expression
 tgeneric15.pp	unclassified: pascal26:17: error: base type not found: specialize ()
 tgeneric16.pp	unclassified: pascal26:18: error: base type not found: specialize ()
 tgeneric23.pp	unclassified: pascal26:6: error: uses: unit source not found: fgl ()
-tgeneric24.pp	parser: generic record/array/procvar templates
-tgeneric25.pp	parser: generic record/array/procvar templates
-tgeneric27.pp	parser: generic record/array/procvar templates
-tgeneric33.pp	parser: generic record/array/procvar templates
+tgeneric25.pp	gap: SetLength over a specialized `array of T` alias misroutes to the string path (template parses now)
+tgeneric27.pp	gap: enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
+tgeneric33.pp	gap: inline `specialize TProc1<Integer>` as a VAR type (no named alias)
 tgeneric56.pp	gap: accepts-invalid — bare unspecialized template as var type: undefined type (template-registry check)
 tgeneric59.pp	unclassified: pascal26:11: error: expected name ()
-tgeneric79.pp	parser: generic record/array/procvar templates
-tgeneric86.pp	parser: generic record/array/procvar templates
-tgeneric87.pp	parser: generic record/array/procvar templates
-tgeneric88.pp	parser: generic record/array/procvar templates
+tgeneric79.pp	gap: inline `class(specialize IGenericIntf<T>)` parent-list specialize (interface templates capture now)
+tgeneric87.pp	gap: `^specialize TTest<T>` pointer-to-specialize in typed const
+tgeneric88.pp	gap: `^specialize TTest<T>` pointer-to-specialize type decl
 tgeneric91.pp	unclassified: pascal26:31: error: undefined variable (Self)
 tgeneric93.pp	unclassified: pascal26:0: error: conditional directive: declared requires (NAME) ()
-tgeneric94.pp	parser: generic record/array/procvar templates
-tgeneric95.pp	parser: generic record/array/procvar templates
+tgeneric94.pp	gap: generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
+tgeneric95.pp	gap: specialize inside a generic routine signature (`expected name` at line 16)
 tgeneric97.pp	unclassified: pascal26:14: error: undefined variable (LowerCase)
 tgenfunc10.pp	parser: named/class operator (Initialize/Finalize/Explicit...)
 tgenfunc1.pp	parser: inline specialize expression

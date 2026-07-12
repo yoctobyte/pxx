@@ -420,6 +420,9 @@ test-core: $(COMPILER)
 	# virtual/indirect calls: managed-string arg materialization + string->Pointer skip
 	./$(COMPILER) --mimic-fpc test/test_virtual_call_string_args.pas /tmp/test_virtual_call_string26
 	test "$$(/tmp/test_virtual_call_string26)" = "$$(printf 'v-len=6 d1=112\nv-len=2 d1=120\ni-len=5 d1=97')"
+	# generic record/array/procvar templates (feature-pascal-generic-nonclass-templates)
+	./$(COMPILER) test/test_generic_nonclass.pas /tmp/test_generic_nonclass26
+	test "$$(/tmp/test_generic_nonclass26)" = "$$(printf '7\n20\n42')"
 	./$(COMPILER) test/test_bare_property.pas /tmp/test_bare_property26
 	test "$$(/tmp/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

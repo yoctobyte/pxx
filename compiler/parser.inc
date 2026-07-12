@@ -1078,9 +1078,57 @@ begin
   Expect(tkGt, '>');
   Expect(tkEq, '=');
 
-  if CurTok.Kind <> tkClass then Error('generic templates must be class declarations');
+  { Generic templates: class / record / packed record (depth-counted to the
+    matching `end`), or array / procedure / function types (run to the
+    terminating `;`) — feature-pascal-generic-nonclass-templates. Generics are
+    token substitution, so capture is purely lexical; the specialization
+    streams the body and ParseTypeSection's ordinary type-decl dispatch
+    (class/record/array/procvar branches) parses it. }
+  if not ((CurTok.Kind in [tkClass, tkRecord, tkPacked, tkArray,
+                            tkProcedure, tkFunction]) or
+          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interface'))) then
+    Error('generic templates must be class, record, interface, array or procedure declarations');
 
   startTok := TokPos - 1;
+  if CurTok.Kind = tkPacked then
+  begin
+    Next;   { capture includes 'packed'; depth-count from the 'record' }
+    if CurTok.Kind <> tkRecord then Error('generic packed template must be a record');
+  end;
+  if (Tokens[startTok].Kind = tkArray) or (Tokens[startTok].Kind = tkProcedure) or
+     (Tokens[startTok].Kind = tkFunction) then
+  begin
+    { no `end`: the body runs to the first ';' outside (),[] — and outside an
+      inline `record ... end` element type (tgeneric25's
+      `array[0..1] of record A: T; B: String; end`), whose own semicolons
+      must not terminate the capture. }
+    depth := 0;
+    cur := TokPos;
+    while cur < TokCount do
+    begin
+      if (Tokens[cur].Kind = tkLParen) or (Tokens[cur].Kind = tkLBrack) then Inc(depth)
+      else if (Tokens[cur].Kind = tkRParen) or (Tokens[cur].Kind = tkRBrack) then Dec(depth)
+      else if (Tokens[cur].Kind = tkRecord) or (Tokens[cur].Kind = tkClass) then
+      begin
+        { skip the whole record/class body: end-depth count }
+        gi := 1;   { reuse gi as the end-depth counter }
+        Inc(cur);
+        while (cur < TokCount) and (gi > 0) do
+        begin
+          if (Tokens[cur].Kind = tkRecord) or (Tokens[cur].Kind = tkClass) then Inc(gi)
+          else if Tokens[cur].Kind = tkEnd then Dec(gi);
+          Inc(cur);
+        end;
+        continue;
+      end
+      else if (Tokens[cur].Kind = tkSemicolon) and (depth = 0) then Break;
+      Inc(cur);
+    end;
+    if cur < TokCount then Inc(cur);   { include the ';' }
+    finalCur := cur;
+  end
+  else
+  begin
   depth := 1;
   cur := TokPos;
   while (cur < TokCount) and (depth > 0) do
@@ -1117,6 +1165,7 @@ begin
     Inc(cur);
 
   finalCur := cur;  { save before for-loop clobbers 'cur' }
+  end;
 
   if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
   Templates[TemplateCount].Name := templateName;

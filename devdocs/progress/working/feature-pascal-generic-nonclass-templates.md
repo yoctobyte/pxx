@@ -6,9 +6,9 @@ prio: 50  # auto — 10 conformance tests
 
 - **Type:** feature (Pascal frontend, generics)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** backlog — filed 2026-07-10 from the FPC-testsuite audit
+- **Status:** working
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** opus-p
 
 ## Symptom
 `error: generic templates must be class declarations` — pxx only allows
