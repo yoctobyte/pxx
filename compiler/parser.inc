@@ -2074,53 +2074,123 @@ begin
   UClsHasGuid[ci] := True;
 end;
 
-{ X.ClassName, for both shapes it can take:
+{ The class-reference operations FPC puts on TObject in System, so they are reached
+  with no `uses`:
 
-    an INSTANCE      -> __pxxClassName(__pxxRttiOf(x))  (blob is at [[x+0] - 8])
-    a CLASS REFERENCE-> __pxxClassName(c)                (a TClass value IS the blob ptr)
+    x.ClassName       the class's name
+    x.ClassType       the class itself, as a TClass    (instances only)
+    x.InheritsFrom(C) is x's class C, or a descendant of it
 
-  FPC declares ClassName on TObject in System, so callers reach it with no `uses`.
-  Every class now carries an RTTI header (see rtti_emit.inc), so this answers for
-  ANY class, not only those with published members -- which is what makes
-  fpcunit's `GetN(C: TClass)` work.
+  Each is a walk over the RTTI blob, and each takes both shapes x can have:
 
-  Consumes an optional empty '()'. Returns -1 when the builtin helpers are not
-  linked, so the caller falls through to its normal handling. }
-function GenMakeClassNameCall(objNode: Integer; isClassRef: Boolean): Integer;
-var pName, pOf, callNode, ofNode, argSeq, inner: Integer;
+    an INSTANCE       -> blob is __pxxRttiOf(x)   ([[x+0] - 8])
+    a CLASS REFERENCE -> blob IS the value        (a TClass value is the blob ptr)
+
+  blobNode is that blob. Returns -1 when the builtin helpers are not linked, so the
+  caller can fall through to its normal handling. }
+function GenMakeClassRefOp(blobNode: Integer; const op: AnsiString; var outTk: TTypeKind): Integer;
+var pi, callNode, argSeq, argSeq2: Integer;
 begin
   Result := -1;
-  pName := FindProc('__pxxClassName');
-  if pName < 0 then Exit;
 
-  inner := objNode;
-  if not isClassRef then
+  if CaseEqual(op, 'ClassType') then
   begin
-    pOf := FindProc('__pxxRttiOf');
-    if pOf < 0 then Exit;
-    ofNode := AllocNode(AN_CALL);
-    ASTIVal[ofNode] := pOf;
-    ASTTk[ofNode] := Ord(Procs[pOf].RetType);
-    argSeq := AllocNode(AN_ARG);
-    ASTLeft[argSeq] := objNode;
-    ASTLeft[ofNode] := argSeq;
-    inner := ofNode;
+    { ClassType IS the blob pointer -- no call at all, just a retype. }
+    outTk := tyPointer;
+    if CurTok.Kind = tkLParen then
+    begin
+      Next;
+      Expect(tkRParen, ')');
+    end;
+    Result := blobNode;
+    Exit;
   end;
 
+  if CaseEqual(op, 'ClassName') then
+  begin
+    pi := FindProc('__pxxClassName');
+    if pi < 0 then Exit;
+    outTk := tyAnsiString;
+  end
+  else if CaseEqual(op, 'InheritsFrom') then
+  begin
+    pi := FindProc('__pxxInheritsFrom');
+    if pi < 0 then Exit;
+    outTk := tyBoolean;
+  end
+  else
+    Exit;
+
   callNode := AllocNode(AN_CALL);
-  ASTIVal[callNode] := pName;
-  ASTTk[callNode] := Ord(Procs[pName].RetType);
+  ASTIVal[callNode] := pi;
+  ASTTk[callNode] := Ord(Procs[pi].RetType);
   argSeq := AllocNode(AN_ARG);
-  ASTLeft[argSeq] := inner;
+  ASTLeft[argSeq] := blobNode;
   ASTLeft[callNode] := argSeq;
 
-  { FPC allows both `x.ClassName` and `x.ClassName()`. }
-  if CurTok.Kind = tkLParen then
+  if CaseEqual(op, 'InheritsFrom') then
   begin
+    { the class to test against -- itself a class reference, i.e. a blob pointer }
+    Expect(tkLParen, '(');
+    ParseExpr;
+    argSeq2 := AllocNode(AN_ARG);
+    ASTLeft[argSeq2] := CurASTNode;
+    ASTRight[argSeq] := argSeq2;
+    Expect(tkRParen, ')');
+  end
+  else if CurTok.Kind = tkLParen then
+  begin
+    { FPC allows both `x.ClassName` and `x.ClassName()`. }
     Next;
     Expect(tkRParen, ')');
   end;
+
   Result := callNode;
+end;
+
+{ True for the three names GenMakeClassRefOp handles. }
+function IsClassRefOpName(const nm: AnsiString): Boolean;
+begin
+  IsClassRefOpName := CaseEqual(nm, 'ClassName') or CaseEqual(nm, 'ClassType') or
+                      CaseEqual(nm, 'InheritsFrom');
+end;
+
+{ The blob of an INSTANCE expression: __pxxRttiOf(objNode). -1 if not linked. }
+function GenMakeRttiOfCall(objNode: Integer): Integer;
+var pi, callNode, argSeq: Integer;
+begin
+  Result := -1;
+  pi := FindProc('__pxxRttiOf');
+  if pi < 0 then Exit;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := pi;
+  ASTTk[callNode] := Ord(Procs[pi].RetType);
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := objNode;
+  ASTLeft[callNode] := argSeq;
+  Result := callNode;
+end;
+
+{ Chain further class-reference operations onto one that just produced a TClass.
+
+  `E.ClassType.InheritsFrom(AExceptionClass)` (fpcunit) is the case: ClassType yields
+  a class reference, and the next selector applies to THAT, not to E. Only a
+  class-reference result (tyPointer, i.e. ClassType) can carry a tail -- ClassName
+  gives a string and InheritsFrom a Boolean, and neither takes these selectors. }
+function ParseClassRefOpTail(node: Integer; var outTk: TTypeKind): Integer;
+var nm: AnsiString; nxt: Integer;
+begin
+  Result := node;
+  while (outTk = tyPointer) and (CurTok.Kind = tkDot) and
+        (Tokens[TokPos].Kind = tkIdent) and IsClassRefOpName(GetTokenStr(TokPos)) do
+  begin
+    Next;                 { consume '.' -- CurTok is now the operation name }
+    nm := CurTok.SVal;
+    Next;                 { consume the operation name }
+    nxt := GenMakeClassRefOp(Result, nm, outTk);
+    if nxt < 0 then Exit;
+    Result := nxt;
+  end;
 end;
 
 function GenMakeGetInterfaceCall(objNode: Integer): Integer;
@@ -2426,6 +2496,7 @@ end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
+  mblobNode: Integer;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
@@ -3028,6 +3099,24 @@ begin
               Exit;
             end;
 
+            { A class-reference operation named on the class LITERAL itself:
+              `TMid.InheritsFrom(TBase)`, `TFoo.ClassName`. The class as a value IS
+              its RTTI blob pointer (AN_CLASSREF), which is exactly the blob these
+              operations walk. }
+            if IsClassRefOpName(fieldName) then
+            begin
+              mcallNode := AllocNode(AN_CLASSREF);
+              ASTIVal[mcallNode] := ci;
+              ASTTk[mcallNode] := Ord(tyPointer);
+              mcallNode := GenMakeClassRefOp(mcallNode, fieldName, tk);
+              if mcallNode >= 0 then
+              begin
+                recName := REC_NONE;
+                Result := ParseClassRefOpTail(mcallNode, tk);
+                Exit;
+              end;
+            end;
+
             Error('class method not found: ' + fieldName);
           end;
           mpi := UMthProc_[mmi];
@@ -3532,18 +3621,17 @@ begin
          (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
          (Syms[ASTIVal[node]].PtrElemRec = REC_NONE) then
       begin
-        { ...but ClassName IS answerable on a bare class reference: a TClass value
-          is the RTTI blob pointer, and the name sits at its +0. This is exactly
-          fpcunit's `function GetN(C: TClass): string; begin Result := C.ClassName`. }
-        if (CurTok.Kind = tkIdent) and CaseEqual(fieldName, 'ClassName') then
+        { ...but the class-reference OPERATIONS are answerable on it: a TClass value
+          IS the RTTI blob pointer. `GetN(C: TClass)` reads C.ClassName;
+          `AClass.InheritsFrom(TTestCase)` walks C's parent chain. Both fpcunit. }
+        if (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) then
         begin
-          Next;                     { consume 'ClassName' }
-          mcallNode := GenMakeClassNameCall(node, True);
+          Next;                     { consume the operation name }
+          mcallNode := GenMakeClassRefOp(node, fieldName, tk);
           if mcallNode >= 0 then
           begin
-            tk := tyAnsiString;
             recName := REC_NONE;
-            Result := mcallNode;
+            Result := ParseClassRefOpTail(mcallNode, tk);
             Exit;
           end;
         end;
@@ -3725,19 +3813,23 @@ begin
         end;
       end;
 
-      { obj.ClassName -- FPC has it on TObject in System. Only when the class has no
-        method of that name, so a user's own ClassName still wins. }
+      { obj.ClassName / obj.ClassType / obj.InheritsFrom(C) -- FPC has them on TObject
+        in System. An instance reaches its blob through __pxxRttiOf. Only when the
+        class has no member of that name, so a user's own still wins. }
       if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
-         CaseEqual(fieldName, 'ClassName') then
+         IsClassRefOpName(fieldName) then
       begin
-        Next;                        { consume 'ClassName' }
-        mcallNode := GenMakeClassNameCall(node, False);
-        if mcallNode >= 0 then
+        mblobNode := GenMakeRttiOfCall(node);
+        if mblobNode >= 0 then
         begin
-          tk := tyAnsiString;
-          recName := REC_NONE;
-          Result := mcallNode;
-          Exit;
+          Next;                      { consume the operation name }
+          mcallNode := GenMakeClassRefOp(mblobNode, fieldName, tk);
+          if mcallNode >= 0 then
+          begin
+            recName := REC_NONE;
+            Result := ParseClassRefOpTail(mcallNode, tk);
+            Exit;
+          end;
         end;
       end;
 

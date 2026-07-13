@@ -437,6 +437,9 @@ test-core: $(COMPILER)
 	# through a UNIT, with overloads, by-ref Self, record results, props over fields
 	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas /tmp/test_types_point_methods_b26926
 	test "$$(/tmp/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
+	# TObject.ClassType / InheritsFrom, incl. the fpcunit chain E.ClassType.InheritsFrom(C)
+	./$(COMPILER) test/test_classtype_inheritsfrom_b274.pas /tmp/test_classtype_inheritsfrom_b27426
+	test "$$(/tmp/test_classtype_inheritsfrom_b27426)" = "$$(printf 'classtype name: TLeaf\nchain leaf<-mid: TRUE\nchain leaf<-base: TRUE\nchain leaf<-other: FALSE\nchain leaf<-leaf: TRUE\ninst leaf<-base: TRUE\nvar name: TLeaf\nvar leaf<-mid: TRUE\nvar leaf<-other: FALSE\nlit mid<-base: TRUE\nlit base<-leaf: FALSE\nchain name: TLeaf')"
 	# bare PARENLESS call of a proc-var / method-pointer as a statement (`AMethod;`),
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
