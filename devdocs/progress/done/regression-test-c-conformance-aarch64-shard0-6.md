@@ -33,3 +33,14 @@ test-c-conformance-aarch64: FAILURES: 00187.c(output)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage 2026-07-13 (Track A) — green, closing
+
+Green at HEAD on the exact repro job, and Track T's own watcher reports full-tier GREEN at
+bc5f77d7 (`tstate/`, commit 7f8bd81f), which explicitly lists the aarch64 jobs as FIXED.
+
+The two c-conformance stubs carry the 0-commit range signature (`bad` == `last good`), the
+same harness-flake shape as regression-test-aarch64-test-cross-sysopen-family. The aarch64
+C-conformance shard, though, was genuinely repaired by ab568c7c (frozen inline strings on
+the cross backends) — the watcher marked shard3/6 FIXED at the commit that landed it, so
+these shards were likely the same root cause rather than flakes. Either way they pass now.

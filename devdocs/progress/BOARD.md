@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (97)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -129,9 +129,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
-| regression-test-c-conformance-arm32-shard3-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard3/6 red at e6844ff49085 (auto-filed by twatch) | — |
-| regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -196,7 +193,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (676)
+## done (680)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -391,6 +388,7 @@ _none_
 | bug-forward-class-decl-with-later-base-loses-fields | A | 50 | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | 50 | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-bootstrap-source-drift | A | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
+| bug-fpc-cannot-seed-head-missing-forwards | A | 60 | bug | bug: FPC could not compile HEAD — cold bootstrap broken (RESOLVED 6e523474) | — |
 | bug-fpc-seed-drift-forward-semicolon-enumtype | A | 45 | bug | FPC seed drift: compiler no longer FPC-compiles (3 spots) | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | 50 | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-fpc-seeded-binary-runtime-segfault | A | 50 | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
@@ -834,9 +832,11 @@ _none_
 | regression-test-arm32-test-scheduler-exc | T | 70 | regression | regression: test-arm32#src:test/test_scheduler_exc.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-scheduler | T | 70 | regression | regression: test-arm32#src:test/test_scheduler.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-timer | T | 70 | regression | regression: test-arm32#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard1-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard1/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard3-6 | A | 70 | regression | regression: test-c-conformance-aarch64#shard3/6 red at 90ae846bda82 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard2-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard3-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard3/6 red at e6844ff49085 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-i386-shard2-6 | T | 70 | regression | regression: test-c-conformance-i386#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-i386-shard5-6 | T | 70 | regression | regression: test-c-conformance-i386#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
@@ -849,6 +849,7 @@ _none_
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -898,9 +899,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-c-conformance-aarch64-shard0-6
-- [p 70] [T] regression-test-c-conformance-arm32-shard3-6
-- [p 70] [T] regression-test-core-test-sqlite-crud-lazy
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
