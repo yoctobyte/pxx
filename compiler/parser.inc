@@ -2548,6 +2548,38 @@ begin
   Result := best;
 end;
 
+{ Does ANY constructor of class ci take an `array of const` / open array at explicit argument
+  position argIdx (0-based, Self excluded)? The `TFoo.Create(args)` path parses its arguments
+  BEFORE it picks the overload -- it has to, since it ranks the overloads by argument type --
+  so it cannot ask the chosen signature whether a '[' is an array-of-const literal or a set.
+  Asking whether ANY candidate wants one there is enough: `[` in that position has no other
+  meaning for a constructor argument.
+
+  Without this, `TJSONArray.Create([0, 'string', ...])` (fcl-json) parsed the literal as a SET
+  and died on "set item must be one character" -- or, with an overloaded ctor, quietly picked
+  the parameterless one and passed garbage. }
+function ClassCtorWantsVarRecAt(ci, argIdx: Integer): Boolean;
+var mi, mpi, base, cnt, k: Integer;
+begin
+  Result := False;
+  if (ci < 0) or (ci >= UClsCount) then Exit;
+  base := UClsMBase[ci];
+  cnt := UClsMCount[ci];
+  for k := 0 to cnt - 1 do
+  begin
+    mi := base + k;
+    if not UMthIsCtor[mi] then continue;
+    mpi := UMthProc_[mi];
+    if mpi < 0 then continue;
+    if (argIdx + 1) < Procs[mpi].ParamCount then
+      if Procs[mpi].Params[argIdx + 1].IsArray then
+      begin
+        Result := True;
+        Exit;
+      end;
+  end;
+end;
+
 function FindUCtorOverloadArgs(ci: Integer; argsHead: Integer): Integer;
 { Constructor overload selection from the ALREADY-PARSED argument list.
 
@@ -5926,7 +5958,7 @@ end;
 
 procedure ParseFactor;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
-    smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec: Integer;
+    smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
@@ -8484,12 +8516,19 @@ begin
 
         argsHead := -1;
         lastArg := -1;
+        ctorCi := FindUClass(name);
+        ctorArgN := 0;
         if CurTok.Kind = tkLParen then
         begin
           Next;
           while CurTok.Kind <> tkRParen do
           begin
-            ParseExpr;
+            { an `array of const` / open-array LITERAL argument -- not a set }
+            if (CurTok.Kind = tkLBrack) and ClassCtorWantsVarRecAt(ctorCi, ctorArgN) then
+              CurASTNode := ParseVarRecLiteralAST
+            else
+              ParseExpr;
+            Inc(ctorArgN);
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;
             if argsHead = -1 then
