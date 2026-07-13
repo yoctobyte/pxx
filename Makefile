@@ -444,6 +444,13 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a callable METHOD POINTER built by hand from a TMethod record: the cast is a
+	# reinterpret of the same {Code,Data} words (fpcunit's RunBare)
+	./$(COMPILER) test/test_method_ptr_cast_b277.pas /tmp/test_method_ptr_cast_b27726
+	test "$$(/tmp/test_method_ptr_cast_b27726)" = "$$(printf 'found Hello: TRUE\nhello n=7\nhello n=100\ntwice: 14\ntwice b: 200')"
+	# TYPED metaclasses: any constructor name + class methods through `class of T`
+	./$(COMPILER) test/test_typed_metaclass_b278.pas /tmp/test_typed_metaclass_b27826
+	test "$$(/tmp/test_typed_metaclass_b27826)" = "$$(printf '1: base:x | tag of TBase\n2: derived:y | tag of TDerived\n3: TDerived')"
 	# `E is <class-reference VALUE>` -- a TClass field/var, not a class name
 	./$(COMPILER) test/test_is_classref_b276.pas /tmp/test_is_classref_b27626
 	test "$$(/tmp/test_is_classref_b27626)" = "$$(printf 'leaf is mid (field): TRUE\nleaf is other (field): FALSE\nleaf is base (var): TRUE\nleaf is other (var): FALSE\nleaf is EMid (name): TRUE\nleaf is EOther (name): FALSE')"

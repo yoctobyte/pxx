@@ -85,6 +85,19 @@ var
   { Replaceable; defaults to SysBackTraceStr below. }
   BackTraceStrFunc: TBackTraceStrFunc;
 
+{ FPC System.ExceptAddr: the address at which the CURRENT exception was raised.
+
+  THIS RETURNS NIL TODAY, and that is a stub, not an implementation -- we do not record
+  the raise site. It is declared because FPC code calls it, and because its callers are
+  diagnostic: fpcunit feeds it to AddFailure, whose AddrsToStr prints 'n/a' for a nil
+  address, so a nil lands on the unit's own sanctioned "no address known" path rather
+  than lying with a plausible-looking pointer. Pass/fail is unaffected.
+
+  The honest fix is cheap and filed (bug-pascal-exceptaddr-returns-nil): IR_RAISE
+  already stores the exception object and class into BSS slots, and the CALL to the
+  raise stub pushes the raise site itself -- so the address is right there to capture. }
+function ExceptAddr: Pointer;
+
 { The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
   $0, which is what the callers' "no address known" path already expects. }
 function SysBackTraceStr(Addr: Pointer): string;
@@ -1659,6 +1672,12 @@ end;
 function SysBackTraceStr(Addr: Pointer): string;
 begin
   Result := '  $' + IntToHex(PtrUInt(Addr), 2 * SizeOf(Pointer));
+end;
+
+function ExceptAddr: Pointer;
+begin
+  { stub -- see the declaration. We do not record the raise site yet. }
+  Result := nil;
 end;
 
 initialization

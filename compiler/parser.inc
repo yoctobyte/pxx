@@ -3173,7 +3173,13 @@ begin
           fieldName := CurTok.SVal;
           Next;
 
-          mmi := FindUMeth(ci, fieldName);
+          { Overload-aware: `TAssert.AssertNotNull(x)` and `TAssert.AssertNotNull(msg, x)`
+            are different methods. FindUMeth takes the first NAME match and ignored the
+            argument count, so the wrong overload was picked (and then complained about
+            the arguments it did not get). CountCallArgsAhead reads the call ahead --
+            the method name is already consumed here, so it is scanning from the '('. }
+          mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+          if mmi < 0 then mmi := FindUMeth(ci, fieldName);
           if mmi < 0 then
           begin
             { class variable: TClass.cnt -> the backing global var (an lvalue, so
@@ -3730,16 +3736,37 @@ begin
               (IntToTypeKind(AliasElemTk[ASTIVal[node]]) = tyClass) and
               (AliasElemRec[ASTIVal[node]] >= REC_UCLASS_BASE) then
         ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE;
-      if (ci >= 0) and CaseEqual(fieldName, 'create') then
+      if ci >= 0 then
       begin
-        mmi := FindUMeth(ci, 'create');
-        if mmi >= 0 then
+        { Any CONSTRUCTOR through the metaclass, not just one spelled `Create`. FPC
+          names them freely -- fpcunit's suite builder calls `tc.CreateWith(name, sn)`
+          -- and UMthIsCtor is what actually marks one. Matching on the NAME 'create'
+          silently missed every other constructor, which then fell through to the
+          member paths below and did something else entirely. }
+        mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+        if mmi < 0 then mmi := FindUMeth(ci, fieldName);
+        if (mmi >= 0) and UMthIsCtor[mmi] then
         begin
-          Next; { consume the 'Create' method name }
+          Next; { consume the constructor name }
           node := BuildMetaclassNew(node, ci, mmi);
           recName := REC_UCLASS_BASE + ci;
           tk := tyClass;
           Continue;   { allow trailing .field/[i] selectors on the new instance }
+        end;
+
+        { A CLASS METHOD through the metaclass: `tc.SingleInstanceForSuite`. Now that
+          Self is a real argument, this needs nothing special -- pass the metaclass
+          VALUE as Self and the method runs against whatever class the variable holds.
+          The dispatch is dynamic for free. }
+        if (mmi >= 0) and UMthIsStatic[mmi] and (UMthProc_[mmi] >= 0) then
+        begin
+          mpi := UMthProc_[mmi];
+          Next; { consume the method name }
+          node := GenMakeStaticMethodCall(mpi, node);
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+          Continue;
         end;
       end;
 
@@ -7845,6 +7872,23 @@ begin
               frozen<->managed as usual. Tagging it tyPointer made
               Pos(tbtstring(' '), s) miss every string overload. }
             LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
+          if AliasTk[aliasIdx] = Ord(tyRecord) then
+          begin
+            { RECORD-typed alias cast. A METHOD-POINTER type is one of these: a
+              `procedure of object` value is a 16-byte {Code, Data} record, and so is
+              System.TMethod -- so `TRunMethod(m)` (fpcunit's RunBare, building a
+              callable from a MethodAddress result) is a pure REINTERPRET of the same
+              two words, not a pointer conversion.
+
+              Records are carried BY ADDRESS in this IR, so the operand node is already
+              exactly the right thing; it only needs retyping. Wrapping it in AN_PTR_CAST
+              took the record's first word as if it were the value and produced a method
+              pointer whose Code was garbage -- which called into nothing. }
+            ASTTk[CurASTNode] := Ord(tyRecord);
+            LastExprTk := tyRecord;
+            LastTypeRecId := AliasElemRec[aliasIdx];
             Exit;
           end;
           node := AllocNode(AN_PTR_CAST);
