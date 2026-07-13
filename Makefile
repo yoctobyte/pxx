@@ -462,7 +462,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_classref_op_chained_b29626)" = "$$(printf 'TD\nTRUE')"
 	# `for F in <property>` -- a container EXPRESSION with GetEnumerator, not a bare variable
 	./$(COMPILER) test/test_forin_property_b295.pas /tmp/test_forin_property_b29526
-	test "$$(/tmp/test_forin_property_b29526)" = "$$(printf '1 2 3 \n7 8 9 ')"
+	test "$$(/tmp/test_forin_property_b29526)" = "$$(printf '1 2 3 \n1 2 3 \n7 8 9 ')"
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"

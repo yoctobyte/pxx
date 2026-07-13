@@ -8,7 +8,11 @@
   a hidden local, which the existing enumerator loop then drives. The container is evaluated
   exactly ONCE -- what FPC does, and what a getter with side effects requires.
 
-  The plain-array case below is here to pin that the bare-variable fast path is untouched. }
+  The QUALIFIED source (`for x in o.Bag`) is a DIFFERENT path again -- it is grabbed earlier, by
+  the qualified-member-access branch, which only ever knew arrays, strings and sets. It now
+  materialises a class container the same way. Both are asserted below.
+
+  The plain-array case is here to pin that the bare-variable fast path is untouched. }
 program test_forin_property_b295;
 type
   TEnum = class
@@ -45,6 +49,9 @@ begin
   o := TOwner.Create;
   o.FBag := TBag.Create;
   o.Go;
+  { QUALIFIED source: a property reached through another object }
+  for x in o.Bag do write(x, ' ');
+  writeln;
   { plain array for-in must still work }
   a[0] := 7; a[1] := 8; a[2] := 9;
   for x in a do write(x, ' ');

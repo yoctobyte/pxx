@@ -6088,6 +6088,13 @@ begin
   else if ASTKind[node] = AN_CLASS_CAST then
     { `TClass(obj)` hard cast yields type TClass — same record resolution. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
+  else if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+           (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+          (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) then
+    { A CALL's record is its return type's. A property GETTER is a call, so without this
+      `for x in o.Bag` (Bag a property) could not tell that the container was a class at all.
+      Guarded on a real proc index: the special-builtin calls carry a NEGATIVE id there. }
+    Result := ProcRetRecId[Integer(ASTIVal[node])]
   else if ASTKind[node] = AN_FIELD then
   begin
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));

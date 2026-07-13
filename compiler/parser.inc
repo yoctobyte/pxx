@@ -10448,12 +10448,40 @@ end;
   (jagged) sources through a member-access still fall through to an error. }
 function ParseForInNodeAST(varIdx, contNode: Integer): Integer;
 var
+  fnRec, fnSym, fnAssign, fnLoop, fnSeq: Integer;   { class container w/ GetEnumerator }
   bodyNode, elemTk, staticLen, recId, fldIdx: Integer;
   setEnumId, setElemTk: Integer;
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
 begin
+  { A CLASS container with GetEnumerator, reached through a QUALIFIED source:
+    `for x in o.Bag do` (Bag a property), `for x in rec.List do`.
+
+    This function is the qualified-source path, and it only ever knew arrays, strings and sets
+    -- so a class node fell through to "for-in: variable is not a string or array". The
+    enumerator protocol was already implemented (ParseForInEnumeratorAST); it just needed a
+    container SYMBOL, which a qualified source has not got.
+
+    Materialise the node into a hidden local and drive the existing loop with that. The
+    container is evaluated exactly ONCE, which a property getter with side effects requires. }
+  fnRec := ResolveNodeRec(contNode);
+  if (fnRec >= REC_UCLASS_BASE) and (not UClsIsRecord[fnRec - REC_UCLASS_BASE]) and
+     (FindUMeth(fnRec - REC_UCLASS_BASE, 'GetEnumerator') >= 0) then
+  begin
+    fnSym := AllocVar('', tyClass);
+    Syms[fnSym].RecName := fnRec;
+    fnAssign := GenMakeAssign(GenMakeIdent(fnSym, tyClass), contNode);
+    fnLoop := ParseForInEnumeratorAST(varIdx, fnSym, fnRec - REC_UCLASS_BASE);
+    Result := AllocNode(AN_SEQ);
+    ASTLeft[Result] := fnAssign;
+    fnSeq := AllocNode(AN_SEQ);
+    ASTLeft[fnSeq] := fnLoop;
+    ASTRight[fnSeq] := -1;
+    ASTRight[Result] := fnSeq;
+    Exit;
+  end;
+
   isArr := IsNodeArray(contNode);
   staticLen := -1;
   setEnumId := -1; setElemTk := 0;
