@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T02:05:20Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T02:13:22Z",
    "fixed": [],
    "new_red": [],
@@ -423,6 +415,14 @@
    "sha": "ec7632afbae2048ea6a833566ec882e19d274ea3",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-13T07:26:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "024c63087f0bb447983bf0fad0eacc4955ddf4fb",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -1000,6 +1000,7 @@
   "test-core#src:test/test_asyncecho.pas": "pass",
   "test-core#src:test/test_auto_locals.pas": "pass",
   "test-core#src:test/test_auto_var.pas": "pass",
+  "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
   "test-core#src:test/test_basic_comprehensive.bas": "pass",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
@@ -1649,11 +1650,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T07:23:16Z",
-  "sha": "ec7632afbae2048ea6a833566ec882e19d274ea3",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 205.2
+  "date": "2026-07-13T07:26:48Z",
+  "sha": "024c63087f0bb447983bf0fad0eacc4955ddf4fb",
+  "tier": "native",
+  "verdict": "GREEN",
+  "wall": 80.6
  },
  "last_bench": {
   "conf_rows": 550,
