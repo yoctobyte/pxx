@@ -15568,6 +15568,18 @@ begin
 	          PendingInitKind[PendingInitCount] := 5;
 	          PendingInitTk[PendingInitCount]   := Ord(tyPointer);
 	        end
+	        else if CurTok.Kind = tkString then
+	        begin
+	          { initialised STRING var `s: String = 'seeded';` (b335) — the
+	            LOCAL twin landed with b329; the global path lacked the case.
+	            Kind 1 = string literal; Val/ValAux carry the token span,
+	            exactly what the pending-init flush already reads. }
+	          initVal := Tokens[TokPos - 1].SOffset;
+	          PendingInitValAux[PendingInitCount] := Tokens[TokPos - 1].SLen;
+	          PendingInitKind[PendingInitCount] := 1;
+	          PendingInitTk[PendingInitCount]   := Ord(tk);
+	          Next;
+	        end
 	        else
 	        begin
 	          initVal := ParseInitVal;

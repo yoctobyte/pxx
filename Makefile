@@ -471,6 +471,9 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# initialised STRING vars, global (kind-1 pending init) and local
+	./$(COMPILER) test/test_var_string_initializer_b335.pas /tmp/test_var_strinit_b33526
+	test "$$(/tmp/test_var_strinit_b33526)" = "$$(printf 'global/local 42\nmut/local 42')"
 	# open-array params in RECORD methods (+ [..] open-array literals to any
 	# instance method — were parsed as SET literals)
 	./$(COMPILER) test/test_record_method_open_array_b334.pas /tmp/test_rec_openarr_b33426
