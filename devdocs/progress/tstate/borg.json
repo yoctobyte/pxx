@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T11:45:35Z",
-   "fixed": [],
-   "new_red": [
-    "test-c-conformance-aarch64#shard0/6",
-    "test-c-conformance-aarch64#shard3/6"
-   ],
-   "sha": "e530da678bc93d2fbc4e153cfa7811102b425cb0",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-13T11:47:20Z",
    "fixed": [],
    "new_red": [],
@@ -438,6 +427,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "6440ca5f3a9bc0bdbc48b17336d6504a6e5af3ea",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T19:34:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6cced1da1ae518cce17ebb0637109d5806025582",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1274,6 +1271,7 @@
   "test-core#src:test/test_length_dynarray_call.pas": "pass",
   "test-core#src:test/test_lfm.pas": "pass",
   "test-core#src:test/test_lineending_b260.pas": "pass",
+  "test-core#src:test/test_local_const_classref_array_b317.pas": "pass",
   "test-core#src:test/test_local_shadows_func.pas": "pass",
   "test-core#src:test/test_local_shadows_method_assign.pas": "pass",
   "test-core#src:test/test_local_typed_const.pas": "pass",
@@ -1710,11 +1708,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T18:59:32Z",
-  "sha": "6440ca5f3a9bc0bdbc48b17336d6504a6e5af3ea",
+  "date": "2026-07-13T19:34:16Z",
+  "sha": "6cced1da1ae518cce17ebb0637109d5806025582",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 120.5
+  "wall": 90.8
  },
  "last_bench": {
   "conf_rows": 550,
