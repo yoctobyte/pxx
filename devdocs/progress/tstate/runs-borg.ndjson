@@ -501,3 +501,4 @@
 {"date": "2026-07-13T17:25:45Z", "fixed": [], "full": false, "new_red": ["fpc-bootstrap#src:compiler/compiler.pas"], "sha": "a303fb3d090bdbc9de5d5956cd5f83045d851f28", "tier": "native", "verdict": "GREEN", "wall": 102.1}
 {"date": "2026-07-13T17:29:53Z", "fixed": ["test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"], "full": true, "new_red": [], "sha": "a303fb3d090bdbc9de5d5956cd5f83045d851f28", "tier": "full", "verdict": "RED", "wall": 231.2}
 {"date": "2026-07-13T17:31:57Z", "fixed": [], "full": false, "new_red": [], "sha": "a303fb3d090bdbc9de5d5956cd5f83045d851f28", "tier": "opt", "verdict": "GREEN", "wall": 118.1}
+{"date": "2026-07-13T17:40:05Z", "fixed": [], "full": false, "new_red": [], "sha": "a239fd76c5e46eeb1af6a4777c8914e4bd9a2bfe", "tier": "native", "verdict": "GREEN", "wall": 100.6}
