@@ -95,9 +95,20 @@ def lit_for(ty, rnd):
 
 
 class Gen:
-    def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False):
+    def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
+                 nclasses=0, nobjs=3, nstrs=0):
         self.rnd = random.Random(seed)
         self.seed = seed
+        # OOP + ansistring rungs. These are the POINT of a Pascal smith rather
+        # than just running Csmith: a C generator cannot reach a vtable, an
+        # inheritance chain, a ctor/dtor ordering, or a refcounted copy-on-write
+        # string, and those are where the assumptions live.
+        self.nclasses = nclasses
+        self.nobjs = nobjs
+        self.nstrs = nstrs
+        self.classes = []      # [{name, base, fields, methods}]
+        self.in_method = False  # guards against o.Name recursion inside a method
+        self.strs = []         # ansistring globals
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -285,6 +296,27 @@ class Gen:
             out += ["%send;" % pad]
             return out
 
+        if k < 0.94 and self.classes:
+            o = self.pick_obj()
+            kind = rnd.random()
+            if kind < 0.5:
+                # virtual dispatch through a base-typed reference
+                return ["%sMix(%s.Calc(longint(%s)));"
+                        % (pad, o, self.expr(INT_TYPES[4], scope, 2))]
+            if kind < 0.8:
+                return ["%sMixStr(%s.Name);" % (pad, o)]
+            # write through a field: mutating object state between virtual calls
+            c = self.classes[0]
+            fn, ft = c["fields"][0]
+            return ["%s%s.%s := %s(%s);"
+                    % (pad, o, fn, ft.name, self.expr(ft, scope, 2))]
+
+        if k < 0.97 and self.strs:
+            name, _ = rnd.choice(self.strs)
+            if rnd.random() < 0.6:
+                return ["%s%s := %s;" % (pad, name, self.str_expr(scope, 2))]
+            return ["%sMixStr(%s);" % (pad, self.str_expr(scope, 2))]
+
         # fold a live value into the checksum mid-stream: makes the output
         # sensitive to control flow, not just to final state.
         ty = rnd.choice(INT_TYPES)
@@ -295,6 +327,157 @@ class Gen:
         for _ in range(self.rnd.randint(1, 3)):
             out += self.stmt(scope, depth, ind, assignable)
         return out
+
+    # -- OOP ----------------------------------------------------------------
+    def str_expr(self, scope, depth):
+        """A well-defined ansistring expression.
+
+        Every operation here is total: concat always works, Length always
+        works, and Copy is defined for out-of-range indices (it returns what is
+        actually there). Indices are still kept in range so that a divergence
+        means a real bug rather than an argument about Copy's clamping -- but
+        Copy's clamping IS worth testing, so index bases are derived from live
+        values rather than constants.
+        """
+        rnd = self.rnd
+        cands = [n for (n, t) in scope if t.kind == "str"]
+        if depth <= 0 or not cands or rnd.random() < 0.25:
+            if cands and rnd.random() < 0.5:
+                return rnd.choice(cands)
+            return "'%s'" % "".join(rnd.choice("abcdefgh") for _ in range(rnd.randint(0, 4)))
+        k = rnd.random()
+        if k < 0.40:
+            return "(%s + %s)" % (self.str_expr(scope, depth - 1),
+                                  self.str_expr(scope, depth - 1))
+        if k < 0.60:
+            # Copy with LIVE (not constant) index/len: exercises the refcount /
+            # copy-on-write path and the clamping rules together.
+            s = self.str_expr(scope, depth - 1)
+            i = self.expr(INT_TYPES[4], scope, 1)
+            n = self.expr(INT_TYPES[4], scope, 1)
+            return "Copy(%s, 1 + (longint(%s) and 7), 1 + (longint(%s) and 7))" % (s, i, n)
+        if k < 0.75 and self.classes and not self.in_method:
+            # NEVER inside a method body: Name calling o0.Name would recurse
+            # forever (the objects are globals, so a method can see them). That
+            # would break the terminates-by-construction invariant -- the whole
+            # reason no generated program can hang.
+            o = self.pick_obj()
+            if o:
+                return "%s.Name" % o
+        if k < 0.88:
+            e = self.expr(INT_TYPES[4], scope, 1)
+            return "(%s + Chr(65 + (longint(%s) and 25)))" % (
+                self.str_expr(scope, depth - 1), e)
+        return rnd.choice(cands)
+
+    def pick_obj(self):
+        return "o%d" % self.rnd.randrange(self.nobjs) if self.nobjs else None
+
+    def gen_classes(self):
+        """A chain of classes, each overriding its parent's virtuals.
+
+        A CHAIN (not a flat set) on purpose: `inherited` up a deep chain is what
+        actually exercises vtable construction and method resolution. Every
+        virtual is overridden in every subclass and calls `inherited`, so one
+        call through a base-typed reference walks the whole chain.
+
+        Lifetime discipline, which is what keeps this UB-free: a ctor
+        initialises EVERY field it declares (so no field is ever read
+        uninitialised), the dtor is the only place an object is destroyed, and
+        main frees each object exactly once and never touches it afterwards.
+        """
+        rnd = self.rnd
+        L = ["type"]
+        for i in range(self.nclasses):
+            name = "TC%d" % i
+            base = "TC%d" % (i - 1) if i > 0 else "TObject"
+            fields = [("cf%d_%d" % (i, j), rnd.choice(INT_TYPES))
+                      for j in range(rnd.randint(1, 3))]
+            fields.append(("cs%d" % i, STR))
+            self.classes.append({"name": name, "base": base, "fields": fields, "idx": i})
+            L.append("  %s = class(%s)" % (name, base))
+            for fn, ft in fields:
+                L.append("    %s: %s;" % (fn, ft.name))
+            virt = "virtual" if i == 0 else "override"
+            L.append("    constructor Create(v: longint); %s;" % virt)
+            L.append("    destructor Destroy; override;")
+            L.append("    function Calc(a: longint): longint; %s;" % virt)
+            L.append("    function Name: ansistring; %s;" % virt)
+            L.append("  end;")
+        L.append("")
+        return L
+
+    def gen_class_bodies(self):
+        rnd = self.rnd
+        L = []
+        self.in_method = True
+        for c in self.classes:
+            i = c["idx"]
+            # Fields are in scope in every method. `v` is the CONSTRUCTOR's
+            # parameter and must not leak into Calc/Name -- each method gets
+            # only its own parameters.
+            fscope = [(f, t) for f, t in c["fields"]]
+
+            L.append("constructor %s.Create(v: longint);" % c["name"])
+            L.append("begin")
+            # inherited FIRST: the base must be constructed before this class's
+            # fields are touched. Getting this order wrong would be a generator
+            # bug that reads as a compiler bug.
+            L.append("  inherited Create(%s);" % (
+                "v" if i > 0 else ""))
+            for fn, ft in c["fields"]:
+                if ft.kind == "str":
+                    L.append("  %s := 'c%d';" % (fn, i))
+                else:
+                    L.append("  %s := %s(v + %s);" % (fn, ft.name, lit_for(ft, rnd)))
+            L.append("end;")
+            L.append("")
+
+            # The destructor folds state into the checksum, so ctor/dtor ORDER
+            # and dtor COUNT are observable: a missed or double destructor call,
+            # or a chain walked in the wrong order, changes the output.
+            L.append("destructor %s.Destroy;" % c["name"])
+            L.append("begin")
+            L.append("  Mix(%d);" % (1000 + i))
+            L.append("  Mix(int64(%s));" % c["fields"][0][0])
+            L.append("  inherited Destroy;")
+            L.append("end;")
+            L.append("")
+
+            # Fields alone need not cover all 8 integer types, and leaf() must
+            # always find a VARIABLE of the type it wants -- otherwise it falls
+            # back to a literal and the compile-time-overflow class comes back.
+            # So every method carries one local of each integer type.
+            mloc = [("m%d" % j, t) for j, t in enumerate(INT_TYPES)]
+            mdecl = ["var"] + ["  %s: %s;" % (n, t.name) for n, t in mloc]
+            minit = ["  %s := %s(a);" % (n, t.name) for n, t in mloc]
+
+            L.append("function %s.Calc(a: longint): longint;" % c["name"])
+            L += mdecl
+            L.append("begin")
+            L += minit
+            body_scope = fscope + mloc + [("a", INT_TYPES[4])]
+            if i > 0:
+                L.append("  Calc := longint(%s + inherited Calc(a));"
+                         % self.expr(INT_TYPES[4], body_scope, 2))
+            else:
+                L.append("  Calc := longint(%s);" % self.expr(INT_TYPES[4], body_scope, 2))
+            L.append("end;")
+            L.append("")
+
+            L.append("function %s.Name: ansistring;" % c["name"])
+            L += mdecl
+            L.append("begin")
+            L += ["  %s := %s(%s);" % (n, t.name, lit_for(t, rnd)) for n, t in mloc]
+            nscope = fscope + mloc
+            if i > 0:
+                L.append("  Name := (inherited Name) + %s;" % self.str_expr(nscope, 2))
+            else:
+                L.append("  Name := %s;" % self.str_expr(nscope, 2))
+            L.append("end;")
+            L.append("")
+        self.in_method = False
+        return L
 
     # -- whole program ------------------------------------------------------
     def gen(self):
@@ -314,18 +497,32 @@ class Gen:
         # The generation parameters travel WITH the source: a divergence is
         # reproduced from the seed, so the seed alone must be enough to rebuild
         # the identical program (this is what makes a shrinker unnecessary).
-        L.append("  gen-args: --vars %d --funcs %d --stmts %d --depth %d }"
-                 % (self.nvars, self.nfuncs, self.nstmts, self.maxdepth))
+        L.append("  gen-args: --vars %d --funcs %d --stmts %d --depth %d "
+                 "--classes %d --objs %d --strs %d }"
+                 % (self.nvars, self.nfuncs, self.nstmts, self.maxdepth,
+                    self.nclasses, self.nobjs, self.nstrs))
         L.append("{$mode objfpc}")
         # Wraparound is the DEFINED behaviour we test; range/overflow checks
         # off means arithmetic is total, so there is no trap to diverge on.
         L.append("{$Q-}")
         L.append("{$R-}")
         L.append("")
+        clsdecl = self.gen_classes() if self.nclasses else []
+        L += clsdecl
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
             L.append("  %s: %s;" % (n, t.name))
+        for i in range(self.nstrs):
+            self.strs.append(("s%d" % i, STR))
+            L.append("  s%d: ansistring;" % i)
+        if self.nclasses:
+            # Objects are declared as the BASE class but instantiated as random
+            # derived ones -- so every method call below goes through the vtable
+            # rather than being statically resolvable. A devirtualising optimiser
+            # that gets this wrong shows up as an -O-level self-contradiction.
+            for i in range(self.nobjs):
+                L.append("  o%d: TC0;" % i)
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -334,23 +531,37 @@ class Gen:
         L.append("  cs := qword(cs * 1000003) xor qword(v);")
         L.append("end;")
         L.append("")
+        L.append("procedure MixStr(const s: ansistring);")
+        L.append("var i: longint;")
+        L.append("begin")
+        L.append("  Mix(Length(s));")
+        L.append("  for i := 1 to Length(s) do Mix(ord(s[i]));")
+        L.append("end;")
+        L.append("")
         if self.trace:
             # A checkpoint: fold ALL live state and print it. One line per
             # statement, so a diff of two oracles' traces names the exact
             # statement at which they first disagreed. No source deletion, and
             # it works on a program of any size -- bigger is strictly better.
             L.append("procedure Snap;")
-            L.append("var s: qword;")
+            L.append("var s: qword; i: longint;")
             L.append("begin")
             L.append("  s := cs;")
             for n, t in self.globals:
                 cast = "ord(%s)" % n if t.kind in ("bool", "char") else "int64(%s)" % n
                 L.append("  s := qword(s * 1000003) xor qword(%s);" % cast)
+            for n, t in self.strs:
+                # String state must be in the trace too, or a divergence in a
+                # string statement would show a clean checkpoint and mislocate.
+                L.append("  for i := 1 to Length(%s) do "
+                         "s := qword(s * 31) xor qword(ord(%s[i]));" % (n, n))
             L.append("  writeln(s);")
             L.append("end;")
             L.append("")
         L += safe_helpers()
         L.append("")
+        if self.nclasses:
+            L += self.gen_class_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -362,8 +573,15 @@ class Gen:
         L.append("  cs := 0;")
         for n, t in self.globals:
             L.append("  %s := %s;" % (n, lit_for(t, rnd)))
+        for n, t in self.strs:
+            L.append("  %s := '%s';" % (n, "".join(
+                rnd.choice("abcdefgh") for _ in range(rnd.randint(0, 5)))))
+        for i in range(self.nclasses and self.nobjs):
+            # Instantiate a RANDOM class from the chain into a base-typed slot.
+            L.append("  o%d := TC%d.Create(%d);"
+                     % (i, rnd.randrange(self.nclasses), rnd.randint(1, 50)))
         L.append("")
-        body_scope = list(self.globals)
+        body_scope = list(self.globals) + list(self.strs)
         for _ in range(self.nstmts):
             L += self.stmt(body_scope, self.maxdepth, 1, list(self.globals))
             if self.trace:
@@ -376,6 +594,14 @@ class Gen:
                 L.append("  Mix(ord(%s));" % n)
             else:
                 L.append("  Mix(int64(%s));" % n)
+        for n, t in self.strs:
+            L.append("  MixStr(%s);" % n)
+        for i in range(self.nclasses and self.nobjs):
+            # Free each object EXACTLY once and never touch it again. The
+            # destructors fold into the checksum on their way out, so the dtor
+            # chain (count and order) is part of the observed output -- a missed
+            # or doubled destructor call changes the number.
+            L.append("  o%d.Free;" % i)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -431,6 +657,9 @@ def suffix_for(ty):
     return "_" + ty.name
 
 
+STR = Ty("ansistring", 0, False, "str")
+
+
 def safe_helpers():
     """Total div/mod for every integer type.
 
@@ -465,8 +694,15 @@ def main():
                     help="print the checksum after EVERY statement, not just at exit. "
                          "Diffing two oracles' traces localises a divergence to the "
                          "exact statement -- which is why this tool needs no shrinker.")
+    ap.add_argument("--classes", type=int, default=0,
+                    help="length of the inheritance chain (0 = no OOP). Every class "
+                         "overrides its parent's virtuals and calls inherited, so one "
+                         "call through a base-typed ref walks the whole chain.")
+    ap.add_argument("--objs", type=int, default=3, help="base-typed object slots")
+    ap.add_argument("--strs", type=int, default=0, help="ansistring globals")
     a = ap.parse_args()
-    src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace).gen()
+    src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
+              a.classes, a.objs, a.strs).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)

@@ -246,7 +246,8 @@ def check(nseeds, args):
         rc, out = run([sys.executable, PASMITH, "--seed", str(seed),
                        "--vars", str(args.vars), "--funcs", str(args.funcs),
                        "--stmts", str(args.stmts), "--depth", str(args.depth),
-                       "-o", src], 60)
+                       "--classes", str(args.classes), "--objs", str(args.objs),
+                       "--strs", str(args.strs), "-o", src], 60)
         if rc != 0:
             bad.append((seed, "generator crashed: %s" % out.strip()[:120]))
             continue
@@ -295,6 +296,9 @@ def main():
     ap.add_argument("--funcs", type=int, default=3)
     ap.add_argument("--stmts", type=int, default=12)
     ap.add_argument("--depth", type=int, default=3)
+    ap.add_argument("--classes", type=int, default=0)
+    ap.add_argument("--objs", type=int, default=3)
+    ap.add_argument("--strs", type=int, default=0)
     a = ap.parse_args()
 
     if not os.path.exists(PXX):
@@ -338,7 +342,8 @@ def main():
             rc, out = run([sys.executable, PASMITH, "--seed", str(seed),
                            "--vars", str(a.vars), "--funcs", str(a.funcs),
                            "--stmts", str(a.stmts), "--depth", str(a.depth),
-                           "-o", src], 60)
+                           "--classes", str(a.classes), "--objs", str(a.objs),
+                           "--strs", str(a.strs), "-o", src], 60)
             if rc != 0:
                 print("GENERATOR FAILED seed=%d: %s" % (seed, out))
                 seed += 1
