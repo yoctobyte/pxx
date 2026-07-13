@@ -1706,14 +1706,11 @@
   },
   {
    "bad": "e6844ff49085d4d0f87d4266976df7934549c7b5",
-   "good": "41dc1ce054ba6db50d73a82c227ebb4265d2c9b3",
+   "good": "d54d1363d914977c6cb1809dae00634b3900cfee",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-13T07:54:25Z",
    "range": [
-    "3d7006e58c6f5e6b63ab19e6dae2eae7997775b4",
-    "87bf5ec8a3fd50585bed06a047294defc185d160",
-    "d54d1363d914977c6cb1809dae00634b3900cfee",
     "f4f117d242e786fbb5a94766fdccc00b42069eb7",
     "3b921242bd6146ba70d1dfa19baf6fcef91ab1d5",
     "e6844ff49085d4d0f87d4266976df7934549c7b5"
