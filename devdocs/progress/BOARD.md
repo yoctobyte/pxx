@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,6 +44,7 @@ _none_
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
+| bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-open-array-param-in-record-method | P | 40 | bug | Open-array parameter in a record method (rejected for now — it SEGFAULTED) | — |
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
@@ -933,6 +934,7 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A+C] bug-c-bitfield-packing-sizeof-vs-gcc
 - [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
+- [p 55] [P] bug-pascal-metaclass-array-element-not-a-receiver
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape
