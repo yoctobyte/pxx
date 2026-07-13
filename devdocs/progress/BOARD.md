@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -47,6 +47,7 @@ _none_
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-open-array-param-in-record-method | P | 40 | bug | Open-array parameter in a record method (rejected for now — it SEGFAULTED) | — |
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
+| bug-pascal-string-const-not-scoped | P | 55 | bug | bug: untyped string constants are not SCOPED — a method's local const leaks to every later routine | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -931,6 +932,7 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A+C] bug-c-bitfield-packing-sizeof-vs-gcc
 - [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
+- [p 55] [P] bug-pascal-string-const-not-scoped
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape
