@@ -197,8 +197,45 @@ confused: entries 365/366 both bound to proc 724).
 ### Also cleared on the way
 - `PShortString` and `CodePointer` as built-in type names (fpcunit's testutils needs them).
 
-### Current wall
-Line **3042**: `expected expression` near `] J.FormatJSON`. Suite advanced 1725 → 2774 → 3042.
+### Wall at 3042 — `J.FormatJSON()` → b316
+EMPTY parens on a method whose parameters ALL have defaults. The argument loops had a case
+for trailing defaults AFTER at least one argument, but none for ZERO arguments; the `)` went
+straight to ParseExpr → "expected expression". A parameterless method called with `()` always
+worked (the loop never ran), which is why it was never noticed. Six separate method-call
+argument loops needed the same guard — they are copies of one dispatch, and that duplication
+is exactly what lets a case go missing in some of them.
+
+### THE SUITE NOW PARSES END TO END (~5000 lines)
+Walls: 1725 → 2774 → 3042 → **frontend clear**. The remaining wall is in CODEGEN, which is a
+different class of problem (and a different track — this is Track A ground, not P).
+
+### Current wall — CODEGEN, not the frontend
+
+```
+pascal26:3: error: invalid symbol in lea
+```
+
+That is the strict-IR verifier (`compiler/ir.inc`, the `IR_LEA` arm). Instrumented, it says:
+
+```
+DBG bad LEA: ir=1 sym=257 SymCount=256 tk=17 CurProc=-1 proc=
+```
+
+So: **an IR_LEA in MAIN (`CurProc = -1`) references symbol 257 when SymCount is 256** — a
+symbol index one PAST the end of the table. tk=17 is tyPointer.
+
+The driver's own body is `begin end`, so the code in main is the units' INITIALIZATION
+sections. testjsondata's is ~40 `RegisterTest(TTestXxx);` calls — a metaclass passed to a
+procedure. That shape ALONE reproduces green (a unit with `initialization Reg(TSub);` compiles
+and runs), so it needs more of the real context.
+
+The shape of the number is the lead: a symbol that was valid when the init code was lowered and
+became dangling when SymCount shrank back (a scope/unit truncation), or an off-by-one at a
+scope base. Next probe: print SymCount at the point the unit-init IR is generated vs at verify
+time, and find which declaration owns symbol 257 when it is created.
+
+Note the strict-IR verifier is doing its job here — it caught a dangling reference that would
+otherwise have been a wild `lea`. Do not weaken it.
 
 ### Invocation (was not recorded before; costs 20 minutes to rediscover)
 The suite is a UNIT, so it needs a driver program (`program d; uses testjsondata; begin end.`),
