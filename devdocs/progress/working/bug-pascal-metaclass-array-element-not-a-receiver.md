@@ -60,3 +60,11 @@ is exactly what left this hole (see also b289, the selector-after-indexed-proper
 
 Note b317's regression test deliberately reads the const through `ClassName` and says why,
 so it does not depend on this being fixed.
+
+## RESOLVED 2026-07-13 (b328)
+Exactly the fix direction above: the metaclass-receiver detection now also
+accepts an AN_INDEX over an array symbol whose element is a metaclass (the sym
+carries PtrElemTk=tyClass / PtrElemRec — a clean discriminator against arrays
+of ordinary record pointers). Virtual class methods, virtual constructors and
+the class-ref ops all dispatch through the element now. Pinned:
+test/test_metaclass_array_element_b328.pas. fpjson suite stays 203/203.

@@ -3882,7 +3882,20 @@ begin
       else if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
               (IntToTypeKind(AliasElemTk[ASTIVal[node]]) = tyClass) and
               (AliasElemRec[ASTIVal[node]] >= REC_UCLASS_BASE) then
-        ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE;
+        ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE
+      else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+              (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
+              Syms[ASTIVal[ASTLeft[node]]].IsArray and
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType = tyPointer) and
+              (Syms[ASTIVal[ASTLeft[node]]].PtrElemTk = tyClass) and
+              (Syms[ASTIVal[ASTLeft[node]]].PtrElemRec >= REC_UCLASS_BASE) then
+        { An ELEMENT of an array of metaclasses (`Map[0].Tag`,
+          `DefaultJSONInstanceTypes[jit].Create`). The array symbol carries the
+          element's class in PtrElemTk/PtrElemRec, so the element expression is
+          a metaclass VALUE like any `class of T` variable — it fell through to
+          the plain-pointer member paths and returned garbage
+          (bug-pascal-metaclass-array-element-not-a-receiver, b328). }
+        ci := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec - REC_UCLASS_BASE;
       if ci >= 0 then
       begin
         { A class-reference OPERATION on a TYPED metaclass (`AClass: TJSONDataClass`):

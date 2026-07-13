@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# a metaclass ARRAY ELEMENT as receiver: Map[0].Tag (virtual class method),
+	# Map[0].Create (virtual ctor) — fell to plain-pointer paths, silent garbage
+	./$(COMPILER) test/test_metaclass_array_element_b328.pas /tmp/test_mc_elem_b32826
+	test "$$(/tmp/test_mc_elem_b32826)" = "$$(printf 'via var:   A\nvia elem0: A\nvia elem1: base\nname:      TA\nmade:      A inst=TA')"
 	# an untyped BOOLEAN const keeps tyBoolean (was collapsed to integer; fpjson's
 	# Create([S]) with const S=True built a NUMBER element)
 	./$(COMPILER) test/test_bool_const_varrec_b326.pas /tmp/test_bool_const_b32626
