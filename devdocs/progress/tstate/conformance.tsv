@@ -514,9 +514,9 @@ skip	trange3.pp	trange	gap	{$R+} range checking on array indexes (currently segf
 pass	trange4.pp	trange	-	
 skip	trange5.pp	trange	gap	`with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
 auto	trangeob.pp	trange	-	opt
-pass	tsealed1.pp	tsealed	-	
-pass	tsealed2.pp	tsealed	-	
-pass	tsealed3.pp	tsealed	-	
+fail	tsealed1.pp	tsealed	-	accepted-invalid: %FAIL test compiled
+fail	tsealed2.pp	tsealed	-	accepted-invalid: %FAIL test compiled
+fail	tsealed3.pp	tsealed	-	accepted-invalid: %FAIL test compiled
 skip	tsealed4.pp	tsealed	gap	`class abstract` / `class sealed` modifiers (repeated) in class declarations
 pass	tsealed5.pp	tsealed	-	
 skip	tsealed6.pp	tsealed	gap	`object abstract` / `object sealed` modifiers in object declarations
