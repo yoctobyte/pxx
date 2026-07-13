@@ -124,7 +124,7 @@ pass	tdefault4.pp	tdefault	-
 skip	tdefault5.pp	tdefault	gap	Default() on record/object containing TextFile field (delphi mode)
 pass	tdefault6.pp	tdefault	-	
 pass	tdefault7.pp	tdefault	-	
-pass	tdefault8.pp	tdefault	-	
+fail	tdefault8.pp	tdefault	-	compile error
 pass	tdefault9.pp	tdefault	-	
 skip	tenum1.pp	tenum	gap	subrange type over an enum (`weekend = sat..sun`) not parsed
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
@@ -498,7 +498,7 @@ pass	toperator95.pp	toperator	-
 skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
 skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/widestring/pchar params
-pass	tover2.pp	tover	-	
+fail	tover2.pp	tover	-	compile error
 skip	tover3.pp	tover	wontfix	dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 skip	tover4.pp	tover	gap	80-bit extended/cextended float type and overload resolution across single/double/extended
 skip	tprocvar1.pp	tprocvar	gap	method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars
@@ -527,7 +527,7 @@ skip	tset2c.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 1} pac
 skip	tset2d.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 2} packed-set semantics
 pass	tset2.pp	tset	-	
 pass	tset3.pp	tset	-	
-pass	tset4.pp	tset	-	
+fail	tset4.pp	tset	-	compile error
 pass	tset5a.pp	tset	-	
 auto	tset5.pp	tset	-	opt
 auto	tset6.pp	tset	-	opt
