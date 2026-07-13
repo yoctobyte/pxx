@@ -795,6 +795,7 @@ procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
 procedure ParseRecordMethodDecl(ci: Integer); forward;
+var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/helper body }
 procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
@@ -3489,9 +3490,21 @@ begin
             argument (`TJSONData.DoError(msg, ['Nil', x])`, fpjson) is recognised here too.
             This block used to hand-roll its own arg loop, which parsed the '[' as a SET and
             died on "set item must be one character". }
-          mselfArg := AllocNode(AN_CLASSREF);
-          ASTIVal[mselfArg] := ci;
-          ASTTk[mselfArg] := Ord(tyPointer);
+          if UClsIsRecord[ci] then
+          begin
+            { a record/type HELPER's static reached through the TYPE name
+              (TU32Helper.GetSignMask): no metaclass exists — Self is a
+              by-value dummy the static body may not read. }
+            mselfArg := AllocNode(AN_INT_LIT);
+            ASTIVal[mselfArg] := 0;
+            ASTTk[mselfArg] := Ord(Procs[mpi].Params[0].TypeKind);
+          end
+          else
+          begin
+            mselfArg := AllocNode(AN_CLASSREF);
+            ASTIVal[mselfArg] := ci;
+            ASTTk[mselfArg] := Ord(tyPointer);
+          end;
           GenVirtSlot := UMthVirSlot[mmi];
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           tk := Procs[mpi].RetType;
@@ -8847,19 +8860,36 @@ begin
         Next; { dot }
         Next; { method name }
 
-        savedRecId := LastTypeRecId;
-        LastTypeRecId := REC_UCLASS_BASE + rcCi;
-        rcTmp := AllocVar('', tyRecord);          { the fresh receiver }
-        LastTypeRecId := savedRecId;
+        if UClsHelperTk[rcCi] >= 0 then
+        begin
+          { a TYPE HELPER's static through the helper's name
+            (TU32Helper.GetSignMask): no receiver exists — Self is a by-value
+            dummy the static body may not read, and the call's type is the
+            method's REAL return type (the record-factory shape below returned
+            tyRecord and read a garbage temp). }
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := rcPi;
+          ASTTk[mcallNode] := Ord(Procs[rcPi].RetType);
+          rcSelf := AllocNode(AN_INT_LIT);
+          ASTIVal[rcSelf] := 0;
+          ASTTk[rcSelf] := Ord(Procs[rcPi].Params[0].TypeKind);
+        end
+        else
+        begin
+          savedRecId := LastTypeRecId;
+          LastTypeRecId := REC_UCLASS_BASE + rcCi;
+          rcTmp := AllocVar('', tyRecord);          { the fresh receiver }
+          LastTypeRecId := savedRecId;
 
-        mcallNode := AllocNode(AN_CALL);
-        ASTIVal[mcallNode] := rcPi;
-        ASTTk[mcallNode] := Ord(tyRecord);
-        ASTLiftedVar[mcallNode] := rcTmp;
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := rcPi;
+          ASTTk[mcallNode] := Ord(tyRecord);
+          ASTLiftedVar[mcallNode] := rcTmp;
 
-        rcSelf := AllocNode(AN_IDENT);            { Self = the temp, passed by reference }
-        ASTIVal[rcSelf] := rcTmp;
-        ASTTk[rcSelf] := Ord(tyRecord);
+          rcSelf := AllocNode(AN_IDENT);            { Self = the temp, passed by reference }
+          ASTIVal[rcSelf] := rcTmp;
+          ASTTk[rcSelf] := Ord(tyRecord);
+        end;
         rcSelfArg := AllocNode(AN_ARG);
         ASTLeft[rcSelfArg] := rcSelf;
         ASTLeft[mcallNode] := rcSelfArg;
@@ -8881,8 +8911,13 @@ begin
           Expect(tkRParen, ')');
         end;
 
-        LastTypeRecId := REC_UCLASS_BASE + rcCi;
-        LastExprTk := tyRecord;
+        if UClsHelperTk[rcCi] >= 0 then
+          LastExprTk := Procs[rcPi].RetType
+        else
+        begin
+          LastTypeRecId := REC_UCLASS_BASE + rcCi;
+          LastExprTk := tyRecord;
+        end;
         CurASTNode := mcallNode;
         Exit;
       end;
@@ -16589,13 +16624,17 @@ begin
   begin
     pt[0] := IntToTypeKind(UClsHelperTk[ci]);
     ptRec[0] := UClsHelperRec[ci];
+    { a `class function ...; static;` helper method takes Self BY VALUE (the
+      body may not use Self, per FPC static rules) so a TYPE-NAME call site
+      (TU32Helper.GetSignMask) can pass a dummy literal }
+    pRef[0] := not RecordMethodClassPrefix;
   end
   else
   begin
     pt[0] := tyRecord;
     ptRec[0] := REC_UCLASS_BASE + ci;
+    pRef[0] := True;
   end;
-  pRef[0] := True;
 
   if CurTok.Kind = tkLParen then
   begin
@@ -16709,7 +16748,7 @@ begin
   end;
 
   AddUMeth(ci, mnOff, mnLen, mpi);
-  UMthIsStatic[UMthCount - 1] := False;
+  UMthIsStatic[UMthCount - 1] := RecordMethodClassPrefix;
   UMthIsCtor[UMthCount - 1] := isCtor;
   UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
   UMthPub[UMthCount - 1] := 0;
@@ -16784,7 +16823,9 @@ begin
        ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
     begin
       Next;
+      RecordMethodClassPrefix := True;
       ParseRecordMethodDecl(ci);
+      RecordMethodClassPrefix := False;
       continue;
     end;
 
@@ -19889,7 +19930,15 @@ begin
       end;
     end;
     pnames[0] := 'Self';
-    if isStaticMethod then
+    if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
+    begin
+      { a HELPER's `class function ...; static;`: Self = the target BY VALUE
+        (dummy; static bodies may not use Self) — must agree with the decl }
+      ptypes[0] := IntToTypeKind(UClsHelperTk[methOwnerCi]);
+      ptypesRec[0] := UClsHelperRec[methOwnerCi];
+      pbyref[0] := False;
+    end
+    else if isStaticMethod then
     begin
       { class method: Self is the metaclass -- a class reference }
       ptypes[0] := tyPointer;

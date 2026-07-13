@@ -20,6 +20,10 @@ type
   TIntHelper = record helper for Integer
     function Squared: Integer;
   end;
+  TU32Helper = record helper for Cardinal
+    class function GetSignMask: Cardinal; static; inline;
+    const BITS = 32;
+  end;
 
 function TStrHelper.ToLower2: AnsiString;
 begin
@@ -41,6 +45,11 @@ begin
   Result := Self * Self;
 end;
 
+class function TU32Helper.GetSignMask: Cardinal;
+begin
+  Result := $80000000;
+end;
+
 procedure UseParam(const S: AnsiString);
 begin
   Writeln('param: ', S.ToLower2);
@@ -58,4 +67,6 @@ begin
   UseParam('MiXeD');
   n := 7;
   Writeln('sq:     ', n.Squared);
+  Writeln('mask:   ', TU32Helper.GetSignMask);   { static via the helper's name }
+  Writeln('bits:   ', BITS);                     { helper const (global scope) }
 end.

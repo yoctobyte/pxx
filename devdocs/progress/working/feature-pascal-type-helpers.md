@@ -54,3 +54,14 @@ strings are one family. Pinned: test/test_record_helper_for_string_b331.pas.
 - `type helper for` spelling; class helpers.
 - generics.defaults then adds the REAL walls: methods NAMED after type keywords
   (class function Integer(constref...)), untyped constref params.
+
+## v2 LANDED (same commit series): helper STATICS + consts
+`class function ...; static;` in a helper: Self = target BY VALUE (a dummy —
+static bodies may not read Self, per FPC), marked UMthIsStatic, callable both
+through a VALUE (c.GetSignMask) and through the HELPER's name
+(TU32Helper.GetSignMask — both the record-factory factor path and the
+class-name selector path fork on the helper marker and pass a literal-0 Self).
+Consts in helper bodies were already global-scoped and work. Remaining:
+TARGET-type-name receivers (UInt32.GetSignMask), rvalue receivers, class
+helpers — and generics.defaults' methods NAMED after type keywords
+(class function Integer(constref ...)), which is the next real wall.
