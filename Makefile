@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# an overloaded method's BODY must not clobber a DIFFERENT overload's table entry
+	# (fpjson: ten Insert(Index,...) bodies clobbered the one-arg Insert; verified vs FPC)
+	./$(COMPILER) test/test_method_overload_arity_rebind_b315.pas /tmp/test_method_overload_b31526
+	test "$$(/tmp/test_method_overload_b31526)" = "oneintstr(x)bool(T)dbl"
 	# untyped string constants must be SCOPED: a routine's const must not leak into the
 	# next routine and beat ITS const of the same name (verified against FPC)
 	./$(COMPILER) test/test_string_const_scoping_b314.pas /tmp/test_string_const_scoping_b31426

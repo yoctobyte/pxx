@@ -19702,7 +19702,26 @@ begin
     { overloads: bind THIS signature's entry (the decl registered one proc per
       signature), falling back to the name match for a not-yet-declared method }
     mmi := FindUMethByProc(methOwnerCi, procIdx);
-    if mmi < 0 then mmi := FindUMeth(methOwnerCi, methName);
+    if mmi < 0 then
+    begin
+      mmi := FindUMeth(methOwnerCi, methName);
+      { ...but the name match is the FIRST entry with that name, so for an OVERLOADED
+        method it is almost certainly a DIFFERENT overload -- and binding this body to it
+        OVERWRITES that overload's proc. fpjson's TJSONArray declares Insert(Index) plus
+        ten Insert(Index, ...) overloads; each two-arg body that failed the by-proc lookup
+        landed on the one-arg entry and clobbered it, so `J.Insert(0)` could no longer find
+        a one-argument Insert and the arity search fell through to a two-arg one --
+        "expected ," at the closing paren.
+
+        Only reuse a name match whose bound proc has THIS signature's arity; otherwise
+        register a fresh entry rather than destroying someone else's. (An impl whose
+        signature fails to match its declaration is the deeper defect -- that is what makes
+        FindUMethByProc miss in the first place -- and is filed separately as
+        bug-pascal-overload-impl-decl-signature-match.) }
+      if (mmi >= 0) and (UMthProc_[mmi] >= 0) and
+         (Procs[UMthProc_[mmi]].ParamCount <> Procs[procIdx].ParamCount) then
+        mmi := -1;
+    end;
     if mmi >= 0 then
     begin
       UMthProc_[mmi] := procIdx;
