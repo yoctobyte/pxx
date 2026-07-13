@@ -136,12 +136,12 @@ skip	tenumerators1.pp	tenum	gap	Classes TList/TFPList GetEnumerator + custom enu
 skip	terecs10.pp	terecs	gap	default indexed property on a record (advanced records)
 skip	terecs11.pp	terecs	gap	nested type section inside a record (private type: class/record/object/interface/range)
 fail	terecs12a.pp	terecs	-	accepted-invalid: %FAIL test compiled
-pass	terecs12b.pp	terecs	-	
+fail	terecs12b.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs12c.pp	terecs	-	
 pass	terecs12d.pp	terecs	-	
 pass	terecs12.pp	terecs	-	
 fail	terecs13a.pp	terecs	-	accepted-invalid: %FAIL test compiled
-pass	terecs13b.pp	terecs	-	
+fail	terecs13b.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs13c.pp	terecs	-	
 fail	terecs13d.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs13.pp	terecs	-	
