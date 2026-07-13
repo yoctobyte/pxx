@@ -2202,6 +2202,7 @@ end;
   is/as site are included (whole-program closed world). Shared by `is` and `as`. }
 function IRLowerClassMatch(instExpr, targetCi: Integer; var instSym: Integer): Integer;
 var rvar, instVal, endLbl, skipLbl, c, li, znode, notnil, vmtSym, lv, va, eq: Integer;
+    cmPi, cmBlob, cmArg1, cmArg2, cmCall: Integer;
 begin
   rvar := AllocVar('', tyBoolean);
   instSym := AllocVar('', tyPointer);
@@ -2215,6 +2216,55 @@ begin
   znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
   notnil := IRAppend(IR_BINOP, li, znode, Ord(tkNeq), 0, Ord(tyBoolean));
   IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+  { OPEN-WORLD class match: the VMT-set enumeration below runs when the site's
+    OWN unit lowers, so a subclass declared in a LATER unit (or the program) is
+    not in the set — fpjson's `FList[Index] as TJSONData` Halt(1)-trapped on a
+    program-declared TJSONNull subclass. For a CLASS target, walk the RTTI
+    blobs' parent chain at runtime instead (__pxxInheritsFrom on
+    blob = [[inst+0]-8], reflexive, same machinery x.InheritsFrom(C) uses) —
+    correct for classes it has never seen. Interface targets keep the
+    enumeration (IMT membership is not on the blob chain), as does any build
+    without the builtin unit (ESP). }
+  if (not UClsIsInterface[targetCi]) and (FindProc('__pxxInheritsFrom') >= 0) then
+  begin
+    cmPi := FindProc('__pxxInheritsFrom');
+    { vmt := [inst + 0]; a VMT-LESS instance (the implicit root TObject stores
+      no table) keeps rvar false — the old enumeration never dereferenced
+      either, it only COMPARED. Without this guard the blob load below reads
+      through garbage. }
+    vmtSym := AllocVar('', tyPointer);
+    IRAppend(IR_STORE_SYM, vmtSym,
+             IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+                      -1, -1, 0, Ord(tyPointer)),
+             -1, 0, Ord(tyPointer));
+    lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+    znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+    notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+    { blob := [vmt - 8] — the RTTI backlink; hard 8 on every target (see AN_RTTIOF).
+      A null backlink also keeps rvar false. }
+    cmBlob := IRAppend(IR_LOAD_MEM,
+                IRAppend(IR_BINOP,
+                  IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
+                  IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyPointer)),
+                  Ord(tkMinus), 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer));
+    IRAppend(IR_STORE_SYM, vmtSym, cmBlob, -1, 0, Ord(tyPointer));
+    lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+    znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+    notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+    cmArg1 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+    cmArg2 := IRAppend(IR_ARG, IRAppend(IR_CLASSREF, targetCi, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+    IRB[cmArg1] := cmArg2;
+    cmCall := IRAppendCall(cmPi, cmArg1, -1, Ord(tyBoolean));
+    IRAppend(IR_STORE_SYM, rvar, cmCall, -1, 0, Ord(tyBoolean));
+    IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+    Result := rvar;
+    Exit;
+  end;
   { vmt := [inst+0] }
   IRAppend(IR_STORE_SYM, vmtSym,
            IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),

@@ -471,6 +471,18 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# System.X(...) must beat a same-named METHOD of the enclosing class (qUnit=-2
+	# is explicit) — fpjson's System.Delete dispatched to TJSONArray.Delete, crash
+	./$(COMPILER) test/test_system_qualified_vs_method_b323.pas /tmp/test_sysqual_b32326
+	test "$$(/tmp/test_sysqual_b32326)" = "$$(printf 'got=def\nmethod Delete(7)')"
+	# an INTEGER argument must not overload-match a Boolean parameter —
+	# TJSONArray.Create([1,2,3]) built [true,true,true]
+	./$(COMPILER) test/test_overload_no_int_to_boolean_b324.pas /tmp/test_ovl_bool_b32426
+	test "$$(/tmp/test_ovl_bool_b32426)" = "$$(printf 'n=int\nw=int\nb=bool\ni=int')"
+	# is/as open-world: recognise subclasses from LATER units (runtime RTTI-blob
+	# parent walk); bare TObject instances carry a real VMT so `is` cannot walk garbage
+	./$(COMPILER) test/test_isas_open_world_b325.pas /tmp/test_isas_ow_b32526
+	test "$$(/tmp/test_isas_ow_b32526)" = "$$(printf 'is=TRUE\nas=later\nplain is=FALSE')"
 	# array-of-const boxing: PChar(S) = vtPChar(6) not vtPointer; class instance =
 	# vtObject(7) not vtInteger (fpjson's TJSONArray.Create([PChar(S)]) raised)
 	./$(COMPILER) test/test_varrec_pchar_object_b320.pas /tmp/test_varrec_pchar_b32026

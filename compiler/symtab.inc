@@ -3736,7 +3736,13 @@ begin
   end;
   if TypeIsOrdinal(pType) and TypeIsOrdinal(aType) then
   begin
-    Result := True;
+    { A Boolean PARAMETER accepts only a Boolean argument (FPC: no implicit
+      integer->Boolean). The blanket ordinal rule made overload resolution map
+      a NativeInt argument onto `CreateJSON(Data: Boolean)` — declared before
+      the Integer overload — so fpjson's TJSONArray.Create([1,2,3]) built
+      [true, true, true]. Silent wrong VALUES, no diagnostic. The reverse
+      (Boolean arg -> integer param) stays accepted for now. }
+    Result := (pType <> tyBoolean) or (aType = tyBoolean);
     Exit;
   end;
   if (pType = tyString) and (aType = tyChar) then

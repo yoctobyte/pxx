@@ -7880,7 +7880,10 @@ begin
         which knows nothing of methods. A local var/param (idx >= 0) still
         shadows the method; a unit-qualified name (qUnit >= 0) stays explicit.
         See bug-implicit-self-method-loses-to-unit-proc. }
-      if (procIdx >= 0) and (qUnit < 0) and (idx < 0) and
+      { qUnit = -1 only: `System.X` (qUnit = -2) names the RTL routine
+        explicitly, so the class method must not shadow it — the statement-side
+        twin has the same guard (fpjson's System.Delete vs TJSONArray.Delete). }
+      if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and
          (CurSelfClass >= REC_UCLASS_BASE) and
          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
         procIdx := -1;
@@ -13849,7 +13852,13 @@ begin
           like that dispatch: si >= 0 (a local shadows the method) and unit-
           qualified names keep the plain path. Companion to the same clear on
           the expression side (bug-implicit-self-method-loses-to-unit-proc). }
-        if (procIdx >= 0) and (qUnit < 0) and (si < 0) and
+        { qUnit = -1 ONLY: a `System.`-qualified name (qUnit = -2) explicitly
+          names the builtin/RTL routine, so the enclosing class's same-named
+          method must NOT shadow it — fpjson's TJSONArray.DoFindPath calls
+          System.Delete(E,1,P) precisely because the class has its own
+          Delete(Index); the shadow-clear sent it to the METHOD with mangled
+          args (silent wrong dispatch, then a crash on FList). }
+        if (procIdx >= 0) and (qUnit = -1) and (si < 0) and
            (CurSelfClass >= REC_UCLASS_BASE) and
            (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
           procIdx := -1;
@@ -22209,13 +22218,32 @@ procedure RegisterBuiltinTObject;
   (ClassName/GetHashCode/...) are a separate ticket. Kept an IMPLICIT parent
   for every other class (the `class(TObject)` guard checks by name), so this
   adds a usable row without relocating any VMT. feature-pascal-builtin-tobject-class. }
-var ci: Integer;
+var ci, i: Integer;
 begin
   if FindUClass('TObject') >= 0 then Exit;
   ci := AddUClass(TokCharsAppend('TObject'), 7);
   UClsIsRecord[ci] := False;
   UClsSize_[ci] := TARGET_PTR_SIZE;   { VMT pointer slot at offset 0 }
   UClsAlign[ci] := TARGET_PTR_SIZE;
+  { A real (empty) VMT + RTTI-backlink word, the same shape every DECLARED
+    class gets. Without it UClsVMTOffset stayed -1 and the ctor's VMT stamp
+    wrote a garbage data reference into [instance+0] — so anything reading an
+    instance's class identity (`o is T`'s runtime blob walk, ClassName) walked
+    wild memory for a plain TObject.Create instance. One padding slot, never
+    dispatched (the root has no virtuals until an override materialises one). }
+  for i := 0 to 7 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  UClsVMTOffset[ci] := DataLen;
+  for i := 0 to 7 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
 end;
 
 procedure ParseProgram;
