@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T09:11:06Z",
-   "fixed": [],
-   "new_red": [
-    "test-c-conformance-aarch64#shard3/6"
-   ],
-   "sha": "43ce21ecd3ae96830ddff62fc0b878f124af712f",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-13T09:13:07Z",
    "fixed": [],
    "new_red": [],
@@ -441,12 +431,26 @@
    "sha": "a239fd76c5e46eeb1af6a4777c8914e4bd9a2bfe",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-13T17:47:54Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a239fd76c5e46eeb1af6a4777c8914e4bd9a2bfe",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
+  "optdiff#shard0/6": "pass",
+  "optdiff#shard1/6": "pass",
+  "optdiff#shard2/6": "pass",
+  "optdiff#shard3/6": "pass",
+  "optdiff#shard4/6": "pass",
+  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -1650,6 +1654,11 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
+  "test-opt#00": "pass",
+  "test-opt#src:compiler/compiler.pas@1": "pass",
+  "test-opt#src:compiler/compiler.pas@2": "pass",
+  "test-opt#src:compiler/compiler.pas@3": "pass",
+  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1706,11 +1715,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T17:45:39Z",
+  "date": "2026-07-13T17:47:54Z",
   "sha": "a239fd76c5e46eeb1af6a4777c8914e4bd9a2bfe",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 325.6
+  "tier": "opt",
+  "verdict": "GREEN",
+  "wall": 127.5
  },
  "last_bench": {
   "conf_rows": 550,
