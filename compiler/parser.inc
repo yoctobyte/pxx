@@ -784,6 +784,7 @@ function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
+procedure ParseRecordMethodDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
@@ -2588,7 +2589,10 @@ begin
         selfIdx := Procs[CurProc].Params[0].SymIdx;
         selfNode := AllocNode(AN_IDENT);
         ASTIVal[selfNode] := selfIdx;
-        ASTTk[selfNode] := Ord(tyClass);
+        { Self is tyClass for a class method but tyRecord for an ADVANCED RECORD's method
+          — take the symbol's real type rather than assuming a class, or a record Self is
+          dereferenced as an object pointer and the field access segfaults. }
+        ASTTk[selfNode] := Ord(Syms[selfIdx].TypeKind);
         fldIdx := GenMakeGetInterfaceCall(selfNode);
         if fldIdx >= 0 then
         begin
@@ -2620,7 +2624,7 @@ begin
       selfIdx := Procs[CurProc].Params[0].SymIdx;
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
-      ASTTk[selfNode] := Ord(tyClass);
+      ASTTk[selfNode] := Ord(Syms[selfIdx].TypeKind);   { tyRecord for an advanced-record method }
 
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := selfNode;
@@ -2684,7 +2688,7 @@ begin
       selfIdx := Procs[CurProc].Params[0].SymIdx;
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
-      ASTTk[selfNode] := Ord(tyClass);
+      ASTTk[selfNode] := Ord(Syms[selfIdx].TypeKind);   { tyRecord for an advanced-record method }
       if UPropIsIndexed[pri] then
       begin
         if CurTok.Kind <> tkLBrack then
@@ -14683,6 +14687,115 @@ end;
   (ParseTypeKind's tkRecord/tkPacked case — feature-anonymous-record-type).
   Handles comma field lists, nested fixed/dynamic array fields, and
   case/variant sections; sets UClsSize_/UClsAlign. }
+procedure ParseRecordMethodDecl(ci: Integer);
+{ A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
+  own RTL leans on it — TPoint/TSize/TRect are all advanced records).
+
+  A record method is an ordinary method whose implicit Self is the RECORD, passed BY
+  REFERENCE. There is no VMT: records have no inheritance, so every call is static, which
+  makes this far smaller than the class-method path. The IMPLEMENTATION side is the shared
+  ParseSubroutine — FindUClass already finds record rows, and its Self injection is now
+  record-aware.
+
+  Registers the proc as `TRec.Method` with Self at param 0 and adds a UMeth entry, which is
+  what makes `r.Method(...)` resolve through the ordinary member-call path. }
+var
+  isFunc, byref, sawConst: Boolean;
+  mname, recNm, fullNm: AnsiString;
+  mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
+  pn: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  pt: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  curTk, retTk: TTypeKind;
+begin
+  isFunc := CurTok.Kind = tkFunction;
+  Next;
+  if not IsMemberNameTok then Error('expected record method name');
+  mname := CurTok.SVal;
+  mnOff := Tokens[TokPos-1].SOffset;
+  mnLen := Tokens[TokPos-1].SLen;
+  Next;
+
+  { Self at param 0: the record, by reference. }
+  nP := 1;
+  pn[0] := 'Self';
+  pt[0] := tyRecord;
+  ptRec[0] := REC_UCLASS_BASE + ci;
+  pRef[0] := True;
+
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    while CurTok.Kind <> tkRParen do
+    begin
+      byref := False; sawConst := False;
+      if (CurTok.Kind = tkVar) or
+         ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
+      begin byref := True; Next; end
+      else if IsConstParamTok then begin sawConst := True; Next; end;
+
+      startIdx := nP;
+      while IsDeclNameTok do
+      begin
+        if nP >= MAX_PROC_PARAMS then Error('record method: too many parameters');
+        pn[nP] := CurTok.SVal; Inc(nP); Next;
+        if not Eat(tkComma) then break;
+      end;
+      Expect(tkColon, ':');
+      curTk := ParseTypeKind;
+      for k := startIdx to nP - 1 do
+      begin
+        pt[k] := curTk;
+        ptRec[k] := LastTypeRecId;
+        { a const record/variant param goes by reference, as everywhere else }
+        pRef[k] := byref or (sawConst and ((curTk = tyRecord) or (curTk = tyVariant)));
+      end;
+      if not Eat(tkSemicolon) then break;
+    end;
+    Expect(tkRParen, ')');
+  end;
+
+  retTk := tyInteger;
+  LastTypeRecId := REC_NONE;
+  if isFunc then
+  begin
+    Expect(tkColon, ':');
+    retTk := ParseTypeKind;
+  end;
+  Eat(tkSemicolon);
+
+  { parse-and-ignore directives: records have no VMT, so none of the dispatch ones mean
+    anything here. }
+  while (CurTok.Kind = tkOverload) or
+        ((CurTok.Kind = tkIdent) and
+         (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'static') or
+          CaseEqual(CurTok.SVal, 'deprecated'))) do
+  begin
+    Next;
+    Eat(tkSemicolon);
+  end;
+
+  recNm := GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci]);
+  fullNm := recNm + '.' + mname;
+
+  mpi := RegisterProc(fullNm, isFunc, retTk, nP, pn, pt);
+  Procs[mpi].BodyAddr := -1;
+  for i := 0 to nP - 1 do
+  begin
+    Procs[mpi].Params[i].IsRef := pRef[i];
+    Procs[mpi].Params[i].IsArray := False;
+    if (pt[i] = tyRecord) or (pt[i] = tyClass) then
+      ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := ptRec[i];
+  end;
+
+  AddUMeth(ci, mnOff, mnLen, mpi);
+  UMthIsStatic[UMthCount - 1] := False;
+  UMthIsCtor[UMthCount - 1] := False;
+  UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
+  UMthPub[UMthCount - 1] := 0;
+end;
+
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean);
 var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize: Integer;
@@ -14716,6 +14829,37 @@ begin
     if CurTok.Kind = tkConst then
     begin
       ParseConstSection;
+      continue;
+    end;
+
+    { ADVANCED RECORDS: visibility sections and methods. pxx does not enforce access
+      anywhere, so the visibility words are consumed and dropped; a method registers a
+      `TRec.Method` proc with Self (the record, by reference) at param 0. }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(TokPos), 'private') or
+        CaseEqual(GetTokenStr(TokPos), 'protected')) then
+      Next;
+    if (CurTok.Kind = tkIdent) and
+       (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
+        CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
+    begin
+      Next;
+      continue;
+    end;
+    if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+    begin
+      ParseRecordMethodDecl(ci);
+      continue;
+    end;
+    { `class function` / `class procedure` in a record: consume the prefix and treat it as
+      an ordinary record method. There is no per-instance state to distinguish, and pxx
+      resolves the call the same way. }
+    if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+       ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
+    begin
+      Next;
+      ParseRecordMethodDecl(ci);
       continue;
     end;
 
@@ -17642,13 +17786,26 @@ begin
       end;
     end;
     pnames[0] := 'Self';
-    ptypes[0] := tyClass;
-    ptypesRec[0] := REC_NONE;   { Self's RecName is wired to the owner class below }
+    if UClsIsRecord[methOwnerCi] then
+    begin
+      { An ADVANCED RECORD's method: Self is the RECORD, passed BY REFERENCE. Records are
+        already carried by address in this IR, and a method must be able to mutate its
+        receiver (`p.Offset(dx, dy)`), so by-ref is both natural and required — a
+        by-value Self would mutate a copy and silently lose the write. }
+      ptypes[0] := tyRecord;
+      ptypesRec[0] := methOwnerRec;
+      pbyref[0] := True;
+    end
+    else
+    begin
+      ptypes[0] := tyClass;
+      ptypesRec[0] := REC_NONE;   { Self's RecName is wired to the owner class below }
+      pbyref[0] := False;
+    end;
     ptypesPtrElemTk[0] := tyUnknown;
     ptypesPtrElemRec[0] := REC_NONE;
     ptypesProcSig[0] := -1;
     parr[0]   := False;
-    pbyref[0] := False;
     pNDims[0] := 0;
     pDynDepth[0] := 0;
     pdefault[0] := False;

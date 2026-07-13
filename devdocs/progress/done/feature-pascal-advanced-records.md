@@ -54,3 +54,34 @@ Operators (`class operator Add`) are a separate, later slice — do not fold the
 ## Log
 - 2026-07-13 — opened, found while chasing the unknown-type fallback (an advanced-record
   TPoint in FPC's own RTL was the thing that would not parse).
+
+
+## Landed 2026-07-13
+
+Methods inside a record now work: declaration, implementation, calls, mutation, and
+record-valued results. Visibility sections (`public` / `private` / `strict private`) and
+`class function`/`class procedure` inside a record are consumed too.
+
+`Self` is the RECORD, passed **BY REFERENCE**. That is not a detail — the first attempt
+passed it by value and `p.SetX` silently mutated a COPY, leaving the receiver unchanged. A
+by-value Self loses every write.
+
+No VMT: records have no inheritance, so every call is static, which is why this ended up far
+smaller than the class-method path. The implementation side reuses ParseSubroutine unchanged
+— FindUClass already finds record rows.
+
+### The bug that actually cost the time
+The implicit-Self field access hardcoded `Self` as `tyClass`. A record Self was therefore
+dereferenced as an object POINTER, and the field access segfaulted. It now takes the
+symbol's real type (`Syms[selfIdx].TypeKind`) — which is the correct thing for the class
+path too, it was simply never exercised by anything but a class.
+
+### Not included (deliberately)
+`class operator` (Add / = / Explicit …) and record CONSTRUCTORS. Both are separate slices;
+folding them in would have widened this well past a reviewable change. FPC's typshrdh.inc
+uses both, so a full parse of it still needs them.
+
+### Gate
+`make test` green, `make lib-test` green, self-host byte-identical, `testmgr --tier full`
+1215/1215 GREEN. Regression b268 pins the by-ref receiver (a by-value Self would silently
+pass every other assertion).
