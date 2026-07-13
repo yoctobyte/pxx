@@ -32,7 +32,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (106)
+## backlog (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ _none_
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
+| bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
@@ -956,6 +957,7 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-pascal-except-on-class-open-world
 - [p 45] [A] bug-pascal-member-access-on-pointer-silently-accepted
 - [p 45] [A] bug-riscv32-p256field-coredump
 - [p 45] [A] chore-makefile-testtmp-parameterize
