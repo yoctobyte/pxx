@@ -4921,6 +4921,17 @@ begin
             else
               argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyString));
           end
+          else if ProcParamDefaultIsSet[cpi * MAX_PROC_PARAMS + pathIdx] then
+            { A SET default (`Options: TFormatOptions = DefaultFormat`). The value is not
+              an ordinal: it is the Data[] OFFSET of the 32-byte mask baked at the
+              declaration, so it must yield the mask's ADDRESS (IR_SET_LIT) -- exactly what
+              a set literal written at the call site yields. Emitting IR_CONST_INT here
+              passed the OFFSET itself as if it were the set, and the callee dereferenced
+              it. }
+            argNode := IRAppend(IR_ARG,
+              IRAppend(IR_SET_LIT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
+                       Ord(tySet)),
+              -1, -1, 0, Ord(tySet))
           else
             argNode := IRAppend(IR_ARG,
               IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],

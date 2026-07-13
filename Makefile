@@ -444,6 +444,15 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# SET-typed default parameters (fpjson FormatJSON(Options: TFormatOptions = DefaultFormat))
+	./$(COMPILER) test/test_set_default_param_b282.pas /tmp/test_set_default_param_b28226
+	test "$$(/tmp/test_set_default_param_b28226)" = "$$(printf 'P1: (empty)\nP2: (empty)\nP3: AC\nP4: B\nP5 n=1 : C\nP3: B\nP5 n=2 : AB')"
+	# property REDECLARATION `property Items;default;` (fpjson TJSONArray)
+	./$(COMPILER) test/test_property_redecl_b283.pas /tmp/test_property_redecl_b28326
+	test "$$(/tmp/test_property_redecl_b28326)" = "$$(printf 'base explicit: 7\nchild explicit: 9\nchild default: 11\nchild default read of 3: 9')"
+	# array indexed by an ordinal TYPE: array[Boolean] / array[TEnum] / array[Char]
+	./$(COMPILER) test/test_array_index_type_b284.pas /tmp/test_array_index_type_b28426
+	test "$$(/tmp/test_array_index_type_b28426)" = "$$(printf 'sep[false]=[, ] sep[true]=[,]\nred green blue \ncounts[Green]=7\nflags[True]=42\ntab[A]=9\nok')"
 	# unary `not` on an ARRAY ELEMENT / FIELD / DEREF must be BITWISE, not boolean
 	./$(COMPILER) test/test_bitwise_not_lvalue_b280.pas /tmp/test_bitwise_not_lvalue_b28026
 	test "$$(/tmp/test_bitwise_not_lvalue_b28026)" = "$$(printf 'byte elem : 5 (5)\nint elem  : 5 (5)\nint64 elem: 5 (5)\nrec byte  : 5 (5)\nrec int   : 5 (5)\nderef     : 5 (5)\nplain var : 5 (5)\nnot elem  : -3\nnot var   : -3\nbool elem : TRUE (TRUE)\nbool elem2: FALSE (FALSE)')"

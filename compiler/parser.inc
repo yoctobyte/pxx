@@ -1908,6 +1908,14 @@ begin
       ASTSLen[exprNode] := ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + k];
       ASTTk[exprNode] := Ord(tyString);
     end
+    else if ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + k] then
+    begin
+      { a SET default: the value is the Data[] offset of the mask baked at the
+        declaration, so the call site just references it }
+      exprNode := AllocNode(AN_SET_CONST_REF);
+      ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
+      ASTTk[exprNode] := Ord(tySet);
+    end
     else
     begin
       exprNode := AllocNode(AN_INT_LIT);
@@ -9083,6 +9091,7 @@ begin
 end;
 
 function ConstEval: Int64; forward;
+procedure ParseArrayDimBounds(var lo, hi: Integer); forward;   { body sits with the const helpers }
 
 function ConstEvalFactor: Int64;
 { Primary of a const expression: literal / true / false / single-char literal /
@@ -14195,7 +14204,7 @@ begin
         begin
           Next;   { consume '[' }
           repeat
-            dLo := ConstEval; Expect(tkDotDot, '..'); dHi := ConstEval;
+            ParseArrayDimBounds(dLo, dHi);
             if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
             ndDimLo[ndCnt] := dLo; ndDimSpan[ndCnt] := dHi - dLo + 1; Inc(ndCnt);
           until not Eat(tkComma);
@@ -14516,6 +14525,45 @@ begin
 	  end;
 	end;
 
+{ One array DIMENSION bound pair: `lo..hi`, or an ordinal TYPE naming its whole range.
+
+  FPC lets an array be indexed by an ordinal type rather than a literal range:
+
+      ElementSeps : Array[Boolean] of TJSONStringType = (', ', ',');   { fpjson }
+      Counts      : array[TJSONtype] of Integer;
+      Table       : array[Char] of Byte;
+
+  which mean [0..1], [0..High(TJSONtype)] and [0..255]. Only `lo..hi` parsed before, so the
+  type name went straight into ConstEval and died on the missing `..`.
+
+  A bare identifier is ambiguous -- `array[MaxLen..2]` starts with one too -- so an ident is
+  only read as a TYPE when it is not followed by `..` AND it names an enum type. Otherwise
+  it falls through to the ordinary constant range. }
+procedure ParseArrayDimBounds(var lo, hi: Integer);
+var eid: Integer;
+begin
+  if CurTok.Kind = tkBoolean_T then
+  begin
+    lo := 0; hi := 1; Next; Exit;
+  end;
+  if CurTok.Kind = tkChar_T then
+  begin
+    lo := 0; hi := 255; Next; Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind <> tkDotDot) then
+  begin
+    eid := FindEnumType(CurTok.SVal);
+    if eid >= 0 then
+    begin
+      lo := 0; hi := EnumTypeValCount[eid] - 1; Next; Exit;
+    end;
+  end;
+  lo := ConstEval;
+  Expect(tkDotDot, '..');
+  hi := ConstEval;
+end;
+
 { Accumulate a constant set TERM into mask[0..31]: either a `[...]` literal (elements and
   `lo..hi` ranges, all ConstEval-able) or the NAME of an already-baked set constant, whose
   mask is read straight back out of Data[]. }
@@ -14721,7 +14769,7 @@ begin
           like the var form. }
         cnNDims := 0;
         repeat
-          cLo := ConstEval; Expect(tkDotDot, '..'); cHi := ConstEval;
+          ParseArrayDimBounds(cLo, cHi);
           if cnNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
           cnDimLo[cnNDims] := cLo; cnDimSpan[cnNDims] := cHi - cLo + 1; Inc(cnNDims);
         until not Eat(tkComma);
@@ -15903,7 +15951,8 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   etid, propEnumId, propSetEnumId: Integer;
-  propIsIndexed, propIsDefault: Boolean;   { indexed (array) property + `default;` }
+  propIsIndexed, propIsDefault, propRedecl: Boolean;   { indexed (array) property + `default;` + `property X;` redeclaration }
+  propBase: Integer;                                   { the ancestor row a redeclaration copies }
   mFullName: AnsiString;
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
@@ -15920,6 +15969,8 @@ var
   mPDefault: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefaultVal: array[0..MAX_PROC_PARAMS-1] of Int64;
   mPDefaultIsStr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  mPDefaultIsSet: array[0..MAX_PROC_PARAMS-1] of Boolean;   { twin of mPDefaultIsStr, for SET defaults }
+  mDefaultIsSet: Boolean;
   mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
@@ -16116,7 +16167,7 @@ begin
               end;
               { Default value: `n: Integer = 5` — mirror ParseSubroutine. }
               mHasDefault := False; mDefaultVal := 0;
-              mDefaultIsStr := False; mDefaultSOff := 0; mDefaultSLen := 0;
+              mDefaultIsStr := False; mDefaultIsSet := False; mDefaultSOff := 0; mDefaultSLen := 0;
               if CurTok.Kind = tkEq then
               begin
                 Next;
@@ -16126,6 +16177,14 @@ begin
                   mDefaultSLen := Tokens[TokPos-1].SLen;
                   mDefaultIsStr := True;
                   Next;
+                end
+                else if (CurTok.Kind = tkLBrack) or
+                        ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
+                begin
+                  { a SET default (`Options: TFormatOptions = DefaultFormat`) -- see the
+                    plain-routine path: bake the mask, keep its Data[] offset }
+                  mDefaultVal := BakeSetConst;
+                  mDefaultIsSet := True;
                 end
                 else
                   mDefaultVal := ConstEval;
@@ -16138,7 +16197,7 @@ begin
               if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
                 mIsByRef := True;
               for i := mStartIdx to mNParams-1 do
-              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; mPDefault[i] := mHasDefault; mPDefaultVal[i] := mDefaultVal; mPDefaultIsStr[i] := mDefaultIsStr; mPDefaultIsSet[i] := mDefaultIsSet; mPDefaultSOff[i] := mDefaultSOff; mPDefaultSLen[i] := mDefaultSLen; end;
               if not Eat(tkSemicolon) then mDoneArgs := True;
             end;
             Expect(tkRParen, ')');
@@ -16147,8 +16206,8 @@ begin
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
@@ -16162,6 +16221,7 @@ begin
               ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
               ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
               ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+              ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsSet[i];
               ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
               ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
             end;
@@ -16457,6 +16517,7 @@ begin
                 mHasDefault := False;
                 mDefaultVal := 0;
                 mDefaultIsStr := False;
+                mDefaultIsSet := False;
                 mDefaultSOff := 0;
                 mDefaultSLen := 0;
                 if CurTok.Kind <> tkColon then
@@ -16504,6 +16565,12 @@ begin
                       mDefaultIsStr := True;
                       Next;
                     end
+                    else if (CurTok.Kind = tkLBrack) or
+                            ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
+                    begin
+                      mDefaultVal := BakeSetConst;
+                      mDefaultIsSet := True;
+                    end
                     else
                       mDefaultVal := ConstEval;
                     mHasDefault := True;
@@ -16527,6 +16594,7 @@ begin
                   mPDefault[i] := mHasDefault;
                   mPDefaultVal[i] := mDefaultVal;
                   mPDefaultIsStr[i] := mDefaultIsStr;
+                  mPDefaultIsSet[i] := mDefaultIsSet;
                   mPDefaultSOff[i] := mDefaultSOff;
                   mPDefaultSLen[i] := mDefaultSLen;
                 end;
@@ -16557,6 +16625,7 @@ begin
                 mPDefault[i] := mPDefault[i-1];
                 mPDefaultVal[i] := mPDefaultVal[i-1];
                 mPDefaultIsStr[i] := mPDefaultIsStr[i-1];
+                mPDefaultIsSet[i] := mPDefaultIsSet[i-1];
                 mPDefaultSOff[i] := mPDefaultSOff[i-1];
                 mPDefaultSLen[i] := mPDefaultSLen[i-1];
               end;
@@ -16569,6 +16638,7 @@ begin
               mPDefault[0] := False;
               mPDefaultVal[0] := 0;
               mPDefaultIsStr[0] := False;
+              mPDefaultIsSet[0] := False;
               mPDefaultSOff[0] := 0;
               mPDefaultSLen[0] := 0;
               mNParams := mNParams + 1;
@@ -16591,6 +16661,7 @@ begin
                   ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
                   ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := mPDefaultVal[i];
                   ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsStr[i];
+                  ProcParamDefaultIsSet[mpi * MAX_PROC_PARAMS + i] := mPDefaultIsSet[i];
                   ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := mPDefaultSOff[i];
                   ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := mPDefaultSLen[i];
                 end;
@@ -16701,6 +16772,57 @@ begin
               indexed so accesses pass the subscript as an extra accessor arg. }
             propIsIndexed := False;
             propIsDefault := False;
+
+            { `property Items;` / `property Items; default;` -- a REDECLARATION of an
+              INHERITED property. FPC lets a descendant re-expose an ancestor's property by
+              naming it alone, optionally adding a directive (fpjson's TJSONArray does
+              exactly `property Items;default;` to make the inherited indexed property the
+              class's default one). No type, no accessors: everything comes from the
+              ancestor.
+
+              Re-register it on THIS class with the ancestor's accessors copied, rather
+              than just letting FindUProp find the ancestor's entry -- because the point of
+              the redeclaration is usually to CHANGE something (here, `default`), and that
+              change must not be written onto the ancestor's row. }
+            propRedecl := (CurTok.Kind = tkSemicolon);
+            if propRedecl then
+            begin
+              Next;                                { the ';' after the name }
+              if CurTok.Kind = tkDefault then
+              begin
+                propIsDefault := True;
+                Next;
+                Eat(tkSemicolon);
+              end;
+              while (CurTok.Kind = tkIdent) and
+                    (CaseEqual(CurTok.SVal, 'deprecated') or
+                     CaseEqual(CurTok.SVal, 'platform') or
+                     CaseEqual(CurTok.SVal, 'experimental') or
+                     CaseEqual(CurTok.SVal, 'unimplemented')) do
+              begin
+                if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
+                   (Tokens[TokPos].Kind = tkString) then
+                  Next;
+                Next;
+                Eat(tkSemicolon);
+              end;
+
+              propBase := FindUProp(ci, propName);
+              if propBase < 0 then
+                Error('redeclared property has no ancestor declaration: ' + propName);
+              i := AddUProperty(ci, pnOff, pnLen, UPropTk[propBase], UPropRec[propBase]);
+              UPropReadFOff[i] := UPropReadFOff[propBase]; UPropReadFLen[i] := UPropReadFLen[propBase];
+              UPropReadMOff[i] := UPropReadMOff[propBase]; UPropReadMLen[i] := UPropReadMLen[propBase];
+              UPropWriteFOff[i] := UPropWriteFOff[propBase]; UPropWriteFLen[i] := UPropWriteFLen[propBase];
+              UPropWriteMOff[i] := UPropWriteMOff[propBase]; UPropWriteMLen[i] := UPropWriteMLen[propBase];
+              UPropPub[i] := curPublished;
+              UPropEnumId[i] := UPropEnumId[propBase];
+              UPropSetEnumId[i] := UPropSetEnumId[propBase];
+              UPropIsIndexed[i] := UPropIsIndexed[propBase];
+              UPropIsDefault[i] := propIsDefault or UPropIsDefault[propBase];
+            end
+            else
+            begin
             if CurTok.Kind = tkLBrack then
             begin
               propIsIndexed := True;
@@ -16791,6 +16913,7 @@ begin
             UPropSetEnumId[i] := propSetEnumId;
             UPropIsIndexed[i] := propIsIndexed;
             UPropIsDefault[i] := propIsDefault;
+            end;   { close the non-redeclaration branch }
           end
           else if CurTok.Kind = tkIdent then
           begin
@@ -18115,10 +18238,12 @@ var
   pdefault  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param has a default value (`b: Integer = 10`) }
   pdefaultval : array[0..MAX_PROC_PARAMS-1] of Int64;  { the constant-folded default ordinal }
   pdefaultisstr : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a string literal (`s: string = ''`) }
+  pdefaultisset : array[0..MAX_PROC_PARAMS-1] of Boolean;  { ...or a SET (`o: TOpts = []`): pdefaultval holds the baked mask's Data[] offset }
   pdefaultsoff : array[0..MAX_PROC_PARAMS-1] of Integer;
   pdefaultslen : array[0..MAX_PROC_PARAMS-1] of Integer;
   hasDefault : Boolean; defaultVal : Int64;
-  defaultIsStr : Boolean; defaultSOff, defaultSLen : Integer;
+  defaultIsStr : Boolean;
+  defaultIsSet : Boolean; defaultSOff, defaultSLen : Integer;
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
@@ -18229,7 +18354,7 @@ begin
       isByRef := False;
       isConst := False;
       hasDefault := False; defaultVal := 0;
-      defaultIsStr := False; defaultSOff := 0; defaultSLen := 0;
+      defaultIsStr := False; defaultIsSet := False; defaultSOff := 0; defaultSLen := 0;
       if (CurTok.Kind = tkVar) or
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
@@ -18345,6 +18470,17 @@ begin
           defaultIsStr := True;
           Next;
         end
+        else if (CurTok.Kind = tkLBrack) or
+                ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
+        begin
+          { A SET default: `Options: TFormatOptions = []` or `= DefaultFormat` (fpjson's
+            FormatJSON is both). A set is a 32-byte mask, not an ordinal, so bake the
+            expression and keep its Data[] OFFSET in defaultVal; the call rebuilds an
+            AN_SET_CONST_REF from it. Accepts a full set expression, same as a set
+            constant's initialiser. }
+          defaultVal := BakeSetConst;
+          defaultIsSet := True;
+        end
         else
           defaultVal := ConstEval;
         hasDefault := True;
@@ -18368,6 +18504,7 @@ begin
         pdefault[i] := hasDefault;
         pdefaultval[i] := defaultVal;
         pdefaultisstr[i] := defaultIsStr;
+        pdefaultisset[i] := defaultIsSet;
         pdefaultsoff[i] := defaultSOff;
         pdefaultslen[i] := defaultSLen;
         pNDims[i] := paramNDims;
@@ -18602,6 +18739,7 @@ begin
       pdefault[i] := pdefault[i-1];
       pdefaultval[i] := pdefaultval[i-1];
       pdefaultisstr[i] := pdefaultisstr[i-1];
+      pdefaultisset[i] := pdefaultisset[i-1];
       pdefaultsoff[i] := pdefaultsoff[i-1];
       pdefaultslen[i] := pdefaultslen[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
@@ -18652,6 +18790,7 @@ begin
     pdefault[0] := False;
     pdefaultval[0] := 0;
     pdefaultisstr[0] := False;
+    pdefaultisset[0] := False;
     pdefaultsoff[0] := 0;
     pdefaultslen[0] := 0;
     nparams := nparams + 1;
@@ -18770,6 +18909,7 @@ begin
             ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := pdefault[i];
             ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
             ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+            ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
             ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
             ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
@@ -18933,6 +19073,7 @@ begin
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
     if pDynDepth[i] > 0 then

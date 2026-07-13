@@ -1177,6 +1177,7 @@ var
   ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
   ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
   ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
+  ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
   ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
   ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }
   CurrentCLibrary : AnsiString;
