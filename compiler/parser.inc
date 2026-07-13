@@ -13273,11 +13273,15 @@ begin
           storage gave no extra precision, so `Extended` is now plain Double on
           every target. The tyExtended enum + its x87 load/store paths remain but
           are no longer produced by the front end. }
-      else if CaseEqual(lo, 'shortint') then Result := tyInt8
+      { The Int8/16/32 spellings were MISSING while UInt8/16/32 were present, so they
+        fell through to the unknown-name default and silently became a 4-byte Integer —
+        harmless for Int32 by luck, wrong for Int8/Int16 (4 bytes instead of 1/2, which
+        also mislays any record they sit in). The compiler's own source uses Int32. }
+      else if CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8') then Result := tyInt8
       else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
-      else if CaseEqual(lo, 'smallint') then Result := tyInt16
+      else if CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16') then Result := tyInt16
       else if CaseEqual(lo, 'word') or CaseEqual(lo, 'uint16') then Result := tyUInt16
-      else if CaseEqual(lo, 'longint') then Result := tyInt32
+      else if CaseEqual(lo, 'longint') or CaseEqual(lo, 'int32') then Result := tyInt32
       else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') or CaseEqual(lo, 'uint32') or CaseEqual(lo, 'dword') then Result := tyUInt32
       else if CaseEqual(lo, 'int64') then Result := tyInt64
       else if CaseEqual(lo, 'qword') or CaseEqual(lo, 'uint64') then Result := tyUInt64
@@ -13372,7 +13376,18 @@ begin
             else
             begin
               LastTypeEnumId := FindEnumType(lo);
-              if (LastTypeEnumId < 0) and CaseEqual(lo, 'tobject') then
+              if (LastTypeEnumId < 0) and CaseEqual(lo, 'tclass') then
+              begin
+                { TClass — a class REFERENCE (metaclass). It was never recognised, so it
+                  fell through to tyInteger: `var c: TClass` was a 4-byte int and a class
+                  reference stored in it TRUNCATED. In pxx a class reference is the
+                  address of the class RTTI blob, so it is pointer-sized with a tyClass
+                  element, exactly like the TObject row below. A user-declared TClass
+                  still wins (IsClassType / FindTypeAlias are checked before here). }
+                LastTypePointerElemTk := tyClass;
+                Result := tyPointer;
+              end
+              else if (LastTypeEnumId < 0) and CaseEqual(lo, 'tobject') then
               begin
                 { Builtin root class with no user TObject row (a user-declared
                   TObject won via IsClassType above): same rooted object
@@ -13384,7 +13399,21 @@ begin
                 Result := tyPointer;
               end
               else
-                Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
+                { Enums are ordinal/integer-sized at codegen — and an UNKNOWN type name
+                  silently lands here too, becoming a 4-byte Integer. That is a real
+                  trap: `var x: Integr;` (a typo) compiles, and a pointer type the source
+                  never declared becomes a 32-bit int, TRUNCATING every address stored
+                  through it with no diagnostic. It is the same hole that
+                  bug-tobject-param-truncated-32bit came through — that fix patched the
+                  one symptom (TObject, just above); the hole is still here.
+
+                  NOT tightened to an error yet, because real FPC RTL sources currently
+                  DEPEND on the tolerance: fgl -> types.pp declares TPoint via
+                  `{$i typshrdh.inc}`, which we do not resolve, so the flagship
+                  fgl-compiles test only passes because the missing type quietly becomes
+                  an Integer. Erroring here is right but must land WITH that include fix.
+                  See bug-pascal-unknown-type-silently-integer. }
+                Result := tyInteger;
             end;
           end;
         end;

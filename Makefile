@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# Int8/Int16/Int32 and TClass are real type names (they silently became 4-byte Integers)
+	./$(COMPILER) test/test_int_sized_names_b261.pas /tmp/test_int_sized_names_b26126
+	test "$$(/tmp/test_int_sized_names_b26126)" = "$$(printf 'Int8=1\nInt16=2\nInt32=4\nInt64=8\nTClass=8\nTObject=8\nint16-val=30000\nint8-val=-128\nclassref-nonnil=TRUE')"
 	# System.LineEnding with no `uses`; a source's own LineEnding still wins
 	./$(COMPILER) test/test_lineending_b260.pas /tmp/test_lineending_b26026
 	test "$$(/tmp/test_lineending_b26026)" = "$$(printf 'const-concat-len=3\nis-lf=TRUE\nexpr-len=2\nle-len=1')"

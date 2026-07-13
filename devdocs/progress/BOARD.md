@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (94)
+## backlog (95)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ _none_
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-builtin-pointer-type-cast | P | 45 | bug | `PInteger(p)^` does not compile, though `var p: PInteger` does | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
+| bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -872,6 +873,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-test-c-conformance-aarch64-shard3-6
+- [p 65] [P] bug-pascal-unknown-type-silently-integer
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
