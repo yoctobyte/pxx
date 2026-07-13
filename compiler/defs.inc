@@ -2038,6 +2038,13 @@ var
 
   CurSelfClass : Integer;
 
+  { > 0 while parsing the ELEMENT type of a `^`. A pointer alias may legitimately name
+    a type that does not exist yet (`PNode = ^TNode;` before TNode) — that is what
+    ResolvePendingPointerAliases fixes up afterwards, by name. So an unknown name is
+    only tolerable HERE; everywhere else it is the silent-Integer trap
+    (bug-pascal-unknown-type-silently-integer). }
+  PtrElemDepth : Integer;
+
   { Owning class of the method body being parsed, set even for a STATIC method
     (`class procedure`), which has no Self and so leaves CurSelfClass unset.
     Only class-level members — a `class var` — are reachable through it. }

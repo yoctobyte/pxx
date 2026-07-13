@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (99)
+## backlog (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -42,7 +42,6 @@ _none_
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-builtin-pointer-type-cast | P | 45 | bug | `PInteger(p)^` does not compile, though `var p: PInteger` does | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
-| bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -195,7 +194,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (657)
+## done (658)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -454,6 +453,7 @@ _none_
 | bug-pascal-nested-variant-record-tagged | A | 55 | bug | Nested variant parts with a tagged discriminant (`case f: T of` inside a variant arm) | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
+| bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
 | bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
 | bug-pchar-to-string-implicit-conv | A | 50 | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
@@ -879,7 +879,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard4-6
 - [p 70] [T] regression-test-c-conformance-aarch64-shard3-6
 - [p 70] [T] regression-test-core-test-string-to-pchar-auto
-- [p 65] [P] bug-pascal-unknown-type-silently-integer
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers

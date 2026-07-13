@@ -430,6 +430,14 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# an UNKNOWN type name is an ERROR (it used to become a silent 4-byte Integer).
+	# Positive half: forward `^` refs, named dyn-array types, AnsiChar/Int16 widths.
+	./$(COMPILER) test/test_unknown_type_rejected_b266.pas /tmp/test_unknown_type_rejected_b26626
+	test "$$(/tmp/test_unknown_type_rejected_b26626)" = "$$(printf 'fwd-ptr=1 2\nnamed-dynarray=3 7\nansichar=x size=1\nint16=30000 size=2')"
+	# Negative half: a typo'd type name must FAIL to compile, not quietly become an Integer
+	printf 'program t;\nvar x: Integr;\nbegin x := 1; end.\n' > /tmp/unknown_type_typo_b266.pas
+	! ./$(COMPILER) /tmp/unknown_type_typo_b266.pas /tmp/unknown_type_typo_b26626 > /tmp/unknown_type_typo_b266.log 2>&1
+	grep -q "unknown type: Integr" /tmp/unknown_type_typo_b266.log
 	# `absolute` overlays SHARE storage (it was silently ignored -> independent variable)
 	./$(COMPILER) test/test_absolute_overlay_b265.pas /tmp/test_absolute_overlay_b26526
 	test "$$(/tmp/test_absolute_overlay_b26526)" = "$$(printf 'global=4 4\nglobal=9 9\nlocal=7 7\nlocal=11 11\nreinterp=4294967295')"

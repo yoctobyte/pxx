@@ -6,7 +6,7 @@ prio: 65
 
 - **Type:** bug (correctness — silent wrong code, no diagnostic)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done — CLOSED 2026-07-13.
 
 ## Symptom
 `ParseTypeKind`'s final fallback is `Result := tyInteger` — meant for enum names, but an
@@ -164,3 +164,36 @@ and it has already produced two shipped symptoms (TObject, then TClass/Int8/Int1
 
 ## Gate
 `make test` + self-host byte-identical + cross. The fgl-compiles test is the one to watch.
+
+
+## CLOSED 2026-07-13
+
+The insight was that the fallback was only ever legitimately needed in **one** place: the
+ELEMENT of a `^`. `PNode = ^TNode;` before TNode is a legal forward reference, and
+`ResolvePendingPointerAliases` already fixes the element up afterwards BY NAME — the
+fallback was just the placeholder that let the parse get that far. Everywhere else it was
+pure hazard.
+
+So: a `PtrElemDepth` counter is raised around both `^`-element parses, an unknown name is
+tolerated only while it is > 0, and everywhere else it is now `Error('unknown type: ...')`.
+
+Two more name tables had to be consulted first, because they hold names that ARE declared
+and simply were not reachable from ParseTypeKind:
+- named dynamic-array types (`TByteArray = array of Byte`) live in their own table;
+- C-imported typedefs (`typedef void* PGtkWidget;`) live in the C typedef table
+  (needed a forward decl, since cparser.inc is included after parser.inc).
+
+### What the strict check immediately caught
+- **`AnsiChar` was never a recognised type name** — `Char` is a lexer TOKEN, so its FPC
+  synonym fell through and became a 4-BYTE INTEGER where a 1-byte char belongs. Fixed.
+- **The GTK tests were storing a 64-bit pointer in a 4-byte int.** `PGtkWidget` is never
+  declared by the real `gtk.h` those tests import (it is a pxx-ism from a different
+  header), so it was silently an Integer. The tests PASSED anyway — the truncated pointer
+  was still non-nil. They now use `Pointer`, which is what `gtk_window_new` (a `void*`)
+  actually returns. That is the bug this ticket describes, found live in green tests.
+
+### Gate
+`make test` green, self-host byte-identical, `testmgr --tier full` GREEN. Regression b266:
+the POSITIVE half (forward `^` refs, named dyn-array types, AnsiChar/Int16 widths) in the
+test file, and the NEGATIVE half (a typo'd name must FAIL to compile) in the Makefile,
+since it must not compile at all.

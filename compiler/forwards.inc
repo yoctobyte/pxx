@@ -16,3 +16,4 @@ function CNodeDecaysToPointer(node: Integer): Boolean; forward;
 function IRLowerAddress(node: Integer): Integer; forward;
 function IRNodePointerBase(node: Integer): Boolean; forward;
 function IRPointerStride(node: Integer): Integer; forward;
+function FindCTypedef(const name: AnsiString): Integer; forward;

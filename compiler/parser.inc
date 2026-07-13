@@ -13163,7 +13163,9 @@ begin
     tkCaret:
     begin
       Next;
+      Inc(PtrElemDepth);          { a forward element name is legal here — see PtrElemDepth }
       elemTk := ParseTypeKind();
+      Dec(PtrElemDepth);
       childDepth := LastTypePointerDepth;
       childBaseTk := LastTypePointerBaseTk;
       childBaseRec := LastTypePointerBaseRec;
@@ -13319,6 +13321,10 @@ begin
         fell through to the unknown-name default and silently became a 4-byte Integer —
         harmless for Int32 by luck, wrong for Int8/Int16 (4 bytes instead of 1/2, which
         also mislays any record they sit in). The compiler's own source uses Int32. }
+      { `Char` is a lexer TOKEN, so its FPC synonym `AnsiChar` never resolved as an
+        identifier and fell through to the unknown-name default — a 4-byte Integer where a
+        1-byte char belongs, which also mislays any record or array it sits in. }
+      else if CaseEqual(lo, 'ansichar') then Result := tyChar
       else if CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8') then Result := tyInt8
       else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16') then Result := tyInt16
@@ -13440,25 +13446,40 @@ begin
                 LastTypePointerElemTk := tyClass;
                 Result := tyPointer;
               end
+              else if LastTypeEnumId >= 0 then
+                Result := tyInteger   { enums are ordinal/integer-sized at codegen }
+              else if PtrElemDepth > 0 then
+                { A `^` ELEMENT may name a type that does not exist yet — `PNode = ^TNode;`
+                  before TNode is the classic forward reference, and
+                  ResolvePendingPointerAliases fixes the element up afterwards, BY NAME.
+                  This is the one case the old catch-all fallback ever legitimately served. }
+                Result := tyInteger
+              else if FindCTypedef(lo) >= 0 then
+                { A C-imported typedef (`typedef void* PGtkWidget;`) lives in the C
+                  typedef table, which the Pascal type lookups above do not consult. The
+                  NAME is known, so this is not the silent-typo hazard — but note the
+                  result is still tyInteger, which for a POINTER typedef is the very
+                  truncation this fallback is famous for. Giving C typedefs their real
+                  Pascal type is a separate fix (bug-c-typedef-not-a-pascal-type); this
+                  only stops the strict check from rejecting a name that IS declared. }
+                Result := tyInteger
+              else if FindArrayType(lo) >= 0 then
+                { A named ARRAY type (`TByteArray = array of Byte`) lives in its own table,
+                  not the alias table, so it does not resolve above. Callers that can take
+                  an array (var/field/return type) look it up themselves; ParseTypeKind
+                  only has to not reject it. The NAME is known, so this is not the
+                  silent-typo hazard the catch-all was. }
+                Result := tyInteger
               else
-                { Enums are ordinal/integer-sized at codegen — and an UNKNOWN type name
-                  silently lands here too, becoming a 4-byte Integer. That is a real trap:
-                  `var x: Integr;` (a typo) compiles; a pointer type the source never
-                  declared becomes a 32-bit int and TRUNCATES every address stored through
-                  it; and `absolute` was swallowed whole, its target name parsed as a
-                  "type". It is the same hole bug-tobject-param-truncated-32bit came
-                  through — that fix patched the one symptom (TObject, just above), and the
-                  hole went on to produce TClass, Int8/Int16 and `absolute`.
-
-                  NOT closed yet, and the blocker is now precisely known: a type that
-                  references ITSELF inside its own declaration. FPC's typshrdh.inc declares
-                  TPoint as an advanced record holding `constructor Create(apt: TPoint)`,
-                  so TPoint is used before its own declaration finishes. Today that
-                  parameter quietly becomes an Integer; with the error on, `uses types`
-                  fails. Closing this needs the type NAME registered before its body is
-                  parsed — which is entangled with advanced-record support.
-                  See bug-pascal-unknown-type-silently-integer. }
-                Result := tyInteger;
+                { Everywhere else an unknown name used to land on tyInteger too, silently
+                  becoming a 4-byte Integer. That was a trap, not a tolerance: `var x:
+                  Integr;` (a typo) compiled; a pointer type the source never declared
+                  became a 32-bit int and TRUNCATED every address stored through it; and
+                  `absolute` was swallowed whole, its target name parsed as a "type". It is
+                  the hole bug-tobject-param-truncated-32bit came through — that fix patched
+                  the one symptom (TObject, just above), and the hole went on to produce
+                  TClass, Int8/Int16 and `absolute`. Closed here. }
+                Error('unknown type: ' + lo);
             end;
           end;
         end;
@@ -16055,7 +16076,9 @@ begin
         Next;
         targetNOff := Tokens[TokPos-1].SOffset;
         targetNLen := Tokens[TokPos-1].SLen;
+        Inc(PtrElemDepth);        { `PFoo = ^TFoo` may forward-reference TFoo }
         fTk := ParseTypeKind;
+        Dec(PtrElemDepth);
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
         if fTk = tyPointer then
         begin

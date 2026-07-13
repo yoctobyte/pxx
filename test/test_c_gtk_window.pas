@@ -9,7 +9,7 @@ begin
 end;
 
 var
-  window: PGtkWidget;
+  window: Pointer;   { gtk_window_new returns void*; PGtkWidget was never declared — it was silently a 4-byte int, TRUNCATING the pointer (bug-pascal-unknown-type-silently-integer) }
 begin
   gtk_init(nil, nil);
   window := gtk_window_new(GTK_WINDOW_TOPLEVEL);
