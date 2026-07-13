@@ -133,6 +133,27 @@ const
   fmShareDenyNone  = $40;
 
 type
+  { ---- TStringStream: a stream over a string ----
+    FPC's TStringStream is a TStream whose contents ARE a string: construct it with the text
+    to read, or write into it and read the accumulated text back out of DataString. fpjson's
+    TJSONData.AsJSON formats through one.
+
+    Built on TMemoryStream, which already has the buffer, the growth and the seek discipline
+    -- this only adds the string <-> bytes ends. }
+  TStringStream = class(TMemoryStream)
+  private
+    function GetDataString: string;
+  public
+    constructor Create; overload;
+    constructor Create(const AString: string); overload;
+    { The stream's bytes, as a string. Reading it does not move Position. }
+    property DataString: string read GetDataString;
+    { FPC convenience: append text at the current position. }
+    procedure WriteString(const AString: string);
+    { FPC convenience: read Count bytes from the current position as a string. }
+    function ReadString(Count: Longint): string;
+  end;
+
   TFileStream = class(TStream)
   private
     FHandle: Integer;
@@ -291,6 +312,51 @@ begin
     Result := Result + got;
     Count := Count - got;
   end;
+end;
+
+{ ============================ TStringStream =========================== }
+
+constructor TStringStream.Create;
+begin
+  { an empty stream, ready to be written into }
+end;
+
+constructor TStringStream.Create(const AString: string);
+begin
+  if Length(AString) > 0 then
+    Self.Write(AString[1], Length(AString));
+  Position := 0;      { FPC: a string-constructed stream starts at the beginning }
+end;
+
+function TStringStream.GetDataString: string;
+var
+  n: Longint;
+  savedPos: Int64;
+begin
+  Result := '';
+  n := Longint(Size);
+  if n <= 0 then Exit;
+  SetLength(Result, n);
+  savedPos := Position;         { reading DataString must not move Position }
+  Position := 0;
+  Self.Read(Result[1], n);      { Self-qualified: bare `Read` is the console intrinsic }
+  Position := savedPos;
+end;
+
+procedure TStringStream.WriteString(const AString: string);
+begin
+  if Length(AString) > 0 then
+    Self.Write(AString[1], Length(AString));
+end;
+
+function TStringStream.ReadString(Count: Longint): string;
+var got: Longint;
+begin
+  Result := '';
+  if Count <= 0 then Exit;
+  SetLength(Result, Count);
+  got := Self.Read(Result[1], Count);
+  if got < Count then SetLength(Result, got);
 end;
 
 { ============================ TMemoryStream ============================ }

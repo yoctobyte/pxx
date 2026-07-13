@@ -5752,7 +5752,8 @@ end;
 
 procedure ParseFactor;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
-    smmiS, smSelfNode, mselfArg: Integer;
+    smmiS, smSelfNode, mselfArg, mcCtorCi: Integer;
+    mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
@@ -7989,17 +7990,32 @@ begin
             alias is a `class of T` (element tyClass) and the next selector is
             `.Create`. Dispatch through the metaclass like the variable form (the
             streamer's `TComponentClass(GetClass(n)).Create(owner)`). }
+          { `TFooClass(expr).AnyCtor(args)` -- an inline metaclass CAST, then construct.
+
+            Two things this used to get wrong, both the same shape as the metaclass-VAR path:
+            it matched only a constructor literally spelled `create`, and it picked the
+            overload with FindUMeth (first NAME match, argument count ignored). fpjson does
+            `TJSONObjectClass(DefaultJSONInstanceTypes[jitObject]).Create(Data)` where Create
+            is overloaded (parameterless, and `array of const`) -- so it picked the
+            PARAMETERLESS one and then complained about the argument it did not want.
+
+            The name is only consumed once it is known to BE a constructor, so a non-ctor
+            member still falls through to the paths below. }
           if (IntToTypeKind(AliasElemTk[aliasIdx]) = tyClass) and
              (AliasElemRec[aliasIdx] >= REC_UCLASS_BASE) and
              (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
-             CaseEqual(GetTokenStr(TokPos), 'create') then
+             (FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) >= 0) and
+             UMthIsCtor[FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos))] then
           begin
-            i := FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, 'create');
+            mcCtorCi := AliasElemRec[aliasIdx] - REC_UCLASS_BASE;
+            mcCtorNm := GetTokenStr(TokPos);
+            Next;   { consume '.'  -> CurTok is the ctor name, '(' at TokPos }
+            i := FindUMethOverloadAhead(mcCtorCi, mcCtorNm, CountCallArgsAhead);
+            if i < 0 then i := FindUMeth(mcCtorCi, mcCtorNm);
             if i >= 0 then
             begin
-              Next; { consume '.' }
-              Next; { consume 'Create' }
-              node := BuildMetaclassNew(node, AliasElemRec[aliasIdx] - REC_UCLASS_BASE, i);
+              Next; { consume the constructor name }
+              node := BuildMetaclassNew(node, mcCtorCi, i);
               CurASTNode := node;
               LastExprTk := tyClass;
               Exit;

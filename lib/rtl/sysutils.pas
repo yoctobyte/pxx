@@ -70,6 +70,27 @@ type
     Data: Pointer;
   end;
 
+  { FPC's standard SysUtils exception hierarchy. Real classes, not aliases: code catches them
+    by type (`on E: EConvertError do`) and `is`/`as` must distinguish them, so each needs its
+    own identity. Only the ones real code raises and catches are here; adding another is one
+    line and no thought. }
+  EAbort            = class(Exception) end;
+  EConvertError     = class(Exception) end;      { StrToInt/StrToFloat on malformed input }
+  EInOutError       = class(Exception) end;
+  EAccessViolation  = class(Exception) end;
+  EInvalidOp        = class(Exception) end;
+  EIntError         = class(Exception) end;
+  EDivByZero        = class(EIntError) end;
+  ERangeError       = class(EIntError) end;
+  EIntOverflow      = class(EIntError) end;
+  EMathError        = class(Exception) end;
+  EInvalidPointer   = class(Exception) end;
+  EOutOfMemory      = class(Exception) end;
+  EAssertionFailed  = class(Exception) end;
+  ENotImplemented   = class(Exception) end;
+  EArgumentException = class(Exception) end;
+  EListError        = class(Exception) end;
+
   { The metaclass of Exception. FPC declares it in System, but our Exception lives
     here, so here is where `class of` it can be formed. Code that catches by class
     (fpcunit records the expected exception class of a test) needs it. }
@@ -128,6 +149,38 @@ function Trim(const s: AnsiString): AnsiString;
 function StrToIntDef(const s: AnsiString; def: Integer): Integer;
 function StrToInt(const s: AnsiString): Integer;
 function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
+
+{ FPC's Try* parsers: return False on malformed input and leave the out value untouched,
+  rather than raising. }
+function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
+function TryStrToFloat(const s: AnsiString; var value: Double): Boolean;
+function TryStrToQWord(const s: AnsiString; var value: QWord): Boolean;
+
+{ FPC SysUtils.StrToBool / StrToBoolDef. Accepts the names ('true'/'false', case-insensitive)
+  and the numeric form (0 = False, anything else True), as FPC does. StrToBool returns False
+  on anything else (FPC raises; this RTL's other StrTo* return a default rather than raise,
+  and this follows them). }
+function StrToBool(const s: AnsiString): Boolean;
+function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
+
+{ FPC's UTF-8 <-> UnicodeString converters.
+
+  THIS RTL HAS ONE STRING MODEL: bytes. There is no UTF-16 UnicodeString to convert TO, so
+  `UnicodeString` IS `string` here and these are the IDENTITY. That is stated rather than
+  hidden, because it IS an approximation: FPC's UTF8Decode produces UTF-16 code units, and
+  code that indexes the result expecting one element per CHARACTER will see one element per
+  BYTE here. For ASCII -- which is what fpjson's JSON escaping actually walks -- the two agree
+  exactly; for multi-byte UTF-8 they do not. Real UTF-16 is a string-model decision, not a
+  function to bolt on. }
+function UTF8Decode(const s: AnsiString): AnsiString;
+function UTF8Encode(const s: AnsiString): AnsiString;
+
+{ FPC SysUtils Int64/QWord parsers. StrToInt64 raises in FPC on malformed input; this RTL
+  returns 0, consistent with StrToInt above. StrToQWord parses an UNSIGNED 64-bit value. }
+function StrToInt64(const s: AnsiString): Int64;
+function StrToQWord(const s: AnsiString): QWord;
+function StrToQWordDef(const s: AnsiString; def: QWord): QWord;
+
 { Index of the LAST char of S that occurs in Delimiters, 0 if none (FPC). }
 function LastDelimiter(const Delimiters, S: AnsiString): Integer;
 
@@ -339,10 +392,103 @@ implementation
 
 uses platform, platform_types;
 
+function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
+var t: AnsiString; v: Integer;
+begin
+  t := LowerCase(Trim(s));
+  if t = 'true' then Result := True
+  else if t = 'false' then Result := False
+  else
+  begin
+    v := StrToIntDef(t, -12345);
+    if v = -12345 then Result := def
+    else Result := (v <> 0);
+  end;
+end;
+
+function StrToBool(const s: AnsiString): Boolean;
+begin
+  Result := StrToBoolDef(s, False);
+end;
+
+function UTF8Decode(const s: AnsiString): AnsiString;
+begin
+  Result := s;      { identity -- see the declaration }
+end;
+
+function UTF8Encode(const s: AnsiString): AnsiString;
+begin
+  Result := s;
+end;
+
+{ The sentinel trick these three share: parse with two DIFFERENT defaults. A malformed input
+  yields whichever default was asked for, so the two runs disagree; a well-formed input parses
+  to the same value both times. That is cheaper and more honest than duplicating each
+  parser's validation, and it cannot be fooled -- no single input can equal both sentinels. }
+function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
+var a, b: Int64;
+begin
+  a := StrToInt64Def(s, 0);
+  b := StrToInt64Def(s, 1);
+  Result := (a = b);
+  if Result then value := a;
+end;
+
+function TryStrToQWord(const s: AnsiString; var value: QWord): Boolean;
+var a, b: QWord;
+begin
+  a := StrToQWordDef(s, 0);
+  b := StrToQWordDef(s, 1);
+  Result := (a = b);
+  if Result then value := a;
+end;
+
+function TryStrToFloat(const s: AnsiString; var value: Double): Boolean;
+var a, b: Double;
+begin
+  a := StrToFloatDef(s, 0.0);
+  b := StrToFloatDef(s, 1.0);
+  Result := (a = b);
+  if Result then value := a;
+end;
+
 constructor Exception.Create(const msg: string);
 begin
   FMessage := msg;
   FHelpContext := 0;
+end;
+
+function StrToInt64(const s: AnsiString): Int64;
+begin
+  Result := StrToInt64Def(s, 0);
+end;
+
+function StrToQWordDef(const s: AnsiString; def: QWord): QWord;
+var
+  i, n: Integer;
+  v: QWord;
+  any: Boolean;
+begin
+  Result := def;
+  n := Length(s);
+  i := 1;
+  while (i <= n) and (s[i] = ' ') do Inc(i);
+  if (i <= n) and (s[i] = '+') then Inc(i);   { unsigned: no '-' }
+  v := 0;
+  any := False;
+  while i <= n do
+  begin
+    if (s[i] < '0') or (s[i] > '9') then Exit;   { malformed -> def }
+    v := v * 10 + QWord(Ord(s[i]) - Ord('0'));
+    any := True;
+    Inc(i);
+  end;
+  if any then Result := v;
+end;
+
+function StrToQWord(const s: AnsiString): QWord;
+begin
+  Result := StrToQWordDef(s, 0);
 end;
 
 function HexStr(Value: Int64; Digits: Integer): AnsiString;
