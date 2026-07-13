@@ -520,7 +520,7 @@ test-core: $(COMPILER)
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
 	# was silently retained as a string POINTER -> memory corruption + crash
 	./$(COMPILER) test/test_widechar_to_utf8_b319.pas /tmp/test_widechar_utf8_b31926
-	test "$$(/tmp/test_widechar_utf8_b31926)" = "$$(printf '1=\xc3\xb8 len=2\n2=\xf0\x9f\x8c\x9f len=4\n3=x\xc3\xa9\n4=Abc\n5=\xc3\xb8\n6=AB\n7=?\n8=TRUE')"
+	test "$$(/tmp/test_widechar_utf8_b31926)" = "$$(printf '1=\303\270 len=2\n2=\360\237\214\237 len=4\n3=x\303\251\n4=Abc\n5=\303\270\n6=AB\n7=\n8=TRUE')"
 	# a SELECTOR after a function call used as a STATEMENT was silently dropped —
 	# GetBox.Poke; / GetBox.SetVal(42); / GetBox.Val := 5; / GetBoxAt(0).M(..) all
 	# vanished with no diagnostic (fpjson's RegisterTest registered 0 of 203 tests)

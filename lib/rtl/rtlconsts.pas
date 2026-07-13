@@ -9,15 +9,19 @@ unit rtlconsts;
 interface
 
 const
-  SArgumentOutOfRange   = 'Argument out of range';
-  SAssignError          = 'Cannot assign a %s to a %s.';
-  SIndexOutOfRange      = 'Grid index out of range';
-  SInvalidName          = 'Invalid component name: "%s"';
-  SListCapacityError    = 'List capacity (%d) exceeded.';
-  SListCountError       = 'List count (%d) out of bounds.';
-  SListIndexError       = 'List index (%d) out of bounds';
-  SReadOnlyProperty     = 'Property is read-only';
-  SSortedListError      = 'Operation not allowed on sorted list';
+  SArgumentOutOfRange     = 'Argument out of range';
+  SAssignError            = 'Cannot assign a %s to a %s.';
+  SDuplicateItem          = 'Duplicates not allowed in this list ($0%x)';
+  SErrFindNeedsSortedList = 'Cannot use find on unsorted list';
+  SIndexOutOfRange        = 'Grid index out of range';
+  SInvalidName            = 'Invalid component name: "%s"';
+  SListCapacityError      = 'List capacity (%d) exceeded.';
+  SListCountError         = 'List count (%d) out of bounds.';
+  SListIndexError         = 'List index (%d) out of bounds';
+  SListItemSizeError      = 'Incompatible item size in source list';
+  SMapKeyError            = 'Map key (address $%x) does not exist';
+  SReadOnlyProperty       = 'Property is read-only';
+  SSortedListError        = 'Operation not allowed on sorted list';
 
 implementation
 

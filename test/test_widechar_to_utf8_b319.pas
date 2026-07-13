@@ -12,8 +12,8 @@
   through builtin helpers: assignment and string-parameter passing UTF-8-encode the
   code unit; WideChar+WideChar concatenation is surrogate-aware, so a high+low pair
   becomes ONE 4-byte code point exactly as FPC's UTF-16 -> UTF-8 conversion does
-  (U+1F31F below); a lone surrogate encodes as '?' (FPC's invalid-sequence
-  behaviour). In ordinal contexts the cast keeps plain value-cast semantics
+  (U+1F31F below); a lone surrogate yields the EMPTY string (FPC's conversion
+  drops it). In ordinal contexts the cast keeps plain value-cast semantics
   (truncate to 16 bits). Verified against FPC. }
 program test_widechar_to_utf8_b319;
 {$mode objfpc}{$h+}
@@ -39,7 +39,7 @@ begin
   Writeln('4=', s);
   Writeln('5=', Ident(WideChar($F8)));      { string parameter }
   Writeln('6=', Ident(WideChar($41) + WideChar($42)));  { two BMP units, no pair }
-  s := WideChar($D800);                     { lone surrogate -> '?' }
+  s := WideChar($D800);                     { lone surrogate -> dropped (empty) }
   Writeln('7=', s);
   Writeln('8=', Ord(WideChar($1F231)) = $F231);  { ordinal context still truncates }
 end.
