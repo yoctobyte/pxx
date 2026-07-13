@@ -829,6 +829,16 @@ begin
         continue;
       end;
     end
+    else if Fixups[i].DataOff <= -ENUM_RTTI_DATAREF_BASE then
+    begin
+      { TypeInfo(TEnum): resolve to the enum's RTTI blob. Tested BEFORE the others because
+        the classref branch below matches every sentinel <= -CLASSREF_DATAREF_BASE. }
+      j := -Fixups[i].DataOff - ENUM_RTTI_DATAREF_BASE;
+      if (j >= 0) and (j < EnumTypeCount) and (EnumTypeRTTIOff[j] >= 0) then
+        Fixups[i].DataOff := EnumTypeRTTIOff[j]
+      else
+        Error('TypeInfo of an enum type with no RTTI');
+    end
     else if (Fixups[i].DataOff <= -RECORD_RTTI_DATAREF_BASE) and (Fixups[i].DataOff > -SYM_RTTI_DATAREF_BASE) then
     begin
       j := -Fixups[i].DataOff - RECORD_RTTI_DATAREF_BASE;

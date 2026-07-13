@@ -148,7 +148,16 @@ function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; 
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
 
+{ ---- The FPC TypInfo enum surface, over the same blob ----
+  `TypeInfo(TEnum)` is a compiler intrinsic yielding the enum's RTTI blob address -- which
+  IS a PEnumRTTI. These are the names FPC code calls (fpjson prints its JSON type names with
+  GetEnumName), spelled with FPC's PTypeInfo parameter so those sources compile unchanged. }
+function GetEnumName(TypeInfo: PEnumRTTI; Value: Integer): string;
+function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
+
 implementation
+
+uses sysutils;   { CompareText -- FPC-parity case-insensitive GetEnumValue }
 
 function TypeKindSize(tk: Int64): Integer;
 begin
@@ -424,6 +433,29 @@ begin
 end;
 
 { Map an enum member name to its ordinal via the enum RTTI. -1 if not found. }
+function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
+begin
+  if TypeInfo = nil then
+    GetEnumNameCount := 0
+  else
+    GetEnumNameCount := Integer(TypeInfo^.Count);
+end;
+
+function GetEnumName(TypeInfo: PEnumRTTI; Value: Integer): string;
+var
+  arr: PEnumValArr;
+  sp: PString;
+begin
+  GetEnumName := '';
+  if TypeInfo = nil then Exit;
+  if (Value < 0) or (Value >= Integer(TypeInfo^.Count)) then Exit;
+  arr := PEnumValArr(TypeInfo^.ValuesPtr);
+  if arr = nil then Exit;
+  { copy the element pointer to a local before deref -- see GetEnumValue below }
+  sp := arr[Value].P;
+  if sp <> nil then GetEnumName := sp^;
+end;
+
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 var
   arr: PEnumValArr;
@@ -440,7 +472,10 @@ begin
       (arr[i]^) of a pointer-array miscompiles in this dialect. The 8-byte-padded
       slot keeps the array stride uniform across targets (see PEnumValArr). }
     sp := arr[i].P;
-    if sp^ = name then
+    { case-INSENSITIVE, as in FPC. It was an exact match, which is a silent compat gap:
+      FPC's GetEnumValue('green') finds Green. Loosening it can only ever match MORE, so the
+      streaming path (which passes exact names) is unaffected. }
+    if CompareText(sp^, name) = 0 then
     begin
       GetEnumValue := i;
       Exit;

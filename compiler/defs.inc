@@ -312,6 +312,11 @@ const
   AN_PCADDR        = 84; { get_pc_addr: the return address of the current function --
                            i.e. a PC inside its CALLER. No operands. Composed in
                            IRLowerAST as a load of [frame + PtrSize]; no backend op. }
+  AN_TYPEINFO      = 87; { TypeInfo(TEnum): ASTIVal = enum type id. Yields the address of the
+                           enum's RTTI blob {name, count, names[]} -- the same blob EmitRTTI
+                           already writes for enum-typed published properties. Lowers to
+                           IR_CONST_DATA with the ENUM_RTTI_DATAREF_BASE sentinel, since the
+                           blob's Data[] offset is only known after EmitRTTI (post-parse). }
   AN_RTTIOF        = 86; { the class RTTI blob of an INSTANCE: Left = the instance.
                            blob = [[inst + 0] - 8] -- the VMT pointer at the instance's
                            +0, then the backlink word the compiler reserves immediately
@@ -493,6 +498,10 @@ const
   CLASSREF_DATAREF_BASE = 100000;
   RECORD_RTTI_DATAREF_BASE = 200000;
   SYM_RTTI_DATAREF_BASE = 300000;
+  { TypeInfo(TEnum): DataOff = -(ENUM_RTTI_DATAREF_BASE + etid), patched to
+    EnumTypeRTTIOff[etid] after EmitRTTI. Must be the MOST negative base, and its fixup
+    branch must be tested FIRST -- the classref branch matches everything <= -100000. }
+  ENUM_RTTI_DATAREF_BASE = 400000;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;

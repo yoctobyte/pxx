@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# TypeInfo(TEnum) + TypInfo enum reflection (GetEnumName / GetEnumValue)
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_enum_b288.pas /tmp/test_typeinfo_enum_b28826
+	test "$$(/tmp/test_typeinfo_enum_b28826)" = "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
 	# a value cast to an ordinal type NAMED BY AN IDENTIFIER: WideChar(x) / QWord(x)
 	./$(COMPILER) test/test_ident_ordinal_cast_b286.pas /tmp/test_ident_ordinal_cast_b28626
 	test "$$(/tmp/test_ident_ordinal_cast_b28626)" = "$$(printf 'Byte(300)     = 44 (44)\nWord(300)     = 300 (300)\nWideChar(65)  = 65 (65)\nWideChar(300) = 300 (300)\nCardinal(...) = 4294967295 (4294967295)\nQWord(-1)     = 18446744073709551615\nNativeInt(5)  = 5 (5)')"

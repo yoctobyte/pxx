@@ -3636,6 +3636,13 @@ begin
                   IRLowerAST(ASTRight[node]), -1, 0, ASTTk[node]);
     end;
 
+    AN_TYPEINFO:
+      { TypeInfo(TEnum) -> the address of the enum's RTTI blob. The offset is not known
+        until EmitRTTI has run, so emit the sentinel and let the pre-link fixup pass
+        resolve it (exactly as AN_CLASSREF does for a class). }
+      Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                  -(ENUM_RTTI_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer));
+
     AN_RTTIOF:
     begin
       { blob = [[instance + 0] - 8]: load the VMT pointer parked at the instance's

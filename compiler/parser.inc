@@ -7096,6 +7096,29 @@ begin
         Exit;
       end;
 
+      { TypeInfo(TEnum) -- FPC's System intrinsic, the handle TypInfo's GetEnumName takes.
+        We already emit an RTTI blob per enum type {name, count, names[]}; this yields its
+        address. Enum types only for now: a class/record TypeInfo would hand back a blob
+        whose LAYOUT is ours, not FPC's, and code reading it as FPC's TTypeData would be
+        silently wrong -- so those are refused rather than guessed at. }
+      if CaseEqual(name, 'TypeInfo') and (FindProc(name) < 0) and (FindSym(name) < 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('TypeInfo expects a type name');
+        i := FindEnumType(CurTok.SVal);
+        if i < 0 then
+          Error('TypeInfo is supported for ENUM types only (pxx RTTI blobs are not FPC''s TTypeData): ' + CurTok.SVal);
+        Next;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_TYPEINFO);
+        ASTIVal[node] := i;
+        ASTTk[node] := Ord(tyPointer);
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if (CaseEqual(name, 'get_frame') or CaseEqual(name, 'get_pc_addr')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
