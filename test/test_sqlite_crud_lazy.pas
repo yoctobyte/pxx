@@ -40,7 +40,9 @@ end;
 
 begin
   writeln('--- File Database ---');
-  RunTest('/tmp/test_sqlite_crud_lazy26.db');
+  { per-binary DB path — see test_sqlite_crud.pas: a shared /tmp file races across the
+    concurrent -O0/-O2/-O3 optdiff runs and reports a bogus optimization diff. }
+  RunTest(ParamStr(0) + '.db');
   writeln('--- In-Memory Database ---');
   RunTest(':memory:');
 end.

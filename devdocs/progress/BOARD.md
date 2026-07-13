@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (96)
+## backlog (95)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,7 +125,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard3-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard3/6 red at 90ae846bda82 (auto-filed by twatch) | — |
 | regression-test-core-test-string-to-pchar-auto | T | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -192,7 +191,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (660)
+## done (661)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -810,6 +809,7 @@ _none_
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-channel | T | 70 | regression | regression: test-arm32#src:test/test_channel.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-arm32-test-reactor | T | 70 | regression | regression: test-arm32#src:test/test_reactor.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -876,7 +876,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-optdiff-shard4-6
 - [p 70] [T] regression-test-c-conformance-aarch64-shard3-6
 - [p 70] [T] regression-test-core-test-string-to-pchar-auto
 - [p 65] [A] feature-c-corpus-expansion

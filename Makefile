@@ -1841,7 +1841,7 @@ test-core: $(COMPILER)
 	cc -shared -fPIC -o /tmp/liblazycasing.so test/lazycasing_lib.c
 	./$(COMPILER) test/test_c_lazycasing.pas /tmp/c_lazycasing26
 	test "$$(LD_LIBRARY_PATH=/tmp /tmp/c_lazycasing26)" = "$$(printf '7\n30\n101')"
-	rm -f /tmp/test_sqlite_crud26.db
+	rm -f /tmp/sqlite_crud26.db
 	./$(COMPILER) test/test_sqlite_crud.pas /tmp/sqlite_crud26
 	test "$$(/tmp/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	rm -f /tmp/test_string_to_pchar_auto26.db

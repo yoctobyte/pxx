@@ -24,7 +24,10 @@ begin
   db := nil;
   stmt := nil;
 
-  rc := sqlite3_open('/tmp/test_string_to_pchar_auto26.db', @db);
+  { per-binary DB path: optdiff runs the -O0/-O2/-O3 builds CONCURRENTLY, and a shared
+    /tmp file made them race and report a bogus "optimization diff" (see
+    test_sqlite_crud.pas). argv[0] differs per opt level. }
+  rc := sqlite3_open(ParamStr(0) + '.db', @db);
   writeln('open=', rc);
 
   Exec('DROP TABLE IF EXISTS t;');

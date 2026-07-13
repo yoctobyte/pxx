@@ -10,6 +10,12 @@ uses sqlite3;
 var
   db, stmt: Pointer;
   rc, id, i: Integer;
+  { The DB path is derived from THIS binary's own name, not a fixed one. optdiff compiles
+    the same source at -O0/-O2/-O3 and runs the three binaries CONCURRENTLY; with a shared
+    '/tmp/test_sqlite_crud26.db' they raced on one file and the outputs differed — reported
+    as an optimization diff when it was nothing of the sort. Same shared-/tmp race that bit
+    cjson/lua. argv[0] differs per opt level, so each run gets its own database. }
+  dbPath: string;
   p: PChar;
   c: Char;
   name: string;
@@ -24,7 +30,8 @@ begin
   db := nil;
   stmt := nil;
 
-  rc := sqlite3_open(PChar('/tmp/test_sqlite_crud26.db'), @db);
+  dbPath := ParamStr(0) + '.db';
+  rc := sqlite3_open(PChar(dbPath), @db);
   writeln('open=', rc);
 
   Exec(PChar('DROP TABLE IF EXISTS t;'));
