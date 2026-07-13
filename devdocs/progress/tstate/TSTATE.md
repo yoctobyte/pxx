@@ -2,7 +2,8 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `a5fc06ee29b6` | 2026-07-13T05:50:57Z | GREEN (native) | 75.9s | `2107bced1a53` GREEN |
+| borg | `a5fc06ee29b6` | 2026-07-13T05:54:26Z | RED (full) | 193.2s | `a5fc06ee29b6` RED |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
+- **test-aarch64#src:test/test_cross_sysopen_family.pas** — test/test_cross_sysopen_family.pas tools/run_target.sh (borg): bad `a5fc06ee29b6`, last good `a5fc06ee29b6`, 0 commit(s) in range
