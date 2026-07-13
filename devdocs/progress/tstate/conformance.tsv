@@ -149,7 +149,7 @@ skip	terecs14.pp	terecs	gap	`class operator` set on records (Explicit, :=, =, In
 skip	terecs15.pp	terecs	gap	record constructors with overloads (advanced records)
 skip	terecs16.pp	terecs	gap	record constructor (`constructor TRec.Create`) in advanced records
 pass	terecs17a.pp	terecs	-	
-pass	terecs17.pp	terecs	-	
+fail	terecs17.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs18a.pp	terecs	-	
 pass	terecs18.pp	terecs	-	
 fail	terecs19.pp	terecs	-	accepted-invalid: %FAIL test compiled
