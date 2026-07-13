@@ -14603,6 +14603,18 @@ begin
     if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkVar) then
       Error('class var is not allowed in a record type');
+
+    { `const` section inside a record — same treatment as in a class body: parsed as
+      ordinary GLOBAL constants. A constant has no storage and pxx does not scope
+      declarations, so there is nothing to scope, and `TRec.K` resolves through the
+      qualified-const path. Unparsed, `const` fell into the field parser below and
+      demanded a ':' after the name. }
+    if CurTok.Kind = tkConst then
+    begin
+      ParseConstSection;
+      continue;
+    end;
+
     if CurTok.Kind = tkIdent then
     begin
       { comma-separated names share one type: `X, Y: Integer` }

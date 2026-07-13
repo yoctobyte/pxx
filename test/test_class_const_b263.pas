@@ -12,6 +12,15 @@ program test_class_const_b263;
   bit `class var` (b244): `strict private` after a const list was swallowed as the next
   const NAME. }
 type
+  { a `const` section inside a RECORD gets the same treatment }
+  TR = record
+  const
+    K = 4;
+    RName = 'rec';
+  var
+    x: Integer;
+  end;
+
   TA = class
   const
     MaxItems = 16;
@@ -36,7 +45,11 @@ end;
 
 var
   a: TA;
+  r: TR;
 begin
+  r.x := TR.K * 2;
+  writeln('rec-x=', r.x, ' rec-name=', TR.RName);
+
   a := TA.Create;
   a.Go;
   writeln('n=', a.N);
