@@ -2,26 +2,7 @@
 
 { ===== Error ===== }
 
-procedure WriteTokenContext;
-{ The source words around the current token, with `>>>` marking exactly where we
-  tripped. Expect() has printed this for years and it is the difference between a
-  findable error and an unfindable one — a bare line number does NOT track across
-  {$i} includes, so "line 19" can be a comment in one file and a directive in
-  another. Every Error gets it now, not just the token-mismatch path.
-
-  Token text lives in the TokChars pool; the raw token's SOffset indexes it. }
-var ctx: AnsiString; ei: Integer;
-begin
-  if (TokPos < 1) or (TokPos > TokCount) then Exit;
-  ctx := '';
-  for ei := TokPos - 6 to TokPos + 2 do
-    if (ei >= 1) and (ei <= TokCount) then
-    begin
-      if ei = TokPos then ctx := ctx + '>>> ';
-      ctx := ctx + GetTokenStrFromRaw(Tokens[ei-1].SOffset, Tokens[ei-1].SLen) + ' ';
-    end;
-  writeln('  near: ', ctx);
-end;
+procedure WriteTokenContext; forward;   { body sits after GetTokenStrFromRaw, which it uses }
 
 procedure Error(const msg: AnsiString);
 begin
@@ -325,6 +306,28 @@ begin
     s[i + 1] := TokChars[off + i];
   Result := s;
 end;
+
+procedure WriteTokenContext;
+{ The source words around the current token, with `>>>` marking exactly where we
+  tripped. Expect() has printed this for years and it is the difference between a
+  findable error and an unfindable one — a bare line number does NOT track across
+  {$i} includes, so "line 19" can be a comment in one file and a directive in
+  another. Every Error gets it now, not just the token-mismatch path.
+
+  Token text lives in the TokChars pool; the raw token's SOffset indexes it. }
+var ctx: AnsiString; ei: Integer;
+begin
+  if (TokPos < 1) or (TokPos > TokCount) then Exit;
+  ctx := '';
+  for ei := TokPos - 6 to TokPos + 2 do
+    if (ei >= 1) and (ei <= TokCount) then
+    begin
+      if ei = TokPos then ctx := ctx + '>>> ';
+      ctx := ctx + GetTokenStrFromRaw(Tokens[ei-1].SOffset, Tokens[ei-1].SLen) + ' ';
+    end;
+  writeln('  near: ', ctx);
+end;
+
 
 {$ifdef FPC}
 function StrToDoubleBits(const s: AnsiString): Int64;
