@@ -11724,7 +11724,8 @@ end;
 
 function ParseStatementAST: Integer;
 var
-  smmiS: Integer;
+  smmiS, pvSig, pvTarget: Integer;
+  pvIsMeth: Boolean;
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -13206,6 +13207,42 @@ begin
               begin
                 Next; Next; Next;   { consume obj, '.', 'Free' }
                 node := GenMakeFreeObject(idx);
+                Result := node; Exit;
+              end;
+
+              { Bare, PARENLESS call of a proc-var / method-pointer AS A STATEMENT:
+                `AMethod;` -- fpcunit's AssertException invokes the TRunMethod it was
+                handed exactly so.
+
+                POSITION is the only thing that disambiguates this, and it has to be
+                read narrowly. A bare proc-var name is a VALUE nearly everywhere:
+                `q := p`, `Foo(cb)`, `Assigned(p)`. It is a CALL only when the whole
+                statement is the name -- nothing else it could mean. So the test is
+                made HERE, in the statement path, on the token that FOLLOWS the name
+                (same shape as `obj.Free;` above), and NOT inside ParseLValueAST:
+                that runs for expression atoms too, where the next token is just as
+                often a ';' -- putting it there turned `q := p;` into a call of p.
+
+                Zero-parameter signatures only: anything taking arguments has to be
+                written with them. }
+              if (idx >= 0) and (SymProcSig[idx] >= 0) and
+                 (Tokens[TokPos].Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
+                                          tkFinally, tkExcept]) and
+                 (Procs[SymProcSig[idx]].ParamCount = 0) then
+              begin
+                pvSig := SymProcSig[idx];
+                pvIsMeth := Syms[idx].TypeKind = tyRecord;
+                Next;                      { consume the proc-var name }
+                pvTarget := AllocNode(AN_IDENT);
+                ASTIVal[pvTarget] := idx;
+                if pvIsMeth then ASTTk[pvTarget] := Ord(tyRecord)
+                else ASTTk[pvTarget] := Ord(tyPointer);
+                node := AllocNode(AN_CALL_IND);
+                ASTLeft[node]  := -1;      { no args }
+                ASTRight[node] := pvTarget;
+                ASTIVal[node]  := pvSig;
+                ASTTk[node]    := Ord(Procs[pvSig].RetType);
+                if pvIsMeth then ASTSLen[node] := 1 else ASTSLen[node] := 0;
                 Result := node; Exit;
               end;
               { The implicit-Self FIELD twin: `FField.Free;` inside a method,

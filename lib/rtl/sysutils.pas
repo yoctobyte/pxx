@@ -207,6 +207,11 @@ function QuotedStr(const s: AnsiString): AnsiString;
   (max chars for %s, fraction digits for %f). FPC SysUtils.Format. }
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 
+{ FPC SysUtils.BoolToStr. With UseBoolStrs the result is 'True'/'False'; without it
+  the Delphi-compatible '-1'/'0'. The TrueS/FalseS form lets the caller name both. }
+function BoolToStr(B: Boolean; UseBoolStrs: Boolean): AnsiString; overload;
+function BoolToStr(B: Boolean; const TrueS, FalseS: AnsiString): AnsiString; overload;
+
 { FPC's UnicodeString-returning Format. This RTL has a single byte-string model
   (string = AnsiString), so it is Format -- declared because FPC code calls it by
   name (fpcunit's ComparisonMsg does). }
@@ -1103,6 +1108,23 @@ end;
 function UnicodeFormat(const fmt: AnsiString; const args: array of const): AnsiString;
 begin
   Result := Format(fmt, args);
+end;
+
+function BoolToStr(B: Boolean; UseBoolStrs: Boolean): AnsiString;
+begin
+  if UseBoolStrs then
+  begin
+    if B then Result := 'True' else Result := 'False';
+  end
+  else
+  begin
+    if B then Result := '-1' else Result := '0';
+  end;
+end;
+
+function BoolToStr(B: Boolean; const TrueS, FalseS: AnsiString): AnsiString;
+begin
+  if B then Result := TrueS else Result := FalseS;
 end;
 
 function DirentByte(buf: Pointer; off: Integer): Byte;
