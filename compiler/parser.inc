@@ -2275,6 +2275,44 @@ begin
     Result := selfNode;
 end;
 
+{ Is this bare identifier a value of CLASS-REFERENCE type (a TClass variable, param,
+  or a field of the enclosing class)? A class reference is tyPointer whose element is
+  tyClass -- the shape TClass, a metaclass Self, and ClassType all carry. Used to spot
+  `E is <classref>`, where the class is a runtime value rather than a name. }
+function IdentIsClassRefValue(const nm: AnsiString): Boolean;
+var si, fi: Integer;
+begin
+  IdentIsClassRefValue := False;
+  si := FindSym(nm);
+  if si >= 0 then
+  begin
+    if (Syms[si].TypeKind = tyPointer) and (Syms[si].PtrElemTk = tyClass) then
+    begin
+      IdentIsClassRefValue := True;
+      Exit;
+    end;
+    if (Syms[si].TypeKind = tyClass) and (Syms[si].RecName = REC_NONE) then
+    begin
+      IdentIsClassRefValue := True;
+      Exit;
+    end;
+    Exit;   { a symbol of some other type shadows -- `is` is not an operator here }
+  end;
+  if (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) then
+  begin
+    fi := FindUField(CurMethClass - REC_UCLASS_BASE, nm);
+    if fi >= 0 then
+    begin
+      { a class-reference FIELD carries the same "class with no concrete class id"
+        shape, whether it is recorded as a pointer-to-class or a bare class }
+      if (UFldTk[fi] = Ord(tyPointer)) and (UFldPtrElemTk[fi] = Ord(tyClass)) then
+        IdentIsClassRefValue := True
+      else if (UFldTk[fi] = Ord(tyClass)) and (UFldRec_[fi] = REC_NONE) then
+        IdentIsClassRefValue := True;
+    end;
+  end;
+end;
+
 function GenMakeGetInterfaceCall(objNode: Integer): Integer;
 { Rewrite `<obj>.GetInterface(IID, Obj)` (and the bare, implicit-Self form) to
   __pxxGetInterface(<obj>, @IID, @Obj). CurTok must be on the '('.
@@ -7122,6 +7160,35 @@ begin
         procIdx := FindProc(name);
       end;
 
+      { A bare class-reference OPERATION inside a method body -- implicit Self:
+        `ClassName`, `ClassType`, `InheritsFrom(C)` with no receiver (fpcunit's
+        TTestCase.GetTestName reads a bare ClassName).
+
+        GenMakeImplicitMetaclass already yields the right blob for either method kind:
+        an instance method's Self walks to its RUNTIME class, a class method's Self IS
+        the class. So this is the same operation as the qualified form, with the
+        receiver implied. A member of that name on the class still wins. }
+      if (procIdx < 0) and (idx < 0) and (qUnit < 0) and
+         (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) and
+         IsClassRefOpName(name) and
+         (FindUMeth(CurMethClass - REC_UCLASS_BASE, name) < 0) and
+         (FindUField(CurMethClass - REC_UCLASS_BASE, name) < 0) then
+      begin
+        smSelfNode := GenMakeImplicitMetaclass;
+        if smSelfNode >= 0 then
+        begin
+          Next;                    { consume the operation name }
+          node := GenMakeClassRefOp(smSelfNode, name, tk);
+          if node >= 0 then
+          begin
+            node := ParseClassRefOpTail(node, tk);
+            LastExprTk := tk;
+            CurASTNode := node;
+            Exit;
+          end;
+        end;
+      end;
+
       { Bare call to a sibling CLASS (static) method, from inside a class method.
 
         CurSelfClass is deliberately unset in a `class procedure` -- it is static and
@@ -8768,13 +8835,51 @@ begin
 end;
 
 procedure ParseExpr;
-var op: TTokenKind; left, right, node, isci: Integer; isIsTest: Boolean;
+var op: TTokenKind; left, right, node, isci, isNode, isArg, isArg2: Integer; isIsTest: Boolean;
 begin
   ParseSimpleExpr;
   { `X is T` / `X as T` — is/as are contextual identifiers (not reserved tokens),
     treated as operators only when followed by a known class name, so a stray
     identifier is never hijacked. Parser-resolved into their own AST nodes (per
     the and/or lesson: never key behaviour off a global flag). }
+  { `E is <class-reference VALUE>` -- the class to test against is only known at
+    runtime: a TClass variable, param, or field (fpcunit's
+    `if not (E is FExpectedException)`, where FExpectedException: TClass is a field).
+
+    AN_IS_TEST carries a compile-time class INDEX, so it cannot express this. But the
+    test is exactly InheritsFrom on the instance's blob:
+
+        E is cr   ==   __pxxInheritsFrom(rtti_of(E), cr)
+
+    which is the operation already built for `x.InheritsFrom(C)`. Recognised only when
+    the right-hand ident is a class-reference-typed symbol or field -- a known class
+    NAME still takes the compile-time path above, and anything else leaves `is` alone. }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'is') and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     (FindUClass(GetTokenStr(TokPos)) < 0) and
+     IdentIsClassRefValue(GetTokenStr(TokPos)) and
+     (FindProc('__pxxInheritsFrom') >= 0) then
+  begin
+    Next;                       { consume 'is' }
+    left := CurASTNode;
+    node := GenMakeRttiOfCall(left);            { the instance's runtime class }
+    ParseFactor;                                { the class-reference operand }
+    right := CurASTNode;
+    isci := FindProc('__pxxInheritsFrom');
+    isNode := AllocNode(AN_CALL);
+    ASTIVal[isNode] := isci;
+    ASTTk[isNode] := Ord(tyBoolean);
+    isArg := AllocNode(AN_ARG);
+    ASTLeft[isArg] := node;
+    ASTLeft[isNode] := isArg;
+    isArg2 := AllocNode(AN_ARG);
+    ASTLeft[isArg2] := right;
+    ASTRight[isArg] := isArg2;
+    LastExprTk := tyBoolean;
+    CurASTNode := isNode;
+    Exit;
+  end;
+
   if (CurTok.Kind = tkIdent) and
      (CaseEqual(CurTok.SVal, 'is') or CaseEqual(CurTok.SVal, 'as')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
@@ -21138,7 +21243,13 @@ begin
       normally written with no '(' and must be matched on the bare name. A class with
       a member of that name shadows at the call site, leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom')) and
+       (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom') or
+        { `E is <class-reference VALUE>` lowers to __pxxInheritsFrom (see ParseExpr).
+          Whether the right-hand side is a class NAME (compile-time, no helper) or a
+          TClass value (runtime, helper) is not knowable from the tokens, so the
+          soft-keyword `is` pulls the unit. An unused helper is dropped by the linker
+          path anyway; a missing one would silently disable the operator. }
+        CaseEqual(GetTokenStr(i), 'is')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /

@@ -60,6 +60,16 @@ type
     property Message: string read FMessage write FMessage;
   end;
 
+  { FPC System.TMethod: the two words a method pointer is made of. A `procedure of
+    object` value has exactly this layout -- Code at +0, Data (Self) at +8 -- so code
+    that builds a method pointer by hand fills a TMethod and casts it to the method
+    type. fpcunit's TTestCase.RunBare does that to invoke a test method found by RTTI. }
+  PMethod = ^TMethod;
+  TMethod = record
+    Code: Pointer;
+    Data: Pointer;
+  end;
+
   { The metaclass of Exception. FPC declares it in System, but our Exception lives
     here, so here is where `class of` it can be formed. Code that catches by class
     (fpcunit records the expected exception class of a test) needs it. }

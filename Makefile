@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# `E is <class-reference VALUE>` -- a TClass field/var, not a class name
+	./$(COMPILER) test/test_is_classref_b276.pas /tmp/test_is_classref_b27626
+	test "$$(/tmp/test_is_classref_b27626)" = "$$(printf 'leaf is mid (field): TRUE\nleaf is other (field): FALSE\nleaf is base (var): TRUE\nleaf is other (var): FALSE\nleaf is EMid (name): TRUE\nleaf is EOther (name): FALSE')"
 	# `Self` in a CLASS method is the METACLASS, and the RUNTIME class: TDerived.M must
 	# see Self=TDerived inside TBase.M, and a bare sibling call must propagate it
 	./$(COMPILER) test/test_metaclass_self_b275.pas /tmp/test_metaclass_self_b27526
