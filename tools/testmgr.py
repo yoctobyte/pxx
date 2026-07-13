@@ -113,7 +113,8 @@ CLASSES = {
 # whole build, not an inner-loop cost.
 FPC_CANARY_TIERS = ("native", "limited", "full")
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
-SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this
+SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this...
+SWAP_FLOOR_FRAC = 0.10          # ...but never demand more than this much of SwapTotal
 PSI_ADMIT = 20.0                # never admit above this memory PSI (some avg10)
 PSI_KILL = 45.0                 # kill+requeue the newest job above this PSI
 SCOPE_MAX_FRAC = 0.60           # cgroup MemoryMax = min(8G, this * MemTotal)
@@ -1034,8 +1035,19 @@ class Manager:
         # see the refault storm coming.  Report the stall once per run rather
         # than silently idling — a stuck-looking scheduler must say why.
         mi = meminfo()
-        if mi.get("SwapTotal", 0) and mi.get("SwapFree", 0) < SWAP_FLOOR:
-            self.note_stall("swap low (%d MB free)" % (mi["SwapFree"] >> 20))
+        # The swap floor must scale with the box, or it becomes a permanent
+        # lockout. A flat 1000 MB is a QUARTER of a 4 GB swap and a rounding
+        # error on a 32 GB one. Observed on borg: 8 GB MemAvailable, memory PSI
+        # flat 0.00 (i.e. not thrashing at all), yet every job was held back
+        # because free swap was 965 MB against the 1000 MB floor -- a 35 MB miss.
+        # And it never recovers: the used swap is stale anon pages from
+        # long-lived desktop processes that will never be handed back. So the
+        # gate stayed shut forever and every run crawled in degraded serial mode.
+        # min() keeps this NO LESS conservative than before on big-swap boxes.
+        floor = min(SWAP_FLOOR, int(mi.get("SwapTotal", 0) * SWAP_FLOOR_FRAC))
+        if mi.get("SwapTotal", 0) and mi.get("SwapFree", 0) < floor:
+            self.note_stall("swap critically low (%d MB free, floor %d MB)"
+                            % (mi["SwapFree"] >> 20, floor >> 20))
             return False
         psi = mem_pressure()
         if psi > PSI_ADMIT:
