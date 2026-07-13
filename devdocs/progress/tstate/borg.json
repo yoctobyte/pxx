@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T11:41:06Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e530da678bc93d2fbc4e153cfa7811102b425cb0",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T11:45:35Z",
    "fixed": [],
    "new_red": [
@@ -439,6 +431,14 @@
    "new_red": [],
    "sha": "12d5562a573db2993c58dd54e862eddbdc4c9c3a",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T18:59:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6440ca5f3a9bc0bdbc48b17336d6504a6e5af3ea",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1165,6 +1165,7 @@
   "test-core#src:test/test_dynlib.pas@1": "pass",
   "test-core#src:test/test_dynlib.pas@2": "pass",
   "test-core#src:test/test_empty_class_shorthand.pas": "pass",
+  "test-core#src:test/test_empty_paren_default_args_b316.pas": "pass",
   "test-core#src:test/test_enum_cast.pas": "pass",
   "test-core#src:test/test_eof_stdin.pas": "pass",
   "test-core#src:test/test_erlang_skeleton.erl": "pass",
@@ -1709,11 +1710,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T18:54:50Z",
-  "sha": "12d5562a573db2993c58dd54e862eddbdc4c9c3a",
-  "tier": "full",
+  "date": "2026-07-13T18:59:32Z",
+  "sha": "6440ca5f3a9bc0bdbc48b17336d6504a6e5af3ea",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 208.6
+  "wall": 120.5
  },
  "last_bench": {
   "conf_rows": 550,
