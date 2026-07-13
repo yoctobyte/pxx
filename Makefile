@@ -942,6 +942,11 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# a struct-valued comma expression passed BY VALUE (segfaulted: a comma is not an
+	# lvalue, so the record-by-value copy could not take its address); plus the left
+	# operand's side effects, which must still run
+	./$(COMPILER) test/ccomma_struct_arg_b307.c /tmp/ccomma_struct_arg_b30726
+	test "$$(/tmp/ccomma_struct_arg_b30726)" = "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2')"
 	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
 	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
 	./$(COMPILER) test/csigned_bitfield_b306.c /tmp/csigned_bitfield_b30626

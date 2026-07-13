@@ -6095,6 +6095,12 @@ begin
       `for x in o.Bag` (Bag a property) could not tell that the container was a class at all.
       Guarded on a real proc index: the special-builtin calls carry a NEGATIVE id there. }
     Result := ProcRetRecId[Integer(ASTIVal[node])]
+  else if ASTKind[node] = AN_COMMA then
+    { `(a, b)` yields b's value, so its record is b's. Without this a struct-valued
+      comma resolved to REC_NONE and a call marshalled it as a SCALAR: csmith's
+      `func_10(((*g_3), g_15), ...)` -- a struct handed over by value through a comma
+      -- segfaulted, while the same struct passed directly was fine. }
+    Result := ResolveNodeRec(ASTRight[node])
   else if ASTKind[node] = AN_FIELD then
   begin
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));

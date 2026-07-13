@@ -1789,6 +1789,25 @@ begin
     Result := IRLowerAST(argAST);
     Exit;
   end;
+  { `f((a, b))` -- a comma operator as an argument. Its value IS b, so evaluate a for
+    its side effects and then lower b AS the argument, with the full parameter-aware
+    treatment below. Unwrapping here rather than letting IRLowerAST handle the comma
+    is what makes a STRUCT (or array, or string) survive the trip: a comma is not an
+    lvalue, so the record-by-value path could not take its address and fell through to
+    a scalar lowering, handing the callee a garbage pointer.
+
+    csmith: `func_10(((*g_3), g_15), ...)` segfaulted, while `func_10(g_15, ...)` --
+    the same struct, passed directly -- was fine. }
+  while ASTKind[argAST] = AN_COMMA do
+  begin
+    { IRMarkStatementNode, exactly as the AN_COMMA arm of IRLowerAST does: the IR is
+      walked from its roots, so a node evaluated purely for its side effects has to be
+      marked or it is an orphan and never gets emitted at all -- `f((bump(), s))` would
+      silently not call bump(). }
+    IRMarkStatementNode(IRLowerAST(ASTLeft[argAST]));
+    argAST := ASTRight[argAST];
+  end;
+
   argTk := IntToTypeKind(ASTTk[argAST]);
   needTemp := False;
   argRecId := REC_NONE;
