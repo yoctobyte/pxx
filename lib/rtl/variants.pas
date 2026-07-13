@@ -23,6 +23,26 @@ interface
 type
   TVarType = Word;
 
+{ FPC's Null / Unassigned variant values.
+
+  READ THE UNIT HEADER: pxx has ONE "no value" tag (VT_EMPTY), where FPC distinguishes
+  varEmpty (never assigned) from varNull (assigned, but null). So these two return the SAME
+  thing here, and `VarIsNull(Unassigned)` is True where FPC says False.
+
+  That is a real approximation and it is stated rather than hidden. It is the right one for
+  the callers that exist -- fpjson uses Null purely as "the JSON null value", never to
+  distinguish it from unassigned -- but code that genuinely needs the three-way
+  empty/null/value distinction wants a compiler change (a VT_NULL tag), not a library
+  workaround. Say so rather than quietly returning the wrong answer.
+
+  These are VARIABLES, not functions, because a function cannot return a Variant in this
+  compiler yet (bug-variant-function-return -- a Variant result segfaults). FPC declares them
+  as functions; as read-only values the difference is invisible to callers, which is the
+  whole surface anyone uses. They are initialised empty and nothing writes them. }
+var
+  Null: Variant;
+  Unassigned: Variant;
+
 { The tag of V (VT_EMPTY..VT_STRING above). }
 function VarType(const V: Variant): TVarType;
 

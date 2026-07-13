@@ -150,6 +150,16 @@ function StrToIntDef(const s: AnsiString; def: Integer): Integer;
 function StrToInt(const s: AnsiString): Integer;
 function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
 
+{ FPC System.StrPas: a NUL-terminated PChar as a Pascal string ('' for nil). StrLen is its
+  length. }
+function StrPas(P: PChar): AnsiString;
+function StrLen(P: PChar): Integer;
+
+{ FPC's sLineBreak: the platform line terminator. `LineEnding` is a compiler-known constant
+  in this dialect; sLineBreak is the SysUtils spelling of the same thing, which FPC code uses
+  interchangeably (fpjson's pretty-printer builds its indentation with it). }
+function sLineBreak: AnsiString;
+
 { FPC's Try* parsers: return False on malformed input and leave the out value untouched,
   rather than raising. }
 function TryStrToInt64(const s: AnsiString; var value: Int64): Boolean;
@@ -391,6 +401,31 @@ procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
 implementation
 
 uses platform, platform_types;
+
+function StrLen(P: PChar): Integer;
+var n: Integer;
+begin
+  n := 0;
+  if P <> nil then
+    while P[n] <> #0 do Inc(n);
+  Result := n;
+end;
+
+function StrPas(P: PChar): AnsiString;
+var i, n: Integer;
+begin
+  Result := '';
+  if P = nil then Exit;
+  n := StrLen(P);
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+    Result[i + 1] := P[i];
+end;
+
+function sLineBreak: AnsiString;
+begin
+  Result := LineEnding;
+end;
 
 function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
 var t: AnsiString; v: Integer;

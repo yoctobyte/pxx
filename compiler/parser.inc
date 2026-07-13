@@ -3950,6 +3950,19 @@ begin
               ASTTk[mselfArg] := Ord(tyInt64);
               node := mselfArg;
             end;
+
+            { ...and then KEEP GOING. A getter's result is an ordinary value, so a selector
+              may follow it: `Self.Items[I].Clone` (fpjson's TJSONArray.Clone). This path used
+              to Exit here, leaving the `.Clone` unconsumed -- which the ASSIGNMENT path
+              tolerated (the statement ended there anyway) but an argument list did not
+              ("expected comma or close parenthesis"). That asymmetry is why it survived: the
+              obvious way to write it, `x := obj.Items[i].Method`, happened to work. }
+            tk := Procs[mpi].RetType;
+            recName := ProcRetRecId[mpi];
+            if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+            if (CurTok.Kind = tkDot) or (CurTok.Kind = tkLBrack) then
+              node := ParseClassRecordSelectors(node, recName, tk);
+
             Result := node; Exit;
           end
           else

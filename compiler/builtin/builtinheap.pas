@@ -32,6 +32,15 @@ type
     offset (see FixupTVarRecLayout) and right-sizes the record, so a string
     element and an integer element share the 8-/4-byte value slot exactly as FPC
     lays them out. Only the two tags the asm emitter needs are wired today. }
+  { Typed pointers for TVarRec's BOXED members. The union slot is pointer-sized, so a value
+    wider than a pointer (a Double, an Int64, a ShortString) is stored BY ADDRESS -- and the
+    field must be a typed pointer, not a bare Pointer, or `VExtended^` derefs to tyUnknown and
+    every overload of the thing it is passed to fails to match. (That is exactly how fpjson's
+    VarRecToJSON failed: "Mismatch in MatchProcCall: CreateJSON, arg[0] = 0".) }
+  PVarRecInt64  = ^Int64;
+  PVarRecDouble = ^Double;
+  PVarRecStr    = ^string;
+
   TVarRec = record
     VType: NativeInt;
     VInteger: NativeInt;
@@ -40,8 +49,25 @@ type
     VChar: Char;
     VPointer: Pointer;
     VPChar: Pointer;
-    VInt64: Pointer;      { PInt64 — value boxed because the union slot is pointer-sized }
-    VExtended: Pointer;   { PDouble — likewise boxed }
+    VInt64: PVarRecInt64;      { boxed: the union slot is only pointer-sized }
+    VExtended: PVarRecDouble;  { likewise }
+    { The rest of FPC's union. Adding a field here is SAFE and costs nothing:
+      FixupTVarRecLayout overlays EVERY field after VType onto the single value slot, so the
+      record stays a tag plus one pointer regardless of how many names are listed -- which is
+      exactly what FPC's variant record is. These exist so code that reads an element BY TAG
+      (fpjson's VarRecToJSON does, exhaustively) compiles; a tag this compiler never emits is
+      simply a branch that never runs. }
+    VObject: Pointer;
+    VClass: Pointer;
+    VString: PVarRecStr;       { FPC's PShortString; a string pointer here }
+    VCurrency: PVarRecDouble;  { FPC's PCurrency; this RTL models Currency as Double }
+    VVariant: Pointer;
+    VInterface: Pointer;
+    VWideChar: Word;
+    VPWideChar: Pointer;
+    VWideString: Pointer;
+    VUnicodeString: Pointer;
+    VQWord: PVarRecInt64;      { boxed }
   end;
 
 const
@@ -52,8 +78,18 @@ const
   vtString     = 4;   { shortstring; unused with ansistrings }
   vtPointer    = 5;
   vtPChar      = 6;
+  vtObject     = 7;
+  vtClass      = 8;
+  vtWideChar   = 9;
+  vtPWideChar  = 10;
   vtAnsiString = 11;
+  vtCurrency   = 12;
+  vtVariant    = 13;
+  vtInterface  = 14;
+  vtWideString = 15;
   vtInt64      = 16;
+  vtQWord      = 17;
+  vtUnicodeString = 18;
 
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);

@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a SELECTOR after an indexed-property read: obj.Items[i].Method, incl. as a call ARG
+	./$(COMPILER) test/test_selector_after_property_b289.pas /tmp/test_selector_after_property_b28926
+	test "$$(/tmp/test_selector_after_property_b28926)" = "$$(printf 'took 100\ntook 200\ntook 300\ntook 400\nchained: 200')"
 	# TypeInfo(TEnum) + TypInfo enum reflection (GetEnumName / GetEnumValue)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_enum_b288.pas /tmp/test_typeinfo_enum_b28826
 	test "$$(/tmp/test_typeinfo_enum_b28826)" = "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
