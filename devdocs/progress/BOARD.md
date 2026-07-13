@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (96)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -100,6 +100,7 @@ _none_
 | feature-pascal-advanced-records | P | 55 | feature | Advanced records: methods (and `public`/`private`) inside a record | — |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
+| feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpjson | P | 58 | feature | Pascal corpus: fcl-json — polymorphic TJSONData hierarchy + RTTI streaming | feature-pascal-corpus-fpcunit |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -127,7 +128,9 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
+| regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard3-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard3/6 red at 90ae846bda82 (auto-filed by twatch) | — |
+| regression-test-core-test-string-to-pchar-auto | T | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -873,7 +876,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [T] regression-optdiff-shard4-6
 - [p 70] [T] regression-test-c-conformance-aarch64-shard3-6
+- [p 70] [T] regression-test-core-test-string-to-pchar-auto
 - [p 65] [P] bug-pascal-unknown-type-silently-integer
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
@@ -907,6 +912,7 @@ _none_
 - [p 50] [A] bug-c-struct-byval-varargs-32bit
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
+- [p 50] [P] feature-pascal-class-property
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
