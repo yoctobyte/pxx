@@ -46,41 +46,38 @@ Each was found and fixed one at a time, and each came through THIS hole:
 
 The hole keeps manufacturing these. It is worth closing.
 
-## Why it is not closed yet — the blocker is now EXACTLY known
-Making it an error is a one-line change and the compiler still self-hosts. `make test`
-then fails in one place: the flagship fgl-compiles test, with `unknown type: TPoint`.
+## Why it is not closed yet — what is VERIFIED, and what is not
+Making it an error is a one-line change, and **the compiler still self-hosts with it on.**
+`make test` then fails in exactly ONE place: the flagship fgl-compiles test, with
+`unknown type: TPoint`. Everything else in the suite passes.
 
-The cause is **a type that references ITSELF inside its own declaration.** FPC's
-`rtl/inc/typshrdh.inc` declares TPoint as an advanced record:
+### Verified facts (do not re-derive)
+- `TPoint` IS properly declared: under the lax build `SizeOf(TPoint) = 8` (the two Longints
+  from `rtl/inc/typshrdh.inc`). The include RESOLVES.
+- A missing include inside a unit is ALREADY a hard error — so it could not have been
+  silently skipped.
+- A record's NAME is registered (`AddUClass`) BEFORE its body is parsed, and a
+  self-reference through a pointer (`next: ^TR`) resolves fine.
+- **`VER3` IS defined under `--mimic-fpc`.** So typshrdh.inc's `{$ifdef VER3}` block is
+  ACTIVE, and TPoint's declaration really does contain `public` and
+  `constructor Create(apt: TPoint); overload;` — an advanced record, which pxx cannot parse
+  ([[feature-pascal-advanced-records]]).
 
-```pascal
-TPoint = packed record
-    X : Longint; Y : Longint;
-  public
-    constructor Create(apt: TPoint); overload;     { <-- TPoint, mid-declaration }
-  end;
-```
+### What is NOT known
+**Which construct actually trips it.** Line numbers are useless here: the error reports
+"line 19", which is a COMMENT in typshrdh.inc and a `{$modeswitch}` in types.pp — they do
+not track across includes. Two hypotheses were tried and BOTH were wrong (an unresolved
+include; then a self-referencing type). Do not guess a third.
 
-TPoint is not registered until its declaration finishes, so that parameter's type is
-unknown AT THAT POINT. Today it quietly becomes an Integer and nobody notices (the record
-itself still lands: `SizeOf(TPoint) = 8` afterwards). With the error on, `uses types` fails
-outright — which is why `fgl` does.
+### How to actually find it
+1. Re-apply the one-line error in ParseTypeKind's final `else`.
+2. Give the error real provenance first — include the current FILE and a token-context
+   window, the way the "Expected: X but got Y" path already does. Without that this is
+   unfindable, and that diagnostic gap is worth fixing on its own merits.
+3. Then bisect `typshrdh.inc` / `types.pp` with that error in hand.
 
-### Two earlier hypotheses, both WRONG — do not re-walk them
-- *"The `{$i typshrdh.inc}` include is not resolved."* No: it resolves, TPoint IS declared,
-  and a missing include in a unit is already a hard error.
-- *"Our headline FPC-compat result leans on this bug."* Overstated. The record is fine; only
-  the self-reference inside it is papered over.
-
-## What closing it needs
-Register the type NAME before parsing its body, so a self-reference resolves. That is
-entangled with [[feature-pascal-advanced-records]] — pxx cannot parse a record with a
-`public constructor` at all today, so how much of that declaration currently lands is the
-first thing to establish.
-
-Order: advanced records (or at least early name registration) FIRST, then turn the
-fallback into an error. Landing the error alone regresses the fgl gate; landing it with the
-name-registration fix should be clean.
+Advanced-record support is the likely prerequisite either way, since that declaration
+cannot currently be parsed as written.
 
 ## Old notes (superseded)
 ## Why it was not simply made an error
