@@ -49,3 +49,41 @@ work there.
   x86-64.
 - (Stretch, separate slice) `bignum` compiles for riscv32/i386 — i.e. by-value
   record params and managed aggregate locals supported on the 32-bit backends.
+
+## Reduced repro (2026-07-13) — it is NOT a crypto bug
+
+The p256field core-dump is a symptom. The real defect is **much broader**: on
+riscv32, **writes through a `var` array parameter do not work, for any element
+type**. Reads are fine.
+
+```pascal
+program t;
+type TI = array[0..3] of Integer;
+procedure W(var r: TI);
+begin
+  r[0] := 11; r[1] := 22; r[2] := 33; r[3] := 44;
+end;
+var a: TI; i: Integer;
+begin
+  for i := 0 to 3 do a[i] := 0;
+  W(a);
+  for i := 0 to 3 do Write(a[i], ' ');   { riscv32 prints "0 0 0 0" — writes LOST }
+  WriteLn;
+end.
+```
+
+| case | riscv32 | i386 / x86-64 |
+|---|---|---|
+| **read** via `const` array param | correct | correct |
+| **write** via `var` array param, `Integer` elems | **silently lost** (`0 0 0 0`) | correct |
+| **write** via `var` array param, `UInt64` elems | **segfault** | correct |
+| local array, direct writes (no param) | correct | correct |
+
+So the indexed-lvalue address for a by-ref array param is wrong on riscv32 — the
+write path does not dereference the parameter's pointer (it is the same shape as the
+x86-64 `IR_LEA` skParam+IsRef special case in `ir_codegen.inc`, which the riscv32
+backend appears to lack on the *write* side).
+
+**Blast radius is far wider than crypto:** any RTL or user code that writes into a
+`var` array param mis-executes on riscv32 — silently for 32-bit elements. Anything
+riscv32/ESP32 should be treated as suspect until this is fixed.
