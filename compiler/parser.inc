@@ -17,6 +17,15 @@ procedure EmitIoLockStubs386; forward;
 procedure EmitIoLockStubsA64; forward;
 procedure EmitIoLockStubsArm32; forward;
 
+{ pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
+  cannot, and the cold-bootstrap seed is built by FPC. Anything defined later in this
+  file but used earlier needs a forward here, or `make bootstrap` breaks while every
+  pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
+function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
+function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
+function ByRefArgStartsExpression: Boolean; forward;
+function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
+
 
 function AllocNode(kind: Integer): Integer;
 begin
