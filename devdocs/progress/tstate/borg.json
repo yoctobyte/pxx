@@ -1767,14 +1767,11 @@
   },
   {
    "bad": "5d6d4eaab3b8b15e163b3c75a52c08b4e2d5664b",
-   "good": "a239fd76c5e46eeb1af6a4777c8914e4bd9a2bfe",
+   "good": "d9232bc169282d17ff39d55f4e3ea2ffbd3f451d",
    "job": "test-core#src:test/test_sqlite_crud.pas",
    "name": "test-core#628",
    "opened": "2026-07-13T17:54:38Z",
    "range": [
-    "612f6597df5f7186e7717147ae70965154070e1a",
-    "3c77c242fd6837cb5d0956747f9ab1f9d08ebd9f",
-    "d9232bc169282d17ff39d55f4e3ea2ffbd3f451d",
     "4daad916f524d7f171fd1663de0ce1c79f00f227",
     "b0c335baf1e8ea7d72b97c627b68d9127e3488b8",
     "cd7a3aaba1485f63901317d2faa864581bc3bb63",
