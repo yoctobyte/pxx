@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# record helper for <type> v1: instance methods on plain-typed values,
+	# Self = target by reference (generics' ALeft.ToLower shape)
+	./$(COMPILER) test/test_record_helper_for_string_b331.pas /tmp/test_rec_helper_b33126
+	test "$$(/tmp/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49')"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas /tmp/test_macros_rot_b33026

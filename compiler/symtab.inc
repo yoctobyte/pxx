@@ -566,9 +566,35 @@ begin
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
+  UClsHelperTk[UClsCount] := -1;
+  UClsHelperRec[UClsCount] := REC_NONE;
   UClsForward[UClsCount] := False;
   UClsCaseSensFields[UClsCount] := False;
   UClsCount := UClsCount + 1;
+end;
+
+function FindHelperForType(tk: TTypeKind; rec: Integer): Integer;
+{ Newest-declared TYPE HELPER whose target matches (tk, rec); -1 if none.
+  FPC scoping: the last visible helper wins, hence the downward scan. The two
+  string flavours (frozen tyString / managed tyAnsiString) are one family —
+  an AnsiString helper serves a frozen-string receiver too. }
+var i, want, have: Integer;
+begin
+  Result := -1;
+  want := Ord(tk);
+  for i := UClsCount - 1 downto 0 do
+  begin
+    have := UClsHelperTk[i];
+    if have < 0 then continue;
+    if (have = want) or
+       (((have = Ord(tyString)) or (have = Ord(tyAnsiString))) and
+        ((want = Ord(tyString)) or (want = Ord(tyAnsiString)))) then
+      if (UClsHelperRec[i] = rec) or (UClsHelperRec[i] = REC_NONE) or (rec = REC_NONE) then
+      begin
+        Result := i;
+        Exit;
+      end;
+  end;
 end;
 
 function EnsureMethodPtrRec: Integer;

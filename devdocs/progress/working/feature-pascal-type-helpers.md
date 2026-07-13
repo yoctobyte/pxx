@@ -5,7 +5,7 @@ prio: 55
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** backlog — filed 2026-07-14 during rtl-generics rung-3 recon.
+- **Status:** working
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
   code across the FPC/Delphi ecosystem.
@@ -38,3 +38,19 @@ the helpers unit itself.
 
 ## Gate
 make test + self-host byte-identical (shared parser); fpjson suite stays green.
+
+## v1 LANDED 2026-07-14 (b331)
+Decl (`record helper for <type>` via the advanced-record machinery, helper
+marker in UClsHelperTk/Rec), impl-side Self fork, and call dispatch (early
+ParseLValueAST intercept → ParseClassRecordSelectors with the helper as rec id;
+Self = receiver by reference). Instance methods on variables/params work, incl.
+Self mutation and const-string params; last-visible-helper-wins; frozen+managed
+strings are one family. Pinned: test/test_record_helper_for_string_b331.pas.
+
+## Remaining (v2+)
+- statics + consts INSIDE helpers, and type-name receivers (UInt32.GetSignMask,
+  UInt32.SIZED_SIGN_MASK[i]) — generics.helpers' UInt32/UInt64 sections.
+- rvalue receivers ('abc'.ToLower, F().ToLower) — need a materialized temp.
+- `type helper for` spelling; class helpers.
+- generics.defaults then adds the REAL walls: methods NAMED after type keywords
+  (class function Integer(constref...)), untyped constref params.

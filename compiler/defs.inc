@@ -1926,6 +1926,8 @@ var
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
+  UClsHelperTk : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER: Ord(target TTypeKind), -1 = not a helper }
+  UClsHelperRec : array[0..MAX_UCLASS-1] of Integer; { helper target's rec id (REC_NONE for scalars/strings) }
   { Class-name aliases (`TOptionList = TList;`) — FindUClass resolves the alias
     to the target class row, so every class-name consumer (var decls,
     X.Create, casts, is/as) sees the alias transparently. }

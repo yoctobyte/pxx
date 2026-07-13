@@ -2802,6 +2802,33 @@ begin
     Exit;
   end;
 
+  { TYPE-HELPER dispatch: a '.' member on a plain (non-class/record) receiver
+    whose type has a `record helper for T` in scope, and the member names one
+    of the helper's methods — `s.ToLower` with s: AnsiString. Reuses the
+    class/record selector machinery with the HELPER as the record id; the
+    method's Self (param 0) is the target BY REFERENCE, so passing the
+    receiver node as the Self argument takes its address, exactly like an
+    advanced-record method. Guarded on the member actually existing, so every
+    other '.' path is untouched. }
+  if (idx >= 0) and (CurTok.Kind = tkDot) and
+     (Syms[idx].RecName < REC_UCLASS_BASE) and (not Syms[idx].IsArray) and
+     not (Syms[idx].TypeKind in [tyRecord, tyClass, tyVariant, tyPointer]) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
+  begin
+    mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
+    if (mci >= 0) and (FindUMeth(mci, GetTokenStr(TokPos)) >= 0) then
+    begin
+      node := AllocNode(AN_IDENT);
+      ASTIVal[node] := idx;
+      ASTTk[node] := Ord(Syms[idx].TypeKind);
+      tk := Syms[idx].TypeKind;
+      node := ParseClassRecordSelectors(node, REC_UCLASS_BASE + mci, tk);
+      LastExprTk := tk;
+      Result := node;
+      Exit;
+    end;
+  end;
+
   if WithStackDepth > 0 then
   begin
     for w := WithStackDepth - 1 downto 0 do
@@ -16554,11 +16581,20 @@ begin
   mnLen := Tokens[TokPos-1].SLen;
   Next;
 
-  { Self at param 0: the record, by reference. }
+  { Self at param 0: the record, by reference. For a TYPE HELPER, Self is a
+    reference to the TARGET type instead (s.ToLower reads Self as the string). }
   nP := 1;
   pn[0] := 'Self';
-  pt[0] := tyRecord;
-  ptRec[0] := REC_UCLASS_BASE + ci;
+  if UClsHelperTk[ci] >= 0 then
+  begin
+    pt[0] := IntToTypeKind(UClsHelperTk[ci]);
+    ptRec[0] := UClsHelperRec[ci];
+  end
+  else
+  begin
+    pt[0] := tyRecord;
+    ptRec[0] := REC_UCLASS_BASE + ci;
+  end;
   pRef[0] := True;
 
   if CurTok.Kind = tkLParen then
@@ -18267,6 +18303,20 @@ begin
         ci := AddUClass(tnOff, tnLen);
         UClsParent[ci] := -1;
         UClsIsRecord[ci] := True;
+        if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'helper') and
+           (Tokens[TokPos].Kind = tkFor) then
+        begin
+          { `record helper for <type>` — a TYPE HELPER: methods dispatch on
+            values of the TARGET type; Self (param 0) is the target BY
+            REFERENCE. Parsed with the advanced-record member machinery; the
+            helper marker forks Self's type on both the decl and impl sides
+            (they must agree — the b321 lesson). }
+          Next;                       { helper }
+          Expect(tkFor, 'for');
+          fTk := ParseTypeKind;
+          UClsHelperTk[ci] := Ord(fTk);
+          UClsHelperRec[ci] := LastTypeRecId;
+        end;
         ParseRecordFields(ci, isPackedRecord);
       end
       else if CurTok.Kind = tkCaret then
@@ -19845,6 +19895,14 @@ begin
       ptypes[0] := tyPointer;
       ptypesRec[0] := REC_NONE;
       pbyref[0] := False;
+    end
+    else if (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
+    begin
+      { TYPE HELPER method impl: Self = the target type by reference — must
+        agree with the decl side's registration or the impl never binds. }
+      ptypes[0] := IntToTypeKind(UClsHelperTk[methOwnerCi]);
+      ptypesRec[0] := UClsHelperRec[methOwnerCi];
+      pbyref[0] := True;
     end
     else if UClsIsRecord[methOwnerCi] then
     begin
