@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T02:03:31Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T02:05:20Z",
    "fixed": [],
    "new_red": [],
@@ -421,18 +413,22 @@
    "sha": "d7933be5b0d52486312810aa535961bb7dfb639b",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T07:23:16Z",
+   "fixed": [],
+   "new_red": [
+    "test-c-conformance-aarch64#shard3/6"
+   ],
+   "sha": "ec7632afbae2048ea6a833566ec882e19d274ea3",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -673,7 +669,7 @@
   "test-c-conformance-aarch64#shard0/6": "pass",
   "test-c-conformance-aarch64#shard1/6": "pass",
   "test-c-conformance-aarch64#shard2/6": "pass",
-  "test-c-conformance-aarch64#shard3/6": "pass",
+  "test-c-conformance-aarch64#shard3/6": "fail",
   "test-c-conformance-aarch64#shard4/6": "pass",
   "test-c-conformance-aarch64#shard5/6": "pass",
   "test-c-conformance-arm32#shard0/6": "pass",
@@ -1056,11 +1052,13 @@
   "test-core#src:test/test_class_cast_field.pas": "pass",
   "test-core#src:test/test_class_const_b263.pas": "pass",
   "test-core#src:test/test_class_is_as.pas": "pass",
+  "test-core#src:test/test_class_method_bare_call_b272.pas": "pass",
   "test-core#src:test/test_class_methods.pas": "pass",
   "test-core#src:test/test_class_of.pas": "pass",
   "test-core#src:test/test_class_overload_directive_b247.pas": "pass",
   "test-core#src:test/test_class_str.pas": "pass",
   "test-core#src:test/test_class_var_section_b244.pas": "pass",
+  "test-core#src:test/test_classname_b271.pas": "pass",
   "test-core#src:test/test_classref.pas": "pass",
   "test-core#src:test/test_collections.pas": "pass",
   "test-core#src:test/test_comment_directive.pas": "pass",
@@ -1595,11 +1593,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1656,11 +1649,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T07:00:32Z",
-  "sha": "d7933be5b0d52486312810aa535961bb7dfb639b",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 105.5
+  "date": "2026-07-13T07:23:16Z",
+  "sha": "ec7632afbae2048ea6a833566ec882e19d274ea3",
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 205.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1670,11 +1663,11 @@
   "sha": "d7933be5b0d52486312810aa535961bb7dfb639b"
  },
  "last_full": {
-  "date": "2026-07-13T06:58:40Z",
-  "sha": "d7933be5b0d52486312810aa535961bb7dfb639b",
+  "date": "2026-07-13T07:23:16Z",
+  "sha": "ec7632afbae2048ea6a833566ec882e19d274ea3",
   "tier": "full",
-  "verdict": "GREEN",
-  "wall": 188.6
+  "verdict": "RED",
+  "wall": 205.2
  },
  "last_opt": {
   "date": "2026-07-13T07:00:36Z",
@@ -1689,6 +1682,23 @@
    "opened": "2026-07-13T02:18:18Z",
    "range": [],
    "src": "tools/optdiff.sh"
+  },
+  {
+   "bad": "ec7632afbae2048ea6a833566ec882e19d274ea3",
+   "good": "d7933be5b0d52486312810aa535961bb7dfb639b",
+   "job": "test-c-conformance-aarch64#shard3/6",
+   "name": "test-c-conformance-aarch64#shard3/6",
+   "opened": "2026-07-13T07:23:16Z",
+   "range": [
+    "e1f557202fcc84377c83efc4e34232c4912ae1c0",
+    "a8d87ca323b69db28f72c3825f3777c8abfd12a6",
+    "c0eb2be6b43dba4d7042b450094dd01f10704e61",
+    "bf22037bca4e46b9224c439b24250dc2362928c8",
+    "5b33ce696dfa44238911a2393e7ae1f32f53dcd1",
+    "7e0add11b20f42734d3f558bcc496f7846416c98",
+    "ec7632afbae2048ea6a833566ec882e19d274ea3"
+   ],
+   "src": "tools/run_c_conformance.sh"
   }
  ]
 }
