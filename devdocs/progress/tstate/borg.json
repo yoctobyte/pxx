@@ -1756,13 +1756,11 @@
   },
   {
    "bad": "a303fb3d090bdbc9de5d5956cd5f83045d851f28",
-   "good": "afe6ec80b47bfa4d444957f80f19df0cc8a067cb",
+   "good": "9ae7a3617ccb49c4740fd0ab02e1494a98fc8bd3",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-13T17:25:45Z",
    "range": [
-    "dedd444c9d163c4c41ba57edab7a77f54eb1874b",
-    "9ae7a3617ccb49c4740fd0ab02e1494a98fc8bd3",
     "603cf2bda859c38146854e698430b3fc2160b741",
     "a303fb3d090bdbc9de5d5956cd5f83045d851f28"
    ],
