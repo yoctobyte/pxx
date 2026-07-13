@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `2d5e72790cfe` | 2026-07-13T01:32:02Z | GREEN (native) | 69.2s | `3f4b6ce3d74e` GREEN |
+| borg | `99fbd9610a5e` | 2026-07-13T01:36:14Z | GREEN (native) | 67.2s | `3f4b6ce3d74e` GREEN |
 
 ## Open regressions
 - none
