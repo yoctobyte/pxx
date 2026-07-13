@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# `absolute` overlays SHARE storage (it was silently ignored -> independent variable)
+	./$(COMPILER) test/test_absolute_overlay_b265.pas /tmp/test_absolute_overlay_b26526
+	test "$$(/tmp/test_absolute_overlay_b26526)" = "$$(printf 'global=4 4\nglobal=9 9\nlocal=7 7\nlocal=11 11\nreinterp=4294967295')"
 	# class sealed/abstract, method `final`, and System.Assert (a user's own Assert wins)
 	./$(COMPILER) test/test_assert_sealed_final_b264.pas /tmp/test_assert_sealed_final_b26426
 	test "$$(/tmp/test_assert_sealed_final_b26426)" = "$$(printf 'B\nS\nasserts-passed')"

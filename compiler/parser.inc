@@ -13471,6 +13471,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     initElem: Integer; initVal: Int64; elemResolved: Boolean; elemDynDepth: Integer;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
     moreDims: Boolean; elemProcSig: Integer;
+    absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     initDepth, scOff, scLen: Integer;
 begin
@@ -13678,13 +13679,51 @@ begin
     else
     begin
       { Skip qualifiers like pointer, ^, etc. Stop at `=` so a scalar
-        initializer (`var x: Integer = 5`) is left for the init handler below. }
+        initializer (`var x: Integer = 5`) is left for the init handler below.
+        Stop at `absolute` too: it is a plain identifier, so this loop used to hand it
+        (and the target name after it) to ParseTypeKind, where they fell through the
+        unknown-name default and quietly became Integers. That is how `absolute` came to
+        be silently IGNORED — the overlay never happened and the variable got its own
+        storage. Handled properly just below. }
       while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
-                 tkProcedure, tkFunction, tkEOF]) do
+                 tkProcedure, tkFunction, tkEOF]) and
+            not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute')) do
       begin
         tk := ParseTypeKind;
       end;
     end;
+
+    { `b: Integer absolute a;` — b SHARES a's storage (a classic Pascal overlay).
+      `absolute` was not recognised at all and was silently swallowed, so b became an
+      INDEPENDENT variable: reading it gave 0 and writing it never touched a. Wrong
+      values, no diagnostic.
+
+      Aliasing is exactly "same storage": give the new symbol the target's offset and
+      scope instead of allocating its own. Only a plain named variable may be the
+      target, and it must live in the same scope class (both global, or both local to
+      this routine) — anything else is rejected loudly rather than half-supported. }
+    absTarget := -1;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute') then
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('absolute: expected a variable name');
+      absTarget := FindSym(CurTok.SVal);
+      if absTarget < 0 then Error('absolute: unknown variable ' + CurTok.SVal);
+      if Syms[absTarget].Kind = skConst then
+        Error('absolute: target must be a variable, not a constant');
+      if Syms[absTarget].IsRef then
+        { a by-ref param's slot holds an ADDRESS, so overlaying it would alias the
+          pointer word, not the pointee — reject rather than half-support }
+        Error('absolute: target must not be a by-reference parameter');
+      { A local overlaying a global (or the reverse) would alias a FRAME offset onto a
+        DATA offset — two different address spaces. Reject rather than half-support. }
+      if (CurProc >= 0) and (Syms[absTarget].Kind = skGlobal) then
+        Error('absolute: a local cannot overlay a global');
+      if (CurProc < 0) and (Syms[absTarget].Kind <> skGlobal) then
+        Error('absolute: a global can only overlay a global');
+      Next;
+    end;
+
 	    if isArr then
 	      for i := 0 to n-1 do
 	      begin
@@ -13712,6 +13751,10 @@ begin
 	      for i := 0 to n-1 do
 	      begin
 	        idx := AllocVar(names[i], tk);
+	        { `absolute` overlay: take the target's storage instead of our own. AllocVar
+	          already reserved a slot; we simply never use it, which costs a few bytes and
+	          keeps every other invariant (scope, rollback, slot recycling) intact. }
+	        if absTarget >= 0 then Syms[idx].Offset := Syms[absTarget].Offset;
 	        if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
 	        if (tk = tyRecord) or (tk = tyClass) then
 	        begin
