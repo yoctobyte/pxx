@@ -93,8 +93,34 @@ LAX compiler too (`Expected: :, but got: function`), yet the real one somehow su
 partially skipped rather than parsed, and the name never lands in the record table even
 though the type ends up usable. THAT is the thing to understand.
 
-Next step: instrument the named-record branch (does `AddUClass` run for TPoint? does
-`ParseRecordFields` get called, and where does it stop?), rather than guessing again.
+### Instrumented — and the answer is ORDER, not the record
+Done 2026-07-13. `AddUClass` DOES run for TPoint and `ParseRecordFields` DOES complete:
+
+```
+DBG unknown TPoint: IsRecordType=0 alias=-1 UClsCount=4 TypeSectionDepth=0
+DBG named-record branch for TPoint, ci=4
+DBG TPoint fields done; IsRecordType=20
+```
+
+Read the order. The **unknown-TPoint hit comes FIRST**, while the record table is still
+empty for it (`IsRecordType=0`, `UClsCount=4`) — and TPoint's record declaration is
+processed AFTERWARDS. So `PPoint = ^TPoint` is being parsed BEFORE `TPoint = record`, even
+though TPoint is declared 28 lines EARLIER in the file.
+
+**Declarations are not reaching the parser in source order.** That is the actual bug to
+chase — not advanced records, and not the include. The advanced-record body is presumably
+why TPoint's declaration gets deferred/re-walked, but the failure itself is an ordering
+one.
+
+This also explains something that should have been suspicious all along: forward pointer
+refs (`PNode = ^TNode;` before TNode) currently WORK. If a pointer alias can be parsed
+before its element type exists, then the unknown-name fallback is what is silently
+absorbing that case too — which means closing the hole may require the forward-pointer
+path to be made explicit (a real forward declaration + fixup), not just an error.
+
+Next: find why the declaration order is not source order here (the decl pre-scan /
+excision machinery is the place to look), and how forward pointer aliases are meant to
+resolve their element type.
 
 Advanced-record support is the likely prerequisite either way, since that declaration
 cannot currently be parsed as written.
