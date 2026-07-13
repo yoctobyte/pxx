@@ -97,6 +97,29 @@ untyped reference cannot dispatch Destroy (the VMT slot is unknown without a cla
 now an intrinsic that uses the call site's static type, which is what `obj.Free` already did
 correctly.
 
+### The current wall, narrowed (2026-07-13, instrumented)
+`AssertEquals('FormatJSON equals JSON', S.AsJSON, S.FormatJSOn)` in `TTestString.TestFormat`
+dies with `Expected: ,` at the `.` of `S.AsJSON`. Established by instrumentation, gated on
+`CurProc` (NOT on a line number — see below):
+
+- **`S` resolves CORRECTLY**: idx 257, `tyClass`, rec 86 (TJSONString), `skLocal`, block-visible.
+  My first read of this — that `S` bound to an unrelated AnsiString `skParam` — was WRONG, and
+  the ticket I filed on it is withdrawn: [[bug-pascal-local-var-not-registered-wrong-sym]].
+  **The debug print was gated on `CurTok.Line`, and line numbers COLLIDE ACROSS UNITS** — those
+  hits were from a different file. Gate instrumentation on `CurProc`, a symbol index, or a token
+  SOffset. Never a line number.
+- The correct `AssertEquals` overload IS selected (`msg, string, string`; no by-ref params), so
+  the arguments are parsed with `ParseExpr`.
+- The failure is therefore in the MEMBER ACCESS on a correctly-resolved class variable.
+- It is **DECL-ORDER dependent**: moving `TestFormat`'s body to the END of the implementation
+  section makes it compile (the wall then moves on to `TTestFloat.DoTest`). Same family as b291,
+  where a method's return-type class id was recorded at its BODY rather than its DECLARATION.
+
+Next probe: find why the selector path is not reached for `S.AsJSON` here when the identical
+construct compiles standalone (`fj3.pas`: fpcunit + fpjson + the same AssertEquals call). The
+answer is something about what is or is not registered at that point in the unit — which is what
+"decl-order dependent" means.
+
 ### State
 The suite's remaining walls are a LONG TAIL, not an architectural blocker. Each one is
 CONTEXTUAL — it reproduces green in isolation and only fails inside the real file — so each
