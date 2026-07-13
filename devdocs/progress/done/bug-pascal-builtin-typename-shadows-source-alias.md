@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (name resolution — silent wrong TYPE, not a parse error)
 - **Track:** P — Pascal frontend (shared parser.inc, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13, split out of
+- **Status:** done
   [[bug-pascal-builtin-pointer-type-cast]] (resolved) once the real ordering was measured.
 
 ## The defect
@@ -46,3 +46,6 @@ name that the RTL also declares, and gate on `make test` + the RTL/lib tests, no
 
 ## Gate
 `make test` + self-host byte-identical + `make lib-test` (this touches how RTL type names resolve).
+
+## Log
+- 2026-07-13 — resolved, commit 5c21dd25.
