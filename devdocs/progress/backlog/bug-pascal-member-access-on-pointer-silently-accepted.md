@@ -48,3 +48,29 @@ landing. That is why this is filed rather than fixed inline.
 
 ## Gate
 `make test` + self-host byte-identical + the C corpus (see the care note).
+
+## 2026-07-13 — ATTEMPTED and REVERTED. The naive guard is wrong, and here is why.
+
+Tried the obvious thing: at the AN_FIELD builder, reject a member when the receiver's recName is
+not a record/class (Pascal mode only, to leave the C frontend alone). It correctly rejected
+`p.NoSuchThing` — and it BROKE a legitimate case immediately:
+
+```pascal
+type PNode = ^TNode;  TNode = record v: Integer; next: PNode; end;
+...
+writeln(p^.next^.v);      { rejected by the naive guard }
+```
+
+A typed pointer's record identity is NOT carried in `recName` at that point — it lives in the
+symbol's `PtrElemRec` (and, for a field, `UFldPtrElemRec`), and the deref chain resolves it
+elsewhere. So "recName is REC_NONE" does not mean "this has no members"; it means "the record
+id is somewhere else". Reverted; `make test` (b266) caught it in one run.
+
+**The real fix must ask the right question.** Reject only when the receiver genuinely has no
+member namespace to search — i.e. it is a pointer whose PtrElemRec is REC_NONE *and* not a
+record/class — rather than keying on the one field that happens to be empty at that site. That
+means threading the pointee record id to the member-access decision, which is the same
+information the deref chain already uses.
+
+Do NOT retry this by tightening the same predicate; it will keep hitting valid typed-pointer
+chains. Start by finding where `p^.next^` resolves its record and use that.
