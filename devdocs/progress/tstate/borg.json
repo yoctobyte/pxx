@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T01:39:38Z",
-   "fixed": [],
-   "new_red": [
-    "test-c-conformance-aarch64#shard3/6"
-   ],
-   "sha": "99fbd9610a5eee835c18d0724a20bc4e3526920c",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-13T01:41:53Z",
    "fixed": [],
    "new_red": [],
@@ -428,6 +418,14 @@
    "new_red": [],
    "sha": "f913bd22ae30f30cc3c461260777cf12a110c50c",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T06:43:31Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "65970a28dbc776d2264e412064179268c858b8f3",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1439,6 +1437,7 @@
   "test-core#src:test/test_type_runtime.pas": "pass",
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
+  "test-core#src:test/test_types_point_methods_b269.pas": "pass",
   "test-core#src:test/test_uint64_ops.pas": "pass",
   "test-core#src:test/test_unicodestring_alias.pas": "pass",
   "test-core#src:test/test_unit_impl_fwd.pas": "pass",
@@ -1662,11 +1661,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T06:37:25Z",
-  "sha": "f913bd22ae30f30cc3c461260777cf12a110c50c",
-  "tier": "opt",
+  "date": "2026-07-13T06:43:31Z",
+  "sha": "65970a28dbc776d2264e412064179268c858b8f3",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 97.7
+  "wall": 72.8
  },
  "last_bench": {
   "conf_rows": 550,
