@@ -36,26 +36,40 @@ hole** — and the hole then swallowed `TClass` (a class reference, truncated) a
 same one-at-a-time way. The next missing name will do it again.
 
 ## Why it was not simply made an error
-Tried 2026-07-13. It is the right change and it does NOT break forward references (the
-declaration pre-scan registers the type section up front). But it breaks the **flagship
-fgl-compiles test**, and for an instructive reason:
+Tried 2026-07-13 (one line: error instead of `Result := tyInteger`). It does NOT break
+forward references — the declaration pre-scan registers the type section up front. It DOES
+break the **flagship fgl-compiles test** with `unknown type: TPoint`.
 
-`fgl` uses `types`, and FPC's `types.pp` declares `TPoint` in its non-Windows branch via
-`{$i typshrdh.inc}` — an include we do not resolve (it lives in `rtl/inc`, and adding
-`-Fi` to it did not help, so the include itself is not being processed). So `TPoint` is
-undefined, and the flagship "we compile real FPC source" test **passes only because the
-missing type quietly becomes an Integer**.
+### A wrong lead, recorded so nobody re-walks it
+My first hypothesis was that FPC's `types.pp` declares `TPoint` via `{$i typshrdh.inc}`
+and that we fail to resolve that include. **That is WRONG.** Checked directly:
 
-That is worth saying plainly: our headline FPC-compat result is currently leaning on this
-bug.
+```
+uses types;         -> SizeOf(TPoint) = 8   (the record from the include: two Longints)
+uses fgl;           -> SizeOf(TPoint) = 8   (transitively, same)
+uses fgl, types;    -> SizeOf(TPoint) = 8
+```
 
-## So the fix is two-part, and must land together
-1. Make the unknown `{$i}` in FPC's `types.pp` actually resolve (or find why the include
-   is skipped — a missing include is supposed to be a HARD error already, per
-   bug-pascal-include-search-silent-miss, so something is letting this one through).
-2. THEN turn the unknown-name fallback into an error.
+The include IS found and TPoint IS registered — and a missing include in a unit is already
+a hard error (verified), so it could not have been silently skipped anyway. So the
+"headline FPC-compat leans on this bug" claim in the first draft of this ticket was
+**false**; ignore it.
 
-Landing (2) alone regresses the fgl gate. Landing (1) alone leaves the truncation hole.
+What the strict error's true source is has NOT been isolated. Something in the `fgl` ->
+`types` chain references a type name that is unknown AT THAT POINT, and today it quietly
+becomes an Integer. Note that `typshrdh.inc`'s TPoint is an ADVANCED RECORD (methods,
+`public`, a self-referencing `constructor Create(apt: TPoint)`), and pxx does not parse a
+record with a `public constructor` at all — so how much of that declaration actually lands
+is worth checking first.
+
+## How to pick this up
+1. Re-apply the one-line strict error in ParseTypeKind's final `else`.
+2. Compile `test/test_fgl_use.pas --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/rtl/objpas` and
+   find WHICH name is unknown and where. Do not assume it is the include.
+3. Fix that, then keep the error.
+
+The truncation hole is the prize and it is worth the dig: it is a silent wrong-code bug,
+and it has already produced two shipped symptoms (TObject, then TClass/Int8/Int16).
 
 ## Gate
 `make test` + self-host byte-identical + cross. The fgl-compiles test is the one to watch.
