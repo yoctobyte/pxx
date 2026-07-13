@@ -1200,6 +1200,14 @@ var
   ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
+  CTypeBaseIsEnum : Boolean; { last ParseCDeclType's BASE type was an `enum` (which we map to
+                               tyInt32). Only consulted for BITFIELDS: C leaves the signedness
+                               of an enum bitfield implementation-defined, and gcc makes it
+                               UNSIGNED when no enumerator is negative -- c-testsuite 00218
+                               depends on exactly that (`enum tree_code code : 8` with a value
+                               of 148 must NOT come back sign-extended). A plain `int x : 8`
+                               IS signed, so the two cannot be told apart from the TTypeKind
+                               alone -- hence this flag. }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }

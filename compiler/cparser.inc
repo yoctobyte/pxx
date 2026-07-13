@@ -2797,6 +2797,7 @@ begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
+  CTypeBaseIsEnum := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   tdIsFnType := False;
@@ -2865,7 +2866,7 @@ begin
               the declarator reader (stray-token error / desync) and A/B fold to
               0 as unknown idents. The enum type itself is just int. }
             if CurTok.Kind = tkBegin then ParseCEnumBody;
-            base := tyInt32; sawBase := True;
+            base := tyInt32; sawBase := True; CTypeBaseIsEnum := True;
           end
           else
           begin
@@ -8531,7 +8532,7 @@ var
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
   fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
   fTk: TTypeKind;
-  isArr, firstDecl, subIsUnion: Boolean;
+  isArr, firstDecl, subIsUnion, fldBaseIsEnum: Boolean;
   { The parent's fields are BUFFERED during the walk and appended to the shared
     UFld pool only AFTER the body (and any nested sub-records) are laid out, so the
     parent's fields stay contiguous — FindUField scans [base, base+count). Without
@@ -8714,6 +8715,8 @@ begin
     begin
       fieldStartIdx := TokPos - 1;
       fTk := ParseCDeclType;
+      fldBaseIsEnum := CTypeBaseIsEnum;   { captured now: the declarator scan below re-enters
+                                            ParseCDeclType (fn-ptr params) and resets the global }
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
       { pointee sig for a POINTER-to-fn-ptr field (`ft *pf`): base-star form leaves
         CTypeProcSig -1 and stashes the sig in CTypePtrElemProcSig; a comma-later
@@ -8923,6 +8926,14 @@ begin
             bfBitWidth[bfCount] := bitWidth;
             bfBitShift[bfCount] := bitUnitUsed;
             bfBitBytes[bfCount] := bitBytes;
+            { An ENUM bitfield is UNSIGNED. C leaves its signedness implementation-defined,
+              and gcc zero-extends when no enumerator is negative -- c-testsuite 00218 turns
+              on it (`enum tree_code code : 8` holding 148 must not read back negative). A
+              plain `int x : 8` IS signed and must sign-extend, and both map to tyInt32, so
+              the record has to carry the distinction: store the field as the unsigned kind
+              and IRLowerBitFieldRead's signed test then simply does not fire. }
+            if fldBaseIsEnum then
+              bfTk[bfCount] := Ord(CUnsignedOf(IntToTypeKind(bfTk[bfCount])));
           end
           else
           begin

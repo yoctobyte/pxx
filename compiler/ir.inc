@@ -670,15 +670,17 @@ begin
     -5. Sign-extend it branchlessly with (v xor signBit) - signBit -- no arithmetic
     shift, no new IR op, correct for every width.
 
-    Only when the field is signed AND narrower than its storage unit: a full-width
-    field is already right, and an unsigned field must stay zero-extended.
+    Applies to EVERY signed field, whatever its width: IRBitStorageTk always picks an
+    UNSIGNED storage type (tyUInt8/16/32), so the load is zero-extended even when the
+    field exactly fills its unit. Guarding on `width < storage bits` (as this first
+    did) left `signed f : 8` in a one-byte unit reading -7 back as 249. An unsigned
+    field must of course stay zero-extended.
 
     csmith found this on its fourth program, and every signed bitfield in every
     generated program was wrong. The C corpora (lua/sqlite/tcc) never caught it
     because their bitfields are unsigned -- the bug was invisible to a decade of
     real-world C. }
-  if (width < TypeSize(storageTk) * 8) and
-     ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
+  if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
       (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
   begin
     signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
