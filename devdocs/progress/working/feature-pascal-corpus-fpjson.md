@@ -6,7 +6,8 @@ prio: 58
 
 - **Type:** feature (compat — real-code validation of the OO surface)
 - **Track:** P — Pascal frontend, tag: compat
-- **Status:** working — in progress 2026-07-13. **Deep into the unit; ~20 walls cleared.**
+- **Status:** working — 2026-07-13. **fpjson COMPILES AND PRODUCES CORRECT JSON.** The DOM, the
+  formatter and every accessor are green. Remaining: the SCANNER's `\uXXXX` path needs UTF-16.
 - **Follows:** [[feature-pascal-corpus-fpcunit]] (rung 1 — DONE, compiles and runs)
 
 ## Why fpjson
@@ -41,26 +42,46 @@ RTL (new units and surface):
   AnsiCompareStr/Text, UnicodeFormat, BoolToStr, ExceptClass, BackTraceStrFunc, TMethod
 - `typinfo`: GetEnumName / GetEnumNameCount; GetEnumValue made case-insensitive (FPC parity)
 
-## THE CURRENT WALL
-```
-pascal26: error: Expected: :=, but got: ... (in TJSONData.DumpJSON)
-  near:  W  '":'  O  Items  I  DumpJSON >>> S  end
-```
-i.e. `O.Items[I].DumpJSON(S);` — a method call, WITH an argument, on an INDEXED PROPERTY, as a
-statement, **inside a method that also has a nested procedure**.
+## fpjson WORKS
 
-**Every piece reproduces GREEN in isolation** and is regression-tested:
-- a method call on an indexed property, as a statement — works
-- ...with an argument — works
-- ...implicit-Self (`Items[I].Dump`) — works
-- a nested procedure inside a method, capturing the method's params AND reaching Self — works
+```
+{ "name" : "pxx", "version" : 2, "ok" : true, "ratio" : 1.5,
+  "list" : [1, 2, "three"], "child" : { "nested" : "yes" } }
+```
+Every accessor correct: Get / Strings / Integers / Floats / Booleans, nested objects, arrays,
+IndexOfName, JSONType. fpjson.pp is used UNMODIFIED (888 procs).
 
-So it is the COMBINATION, or something about fpjson's specific shape (TJSONData.Items has a
-VIRTUAL getter and TJSONArray REDECLARES the property as `default`). **Do not guess** — this
-is exactly the situation that ate four rounds in the TPoint hunt
-([[project_dump_tokens_before_theorising]]). Cut fpjson.pp down until it flips, or dump the
-tokens/AST at that call. The wide diagnostic window (`WriteTokenContext`, temporarily widened
-to ±20 tokens) is what located it at all.
+### The last three, and every one was SILENT
+- **Virtual CLASS METHODS bound statically.** `class function JSONType: TJSONType; virtual;`
+  read through a base-typed reference ran TJSONData's base body and returned jtUnknown — so
+  every `Get(name, default)` quietly returned the default. A class method's Self is the
+  METACLASS, so IR_VIRTUAL_CALL cannot be reused (it loads the VMT from [Self+0], which on a
+  blob is the name pointer). Lowered instead to `[[Self + 24] + slot*8]` + IR_CALL_IND —
+  target-independent, no backend op. (b290)
+- **A method's RETURN-TYPE class id was recorded at its BODY, not its DECLARATION.** So a
+  method called before its own implementation appeared — ordinary inside one unit — had
+  ProcRetRecId = REC_NONE, and a selector on its result degraded to a FIELD access. Every piece
+  reproduced GREEN in isolation; only the ORDER made it fail, which is why it needed a
+  token-level instrument to see. (b291)
+- **Constant initializers ran AFTER unit initialization sections.** fpjson's initialization
+  reads a class const to set up its separators — and read zeros. Every document it formatted
+  came out with no braces, no colons, no commas: the structure right, the punctuation simply
+  absent. A constant that does not hold its value until after the program starts running is not
+  a constant. (b292)
+
+Plus the property `index` specifier (b293) and runtime set members in `in` (b294), both from
+the scanner.
+
+## What is left
+Only the SCANNER's `\uXXXX` escape path, which builds a UTF-16 surrogate pair
+(`WideChar(u1) + WideChar(u2)`). That is a genuine string-model boundary, not a bug — see
+[[feature-unicodestring-model]], which spells out what a real UnicodeString would take and why
+faking it is exactly the failure mode this corpus keeps catching. **fpjson's DOM does not need
+it**; only parsing JSON *text* containing `\u` escapes does.
+
+## Next
+Rung 3 — reassess. Likely `rtl-generics` (generic classes x interfaces x class constraints) or
+`fcl-xml` DOM. Also now unblocked: fpjson's OWN fpcunit suite, since fpcunit runs.
 
 ## Gate
 `make test` + self-host byte-identical + cross.
