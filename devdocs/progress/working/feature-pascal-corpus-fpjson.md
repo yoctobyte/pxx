@@ -209,47 +209,29 @@ is exactly what lets a case go missing in some of them.
 Walls: 1725 → 2774 → 3042 → **frontend clear**. The remaining wall is in CODEGEN, which is a
 different class of problem (and a different track — this is Track A ground, not P).
 
-### Current wall — CODEGEN, not the frontend
+### Wall in CODEGEN — `invalid symbol in lea` → b317
+A ROUTINE-LOCAL const array of CLASS REFERENCES registered a PENDING GLOBAL initializer
+holding the routine-local symbol index. That index is rolled back with the routine's scope,
+so main lowered a dangling IR_LEA. testjsondata declares exactly that:
+`Const MyJSONInstanceTypes : Array[TJSONInstanceType] of TJSONDataClass = (TJSONData, ...)`.
+Every other element kind already forked on `isLocalConst`; the class-ref branch did not.
 
-```
-pascal26:3: error: invalid symbol in lea
-```
+## RUNG 2 COMPLETE — testjsondata.pp COMPILES END TO END (~5000 lines, 1369 procs)
 
-That is the strict-IR verifier (`compiler/ir.inc`, the `IR_LEA` arm). Instrumented, it says:
+Walls: 1725 (b313) → 2774 (b315) → 3042 (b316) → codegen (b317) → compiles.
 
-```
-DBG bad LEA: ir=1 sym=257 SymCount=256 tk=17 CurProc=-1 proc=
-```
+Every one was a genuine, minimal, FPC-divergent bug — not the "contextual, only fails in the
+real file" noise the earlier note assumed. They looked contextual because each needs a second
+declaration elsewhere in the file to trigger. **Instrument the dispatch, do not theorise** is
+what cracked every one of them, in one or two compiles each.
 
-So: **an IR_LEA in MAIN (`CurProc = -1`) references symbol 257 when SymCount is 256** — a
-symbol index one PAST the end of the table. tk=17 is tyPointer.
+## What is left on this ticket
+1. **RUN the suite.** It compiles; it has not been executed yet. Needs a driver that actually
+   runs the registered tests (fpcunit's consoletestrunner, or call the registry directly).
+   Expect a fresh crop of RUNTIME divergences — that is the point of the rung.
+2. `\uXXXX` in the scanner (UTF-16 surrogate pair) — [[feature-unicodestring-model]], a genuine
+   string-model boundary, not a bug. fpjson's DOM does not need it.
+3. Open bugs found here, filed separately:
+   - [[bug-pascal-metaclass-array-element-not-a-receiver]] — `Map[0].Tag` returns garbage
+   - [[bug-pascal-overload-impl-decl-signature-match]] — same-arity overloads still confusable
 
-The driver's own body is `begin end`, so the code in main is the units' INITIALIZATION
-sections. testjsondata's is ~40 `RegisterTest(TTestXxx);` calls — a metaclass passed to a
-procedure. That shape ALONE reproduces green (a unit with `initialization Reg(TSub);` compiles
-and runs), so it needs more of the real context.
-
-The shape of the number is the lead: a symbol that was valid when the init code was lowered and
-became dangling when SymCount shrank back (a scope/unit truncation), or an off-by-one at a
-scope base. Next probe: print SymCount at the point the unit-init IR is generated vs at verify
-time, and find which declaration owns symbol 257 when it is created.
-
-Note the strict-IR verifier is doing its job here — it caught a dangling reference that would
-otherwise have been a wild `lea`. Do not weaken it.
-
-### Invocation (was not recorded before; costs 20 minutes to rediscover)
-The suite is a UNIT, so it needs a driver program (`program d; uses testjsondata; begin end.`),
-and it MUST be compiled with `--mimic-fpc` (that is what defines FPC_FULLVERSION, which
-fcl-json.inc gates on). Our own `lib/rtl/testutils.pas` must SHADOW fcl-fpcunit's — FPC's
-version hand-walks FPC's internal VMT — and a unit's `uses` resolves from its OWN directory
-first, so put a copy of ours in a staging dir alongside the vendor sources rather than
-relying on `-Fu` order:
-
-```sh
-ST=/tmp/fpjson-stage; mkdir -p $ST
-ln -sf $FPCJ/fcl-json/src/*.pp $FPCJ/fcl-json/src/*.inc \
-       $FPCJ/fcl-fpcunit/src/*.pp $FPCJ/fcl-fpcunit/src/*.inc \
-       $FPCJ/fcl-json/tests/*.pp  $ST/
-rm -f $ST/testutils.pp && cp lib/rtl/testutils.pas $ST/
-./compiler/pascal26 --mimic-fpc -Fulib/rtl -Fulib/rtl/platform/posix -Fu$ST driver.pas /tmp/d
-```
