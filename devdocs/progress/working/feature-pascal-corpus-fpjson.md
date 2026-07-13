@@ -264,3 +264,19 @@ minimal and silent (b318-b325):
 - TJSONIntegerNumber.JSONType expected 3 got 1 — the FACTORY tests: a TMyInteger
   registered via SetJSONInstanceType should be created by `.Add(1)`, we create the
   DEFAULT class instead (DefaultJSONInstanceTypes read path?)
+
+## RUNG 2 COMPLETE AND GREEN — 2026-07-13 night: run 203 / failures 0 / errors 0
+Second half of the night (b326, b327 + RTL strictness, commit a1565ed5):
+- b326 untyped boolean const collapsed to integer (Create([S]) built a number)
+- b327 Str(F,S) no-width = FPC scientific default; both suite sides now agree
+- sysutils StrToInt/Int64/QWord/Bool raise EConvertError (FPC parity);
+  StrToBool accepts numeric strings; TryStrToFloat/StrToFloatDef parse exponents
+- lone UTF-16 surrogate converts to '' (FPC drops it): '?🌟' -> '🌟'
+
+The suite is a real oracle now: driver = /tmp/fpjson-stage/tjrun.pp against the
+staged symlink dir (see the invocation note above; rebuild is one compile).
+Remaining items on this ticket's original scope:
+- jsonscanner/jsonparser (the rest of fcl-json) — that is where
+  [[feature-unicodestring-model]] genuinely bites (WideString(...) casts);
+  a separate rung when picked up.
+- [[bug-pascal-metaclass-array-element-not-a-receiver]] still open (p55).

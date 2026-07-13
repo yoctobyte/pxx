@@ -50,7 +50,6 @@ _none_
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-open-array-param-in-record-method | P | 40 | bug | Open-array parameter in a record method (rejected for now — it SEGFAULTED) | — |
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
-| bug-pascal-overload-impl-decl-signature-match | P | 50 | bug | bug: an overloaded method's IMPLEMENTATION does not always match back to its DECLARATION | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -138,6 +137,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
+| regression-test-core-test-widechar-to-utf8-b319 | T | 70 | regression | regression: test-core#src:test/test_widechar_to_utf8_b319.pas red at d94db8d6b0cc (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh red at 8766dccbd2dd (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -204,7 +204,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (683)
+## done (684)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -470,6 +470,7 @@ _none_
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
 | bug-pascal-method-default-param-self-shift | P | 70 | bug | Method default parameters land on the WRONG slot (silent wrong values) | — |
 | bug-pascal-nested-variant-record-tagged | A | 55 | bug | Nested variant parts with a tagged discriminant (`case f: T of` inside a variant arm) | — |
+| bug-pascal-overload-impl-decl-signature-match | P | 50 | bug | bug: an overloaded method's IMPLEMENTATION does not always match back to its DECLARATION | — |
 | bug-pascal-paren-expr-loses-class-id | P | 50 | bug | A parenthesised expression loses its class id: `(b as T)[i]` and `(b as T).ClassName` | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-pascal-string-const-not-scoped | P | 55 | bug | bug: untyped string constants are not SCOPED — a method's local const leaks to every later routine | — |
@@ -914,6 +915,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
+- [p 70] [T] regression-test-core-test-widechar-to-utf8-b319
 - [p 70] [T] regression-test-sqlite-threads-aarch64-run-sqlite-thread-test
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
@@ -950,7 +952,6 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
 - [p 50] [A] bug-c-struct-byval-varargs-32bit
-- [p 50] [P] bug-pascal-overload-impl-decl-signature-match
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-pascal-record-constructors

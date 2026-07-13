@@ -44,3 +44,16 @@ them; do not theorise.
 `test/test_method_overload_arity_rebind_b315.pas` covers the arity case. A same-arity case
 (two overloads differing only in parameter TYPE, implemented out of order) would pin this
 one — worth writing as the first step.
+
+## RESOLVED 2026-07-13 (b321, commit b2b672b7)
+Root cause found via fpjson's suite: the class-method DECL registration was
+rec-blind (FindProcOverload, no ProcParamRecId stored), so two same-arity
+overloads whose params differ only in CLASS IDENTITY shared one proc slot and
+each impl body clobbered the other's — `Add(TJSONData(x))` inside
+`Add(AnObject: TJSONObject)` re-dispatched to ITSELF (stack overflow). Decl
+registration now uses FindProcOverloadRec + stores ProcParamRecId; the overload
+RANKING also became class-aware (exact class 0, ancestor up-cast 2, unrelated
+impossible). Pinned: test/test_overload_class_identity_b321.pas.
+
+## Log
+- 2026-07-13 — resolved, commit b2b672b7.
