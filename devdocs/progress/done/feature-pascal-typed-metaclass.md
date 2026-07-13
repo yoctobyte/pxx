@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** feature
 - **Track:** P — Pascal frontend
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Follows:** [[feature-pascal-metaclass-self]] (Self in a class method = the runtime class — landed)
 - **Blocks:** [[feature-pascal-corpus-fpcunit]] if fpcunit's `TTestCaseClass` path needs it
 
@@ -66,3 +66,15 @@ this ticket is about the FRONTEND's name resolution, not about the runtime.
 
 ## Gate
 `make test` + self-host byte-identical + cross.
+
+## RESOLVED 2026-07-14 — already landed (stale ticket)
+Everything in "shape of the work" shipped during the fpcunit/fpjson arcs:
+typed metaclass member resolution + virtual class methods (b278), any
+constructor through the metaclass (BuildMetaclassNew), descendant checking on
+assignment (CheckMetaclassAssign), metaclass ARRAY ELEMENTS as receivers
+(b328). Verified tonight: class method via `tc: TBaseClass` dispatches on the
+RUNTIME class, virtual ctor builds the derived instance, ClassName answers.
+Pinned by test_typed_metaclass_b278.pas + test_metaclass_array_element_b328.pas.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
