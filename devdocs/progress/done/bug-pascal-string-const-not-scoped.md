@@ -63,3 +63,6 @@ FPC: rejects C ("Identifier not found"). Check what pxx does with B and C.
 scope/owner column (the `CurProc` that declared it, 0 = unit/global) and `FindStrConst`
 must search innermost-first and skip entries owned by a routine that is not the current one
 (or an enclosing one, for nested routines). Mirrors what the symbol table already does.
+
+## Log
+- 2026-07-13 — resolved, commit 3abe6150.
