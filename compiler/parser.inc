@@ -6312,6 +6312,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
     rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
+    castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
@@ -8930,6 +8931,16 @@ begin
         begin
           LastTypeRecId := REC_UCLASS_BASE + rcCi;
           LastExprTk := tyRecord;
+          { postfix chaining on the ctor result: TPt.Create(7,8).Sum — the
+            lifted temp is an addressable record, so the ordinary selector
+            machinery works on the call node (the known gap on
+            feature-pascal-record-constructors). }
+          if CurTok.Kind in [tkDot, tkLBrack] then
+          begin
+            castTk2 := tyRecord;
+            mcallNode := ParseClassRecordSelectors(mcallNode, REC_UCLASS_BASE + rcCi, castTk2);
+            LastExprTk := castTk2;
+          end;
         end;
         CurASTNode := mcallNode;
         Exit;

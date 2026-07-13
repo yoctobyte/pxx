@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** bug (compat — hard error, easy workaround)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 
 ## Symptom
 ```pascal
@@ -41,3 +41,12 @@ they are the same shape.
 ## Log
 - 2026-07-13 — found while landing advanced-record `class operator`
   ([[feature-pascal-record-constructors]]). Split out rather than widening that change.
+
+## RESOLVED 2026-07-14 (b333)
+ResolveNodeRec's AN_CALL case falls back to the LIFTED TEMP's RecName when the
+proc carries no return rec — a record CONSTRUCTOR "returns" through the hidden
+temp, so operator dispatch (and everything else asking "which record is this
+call?") now sees it. Bonus in the same commit: postfix selectors chain on the
+factory result (TPt.Create(7,8).Sum), closing the other gap noted on
+feature-pascal-record-constructors. Pinned: test_record_ctor_expr_tails_b333.
+- 2026-07-14 — resolved, commit HEAD.

@@ -6137,7 +6137,17 @@ begin
     { A CALL's record is its return type's. A property GETTER is a call, so without this
       `for x in o.Bag` (Bag a property) could not tell that the container was a class at all.
       Guarded on a real proc index: the special-builtin calls carry a NEGATIVE id there. }
-    Result := ProcRetRecId[Integer(ASTIVal[node])]
+  begin
+    Result := ProcRetRecId[Integer(ASTIVal[node])];
+    { A RECORD-FACTORY call (TPt.Create(...) — a record CONSTRUCTOR) has no
+      return-rec on the proc (ctors return nothing); its record is the hidden
+      LIFTED TEMP's. Without this, `TPt.Create(1,2) + TPt.Create(3,4)` could
+      not find the record's operator overload
+      (bug-pascal-operator-on-record-call-result). }
+    if (Result = REC_NONE) and (ASTLiftedVar[node] >= 0) and
+       (ASTLiftedVar[node] < SymCount) then
+      Result := Syms[ASTLiftedVar[node]].RecName;
+  end
   else if ASTKind[node] = AN_COMMA then
     { `(a, b)` yields b's value, so its record is b's. Without this a struct-valued
       comma resolved to REC_NONE and a call marshalled it as a SCALAR: csmith's
