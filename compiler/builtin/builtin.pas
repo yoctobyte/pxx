@@ -31,7 +31,7 @@ function PCharToString(p: PChar): AnsiString;
   unit converts at the boundary. The PAIR form is surrogate-aware: a high+low
   surrogate pair combines into one 4-byte code point (FPC's UTF-16 -> UTF-8
   conversion does the same); anything else encodes each unit independently.
-  A LONE surrogate encodes as '?', matching FPC's invalid-sequence behaviour. }
+  A LONE surrogate yields the empty string, matching FPC's conversion. }
 function __pxxWideCharToUTF8(u: Integer): AnsiString;
 function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
 
@@ -270,13 +270,54 @@ function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 { Format a Double like write(v:width:decimals). decimals < 0 -> natural form
   (FloatToStr); decimals >= 0 -> fixed, round-to-nearest, exactly `decimals`
   fractional digits (0 -> rounded integer, no point). Then right-justify to
-  width with spaces. Matches the writeln float formatter for normal-range values. }
+  width with spaces. Matches the writeln float formatter for normal-range values.
+
+  width < 0 (only the `Str(F, S)` statement's no-width default passes it):
+  FPC's default Str(Double) form — ` d.ddddddddddddddddE+eee`, 17 significant
+  digits, a LEADING SPACE for non-negative (where the '-' would go), 3-digit
+  signed exponent. fcl-json's float tests do `Str(F,S); Delete(S,1,1)` and
+  compare against the DOM's output, so both sides must produce FPC's text. }
 var
   neg: Boolean;
   pw, scaled, ip, fp: Int64;
   i: Integer;
   frac: string;
+  e: Integer;
+  m: Double;
+  digs: AnsiString;
 begin
+  if (width < 0) and (decimals < 0) then
+  begin
+    neg := v < 0;
+    if neg then v := -v;
+    e := 0;
+    if v = 0 then
+      digs := '00000000000000000'
+    else
+    begin
+      m := v;
+      while m >= 10.0 do begin m := m / 10.0; e := e + 1; end;
+      while m < 1.0 do begin m := m * 10.0; e := e - 1; end;
+      scaled := Round(m * 1e16);            { 17 significant digits }
+      if scaled >= 100000000000000000 then  { rounding carried into a new digit }
+      begin
+        scaled := scaled div 10;
+        e := e + 1;
+      end;
+      digs := StrInt(scaled, 0);
+      while Length(digs) < 17 do digs := '0' + digs;
+    end;
+    if neg then Result := '-' else Result := ' ';
+    Result := Result + digs[1] + '.';
+    for i := 2 to 17 do Result := Result + digs[i];
+    if e < 0 then begin Result := Result + 'E-'; e := -e; end
+    else Result := Result + 'E+';
+    frac := StrInt(e, 0);
+    while Length(frac) < 3 do frac := '0' + frac;
+    Result := Result + frac;
+    Exit;
+  end;
+  if width < 0 then width := 0;
   if decimals < 0 then
     Result := FloatToStr(v)
   else
@@ -468,8 +509,11 @@ begin
   end
   else if (u >= $D800) and (u <= $DFFF) then
   begin
-    { a lone UTF-16 surrogate is not a code point; FPC's conversion yields '?' }
-    Result := '?';
+    { a lone UTF-16 surrogate is not a code point; FPC's conversion DROPS it
+      (fpjson's MaybeAppendUnicode appends a stale high surrogate right after
+      the pair path already emitted the combined code point — FPC yields
+      nothing there, so must we) }
+    Result := '';
   end
   else
   begin

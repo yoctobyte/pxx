@@ -205,8 +205,8 @@ function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
 function UTF8Decode(const s: AnsiString): AnsiString;
 function UTF8Encode(const s: AnsiString): AnsiString;
 
-{ FPC SysUtils Int64/QWord parsers. StrToInt64 raises in FPC on malformed input; this RTL
-  returns 0, consistent with StrToInt above. StrToQWord parses an UNSIGNED 64-bit value. }
+{ FPC SysUtils Int64/QWord parsers. StrToInt64/StrToQWord raise EConvertError on
+  malformed input, like FPC; the *Def forms return the default instead. }
 function StrToInt64(const s: AnsiString): Int64;
 function StrToQWord(const s: AnsiString): QWord;
 function StrToQWordDef(const s: AnsiString; def: QWord): QWord;
@@ -456,22 +456,28 @@ begin
 end;
 
 function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
-var t: AnsiString; v: Integer;
+var t: AnsiString; f: Double;
 begin
+  { FPC TryStrToBool: the boolean WORDS, else ANY numeric string — a nonzero
+    value (float included: '1.2') is True. fcl-json's TJSONString.AsBoolean
+    depends on the float branch. }
   t := LowerCase(Trim(s));
   if t = 'true' then Result := True
   else if t = 'false' then Result := False
-  else
-  begin
-    v := StrToIntDef(t, -12345);
-    if v = -12345 then Result := def
-    else Result := (v <> 0);
-  end;
+  else if TryStrToFloat(t, f) then Result := (f <> 0)
+  else Result := def;
 end;
 
 function StrToBool(const s: AnsiString): Boolean;
+var t: AnsiString; f: Double;
 begin
-  Result := StrToBoolDef(s, False);
+  { FPC parity: raises EConvertError on a string that is neither a boolean
+    word nor numeric (this RTL used to return False silently). }
+  t := LowerCase(Trim(s));
+  if t = 'true' then Result := True
+  else if t = 'false' then Result := False
+  else if TryStrToFloat(t, f) then Result := (f <> 0)
+  else raise EConvertError.CreateFmt('"%s" is not a valid boolean', [s]);
 end;
 
 function UTF8Decode(const s: AnsiString): AnsiString;
@@ -523,7 +529,9 @@ end;
 
 function StrToInt64(const s: AnsiString): Int64;
 begin
-  Result := StrToInt64Def(s, 0);
+  { FPC parity: raises EConvertError on malformed input (used to return 0). }
+  if not TryStrToInt64(s, Result) then
+    raise EConvertError.CreateFmt('"%s" is an invalid integer', [s]);
 end;
 
 function StrToQWordDef(const s: AnsiString; def: QWord): QWord;
@@ -551,7 +559,9 @@ end;
 
 function StrToQWord(const s: AnsiString): QWord;
 begin
-  Result := StrToQWordDef(s, 0);
+  { FPC parity: raises EConvertError on malformed input (used to return 0). }
+  if not TryStrToQWord(s, Result) then
+    raise EConvertError.CreateFmt('"%s" is an invalid QWord', [s]);
 end;
 
 function HexStr(Value: Int64; Digits: Integer): AnsiString;
@@ -669,7 +679,9 @@ end;
 
 function StrToInt(const s: AnsiString): Integer;
 begin
-  Result := StrToIntDef(s, 0);
+  { FPC parity: raises EConvertError on malformed input (used to return 0). }
+  if not TryStrToInt(s, Result) then
+    raise EConvertError.CreateFmt('"%s" is an invalid integer', [s]);
 end;
 
 function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
@@ -894,7 +906,8 @@ begin
 end;
 
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
-var i, digit: Integer; c: Char; neg: Boolean; w, frac, divsor: Double; in_frac: Boolean; started: Boolean;
+var i, digit, e, k: Integer; c: Char; neg, eneg: Boolean;
+    w, frac, divsor, scale: Double; in_frac, started, estarted: Boolean;
 begin
   Result := def;
   i := 1; neg := False; w := 0.0; frac := 0.0; divsor := 1.0; in_frac := False; started := False;
@@ -904,6 +917,7 @@ begin
     if s[i] = '-' then neg := True;
     i := i + 1;
   end;
+  e := 0; eneg := False; estarted := True;
   while i <= Length(s) do
   begin
     c := s[i];
@@ -925,14 +939,40 @@ begin
       in_frac := True;
       i := i + 1;
     end
+    else if ((c = 'e') or (c = 'E')) and started then
+    begin
+      { exponent: [+|-]digits to the END of the string ('1e0', '1.2E+003') }
+      i := i + 1;
+      if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+      begin
+        if s[i] = '-' then eneg := True;
+        i := i + 1;
+      end;
+      estarted := False;
+      while i <= Length(s) do
+      begin
+        c := s[i];
+        if (c < '0') or (c > '9') then Exit;
+        e := e * 10 + (Ord(c) - Ord('0'));
+        estarted := True;
+        i := i + 1;
+      end;
+      if not estarted then Exit;
+    end
     else
       Exit;
   end;
-  if not started then Exit;
-  if neg then
-    Result := -(w + frac)
+  if not (started and estarted) then Exit;
+  scale := 1.0;
+  for k := 1 to e do scale := scale * 10.0;
+  if eneg then
+    w := (w + frac) / scale
   else
-    Result := w + frac;
+    w := (w + frac) * scale;
+  if neg then
+    Result := -w
+  else
+    Result := w;
 end;
 
 function StrToFloat(const s: AnsiString): Double;

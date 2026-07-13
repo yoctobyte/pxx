@@ -13723,7 +13723,14 @@ begin
         strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
         if strIsFloat then procIdx := FindProc('StrFloat') else procIdx := FindProc('StrInt');
         if procIdx < 0 then Error('Str: builtin unit not loaded');
-        if stepsNode < 0 then stepsNode := GenMakeIntLit(0);
+        { float with NO width: -1 selects FPC's default scientific Str form
+          (` d.ddd...E+eee`) in StrFloat; an explicit width keeps the fixed/
+          natural formatter. Integers keep 0 (plain digits, FPC-identical). }
+        if stepsNode < 0 then
+        begin
+          if strIsFloat and (decNode < 0) then stepsNode := GenMakeIntLit(-1)
+          else stepsNode := GenMakeIntLit(0);
+        end;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := stepsNode;
@@ -16165,6 +16172,18 @@ begin
           infers a real-typed const. Store the IEEE-754 double bits tagged
           tyDouble (sign handled by ParseInitVal); a use builds an AN_FLOAT_LIT. }
         AddConst(name, tyDouble, ParseInitVal);
+      end
+      else if (CurTok.Kind in [tkTrue, tkFalse]) and
+              (Tokens[TokPos].Kind = tkSemicolon) then
+      begin
+        { Untyped BOOLEAN constant (`const S = True;`). ConstEval collapses it
+          to an integer, which then boxed as vtInteger in `array of const` —
+          fpjson's TJSONArray.Create([S]) built a NUMBER element for a Boolean
+          (FPC: vtBoolean). Bare True/False only; a folded boolean EXPRESSION
+          still lands in the integer path below. }
+        if CurTok.Kind = tkTrue then v := 1 else v := 0;
+        Next;
+        AddConst(name, tyBoolean, v);
       end
       else
       begin

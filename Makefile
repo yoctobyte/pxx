@@ -471,6 +471,14 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# an untyped BOOLEAN const keeps tyBoolean (was collapsed to integer; fpjson's
+	# Create([S]) with const S=True built a NUMBER element)
+	./$(COMPILER) test/test_bool_const_varrec_b326.pas /tmp/test_bool_const_b32626
+	test "$$(/tmp/test_bool_const_b32626)" = "$$(printf 'vt=1 b=TRUE\nvt=1 b=FALSE\nvt=0 i=3\nvt=1 b=TRUE\npick=bool')"
+	# Str(F,S) no-width = FPC's scientific default ` d.dddE+eee`; explicit widths
+	# and writeln floats unchanged (fcl-json compares Str output on both sides)
+	./$(COMPILER) test/test_str_float_fpc_default_b327.pas /tmp/test_str_float_b32726
+	test "$$(/tmp/test_str_float_b32726)" = "$$(printf '[ 1.2000000000000000E+000]\n[ 0.0000000000000000E+000]\n[-1.5000000000000000E+000]\n[   1.200]\n1.20')"
 	# System.X(...) must beat a same-named METHOD of the enclosing class (qUnit=-2
 	# is explicit) — fpjson's System.Delete dispatched to TJSONArray.Delete, crash
 	./$(COMPILER) test/test_system_qualified_vs_method_b323.pas /tmp/test_sysqual_b32326
