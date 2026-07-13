@@ -212,3 +212,5 @@
 2026-07-12T23:14:55Z  v212  c344e9016131485596a990f4069bafa03370a05140bd713ba81fb4aae4c52f09  b039b3b6f3dbdebb84a2015c0552a62a481042c5  perf(heap): segregated free lists — O(1) alloc/free, ~6% off self-compile
 2026-07-13T00:19:17Z  v213  8667cbbc71069278f53c703b8f4c7e9a921917942a032bc054095de764e68501  671b0e74307a3ef6c903cccc456e023782a3291e  feat(rtl/rtti): class-level published-method enumeration (no instance needed)
 2026-07-13T01:33:15Z  v214  1fab39fd7518d0a31dfc5ea69e7886e990bed0c4bbe37d7c05e26233bc7f5e28  00766ec29d41354d858aa5fed5612e28c6fb108e  feat(pfront): const / class const sections inside a class body
+2026-07-13T03:34:51Z  v215  64cb58c2a4a0d9a9978a21ddcb055fd4ac8452a9f90fb5a86bd533ebe7e831c4  070d4102e86614f25de2b5a3e10eca7068f0f45a  fix(pfront): an unknown type name is an ERROR — closes the silent-Integer hole
+2026-07-13T03:39:47Z  v216  67cc94bdfee0dd33000cf9b414a4c27b8a7cf7c64f7ee23607426216bbda5dfc  070d4102e86614f25de2b5a3e10eca7068f0f45a  fix(pfront): an unknown type name is an ERROR — closes the silent-Integer hole
