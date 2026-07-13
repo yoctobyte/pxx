@@ -5062,6 +5062,7 @@ end;
   suffix and the method-call sites so `f(a).x`, `Self.M(a).x`, `obj.M(a).x` all
   resolve their trailing members. }
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
+var crBlob, crNode: Integer;   { class-reference ops on a chained value }
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
@@ -5077,13 +5078,40 @@ begin
       prevTok := TokPos - 1;
       fieldName := GetTokenStr(prevTok);
 
+      ci := -1;
+      if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
+
+      { The class-reference OPERATIONS on a chained value: `(Data as TJSONArray).ClassType`,
+        `(b as TD).ClassName`. They are not methods, so the method path below never matched --
+        and a pointer accepts any member name silently, so the selector was simply DROPPED and
+        the expression evaluated to the object pointer. It printed a number where a class name
+        was expected, with no error at all.
+
+        An INSTANCE reaches its blob through AN_RTTIOF; a class REFERENCE is the blob. A real
+        member of that name on the class still wins. }
+      if (ci >= 0) and (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) and
+         (FindUMeth(ci, fieldName) < 0) and (FindUField(ci, fieldName) < 0) and
+         (not UClsIsRecord[ci]) then
+      begin
+        crBlob := GenMakeRttiOfCall(node);
+        if crBlob >= 0 then
+        begin
+          Next;                          { consume the operation name }
+          crNode := GenMakeClassRefOp(crBlob, fieldName, outTk);
+          if crNode >= 0 then
+          begin
+            node := ParseClassRefOpTail(crNode, outTk);
+            recId := REC_NONE;
+            Continue;
+          end;
+        end;
+      end;
+
       { Method call on the value: `.M(args)` (or 0-arg `.M`). Checked before the
         field path so a method name isn't mistaken for a field. Mirrors the
         instance-method arg parsing (ref/array params taken by lvalue). Self =
         the current node; virtual methods dispatch dynamically on the real object
         (a hard cast doesn't change the dynamic type). }
-      ci := -1;
-      if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
 
       { Property on the value: TT(c).Prop — resolve to the backing field
         (rename the AN_FIELD to the accessor field) or the getter/setter call,

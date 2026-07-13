@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a class-reference OP chained after a value: d.Self_.ClassName / .InheritsFrom
+	./$(COMPILER) test/test_classref_op_chained_b296.pas /tmp/test_classref_op_chained_b29626
+	test "$$(/tmp/test_classref_op_chained_b29626)" = "$$(printf 'TD\nTRUE')"
 	# `for F in <property>` -- a container EXPRESSION with GetEnumerator, not a bare variable
 	./$(COMPILER) test/test_forin_property_b295.pas /tmp/test_forin_property_b29526
 	test "$$(/tmp/test_forin_property_b29526)" = "$$(printf '1 2 3 \n7 8 9 ')"
