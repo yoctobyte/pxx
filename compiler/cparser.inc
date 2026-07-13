@@ -5784,7 +5784,14 @@ begin
       arrLen := flatLen;
     end;
     nArrElems := 0;
+    { FLAT (1-D) pointer-array globals only. A MULTIDIM pointer array must be left for
+      the brace-elision walker below (the `dimCount >= 2` branch): this pre-scan has no
+      notion of nested braces or of the array's shape, and it would consume the whole
+      `{...}` and then emit nothing -- every element of `static int *g[2][3] = {{&x,..}}`
+      read back nil, and csmith's programs, which are full of such tables, dereferenced
+      them and died. }
     if (CurTok.Kind = tkAssign) and wasArr and (baseTk = tyPointer) and
+       (dimCount < 2) and
        (Tokens[TokPos].Kind = tkBegin) then
     begin
       Next; Next;  { consume assignment and opening initializer token }
@@ -5998,8 +6005,8 @@ begin
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
       if (CurTok.Kind = tkBegin) and wasArr and (dimCount >= 2) and
-         (baseTk <> tyRecord) and (baseTk <> tyPointer) and
-         (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) and
+         (baseTk <> tyRecord) and
+         (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk) or (baseTk = tyPointer)) and
          (idx >= 0) then
       begin
         { MULTIDIMENSIONAL ordinal-or-float global `int a[2][3] = {{1,2,3},{4,5,6}}`
