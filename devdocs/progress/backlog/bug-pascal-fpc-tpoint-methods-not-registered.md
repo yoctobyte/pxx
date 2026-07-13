@@ -100,3 +100,29 @@ before the parser sees it.
 
 Next: stop reproducing and go the other way — bisect the REAL typshrdh.inc/types.pp by cutting
 it down until the failure disappears.
+
+
+## 2026-07-13 — the include now parses IN FULL; the UNIT path is the remaining difference
+
+Bisected the real file instead of reproducing it, as the previous note said to. Including the
+REAL `typshrdh.inc` directly into a program now parses **completely** — every one of TPoint's
+and TRect's declarations. Getting there needed four genuine gaps closed, each one real and now
+landed:
+
+- `ValReal` was not a known type name;
+- DEFAULT PARAMETER VALUES on a record method (`Normalize: Boolean = False`);
+- METHOD-BACKED record properties (`read getHeight write setHeight` — TRect uses them, TSize is
+  field-backed);
+- open-array params, which are still rejected loudly
+  ([[bug-pascal-open-array-param-in-record-method]] — they segfaulted).
+
+The only error left when including it directly is `unresolved forward: TPoint.Offset`, which is
+CORRECT: typshrdh.inc is headers only; the bodies live in typshrd.inc.
+
+**But going through `types.pp` as a UNIT still truncates TPoint's body.** Same include, same
+content — parses in full from a program, loses everything after the fields when reached through
+the unit. That is now the whole remaining question, and it narrows this from "something eats
+tokens" to "the UNIT interface path eats tokens that the program path does not".
+
+Next: diff the two paths. The unit interface is where to look (a pre-scan / DeclItem excision
+that the program path does not run, or runs differently).

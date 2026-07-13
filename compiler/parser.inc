@@ -13419,6 +13419,8 @@ begin
         Currency deliberately match what lib/rtl/sysutils already declares them as. }
       else if CaseEqual(lo, 'widechar') then Result := tyUInt16    { 2 bytes, not 4 }
       else if CaseEqual(lo, 'comp') then Result := tyInt64
+      { ValReal — FPC's "widest available real". pxx's widest is Double. }
+      else if CaseEqual(lo, 'valreal') then Result := tyDouble
       else if CaseEqual(lo, 'tdatetime') then Result := tyDouble
       else if CaseEqual(lo, 'currency') then Result := tyDouble
       else if CaseEqual(lo, 'sizeint') then Result := tyNativeInt
@@ -14776,6 +14778,7 @@ procedure ParseRecordPropertyDecl(ci: Integer);
 var
   pnOff, pnLen, pri: Integer;
   rFOff, rFLen, wFOff, wFLen: Integer;
+  rMOff, rMLen, wMOff, wMLen: Integer;
   pTk: TTypeKind;
   pRec: Integer;
 begin
@@ -14789,31 +14792,50 @@ begin
   pTk := ParseTypeKind;
   pRec := LastTypeRecId;
 
-  rFOff := 0; rFLen := 0;
-  wFOff := 0; wFLen := 0;
+  rFOff := 0; rFLen := 0; rMOff := 0; rMLen := 0;
+  wFOff := 0; wFLen := 0; wMOff := 0; wMLen := 0;
 
   { `read` / `write` are TOKENS here (tkRead / tkwrite — they double as the I/O builtins),
     not identifiers. Testing for tkIdent silently never matched. }
   while (CurTok.Kind = tkRead) or (CurTok.Kind = tkwrite) do
   begin
+    { An accessor is either a FIELD (`read cy`) or a METHOD (`read getHeight`) — FPC's
+      typshrdh.inc uses both, TSize field-backed and TRect method-backed. Which one it is
+      is decided by looking it up, so the same syntax serves both. }
     if CurTok.Kind = tkRead then
     begin
       Next;
-      if not IsMemberNameTok then Error('expected record property read field');
-      if FindUField(ci, CurTok.SVal) < 0 then
-        Error('record property accessor must be a field: ' + CurTok.SVal);
-      rFOff := Tokens[TokPos-1].SOffset;
-      rFLen := Tokens[TokPos-1].SLen;
+      if not IsMemberNameTok then Error('expected record property read accessor');
+      if FindUField(ci, CurTok.SVal) >= 0 then
+      begin
+        rFOff := Tokens[TokPos-1].SOffset;
+        rFLen := Tokens[TokPos-1].SLen;
+      end
+      else if FindUMeth(ci, CurTok.SVal) >= 0 then
+      begin
+        rMOff := Tokens[TokPos-1].SOffset;
+        rMLen := Tokens[TokPos-1].SLen;
+      end
+      else
+        Error('record property accessor is neither a field nor a method: ' + CurTok.SVal);
       Next;
     end
     else
     begin
       Next;
-      if not IsMemberNameTok then Error('expected record property write field');
-      if FindUField(ci, CurTok.SVal) < 0 then
-        Error('record property accessor must be a field: ' + CurTok.SVal);
-      wFOff := Tokens[TokPos-1].SOffset;
-      wFLen := Tokens[TokPos-1].SLen;
+      if not IsMemberNameTok then Error('expected record property write accessor');
+      if FindUField(ci, CurTok.SVal) >= 0 then
+      begin
+        wFOff := Tokens[TokPos-1].SOffset;
+        wFLen := Tokens[TokPos-1].SLen;
+      end
+      else if FindUMeth(ci, CurTok.SVal) >= 0 then
+      begin
+        wMOff := Tokens[TokPos-1].SOffset;
+        wMLen := Tokens[TokPos-1].SLen;
+      end
+      else
+        Error('record property accessor is neither a field nor a method: ' + CurTok.SVal);
       Next;
     end;
   end;
@@ -14821,9 +14843,9 @@ begin
 
   pri := AddUProperty(ci, pnOff, pnLen, Ord(pTk), pRec);
   UPropReadFOff[pri] := rFOff;  UPropReadFLen[pri] := rFLen;
-  UPropReadMOff[pri] := 0;      UPropReadMLen[pri] := 0;
+  UPropReadMOff[pri] := rMOff;  UPropReadMLen[pri] := rMLen;
   UPropWriteFOff[pri] := wFOff; UPropWriteFLen[pri] := wFLen;
-  UPropWriteMOff[pri] := 0;     UPropWriteMLen[pri] := 0;
+  UPropWriteMOff[pri] := wMOff; UPropWriteMLen[pri] := wMLen;
   UPropPub[pri] := 0;
 end;
 
@@ -14847,8 +14869,21 @@ var
   pt: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  rmHasDef, rmStrDef, rmArr: array[0..MAX_PROC_PARAMS-1] of Boolean;
+  rmIsArr: Boolean;
+  rmValDef: array[0..MAX_PROC_PARAMS-1] of Int64;
+  rmSOffDef, rmSLenDef: array[0..MAX_PROC_PARAMS-1] of Integer;
+  rmDefVal: Int64;
+  rmDefSOff, rmDefSLen: Integer;
+  rmDefIsStr: Boolean;
   curTk, retTk: TTypeKind;
 begin
+  for k := 0 to MAX_PROC_PARAMS - 1 do
+  begin
+    rmHasDef[k] := False; rmStrDef[k] := False; rmArr[k] := False;
+    rmValDef[k] := 0; rmSOffDef[k] := 0; rmSLenDef[k] := 0;
+  end;
+  rmDefVal := 0; rmDefSOff := 0; rmDefSLen := 0; rmDefIsStr := False;
   { A record CONSTRUCTOR fills a fresh receiver rather than returning anything, so it
     registers exactly like a procedure whose Self is the record. Only the CALL differs. }
   isCtor := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor');
@@ -14887,13 +14922,51 @@ begin
         if not Eat(tkComma) then break;
       end;
       Expect(tkColon, ':');
+      { open-array param: `const Points: array of TPoint` (typshrdh.inc's TRect.Union) }
+      rmIsArr := False;
+      if CurTok.Kind = tkArray then
+      begin
+        { An open-array param needs the hidden length argument the class/routine paths set
+          up; registering it with IsArray alone produced a SEGFAULT at the call. Rejected
+          loudly rather than shipped as a crash — see
+          bug-pascal-open-array-param-in-record-method. (typshrdh.inc's TRect.Union uses
+          one, so that declaration still does not parse.) }
+        Error('open-array parameter in a record method is not supported yet');
+      end;
       curTk := ParseTypeKind;
       for k := startIdx to nP - 1 do
       begin
         pt[k] := curTk;
         ptRec[k] := LastTypeRecId;
+        rmArr[k] := rmIsArr;
         { a const record/variant param goes by reference, as everywhere else }
         pRef[k] := byref or (sawConst and ((curTk = tyRecord) or (curTk = tyVariant)));
+      end;
+      { default value: `Normalize: Boolean = False` (typshrdh.inc's TRect.Contains). Same
+        two shapes the other parameter parsers take — a string literal, or a folded ordinal. }
+      if CurTok.Kind = tkEq then
+      begin
+        Next;
+        if CurTok.Kind = tkString then
+        begin
+          rmDefSOff := Tokens[TokPos-1].SOffset;
+          rmDefSLen := Tokens[TokPos-1].SLen;
+          rmDefIsStr := True;
+          Next;
+        end
+        else
+        begin
+          rmDefVal := ConstEval;
+          rmDefIsStr := False;
+        end;
+        for k := startIdx to nP - 1 do
+        begin
+          rmHasDef[k] := True;
+          rmValDef[k] := rmDefVal;
+          rmStrDef[k] := rmDefIsStr;
+          rmSOffDef[k] := rmDefSOff;
+          rmSLenDef[k] := rmDefSLen;
+        end;
       end;
       if not Eat(tkSemicolon) then break;
     end;
@@ -14928,9 +15001,17 @@ begin
   for i := 0 to nP - 1 do
   begin
     Procs[mpi].Params[i].IsRef := pRef[i];
-    Procs[mpi].Params[i].IsArray := False;
+    Procs[mpi].Params[i].IsArray := rmArr[i];
     if (pt[i] = tyRecord) or (pt[i] = tyClass) then
       ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := ptRec[i];
+    if rmHasDef[i] then
+    begin
+      ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;
+      ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + i] := rmValDef[i];
+      ProcParamDefaultIsStr[mpi * MAX_PROC_PARAMS + i] := rmStrDef[i];
+      ProcParamDefaultSOff[mpi * MAX_PROC_PARAMS + i] := rmSOffDef[i];
+      ProcParamDefaultSLen[mpi * MAX_PROC_PARAMS + i] := rmSLenDef[i];
+    end;
   end;
 
   AddUMeth(ci, mnOff, mnLen, mpi);

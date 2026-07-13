@@ -30,8 +30,11 @@ type
   private
     function Half: Longint;
   public
-    { field-backed properties in a record — FPC's own TSize/TRect are records with these }
-    property FirstCoord: Longint read X write X;
+    { properties in a record — FPC's own TSize is field-backed, TRect method-backed }
+    property FirstCoord: Longint read X write X;      { FIELD-backed }
+    property Total: Longint read Sum;                 { METHOD-backed }
+    { a default parameter value on a record method (typshrdh.inc's TRect.Contains) }
+    function Scaled(f: Longint; Bump: Boolean = False): Longint;
   end;
 
 constructor TPt.Create(ax, ay: Longint);
@@ -71,6 +74,11 @@ end;
 function TPt.Sum: Longint;
 begin
   Sum := X + Y;
+end;
+
+function TPt.Scaled(f: Longint; Bump: Boolean = False): Longint;
+begin
+  if Bump then Scaled := (X * f) + 1 else Scaled := X * f;
 end;
 
 function TPt.Half: Longint;
@@ -124,4 +132,8 @@ begin
   writeln('prop-read=', b.FirstCoord);
   b.FirstCoord := 70;
   writeln('prop-write=', b.X);
+  writeln('prop-method=', b.Total);        { method-backed property }
+
+  { a default parameter value on a record method }
+  writeln('def=', b.Scaled(2), ' ', b.Scaled(2, True));
 end.
