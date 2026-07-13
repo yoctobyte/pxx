@@ -32,11 +32,12 @@ cases need no judgement at all and are labelled as such below:
 Usage:
   tools/pasmith_run.py --minutes 5
   tools/pasmith_run.py --seeds 1-200 --cross      # add QEMU cross-targets
-  tools/pasmith_run.py --seed 12345 --shrink-only # re-shrink one finding
+  tools/pasmith_run.py --seed 12345               # re-run one seed (it IS the repro)
 """
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -49,8 +50,10 @@ RTL = os.path.join(ROOT, "lib", "rtl")
 PASMITH = os.path.join(ROOT, "tools", "pasmith.py")
 RUN_TARGET = os.path.join(ROOT, "tools", "run_target.sh")
 FINDINGS = os.environ.get("PASMITH_FINDINGS_DIR", "/tmp/pxx_pasmith_findings")
-RUN_TIMEOUT = 10
-COMPILE_TIMEOUT = 120
+# Everything is bounded. A generated program terminates by construction, so a
+# run that hits the timeout is itself a finding, never a reason to wait longer.
+RUN_TIMEOUT = 5
+COMPILE_TIMEOUT = 30
 
 CROSS_ARCHS = ["i386", "aarch64", "arm32"]
 
@@ -150,55 +153,122 @@ def classify(results):
     return True, groups, note
 
 
-def diverges(src, workdir, oracles, baseline_note):
-    res = {o.name: evaluate(o, src, workdir) for o in oracles}
-    bad, groups, note = classify(res)
-    # During shrinking we require the SAME kind of divergence, not just any --
-    # otherwise the shrinker happily "reduces" a codegen bug into an unrelated
-    # compile error and the reproducer proves nothing.
-    if bad and note == baseline_note:
-        return True, res, note
-    return False, res, note
+def localize(src, workdir, oracles, groups):
+    """Point at the STATEMENT that first diverged -- without deleting anything.
 
+    This replaces a delta-debugging shrinker, deliberately. Shrinking exists in
+    Csmith because its reproducers go to strangers who will not read 40KB. Ours
+    go to an agent in this repo, and the program is SEEDED: `--seed N` already
+    is the reproducer, permanently and for free, at any size. Reducing the
+    source buys nothing here -- and the pressure to reduce it pushes toward
+    generating SMALL programs, which is precisely backwards. Small programs make
+    the fuzzer's job easy and the compiler's job easy; the whole point is the
+    opposite. Deep inheritance chains, ctor/dtor ordering and vtable dispatch do
+    not even begin to strain a compiler until programs are LARGE.
 
-def shrink(src_path, workdir, oracles, note, max_passes=8):
-    """Greedy line-wise delta debug, gated on the divergence still reproducing.
-
-    Deleting a line usually breaks syntax; that candidate simply fails to
-    reproduce (FPC won't compile it) and is rejected. Crude, but it is a
-    generated program -- most of it is dead weight, and cutting 90% of the
-    lines is what makes a finding a filable ticket instead of a wall of text.
+    So instead of cutting code down, we ask the program where it went wrong.
+    pasmith --trace emits the running checksum after every statement rather than
+    only at exit. Run the same program under two oracles, diff the two traces,
+    and the FIRST differing checkpoint is the guilty statement -- located
+    exactly, in one run per oracle, on a program of any size. Cost is O(1)
+    compiles instead of O(lines), and it gets BETTER with bigger programs
+    instead of collapsing.
     """
+    names = sorted(groups.items(), key=lambda kv: -len(kv[1]))
+    if len(names) < 2:
+        return None
+    a_name = sorted(names[0][1])[0]
+    b_name = sorted(names[1][1])[0]
+    by = {o.name: o for o in oracles}
+    if a_name not in by or b_name not in by:
+        return None
+
+    # Rebuild the SAME program in trace mode. The seed plus the gen-args
+    # recorded in the source header reproduce it byte-for-byte, so no state
+    # needs to be threaded here -- the source is self-describing.
+    traced = os.path.join(workdir, "traced.pas")
+    rc, _ = run([sys.executable, PASMITH, "--seed", str(seed_of(src)),
+                 "--trace", "-o", traced] + gen_args_of(src), 60)
+    if rc != 0:
+        return None
+
+    ta = evaluate(by[a_name], traced, workdir)
+    tb = evaluate(by[b_name], traced, workdir)
+    la, lb = ta.split("\n"), tb.split("\n")
+    for i in range(min(len(la), len(lb))):
+        if la[i] != lb[i]:
+            return ("first divergence at checkpoint %d of %d\n"
+                    "    %-10s %s\n    %-10s %s\n"
+                    "    (checkpoint N = the Nth statement of the traced program;\n"
+                    "     everything before it agrees, so the bug is AT that statement)"
+                    % (i + 1, min(len(la), len(lb)), a_name, la[i], b_name, lb[i]))
+    return "traces agree up to the shorter one (%d vs %d checkpoints)" % (len(la), len(lb))
+
+
+# The traced rebuild has to reproduce the SAME program, so the generation
+# parameters travel with the source rather than being guessed.
+def seed_of(src_path):
     with open(src_path) as f:
-        lines = f.read().split("\n")
-    cand_path = os.path.join(workdir, "shrink.pas")
+        for line in f:
+            m = re.search(r"seed (\d+)", line)
+            if m:
+                return int(m.group(1))
+    return 0
 
-    def repro(ls):
-        with open(cand_path, "w") as f:
-            f.write("\n".join(ls))
-        ok, _, _ = diverges(cand_path, workdir, oracles, note)
-        return ok
 
-    for _ in range(max_passes):
-        progress = False
-        i = 0
-        while i < len(lines):
-            ln = lines[i].strip()
-            # Never delete the structural skeleton -- doing so can only ever
-            # produce a non-compiling candidate, so it wastes a compile.
-            if (ln.startswith("program ") or ln.startswith("{$") or ln == "begin"
-                    or ln in ("end.", "end;", "end") or ln.startswith("writeln")):
-                i += 1
-                continue
-            trial = lines[:i] + lines[i + 1:]
-            if repro(trial):
-                lines = trial
-                progress = True
-            else:
-                i += 1
-        if not progress:
-            break
-    return "\n".join(lines)
+def gen_args_of(src_path):
+    with open(src_path) as f:
+        head = f.read(2000)
+    m = re.search(r"gen-args:([^}\n]*)", head)
+    return m.group(1).split() if m else []
+
+
+def check(nseeds, args):
+    """The GENERATOR's own gate: does FPC accept everything pasmith emits?
+
+    This is the tool's test, and it is deliberately cheap: compile only, never
+    run, one oracle, no shrinking, no iteration. pasmith's contract is "emits
+    valid, well-typed objfpc" -- FPC accepting the program IS that contract,
+    and it is a syntax/semantics question, so a compile answers it in full.
+    Anything FPC rejects is a generator bug, full stop (a compiler can't be
+    'wrong' about code we promised would be valid), so this needs none of the
+    differential machinery and none of its cost.
+
+    Run this after touching pasmith.py. Divergence hunting is a separate,
+    slower activity -- do not conflate them.
+    """
+    workdir = tempfile.mkdtemp(prefix="pasmith-check.")
+    fpc = Oracle("fpc-O0", "fpc", ["-O-"])
+    bad = []
+    t0 = time.time()
+    for seed in range(1, nseeds + 1):
+        src = os.path.join(workdir, "c%d.pas" % seed)
+        rc, out = run([sys.executable, PASMITH, "--seed", str(seed),
+                       "--vars", str(args.vars), "--funcs", str(args.funcs),
+                       "--stmts", str(args.stmts), "--depth", str(args.depth),
+                       "-o", src], 60)
+        if rc != 0:
+            bad.append((seed, "generator crashed: %s" % out.strip()[:120]))
+            continue
+        outbin = os.path.join(workdir, "c%d" % seed)
+        rc, txt = run(["fpc", "-Mobjfpc", "-vw", "-O-", "-o" + outbin, src],
+                      COMPILE_TIMEOUT, cwd=workdir)
+        if rc != 0:
+            errs = [l for l in txt.split("\n") if "Error:" in l or "Fatal:" in l]
+            bad.append((seed, errs[0].strip() if errs else "fpc rc=%d" % rc))
+            shutil.copy(src, os.path.join(FINDINGS, "reject_seed_%d.pas" % seed))
+    dt = time.time() - t0
+
+    print("pasmith --check: %d seeds, %d rejected by FPC  (%.1fs)"
+          % (nseeds, len(bad), dt))
+    for seed, why in bad[:10]:
+        print("  seed %-5d %s" % (seed, why))
+    if bad:
+        print("\nFPC rejecting pasmith output is a GENERATOR bug -- pasmith's whole")
+        print("contract is that it emits valid objfpc. Fix pasmith, not the compiler.")
+        print("Rejected sources saved to %s/reject_seed_*.pas" % FINDINGS)
+        return 1
+    return 0
 
 
 def parse_seeds(spec):
@@ -214,7 +284,12 @@ def main():
     ap.add_argument("--seeds", help="explicit seed range, e.g. 1-500 (overrides --minutes)")
     ap.add_argument("--seed", type=int, help="single seed")
     ap.add_argument("--cross", action="store_true", help="also run pxx cross-targets under QEMU")
-    ap.add_argument("--no-shrink", action="store_true")
+    ap.add_argument("--check", type=int, metavar="N", nargs="?", const=50,
+                    help="GENERATOR GATE: compile N seeds with FPC only (no run, no "
+                         "oracles). FPC must accept 100%%; anything else is a pasmith "
+                         "bug. Fast, non-iterative. Run after touching pasmith.py.")
+    ap.add_argument("--no-localize", action="store_true",
+                    help="skip the trace-diff that names the diverging statement")
     ap.add_argument("--start", type=int, default=1, help="first seed for the timed loop")
     ap.add_argument("--vars", type=int, default=8)
     ap.add_argument("--funcs", type=int, default=3)
@@ -229,8 +304,11 @@ def main():
         print("fpc not found -- the external oracle is the point of this tool", file=sys.stderr)
         return 2
 
-    oracles = build_oracles(a.cross)
     os.makedirs(FINDINGS, exist_ok=True)
+    if a.check is not None:
+        return check(a.check, a)
+
+    oracles = build_oracles(a.cross)
     workdir = tempfile.mkdtemp(prefix="pasmith.")
 
     if a.seed is not None:
@@ -282,17 +360,19 @@ def main():
 
             stem = os.path.join(FINDINGS, "seed_%d" % seed)
             shutil.copy(src, stem + ".pas")
-            if not a.no_shrink:
-                print("    shrinking...")
-                small = shrink(src, workdir, oracles, note)
-                with open(stem + ".min.pas", "w") as f:
-                    f.write(small)
-                nl = len([x for x in small.split("\n") if x.strip()])
-                print("    shrunk to %d lines -> %s.min.pas" % (nl, stem))
+            loc = None
+            if not a.no_localize and "REJECTED" not in note:
+                loc = localize(src, workdir, oracles, groups)
+                if loc:
+                    print("    %s" % loc.replace("\n", "\n    "))
             with open(stem + ".txt", "w") as f:
                 f.write("seed=%d\nnote=%s\n\n" % (seed, note))
                 for k, v in sorted(res.items()):
                     f.write("%-12s %s\n" % (k, v))
+                if loc:
+                    f.write("\n%s\n" % loc)
+                f.write("\nrepro: tools/pasmith.py --seed %d --vars %d --funcs %d "
+                        "--stmts %d --depth %d\n" % (seed, a.vars, a.funcs, a.stmts, a.depth))
             seed += 1
     except KeyboardInterrupt:
         print("\ninterrupted")
