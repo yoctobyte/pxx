@@ -3842,6 +3842,25 @@ begin
 
     AN_ADDR:
     begin
+      { `@s` where s is a scalar MANAGED STRING: the address of the VARIABLE, not of its data.
+
+        IR_LEA on such a symbol deliberately LOADS the handle rather than taking the address --
+        the slot holds a heap pointer, and every consumer that wants "the string's bytes" (a
+        by-ref pass, C interop) wants exactly that. But it makes `@s` return the data pointer,
+        so `p: ^string; p := @s; p^` read the string's first 8 bytes AS IF they were a handle
+        and segfaulted (bug-pascal-deref-managed-string-ptr).
+
+        AN_SLOTADDR is precisely "the variable's own slot, no auto-deref", so `@` on a managed
+        string ident uses it. Nothing else changes: the by-ref and lvalue-write paths do not go
+        through AN_ADDR. }
+      if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
+         (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyAnsiString) and
+         (not Syms[ASTIVal[ASTLeft[node]]].IsArray) then
+      begin
+        Result := IRAppend(IR_SLOTADDR, Integer(ASTIVal[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
+
       Result := IRLowerAddress(ASTLeft[node]);
       { The address VALUE is a pointer no matter what it points at.
         IRLowerAddress tags its node with the pointee's type; for a float
@@ -4840,8 +4859,16 @@ begin
            (ASTKind[ASTLeft[item]] = AN_DEREF) and
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
         begin
-          value := IRLowerAST(ASTLeft[ASTLeft[item]]);
-          IRTk[value] := Ord(tyAnsiString);
+          { `Length(ps^)` where ps: ^string. The commentary above describes the OLD model, in
+            which `@s` yielded the HANDLE, so ps held the handle and `ps^` WAS it -- hence
+            lowering ps itself and merely retagging it.
+
+            `@s` now yields the address of the VARIABLE (its slot), which is what @ means and
+            what makes `ps^` readable and writable at all. So ps is a slot address, and the
+            handle must be LOADED from it. Retagging ps without the load returned the length
+            of whatever the slot address happened to point at -- 0, in practice. }
+          value := IRAppend(IR_LOAD_MEM,
+                     IRLowerAST(ASTLeft[ASTLeft[item]]), -1, -1, 0, Ord(tyAnsiString));
         end
         else if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
            (ASTKind[ASTLeft[item]] = AN_CALL) and (ASTIVal[ASTLeft[item]] >= 0) and

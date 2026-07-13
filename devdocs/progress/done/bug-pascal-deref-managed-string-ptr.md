@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** bug
 - **Track:** A — core (managed-string deref lowering)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** writing the regression for [[bug-riscv32-string-literal-to-class-field]] — it
   is a SEPARATE defect that the test happened to also cover, and it reproduces on x86-64.
 
@@ -41,3 +41,6 @@ time, not segfault.
 
 ## Gate
 `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-13 — resolved, commit pending.

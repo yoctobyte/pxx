@@ -466,6 +466,10 @@ test-core: $(COMPILER)
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
+	# not the variable's address)
+	./$(COMPILER) test/test_deref_managed_string_b302.pas /tmp/test_deref_managed_string_b30226
+	test "$$(/tmp/test_deref_managed_string_b30226)" = "$$(printf 'read      : orig\nafter write: changed\nvia proc  : via proc\ncopied    : via proc len=8\nlen via ^ : 8')"
 	# `x in [constants]` is a BOOLEAN (it carried no type: printed 1/0, and `and` went bitwise)
 	./$(COMPILER) test/test_in_is_boolean_b301.pas /tmp/test_in_is_boolean_b30126
 	test "$$(/tmp/test_in_is_boolean_b30126)" = "$$(printf 'const enum : TRUE\nconst char : TRUE\nruntime    : TRUE\nvia bool   : TRUE\ncombined   : TRUE')"
