@@ -13325,6 +13325,13 @@ begin
         identifier and fell through to the unknown-name default — a 4-byte Integer where a
         1-byte char belongs, which also mislays any record or array it sits in. }
       else if CaseEqual(lo, 'ansichar') then Result := tyChar
+      { FPC's sized booleans, used by real bindings (Synapse). These are C-ABI booleans —
+        a fixed-width integer where nonzero means true — so they must keep their WIDTH:
+        LongBool is 4 bytes, WordBool 2, ByteBool 1. Mapping them onto tyBoolean would
+        silently change their size and corrupt any struct or call that crosses to C. }
+      else if CaseEqual(lo, 'longbool') then Result := tyInteger
+      else if CaseEqual(lo, 'wordbool') then Result := tyUInt16
+      else if CaseEqual(lo, 'bytebool') then Result := tyUInt8
       else if CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8') then Result := tyInt8
       else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16') then Result := tyInt16
