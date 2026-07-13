@@ -2227,7 +2227,15 @@ begin
     ai := 1;                    { param 0 is Self }
     while ai <= Procs[mpi].ParamCount - 1 do
     begin
-      if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
+      { An `array of const` argument written as a LITERAL -- `DoError(msg, ['Nil', x])`
+        (fpjson) -- and an open-array scalar literal. Without these the '[' is parsed as a
+        SET and dies on "set item must be one character". The plain-routine call path has
+        always checked for them; the method paths did not. }
+      if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, ai) then
+        exprNode := ParseVarRecLiteralAST
+      else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, ai) then
+        exprNode := ParseArrayCtorAST(Procs[mpi].Params[ai].TypeKind)
+      else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
         if ByRefArgStartsExpression then
         begin
@@ -3273,63 +3281,22 @@ begin
           if not UMthIsStatic[mmi] then
             Error('cannot call non-static method on class type directly');
 
-          mcallNode := AllocNode(AN_CALL);
-          ASTIVal[mcallNode] := mpi;
-          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-
           { Self (param 0) is the CLASS being named -- `TMyTest.Suite` passes TMyTest,
-            which is precisely what makes the metaclass idiom work. Passed even with
-            no argument list, since it is not optional. }
-          margSeq := AllocNode(AN_ARG);
+            which is precisely what makes the metaclass idiom work. Passed even with no
+            argument list, since it is not optional.
+
+            The argument list itself goes through GenMakeStaticMethodCall, the same builder
+            the bare and instance-reached forms use -- so an `array of const` LITERAL
+            argument (`TJSONData.DoError(msg, ['Nil', x])`, fpjson) is recognised here too.
+            This block used to hand-roll its own arg loop, which parsed the '[' as a SET and
+            died on "set item must be one character". }
           mselfArg := AllocNode(AN_CLASSREF);
           ASTIVal[mselfArg] := ci;
           ASTTk[mselfArg] := Ord(tyPointer);
-          ASTLeft[margSeq] := mselfArg;
-          ASTLeft[mcallNode] := margSeq;
-          mlastArg := margSeq;
-
-          if CurTok.Kind = tkLParen then
-          begin
-            Next;
-            mai := 1;
-            while mai <= Procs[mpi].ParamCount-1 do
-            begin
-              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-              begin
-                if ByRefArgStartsExpression then
-                begin
-                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
-                    param, [..] literals, casts): parse as an expression }
-                  ParseExpr; mexprNode := CurASTNode;
-                end
-                else
-                begin
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
-                end;
-              end
-              else
-              begin
-                ParseExpr; mexprNode := CurASTNode;
-              end;
-              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-              if mlastArg = -1 then
-                ASTLeft[mcallNode] := margSeq
-              else
-                ASTRight[mlastArg] := margSeq;
-              mlastArg := margSeq;
-              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
-              begin
-                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
-                mai := Procs[mpi].ParamCount-1;
-              end
-              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-              Inc(mai);
-            end;
-            Expect(tkRParen, ')');
-          end
-          else if CanFillDefaultsFrom(mpi, 1) then
-            FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+          mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
 
           Result := mcallNode;
           Exit;
@@ -3746,6 +3713,24 @@ begin
         ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE;
       if ci >= 0 then
       begin
+        { A class-reference OPERATION on a TYPED metaclass (`AClass: TJSONDataClass`):
+          `AClass.InheritsFrom(MinJSONInstanceTypes[AType])`, `AClass.ClassName` -- fpjson's
+          SetJSONInstanceType does both. A typed metaclass carries a concrete class id, so it
+          lands in this branch rather than the bare-class-reference one, and the ops had to be
+          taught here too. A real member of that name on the class still wins. }
+        if (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) and
+           (FindUMeth(ci, fieldName) < 0) then
+        begin
+          Next;                        { consume the operation name }
+          mcallNode := GenMakeClassRefOp(node, fieldName, tk);
+          if mcallNode >= 0 then
+          begin
+            recName := REC_NONE;
+            Result := ParseClassRefOpTail(mcallNode, tk);
+            Exit;
+          end;
+        end;
+
         { Any CONSTRUCTOR through the metaclass, not just one spelled `Create`. FPC
           names them freely -- fpcunit's suite builder calls `tc.CreateWith(name, sn)`
           -- and UMthIsCtor is what actually marks one. Matching on the NAME 'create'
@@ -5667,10 +5652,17 @@ begin
   else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
   else if CaseEqual(nm, 'longint') then Result := tyInt32
   else if CaseEqual(nm, 'integer') then Result := tyInteger
-  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'uint32') then Result := tyUInt32
+  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'uint32')
+       or CaseEqual(nm, 'dword') then Result := tyUInt32
   else if CaseEqual(nm, 'int64') then Result := tyInt64
+  else if CaseEqual(nm, 'qword') or CaseEqual(nm, 'uint64') then Result := tyUInt64
+  else if CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint') then Result := tyNativeInt
+  else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then Result := tyNativeUInt
   else if CaseEqual(nm, 'boolean') then Result := tyBoolean
   else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
+  { WideChar is a 2-byte ordinal here (this RTL is byte/ASCII throughout; the type exists so
+    FPC sources that name it compile). `WideChar(x)` is fpjson's \u escape decoder. }
+  else if CaseEqual(nm, 'widechar') then Result := tyUInt16
   else Result := tyUnknown;
 end;
 
@@ -7078,6 +7070,29 @@ begin
         if nArgs <> 5 then Error('__pxxclone: expects exactly 5 arguments (flags, childStack, entry, arg, ctidptr)');
         LastExprTk := tyInt64;
         CurASTNode := node;
+        Exit;
+      end;
+
+      { A value cast to an ordinal type NAMED BY AN IDENTIFIER -- `WideChar(x)` (fpjson's
+        \u escape decoder). The builtin casts above key on the type KEYWORD token
+        (tkInteger_T etc.), so a type whose name merely lexes as an identifier -- WideChar,
+        QWord, NativeInt -- had no cast at all and came out as "undefined variable".
+
+        AN_PTR_CAST with ASTIVal = -1 is the real-width-truncating value cast (the same node
+        `Byte(x)` builds), not the Integer/LongWord value-pun. A variable, routine or user
+        type alias of the same name still wins. }
+      if (FindSym(name) < 0) and (FindProc(name) < 0) and (FindTypeAlias(name) < 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         (OrdinalNameToTk(name) <> tyUnknown) then
+      begin
+        tk := OrdinalNameToTk(name);
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := -1;
+        ASTTk[node] := Ord(tk);
+        CurASTNode := node;
+        LastExprTk := tk;
         Exit;
       end;
 

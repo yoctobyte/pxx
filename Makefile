@@ -444,6 +444,12 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a value cast to an ordinal type NAMED BY AN IDENTIFIER: WideChar(x) / QWord(x)
+	./$(COMPILER) test/test_ident_ordinal_cast_b286.pas /tmp/test_ident_ordinal_cast_b28626
+	test "$$(/tmp/test_ident_ordinal_cast_b28626)" = "$$(printf 'Byte(300)     = 44 (44)\nWord(300)     = 300 (300)\nWideChar(65)  = 65 (65)\nWideChar(300) = 300 (300)\nCardinal(...) = 4294967295 (4294967295)\nQWord(-1)     = 18446744073709551615\nNativeInt(5)  = 5 (5)')"
+	# an `array of const` LITERAL passed to a METHOD (fpjson TJSONData.DoError)
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_arrayofconst_to_method_b287.pas /tmp/test_arrayofconst_to_method_b28726
+	test "$$(/tmp/test_arrayofconst_to_method_b28726)" = "$$(printf 'direct: answer = 42\n  n=2 -> class: answer = 42')"
 	# an initialised array of CLASS REFERENCES (elements are class names) -- const AND var
 	./$(COMPILER) test/test_classref_array_const_b285.pas /tmp/test_classref_array_const_b28526
 	test "$$(/tmp/test_classref_array_const_b28526)" = "$$(printf 'TBase TMid TLeaf \nTLeaf TBase TMid \nleaf<-base: TRUE\nbase<-leaf: FALSE')"

@@ -109,6 +109,11 @@ function IntToStr(value: Int64): AnsiString;
   (FPC SysUtils.IntToHex). Negative values use their two's-complement bits. }
 function IntToHex(value: Int64; digits: Integer): AnsiString;
 
+{ FPC System.HexStr(Value, Digits): uppercase hex, left-zero-padded to Digits. Same result
+  as IntToHex; declared because FPC code calls it by this name (fpjson escapes a character
+  as `'\u' + HexStr(Ord(S[I]), 4)`). }
+function HexStr(Value: Int64; Digits: Integer): AnsiString;
+
 { A string of Count copies of ch (FPC SysUtils.StringOfChar; '' if Count<=0). }
 function StringOfChar(ch: Char; count: Integer): AnsiString;
 
@@ -338,6 +343,11 @@ constructor Exception.Create(const msg: string);
 begin
   FMessage := msg;
   FHelpContext := 0;
+end;
+
+function HexStr(Value: Int64; Digits: Integer): AnsiString;
+begin
+  Result := IntToHex(Value, Digits);
 end;
 
 
