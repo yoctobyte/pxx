@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** feature (Pascal frontend validation)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** done
 - **Owner:** agent-A-fpcunit
 - **Parent:** [[feature-pascal-corpus-oop]]
 - **Unblocks:** [[feature-pascal-corpus-passrc]] (its tests are fpcunit-based), and every
@@ -131,3 +131,58 @@ method dedup in the FPC version falls out of walking own-then-parent.
 ### Remaining after that
 `TFPList` and the rest of the FPC container surface. Still parked; nothing half-applied,
 every compiler change above is committed, gated and pushed.
+
+## 2026-07-13 — RESOLVED. fpcunit COMPILES AND RUNS.
+
+```
+run:      3
+failures: 1      <- the deliberate one
+errors:   0
+```
+
+A `TTestCase` descendant's published `Test*` methods are discovered through RTTI, each is
+turned into a callable method pointer, invoked, and its assertion failures recorded. The
+whole chain works: RTTI method discovery -> method-pointer construction -> invocation ->
+assertion -> exception -> failure recording. fpcunit.pp itself is used UNMODIFIED (637
+procs); only `testutils` is substituted, which is the platform-internals half and always
+was the plan (see the note above).
+
+### What it took, in the order the walls came
+Each of these is a real Pascal-frontend feature, landed green with its own regression:
+
+| wall | what landed |
+| --- | --- |
+| `get_frame` / `get_pc_addr` / `get_caller_stackinfo` | real frame walk, one backend op (b270) |
+| `TObject.ClassName` | + an RTTI header for EVERY class, not just published ones (b271) |
+| bare sibling CLASS-method call | a static method needs no Self, it just had to be FOUND (b272) |
+| `AMethod;` | bare parenless call of a proc-var / method pointer, as a statement (b273) |
+| `ClassType` / `InheritsFrom` | + the chain `E.ClassType.InheritsFrom(C)` (b274) |
+| **`Self` in a class method** | **the METACLASS, and the RUNTIME class** (b275) |
+| `E is <class-ref VALUE>` | a TClass field/var, not a class name (b276) |
+| `TRunMethod(m)` | a method pointer built by hand from a TMethod record (b277) |
+| typed metaclasses | ANY constructor name + class methods through `class of T` (b278) |
+
+Plus RTL: ExceptClass, BackTraceStrFunc (+ a real default), BoolToStr, AnsiCompareStr/Text,
+UnicodeFormat, System.TMethod, and ExceptAddr as an explicit nil stub.
+
+### The one that mattered
+`Self` in a class method (b275). The cheap fix -- make it the statically-known class --
+compiles, runs, and silently builds a suite for the WRONG class: FPC's whole idiom is that
+`TMyTest.Suite` reaches `TAssert.Suite`'s body with `Self = TMyTest`. So the class is now
+passed as a real hidden argument, param 0 of every class method, and it propagates through
+bare sibling calls. Everything else in the list is reachable from that one decision.
+
+### Known gaps, filed not hidden
+- [[bug-cross-metaclass-new-with-args]] — constructing through a class reference WITH
+  ARGUMENTS segfaults on every non-x86-64 target. PRE-EXISTING (reproduces with the old
+  `Create` spelling and code path), but it means the fpcunit chain is x86-64-only until
+  fixed. **This is the next thing to do for this corpus.**
+- [[bug-pascal-exceptaddr-returns-nil]] — ExceptAddr is a declared stub; fpcunit only uses
+  it to print WHERE a failure happened, and prints `n/a` for nil, so pass/fail is unaffected.
+- Virtual class methods (`class function ... virtual`) still bind statically. FPC dispatches
+  them through the VMT. Not needed by fpcunit; worth a ticket if a rung above needs it.
+
+### Next rung
+[[feature-pascal-corpus-fpjson]] (rung 2) — and fpcunit being green is what unlocks it, since
+every FPC library's own suite is written against fpcunit.
+- 2026-07-13 — resolved, commit pending.
