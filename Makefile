@@ -471,6 +471,11 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# a ROUTINE-LOCAL const array of CLASS REFERENCES registered a PENDING GLOBAL init
+	# holding the routine-local symbol index — rolled back with the scope, so main lowered
+	# a dangling IR_LEA ("invalid symbol in lea"). Verified against FPC.
+	./$(COMPILER) test/test_local_const_classref_array_b317.pas /tmp/test_local_const_classref_b31726
+	test "$$(/tmp/test_local_const_classref_b31726)" = "$$(printf '0=TA\n1=TB\n0=TA\n1=TB\ng0=TB\ng1=TA')"
 	# `obj.F()` — EMPTY parens on a method whose params ALL have defaults (fcl-json writes
 	# `J.FormatJSON()`); the arg loop had no ZERO-argument case (verified vs FPC)
 	./$(COMPILER) test/test_empty_paren_default_args_b316.pas /tmp/test_empty_paren_b31626

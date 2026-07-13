@@ -15619,14 +15619,41 @@ begin
                 through the same per-class data-ref sentinel. }
               cClassIdx := FindUClass(CurTok.SVal);
               Next;
-              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-              PendingInitSym[PendingInitCount]  := cIdx;
-              PendingInitElem[PendingInitCount] := cLo + cElem;
-              PendingInitFOff[PendingInitCount] := -1;
-              PendingInitKind[PendingInitCount] := 8;
-              PendingInitVal[PendingInitCount]  := cClassIdx;
-              PendingInitTk[PendingInitCount]   := Ord(tyPointer);
-              Inc(PendingInitCount);
+              if isLocalConst then
+              begin
+                { A ROUTINE-LOCAL const array of class references. Every other element kind
+                  around here already forks on isLocalConst; this branch did not, and
+                  registered a PENDING GLOBAL initializer holding the routine-local symbol
+                  index. That index is rolled back with the routine's scope
+                  (SymRollbackTo), so by the time main ran the pending initializers it
+                  pointed past the end of the symbol table -- the strict-IR verifier caught
+                  it as "invalid symbol in lea", with a dangling IR_LEA in main.
+
+                  Local inits already carry kind 5 = AN_CLASSREF (the scalar metaclass
+                  const), and the flush honours LocalInitElem, so an array ELEMENT needs
+                  nothing new. fcl-json's testjsondata.pp does exactly this:
+                    Const MyJSONInstanceTypes : Array[TJSONInstanceType] of TJSONDataClass
+                            = (TJSONData, TMyInteger, ...); }
+                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+                LocalInitSym[LocalInitCount]  := cIdx;
+                LocalInitElem[LocalInitCount] := cLo + cElem;
+                LocalInitFOff[LocalInitCount] := -1;
+                LocalInitKind[LocalInitCount] := 5;      { AN_CLASSREF }
+                LocalInitVal[LocalInitCount]  := cClassIdx;
+                LocalInitTk[LocalInitCount]   := Ord(tyPointer);
+                Inc(LocalInitCount);
+              end
+              else
+              begin
+                if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+                PendingInitSym[PendingInitCount]  := cIdx;
+                PendingInitElem[PendingInitCount] := cLo + cElem;
+                PendingInitFOff[PendingInitCount] := -1;
+                PendingInitKind[PendingInitCount] := 8;
+                PendingInitVal[PendingInitCount]  := cClassIdx;
+                PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+                Inc(PendingInitCount);
+              end;
             end
             else if isLocalConst then
             begin
