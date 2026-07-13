@@ -38,6 +38,7 @@ import fnmatch
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -53,6 +54,8 @@ CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  "autoticket": True,   # stub regression tickets (face 1)
                  "idle_opt": True,     # idle: O-level differential sweep
                  "idle_bench": True,   # idle: tracked benchmark timings
+                 "idle_fuzz": True,    # idle: pasmith/fuzz.sh (endless, lowest prio)
+                 "fuzz_minutes": 10,   # time-box per idle fuzz slice
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
@@ -596,6 +599,97 @@ def clone_head_back(clone):
     sh(["git", "checkout", "--quiet", clone.branch], cwd=clone.path)
 
 
+def run_fuzz_idle(clone, host, st, sha, preempted):
+    """Idle work: spend spare cycles fuzzing (feature-fuzzer-idle-scheduling).
+
+    Differs from every other idle phase in one way that drives the whole design:
+    opt and bench are DONE-per-sha, so they self-terminate. Fuzzing is endless --
+    there is no point at which a sha is "fully fuzzed". So:
+
+      * It is strictly LAST in the idle chain. It may only ever consume cycles
+        that no real work wants; it must never delay a backfill, an opt sweep or
+        a bisect. (If it ran earlier in the chain it would starve them forever,
+        because it never finishes.)
+      * It is TIME-BOXED per slice (fuzz_minutes) and PREEMPTIBLE -- a push kills
+        it mid-slice and reclaims the box. A verdict on a real commit always wins
+        over a speculative bug hunt.
+      * The seed cursor PERSISTS across slices (st["fuzz_seed"]), so successive
+        slices explore new programs instead of re-running seed 1 forever. This is
+        the difference between a fuzzer and a very slow regression suite.
+
+    Findings are PUBLISHED, never auto-ticketed: an unattended loop that files
+    tickets produces ticket-spam, and a divergence needs triage (is it the
+    generator's fault?) before it is a bug. tstate/ is also the watcher
+    identity's entire write scope. A human or the Track T agent turns a finding
+    into a ticket in the owning lane.
+    """
+    minutes = float(CONF.get("fuzz_minutes", 10))
+    seed0 = int(st.get("fuzz_seed", 1))
+    runner = os.path.join(clone.path, "tools/pasmith_run.py")
+    if not os.path.exists(runner) or not shutil.which("fpc"):
+        return False        # no generator at this sha, or no oracle: skip silently
+    print("twatch: fuzz %s (%.0fm from seed %d)" % (sha[:12], minutes, seed0),
+          flush=True)
+    set_phase(clone, host, "fuzz", sha=sha, seed=seed0)
+    clone.checkout(sha)
+
+    findings = os.path.join(tempfile.gettempdir(), "twatch-fuzz-%d" % os.getpid())
+    env = dict(os.environ, PASMITH_FINDINGS_DIR=findings)
+    # OOP + strings: the rungs Csmith cannot reach, and the reason this
+    # generator exists. Big programs on purpose -- size is a feature here.
+    proc = subprocess.Popen(
+        [sys.executable, runner, "--minutes", str(minutes), "--start", str(seed0),
+         "--classes", "4", "--strs", "3", "--stmts", "20", "--vars", "10"],
+        cwd=clone.path, env=env, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, start_new_session=True)
+
+    out = []
+    while proc.poll() is None:
+        if preempted():
+            # A real push outranks speculative work: kill the GROUP (the runner
+            # spawns compilers and qemu) and drop the slice on the floor.
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except OSError:
+                pass
+            proc.wait()
+            print("twatch: fuzz preempted by a push — slice discarded", flush=True)
+            set_phase(clone, host, "idle")
+            return "aborted"
+        time.sleep(2)
+    out = proc.stdout.read().decode("utf-8", "replace") if proc.stdout else ""
+
+    nprog = ndiv = 0
+    m = re.search(r"(\d+) programs, (\d+) divergences", out)
+    if m:
+        nprog, ndiv = int(m.group(1)), int(m.group(2))
+    st = load_state(clone, host)
+    st["fuzz_seed"] = seed0 + max(nprog, 1)      # never re-walk the same seeds
+    st["last_fuzz"] = {"sha": sha, "date": utcnow(),
+                       "programs": nprog, "divergences": ndiv}
+    save_state(clone, host, st)
+
+    if ndiv:
+        # Publish the reproducer stanzas into tstate/ for triage. The seed IS
+        # the reproducer (pasmith is deterministic), so a few hundred bytes of
+        # text is a complete, permanent bug report -- no source to attach.
+        dst = os.path.join(clone.path, TSTATE_REL, "fuzz")
+        os.makedirs(dst, exist_ok=True)
+        kept = 0
+        for f in sorted(os.listdir(findings)) if os.path.isdir(findings) else []:
+            if f.endswith(".txt"):
+                shutil.copy(os.path.join(findings, f),
+                            os.path.join(dst, "%s-%s" % (sha[:12], f)))
+                kept += 1
+        print("twatch: fuzz found %d divergence(s) in %d programs — published %d "
+              "to tstate/fuzz (NOT ticketed: needs triage, the generator is the "
+              "first suspect)" % (ndiv, nprog, kept), flush=True)
+    clone.publish("tstate(%s): fuzz %s %d programs, %d divergences"
+                  % (host, sha[:12], nprog, ndiv))
+    set_phase(clone, host, "idle")
+    return True
+
+
 def run_bench_idle(clone, host, st, sha):
     """Idle work: tracked benchmark timings for the fully-tested sha — the
     clone's testmgr --bench, rows published to tstate/bench.tsv. Runs
@@ -976,6 +1070,18 @@ def main():
                     if args.once:
                         print("twatch: up to date (%s), nothing to do" % head[:12],
                               flush=True)
+            # LAST, and only when nothing real is left: everything tested, the
+            # full matrix done, no bisect pending. The fuzzer never finishes, so
+            # anywhere earlier in the chain it would starve every phase below it.
+            # Skipped in --once (a one-shot check should not sit fuzzing for 10
+            # minutes).
+            if not did_work and tested and not args.once \
+                    and CONF.get("idle_fuzz") \
+                    and (st.get("last_full") or {}).get("sha") == tested:
+                st = load_state(clone, host)
+                if run_fuzz_idle(clone, host, st, tested,
+                                 make_preempted(clone, tested)):
+                    did_work = True
             if not did_work:
                 set_phase(clone, host, "idle", head=head[:12])
             errors = 0

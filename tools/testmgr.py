@@ -26,6 +26,7 @@ Usage:
 """
 
 import argparse
+import atexit
 import fnmatch
 import json
 import os
@@ -36,9 +37,14 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Stable, unique per CLONE (not per run): build outputs must not collide with a
+# testmgr running in another checkout on the same box, but must still be reused
+# across runs in THIS checkout (make's incrementality depends on it).
+REPO_TAG = re.sub(r"[^A-Za-z0-9_-]", "-", REPO.strip("/"))[-40:]
 COMPILER = os.environ.get("TESTMGR_COMPILER", "compiler/pascal26")
 
 # ---------------------------------------------------------------- tiers ----
@@ -143,10 +149,221 @@ def save_metrics(m):
 
 
 LIVE_PATH = os.path.join(REPO, ".testmgr", "live.json")
+LOCK_PATH = os.path.join(REPO, ".testmgr", "run.lock")
+# How long the scheduler may make NO progress (nothing running, nothing
+# admitted) before it forces a job through the memory gates. See admit_forced().
+STARVE_GRACE = 90.0
+# A lock whose heartbeat is older than this is dead, whatever its pid says: a
+# SIGKILLed run leaves the file behind, and a stale lock that blocks every
+# future run is exactly as bad as no lock at all.
+HEARTBEAT_STALE = 120.0
+HEARTBEAT_PERIOD = 10.0         # beat interval; must be << HEARTBEAT_STALE
 # default work-weights for jobs with no learned duration yet, per class —
 # used only for the progress estimate, never for scheduling
 CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
                 "corpus": 45.0, "conformance": 90.0, "opt": 30.0}
+
+
+def pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def find_runs():
+    """Every testmgr on this box, whatever clone it belongs to. [(pid, repo, tier, age)]
+
+    You cannot find these with pstree, and that is the point. reexec_scoped()
+    re-execs testmgr inside a transient systemd scope (that is what applies the
+    memory cap), so systemd ADOPTS it: PPID becomes 1, it leaves the launching
+    shell's process tree, and it is not a job of that shell. Consequences:
+
+      * a running testmgr is invisible to `pstree` / `jobs` -- it looks like
+        nothing is happening;
+      * killing the shell, or the agent session, does NOT kill it. It runs on,
+        detached, until its global deadline.
+
+    So orphans accumulate silently across sessions, and every orphan holds memory,
+    which raises PSI, which makes NEW runs fail admission -- see admit_forced().
+    The orphans are the cause; the starvation was only the symptom. A per-repo
+    lock cannot see them (they are in other clones), so discovery has to be
+    box-wide, by scanning /proc.
+    """
+    out = []
+    me = os.getpid()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        try:
+            with open("/proc/%s/cmdline" % pid, "rb") as f:
+                argv = f.read().decode("utf-8", "replace").split("\0")
+        except OSError:
+            continue
+        path = next((a for a in argv if a.endswith("testmgr.py")), None)
+        if not path:
+            continue
+        tier = "?"
+        for i, a in enumerate(argv):
+            if a == "--tier" and i + 1 < len(argv):
+                tier = argv[i + 1]
+        repo = os.path.dirname(os.path.dirname(path))
+        try:
+            age = time.time() - os.path.getmtime("/proc/%s" % pid)
+        except OSError:
+            age = 0.0
+        out.append((int(pid), repo, tier, age))
+    return sorted(out)
+
+
+def read_lock():
+    try:
+        with open(LOCK_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def lock_state():
+    """(state, info) where state is 'free' | 'live' | 'stale'.
+
+    Liveness needs BOTH a live pid and a fresh heartbeat. A pid alone is not
+    enough: pids get reused, and a wedged run that stopped heartbeating is not
+    something a new run should defer to forever. A heartbeat alone is not enough
+    either -- it could be a file nobody is updating.
+    """
+    info = read_lock()
+    if not info:
+        return "free", None
+    age = time.time() - info.get("heartbeat", 0)
+    if pid_alive(info.get("pid", -1)) and age < HEARTBEAT_STALE:
+        return "live", info
+    return "stale", info
+
+
+def kill_run(pid, why):
+    """Kill a wedged/superseded testmgr, WITHOUT killing the caller.
+
+    Group-killing is what we want -- a testmgr that dies leaving orphaned qemu
+    or compiler children behind is half the reason the box gets starved in the
+    first place. But `killpg(getpgid(pid))` is a loaded gun: if that process
+    shares our process group (testmgr started plainly from a shell, no setsid),
+    the group is the SHELL's, and group-killing it takes down the shell, this
+    agent session, and every sibling job. The first run of this test SIGKILLed
+    itself proving exactly that.
+
+    So group-kill only a process that leads its own group (a scoped testmgr
+    does -- see reexec_scoped/setsid), never our own group, and otherwise fall
+    back to killing the single pid.
+    """
+    if not pid_alive(pid):
+        return
+    try:
+        pgid = os.getpgid(pid)
+    except OSError:
+        return
+    try:
+        if pgid == pid and pgid != os.getpgid(0):
+            os.killpg(pgid, signal.SIGKILL)     # leader of its own group: safe
+        else:
+            os.kill(pid, signal.SIGKILL)        # shares our group: pid only
+        print("testmgr: killed run pid %d — %s" % (pid, why), flush=True)
+    except OSError:
+        pass
+
+
+def reap_stale(info):
+    """Clean up after a run that died without releasing its lock."""
+    pid = info.get("pid", -1)
+    kill_run(pid, "wedged (no heartbeat for >%ds)" % HEARTBEAT_STALE)
+    scratch = "/tmp/testmgr-scratch-%d" % pid
+    if os.path.isdir(scratch):
+        shutil.rmtree(scratch, ignore_errors=True)
+    try:
+        os.unlink(LOCK_PATH)
+    except OSError:
+        pass
+
+
+def start_heartbeat(tier):
+    """Beat from a daemon thread, for the WHOLE process lifetime.
+
+    Not from the scheduler loop: build_compiler() and calibrate() run for
+    minutes before the loop is even reached, and a heartbeat that only ticks
+    while scheduling would go stale during a perfectly healthy build -- so a
+    second run would declare us wedged and kill us mid-build. Liveness must mean
+    "this process exists and is not frozen", which is a property of the process,
+    not of one phase of it.
+    """
+    def beat():
+        while True:
+            info = read_lock()
+            if not info or info.get("pid") != os.getpid():
+                return          # someone force-took the lock: stop pretending
+            info["heartbeat"] = time.time()
+            info["tier"] = tier
+            write_json_atomic(LOCK_PATH, info)
+            time.sleep(HEARTBEAT_PERIOD)
+    t = threading.Thread(target=beat, daemon=True)
+    t.start()
+    return t
+
+
+def release_lock():
+    """Drop the lock if it is still ours.
+
+    Covers clean exit, exception and SIGINT/SIGTERM (atexit). It cannot cover
+    SIGKILL or a power cut -- which is exactly why liveness is a HEARTBEAT and
+    not merely the presence of this file: the stale path reclaims what this
+    function never got to release.
+    """
+    info = read_lock()
+    if info and info.get("pid") == os.getpid():
+        try:
+            os.unlink(LOCK_PATH)
+        except OSError:
+            pass
+
+
+def acquire_lock(force):
+    """Refuse to pile onto a live run; reclaim a dead one. Returns True if ours.
+
+    Piling on is not harmless: admission is gated on GLOBAL machine memory, so a
+    second run does not merely queue behind the first -- it competes with it,
+    and both starve. "Re-running doesn't kill the old one" and "testmgr hangs"
+    are the same bug seen from two ends.
+    """
+    state, info = lock_state()
+    if state == "live" and not force:
+        ago = int(time.time() - info.get("started", time.time()))
+        print("testmgr: a run is ALREADY LIVE (pid %d, tier %s, started %dm%02ds ago)"
+              % (info.get("pid", -1), info.get("tier", "?"), ago // 60, ago % 60),
+              file=sys.stderr)
+        print("         Two runs compete for the same memory gates and starve each "
+              "other.\n"
+              "         Wait for it, or re-run with --force to kill it and take over.",
+              file=sys.stderr)
+        return False
+    if state == "live" and force:
+        print("testmgr: --force — killing the live run (pid %d) and taking over"
+              % info.get("pid", -1), flush=True)
+        kill_run(info.get("pid", -1), "superseded by --force")
+        reap_stale(info)
+    elif state == "stale":
+        reap_stale(info)
+    # Claim it NOW, not at the first scheduler tick. build_compiler() runs for
+    # minutes before the loop starts, and a lock that does not exist yet is a
+    # lock that does not work: a second run would sail straight through the
+    # check and race us. That race is not merely wasteful -- both runs build
+    # into the SAME fixed paths (/tmp/pascal26-build, -verify), so the self-host
+    # fixedpoint job compares one run's binary against the other's and reports a
+    # byte-1 difference. A FAKE self-host regression, on the very gate that
+    # blesses the stable binary. Observed while testing this lock.
+    write_json_atomic(LOCK_PATH, {
+        "pid": os.getpid(), "tier": "?",
+        "started": time.time(), "heartbeat": time.time()})
+    return True
 
 
 def write_json_atomic(path, obj):
@@ -683,6 +900,14 @@ class Manager:
         self.idle_frac = 1.0
         self.interrupted = False
         self.deadline = time.monotonic() + args.deadline
+        self._started = time.time()
+        # Forward-progress guarantee. See admit_forced() -- the admission gates
+        # look at GLOBAL machine state (PSI, swap, MemAvailable), so a loaded box
+        # can hold every job back forever. That is only sound while something of
+        # OURS is running and will finish and free the resource. With nothing
+        # running, waiting cannot help: it is a deadlock, not backpressure.
+        self._last_progress = time.monotonic()
+        self._degraded = False
 
     # -- lifecycle -----------------------------------------------------
     def launch(self, job):
@@ -830,6 +1055,52 @@ class Manager:
         self.last_stall_msg = now
         print("testmgr: admission held — %s" % why, flush=True)
 
+    def admit_forced(self, now):
+        """THE self-heal: never sit idle with work queued.
+
+        The admission gates in admit_ok() are all GLOBAL machine state -- memory
+        PSI, swap floor, MemAvailable. None of them is about us. So a box loaded
+        by somebody else (another agent's run, the twatch daemon, a browser)
+        holds back every job we have, and we sleep in the scheduler loop making
+        no progress until the global deadline fires, tens of minutes later. That
+        is what a "hung" testmgr actually is: not stuck, STARVED.
+
+        Backpressure is only sound while something of ours is RUNNING -- that job
+        will finish and release memory, so waiting is productive. With
+        self.running empty there is nothing to wait for and no reason to think
+        the next tick differs from this one. Deadlock, not backpressure.
+
+        So: nothing running + work queued + no progress for STARVE_GRACE seconds
+        => force ONE job through the gates, loudly. One at a time, so we degrade
+        to serial execution on a hostile box rather than piling on. Progress is
+        slow instead of absent, and the run always terminates.
+        """
+        if self.running or not self.queue:
+            self._degraded = False      # normal admission works again
+            return None
+        # Once starvation is established, DON'T re-serve the full grace period
+        # before every subsequent job: the box is hostile, we already know, and
+        # re-proving it costs STARVE_GRACE seconds per job (90s x 11 jobs = 16
+        # minutes of sitting still, which is most of the "hang" all over again).
+        # Stay in degraded mode -- force jobs back-to-back, one at a time -- until
+        # a job passes the real gates on its own.
+        grace = TICK if self._degraded else STARVE_GRACE
+        if now - self._last_progress < grace:
+            return None
+        announced = self._degraded      # read BEFORE we set it, or the banner never prints
+        self._degraded = True
+        # Cheapest job first: the likeliest to fit, and the one that gets the
+        # progress clock ticking again with the least added pressure.
+        job = min(self.queue, key=lambda j: j.est_mem)
+        if not announced:
+            print("testmgr: STARVED %.0fs — %d jobs queued, none running, and the "
+                  "memory gates are held by OTHER load on this box. Forcing jobs "
+                  "through one at a time (degraded/serial) rather than stalling to "
+                  "the deadline." % (now - self._last_progress, len(self.queue)),
+                  flush=True)
+        print("testmgr: forcing %s (degraded)" % job.name, flush=True)
+        return job
+
     def deps_ready(self, job):
         for d in job.deps:
             if d.status == "queued" or d.status == "running":
@@ -899,6 +1170,7 @@ class Manager:
                 self.queue = []
                 return 1
             for job in self.reap():
+                self._last_progress = time.monotonic()   # a finished job IS progress
                 dur = job.t1 - job.t0
                 mark = {"pass": "ok", "fail": "FAIL", "timeout": "TIMEOUT"}[job.status]
                 if job.advisory and job.status != "pass":
@@ -938,6 +1210,15 @@ class Manager:
                 self.queue.remove(job)
                 self.launch(job)
                 launched += 1
+                self._last_progress = now
+            # Nothing admitted and nothing running? Then waiting is pointless --
+            # force one job through rather than stalling to the deadline.
+            if not launched:
+                forced = self.admit_forced(now)
+                if forced is not None:
+                    self.queue.remove(forced)
+                    self.launch(forced)
+                    self._last_progress = now
             time.sleep(TICK)
         return 1 if failed else 0
 
@@ -964,7 +1245,30 @@ def calibrate():
 
 
 def build_compiler():
-    r = subprocess.run(["make", "--no-print-directory", COMPILER], cwd=REPO)
+    """Build the compiler into paths PRIVATE to this clone.
+
+    The Makefile's BUILD_COMPILER/VERIFY_COMPILER default to the fixed global
+    paths /tmp/pascal26-build and /tmp/pascal26-verify -- shared by every clone
+    on the box. Two testmgr runs in DIFFERENT checkouts (a dev gate in one, the
+    twatch daemon's in another) therefore write the same two files, and the
+    self-host fixedpoint step then `cmp`s one clone's binary against the
+    OTHER's. It reports "differ: byte 97" and the run dies with a self-host
+    failure that never happened -- a fabricated regression on the very gate that
+    blesses the stable binary. Reproduced here on 2026-07-13 while testing the
+    run lock; it is the non-job half of chore-makefile-testtmp-parameterize
+    (testmgr already rewrites /tmp/ for JOB scripts, but `make` runs outside
+    that rewrite).
+
+    The run lock cannot fix this: the collision is between REPOS, not within one.
+    These are plain `:=` make variables, so overriding them on the command line
+    needs no Makefile change (that sweep stays Track A's ticket).
+    """
+    priv = "/tmp/pascal26-build-%s" % REPO_TAG
+    r = subprocess.run(["make", "--no-print-directory", COMPILER,
+                        "BUILD_COMPILER=%s-build" % priv,
+                        "VERIFY_COMPILER=%s-verify" % priv,
+                        "BUILD_COMPILER_MANAGED=%s-mbuild" % priv,
+                        "VERIFY_COMPILER_MANAGED=%s-mverify" % priv], cwd=REPO)
     if r.returncode != 0:
         sys.exit("testmgr: building %s failed" % COMPILER)
 
@@ -1264,7 +1568,82 @@ def main():
                     help="write machine-readable per-job results (twatch)")
     ap.add_argument("--inject-hang", action="store_true",
                     help="add a sleep-loop job to prove hang handling")
+    ap.add_argument("--force", action="store_true",
+                    help="kill a live run in this repo and take over (default is "
+                         "to refuse: two runs starve each other on the memory gates)")
+    ap.add_argument("--status", action="store_true",
+                    help="is a run live in this repo, or anywhere on this box? "
+                         "(systemd-scoped runs do NOT appear in pstree)")
+    ap.add_argument("--older-than", type=float, default=30, metavar="MIN",
+                    help="--kill-orphans: age floor in minutes (default 30)")
+    ap.add_argument("--kill-orphans", action="store_true",
+                    help="kill every testmgr on this box — the detached runs whose "
+                         "shell/agent is gone but which keep running and starving "
+                         "new runs")
     args = ap.parse_args()
+
+    if args.status or args.kill_orphans:
+        state, info = lock_state()
+        if state == "free":
+            print("testmgr: no run in THIS repo (%s)" % REPO)
+        else:
+            ago = int(time.time() - info.get("started", time.time()))
+            beat = int(time.time() - info.get("heartbeat", 0))
+            print("testmgr: %s run in this repo — pid %d, tier %s, up %dm%02ds, "
+                  "heartbeat %ds ago" % (state.upper(), info.get("pid", -1),
+                                         info.get("tier", "?"), ago // 60,
+                                         ago % 60, beat))
+            if state == "stale":
+                print("         (stale: the next run reaps it automatically)")
+
+        # Box-wide: these do NOT show up in pstree (systemd-scoped, see
+        # find_runs()), so this is the only way anyone can see them.
+        runs = find_runs()
+        if runs:
+            print("\ntestmgr: %d run(s) on this box — NOT visible in pstree "
+                  "(systemd-scoped, reparented to pid 1):" % len(runs))
+            for pid, repo, tier, age in runs:
+                mine = " <- this repo" if repo == REPO else ""
+                print("  pid %-8d %-32s tier %-10s up %dm%02ds%s"
+                      % (pid, repo, tier, int(age) // 60, int(age) % 60, mine))
+            print("\n  An orphan (its agent/shell is gone) keeps running to its "
+                  "deadline and holds memory,\n  which starves every new run's "
+                  "admission. Reap with: tools/testmgr.py --kill-orphans")
+        if args.kill_orphans:
+            # "Detached" is NOT "orphaned" -- EVERY scoped run is detached by
+            # design, including the twatch daemon's and other agents' live runs.
+            # Killing those would be far worse than the leak we are fixing. A run
+            # is an orphan only if it is not actually SCHEDULING any more: its own
+            # repo's lock has stopped beating. Plus an age floor, so a run that is
+            # merely mid-build (heartbeat starts at lock acquisition, but an old
+            # testmgr predating locks writes none at all) is never shot on sight.
+            n = skipped = 0
+            for pid, repo, tier, age in runs:
+                if pid == os.getpid():
+                    continue
+                beat = 0.0
+                try:
+                    with open(os.path.join(repo, ".testmgr", "run.lock")) as f:
+                        beat = json.load(f).get("heartbeat", 0)
+                except (OSError, ValueError):
+                    pass
+                alive = (time.time() - beat) < HEARTBEAT_STALE if beat else False
+                if alive:
+                    print("  keep  pid %-8d %s — heartbeat fresh, it IS working"
+                          % (pid, repo))
+                    skipped += 1
+                    continue
+                if age < args.older_than * 60:
+                    print("  keep  pid %-8d %s — only %dm old (< --older-than %dm); "
+                          "may be an old testmgr with no lock, or mid-build"
+                          % (pid, repo, int(age) // 60, args.older_than))
+                    skipped += 1
+                    continue
+                kill_run(pid, "orphan: no heartbeat, up %dm (%s, tier %s)"
+                         % (int(age) // 60, repo, tier))
+                n += 1
+            print("testmgr: reaped %d, kept %d" % (n, skipped))
+        return 0
 
     if args.bench:
         # deliberately unscoped: --bench appends to the tracked timing series in
@@ -1277,6 +1656,14 @@ def main():
     # --list does no work; TESTMGR_NO_SCOPE=1 is the escape hatch (self-tests)
     if not args.list and os.environ.get("TESTMGR_NO_SCOPE") != "1":
         reexec_scoped()         # does not return if it scopes us
+
+    # One run per repo. Acquired AFTER reexec_scoped (which replaces the
+    # process) so the pid in the lock is the one that actually schedules, and
+    # before build_compiler() so two runs cannot race on the same binary.
+    if not args.list and not acquire_lock(args.force):
+        return 2
+    atexit.register(release_lock)
+    start_heartbeat(args.tier)
 
     build_compiler()
     jobs = generate(args.tier)
