@@ -83,3 +83,51 @@ Cross where a backend/runtime is touched.
   Nothing is half-applied: every compiler change above is committed, gated
   (`make test` + self-host byte-identical + `--tier limited` cross) and pushed.
   Resume by taking [[feature-rtti-method-reflection]] first.
+
+
+## 2026-07-13 — the reflection half is DONE, and a DESIGN BOUNDARY is now visible
+
+Everything the rung actually existed to prove now works, and testutils walks four more
+walls before hitting something that is **not a bug**:
+
+- `TObject.MethodAddress` / `MethodName`, FPC spelling, no `uses`
+  ([[feature-rtti-method-reflection]]).
+- `TObject.GetInterface(IID, out Obj)` — a REAL GUID lookup, not a stub
+  ([[feature-tobject-getinterface-guid-table]]). The interface GUID literal used to be
+  parsed and thrown away; it is now recorded, and each class RTTI blob carries an
+  interface table keyed by it.
+- `packed array` on a field/var (b258).
+
+### The boundary: testutils cannot compile unmodified, and that is CORRECT
+`testutils.GetMethodList` does not use any public API. It hand-walks **FPC's internal
+VMT layout**:
+
+```pascal
+vmt := PVmt(aClass);
+methodTable := pMethodNameTable(vmt^.vMethodTable);
+pmr := @methodTable^.entries[0];
+```
+
+`PVmt` / `vMethodTable` / `TMethodNameTable` are FPC System internals. pxx has its own
+VMT and its own RTTI blob and will never match FPC's byte layout — nor should it. **No
+amount of frontend work fixes this**, and emulating FPC's VMT layout to satisfy one
+helper would be the tail wagging the dog.
+
+### So the plan changes: substitute testutils, do not fork fpcunit
+`testutils` is the one unit in the chain that is platform-internals code. Provide a
+**pxx-native `testutils`** on the unit search path (ahead of the vendor copy) exposing
+the same public surface — `FreeObjects`, `GetMethodList`, `TNoRefCountObject` — over our
+own reflection. This is not forking the vendor: it is supplying the platform half, which
+is exactly what that unit is.
+
+It should be cheap: a pxx `TClass` value **IS** the RTTI blob pointer (AN_CLASSREF), so
+`GetMethodList(AClass, AList)` can enumerate the published-method table straight from the
+blob — the same walk `lib/rtl/rtti.pas` already does from an instance. The overridden-
+method dedup in the FPC version falls out of walking own-then-parent.
+
+`fpcunit.pp` itself needs no such treatment — its discovery goes through
+`Self.MethodAddress(FName)`, which now works.
+
+### Remaining after that
+`TFPList` and the rest of the FPC container surface. Still parked; nothing half-applied,
+every compiler change above is committed, gated and pushed.
