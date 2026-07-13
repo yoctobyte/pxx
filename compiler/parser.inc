@@ -13437,8 +13437,14 @@ begin
       end;
       Next; { consume the type name }
     end
-    else if CurTok.Kind = tkArray then
+    else if (CurTok.Kind = tkArray) or
+            ((CurTok.Kind = tkPacked) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkArray)) then
     begin
+      { `packed` on an array only affects ELEMENT padding, and pxx already lays
+        elements out contiguously — so accept it and parse the array as usual
+        (same rule as the record-field path). }
+      if CurTok.Kind = tkPacked then Next;
       isArr := True; Next;
       if CurTok.Kind = tkLBrack then
       begin
@@ -14519,6 +14525,15 @@ begin
       fIsDyn := False;
       fDynDepth := 0;
       fNDims := 0;
+      { `entries: packed array[0..0] of TRec;` (fcl-fpcunit's testutils) — `packed`
+        is legal on an array field, not just on a record. It only affects ELEMENT
+        padding, and pxx already lays array elements out contiguously, so it is
+        accepted and the array parsed exactly as an unpacked one. Without this the
+        field type parser fell through to ParseTypeKind, whose tkPacked case assumes
+        a record and demanded one. }
+      if (CurTok.Kind = tkPacked) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkArray) then
+        Next;
       if CurTok.Kind = tkArray then
       begin
         Next;

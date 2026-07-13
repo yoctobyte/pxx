@@ -52,12 +52,23 @@ hardware calibration misses it. Options:
 Whatever the fix: a timeout (124) should not be reported as an output/correctness
 failure. It reads as a miscompile in the report and it is not one.
 
-## Repro
+## Repro — and the decisive one
 ```
-tools/testmgr.py --tier full                      # RED, one cross shard, exit 124
-TESTMGR_TIME_SCALE=4 tools/testmgr.py --tier full # GREEN, 1203/1203
-tools/testmgr.py --tier full --job 'test-c-conformance-aarch64#shard3/6'   # PASS alone
+tools/testmgr.py --tier full                      # RED, ONE cross shard, exit 124
+tools/testmgr.py --tier full --job '<that shard>' # PASS alone
+TESTMGR_TIME_SCALE=8 tools/testmgr.py --tier full # still RED sometimes (load-dependent)
+tools/testmgr.py --tier full --jobs 4             # GREEN, 1205/1205, DEFAULT timeout
 ```
+The last line is the one that settles it: at low concurrency the SAME tree passes with
+the SAME 10s budget. So the budget is not too small in absolute terms — it is too small
+*for the concurrency the tier itself creates*. Raising TESTMGR_TIME_SCALE only papers
+over it (and on a loaded box even scale 8 still tripped), because the pressure scales
+with the job count, not with the hardware.
+
+That points at the fix: derive the per-program budget from the ACTUAL concurrency cap
+(or retry a timed-out program once, serially). Observed failing shards across runs:
+aarch64#shard1, aarch64#shard3, arm32#shard3 — it wanders, as a load effect does and a
+miscompile does not.
 
 ## Log
 - 2026-07-13 — opened by a Track A/C session; not fixed here (Track T owns
