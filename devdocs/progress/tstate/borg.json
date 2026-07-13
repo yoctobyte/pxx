@@ -1739,7 +1739,7 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "adaecd1206f335077795c37d19e3fa1ef472762b",
+   "bad": "ac38180bb8879641738b13e063ede8eb1d7ecefe",
    "good": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
    "job": "test-aarch64#src:test/test_lfm.pas",
    "name": "test-aarch64#63",
@@ -1752,16 +1752,7 @@
     "f573140a507266ad7267bf89757d7f27bd9c8e8a",
     "4d87480775f9e0201d07e8fb271a5cce33dda709",
     "41d6c04aaebc654470b06b05c62bd2b842f3da82",
-    "ac38180bb8879641738b13e063ede8eb1d7ecefe",
-    "9e6edb3d3f41fdeb3a94b5c7dda3e26f04147775",
-    "a403c0510edc1f9081a11413fdca421616d3ef0e",
-    "14734cdb2040ba8870bd661c071ccca8dde517f7",
-    "ea3a1a663c175549866914363985a27a0c5bc5b4",
-    "aff85b4f021d580aadb1f4cb68319382024a96c6",
-    "012dd3d9ff7f218f540f71877557abf6771a17e6",
-    "55a04738d7dbdbe9b703344663a4ed42c12aa914",
-    "df9ea5964932ef08a7495cc99eb7163342a2a287",
-    "adaecd1206f335077795c37d19e3fa1ef472762b"
+    "ac38180bb8879641738b13e063ede8eb1d7ecefe"
    ],
    "src": "test/test_lfm.pas tools/run_target.sh"
   },
