@@ -2155,20 +2155,17 @@ begin
                       CaseEqual(nm, 'InheritsFrom');
 end;
 
-{ The blob of an INSTANCE expression: __pxxRttiOf(objNode). -1 if not linked. }
+{ The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:
+  `obj.ClassMethod(...)` has to pass the instance's RUNTIME class as Self, and NOTHING
+  in the token stream predicts such a call, so the token pre-scan cannot know to pull
+  the builtin unit for it. It is two loads either way. }
 function GenMakeRttiOfCall(objNode: Integer): Integer;
-var pi, callNode, argSeq: Integer;
+var n: Integer;
 begin
-  Result := -1;
-  pi := FindProc('__pxxRttiOf');
-  if pi < 0 then Exit;
-  callNode := AllocNode(AN_CALL);
-  ASTIVal[callNode] := pi;
-  ASTTk[callNode] := Ord(Procs[pi].RetType);
-  argSeq := AllocNode(AN_ARG);
-  ASTLeft[argSeq] := objNode;
-  ASTLeft[callNode] := argSeq;
-  Result := callNode;
+  n := AllocNode(AN_RTTIOF);
+  ASTLeft[n] := objNode;
+  ASTTk[n] := Ord(tyPointer);
+  Result := n;
 end;
 
 { Chain further class-reference operations onto one that just produced a TClass.
@@ -2191,6 +2188,91 @@ begin
     if nxt < 0 then Exit;
     Result := nxt;
   end;
+end;
+
+{ Build a call to a STATIC (class) method, given the node that supplies its Self --
+  the metaclass. CurTok is on the token AFTER the method name; an argument list, if
+  present, is parsed here. Mirrors the qualified `TA.M(...)` block, which is the same
+  call with the class named explicitly.
+
+  Used for the BARE, unqualified form inside a method body, where the receiver is
+  implicit:
+    in a CLASS method    Self already IS the metaclass -> pass it straight through,
+                         so `TMyTest.Suite` reaches TAssert.Suite with Self = TMyTest
+                         and the class propagates down the chain;
+    in an INSTANCE method the runtime class of Self -> __pxxRttiOf(Self). }
+function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
+var callNode, lastArg, argSeq, exprNode, argIdx, ai: Integer;
+begin
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := mpi;
+  ASTTk[callNode] := Ord(Procs[mpi].RetType);
+
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := selfNode;
+  ASTLeft[callNode] := argSeq;
+  lastArg := argSeq;
+
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    ai := 1;                    { param 0 is Self }
+    while ai <= Procs[mpi].ParamCount - 1 do
+    begin
+      if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
+      begin
+        if ByRefArgStartsExpression then
+        begin
+          ParseExpr; exprNode := CurASTNode;
+        end
+        else
+        begin
+          argIdx := FindSym(CurTok.SVal); Next;
+          exprNode := ParseLValueAST(argIdx, TokPos - 2);
+        end;
+      end
+      else
+      begin
+        ParseExpr; exprNode := CurASTNode;
+      end;
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := exprNode;
+      ASTRight[lastArg] := argSeq;
+      lastArg := argSeq;
+      if (ai < Procs[mpi].ParamCount - 1) and CanFillDefaultsFrom(mpi, ai + 1) then
+      begin
+        FillDefaultArgs(mpi, ai + 1, callNode, lastArg);
+        ai := Procs[mpi].ParamCount - 1;
+      end
+      else if ai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
+      Inc(ai);
+    end;
+    Expect(tkRParen, ')');
+  end
+  else if CanFillDefaultsFrom(mpi, 1) then
+    FillDefaultArgs(mpi, 1, callNode, lastArg);
+
+  Result := callNode;
+end;
+
+{ The metaclass to pass as Self for a BARE static-method call in the CURRENT body.
+  -1 when there is no enclosing method. }
+function GenMakeImplicitMetaclass: Integer;
+var selfIdx, selfNode: Integer;
+begin
+  Result := -1;
+  if (CurProc < 0) or (Procs[CurProc].ParamCount <= 0) then Exit;
+  selfIdx := Procs[CurProc].Params[0].SymIdx;
+  if selfIdx < 0 then Exit;
+  selfNode := AllocNode(AN_IDENT);
+  ASTIVal[selfNode] := selfIdx;
+  ASTTk[selfNode] := Ord(Syms[selfIdx].TypeKind);
+  if CurSelfClass >= REC_UCLASS_BASE then
+    { an INSTANCE method: Self is the object -- take its RUNTIME class }
+    Result := GenMakeRttiOfCall(selfNode)
+  else
+    { a CLASS method: Self already IS the metaclass }
+    Result := selfNode;
 end;
 
 function GenMakeGetInterfaceCall(objNode: Integer): Integer;
@@ -2305,8 +2387,9 @@ begin
     begin
       if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
       begin
-        want := nExplicitArgs;
-        if not UMthIsStatic[mbase + i] then want := want + 1;
+        { EVERY method carries a Self at index 0 now -- a class method's Self is the
+          metaclass. So the implicit arg is always there, static or not. }
+        want := nExplicitArgs + 1;
         if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
         begin
           cand[nCand] := mbase + i;
@@ -2367,8 +2450,7 @@ begin
   for c := 0 to nCand - 1 do
   begin
     pi := UMthProc_[cand[c]];
-    base := 0;
-    if not UMthIsStatic[cand[c]] then base := 1;
+    base := 1;   { params[0] is always Self (metaclass for a class method) }
     ok := True;
     score := 0;
     for j := 0 to nArgs - 1 do
@@ -2429,8 +2511,7 @@ begin
     begin
       if UNameMatch(UMthNOff[mbase + i], UMthNLen[mbase + i], lo) then
       begin
-        want := nArgs;
-        if not UMthIsStatic[mbase + i] then want := want + 1;
+        want := nArgs + 1;   { Self at 0 for every method, class methods included }
         if ProcArityMatches(UMthProc_[mbase + i], want) and (nCand < MAX_OVL_CAND) then
         begin
           cand[nCand] := mbase + i;
@@ -3143,12 +3224,22 @@ begin
           mcallNode := AllocNode(AN_CALL);
           ASTIVal[mcallNode] := mpi;
           ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-          mlastArg := -1;
+
+          { Self (param 0) is the CLASS being named -- `TMyTest.Suite` passes TMyTest,
+            which is precisely what makes the metaclass idiom work. Passed even with
+            no argument list, since it is not optional. }
+          margSeq := AllocNode(AN_ARG);
+          mselfArg := AllocNode(AN_CLASSREF);
+          ASTIVal[mselfArg] := ci;
+          ASTTk[mselfArg] := Ord(tyPointer);
+          ASTLeft[margSeq] := mselfArg;
+          ASTLeft[mcallNode] := margSeq;
+          mlastArg := margSeq;
 
           if CurTok.Kind = tkLParen then
           begin
             Next;
-            mai := 0;
+            mai := 1;
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -3184,7 +3275,9 @@ begin
               Inc(mai);
             end;
             Expect(tkRParen, ')');
-          end;
+          end
+          else if CanFillDefaultsFrom(mpi, 1) then
+            FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
 
           Result := mcallNode;
           Exit;
@@ -3922,50 +4015,12 @@ begin
         end;
         if UMthIsStatic[mmi] then
         begin
-          mcallNode := AllocNode(AN_CALL);
-          ASTIVal[mcallNode] := mpi;
-          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-          mlastArg := -1;
-          if CurTok.Kind = tkLParen then
-          begin
-            Next;
-            mai := 0;
-            while mai <= Procs[mpi].ParamCount-1 do
-            begin
-              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-              begin
-                if ByRefArgStartsExpression then
-                begin
-                  { non-ident by-ref/array arg (@obj.Method to a method-pointer
-                    param, [..] literals, casts): parse as an expression }
-                  ParseExpr; mexprNode := CurASTNode;
-                end
-                else
-                begin
-                  margIdx := FindSym(CurTok.SVal); Next;
-                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
-                end;
-              end
-              else
-              begin
-                ParseExpr; mexprNode := CurASTNode;
-              end;
-              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-              if mlastArg = -1 then
-                ASTLeft[mcallNode] := margSeq
-              else
-                ASTRight[mlastArg] := margSeq;
-              mlastArg := margSeq;
-              if (mai < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, mai+1) then
-              begin
-                FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
-                mai := Procs[mpi].ParamCount-1;
-              end
-              else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-              Inc(mai);
-            end;
-            Expect(tkRParen, ')');
-          end;
+          { A CLASS method reached through an INSTANCE: `obj.ClassMethod(...)`. FPC
+            allows it, and Self is the instance's RUNTIME class -- not the static type
+            of the variable -- so it comes from __pxxRttiOf(obj), not a fixed
+            AN_CLASSREF. }
+          mselfArg := GenMakeRttiOfCall(node);
+          mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           node := mcallNode;
           tk := Procs[mpi].RetType;
           Continue;
@@ -5607,7 +5662,7 @@ end;
 
 procedure ParseFactor;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
-    smmiS: Integer;
+    smmiS, smSelfNode, mselfArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
@@ -7087,13 +7142,15 @@ begin
         smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
         if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
         begin
-          procIdx := UMthProc_[smmiS];
-          { A method's proc is registered under its QUALIFIED name, so the call
-            machinery's overload re-match (which resolves by NAME) would find no
-            candidate for the bare name and reject the args. Hand it the registered
-            name: overload resolution then runs over exactly this method's own
-            overload set, which is what it should have been all along. }
-          name := Procs[procIdx].Name;
+          smSelfNode := GenMakeImplicitMetaclass;
+          if smSelfNode >= 0 then
+          begin
+            Next;                 { consume the method name }
+            node := GenMakeStaticMethodCall(UMthProc_[smmiS], smSelfNode);
+            LastExprTk := Procs[UMthProc_[smmiS]].RetType;
+            CurASTNode := node;
+            Exit;
+          end;
         end;
       end;
 
@@ -8136,54 +8193,17 @@ begin
         begin
           if UMthIsStatic[mmi] then
           begin
+            { `TClassName.ClassMethod(...)` in an EXPRESSION. Self is the class named,
+              which is exactly what makes `TMyTest.Suite` see Self = TMyTest. }
             mpi := UMthProc_[mmi];
             Next; { consume class name }
             Expect(tkDot, '.');
             Next; { consume method name }
-            mcallNode := AllocNode(AN_CALL);
-            ASTIVal[mcallNode] := mpi;
-            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-            mlastArg := -1;
-            if CurTok.Kind = tkLParen then
-            begin
-              Next;
-              i := 0;
-              while i <= Procs[mpi].ParamCount-1 do
-              begin
-                if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
-                begin
-                  if ByRefArgStartsExpression then
-                  begin
-                    { non-ident by-ref/array arg (@obj.Method to a method-pointer
-                      param, [..] literals, casts): parse as an expression }
-                    ParseExpr; exprNode := CurASTNode;
-                  end
-                  else
-                  begin
-                    argIdx := FindSym(CurTok.SVal); Next;
-                    exprNode := ParseLValueAST(argIdx, TokPos - 2);
-                  end;
-                end
-                else
-                begin
-                  ParseExpr; exprNode := CurASTNode;
-                end;
-                argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
-                if mlastArg = -1 then
-                  ASTLeft[mcallNode] := argSeq
-                else
-                  ASTRight[mlastArg] := argSeq;
-                mlastArg := argSeq;
-                if (i < Procs[mpi].ParamCount-1) and CanFillDefaultsFrom(mpi, i+1) then
-                begin
-                  FillDefaultArgs(mpi, i+1, mcallNode, mlastArg);
-                  i := Procs[mpi].ParamCount-1;
-                end
-                else if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-                Inc(i);
-              end;
-              Expect(tkRParen, ')');
-            end;
+            mselfArg := AllocNode(AN_CLASSREF);
+            ASTIVal[mselfArg] := ci;
+            ASTTk[mselfArg] := Ord(tyPointer);
+            mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
+            LastExprTk := Procs[mpi].RetType;
             CurASTNode := mcallNode;
             Exit;
           end;
@@ -11816,7 +11836,7 @@ end;
 
 function ParseStatementAST: Integer;
 var
-  smmiS, pvSig, pvTarget: Integer;
+  smmiS, pvSig, pvTarget, smSelfNode: Integer;
   pvIsMeth: Boolean;
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
@@ -12916,13 +12936,16 @@ begin
         smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
         if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
         begin
-          procIdx := UMthProc_[smmiS];
-          { A method's proc is registered under its QUALIFIED name, so the call
-            machinery's overload re-match (which resolves by NAME) would find no
-            candidate for the bare name and reject the args. Hand it the registered
-            name: overload resolution then runs over exactly this method's own
-            overload set, which is what it should have been all along. }
-          name := Procs[procIdx].Name;
+          smSelfNode := GenMakeImplicitMetaclass;
+          if smSelfNode >= 0 then
+          begin
+            Next;                 { consume the method name }
+            node := GenMakeStaticMethodCall(UMthProc_[smmiS], smSelfNode);
+            LastExprTk := Procs[UMthProc_[smmiS]].RetType;
+            CurASTNode := node;
+            Result := node;
+            Exit;
+          end;
         end;
       end;
 
@@ -16299,7 +16322,10 @@ begin
             end;
             Eat(tkSemicolon);
 
-            if not isClassMethod then
+            { The DECL side's twin of the impl-side Self injection: every method carries a
+              Self at index 0, and a CLASS method's Self is the metaclass -- a class
+              reference (tyPointer), not an instance. The two sides must agree or the
+              impl never binds to its declaration ("unresolved forward"). }
             begin
               for i := mNParams downto 1 do
               begin
@@ -16315,7 +16341,8 @@ begin
                 mPDefaultSLen[i] := mPDefaultSLen[i-1];
               end;
               mPNames[0] := 'Self';
-              mPTypes[0] := tyClass;
+              if isClassMethod then mPTypes[0] := tyPointer
+              else mPTypes[0] := tyClass;
               mPArr[0]   := False;
               mPByRef[0] := False;
               mPUntyped[0] := False;
@@ -18326,7 +18353,15 @@ begin
         isStaticMethod := True;
   end;
 
-  if (methOwnerCi >= 0) and not isStaticMethod then
+  { Every method gets a Self at index 0 -- including a STATIC (class) method, whose
+    Self is the CLASS, not an instance. FPC's idiom depends on it being the RUNTIME
+    class: `class function TAssert.Suite: TTest; begin Result := TTestSuite.Create(Self)`
+    must see Self = TMyTest when called as TMyTest.Suite, not TAssert. Passing the
+    statically-known class instead would compile and silently build the wrong suite,
+    so the class is passed as a real argument. A class Self is a bare CLASS REFERENCE
+    (tyPointer -> tyClass, no rec id) -- the same shape a TClass variable has, so
+    ClassName / InheritsFrom / passing it to a TClass param all work on it unchanged. }
+  if methOwnerCi >= 0 then
   begin
     for i := nparams downto 1 do
     begin
@@ -18356,7 +18391,14 @@ begin
       end;
     end;
     pnames[0] := 'Self';
-    if UClsIsRecord[methOwnerCi] then
+    if isStaticMethod then
+    begin
+      { class method: Self is the metaclass -- a class reference }
+      ptypes[0] := tyPointer;
+      ptypesRec[0] := REC_NONE;
+      pbyref[0] := False;
+    end
+    else if UClsIsRecord[methOwnerCi] then
     begin
       { An ADVANCED RECORD's method: Self is the RECORD, passed BY REFERENCE. Records are
         already carried by address in this IR, and a method must be able to mutate its
@@ -18372,8 +18414,17 @@ begin
       ptypesRec[0] := REC_NONE;   { Self's RecName is wired to the owner class below }
       pbyref[0] := False;
     end;
-    ptypesPtrElemTk[0] := tyUnknown;
-    ptypesPtrElemRec[0] := REC_NONE;
+    if isStaticMethod then
+    begin
+      { PtrElemTk = tyClass with no rec id IS the bare-class-reference shape. }
+      ptypesPtrElemTk[0] := tyClass;
+      ptypesPtrElemRec[0] := REC_NONE;
+    end
+    else
+    begin
+      ptypesPtrElemTk[0] := tyUnknown;
+      ptypesPtrElemRec[0] := REC_NONE;
+    end;
     ptypesProcSig[0] := -1;
     parr[0]   := False;
     pNDims[0] := 0;
@@ -21086,7 +21137,8 @@ begin
       GenMakeClassNameCall. Unlike the helpers above it takes NO arguments, so it is
       normally written with no '(' and must be matched on the bare name. A class with
       a member of that name shadows at the call site, leaving the helpers unused. }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'classname') and
+    if (Tokens[i].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /

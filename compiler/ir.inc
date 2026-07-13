@@ -3636,6 +3636,23 @@ begin
                   IRLowerAST(ASTRight[node]), -1, 0, ASTTk[node]);
     end;
 
+    AN_RTTIOF:
+    begin
+      { blob = [[instance + 0] - 8]: load the VMT pointer parked at the instance's
+        +0, then the RTTI backlink word reserved immediately before the VMT.
+
+        The offset is a HARD 8 on every target, not SizeOf(Pointer): the word the VMT
+        allocator reserves ahead of the table is 8 bytes wide on 32-bit too (see the
+        VMT-alloc sites in parser.inc/pyparser.inc, and __pxxRttiOf, which hardcodes
+        -8 and is what the 32-bit ClassName path has always used). Using the pointer
+        size here read 4 bytes too high on the ILP32 targets and returned garbage. }
+      frameNode := IRAppend(IR_LOAD_MEM, IRLowerAST(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+      slotNode := IRAppend(IR_BINOP, frameNode,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyPointer)),
+                    Ord(tkMinus), 0, Ord(tyPointer));
+      Result := IRAppend(IR_LOAD_MEM, slotNode, -1, -1, 0, Ord(tyPointer));
+    end;
+
     AN_FRAME:
     begin
       { get_frame. The one op the backends implement; everything else below is

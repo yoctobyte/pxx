@@ -444,6 +444,10 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# `Self` in a CLASS method is the METACLASS, and the RUNTIME class: TDerived.M must
+	# see Self=TDerived inside TBase.M, and a bare sibling call must propagate it
+	./$(COMPILER) test/test_metaclass_self_b275.pas /tmp/test_metaclass_self_b27526
+	test "$$(/tmp/test_metaclass_self_b27526)" = "$$(printf 'named: TBase TDerived TOther\nsuite: suite of TBase | suite of TDerived\ntagged: >> TDerived\nvia instance: TDerived\nvia instance suite: suite of TDerived\nvia classref: TOther\ninherits: TRUE FALSE')"
 	# bare call to a sibling CLASS (static) method from inside a class method
 	# (fpcunit's TAssert.FailEquals calling Fail) -- incl. overloads
 	./$(COMPILER) test/test_class_method_bare_call_b272.pas /tmp/test_class_method_bare_call_b27226

@@ -312,6 +312,14 @@ const
   AN_PCADDR        = 84; { get_pc_addr: the return address of the current function --
                            i.e. a PC inside its CALLER. No operands. Composed in
                            IRLowerAST as a load of [frame + PtrSize]; no backend op. }
+  AN_RTTIOF        = 86; { the class RTTI blob of an INSTANCE: Left = the instance.
+                           blob = [[inst + 0] - 8] -- the VMT pointer at the instance's
+                           +0, then the backlink word the compiler reserves immediately
+                           BEFORE the VMT. Two loads, so it lowers in the IR rather than
+                           calling the __pxxRttiOf builtin: `obj.ClassMethod(...)` must
+                           pass the instance's RUNTIME class as Self, and nothing in the
+                           token stream predicts that call, so the builtin unit cannot be
+                           pulled for it. }
   AN_CALLERINFO    = 85; { get_caller_stackinfo(var bp, var addr): step ONE frame up.
                            Left = the bp lvalue, Right = the addr lvalue (both var).
                            addr := [bp + PtrSize]; bp := [bp]. Plain loads and stores,

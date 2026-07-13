@@ -3880,7 +3880,7 @@ begin
       if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then
       begin
         want := nExplicitArgs;
-        if not UMthIsStatic[base + i] then want := want + 1;
+        want := want + 1;   { every method has Self at 0, class methods included }
         if ProcArityMatches(UMthProc_[base + i], want) then
         begin Result := base + i; Exit; end;
       end;

@@ -184,6 +184,12 @@ function Concat(const s1, s2: AnsiString): AnsiString;
 function CompareStr(const s1, s2: AnsiString): Integer;
 { Case-insensitive CompareStr; SameText is its = 0 form. }
 function CompareText(const s1, s2: AnsiString): Integer;
+
+{ FPC's locale-aware comparators. This RTL is byte/ASCII throughout (no locale
+  layer), so they are the plain CompareStr / CompareText -- same contract, same
+  sign convention. Declared because FPC code calls them by name. }
+function AnsiCompareStr(const s1, s2: AnsiString): Integer;
+function AnsiCompareText(const s1, s2: AnsiString): Integer;
 function SameText(const s1, s2: AnsiString): Boolean;
 function AnsiSameText(const s1, s2: AnsiString): Boolean;
 
@@ -209,7 +215,7 @@ function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 
 { FPC SysUtils.BoolToStr. With UseBoolStrs the result is 'True'/'False'; without it
   the Delphi-compatible '-1'/'0'. The TrueS/FalseS form lets the caller name both. }
-function BoolToStr(B: Boolean; UseBoolStrs: Boolean): AnsiString; overload;
+function BoolToStr(B: Boolean; UseBoolStrs: Boolean = False): AnsiString; overload;
 function BoolToStr(B: Boolean; const TrueS, FalseS: AnsiString): AnsiString; overload;
 
 { FPC's UnicodeString-returning Format. This RTL has a single byte-string model
@@ -754,6 +760,16 @@ end;
 function CompareText(const s1, s2: AnsiString): Integer;
 begin
   Result := CompareStr(LowerCase(s1), LowerCase(s2));
+end;
+
+function AnsiCompareStr(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareStr(s1, s2);
+end;
+
+function AnsiCompareText(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareText(s1, s2);
 end;
 
 function SameText(const s1, s2: AnsiString): Boolean;
