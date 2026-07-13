@@ -46,3 +46,18 @@ also be acceptable.
 ## Guard
 
 Extend `test/cmultidim_ptr_array_init_b309.c` with the global forms once it lands.
+
+## RESOLVED 2026-07-13 — the flat pre-scan now declines multidim arrays
+
+Fixed together with the local half (b309). The blocker named above was right: the flat
+pointer pre-scan in `ParseCGlobalVarDecl` (`wasArr and baseTk = tyPointer`) consumed the
+braces. It now carries `dimCount < 2`, so a multidim pointer global falls through to the
+brace-elision walker, whose pointer exclusion is also gone.
+
+Note the earlier suspicion that the fn-pointer pre-scan (~5528) was the consumer was
+WRONG — that one is guarded on `CTypeFnPtrName / CTypeProcSig` and never sees a plain
+`int *g[2][3]`. The real consumer sits a few hundred lines lower, at the flat
+pointer-array scan. Test: `test/cmultidim_ptr_array_init_b309.c` (local + global, 2-D + 3-D).
+
+## Log
+- 2026-07-13 — resolved, commit c5220694.

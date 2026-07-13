@@ -31,13 +31,12 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (101)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-bitfield-packing-sizeof-vs-gcc | A+C | 55 | bug | bug: bitfield struct layout — sizeof disagrees with gcc (#pragma pack ignored?) | — |
 | bug-c-csmith-seed2-segfault | A+C | 60 | bug | bug: pxx-built csmith program segfaults (csmith seed 2), -O0 | — |
-| bug-c-global-multidim-pointer-array-init-ignored | C | 55 | bug | bug: a GLOBAL multidim array of pointers ignores its brace initializer | — |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
@@ -197,7 +196,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (680)
+## done (681)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -274,6 +273,7 @@ _none_
 | bug-c-generic-long-vs-int-ilp32 | C | 60 | bug | _Generic cannot tell `long` from `int` on ILP32 (silent wrong selection) | — |
 | bug-c-generic-long-vs-int-on-32bit | C | 50 | bug | bug: _Generic picks `int` where the operand is `long` on 32-bit targets | — |
 | bug-c-global-double-init | C | 50 | bug | C: global `double`/`float` initializer stored as 0 | — |
+| bug-c-global-multidim-pointer-array-init-ignored | C | 55 | bug | bug: a GLOBAL multidim array of pointers ignores its brace initializer | — |
 | bug-c-global-struct-array-fnptr-cast-init | C | 50 | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
@@ -922,7 +922,6 @@ _none_
 - [p 58] [P] feature-pascal-corpus-fpjson (unblocks 1)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A+C] bug-c-bitfield-packing-sizeof-vs-gcc
-- [p 55] [C] bug-c-global-multidim-pointer-array-init-ignored
 - [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
