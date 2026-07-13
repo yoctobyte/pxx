@@ -88,7 +88,7 @@ pass	tclass10.pp	tclass	-
 skip	tclass11a.pp	tclass	gap	nested class types inside a class (strict private / public `type` sections)
 pass	tclass11b.pp	tclass	-	
 skip	tclass12a.pp	tclass	gap	`strict private const` section inside class + static class procedure
-pass	tclass12b.pp	tclass	-	
+fail	tclass12b.pp	tclass	-	accepted-invalid: %FAIL test compiled
 skip	tclass12c.pp	tclass	gap	class-local const/type/var sections, `type Integer` distinct type, property default
 skip	tclass12d.pp	tclass	gap	nested class const/type sections (class-scoped const SomeValue)
 skip	tclass13a.pp	tclass	gap	nested `type` sections inside classes (nested class overriding parent's)
