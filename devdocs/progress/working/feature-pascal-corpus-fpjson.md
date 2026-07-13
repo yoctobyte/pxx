@@ -79,6 +79,19 @@ Only the SCANNER's `\uXXXX` escape path, which builds a UTF-16 surrogate pair
 faking it is exactly the failure mode this corpus keeps catching. **fpjson's DOM does not need
 it**; only parsing JSON *text* containing `\u` escapes does.
 
+## fpjson's OWN suite (testjsondata.pp, 4138 lines) — started
+Now reachable, because fpcunit runs. Walls cleared for it so far:
+- `for F in Data do` where the container is a PROPERTY, not a bare variable (b295)
+- class-reference ops chained after a value: `d.M.ClassName` (b296)
+
+Current blocker: [[bug-pascal-paren-expr-loses-class-id]] — `(Data as TJSONArray)[0].ClassType`.
+A parenthesised expression arrives at ParseFactor's suffix tail with recName = REC_NONE, so
+`[i]` does not dispatch the default property (leaving an unlowerable AN_AS_CAST) and `.Member`
+is silently dropped. The information IS there (ResolveNodeRec knows an as-cast's class); the
+paren tail is simply a THIRD copy of member/index dispatch that does not ask for it. The fix is
+to hand off to ParseClassRecordSelectors rather than grow another copy — the same
+de-duplication that fixed the method call paths.
+
 ## Next
 Rung 3 — reassess. Likely `rtl-generics` (generic classes x interfaces x class constraints) or
 `fcl-xml` DOM. Also now unblocked: fpjson's OWN fpcunit suite, since fpcunit runs.
