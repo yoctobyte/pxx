@@ -147,3 +147,72 @@ Rung 3 — reassess. Likely `rtl-generics` (generic classes x interfaces x class
 
 ## Gate
 `make test` + self-host byte-identical + cross.
+
+
+## 2026-07-13 — the suite's long tail turns out to be REAL frontend bugs, not context noise
+
+The earlier note called the remaining walls "CONTEXTUAL — reproduces green in isolation,
+only fails inside the real file" and recommended a focused session. That session happened,
+and the diagnosis was wrong in an instructive way: every wall so far has been a genuine,
+minimal, FPC-divergent frontend bug. They looked contextual because each needed a second
+declaration elsewhere in the file to trigger — not because the compiler is order-sensitive
+in some vague way.
+
+The method that worked, every time: **instrument the dispatch, do not theorise.** Tag the
+competing `Expect(tkComma)` sites to find WHICH one fires; print the symbol a name resolves
+to; dump the overload candidates. Each wall fell in one or two compiles.
+See [[project_dump_tokens_before_theorising]].
+
+### Wall at 1725 — `AssertEquals('...', S.AsJSON, S.FormatJSOn)` → b313
+NOT a member-access bug, and nothing to do with classes. `ParseFactor` expands any
+identifier naming an untyped string CONSTANT into a literal, without first checking whether
+a VARIABLE of that name is in scope. testjsondata declares a method-local `const S` early
+and a method-local `var S : TJSONString` later, so the variable was silently replaced by the
+CONSTANT'S TEXT — the identifier was consumed, a string literal handed back, and `.AsJSON`
+left unconsumed. Hence "expected ," AT THE DOT, which is what made it read as a selector
+failure. Fixed: a variable in scope beats a same-named constant.
+
+### The defect underneath it → b314
+The string-constant table was FLAT and searched oldest-first, so a routine's `const` leaked
+into every routine parsed after it and even beat that routine's OWN const of the same name:
+`function A: const S='first'` / `function B: const S='second'` gave B='first'. Silently.
+`FindStrConst` is now innermost-wins like `FindSym` (owner = CurProc, -1 = unit level).
+Filed and resolved as bug-pascal-string-const-not-scoped.
+
+### Wall at 2774 — `J.Insert(0)` on TJSONArray → b315
+An overloaded method's BODY could clobber a DIFFERENT overload's method-table entry: when
+the impl header failed to match its declaration by proc identity, the binder fell back to a
+NAME match (the first entry of that name) and overwrote its proc. TJSONArray has
+`Insert(Index)` plus ten `Insert(Index, ...)`, and each two-arg body landed on the one-arg
+entry. So no one-argument Insert existed any more, the arity search fell through to a
+two-arg overload, and the parser demanded a second argument.
+
+Found by dumping FindUMethArity's candidates: entry 356 pointed at proc 723 (ParamCount 2)
+early in the compile and at proc 880 (ParamCount 3) later — the same slot, silently rebound.
+
+The impl-to-decl signature match failing AT ALL is the deeper defect and is filed as
+[[bug-pascal-overload-impl-decl-signature-match]] (same-arity overloads can still be
+confused: entries 365/366 both bound to proc 724).
+
+### Also cleared on the way
+- `PShortString` and `CodePointer` as built-in type names (fpcunit's testutils needs them).
+
+### Current wall
+Line **3042**: `expected expression` near `] J.FormatJSON`. Suite advanced 1725 → 2774 → 3042.
+
+### Invocation (was not recorded before; costs 20 minutes to rediscover)
+The suite is a UNIT, so it needs a driver program (`program d; uses testjsondata; begin end.`),
+and it MUST be compiled with `--mimic-fpc` (that is what defines FPC_FULLVERSION, which
+fcl-json.inc gates on). Our own `lib/rtl/testutils.pas` must SHADOW fcl-fpcunit's — FPC's
+version hand-walks FPC's internal VMT — and a unit's `uses` resolves from its OWN directory
+first, so put a copy of ours in a staging dir alongside the vendor sources rather than
+relying on `-Fu` order:
+
+```sh
+ST=/tmp/fpjson-stage; mkdir -p $ST
+ln -sf $FPCJ/fcl-json/src/*.pp $FPCJ/fcl-json/src/*.inc \
+       $FPCJ/fcl-fpcunit/src/*.pp $FPCJ/fcl-fpcunit/src/*.inc \
+       $FPCJ/fcl-json/tests/*.pp  $ST/
+rm -f $ST/testutils.pp && cp lib/rtl/testutils.pas $ST/
+./compiler/pascal26 --mimic-fpc -Fulib/rtl -Fulib/rtl/platform/posix -Fu$ST driver.pas /tmp/d
+```
