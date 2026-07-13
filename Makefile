@@ -432,7 +432,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
 	# advanced records: methods in a record; Self is the RECORD, BY REFERENCE
 	./$(COMPILER) test/test_advanced_records_b268.pas /tmp/test_advanced_records_b26826
-	test "$$(/tmp/test_advanced_records_b26826)" = "$$(printf 'sum=7\nhalf=3\noffset=4,5\nadd=14,25\nunchanged=4,5 10,20')"
+	test "$$(/tmp/test_advanced_records_b26826)" = "$$(printf 'sum=7\nhalf=3\noffset=4,5\nadd=14,25\nunchanged=4,5 10,20\nctor=3,4 sum=7\nctor-via-fn=5,10')"
 	# System type names that never existed (TDateTime was a 4-byte INT, not a Double)
 	./$(COMPILER) test/test_system_type_names_b267.pas /tmp/test_system_type_names_b26726
 	test "$$(/tmp/test_system_type_names_b26726)" = "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"

@@ -4824,7 +4824,16 @@ begin
         callRetType := Procs[ASTIVal[node]].RetType;
         callVal := IRAppendCall(ASTIVal[node], first, classIdx, Ord(callRetType));
         IRIVal[callVal] := 1;
-        Result := IRAppend(IR_LOAD_SYM, ASTLiftedVar[node], -1, -1, 0, ASTTk[node]);
+        { The call ran for its side effect on the lifted var; the node's VALUE is that var.
+          A RECORD is carried by ADDRESS in this IR, so it must be an IR_LEA — loading it
+          like a scalar yields the first 8 bytes and any consumer then copies from a garbage
+          address (an advanced-record constructor, `p := TPt.Create(3,4)`, segfaulted on
+          exactly this). The interface path is unaffected: it tags the node tyPointer, and a
+          fat interface pointer really is a value. }
+        if IntToTypeKind(ASTTk[node]) = tyRecord then
+          Result := IRAppend(IR_LEA, ASTLiftedVar[node], -1, -1, 0, Ord(tyPointer))
+        else
+          Result := IRAppend(IR_LOAD_SYM, ASTLiftedVar[node], -1, -1, 0, ASTTk[node]);
       end
       else
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);

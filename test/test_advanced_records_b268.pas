@@ -17,6 +17,7 @@ type
   TPt = record
     X, Y: Longint;
   public
+    constructor Create(ax, ay: Longint);   { fills a FRESH receiver; no heap, no VMT }
     procedure Init(ax, ay: Longint);
     procedure Offset(dx, dy: Longint);
     function Sum: Longint;
@@ -24,6 +25,17 @@ type
   private
     function Half: Longint;
   end;
+
+constructor TPt.Create(ax, ay: Longint);
+begin
+  X := ax;
+  Y := ay;
+end;
+
+function MakeAt(n: Longint): TPt;
+begin
+  MakeAt := TPt.Create(n, n * 2);   { a ctor result carried out as a function result }
+end;
 
 procedure TPt.Init(ax, ay: Longint);
 begin
@@ -54,7 +66,7 @@ begin
 end;
 
 var
-  a, b, c: TPt;
+  a, b, c, d: TPt;
 begin
   a.Init(3, 4);
   writeln('sum=', a.Sum);
@@ -67,4 +79,12 @@ begin
   c := a.Add(b);        { a record-VALUED result }
   writeln('add=', c.X, ',', c.Y);
   writeln('unchanged=', a.X, ',', a.Y, ' ', b.X, ',', b.Y);
+
+  { record CONSTRUCTOR: invoked on the TYPE, materialises a temp, yields it by VALUE.
+    It must NOT go through the class Create path — that lowers to GetMem and would
+    heap-allocate a record, handing back a pointer where a value belongs. }
+  d := TPt.Create(3, 4);
+  writeln('ctor=', d.X, ',', d.Y, ' sum=', d.Sum);
+  d := MakeAt(5);
+  writeln('ctor-via-fn=', d.X, ',', d.Y);
 end.

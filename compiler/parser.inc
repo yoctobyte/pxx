@@ -5425,6 +5425,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
+    rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer;
@@ -7693,6 +7694,68 @@ begin
             Exit;
           end;
         end;
+      end;
+
+      { `TRec.Create(...)` — an advanced-record CONSTRUCTOR, invoked on the TYPE.
+
+        A record ctor has no heap and no VMT: it just fills a fresh receiver. So the call
+        materialises a hidden temp of the record type, passes it as Self (by reference, like
+        any record method), and the expression's VALUE is that temp — which is exactly the
+        ASTLiftedVar shape (call emitted as a statement, node yields the var).
+
+        Checked BEFORE the class path below: that one lowers to GetMem, which would
+        heap-allocate a record and hand back a pointer where a value belongs. }
+      if (idx < 0) and (procIdx < 0) and (IsRecordType(name) <> REC_NONE) and
+         (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
+         (Tokens[TokPos+1].Kind = tkIdent) and
+         (FindUMeth(IsRecordType(name) - REC_UCLASS_BASE, GetTokenStr(TokPos+1)) >= 0) then
+      begin
+        rcCi := IsRecordType(name) - REC_UCLASS_BASE;
+        rcMmi := FindUMeth(rcCi, GetTokenStr(TokPos+1));
+        rcPi := UMthProc_[rcMmi];
+
+        Next; { record type name }
+        Next; { dot }
+        Next; { method name }
+
+        savedRecId := LastTypeRecId;
+        LastTypeRecId := REC_UCLASS_BASE + rcCi;
+        rcTmp := AllocVar('', tyRecord);          { the fresh receiver }
+        LastTypeRecId := savedRecId;
+
+        mcallNode := AllocNode(AN_CALL);
+        ASTIVal[mcallNode] := rcPi;
+        ASTTk[mcallNode] := Ord(tyRecord);
+        ASTLiftedVar[mcallNode] := rcTmp;
+
+        rcSelf := AllocNode(AN_IDENT);            { Self = the temp, passed by reference }
+        ASTIVal[rcSelf] := rcTmp;
+        ASTTk[rcSelf] := Ord(tyRecord);
+        rcSelfArg := AllocNode(AN_ARG);
+        ASTLeft[rcSelfArg] := rcSelf;
+        ASTLeft[mcallNode] := rcSelfArg;
+        mlastArg := rcSelfArg;
+
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          while CurTok.Kind <> tkRParen do
+          begin
+            ParseExpr;
+            margSeq := AllocNode(AN_ARG);
+            ASTLeft[margSeq] := CurASTNode;
+            ASTRight[mlastArg] := margSeq;
+            mlastArg := margSeq;
+            if CurTok.Kind = tkComma then Next
+            else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+          end;
+          Expect(tkRParen, ')');
+        end;
+
+        LastTypeRecId := REC_UCLASS_BASE + rcCi;
+        LastExprTk := tyRecord;
+        CurASTNode := mcallNode;
+        Exit;
       end;
 
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
@@ -14700,7 +14763,7 @@ procedure ParseRecordMethodDecl(ci: Integer);
   Registers the proc as `TRec.Method` with Self at param 0 and adds a UMeth entry, which is
   what makes `r.Method(...)` resolve through the ordinary member-call path. }
 var
-  isFunc, byref, sawConst: Boolean;
+  isFunc, byref, sawConst, isCtor: Boolean;
   mname, recNm, fullNm: AnsiString;
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
   pn: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -14709,7 +14772,11 @@ var
   pRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
   curTk, retTk: TTypeKind;
 begin
-  isFunc := CurTok.Kind = tkFunction;
+  { A record CONSTRUCTOR fills a fresh receiver rather than returning anything, so it
+    registers exactly like a procedure whose Self is the record. Only the CALL differs. }
+  isCtor := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor');
+  if isCtor then isFunc := False
+  else isFunc := CurTok.Kind = tkFunction;
   Next;
   if not IsMemberNameTok then Error('expected record method name');
   mname := CurTok.SVal;
@@ -14791,7 +14858,7 @@ begin
 
   AddUMeth(ci, mnOff, mnLen, mpi);
   UMthIsStatic[UMthCount - 1] := False;
-  UMthIsCtor[UMthCount - 1] := False;
+  UMthIsCtor[UMthCount - 1] := isCtor;
   UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
   UMthPub[UMthCount - 1] := 0;
 end;
@@ -14847,7 +14914,8 @@ begin
       Next;
       continue;
     end;
-    if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+    if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
+       ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')) then
     begin
       ParseRecordMethodDecl(ci);
       continue;
