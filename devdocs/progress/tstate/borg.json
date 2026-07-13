@@ -1735,8 +1735,8 @@
   "wall": 231.2
  },
  "last_opt": {
-  "date": "2026-07-13T17:09:02Z",
-  "sha": "8766dccbd2ddf9495353735c5798ffaf325d9be1"
+  "date": "2026-07-13T17:32:01Z",
+  "sha": "a303fb3d090bdbc9de5d5956cd5f83045d851f28"
  },
  "open_regressions": [
   {
