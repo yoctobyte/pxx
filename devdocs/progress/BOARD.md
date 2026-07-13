@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -101,7 +101,6 @@ _none_
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
-| feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-fpjson | P | 58 | feature | Pascal corpus: fcl-json — polymorphic TJSONData hierarchy + RTTI streaming | feature-pascal-corpus-fpcunit |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -132,6 +131,8 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard3-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard3/6 red at e6844ff49085 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -198,7 +199,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (670)
+## done (671)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -731,6 +732,7 @@ _none_
 | feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-advanced-records | P | 55 | feature | Advanced records: methods (and `public`/`private`) inside a record | — |
+| feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
 | feature-pascal-corpus-fpcunit | P | 55→58 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
@@ -893,6 +895,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-test-aarch64-test-cross-sysopen-family
+- [p 70] [T] regression-test-aarch64-test-lfm
+- [p 70] [T] regression-test-aarch64-test-streaming-enumset
 - [p 70] [T] regression-test-c-conformance-arm32-shard3-6
 - [p 70] [T] regression-test-core-test-sqlite-crud-lazy
 - [p 65] [A] feature-c-corpus-expansion
@@ -925,7 +929,6 @@ _none_
 - [p 50] [A] bug-c-struct-byval-varargs-32bit
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
-- [p 50] [P] feature-pascal-class-property
 - [p 50] [P] feature-pascal-record-constructors
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators

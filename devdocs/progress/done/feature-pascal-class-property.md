@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** feature (Pascal frontend)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 
 ## What is missing
 ```pascal
@@ -50,3 +50,4 @@ addition to the class-qualified path that already handles `TFoo.classvar` and `T
 - 2026-07-13 — opened. Attempted, then reverted: the prefix and the qualified-access half
   are easy, but the accessor fallback touches nine open-coded sites and deserves to be done
   once, properly, rather than half-landed.
+- 2026-07-13 — resolved, commit pending.

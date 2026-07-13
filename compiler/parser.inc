@@ -2687,7 +2687,9 @@ end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
-  mblobNode: Integer;
+  mblobNode, cpPri, cpMmi, cpMpi: Integer;
+  cpIsAssign: Boolean;
+  cpName: AnsiString;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
@@ -3252,6 +3254,70 @@ begin
             the method name is already consumed here, so it is scanning from the '('. }
           mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
           if mmi < 0 then mmi := FindUMeth(ci, fieldName);
+
+          { A CLASS PROPERTY reached through the class name: `TJSONData.CompressedJSON := False`
+            (fcl-json). Its accessors are static class methods, whose Self is the METACLASS --
+            so the receiver is the class reference itself, and GenMakeStaticMethodCall does the
+            rest. Checked after methods (a method of that name wins) and before class vars. }
+          if mmi < 0 then
+          begin
+            cpPri := FindUProp(ci, fieldName);
+            if cpPri >= 0 then
+            begin
+              cpIsAssign := (CurTok.Kind = tkAssign) or
+                            ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
+              cpName := '';
+              if cpIsAssign then
+              begin
+                if UPropWriteMLen[cpPri] <= 0 then Error('class property is read-only: ' + fieldName);
+                for i := 0 to UPropWriteMLen[cpPri] - 1 do
+                  AppendChar(cpName, TokChars[UPropWriteMOff[cpPri] + i]);
+              end
+              else
+              begin
+                if UPropReadMLen[cpPri] <= 0 then Error('class property is write-only: ' + fieldName);
+                for i := 0 to UPropReadMLen[cpPri] - 1 do
+                  AppendChar(cpName, TokChars[UPropReadMOff[cpPri] + i]);
+              end;
+              cpMmi := FindUMeth(ci, cpName);
+              if cpMmi < 0 then Error('class property accessor not found: ' + cpName);
+              cpMpi := UMthProc_[cpMmi];
+
+              mselfArg := AllocNode(AN_CLASSREF);
+              ASTIVal[mselfArg] := ci;
+              ASTTk[mselfArg] := Ord(tyPointer);
+
+              if cpIsAssign then
+              begin
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                mcallNode := AllocNode(AN_CALL);
+                ASTIVal[mcallNode] := cpMpi;
+                ASTTk[mcallNode] := Ord(Procs[cpMpi].RetType);
+                margSeq := AllocNode(AN_ARG);
+                ASTLeft[margSeq] := mselfArg;
+                ASTLeft[mcallNode] := margSeq;
+                mlastArg := AllocNode(AN_ARG);
+                ASTLeft[mlastArg] := CurASTNode;    { the value }
+                ASTRight[margSeq] := mlastArg;
+                { the index constant, if the property declares one }
+                PropIndexConstArg(cpPri, margIdx, mexprNode);
+                tk := tyInteger;
+                recName := REC_NONE;
+                Result := mcallNode;
+                Exit;
+              end;
+
+              GenVirtSlot := UMthVirSlot[cpMmi];
+              mcallNode := GenMakeStaticMethodCall(cpMpi, mselfArg);
+              tk := Procs[cpMpi].RetType;
+              recName := ProcRetRecId[cpMpi];
+              if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+              Result := mcallNode;
+              Exit;
+            end;
+          end;
+
           if mmi < 0 then
           begin
             { class variable: TClass.cnt -> the backing global var (an lvalue, so

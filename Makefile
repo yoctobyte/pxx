@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a CLASS PROPERTY through the class name: TD.Compressed := True
+	./$(COMPILER) test/test_class_property_b299.pas /tmp/test_class_property_b29926
+	test "$$(/tmp/test_class_property_b29926)" = "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"
 	# an `array of const` LITERAL to an OVERLOADED constructor (fcl-json TJSONArray.Create)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_ctor_arrayofconst_overload_b298.pas /tmp/test_ctor_arrayofconst_overload_b29826
 	test "$$(/tmp/test_ctor_arrayofconst_overload_b29826)" = "$$(printf 'noarg n=-1\narr n=3')"
