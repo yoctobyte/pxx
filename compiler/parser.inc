@@ -3778,6 +3778,31 @@ begin
         end;
       end;
 
+      { A class-reference OPERATION on ANY pointer-typed value: an array ELEMENT, a
+        FIELD, a call result -- not just a bare identifier.
+
+          MinJSONInstanceTypes[AType].ClassName      { fpjson }
+
+        A class reference IS its RTTI blob pointer, and ClassName / ClassType /
+        InheritsFrom need only that VALUE, not a compile-time class id -- so they can be
+        answered for any pointer-typed expression. Nothing else on a pointer is spelled
+        this way, which is what makes the test safe (the same reasoning as `is` against a
+        class-reference value). Class-typed receivers with a concrete class id are handled
+        further down, and take precedence via the mci path. }
+      if (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) and
+         (tk = tyPointer) and (recName = REC_NONE) and
+         (ASTKind[node] <> AN_IDENT) then
+      begin
+        Next;                          { consume the operation name }
+        mcallNode := GenMakeClassRefOp(node, fieldName, tk);
+        if mcallNode >= 0 then
+        begin
+          recName := REC_NONE;
+          Result := ParseClassRefOpTail(mcallNode, tk);
+          Exit;
+        end;
+      end;
+
       { Bare `object` reference (tyPointer whose element is tyClass with NO
         class id): member access cannot resolve — the reference carries no
         class. Require an explicit cast to a concrete class first
@@ -14477,6 +14502,20 @@ begin
 	              PendingInitValAux[PendingInitCount] := scLen;
 	              PendingInitTk[PendingInitCount]     := Ord(elemTk);
 	            end
+	            else if (elemTk = tyPointer) and (CurTok.Kind = tkIdent) and
+	                    (FindUClass(CurTok.SVal) >= 0) then
+	            begin
+	              { CLASS-REFERENCE element (an initialised VAR array of metaclasses) --
+	                the same shape the const path handles; see there. fpjson declares
+	                DefaultJSONInstanceTypes as a Var, and MinJSONInstanceTypes as a Const. }
+	              PendingInitSym[PendingInitCount]  := idx;
+	              PendingInitElem[PendingInitCount] := arrLo + initElem;
+	              PendingInitFOff[PendingInitCount] := -1;
+	              PendingInitKind[PendingInitCount] := 8;
+	              PendingInitVal[PendingInitCount]  := FindUClass(CurTok.SVal);
+	              PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+	              Next;
+	            end
 	            else
 	            begin
 	              initVal := ParseInitVal;
@@ -14686,7 +14725,7 @@ end;
 
 procedure ParseConstSection;
 var name: AnsiString; v: Int64;
-    cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
+    cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
@@ -14918,6 +14957,31 @@ begin
                 PendingInitTk[PendingInitCount]     := Ord(cElemTk);
                 Inc(PendingInitCount);
               end;
+            end
+            else if (cElemTk = tyPointer) and (CurTok.Kind = tkIdent) and
+                    (FindUClass(CurTok.SVal) >= 0) then
+            begin
+              { A CLASS REFERENCE element: an array of metaclasses initialised with class
+                NAMES —
+
+                  DefaultJSONInstanceTypes : Array[TJSONInstanceType] of TJSONDataClass =
+                    (TJSONData, TJSONIntegerNumber, ... );      { fpjson }
+
+                The value is the class's RTTI blob address, which is only known after
+                EmitRTTI — so it cannot be a ConstEval ordinal. Record the class INDEX and
+                let the initializer emit an AN_CLASSREF, exactly as a class name used as a
+                value anywhere else does; the blob address is patched in at link time
+                through the same per-class data-ref sentinel. }
+              cClassIdx := FindUClass(CurTok.SVal);
+              Next;
+              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+              PendingInitSym[PendingInitCount]  := cIdx;
+              PendingInitElem[PendingInitCount] := cLo + cElem;
+              PendingInitFOff[PendingInitCount] := -1;
+              PendingInitKind[PendingInitCount] := 8;
+              PendingInitVal[PendingInitCount]  := cClassIdx;
+              PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+              Inc(PendingInitCount);
             end
             else if isLocalConst then
             begin
@@ -21149,6 +21213,15 @@ begin
     else if PendingInitKind[i] = 2 then
     begin
       valNode := AllocNode(AN_PROCADDR);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(tyPointer);
+    end
+    else if PendingInitKind[i] = 8 then
+    begin
+      { CLASS-REFERENCE element (an array of metaclasses initialised with class names).
+        Val is the class INDEX; AN_CLASSREF yields its RTTI blob address, resolved after
+        EmitRTTI through the per-class data-ref sentinel. }
+      valNode := AllocNode(AN_CLASSREF);
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := Ord(tyPointer);
     end

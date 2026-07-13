@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -40,6 +40,7 @@ _none_
 | bug-pascal-builtin-pointer-type-cast | P | 45 | bug | `PInteger(p)^` does not compile, though `var p: PInteger` does | — |
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
+| bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-pascal-open-array-param-in-record-method | P | 40 | bug | Open-array parameter in a record method (rejected for now — it SEGFAULTED) | — |
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
@@ -927,6 +928,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [P] bug-pascal-builtin-pointer-type-cast
+- [p 45] [A] bug-pascal-member-access-on-pointer-silently-accepted
 - [p 45] [A] bug-riscv32-p256field-coredump
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib

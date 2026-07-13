@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# an initialised array of CLASS REFERENCES (elements are class names) -- const AND var
+	./$(COMPILER) test/test_classref_array_const_b285.pas /tmp/test_classref_array_const_b28526
+	test "$$(/tmp/test_classref_array_const_b28526)" = "$$(printf 'TBase TMid TLeaf \nTLeaf TBase TMid \nleaf<-base: TRUE\nbase<-leaf: FALSE')"
 	# SET-typed default parameters (fpjson FormatJSON(Options: TFormatOptions = DefaultFormat))
 	./$(COMPILER) test/test_set_default_param_b282.pas /tmp/test_set_default_param_b28226
 	test "$$(/tmp/test_set_default_param_b28226)" = "$$(printf 'P1: (empty)\nP2: (empty)\nP3: AC\nP4: B\nP5 n=1 : C\nP3: B\nP5 n=2 : AB')"
