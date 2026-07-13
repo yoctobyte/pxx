@@ -8,12 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (4)
@@ -31,7 +32,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (109)
+## backlog (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -110,8 +111,6 @@ _none_
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
-| feature-pascal-record-constructors | P | 50 | feature | Advanced records: constructors + `class operator` — DONE | — |
-| feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pascal-typed-metaclass | P | 45 | feature | Typed metaclasses: `class of TFoo`, so a TClass variable can call the class's methods | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
 | feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
@@ -205,7 +204,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (686)
+## done (687)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -754,6 +753,7 @@ _none_
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
+| feature-pascal-record-constructors | P | 50 | feature | Advanced records: constructors + `class operator` — DONE | — |
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
@@ -947,7 +947,6 @@ _none_
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
-- [p 55] [A] feature-pascal-type-helpers
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess
@@ -959,7 +958,6 @@ _none_
 - [p 50] [A+P] bug-pascal-interface-arg-not-converted-from-class
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
-- [p 50] [P] feature-pascal-record-constructors
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)

@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** feature (Pascal frontend)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** done — constructors AND `class operator` landed 2026-07-13.
+- **Status:** done
 - **Follows:** [[feature-pascal-advanced-records]] (methods landed; these are the two
   deliberately-excluded slices).
 
@@ -102,3 +102,6 @@ operands". The operands are record-valued CALL nodes, and operator dispatch only
 record operands it can see as variables/lvalues. Variables work
 (`d := b + c`), which is what b268 pins. Split out as
 [[bug-pascal-operator-on-record-call-result]].
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
