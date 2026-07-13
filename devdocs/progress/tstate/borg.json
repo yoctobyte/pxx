@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T11:18:23Z",
-   "fixed": [],
-   "new_red": [
-    "test-aarch64#src:test/test_lfm.pas",
-    "test-aarch64#src:test/test_streaming_enumset.pas"
-   ],
-   "sha": "adaecd1206f335077795c37d19e3fa1ef472762b",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-13T11:20:37Z",
    "fixed": [],
    "new_red": [],
@@ -443,6 +432,14 @@
    ],
    "new_red": [],
    "sha": "5c58b54d39fb19a8f52cc86de2e03df5a77642a5",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T18:33:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9252b0ca7d4bdb4e6daef0b80b34d914f7e5d800",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1471,6 +1468,7 @@
   "test-core#src:test/test_strict_overload.pas": "pass",
   "test-core#src:test/test_strict_visibility_b262.pas": "pass",
   "test-core#src:test/test_string_concat.pas": "pass",
+  "test-core#src:test/test_string_const_scoping_b314.pas": "pass",
   "test-core#src:test/test_string_copy_intrinsic.pas": "pass",
   "test-core#src:test/test_string_default_param_b245.pas": "pass",
   "test-core#src:test/test_string_delete_insert.pas": "pass",
@@ -1723,11 +1721,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T18:28:34Z",
-  "sha": "5c58b54d39fb19a8f52cc86de2e03df5a77642a5",
+  "date": "2026-07-13T18:33:45Z",
+  "sha": "9252b0ca7d4bdb4e6daef0b80b34d914f7e5d800",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 506.6
+  "wall": 87.0
  },
  "last_bench": {
   "conf_rows": 550,
