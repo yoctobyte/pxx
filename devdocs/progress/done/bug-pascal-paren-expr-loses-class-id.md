@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (frontend — member/index dispatch on a parenthesised value)
 - **Track:** P — Pascal frontend
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** fcl-json's own test suite ([[feature-pascal-corpus-fpjson]]), which writes
   `AssertEquals('Correct class', AClass, (Data as TJSONArray)[0].ClassType)`.
 
@@ -42,3 +42,6 @@ ParseClassRecordSelectors and now works (b296). Only the PARENTHESISED source is
 
 ## Gate
 `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-13 — resolved, commit pending.

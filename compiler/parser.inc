@@ -5063,6 +5063,8 @@ end;
   resolve their trailing members. }
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
 var crBlob, crNode: Integer;   { class-reference ops on a chained value }
+var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
+    dfName: AnsiString;
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
@@ -5329,8 +5331,50 @@ begin
       Next;
       node := sub;
     end
-    else { tkLBrack — index the array field just selected }
+    else { tkLBrack — a DEFAULT PROPERTY on a class value, else index the array just selected }
     begin
+      { `(Data as TJSONArray)[0]` (fcl-json's suite), `obj.Child[i]`. A class value with a
+        DEFAULT property means the getter, not an array index -- and building a raw AN_INDEX
+        over it left the base (an as-cast, say) with no address to take, which surfaced as
+        "IR_UNSUPPORTED: could not lower AST node". ParseLValueAST's suffix loop has always
+        dispatched this; the chained loop never did. }
+      dfCi := -1;
+      if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
+      dfPri := -1;
+      if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
+      if (dfPri >= 0) and (UPropReadMLen[dfPri] > 0) then
+      begin
+        dfName := '';
+        for dfI := 0 to UPropReadMLen[dfPri] - 1 do
+          AppendChar(dfName, TokChars[UPropReadMOff[dfPri] + dfI]);
+        dfMmi := FindUMeth(dfCi, dfName);
+        if dfMmi < 0 then Error('default property getter not found: ' + dfName);
+        dfMpi := UMthProc_[dfMmi];
+
+        dfIdxHead := -1; dfIdxTail := -1;
+        ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
+
+        if UMthVirSlot[dfMmi] >= 0 then
+        begin
+          sub := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[sub] := UMthVirSlot[dfMmi];
+        end
+        else
+          sub := AllocNode(AN_CALL);
+        ASTIVal[sub] := dfMpi;
+        ASTTk[sub] := Ord(Procs[dfMpi].RetType);
+        dfSelf := AllocNode(AN_ARG);
+        ASTLeft[dfSelf] := node;
+        ASTLeft[sub] := dfSelf;
+        ASTRight[dfSelf] := dfIdxHead;       { self, index... }
+
+        node := sub;
+        tk := Procs[dfMpi].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[dfMpi]
+        else recId := REC_NONE;
+        Continue;
+      end;
+
       Next;
       sub := AllocNode(AN_INDEX);
       ASTLeft[sub] := node;
@@ -5882,7 +5926,7 @@ end;
 
 procedure ParseFactor;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
-    smmiS, smSelfNode, mselfArg, mcCtorCi: Integer;
+    smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec: Integer;
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
@@ -6157,6 +6201,31 @@ begin
       node := CurASTNode;
       while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
       begin
+        { A grouped value whose type is a CLASS goes to the real member/index dispatcher --
+          `(Data as TJSONArray)[0].ClassType` (fcl-json's suite).
+
+          This tail used to hand-roll `.` and `[` itself, and it did so WITHOUT the class id:
+          ResolveNodeRec has always known an as-cast's class, but the tail never asked. So
+          `(b as T)[i]` built a raw AN_INDEX instead of dispatching the DEFAULT PROPERTY --
+          leaving the AN_AS_CAST orphaned and unlowerable -- and `(b as T).Member` silently
+          DROPPED an unresolvable member and evaluated to the object pointer.
+
+          It was the THIRD copy of member/index dispatch (ParseLValueAST's suffix loop,
+          ParseClassRecordSelectors, and this). The duplication was the bug, so this hands off
+          rather than growing a fourth: default properties, virtual methods, properties and the
+          class-reference ops all come along for free, and cannot drift again. }
+        if (CurTok.Kind in [tkDot, tkLBrack]) then
+        begin
+          parenRec := ResolveNodeRec(node);
+          if parenRec >= REC_UCLASS_BASE then
+          begin
+            tk := IntToTypeKind(ASTTk[node]);
+            node := ParseClassRecordSelectors(node, parenRec, tk);
+            recName := ResolveNodeRec(node);
+            Continue;
+          end;
+        end;
+
         if CurTok.Kind = tkCaret then
         begin
           Next;

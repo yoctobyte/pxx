@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# a PARENTHESISED expression keeps its class id: (b as T)[i] / (b as T).ClassName
+	./$(COMPILER) test/test_paren_expr_class_b297.pas /tmp/test_paren_expr_class_b29726
+	test "$$(/tmp/test_paren_expr_class_b29726)" = "$$(printf 'direct index   : 20\nas-cast index  : 20\nas-cast chained: TB\nas-cast member : TArr\nas-cast inherit: TRUE')"
 	# a class-reference OP chained after a value: d.Self_.ClassName / .InheritsFrom
 	./$(COMPILER) test/test_classref_op_chained_b296.pas /tmp/test_classref_op_chained_b29626
 	test "$$(/tmp/test_classref_op_chained_b29626)" = "$$(printf 'TD\nTRUE')"
