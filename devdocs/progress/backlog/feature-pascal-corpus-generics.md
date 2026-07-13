@@ -72,3 +72,21 @@ read via GetTokenStr, the class-body property path already does), impl headers
 (selector paths guard on CurTok.Kind = tkIdent). Plus UNTYPED constref params
 (`constref ALeft, ARight): Integer`). Type helpers are DONE through statics
 (b331 v1+v2, see feature-pascal-type-helpers).
+
+## Recon round 3 (b332 landed) — and THE architectural wall
+10. `&keyword` escaped identifiers (lexer: '&'+letter = plain tkIdent, no
+    keyword lookup; '&777' stays octal).
+11. Methods NAMED after type keywords (`class function Integer(...)`) —
+    IsMethodNameTok at decl/impl/call-site name positions; names via
+    GetTokenStr (keyword tokens carry no SVal).
+12. `class of` FORWARD references mint a forward class row.
+13. PVariant builtin pointer name.
+
+**The wall recon stops at: generics.defaults is built ON FPC-layout RTTI** —
+PTypeInfo/PTypeData reflection to select comparers per TypeInfo(T), incl.
+TypeInfo of GENERIC PARAMS. pxx's RTTI blobs are deliberately our own layout
+(TypeInfo() is enum-only for exactly this reason). Options: grow a real
+FPC-compatible TypInfo surface (big, cross-cutting — the same boundary as
+feature-embed-dwscript-rtti), or a pxx-native Generics.Defaults implementation
+(a FORK, which corpus rules resist). Decision needed before this rung
+continues; helpers unit itself now compiles.

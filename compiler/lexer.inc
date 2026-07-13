@@ -1881,7 +1881,26 @@ begin
 
   if c = '&' then
   begin
-    Inc(SrcPos); n := 0;
+    Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['a'..'z','A'..'Z','_']) then
+    begin
+      { `&keyword` — FPC/Delphi ESCAPED IDENTIFIER: the name is a plain
+        tkIdent even when it spells a reserved word (generics.defaults
+        declares `class function &String(...)`). NO keyword lookup. The
+        token's span starts at the name (past the '&') so SOffset-based
+        name records read the bare name. }
+      s := '';
+      while (SrcPos <= Length(Source)) and
+            (Source[SrcPos] in ['a'..'z','A'..'Z','0'..'9','_']) do
+      begin
+        AppendChar(s, Source[SrcPos]);
+        Inc(SrcPos);
+      end;
+      CurTok.Kind := tkIdent;
+      CurTok.SVal := s;
+      Exit;
+    end;
+    n := 0;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7']) do
       begin n := n*8 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;

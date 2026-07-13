@@ -553,6 +553,18 @@ end;
 { Predefined routines are not reserved words. In declaration-name position they
   must behave like ordinary identifiers so user parameters can shadow Chr/Ord,
   Length, Read/Write, etc. }
+{ Method-NAME position: FPC (delphi mode) lets methods be NAMED after built-in
+  type keywords — generics.defaults declares `class function Integer(constref
+  ALeft, ARight: Integer): Integer;` and ~30 siblings per class. These lex as
+  type-keyword tokens whose SVal is EMPTY, so name reads at the sites that
+  accept this predicate must go through GetTokenStr, never SVal. }
+function IsMethodNameTok: Boolean;
+begin
+  IsMethodNameTok := IsMemberNameTok or
+    (CurTok.Kind in [tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T,
+                     tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
+end;
+
 function IsDeclNameTok: Boolean;
 begin
   if IsMemberNameTok then
@@ -3321,8 +3333,8 @@ begin
             Exit;
           end;
           Expect(tkDot, '.');
-          if CurTok.Kind <> tkIdent then Error('expected class method name');
-          fieldName := CurTok.SVal;
+          if not IsMethodNameTok then Error('expected class method name');
+          fieldName := GetTokenStr(TokPos - 1);  { keyword-token names carry no SVal }
           Next;
 
           { Overload-aware: `TAssert.AssertNotNull(x)` and `TAssert.AssertNotNull(msg, x)`
@@ -6152,6 +6164,7 @@ begin
   else if CaseEqual(nm, 'psingle') then Result := tySingle
   else if CaseEqual(nm, 'pdouble') or CaseEqual(nm, 'pextended') then Result := tyDouble
   else if CaseEqual(nm, 'pboolean') then Result := tyBoolean
+  else if CaseEqual(nm, 'pvariant') then Result := tyVariant
   else if CaseEqual(nm, 'ppointer') then Result := tyPointer
   { PShortString — FPC's typinfo/fpcunit method-name tables are built out of it
     (`TMethodNameRec.name : pshortstring`). tyChar for PAnsiChar/PChar is deliberately
@@ -16610,8 +16623,8 @@ begin
   if isCtor then isFunc := False
   else isFunc := CurTok.Kind = tkFunction;
   Next;
-  if not IsMemberNameTok then Error('expected record method name');
-  mname := CurTok.SVal;
+  if not IsMethodNameTok then Error('expected record method name');
+  mname := GetTokenStr(TokPos - 1);   { keyword-token names carry no SVal }
   mnOff := Tokens[TokPos-1].SOffset;
   mnLen := Tokens[TokPos-1].SLen;
   Next;
@@ -17376,7 +17389,15 @@ begin
         Expect(tkOf, 'of');
         if CurTok.Kind <> tkIdent then Error('expected base class after class of');
         ci := FindUClass(CurTok.SVal);
-        if ci < 0 then Error('class of base type not found: ' + CurTok.SVal);
+        if ci < 0 then
+        begin
+          { FPC allows `TFooClass = class of TFoo` BEFORE TFoo's declaration in
+            the same type section (generics.defaults' THashServiceClass): mint
+            a FORWARD class row; the real declaration completes it, exactly
+            like `TFoo = class;`. }
+          ci := AddUClass(Tokens[TokPos-1].SOffset, Tokens[TokPos-1].SLen);
+          UClsForward[ci] := True;
+        end;
         RegisterClassRefAlias(tnOff, tnLen, REC_UCLASS_BASE + ci);
         Next;
         Eat(tkSemicolon);
@@ -17614,8 +17635,8 @@ begin
             else
               Next;
 
-            if not IsMemberNameTok then Error('expected method name');
-            mname := CurTok.SVal;
+            if not IsMethodNameTok then Error('expected method name');
+            mname := GetTokenStr(TokPos - 1);   { keyword-token names carry no SVal }
             mnOff := Tokens[TokPos-1].SOffset;
             mnLen := Tokens[TokPos-1].SLen;
             Next;
@@ -19511,13 +19532,13 @@ begin
       begin
         methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
         Next; { consume dot }
-        if not IsMemberNameTok then Error('expected method name');
-        methName := CurTok.SVal;
+        if not IsMethodNameTok then Error('expected method name');
+        methName := GetTokenStr(TokPos - 1);   { keyword-token names carry no SVal }
         methSNOff := Tokens[TokPos-1].SOffset;
         methSNLen := Tokens[TokPos-1].SLen;
         AppendChar(name, '.');
         i := 1;
-        while i <= Length(CurTok.SVal) do begin AppendChar(name, CurTok.SVal[i]); Inc(i); end;
+        while i <= Length(methName) do begin AppendChar(name, methName[i]); Inc(i); end;
         Next; { consume method name }
       end;
   end;
