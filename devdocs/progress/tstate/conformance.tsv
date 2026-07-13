@@ -498,7 +498,7 @@ pass	toperator95.pp	toperator	-
 skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
 skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/widestring/pchar params
-fail	tover2.pp	tover	-	compile error
+pass	tover2.pp	tover	-	
 skip	tover3.pp	tover	wontfix	dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 skip	tover4.pp	tover	gap	80-bit extended/cextended float type and overload resolution across single/double/extended
 skip	tprocvar1.pp	tprocvar	gap	method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars
