@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -128,7 +128,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
@@ -877,7 +876,7 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (13)
+## rejected (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -894,10 +893,10 @@ _none_
 | feature-asm-structured-ir-library | A | 50 | feature | Unify inline asm onto the existing per-target text-assembler engine | — |
 | feature-lazy-standard-unit-emission | A | 50 | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-opt-lazy-token-sval | O | 55 | feature | Lazy / conditional CurTok.SVal materialization — cut per-token string allocation | — |
+| regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-aarch64-test-cross-sysopen-family
 - [p 70] [T] regression-test-aarch64-test-lfm
 - [p 70] [T] regression-test-aarch64-test-streaming-enumset
 - [p 70] [T] regression-test-c-conformance-aarch64-shard0-6
