@@ -94,12 +94,28 @@ function __pxxPos(const sub, s: AnsiString): Integer;
   proc or a class method of the same name (that broke adventure's
   TGame.Move). Overlap-safe Move (memmove) and FillChar; plain byte loops —
   feature-move-fillchar-intrinsics tracks the optimized emission. }
+{ System.Assert(cond[, msg]) — reached through a parser soft-alias (bare `Assert(` ->
+  this hidden name), so NO real proc named Assert exists to shadow a user's own Assert or
+  a method of the enclosing class. On failure it reports and halts with 227, FPC's
+  assertion runtime error. The message is a defaulted parameter, so both arities work. }
+procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
+
 procedure __pxxMove(const Source; var Dest; Count: Integer);
 procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
 procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
 function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
 
 implementation
+
+procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
+begin
+  if cond then Exit;
+  if msg = '' then
+    writeln('Assertion failed')
+  else
+    writeln('Assertion failed: ', msg);
+  Halt(227);                       { FPC's assertion runtime error }
+end;
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
 var s, d: PByte; i: Integer;

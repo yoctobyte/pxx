@@ -11793,6 +11793,18 @@ begin
         else if CaseEqual(name, 'FillDWord') then name := '__pxxFillDWord'
         else name := '__pxxFillChar';
       end;
+
+      { Bare Assert(cond) / Assert(cond, msg) — System.Assert, with no `uses`. Same
+        soft-alias discipline as Move/FillChar above: no real proc named Assert exists,
+        so a user's own Assert (or a method of the enclosing class) still wins. The
+        message is a defaulted parameter on the helper. }
+      if (qUnit < 0) and CaseEqual(name, 'Assert') and
+         (Tokens[TokPos].Kind = tkLParen) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) and
+         ((qUnit = -2) or (CurSelfClass < REC_UCLASS_BASE) or
+          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
+         (FindProc('__pxxAssert') >= 0) then
+        name := '__pxxAssert';
       { Label definition: 'labelname:' as a statement }
       if Tokens[TokPos].Kind = tkColon then
       begin
@@ -15129,6 +15141,14 @@ begin
       else if CurTok.Kind = tkClass then
       begin
         Next;
+        { `class sealed` / `class abstract` — Delphi class modifiers, sitting between
+          `class` and the heritage list. pxx enforces neither (sealed forbids
+          descendants, abstract forbids instantiation; nothing else here is enforced
+          either), so they are parse-and-ignore. Unconsumed, `sealed` was read as the
+          heritage/first member and the whole declaration desynced. }
+        while (CurTok.Kind = tkIdent) and
+              (CaseEqual(CurTok.SVal, 'sealed') or CaseEqual(CurTok.SVal, 'abstract')) do
+          Next;
         parentCi := -1;
         implCnt := 0;
         hadParens := CurTok.Kind = tkLParen;
@@ -15545,6 +15565,11 @@ begin
                    CaseEqual(CurTok.SVal, 'inline') or
                    CaseEqual(CurTok.SVal, 'static') or
                    CaseEqual(CurTok.SVal, 'reintroduce') or
+                   { `final` — seals a virtual method against further override. pxx does
+                     not enforce it (nothing else here is enforced either), so it is
+                     parse-and-ignore like `reintroduce`. Unconsumed it desynced the
+                     member loop. }
+                   CaseEqual(CurTok.SVal, 'final') or
                    CaseEqual(CurTok.SVal, 'deprecated') or
                    CaseEqual(CurTok.SVal, 'platform') or
                    CaseEqual(CurTok.SVal, 'experimental'))) or
@@ -20266,7 +20291,8 @@ begin
       site. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
+       (CaseEqual(GetTokenStr(i), 'assert') or
+        CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
         CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
         CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then

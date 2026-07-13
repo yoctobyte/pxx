@@ -430,6 +430,14 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# class sealed/abstract, method `final`, and System.Assert (a user's own Assert wins)
+	./$(COMPILER) test/test_assert_sealed_final_b264.pas /tmp/test_assert_sealed_final_b26426
+	test "$$(/tmp/test_assert_sealed_final_b26426)" = "$$(printf 'B\nS\nasserts-passed')"
+	# a FAILING assert reports and halts with 227 (FPC's assertion runtime error)
+	printf 'program a; begin Assert(1=2, "boom"); end.\n' | tr '"' "'" > /tmp/assert_fail_b264.pas
+	./$(COMPILER) /tmp/assert_fail_b264.pas /tmp/assert_fail_b26426
+	! /tmp/assert_fail_b26426 > /tmp/assert_fail_b264.out 2>&1; test "$$?" = "0"
+	test "$$(cat /tmp/assert_fail_b264.out)" = "Assertion failed: boom"
 	# `const` / `class const` sections inside a class body; qualified TFoo.K access
 	./$(COMPILER) test/test_class_const_b263.pas /tmp/test_class_const_b26326
 	test "$$(/tmp/test_class_const_b26326)" = "$$(printf 'rec-x=8 rec-name=rec\nn=19\ngreeting=hi\nqualified=16 3')"
