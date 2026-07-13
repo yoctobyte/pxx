@@ -47,3 +47,18 @@ vs Delphi-mode implicit specialization, nested generic types
 ## Gate
 Suite: rtl-generics has FPC tests (packages/rtl-generics/tests). Same recipe as
 fpjson: stage dir + driver + tjrun-style walker once it compiles.
+
+## Recon continued (same night) — b330 landed
+7. `{$MACRO ON}` text macros: ExpandPasMacros textual pre-pass (elfwriter.inc,
+   runs after ExpandIncludes; guarded so only value-define sources pay). Bodies
+   flatten to one line, directives blank to spaces — line numbers preserved.
+8. Int8/Int16/Int32 as value-cast names (OrdinalNameToTk).
+9. RolDWord/RorDWord/RolQWord/RorQWord System rotates (__pxx soft-alias
+   helpers in builtin, UpCase/Pos pattern; prescan pull).
+
+## The NEXT wall (where this rung actually starts costing)
+`type TValueAnsiStringHelper = record helper for AnsiString` — TYPE HELPERS
+(generics.helpers.pas). A real language feature: helper method dispatch on
+plain types, `Self` = the value. After that: the generic classes themselves
+(TList<T>/TDictionary<K,V> across units, specialize, interface constraints).
+Both are full sessions, not walls.

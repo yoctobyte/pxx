@@ -2821,6 +2821,202 @@ begin
   p := res;
 end;
 
+procedure ExpandPasMacros(var src: AnsiString);
+{ FPC MACRO-ON text macros: a dollar-define directive of the form
+  "define name := replacement" splices the replacement wherever the bare
+  identifier later appears (rtl-generics' generics.hashes builds its Jenkins
+  mixers this way). Textual pre-pass, run AFTER ExpandIncludes on a unit's
+  full source:
+
+  - A macro BODY is flattened to one line (newlines -> spaces; Pascal is
+    newline-insensitive) and the directive itself is blanked to spaces with
+    its newlines kept, so LINE NUMBERS downstream are exactly preserved.
+  - Strings, line comments, paren-star and (nested) brace comments are copied
+    verbatim; plain dollar-directives pass through for the real lexer.
+  - Macros are unit-scoped (the table resets per call, includes are already
+    spliced in). No parameters, no recursive expansion — FPC's plain form.
+  - The whole pass runs ONLY when the source contains a value-define (a
+    dollar-define whose directive text has a := before it closes), so every
+    other unit — including the self-host — passes through untouched.
+  NOTE the doc comment avoids literal brace characters on purpose: see the
+  nested-comment-brace self-host landmine. }
+var
+  mNames, mBodies: array[0..31] of AnsiString;
+  mCount, i, j, k, n, mi, depth: Integer;
+  res, w, body: AnsiString;
+  c: Char;
+  found, seen: Boolean;
+begin
+  { cheap guard: any dollar-define whose directive text contains := ? }
+  n := Length(src);
+  seen := False;
+  i := 1;
+  while (i + 8 <= n) and (not seen) do
+  begin
+    if (src[i] = '{') and (src[i+1] = '$') and
+       ((src[i+2] = 'd') or (src[i+2] = 'D')) then
+    begin
+      j := i + 2;
+      w := '';
+      while (j <= n) and (((src[j] >= 'a') and (src[j] <= 'z')) or
+                          ((src[j] >= 'A') and (src[j] <= 'Z'))) do
+      begin
+        AppendChar(w, src[j]);
+        Inc(j);
+      end;
+      if CaseEqual(w, 'define') then
+        while (j <= n) and (src[j] <> '}') do
+        begin
+          if (src[j] = ':') and (j < n) and (src[j+1] = '=') then
+          begin
+            seen := True;
+            Break;
+          end;
+          Inc(j);
+        end;
+    end;
+    Inc(i);
+  end;
+  if not seen then Exit;
+
+  mCount := 0;
+  res := '';
+  i := 1;
+  while i <= n do
+  begin
+    c := src[i];
+    if c = '''' then
+    begin
+      { string literal ('it''s' scans as two adjacent strings — fine here) }
+      AppendChar(res, c); Inc(i);
+      while i <= n do
+      begin
+        AppendChar(res, src[i]);
+        if src[i] = '''' then begin Inc(i); Break; end;
+        Inc(i);
+      end;
+    end
+    else if (c = '/') and (i < n) and (src[i+1] = '/') then
+    begin
+      while (i <= n) and (src[i] <> #10) do begin AppendChar(res, src[i]); Inc(i); end;
+    end
+    else if (c = '(') and (i < n) and (src[i+1] = '*') then
+    begin
+      AppendChar(res, src[i]); AppendChar(res, src[i+1]); i := i + 2;
+      while i <= n do
+      begin
+        AppendChar(res, src[i]);
+        if (src[i] = ')') and (src[i-1] = '*') then begin Inc(i); Break; end;
+        Inc(i);
+      end;
+    end
+    else if c = '{' then
+    begin
+      if (i < n) and (src[i+1] = '$') then
+      begin
+        j := i + 2;
+        while (j <= n) and (src[j] = ' ') do Inc(j);
+        w := '';
+        while (j <= n) and (((src[j] >= 'a') and (src[j] <= 'z')) or
+                            ((src[j] >= 'A') and (src[j] <= 'Z'))) do
+        begin
+          AppendChar(w, src[j]);
+          Inc(j);
+        end;
+        found := False;
+        if CaseEqual(w, 'define') then
+        begin
+          while (j <= n) and ((src[j] = ' ') or (src[j] = #9)) do Inc(j);
+          w := '';
+          while (j <= n) and (((src[j] >= 'a') and (src[j] <= 'z')) or
+                              ((src[j] >= 'A') and (src[j] <= 'Z')) or
+                              ((src[j] >= '0') and (src[j] <= '9')) or
+                              (src[j] = '_')) do
+          begin
+            AppendChar(w, src[j]);
+            Inc(j);
+          end;
+          while (j <= n) and ((src[j] = ' ') or (src[j] = #9) or (src[j] = #10) or (src[j] = #13)) do Inc(j);
+          if (j < n) and (src[j] = ':') and (src[j+1] = '=') then
+          begin
+            j := j + 2;
+            body := '';
+            while (j <= n) and (src[j] <> '}') do
+            begin
+              if (src[j] = #10) or (src[j] = #13) then AppendChar(body, ' ')
+              else AppendChar(body, src[j]);
+              Inc(j);
+            end;
+            if j > n then Error('unterminated text-macro define directive');
+            if mCount >= 32 then Error('too many text macros in one unit');
+            mNames[mCount] := w;
+            mBodies[mCount] := body;
+            Inc(mCount);
+            { blank the directive; keep its newlines so line numbers hold }
+            for k := i to j do
+              if (src[k] = #10) then AppendChar(res, #10) else AppendChar(res, ' ');
+            i := j + 1;
+            found := True;
+          end;
+        end;
+        if not found then
+        begin
+          { any other directive: copy verbatim through its closing brace }
+          while (i <= n) and (src[i] <> '}') do begin AppendChar(res, src[i]); Inc(i); end;
+          if i <= n then begin AppendChar(res, src[i]); Inc(i); end;
+        end;
+      end
+      else
+      begin
+        { comment — nested braces tolerated; over-nesting in delphi-mode
+          sources only risks skipping macro USES inside dead comment text }
+        depth := 0;
+        while i <= n do
+        begin
+          AppendChar(res, src[i]);
+          if src[i] = '{' then Inc(depth)
+          else if src[i] = '}' then
+          begin
+            Dec(depth);
+            if depth = 0 then begin Inc(i); Break; end;
+          end;
+          Inc(i);
+        end;
+      end;
+    end
+    else if ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or (c = '_') then
+    begin
+      w := '';
+      while (i <= n) and (((src[i] >= 'a') and (src[i] <= 'z')) or
+                          ((src[i] >= 'A') and (src[i] <= 'Z')) or
+                          ((src[i] >= '0') and (src[i] <= '9')) or
+                          (src[i] = '_')) do
+      begin
+        AppendChar(w, src[i]);
+        Inc(i);
+      end;
+      found := False;
+      mi := 0;
+      while (mi < mCount) and (not found) do
+      begin
+        if CaseEqual(w, mNames[mi]) then
+        begin
+          AppendString(res, mBodies[mi]);
+          found := True;
+        end;
+        Inc(mi);
+      end;
+      if not found then AppendString(res, w);
+    end
+    else
+    begin
+      AppendChar(res, c);
+      Inc(i);
+    end;
+  end;
+  src := res;
+end;
+
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
 { Replace active dollar-include directives with file contents, one level deep.
   Conditional directives remain in the text for the real lexer pass; this

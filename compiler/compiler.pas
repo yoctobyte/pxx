@@ -643,6 +643,7 @@ begin
   DeclItemCount := 0;
   if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
     ExpandIncludes(Source, SourceFileDir);
+    ExpandPasMacros(Source);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;

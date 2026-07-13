@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
+	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
+	./$(COMPILER) test/test_text_macros_rotates_b330.pas /tmp/test_macros_rot_b33026
+	test "$$(/tmp/test_macros_rot_b33026)" = "$$(printf 'a=2 b=3\nrol=3\nror=3221225472\nrolq=24\ni8=-1\ni16=-1\ni32=-1')"
 	# rtl-generics dialect prereqs: array[Byte], PUInt8-family names, local
 	# var-section ordinal initializers, compound-assign statements (+= -= *= /=)
 	./$(COMPILER) test/test_dialect_generics_prereqs_b329.pas /tmp/test_generics_prereq_b32926

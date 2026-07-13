@@ -93,6 +93,14 @@ function __pxxSqrDbl(d: Double): Double;
 function __pxxUpCase(c: Char): Char;
 function __pxxPos(const sub, s: AnsiString): Integer;
 
+{ FPC System bit rotates (RolDWord/RorDWord/RolQWord/RorQWord), reached through
+  a parser soft-alias like UpCase/Pos so no real proc of those names exists to
+  shadow a user's own. n is masked to the width like FPC/x86 do. }
+function __pxxRolDWord(v: Cardinal; n: Integer): Cardinal;
+function __pxxRorDWord(v: Cardinal; n: Integer): Cardinal;
+function __pxxRolQWord(v: QWord; n: Integer): QWord;
+function __pxxRorQWord(v: QWord; n: Integer): QWord;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -125,6 +133,34 @@ begin
   else
     writeln('Assertion failed: ', msg);
   Halt(227);                       { FPC's assertion runtime error }
+end;
+
+function __pxxRolDWord(v: Cardinal; n: Integer): Cardinal;
+begin
+  n := n and 31;
+  if n = 0 then Result := v
+  else Result := (v shl n) or (v shr (32 - n));
+end;
+
+function __pxxRorDWord(v: Cardinal; n: Integer): Cardinal;
+begin
+  n := n and 31;
+  if n = 0 then Result := v
+  else Result := (v shr n) or (v shl (32 - n));
+end;
+
+function __pxxRolQWord(v: QWord; n: Integer): QWord;
+begin
+  n := n and 63;
+  if n = 0 then Result := v
+  else Result := (v shl n) or (v shr (64 - n));
+end;
+
+function __pxxRorQWord(v: QWord; n: Integer): QWord;
+begin
+  n := n and 63;
+  if n = 0 then Result := v
+  else Result := (v shr n) or (v shl (64 - n));
 end;
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);

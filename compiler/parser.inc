@@ -7,6 +7,7 @@ function GetFilePath(const path: AnsiString): AnsiString; forward;
 function GetFileBaseName(const path: AnsiString): AnsiString; forward;
 procedure NormalizePath(var p: AnsiString); forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
+procedure ExpandPasMacros(var src: AnsiString); forward;
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
@@ -6144,11 +6145,11 @@ end;
 
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind;
 begin
-  if CaseEqual(nm, 'shortint') then Result := tyInt8
+  if CaseEqual(nm, 'shortint') or CaseEqual(nm, 'int8') then Result := tyInt8
   else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'uint8') then Result := tyUInt8
-  else if CaseEqual(nm, 'smallint') then Result := tyInt16
+  else if CaseEqual(nm, 'smallint') or CaseEqual(nm, 'int16') then Result := tyInt16
   else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
-  else if CaseEqual(nm, 'longint') then Result := tyInt32
+  else if CaseEqual(nm, 'longint') or CaseEqual(nm, 'int32') then Result := tyInt32
   else if CaseEqual(nm, 'integer') then Result := tyInteger
   else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'uint32')
        or CaseEqual(nm, 'dword') then Result := tyUInt32
@@ -8229,6 +8230,30 @@ begin
         CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
         ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyChar);
         LastExprTk := tyChar;
+        Exit;
+      end;
+
+      { RolDWord/RorDWord/RolQWord/RorQWord(value, n): FPC System bit-rotate
+        intrinsics (generics.hashes' xxHash mixers). Same soft-alias shape as
+        UpCase: hidden __pxx helpers so no real proc of these names exists to
+        shadow a user's own. }
+      if (CaseEqual(name, 'RolDWord') or CaseEqual(name, 'RorDWord') or
+          CaseEqual(name, 'RolQWord') or CaseEqual(name, 'RorQWord')) and
+         (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkComma, ',');
+        ParseExpr; op := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('__pxx' + name);
+        if helperPi < 0 then Error(name + ': builtin helper unavailable (needs the builtin unit; not on ESP)');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        left := AllocNode(AN_ARG); ASTLeft[left] := op; ASTRight[argSeq] := left;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq;
+        ASTTk[CurASTNode] := Ord(Procs[helperPi].RetType);
+        LastExprTk := Procs[helperPi].RetType;
         Exit;
       end;
 
@@ -21685,6 +21710,7 @@ begin
     CurrentUnitIdx := strIdx;
 
     ExpandIncludes(UnitContent, GetFilePath(path));
+    ExpandPasMacros(UnitContent);
 
     { This unit's name resolves the `*` in its own $R *.lfm (processed during
       LexAppend below). Restored after, so a nested `uses` doesn't leak its base. }
@@ -22650,7 +22676,9 @@ begin
       builtin unit (see ParseFactor); pull it so they resolve. ESP can't. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos')) and
+       (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos') or
+        CaseEqual(GetTokenStr(i), 'roldword') or CaseEqual(GetTokenStr(i), 'rordword') or
+        CaseEqual(GetTokenStr(i), 'rolqword') or CaseEqual(GetTokenStr(i), 'rorqword')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Move(...)` / `FillChar(...)`: System memory primitives live in the
