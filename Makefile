@@ -942,6 +942,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# a discarded expression statement must still be EVALUATED: a non-call root was an
+	# IR orphan, so `f() ^ 3;` / `(void)(f()+1);` / `x = ((f()^K), 0);` never called f()
+	./$(COMPILER) test/cdiscarded_expr_side_effects_b308.c /tmp/cdiscarded_expr_b30826
+	test "$$(/tmp/cdiscarded_expr_b30826)" = "$$(printf 'bare-call=1\nbinop=1\ncast=1\nternary=1\ntwo-calls=2\nunary=1\ncomma-assign=1 g=0\ncomma-chain=2 x=9\ncomma-in-if=1')"
 	# a struct-valued comma expression passed BY VALUE (segfaulted: a comma is not an
 	# lvalue, so the record-by-value copy could not take its address); plus the left
 	# operand's side effects, which must still run

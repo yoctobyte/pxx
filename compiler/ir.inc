@@ -507,6 +507,59 @@ begin
   end;
 end;
 
+procedure IRDiscardValue(irNode: Integer);
+{ A value computed at STATEMENT level and thrown away -- but which must still be
+  EVALUATED, because the expression may contain calls.
+
+  IRMarkStatementNode alone is not enough: the IR is emitted by walking from its roots,
+  and the top-level emit loop only recognises certain statement kinds. A root that is
+  neither a call nor a store is an ORPHAN and never gets emitted -- and the calls inside
+  it go down with it. So `f() ^ 3;`, `(void)(f() + 1);` and `x = ((f() ^ K), 0);` all
+  silently failed to call f(). The VALUES were right, which is why it stayed invisible;
+  csmith found it through the comma form.
+
+  Fix: force any other root into a hidden temp. A store IS a statement root, so it gets
+  emitted and drags its whole operand tree -- calls included -- with it, in order. The
+  temp is dead and -O drops the store.
+
+  Use this ONLY where the value is genuinely discarded at statement level (statement-list
+  items, a comma's left operand). Do NOT use it mid-expression -- appending a store while
+  a caller is part-way through building an argument or init chain splices it into that
+  chain and corrupts it. That is what IRMarkStatementNode stays for.
+
+  C-mode only: Pascal has no value-discarding expression statement, so the self-host
+  binary stays byte-identical. }
+var mkTk: TTypeKind; mkTmp: Integer;
+begin
+  if (irNode < 0) or (irNode >= IRCount) then Exit;
+  IRMarkStatementNode(irNode);
+  if not CProgramMode then Exit;
+  { Wrap ONLY a pure value node -- an operator whose result is thrown away but whose
+    operands may call something. Crucially none of these kinds is emitted by the
+    top-level statement loop, so the wrapping store cannot make an already-emitted
+    statement (IR_STORE_*, IR_CALL, IR_WRITE, ...) run a SECOND time as an operand.
+    An earlier revision wrapped every non-call root and did exactly that: it
+    double-evaluated the store in `*va_arg(ap, double*) = 100.125;` and crashed. }
+  if IRKind[irNode] = IR_LOAD_MEM then
+  begin
+    { `*f();` -- a discarded load THROUGH a call result. Do not wrap the load: an
+      IR_LOAD_MEM root also turns up where the emit loop is already handling the
+      surrounding statement (the va_arg builtins), and wrapping it there evaluated
+      that statement twice and crashed b201. Marking the address operand is enough --
+      it is the call, and that is the only side effect the load can have. }
+    IRMarkStatementNode(IRA[irNode]);
+    Exit;
+  end;
+  if (IRKind[irNode] <> IR_BINOP) and (IRKind[irNode] <> IR_NEG) and
+     (IRKind[irNode] <> IR_NOT) then Exit;
+  mkTk := IntToTypeKind(IRTk[irNode]);
+  if TypeIsOrdinal(mkTk) or TypeIsFloat(mkTk) or (mkTk = tyPointer) then
+  begin
+    mkTmp := AllocVar('', mkTk);
+    IRAppend(IR_STORE_SYM, mkTmp, irNode, -1, 0, Ord(mkTk));
+  end;
+end;
+
 function NodeDynDepth(node: Integer): Integer;
 { Dynamic-array nesting of an expression's value: 0 if not a dyn array, else the
   remaining `array of` levels. m (array of array of T) is 2; m[i] is 1; m[i][j]
@@ -1806,7 +1859,7 @@ begin
       walked from its roots, so a node evaluated purely for its side effects has to be
       marked or it is an orphan and never gets emitted at all -- `f((bump(), s))` would
       silently not call bump(). }
-    IRMarkStatementNode(IRLowerAST(ASTLeft[argAST]));
+    IRDiscardValue(IRLowerAST(ASTLeft[argAST]));
     argAST := ASTRight[argAST];
   end;
 
@@ -5385,7 +5438,7 @@ begin
     begin
       { C comma operator: evaluate Left for its side effects (discard the value),
         yield Right. Right-nested, so each Left peels one operand off the front. }
-      IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
+      IRDiscardValue(IRLowerAST(ASTLeft[node]));
       Result := IRLowerAST(ASTRight[node]);
     end;
 
@@ -5958,13 +6011,13 @@ begin
         if ASTKind[seq] = AN_SEQ then
         begin
           item := IRLowerAST(ASTLeft[seq]);
-          IRMarkStatementNode(item);
+          IRDiscardValue(item);
           seq := ASTRight[seq];
         end
         else
         begin
           item := IRLowerAST(seq);
-          IRMarkStatementNode(item);
+          IRDiscardValue(item);
           seq := -1;
         end;
         if first < 0 then first := item;
