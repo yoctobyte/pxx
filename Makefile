@@ -954,7 +954,7 @@ test-core: $(COMPILER)
 	# lvalue, so the record-by-value copy could not take its address); plus the left
 	# operand's side effects, which must still run
 	./$(COMPILER) test/ccomma_struct_arg_b307.c /tmp/ccomma_struct_arg_b30726
-	test "$$(/tmp/ccomma_struct_arg_b30726)" = "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2')"
+	test "$$(/tmp/ccomma_struct_arg_b30726)" = "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2\nassign-comma=2 7 side=0\nassign-comma-big=10 side=1')"
 	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
 	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
 	./$(COMPILER) test/csigned_bitfield_b306.c /tmp/csigned_bitfield_b30626

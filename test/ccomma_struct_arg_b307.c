@@ -21,6 +21,10 @@ static struct S0 g_15 = {2, 7};
 static struct Big g_big = {1, 2, 3, 4};
 static int side = 0;
 
+static struct S0 dst;
+static struct S0 *dp = &dst;
+static struct Big bdst;
+
 static unsigned f(struct S0 s, int a) { return (unsigned)s.f0 + s.f1 + a; }
 static long fbig(struct Big b) { return b.a + b.b + b.c + b.d; }
 static int bump(void) { side++; return 0; }
@@ -32,5 +36,14 @@ int main(void)
     printf("comma-big=%ld\n", fbig((bump(), g_big)));
     printf("nested-comma=%u\n", f((bump(), (*g_3), g_15), 1));
     printf("side=%d\n", side);          /* the left operands MUST still be evaluated */
+
+    /* the same shape on the OTHER side of the `=`: a struct-valued comma as the
+       right-hand side of an assignment. A record assignment copies from the source's
+       ADDRESS, and a comma is not an lvalue, so this took the address of nothing. */
+    side = 0;
+    (*dp) = ((*g_3), g_15);
+    printf("assign-comma=%d %d side=%d\n", (int)dp->f0, (int)dp->f1, side);
+    bdst = (bump(), g_big);
+    printf("assign-comma-big=%ld side=%d\n", bdst.a + bdst.b + bdst.c + bdst.d, side);
     return 0;
 }

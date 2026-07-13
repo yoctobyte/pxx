@@ -4280,6 +4280,20 @@ begin
 
     AN_ASSIGN:
     begin
+      { `x = (a, b)` -- a comma on the right-hand side. Its value IS b, so evaluate a
+        for its side effects and then assign FROM b. Rewriting the node here (rather
+        than letting IRLowerAST return the comma's value) is what makes a STRUCT survive:
+        a record assignment copies from the source's ADDRESS, and a comma is not an
+        lvalue, so `(*p) = (g, s);` took the address of nothing and segfaulted -- the
+        same shape as the call-argument case fixed in b307, on the other side of the `=`.
+
+        Right-nested, so peel one operand at a time. }
+      while ASTKind[ASTRight[node]] = AN_COMMA do
+      begin
+        IRDiscardValue(IRLowerAST(ASTLeft[ASTRight[node]]));
+        ASTRight[node] := ASTRight[ASTRight[node]];
+      end;
+
       lhsTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
       if (lhsTk = tyUnknown) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
       begin
