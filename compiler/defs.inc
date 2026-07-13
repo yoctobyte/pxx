@@ -2071,6 +2071,12 @@ var
   StrConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
   StrConstSOff : array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstSLen : array[0..MAX_TYPEALIAS-1] of Integer;
+  { The routine that declared it (CurProc at registration; -1 = unit/global level). The
+    table used to be FLAT, so a `const S = 'x';` inside one routine stayed visible to every
+    routine parsed after it -- and the lookup returned the FIRST match, so the leaked one
+    even beat a later routine's OWN const of the same name, substituting the wrong text
+    silently. bug-pascal-string-const-not-scoped. }
+  StrConstOwner: array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstCount: Integer;
 
   { Named set constants (`const S = [1,2,3]` / `const S: TS = [..]`). The 32-byte

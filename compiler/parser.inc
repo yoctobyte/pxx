@@ -2426,6 +2426,7 @@ begin
   if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
   if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
   StrConstName[StrConstCount] := 'LineEnding';
+  StrConstOwner[StrConstCount] := -1;   { System.LineEnding is global }
   StrConstSOff[StrConstCount] := TokCharLen;
   StrConstSLen[StrConstCount] := 1;
   TokChars[TokCharLen] := #10;
@@ -15634,6 +15635,7 @@ begin
             end;
             if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
             StrConstName[StrConstCount] := name;
+            StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := scOff;
             StrConstSLen[StrConstCount] := scLen;
             Inc(StrConstCount);
@@ -15642,6 +15644,7 @@ begin
           begin
             if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
             StrConstName[StrConstCount] := name;
+            StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
             StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
             Inc(StrConstCount);
@@ -15857,6 +15860,7 @@ begin
           until not Eat(tkPlus);
           if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
           StrConstName[StrConstCount] := name;
+          StrConstOwner[StrConstCount] := CurProc;
           StrConstSOff[StrConstCount] := scOff;
           StrConstSLen[StrConstCount] := scLen;
           Inc(StrConstCount);
@@ -15867,6 +15871,7 @@ begin
             the name builds an AN_STR_LIT over it. }
           if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
           StrConstName[StrConstCount] := name;
+          StrConstOwner[StrConstCount] := CurProc;
           StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
           StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
           Inc(StrConstCount);

@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# untyped string constants must be SCOPED: a routine's const must not leak into the
+	# next routine and beat ITS const of the same name (verified against FPC)
+	./$(COMPILER) test/test_string_const_scoping_b314.pas /tmp/test_string_const_scoping_b31426
+	test "$$(/tmp/test_string_const_scoping_b31426)" = "$$(printf 'A=A-local\nB=B-local\nUsesOuter=outer-G\nShadowsOuter=inner-G\nOuterAgain=outer-G\nCombine=unit-level/outer-G')"
 	# a VARIABLE in scope beats an untyped string CONSTANT of the same name: the const
 	# table is not scoped, so a `const S` in one method silently replaced a later
 	# method's `var S : TClass` with the constant's TEXT (verified against FPC)

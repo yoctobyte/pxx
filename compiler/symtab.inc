@@ -199,11 +199,22 @@ begin
 end;
 
 function FindStrConst(const name: AnsiString): Integer;
+{ Innermost-wins, like FindSym: a constant declared in the CURRENT routine beats one
+  declared at unit level, and one declared in some OTHER routine is not visible at all.
+  Newest-first within each tier, so a redeclaration shadows an earlier one.
+
+  The table was flat and searched oldest-first, so a routine-local const leaked into every
+  routine parsed after it AND beat that routine's own const of the same name -- the wrong
+  text, silently. bug-pascal-string-const-not-scoped. }
 var i: Integer;
 begin
   Result := -1;
-  for i := 0 to StrConstCount - 1 do
-    if CaseEqual(StrConstName[i], name) then begin Result := i; Exit; end;
+  for i := StrConstCount - 1 downto 0 do          { the current routine's own }
+    if (StrConstOwner[i] = CurProc) and CaseEqual(StrConstName[i], name) then
+      begin Result := i; Exit; end;
+  for i := StrConstCount - 1 downto 0 do          { else a unit/global-level one }
+    if (StrConstOwner[i] = -1) and CaseEqual(StrConstName[i], name) then
+      begin Result := i; Exit; end;
 end;
 
 function FindSetConst(const name: AnsiString): Integer;
