@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (103)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -66,6 +66,7 @@ _none_
 | feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
+| feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | C | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -915,6 +916,7 @@ _none_
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
+- [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [A] feature-float-exception-mask-control
 - [p 60] [A] feature-inline-asm-xtensa
