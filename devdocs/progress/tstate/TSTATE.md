@@ -2,8 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `2593dd2d9e2e` | 2026-07-13T05:12:49Z | GREEN (native) | 84.9s | `7b06e7f7a7fe` RED |
+| borg | `2593dd2d9e2e` | 2026-07-13T05:16:07Z | GREEN (full) | 190.2s | `2593dd2d9e2e` GREEN |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
-- **test-c-conformance-aarch64#shard3/6** — tools/run_c_conformance.sh (borg): bad `7b06e7f7a7fe`, last good `7b06e7f7a7fe`, 0 commit(s) in range
