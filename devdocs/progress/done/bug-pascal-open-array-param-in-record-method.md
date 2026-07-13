@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** bug (feature gap; currently a loud error)
 - **Track:** P — Pascal frontend
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 
 ## What
 ```pascal
@@ -33,3 +33,16 @@ not just the call.
 
 ## Gate
 `make test` + self-host byte-identical.
+
+## RESOLVED 2026-07-14 (b334)
+The IsArray registration is all the caller needs now — the old segfault
+predated the unified call-arg path; pxx open arrays carry their length inline
+at data-8. Enabled in ParseRecordMethodDecl, plus the real bug found on the
+way: a `[...]` open-array LITERAL argument to ANY instance/record method was
+parsed as a SET literal (crash) — the method arg loops (ParseLValueAST's and
+ParseClassRecordSelectors') now fork on ParamIsOpenArrayScalar /
+ParamIsVarRecArray like the plain-call path. High(), indexing, record
+elements (TRect.Union shape) all pinned in test_record_method_open_array_b334.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.

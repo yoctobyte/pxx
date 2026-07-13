@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# open-array params in RECORD methods (+ [..] open-array literals to any
+	# instance method — were parsed as SET literals)
+	./$(COMPILER) test/test_record_method_open_array_b334.pas /tmp/test_rec_openarr_b33426
+	test "$$(/tmp/test_rec_openarr_b33426)" = "$$(printf 'sum=106\nlit=130\nspan=14')"
 	# record-ctor results as full expressions: operator dispatch sees the lifted
 	# temp's record; postfix selectors chain on the factory result
 	./$(COMPILER) test/test_record_ctor_expr_tails_b333.pas /tmp/test_rec_ctor_tails_b33326

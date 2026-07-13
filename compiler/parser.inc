@@ -4409,7 +4409,13 @@ begin
             end;
             while mai <= Procs[mpi].ParamCount-1 do
             begin
-              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
+                mexprNode := ParseVarRecLiteralAST
+              else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
+                { `[...]` open-array literal to an instance/record method
+                  (r.SumAll([10,20])) — was parsed as a SET literal (b334) }
+                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind)
+              else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
                 if ByRefArgStartsExpression then
                 begin
@@ -5545,7 +5551,19 @@ begin
           end;
           while mai <= Procs[mpi].ParamCount - 1 do
           begin
-            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, mai) then
+            begin
+              { `[...]` array-of-const literal to a method reached through a
+                value/selector chain — same as the plain-call path (b287) }
+              aNode := ParseVarRecLiteralAST;
+            end
+            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
+            begin
+              { `[...]` open-array literal (r.SumAll([10,20]) on a record
+                method) — was parsed as a SET literal and crashed (b334) }
+              aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind);
+            end
+            else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
               if ByRefArgStartsExpression then
               begin
@@ -16683,12 +16701,15 @@ begin
       rmIsArr := False;
       if CurTok.Kind = tkArray then
       begin
-        { An open-array param needs the hidden length argument the class/routine paths set
-          up; registering it with IsArray alone produced a SEGFAULT at the call. Rejected
-          loudly rather than shipped as a crash — see
-          bug-pascal-open-array-param-in-record-method. (typshrdh.inc's TRect.Union uses
-          one, so that declaration still does not parse.) }
-        Error('open-array parameter in a record method is not supported yet');
+        { open-array param `const Points: array of TPoint` (typshrdh.inc's
+          TRect.Union) — same shape as the class/interface method paths: the
+          IsArray flag is all the CALLER needs (pxx open arrays carry their
+          length INLINE at data-8; the shared arg builder adapts static
+          arrays). The old segfault predated the unified call-arg path (b287);
+          b334 pins call + High() + indexing. }
+        Next;
+        Expect(tkOf, 'of');
+        rmIsArr := True;
       end;
       curTk := ParseTypeKind;
       for k := startIdx to nP - 1 do
