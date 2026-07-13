@@ -135,15 +135,15 @@ skip	tenum6.pp	tenum	gap	`Str()` of boolean / ByteBool / WordBool / LongBool / Q
 skip	tenumerators1.pp	tenum	gap	Classes TList/TFPList GetEnumerator + custom enumerator classes
 skip	terecs10.pp	terecs	gap	default indexed property on a record (advanced records)
 skip	terecs11.pp	terecs	gap	nested type section inside a record (private type: class/record/object/interface/range)
-pass	terecs12a.pp	terecs	-	
+fail	terecs12a.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs12b.pp	terecs	-	
 pass	terecs12c.pp	terecs	-	
 pass	terecs12d.pp	terecs	-	
 pass	terecs12.pp	terecs	-	
-pass	terecs13a.pp	terecs	-	
+fail	terecs13a.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs13b.pp	terecs	-	
 pass	terecs13c.pp	terecs	-	
-pass	terecs13d.pp	terecs	-	
+fail	terecs13d.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs13.pp	terecs	-	
 skip	terecs14.pp	terecs	gap	`class operator` set on records (Explicit, :=, =, In, comparison operators)
 skip	terecs15.pp	terecs	gap	record constructors with overloads (advanced records)
@@ -152,14 +152,14 @@ pass	terecs17a.pp	terecs	-
 pass	terecs17.pp	terecs	-	
 pass	terecs18a.pp	terecs	-	
 pass	terecs18.pp	terecs	-	
-pass	terecs19.pp	terecs	-	
+fail	terecs19.pp	terecs	-	accepted-invalid: %FAIL test compiled
 pass	terecs1.pp	terecs	-	
 skip	terecs20.pp	terecs	gap	`class threadvar` inside a record + threading RTL
 pass	terecs21.pp	terecs	-	
-pass	terecs2.pp	terecs	-	
+fail	terecs2.pp	terecs	-	accepted-invalid: %FAIL test compiled
 skip	terecs3.pp	terecs	gap	advanced-record features from a unit — class var/const/nested type, static class methods
 pass	terecs4.pp	terecs	-	
-pass	terecs5.pp	terecs	-	
+fail	terecs5.pp	terecs	-	accepted-invalid: %FAIL test compiled
 skip	terecs6.pp	terecs	gap	Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 pass	terecs7.pp	terecs	-	
 skip	terecs8.pp	terecs	gap	`class var` in a record referencing its own type + class property
