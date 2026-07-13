@@ -35,6 +35,54 @@ hole** — and the hole then swallowed `TClass` (a class reference, truncated) a
 `Int8`/`Int16`/`Int32` (all silently 4 bytes) until 2026-07-13, when those were fixed the
 same one-at-a-time way. The next missing name will do it again.
 
+## Confirmed symptoms so far
+Each was found and fixed one at a time, and each came through THIS hole:
+- `Sender: TObject` truncated to 32 bits ([[bug-tobject-param-truncated-32bit]]);
+- `TClass` truncated — a class reference in a 4-byte int;
+- `Int8` / `Int16` silently 4 bytes (and `Int32` right only by luck);
+- **`absolute` silently IGNORED** — the var-section's qualifier skipper handed `absolute`
+  AND its target name to ParseTypeKind, where both became Integers, so the overlay never
+  happened and the variable got its own storage (b265).
+
+The hole keeps manufacturing these. It is worth closing.
+
+## Why it is not closed yet — the blocker is now EXACTLY known
+Making it an error is a one-line change and the compiler still self-hosts. `make test`
+then fails in one place: the flagship fgl-compiles test, with `unknown type: TPoint`.
+
+The cause is **a type that references ITSELF inside its own declaration.** FPC's
+`rtl/inc/typshrdh.inc` declares TPoint as an advanced record:
+
+```pascal
+TPoint = packed record
+    X : Longint; Y : Longint;
+  public
+    constructor Create(apt: TPoint); overload;     { <-- TPoint, mid-declaration }
+  end;
+```
+
+TPoint is not registered until its declaration finishes, so that parameter's type is
+unknown AT THAT POINT. Today it quietly becomes an Integer and nobody notices (the record
+itself still lands: `SizeOf(TPoint) = 8` afterwards). With the error on, `uses types` fails
+outright — which is why `fgl` does.
+
+### Two earlier hypotheses, both WRONG — do not re-walk them
+- *"The `{$i typshrdh.inc}` include is not resolved."* No: it resolves, TPoint IS declared,
+  and a missing include in a unit is already a hard error.
+- *"Our headline FPC-compat result leans on this bug."* Overstated. The record is fine; only
+  the self-reference inside it is papered over.
+
+## What closing it needs
+Register the type NAME before parsing its body, so a self-reference resolves. That is
+entangled with [[feature-pascal-advanced-records]] — pxx cannot parse a record with a
+`public constructor` at all today, so how much of that declaration currently lands is the
+first thing to establish.
+
+Order: advanced records (or at least early name registration) FIRST, then turn the
+fallback into an error. Landing the error alone regresses the fgl gate; landing it with the
+name-registration fix should be clean.
+
+## Old notes (superseded)
 ## Why it was not simply made an error
 Tried 2026-07-13 (one line: error instead of `Result := tyInteger`). It does NOT break
 forward references — the declaration pre-scan registers the type section up front. It DOES

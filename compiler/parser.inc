@@ -13442,18 +13442,21 @@ begin
               end
               else
                 { Enums are ordinal/integer-sized at codegen — and an UNKNOWN type name
-                  silently lands here too, becoming a 4-byte Integer. That is a real
-                  trap: `var x: Integr;` (a typo) compiles, and a pointer type the source
-                  never declared becomes a 32-bit int, TRUNCATING every address stored
-                  through it with no diagnostic. It is the same hole that
-                  bug-tobject-param-truncated-32bit came through — that fix patched the
-                  one symptom (TObject, just above); the hole is still here.
+                  silently lands here too, becoming a 4-byte Integer. That is a real trap:
+                  `var x: Integr;` (a typo) compiles; a pointer type the source never
+                  declared becomes a 32-bit int and TRUNCATES every address stored through
+                  it; and `absolute` was swallowed whole, its target name parsed as a
+                  "type". It is the same hole bug-tobject-param-truncated-32bit came
+                  through — that fix patched the one symptom (TObject, just above), and the
+                  hole went on to produce TClass, Int8/Int16 and `absolute`.
 
-                  NOT tightened to an error yet, because real FPC RTL sources currently
-                  DEPEND on the tolerance: fgl -> types.pp declares TPoint via
-                  `{$i typshrdh.inc}`, which we do not resolve, so the flagship
-                  fgl-compiles test only passes because the missing type quietly becomes
-                  an Integer. Erroring here is right but must land WITH that include fix.
+                  NOT closed yet, and the blocker is now precisely known: a type that
+                  references ITSELF inside its own declaration. FPC's typshrdh.inc declares
+                  TPoint as an advanced record holding `constructor Create(apt: TPoint)`,
+                  so TPoint is used before its own declaration finishes. Today that
+                  parameter quietly becomes an Integer; with the error on, `uses types`
+                  fails. Closing this needs the type NAME registered before its body is
+                  parsed — which is entangled with advanced-record support.
                   See bug-pascal-unknown-type-silently-integer. }
                 Result := tyInteger;
             end;
