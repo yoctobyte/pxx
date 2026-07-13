@@ -62,3 +62,13 @@ fpjson: stage dir + driver + tjrun-style walker once it compiles.
 plain types, `Self` = the value. After that: the generic classes themselves
 (TList<T>/TDictionary<K,V> across units, specialize, interface constraints).
 Both are full sessions, not walls.
+
+## Next-wall inventory (generics.defaults) — methods NAMED after TYPE KEYWORDS
+`class function Integer(constref ALeft, ARight: Integer): Integer;` etc — ~30
+each in TCompare/TEquals/THashFactory. Needs: member-NAME position accepting
+type-keyword tokens (tkInteger_T/tkLongWord_T/...; NOTE their SVal is empty —
+read via GetTokenStr, the class-body property path already does), impl headers
+`class function TCompare.Integer(...)`, and call sites `TCompare.Integer(a,b)`
+(selector paths guard on CurTok.Kind = tkIdent). Plus UNTYPED constref params
+(`constref ALeft, ARight): Integer`). Type helpers are DONE through statics
+(b331 v1+v2, see feature-pascal-type-helpers).
