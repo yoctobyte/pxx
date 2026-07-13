@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T21:56:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T21:59:45Z",
    "fixed": [
     "test-c-conformance-aarch64#shard1/6"
@@ -413,12 +405,26 @@
    "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T02:05:20Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
+  "optdiff#shard0/6": "pass",
+  "optdiff#shard1/6": "pass",
+  "optdiff#shard2/6": "pass",
+  "optdiff#shard3/6": "pass",
+  "optdiff#shard4/6": "pass",
+  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -1575,6 +1581,11 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
+  "test-opt#00": "pass",
+  "test-opt#src:compiler/compiler.pas@1": "pass",
+  "test-opt#src:compiler/compiler.pas@2": "pass",
+  "test-opt#src:compiler/compiler.pas@3": "pass",
+  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1631,11 +1642,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T02:03:31Z",
+  "date": "2026-07-13T02:05:20Z",
   "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
-  "tier": "full",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 181.6
+  "wall": 103.3
  },
  "last_bench": {
   "conf_rows": 550,
