@@ -151,6 +151,19 @@ def cmd_up(clone, a):
         return cmd_stop(clone)
 
 
+def print_tstate(clone):
+    """The tstate summary (verdicts, open regressions, UP/DOWN).
+
+    Shared by `trackt status` and the live view, which re-renders it whenever a
+    gate completes — it used to be printed once at startup and then left to rot,
+    so a "DOWN — untested for 47 min" line could sit on screen long after the
+    watcher had caught up.
+    """
+    # from the dev checkout if it has tstate, else from the clone
+    repo = CHECKOUT if os.path.isdir(os.path.join(CHECKOUT, "devdocs")) else clone
+    twatch.status(repo, grace_min=45)
+
+
 def cmd_status(clone, attach_ok=True):
     conf = twatch.load_conf(clone)
     pid, w = daemon_pid(clone)
@@ -180,10 +193,7 @@ def cmd_status(clone, attach_ok=True):
               % (GRN, OFF, pid, phase, extra, age))
     else:
         print("  daemon : %sSTOPPED%s — trackt start" % (RED, OFF))
-    # tstate summary (same source as twatch --status), from the dev checkout
-    # if it has tstate, else from the clone
-    repo = CHECKOUT if os.path.isdir(os.path.join(CHECKOUT, "devdocs")) else clone
-    twatch.status(repo, grace_min=45)
+    print_tstate(clone)
     if attach_ok and pid and w.get("phase") == "testing":
         print("%s-- run in progress, attaching (Ctrl-C detaches) --%s" % (DIM, OFF))
         cmd_watch(clone)
@@ -204,39 +214,67 @@ def runs_files(clone):
 def emit_completions(clone, pos, show_sha=True):
     """Print a persistent timestamped line for every suite run completed
     since the last call — new rows in tstate/runs-<host>.ndjson, the
-    per-run archive twatch appends to when a gate finishes."""
+    per-run archive twatch appends to when a gate finishes.
+
+    Rows are identified by CONTENT, not by byte offset. Offsets cannot survive
+    this file: it is git-managed, and every publish does add/commit/pull
+    --rebase, during which git rewrites it — briefly shrinking it to the
+    remote's version, then regrowing it with our row. A shrink rewinds the
+    recorded offset, and the regrow then re-emits every row after that point.
+    That is the duplicated blocks in the live view: the same completed runs
+    printed again and again, one more copy each publish.
+    """
+    emitted = False
     for path in runs_files(clone):
         try:
-            size = os.path.getsize(path)
+            with open(path) as f:
+                rows = f.read().splitlines()
         except OSError:
             continue
-        last = pos.get(path)
-        pos[path] = size
-        if last is None or size <= last:
-            continue  # first sighting: report only runs finishing from now on
+        seen = pos.setdefault(path, set())
+        first_sight = not seen
         host = os.path.basename(path)[len("runs-"):-len(".ndjson")]
-        with open(path) as f:
-            f.seek(last)
-            for ln in f:
-                try:
-                    r = json.loads(ln)
-                except ValueError:
-                    continue
-                col = RED if r.get("verdict") == "RED" else GRN
-                line = "[%s] %s %s %s%s%s %ds" % (
-                    r.get("date", "?"), host, r.get("tier", "?"),
-                    col, r.get("verdict", "?"), OFF, r.get("wall", 0))
-                if show_sha and r.get("sha"):
-                    line += " " + r["sha"][:12]
-                if r.get("new_red"):
-                    line += " %sNEW-RED:%s%s" % (RED, ",".join(r["new_red"][:5]), OFF)
-                if r.get("fixed"):
-                    line += " %sFIXED:%s%s" % (GRN, ",".join(r["fixed"][:5]), OFF)
-                print("\r\033[K  " + line)
+        for ln in rows:
+            key = ln.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            if first_sight:
+                continue    # prime: report only runs finishing from NOW on
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            col = RED if r.get("verdict") == "RED" else GRN
+            line = "[%s] %s %s %s%s%s %ds" % (
+                r.get("date", "?"), host, r.get("tier", "?"),
+                col, r.get("verdict", "?"), OFF, r.get("wall", 0))
+            if show_sha and r.get("sha"):
+                line += " " + r["sha"][:12]
+            if r.get("new_red"):
+                line += " %sNEW-RED:%s%s" % (RED, ",".join(r["new_red"][:5]), OFF)
+            if r.get("fixed"):
+                line += " %sFIXED:%s%s" % (GRN, ",".join(r["fixed"][:5]), OFF)
+            print("\r\033[K  " + line)
+            emitted = True
+    return emitted
 
 
-def render_live(clone, w, live, last_reds):
+def render_live(clone, w, live, last_reds, seen_phase=None):
     phase = w.get("phase", "?")
+    # A phase CHANGE gets a persistent line. The in-place line (\r + erase, no
+    # newline) is right for a progress bar that updates every second, but it
+    # means a phase the daemon spent four minutes in — bench, fuzz, bisect —
+    # is silently overwritten by whatever comes next and leaves no trace at all.
+    # The user saw "benchmarking" for minutes and then watched it disappear.
+    if seen_phase is not None and phase != seen_phase.get("phase"):
+        if seen_phase.get("phase") is not None:
+            prev, since = seen_phase["phase"], seen_phase.get("since")
+            took = " (%ds)" % int(time.time() - since) if since else ""
+            print("\r\033[K  %s%s%s done%s" % (DIM, prev, OFF, DIM + took + OFF))
+        seen_phase["phase"] = phase
+        seen_phase["since"] = time.time()
+
     if phase != "testing" or not live:
         line = "phase %-12s %s" % (phase, DIM + fmt_age(w.get("ts")) + " ago" + OFF)
         sys.stdout.write("\r\033[K  " + line if ISATTY else "  " + line + "\n")
@@ -272,15 +310,21 @@ def watch_loop(clone, show_sha=True):
           % (DIM, OFF))
     seen = set()
     pos = {}
-    emit_completions(clone, pos, show_sha)   # prime offsets, print nothing
+    phase = {"phase": None, "since": None}
+    emit_completions(clone, pos, show_sha)   # prime: print nothing for old rows
     while True:
         pid, w = daemon_pid(clone)
         live = read_json(os.path.join(clone, ".testmgr", "live.json"))
         if not pid:
             print("\n  daemon not running.")
             return 1
-        emit_completions(clone, pos, show_sha)
-        seen = render_live(clone, w, live, seen)
+        # A completed gate is exactly when the tstate summary changes (verdict,
+        # NEW-RED/FIXED, UP/DOWN). Re-render it then — printing it once at
+        # startup left it stale for the whole session, so the "DOWN, untested
+        # for 47 min" you were reading could be minutes out of date.
+        if emit_completions(clone, pos, show_sha):
+            print_tstate(clone)
+        seen = render_live(clone, w, live, seen, phase)
         time.sleep(1)
 
 
