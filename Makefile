@@ -942,6 +942,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# a multidim LOCAL array of POINTERS must honour its brace initializer (it was
+	# silently SKIPPED -- every element read back nil; 1-D and multidim-int were fine)
+	./$(COMPILER) test/cmultidim_ptr_array_init_b309.c /tmp/cmultidim_ptr_array_b30926
+	test "$$(/tmp/cmultidim_ptr_array_b30926)" = "$$(printf 'braced=1 1\nflat=1 1\n3d=1 1\nderef3d=5\n1d=1\nints=1 6')"
 	# a discarded expression statement must still be EVALUATED: a non-call root was an
 	# IR orphan, so `f() ^ 3;` / `(void)(f()+1);` / `x = ((f()^K), 0);` never called f()
 	./$(COMPILER) test/cdiscarded_expr_side_effects_b308.c /tmp/cdiscarded_expr_b30826

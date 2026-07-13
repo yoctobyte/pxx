@@ -3577,9 +3577,16 @@ begin
       if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) then
         recArrInitCount := CBraceTopLevelInitCountAt(TokPos);
+      { Multidimensional scalar array with a brace initializer. POINTER elements belong
+        here too (`int *a[2][3] = {{&x,&x,&x},{&x,&x,&x}}`): they were excluded, so the
+        initializer fell through to the "unconsumed initializer" balanced SKIP below and
+        was silently discarded -- every element read back as nil. The elements are just
+        scalars to this flattening pre-scan (ParseCExpr yields AN_ADDR for `&x`), and the
+        stores below are pointer-width, so nothing else has to change. 1-D pointer arrays
+        always worked, which is what kept this hidden. csmith seed 711 crashed on it. }
       if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (dimCount >= 2) and
-         (declTk <> tyPointer) and (TypeIsOrdinal(declTk) or TypeIsFloat(declTk)) then
+         (TypeIsOrdinal(declTk) or TypeIsFloat(declTk) or (declTk = tyPointer)) then
       begin
         Next; Next;   { consume the assign then the open brace }
         brDepth := 1;
