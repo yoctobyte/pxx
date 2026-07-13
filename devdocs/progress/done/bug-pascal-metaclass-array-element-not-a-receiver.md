@@ -68,3 +68,6 @@ carries PtrElemTk=tyClass / PtrElemRec — a clean discriminator against arrays
 of ordinary record pointers). Virtual class methods, virtual constructors and
 the class-ref ops all dispatch through the element now. Pinned:
 test/test_metaclass_array_element_b328.pas. fpjson suite stays 203/203.
+
+## Log
+- 2026-07-13 — resolved, commit HEAD.
