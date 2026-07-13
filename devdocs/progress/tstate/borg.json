@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T21:47:32Z",
-   "fixed": [
-    "test-c-conformance-arm32#shard5/6",
-    "test-c-conformance-i386#shard5/6",
-    "test-c-conformance-riscv32#shard5/6"
-   ],
-   "new_red": [],
-   "sha": "4d2664947bbed8415180d8c68287f52834cb50dc",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-12T21:49:22Z",
    "fixed": [],
    "new_red": [],
@@ -414,6 +402,16 @@
    "new_red": [],
    "sha": "8997639f144fc690145e51c980d5c50b94986a89",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T02:00:20Z",
+   "fixed": [
+    "test-core#src:test/test_string_to_pchar_auto.pas"
+   ],
+   "new_red": [],
+   "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -989,6 +987,7 @@
   "test-core#src:test/test_asm_memr.pas": "pass",
   "test-core#src:test/test_asm_sizekw.pas": "pass",
   "test-core#src:test/test_asm_swap.pas": "pass",
+  "test-core#src:test/test_assert_sealed_final_b264.pas": "pass",
   "test-core#src:test/test_assign_types.pas": "pass",
   "test-core#src:test/test_async.pas": "pass",
   "test-core#src:test/test_async_sl.pas": "pass",
@@ -1403,7 +1402,7 @@
   "test-core#src:test/test_string_delete_insert.pas": "pass",
   "test-core#src:test/test_string_ordering.pas": "pass",
   "test-core#src:test/test_string_sized.pas": "pass",
-  "test-core#src:test/test_string_to_pchar_auto.pas": "fail",
+  "test-core#src:test/test_string_to_pchar_auto.pas": "pass",
   "test-core#src:test/test_succ_pred_odd.pas": "pass",
   "test-core#src:test/test_symslot_stale_ndims.pas": "pass",
   "test-core#src:test/test_syncobjs.pas": "pass",
@@ -1643,11 +1642,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T01:53:46Z",
-  "sha": "8997639f144fc690145e51c980d5c50b94986a89",
-  "tier": "opt",
+  "date": "2026-07-13T02:00:20Z",
+  "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 124.9
+  "wall": 64.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1667,15 +1666,5 @@
   "date": "2026-07-13T01:53:50Z",
   "sha": "8997639f144fc690145e51c980d5c50b94986a89"
  },
- "open_regressions": [
-  {
-   "bad": "8997639f144fc690145e51c980d5c50b94986a89",
-   "good": "8997639f144fc690145e51c980d5c50b94986a89",
-   "job": "test-core#src:test/test_string_to_pchar_auto.pas",
-   "name": "test-core#580",
-   "opened": "2026-07-13T01:51:31Z",
-   "range": [],
-   "src": "test/test_string_to_pchar_auto.pas"
-  }
- ]
+ "open_regressions": []
 }
