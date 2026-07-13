@@ -235,3 +235,32 @@ what cracked every one of them, in one or two compiles each.
    - [[bug-pascal-metaclass-array-element-not-a-receiver]] — `Map[0].Tag` returns garbage
    - [[bug-pascal-overload-impl-decl-signature-match]] — same-arity overloads still confusable
 
+
+## 2026-07-13 night — THE SUITE RUNS: 203/203 tests execute, 187 pass, 16 fail, 0 errors
+Driver: /tmp/fpjson-stage/tjrun.pp (walks the registry, prints each test name before
+running it — a crash names its test). Eight compiler bugs fixed to get here, every one
+minimal and silent (b318-b325):
+
+- b318 statement-position selector after a function call silently DROPPED (RegisterTest
+  registered 0 of 203 tests)
+- b319 WideChar->UTF-8 at string boundaries, surrogate-pair aware (\uXXXX decoder crashed)
+- b320 array-of-const vtPChar/vtObject tags (Create([PChar(S)]) raised EJSON)
+- b321 overload CLASS IDENTITY: rec-aware method-decl registration + exact-class ranking
+  (Add(TJSONData(x)) recursed into itself, stack overflow)
+- b322 `on E: Exception` missed exception classes from later-compiled units (root
+  Exception now catch-all; general case = bug-pascal-except-on-class-open-world)
+- b323 System.Delete lost to the enclosing class's own Delete method (crash via Self=1)
+- b324 integer arg overload-matched a Boolean param ([1,2,3] became [true,true,true])
+- b325 is/as closed-world per unit: `FList[Index] as TJSONData` Halt(1) on the program's
+  factory subclass; now a runtime RTTI-blob parent walk; builtin TObject got a real VMT
+
+### Remaining 16 failures (semantic long tail, no crashes)
+- TJSONString.AsBoolean/AsInteger/AsQWord: string->number conversions should raise/convert
+  per FPC (StrToInt64/TryStrToQWord edge semantics)
+- Float FORMATTING: `[.2]` expected vs `[1.2]` — FPC prints floats without the leading
+  integer digit?? (check DefaultFormatSettings / the suite's expectations; likely our
+  Str/FloatToStr divergence)
+- `{ "A" :1.2 }` vs `{ "A" : 1.2 }` — a spacing rule in AsJSON's float branch
+- TJSONIntegerNumber.JSONType expected 3 got 1 — the FACTORY tests: a TMyInteger
+  registered via SetJSONInstanceType should be created by `.Add(1)`, we create the
+  DEFAULT class instead (DefaultJSONInstanceTypes read path?)
