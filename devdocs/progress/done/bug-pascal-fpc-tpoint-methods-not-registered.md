@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** bug (compat)
 - **Track:** P — Pascal frontend
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Follows:** [[feature-pascal-advanced-records]] / [[feature-pascal-record-constructors]]
 
 ## Symptom
@@ -126,3 +126,53 @@ tokens" to "the UNIT interface path eats tokens that the program path does not".
 
 Next: diff the two paths. The unit interface is where to look (a pre-scan / DeclItem excision
 that the program path does not run, or runs differently).
+
+## 2026-07-13 — RESOLVED. It was never a compiler bug: OUR types.pas shadows FPC's.
+
+Dumped the raw token stream around TPoint's body instead of the parser's view of it. The
+tokens are:
+
+```
+tok[13468] TPoint  tok[13469] =  tok[13470] record
+tok[13471] X  : LongInt ;  Y : LongInt ;  end ;
+tok[13481] PSmallPoint = ^ TSmallPoint ;
+```
+
+That is **not typshrdh.inc's TPoint**. No `packed`, no `public`, no methods, and TSmallPoint
+comes *after* it instead of before. Nothing excised anything.
+
+`uses types` resolves to **our own `lib/rtl/types.pas`** — the RTL is on the default unit path,
+so it wins over `-Fu.../objpas`. Our types.pas declared a plain `TPoint = record X, Y: LongInt;
+end;`. FPC's `types.pp` was never parsed at any point in this investigation. The methods "were
+not registered" because they were never written.
+
+The three earlier hypotheses in this ticket (anonymous-record branch, conditional-compilation
+excision, unit-interface pre-scan) were all wrong, and each was a guess dressed up as a lead.
+The lesson is the same one as [[project_decl_order_soffset_not_token_index]]: **when a parser
+"loses" something, dump the TOKENS before theorising about the parser.** One token dump ended a
+hunt that four rounds of minimal reproductions could not, precisely because a reproduction can
+only ever confirm the file you *think* is being read.
+
+### What actually landed
+Our `lib/rtl/types.pas` now declares TPoint, TSize and TRect as the ADVANCED RECORDS they are in
+FPC — which the four real gaps closed while chasing this (ValReal, default params on record
+methods, method-backed record properties, record properties at all) now make possible:
+
+- `TPoint`: `SetLocation`/`Offset` (each overloaded on `(x, y)` and `(const TPoint)`), `IsZero`,
+  `Add`, `Subtract`;
+- `TSize`: `Width`/`Height` properties over `cx`/`cy`;
+- `TRect`: `GetWidth`/`GetHeight`/`IsEmpty`/`Contains` + `Width`/`Height` properties.
+
+Regression `test/test_types_point_methods_b269.pas` covers the whole path: record methods reached
+through a UNIT, overload dispatch, a by-ref `Self` that really mutates the receiver, record-typed
+results, and properties over fields.
+
+So the ticket's original symptom (`p.Offset(q)` failing after `uses types`) now WORKS — just for
+a reason nobody predicted.
+
+### Resolution
+Resolved. Not a compiler bug; a missing RTL declaration. The four gaps it flushed out were real
+and are landed independently, which is the whole value this ticket produced.
+
+## Log
+- 2026-07-13 — resolved, commit pending.

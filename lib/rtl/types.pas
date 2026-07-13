@@ -17,9 +17,19 @@ type
   TDuplicates = (dupIgnore, dupAccept, dupError);
 
   PPoint = ^TPoint;
+  { An ADVANCED RECORD, as in FPC: TPoint carries its own methods. Self is the record, by
+    reference, so Offset/SetLocation mutate the receiver. }
   TPoint = record
     X: LongInt;
     Y: LongInt;
+  public
+    procedure SetLocation(ax, ay: LongInt); overload;
+    procedure SetLocation(const apt: TPoint); overload;
+    procedure Offset(dx, dy: LongInt); overload;
+    procedure Offset(const apt: TPoint); overload;
+    function IsZero: Boolean;
+    function Add(const apt: TPoint): TPoint;
+    function Subtract(const apt: TPoint): TPoint;
   end;
 
   PSmallPoint = ^TSmallPoint;
@@ -32,6 +42,9 @@ type
   TSize = record
     cx: LongInt;
     cy: LongInt;
+  public
+    property Width: LongInt read cx write cx;
+    property Height: LongInt read cy write cy;
   end;
 
   PRect = ^TRect;
@@ -40,6 +53,13 @@ type
     Top: LongInt;
     Right: LongInt;
     Bottom: LongInt;
+  public
+    function GetWidth: LongInt;
+    function GetHeight: LongInt;
+    function IsEmpty: Boolean;
+    function Contains(const apt: TPoint): Boolean;
+    property Width: LongInt read GetWidth;
+    property Height: LongInt read GetHeight;
   end;
 
 const
@@ -56,6 +76,68 @@ function RectWidth(const R: TRect): LongInt;
 function RectHeight(const R: TRect): LongInt;
 
 implementation
+
+procedure TPoint.SetLocation(ax, ay: LongInt);
+begin
+  X := ax;
+  Y := ay;
+end;
+
+procedure TPoint.SetLocation(const apt: TPoint);
+begin
+  X := apt.X;
+  Y := apt.Y;
+end;
+
+procedure TPoint.Offset(dx, dy: LongInt);
+begin
+  X := X + dx;
+  Y := Y + dy;
+end;
+
+procedure TPoint.Offset(const apt: TPoint);
+begin
+  X := X + apt.X;
+  Y := Y + apt.Y;
+end;
+
+function TPoint.IsZero: Boolean;
+begin
+  Result := (X = 0) and (Y = 0);
+end;
+
+function TPoint.Add(const apt: TPoint): TPoint;
+begin
+  Result.X := X + apt.X;
+  Result.Y := Y + apt.Y;
+end;
+
+function TPoint.Subtract(const apt: TPoint): TPoint;
+begin
+  Result.X := X - apt.X;
+  Result.Y := Y - apt.Y;
+end;
+
+function TRect.GetWidth: LongInt;
+begin
+  Result := Right - Left;
+end;
+
+function TRect.GetHeight: LongInt;
+begin
+  Result := Bottom - Top;
+end;
+
+function TRect.IsEmpty: Boolean;
+begin
+  Result := (Right <= Left) or (Bottom <= Top);
+end;
+
+function TRect.Contains(const apt: TPoint): Boolean;
+begin
+  Result := (apt.X >= Left) and (apt.X < Right) and
+            (apt.Y >= Top) and (apt.Y < Bottom);
+end;
 
 function Point(AX, AY: LongInt): TPoint;
 begin

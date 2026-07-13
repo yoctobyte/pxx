@@ -433,6 +433,10 @@ test-core: $(COMPILER)
 	# advanced records: methods in a record; Self is the RECORD, BY REFERENCE
 	./$(COMPILER) test/test_advanced_records_b268.pas /tmp/test_advanced_records_b26826
 	test "$$(/tmp/test_advanced_records_b26826)" = "$$(printf 'sum=7\nhalf=3\noffset=4,5\nadd=14,25\nunchanged=4,5 10,20\nctor=3,4 sum=7\nctor-via-fn=5,10\nop-plus=11,22\nop-eq=TRUE\nop-neq=FALSE\nprop-read=7\nprop-write=70\nprop-method=78\ndef=140 141')"
+	# RTL types.pas: TPoint/TRect are ADVANCED RECORDS -- record methods reached
+	# through a UNIT, with overloads, by-ref Self, record results, props over fields
+	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas /tmp/test_types_point_methods_b26926
+	test "$$(/tmp/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
 	# System type names that never existed (TDateTime was a 4-byte INT, not a Double)
 	./$(COMPILER) test/test_system_type_names_b267.pas /tmp/test_system_type_names_b26726
 	test "$$(/tmp/test_system_type_names_b26726)" = "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"
