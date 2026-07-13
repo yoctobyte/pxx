@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `f7bd4a180eb4` | 2026-07-13T00:22:14Z | GREEN (native) | 71.5s | `90ae846bda82` RED |
+| borg | `f7bd4a180eb4` | 2026-07-13T00:25:12Z | GREEN (full) | 170.6s | `f7bd4a180eb4` GREEN |
 
 ## Open regressions
-- **test-c-conformance-aarch64#shard3/6** — tools/run_c_conformance.sh (borg): bad `90ae846bda82`, last good `90ae846bda82`, 0 commit(s) in range
+- none
