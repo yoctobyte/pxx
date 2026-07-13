@@ -113,7 +113,6 @@ _none_
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
-| feature-system-stack-frame-intrinsics | A | 45 | feature | System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -128,6 +127,7 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
+| regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | test-sqlite-external-vs-self-compiled-parity | C | 40 | test | SQLite SQL parity: external libsqlite3 vs self-compiled amalgamation | task-sqlite-libc-free-runtime-bringup |
 | wish-compile-gnu-pascal | B+C | 45 | wish | Wish: compile GPC | — |
@@ -192,7 +192,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (665)
+## done (666)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -769,6 +769,7 @@ _none_
 | feature-sys-getdents | B | 50 | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-sys-process-spawning | B | 50 | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-syscall-pthread-shim | B | 50 | feature | Syscall-only pthread shim for libc-free C libraries | — |
+| feature-system-stack-frame-intrinsics | A | 45 | feature | System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo | — |
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -882,6 +883,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] regression-test-aarch64-test-cross-sysopen-family
+- [p 70] [T] regression-test-core-test-sqlite-crud-lazy
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
@@ -945,7 +947,6 @@ _none_
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
 - [p 45] [B] feature-synapse-compile-check
-- [p 45] [A] feature-system-stack-frame-intrinsics
 - [p 45] [B] feature-tls-system-trust-store
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [B] feature-writeln-as-library

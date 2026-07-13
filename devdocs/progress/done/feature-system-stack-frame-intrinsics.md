@@ -5,7 +5,7 @@ prio: 45
 # System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo
 
 - **Type:** feature (Track A — System intrinsics)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Blocks:** [[feature-pascal-corpus-fpcunit]] — the LAST wall in fpcunit.pp itself.
 
 ## What needs them
@@ -56,3 +56,4 @@ not worth chasing.
 - 2026-07-13 — opened. It is the only thing left between us and fpcunit.pp compiling;
   everything else in the chain now works (testutils substituted, LineEnding, TFPList,
   GetInterface, MethodAddress, packed arrays).
+- 2026-07-13 — resolved, commit d963d5d0.
