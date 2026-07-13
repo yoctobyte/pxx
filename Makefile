@@ -942,6 +942,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
+	# element was initialised and the rest stayed zero (silently)
+	./$(COMPILER) test/cmultidim_struct_array_init_b311.c /tmp/cmultidim_struct_array_b31126
+	test "$$(/tmp/cmultidim_struct_array_b31126)" = "$$(printf '2d=1 4 6\n3d=1 6 8\n2f=1 4 5 8\n1d=1 6')"
 	# a multidim LOCAL array of POINTERS must honour its brace initializer (it was
 	# silently SKIPPED -- every element read back nil; 1-D and multidim-int were fine)
 	./$(COMPILER) test/cmultidim_ptr_array_init_b309.c /tmp/cmultidim_ptr_array_b30926

@@ -3311,6 +3311,7 @@ function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
+    lclNDims, lclSpan0, lclEB, mdi: Integer;
     ptrElemSig, declPtrElemSig: Integer;  { pointee fn-ptr sig for `ft *pf` (SymElemProcSig channel) }
     paLen, sibPaLen: Integer;
     ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
@@ -3809,7 +3810,27 @@ begin
         seq := CMakeZeroLocal(idx, declTk);
         if head = -1 then head := seq else ASTRight[tail] := seq;
         tail := seq;
-        seq := CInitLocalAggregate(idx, Ord(tyRecord), scalarRec, arrLen, 1, arrLen, 1, True);
+        { Pass the array's REAL shape. This used to hard-code nDims=1, so a MULTIDIM
+          local array of structs (`struct S a[2][3] = {{{1},{2},{3}},{{4},{5},{6}}}`)
+          was walked as if it were one-dimensional: only the first element landed and
+          the rest stayed zero. Silent. The GLOBAL path already derived the shape this
+          way (CEmitDeferredCAggInits); the local one did not. }
+        lclNDims := SymArrNDims[idx];
+        if lclNDims < 2 then
+        begin
+          lclNDims := 1; lclSpan0 := arrLen; lclEB := 1;
+        end
+        else
+        begin
+          lclSpan0 := SymArrDimSpan[idx * MAX_ARR_DIMS + 0];
+          if lclSpan0 < 1 then lclSpan0 := 1;
+          lclEB := 1;
+          for mdi := 1 to lclNDims - 1 do
+            lclEB := lclEB * SymArrDimSpan[idx * MAX_ARR_DIMS + mdi];
+          if lclEB < 1 then lclEB := 1;
+        end;
+        seq := CInitLocalAggregate(idx, Ord(tyRecord), scalarRec, arrLen,
+                                   lclNDims, lclSpan0, lclEB, True);
         if seq <> -1 then
         begin
           if head = -1 then head := seq else ASTRight[tail] := seq;
