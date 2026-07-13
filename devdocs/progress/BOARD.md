@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (106)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +135,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh red at 8766dccbd2dd (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -202,7 +201,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (682)
+## done (683)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -861,6 +860,7 @@ _none_
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
+| regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
 | regression-test-i386-test-asyncecho | T | 70 | regression | regression: test-i386#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -910,7 +910,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-test-core-test-sqlite-crud
 - [p 70] [T] regression-test-sqlite-threads-aarch64-run-sqlite-thread-test
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
