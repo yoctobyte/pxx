@@ -113,6 +113,10 @@ CLASSES = {
 # Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
 # whole build, not an inner-loop cost.
 FPC_CANARY_TIERS = ("native", "limited", "full")
+# Tiers carrying the self-host fixedpoint GATE (~20s: two compiler builds).
+# Not "quick": that is the inner loop, and this is a bootstrap chain. It is NOT
+# advisory — byte-identical self-host is the gate the stable binary rests on.
+SELFHOST_GATE_TIERS = ("native", "limited", "full")
 MEM_FLOOR = 1500 << 20          # never admit below this MemAvailable
 SWAP_FLOOR = 1000 << 20         # never admit with less free swap than this...
 SWAP_FLOOR_FRAC = 0.10          # ...but never demand more than this much of SwapTotal
@@ -754,6 +758,8 @@ def generate(tier):
             jobs.append(j)
     if tier in FPC_CANARY_TIERS:
         jobs.append(fpc_canary_job())
+    if tier in SELFHOST_GATE_TIERS:
+        jobs.append(selfhost_fixedpoint_job())
     assign_selectors(jobs)
     return jobs
 
@@ -781,6 +787,27 @@ def corpus_warning(absent, njobs):
               "  !!   tools/install_lib_candidates.sh %s" % " ".join(names),
               "  " + "!" * 68, ""]
     return "\n".join(lines)
+
+
+def selfhost_fixedpoint_job():
+    """The self-host gate, as a JOB.
+
+    It used to be asserted only inside `make compiler/pascal26`, which meant a
+    broken gate looked like a broken box: make failed, testmgr exited rc=1, and
+    the watcher logged "no report — infra problem, not recording a verdict".
+    The single most important property in the project failed SILENTLY, 1445
+    times in the borg log. As a job it can be RED, bisected to a culprit, and
+    ticketed like anything else.
+
+    Seeds from the committed pinned stable, so the answer is identical on every
+    box; see tools/selfhost_fixedpoint.sh for the two properties it checks.
+    """
+    j = Job("selfhost-fixedpoint", 0, ["tools/selfhost_fixedpoint.sh"])
+    j.name = "selfhost-fixedpoint#00"
+    j.cls = "selfhost"
+    j.sel = "selfhost-fixedpoint#src:compiler/compiler.pas"
+    j.est_mem = CLASSES["selfhost"]["est_mem"]
+    return j
 
 
 def fpc_canary_job():
@@ -1283,7 +1310,7 @@ def build_compiler():
                         "BUILD_COMPILER_MANAGED=%s-mbuild" % priv,
                         "VERIFY_COMPILER_MANAGED=%s-mverify" % priv], cwd=REPO)
     if r.returncode == 0:
-        return
+        return True
     # The make rule demands a ONE-PASS fixedpoint: seed compiles the sources to
     # stage2, stage2 compiles them to stage3, cmp stage2 stage3. That holds only
     # if the seed ALREADY matches the current sources. It does not after any
@@ -1302,7 +1329,33 @@ def build_compiler():
     # and quietly looping until it does would hide exactly the thing the
     # self-host gate exists to catch.
     if not converge_seed(priv):
-        sys.exit("testmgr: building %s failed" % COMPILER)
+        print("testmgr: building %s failed" % COMPILER, flush=True)
+        return False
+    return True
+
+
+def report_build_failure(args):
+    """Turn an unbuildable compiler into a RED verdict the watcher can act on.
+
+    Without this the run dies rc=1 with no report, twatch says "infra problem,
+    not recording a verdict", and the sha is simply never tested — no red, no
+    ticket, no bisect, and a watcher that silently falls further behind. Emitting
+    a report makes it a normal failing job: it goes RED, the bisect narrows it to
+    a commit, and the Track T agent files it like any other regression.
+    """
+    print("\n== testmgr report (tier %s) ==\n  FAIL     selfhost-fixedpoint#00 "
+          "— the compiler cannot be built from these sources\n" % args.tier)
+    if args.report_json:
+        rep = {"tier": args.tier, "wall": 0.0, "scale": 1.0, "verdict": "RED",
+               "slow": [],
+               "jobs": [{"name": "selfhost-fixedpoint#00", "cls": "selfhost",
+                         "src": "compiler/compiler.pas",
+                         "sel": "selfhost-fixedpoint#src:compiler/compiler.pas",
+                         "advisory": False, "status": "fail", "dur": 0.0,
+                         "mem": 0, "cpu": 0.0}]}
+        with open(args.report_json, "w") as f:
+            json.dump(rep, f, indent=1)
+    return 1
 
 
 def converge_seed(priv, max_rounds=4):
@@ -1419,7 +1472,8 @@ def bench_prev(tsv, host):
 
 def run_bench():
     import socket
-    build_compiler()
+    if not build_compiler():
+        sys.exit("testmgr: --bench needs a working compiler")
     cc = os.path.join(REPO, COMPILER)
     host = re.sub(r"[^A-Za-z0-9_-]", "-",
                   socket.gethostname().split(".")[0])
@@ -1732,7 +1786,14 @@ def main():
     atexit.register(release_lock)
     start_heartbeat(args.tier)
 
-    build_compiler()
+    # A compiler we cannot build is a VERDICT, not an absence of one. Exiting
+    # rc=1 here made the watcher log "no report — infra problem, not recording a
+    # verdict" and move on: the sha stayed untested, nothing went red, nobody was
+    # told, and there was nothing to bisect. A broken self-host must be as loud
+    # as a broken test — louder, since everything else rests on it.
+    if not build_compiler():
+        return report_build_failure(args)
+
     jobs = generate(args.tier)
     if args.job:
         jobs = [j for j in jobs if job_selected(j, args.job)]
