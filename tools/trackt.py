@@ -164,10 +164,20 @@ def cmd_status(clone, attach_ok=True):
              "on(:%s)" % conf["web_port"] if conf["web"] else "off",
              "" if not web_pid(clone) else " [serving]"))
     if pid:
+        # The phase in watch.json is only meaningful if the daemon we FOUND is
+        # the one that wrote it. On shutdown the old daemon leaves
+        # phase="stopped" behind; a freshly started daemon is then discovered by
+        # the /proc scan before it has written its own first phase — and the
+        # status line reported "RUNNING pid 2616079 — stopped", which is a
+        # contradiction, and exactly the kind of thing that makes a watcher
+        # untrustworthy to read.
+        fresh = w.get("pid") == pid and w.get("phase") not in (None, "stopped")
+        phase = w.get("phase", "?") if fresh else "starting…"
         extra = " ".join("%s=%s" % (k, w[k]) for k in ("sha", "tier", "head")
-                         if w.get(k))
-        print("  daemon : %sRUNNING%s pid %d — %s %s (%s ago)"
-              % (GRN, OFF, pid, w.get("phase", "?"), extra, fmt_age(w.get("ts"))))
+                         if w.get(k)) if fresh else ""
+        age = "%s ago" % fmt_age(w.get("ts")) if fresh else "no phase written yet"
+        print("  daemon : %sRUNNING%s pid %d — %s %s (%s)"
+              % (GRN, OFF, pid, phase, extra, age))
     else:
         print("  daemon : %sSTOPPED%s — trackt start" % (RED, OFF))
     # tstate summary (same source as twatch --status), from the dev checkout
