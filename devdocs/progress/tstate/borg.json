@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T15:00:52Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "83195674244ec59e1325c794c9f0987d63988fed",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T15:03:42Z",
    "fixed": [],
    "new_red": [],
@@ -430,6 +422,17 @@
    "new_red": [],
    "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T22:24:54Z",
+   "fixed": [
+    "test-core#src:test/test_fpc_compat_batch2.pas",
+    "test-core#src:test/test_widechar_to_utf8_b319.pas"
+   ],
+   "new_red": [],
+   "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1206,7 +1209,7 @@
   "test-core#src:test/test_forward_class_base.pas": "pass",
   "test-core#src:test/test_forward_use.pas": "pass",
   "test-core#src:test/test_fpc_compat_batch.pas": "pass",
-  "test-core#src:test/test_fpc_compat_batch2.pas": "fail",
+  "test-core#src:test/test_fpc_compat_batch2.pas": "pass",
   "test-core#src:test/test_freeandnil_destructor_b300.pas": "pass",
   "test-core#src:test/test_freemem.pas": "pass",
   "test-core#src:test/test_frozen_string_cross_b305.pas": "pass",
@@ -1538,7 +1541,7 @@
   "test-core#src:test/test_warn_self_result.pas@2": "pass",
   "test-core#src:test/test_warn_stack_frame.pas@1": "pass",
   "test-core#src:test/test_warn_stack_frame.pas@2": "pass",
-  "test-core#src:test/test_widechar_to_utf8_b319.pas": "fail",
+  "test-core#src:test/test_widechar_to_utf8_b319.pas": "pass",
   "test-core#src:test/test_wildcard_lfm.pas": "pass",
   "test-core#src:test/test_with.pas": "pass",
   "test-core#src:test/test_with_class_create.pas": "pass",
@@ -1727,11 +1730,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T22:18:54Z",
-  "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
-  "tier": "opt",
+  "date": "2026-07-13T22:24:54Z",
+  "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 114.0
+  "wall": 72.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1771,45 +1774,6 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "d94db8d6b0ccc8a1ce8441e7104293aeff071199",
-   "good": "9daabff946509e9b64066dfa7dee6a2166674a45",
-   "job": "test-core#src:test/test_widechar_to_utf8_b319.pas",
-   "name": "test-core#26",
-   "opened": "2026-07-13T21:19:45Z",
-   "range": [
-    "83f7c5a3483f5a0a28394ca2008ee444ea7fa3b4",
-    "c6e5b95a6138f30ef3e6cba5384a4b1b2c183c41",
-    "101af03ae2f7cb91af8155187b56fb4fc4a5991a",
-    "2bc1d8f42e3b098752970283ee5379b01a29b761",
-    "b709368738c9c8ac276d8b73fbae321d477e28a7",
-    "54f03b4841b6702af3938b15491fa0957c6c36ff",
-    "fd7ca0117e09566a709bbd8e4f84f7df842dfe3e",
-    "becb4a2e57aaa1d81319a2e0bf9303249ebdc438",
-    "cfc444f577ac40a0f35c32483a69f13dc4a49845",
-    "fb24cd37a35ab6e691609e532dc775e93ef284f1",
-    "f31478c1aee66dd7ad848f417f864944077bbd3f",
-    "110b26dbee0685d8cefb3bf41034afe8c75e54e2",
-    "6116ec52c11d31d4d4dac64e4f2ccb1c483fe20f",
-    "74dd8ce081d813bda249b1aae08b355452462b1d",
-    "a409c6955b51aa3b49501b78d1c1355b60decf79",
-    "d94db8d6b0ccc8a1ce8441e7104293aeff071199"
-   ],
-   "src": "test/test_widechar_to_utf8_b319.pas"
-  },
-  {
-   "bad": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
-   "good": "0348fae0ff3313631fad0fba4afdd811ce4b35c1",
-   "job": "test-core#src:test/test_fpc_compat_batch2.pas",
-   "name": "test-core#155",
-   "opened": "2026-07-13T22:00:22Z",
-   "range": [
-    "0e077fb900b2213629f16bf9f8320b275e03ec08",
-    "3d928091d3865507680e4a4d38060d49f70b8c6a",
-    "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f"
-   ],
-   "src": "test/test_fpc_compat_batch2.pas test/test_fgl_use.pas"
   },
   {
    "bad": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
