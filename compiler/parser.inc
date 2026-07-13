@@ -2932,6 +2932,36 @@ begin
               Result := node;
               Exit;
             end;
+
+            { `TFoo.MaxItems` — a class CONST, qualified by its class. Class-body const
+              sections are parsed as ordinary global constants (they have no storage, and
+              pxx does not scope class-local declarations), so the name resolves as a
+              plain skConst symbol; the class qualifier is just how FPC spells the
+              reference. }
+            fldIdx := FindStrConst(fieldName);     { a STRING const lives in its own table }
+            if fldIdx >= 0 then
+            begin
+              node := AllocNode(AN_STR_LIT);
+              ASTSOffset[node] := StrConstSOff[fldIdx];
+              ASTSLen[node] := StrConstSLen[fldIdx];
+              ASTTk[node] := Ord(tyString);
+              tk := tyString;
+              recName := REC_NONE;
+              Result := node;
+              Exit;
+            end;
+            fldIdx := FindSym(fieldName);
+            if (fldIdx >= 0) and (Syms[fldIdx].Kind = skConst) then
+            begin
+              node := AllocNode(AN_INT_LIT);
+              ASTIVal[node] := Syms[fldIdx].ConstVal;
+              ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
+              tk := Syms[fldIdx].TypeKind;
+              recName := REC_NONE;
+              Result := node;
+              Exit;
+            end;
+
             Error('class method not found: ' + fieldName);
           end;
           mpi := UMthProc_[mmi];
@@ -13873,9 +13903,13 @@ begin
     directly followed by a constructor/destructor body — or ending an interface
     before `implementation` — would consume that word as the next const NAME and
     then fail expecting `=`. Mirrors the type-section terminator set. }
+  { ...and, for a `const` section inside a CLASS BODY, the visibility markers, which are
+    likewise plain identifiers. Without them the section ran straight through
+    `strict private` and consumed `strict` as the next const NAME
+    (IsClassMemberStartWord covers private/protected/public/published + ctor/dtor). }
   while (CurTok.Kind = tkIdent) and
-        (not CaseEqual(CurTok.SVal, 'constructor')) and
-        (not CaseEqual(CurTok.SVal, 'destructor')) and
+        (not IsClassMemberStartWord(CurTok.SVal)) and
+        (not CaseEqual(CurTok.SVal, 'strict')) and
         (not CaseEqual(CurTok.SVal, 'operator')) and
         (not CaseEqual(CurTok.SVal, 'implementation')) and
         (not CaseEqual(CurTok.SVal, 'initialization')) and
@@ -15227,6 +15261,26 @@ begin
             Inc(TypeSectionDepth);
             ParseTypeSection;
             Dec(TypeSectionDepth);
+            continue;
+          end;
+
+          { `const` / `class const` section inside a class body (FPC/Delphi):
+
+              TFoo = class
+              const MaxItems = 16;
+              class const Version = 3;
+
+            Parsed as GLOBAL constants, exactly as the nested `type` section above is
+            parsed as global type aliases — pxx does not scope class-local declarations
+            (access control is unenforced project-wide), and a constant has no storage,
+            so there is nothing to scope. `class const` and `const` are the same thing:
+            a constant is already per-class, not per-instance. Neither parsed before —
+            `const` fell into the field parser, which demanded a ':' after the name. }
+          if (CurTok.Kind = tkConst) or
+             ((CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkConst)) then
+          begin
+            if CurTok.Kind = tkClass then Next;   { consume `class`, leaving `const` }
+            ParseConstSection;
             continue;
           end;
 

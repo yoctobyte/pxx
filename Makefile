@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# `const` / `class const` sections inside a class body; qualified TFoo.K access
+	./$(COMPILER) test/test_class_const_b263.pas /tmp/test_class_const_b26326
+	test "$$(/tmp/test_class_const_b26326)" = "$$(printf 'n=19\ngreeting=hi\nqualified=16 3')"
 	# `strict private` / `strict protected`; a published section after them still reflects
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_strict_visibility_b262.pas /tmp/test_strict_visibility_b26226
 	test "$$(/tmp/test_strict_visibility_b26226)" = "$$(printf 'x=2\npublished-count=1\npublished=TestVisible\nbump-hidden=TRUE')"
