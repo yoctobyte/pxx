@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T21:59:45Z",
-   "fixed": [
-    "test-c-conformance-aarch64#shard1/6"
-   ],
-   "new_red": [],
-   "sha": "fbb0fdb52c18cb527f8227b7ffa7180dd293735d",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T22:01:32Z",
    "fixed": [],
    "new_red": [],
@@ -412,6 +402,14 @@
    "new_red": [],
    "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T02:13:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6e0395e5495f72a8c046d8a88c77183f7989dcd2",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -967,6 +965,7 @@
   "test-core#src:test/string_compare.pas@1": "pass",
   "test-core#src:test/strings.pas": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
+  "test-core#src:test/test_absolute_overlay_b265.pas": "pass",
   "test-core#src:test/test_abstract_out.pas": "pass",
   "test-core#src:test/test_ada_skeleton.adb": "pass",
   "test-core#src:test/test_aggregate_results.pas": "pass",
@@ -1642,11 +1641,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T02:05:20Z",
-  "sha": "6276d85155ae9973c8a0786851130c66b8fa9b99",
-  "tier": "opt",
+  "date": "2026-07-13T02:13:22Z",
+  "sha": "6e0395e5495f72a8c046d8a88c77183f7989dcd2",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 103.3
+  "wall": 65.6
  },
  "last_bench": {
   "conf_rows": 550,
