@@ -15,11 +15,7 @@
   FPC binds it by the variable's DECLARED class -- but Self is still TDerived, so it
   prints 'tag of TDerived'. That is FPC's behaviour, not an approximation of it. The
   CONSTRUCTOR is virtual, so it really does build a TDerived.
-
-  x86-64 ONLY, deliberately: constructing through a class reference with ARGUMENTS
-  segfaults on every other target, and has done all along -- it reproduces with the old
-  `Create` spelling and the old code path. See bug-cross-metaclass-new-with-args. Do not
-  add this to a cross list until that is fixed. }
+ }
 program test_typed_metaclass_b278;
 type
   TBase = class

@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (cross-target codegen)
 - **Track:** A — core (AN_METACLASS_NEW lowering / per-backend arg marshalling)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** the typed-metaclass work for fpcunit ([[feature-pascal-corpus-fpcunit]]).
   PRE-EXISTING — reproduces with the old `Create` spelling and the old code path; the
   typed-metaclass change neither caused nor touches it.
@@ -59,3 +59,35 @@ backend — that path is known good.
 
 ## Gate
 `make test` + self-host byte-identical + cross (this IS the cross gate).
+
+## 2026-07-13 — FIXED. It was never target-specific: it was ARGUMENT-specific.
+
+Green on all five targets (x86-64, i386, aarch64, arm32, riscv32).
+
+`AN_METACLASS_NEW` lowered its constructor arguments with a raw `IRLowerAST`. Every other
+call path — `AN_CALL`, `AN_VIRTUAL_CALL`, `AN_INTF_CALL` — uses **`IRLowerCallArg`**, which
+is PARAMETER-AWARE: it lowers the expression against the DECLARED TYPE of the parameter it
+is being passed to (and allocates the hidden managed-string temp when one is needed). A raw
+`IRLowerAST` only knows the expression.
+
+For an `Integer` argument the two agree, so it worked. For a `const s: string` they do not,
+and x86-64's `IR_ARG` emit for a frozen string happened to forgive the difference while the
+other four backends did not — which is exactly what made this look like a cross-target
+codegen bug rather than a missing call-lowering step. An Integer argument had been working
+on every target the whole time; nobody had tried a string.
+
+The lesson generalises: **a hand-built IR_ARG chain that does not go through IRLowerCallArg
+is wrong**, and it will look target-specific because only some backends notice.
+
+Fix: use `IRLowerCallArg` + the managed-temp block, the same as the other three call paths.
+`test/test_typed_metaclass_b278.pas` now passes on all four cross targets and the x86-64-only
+note has been removed from it.
+
+## Residual (SEPARATE bug, split out)
+While confirming this, riscv32 turned out to have an unrelated defect that this ticket's
+reproduction was accidentally also hitting: storing a string LITERAL into a class field gives
+an empty string there. It has nothing to do with metaclasses (a direct `TD.Create` shows it
+too). Filed as [[bug-riscv32-string-literal-to-class-field]].
+
+## Log
+- 2026-07-13 — resolved, commit pending.

@@ -5968,12 +5968,41 @@ begin
       pathIdx := 1;
       while item <> -1 do
       begin
+        { Lower each argument through IRLowerCallArg, exactly as AN_CALL / AN_VIRTUAL_CALL
+          / AN_INTF_CALL do -- NOT with a raw IRLowerAST.
+
+          IRLowerCallArg is PARAMETER-AWARE: it lowers the expression against the
+          declared type of the parameter it is being passed to. A raw IRLowerAST only
+          knows the expression, so it happened to agree for an Integer and disagreed for
+          a `const s: string` -- which is why metaclass construction with a STRING
+          argument segfaulted on every backend except x86-64, whose IR_ARG emit for a
+          frozen string forgave the difference. An Integer argument worked everywhere all
+          along, which is what made the bug look target-specific rather than
+          argument-specific. }
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
-        if isRefArg then
-          value := IRLowerAddress(ASTLeft[item])
+        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        argIsManagedTemp :=
+          (not isRefArg) and (pathIdx < Procs[cpi].ParamCount) and
+          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+          (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+          (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+        if argIsManagedTemp then
+        begin
+          { a managed-string temp must outlive the call; same hidden slot the other
+            call paths allocate }
+          hiddenArgSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_DEFAULT_MEM,
+            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
+          IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+          value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
+        end
         else
-          value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         IRB[last] := argNode;
         last := argNode;
         item := ASTRight[item];
