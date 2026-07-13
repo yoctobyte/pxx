@@ -18,6 +18,11 @@ type
     X, Y: Longint;
   public
     constructor Create(ax, ay: Longint);   { fills a FRESH receiver; no heap, no VMT }
+    { FPC's advanced-record operator syntax. pxx keys an operator on its OPERAND TYPES, so
+      the in-record signature carries nothing the definition does not — it is parsed and
+      discarded, and the `class operator TPt.+` DEFINITION below is what registers it. }
+    class operator + (const u, v: TPt): TPt;
+    class operator = (const u, v: TPt): Boolean;
     procedure Init(ax, ay: Longint);
     procedure Offset(dx, dy: Longint);
     function Sum: Longint;
@@ -30,6 +35,17 @@ constructor TPt.Create(ax, ay: Longint);
 begin
   X := ax;
   Y := ay;
+end;
+
+class operator TPt.+ (const u, v: TPt): TPt;
+begin
+  Result.X := u.X + v.X;
+  Result.Y := u.Y + v.Y;
+end;
+
+class operator TPt.= (const u, v: TPt): Boolean;
+begin
+  Result := (u.X = v.X) and (u.Y = v.Y);
 end;
 
 function MakeAt(n: Longint): TPt;
@@ -87,4 +103,16 @@ begin
   writeln('ctor=', d.X, ',', d.Y, ' sum=', d.Sum);
   d := MakeAt(5);
   writeln('ctor-via-fn=', d.X, ',', d.Y);
+
+  { class operators. NOTE the operands are VARIABLES: operator dispatch does not yet see a
+    record-valued CALL result (`TPt.Create(1,2) + TPt.Create(3,4)` fails to find the
+    overload) — filed, not bodged. }
+  b := TPt.Create(1, 2);
+  c := TPt.Create(10, 20);
+  d := b + c;
+  writeln('op-plus=', d.X, ',', d.Y);
+  b := TPt.Create(11, 22);
+  writeln('op-eq=', d = b);
+  b := TPt.Create(0, 0);
+  writeln('op-neq=', d = b);
 end.

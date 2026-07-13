@@ -1573,7 +1573,19 @@ var
   nameOff, nameLen: Integer;
   procIdx: Integer;
 begin
+  { `class operator TPt.+ (const a, b: TPt): TPt;` — FPC's ADVANCED-RECORD operator syntax.
+    Both the `class` prefix and the `TRec.` qualifier are accepted and dropped: pxx keys an
+    operator on its OPERAND TYPES, not on an owning type, so the qualifier carries no
+    information the signature does not already have. A plain top-level
+    `operator + (a, b: TPt): TPt` was already supported and means exactly the same thing —
+    this just lets FPC's spelling through to the same machinery. }
+  if CurTok.Kind = tkClass then Next;
   Next; { consume 'operator' }
+  if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
+  begin
+    Next;   { the TRec qualifier }
+    Next;   { the dot }
+  end;
   opKind := CurTok.Kind;
   opKey := -1;
   if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
@@ -14931,6 +14943,19 @@ begin
       continue;
     end;
 
+    { `class operator + (const a, b: TPt): TPt;` inside a record — the SIGNATURE only. pxx
+      keys an operator on its OPERAND TYPES, so the in-record declaration carries nothing the
+      definition does not; it is parsed and discarded, and the `class operator TPt.+(...)`
+      DEFINITION (top level) is what actually registers it. Skip to the terminating ';'. }
+    if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
+    begin
+      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and
+            (CurTok.Kind <> tkEOF) do Next;
+      Eat(tkSemicolon);
+      continue;
+    end;
+
     if CurTok.Kind = tkIdent then
     begin
       { comma-separated names share one type: `X, Y: Integer` }
@@ -20803,6 +20828,18 @@ begin
       tkClass,
       tkProcedure,
       tkFunction:
+      if (CurTok.Kind = tkClass) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'operator') then
+      begin
+        { `class operator TPt.+ (const a, b: TPt): TPt;` — an advanced-record operator
+          DEFINITION. Like a plain `operator` definition it emits its body in place and
+          rewrites the token stream, so it is parsed in full during the pre-scan rather than
+          body-deferred (bug-unit-operator-def-silently-skipped). }
+        PreScanPass := False;
+        ParseOperatorDef;
+        PreScanPass := True;
+      end
+      else
       begin
         if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
         DeclItemStart[DeclItemCount] := TokPos - 1;

@@ -2,11 +2,11 @@
 prio: 50
 ---
 
-# Advanced records: `class operator` (constructors: DONE)
+# Advanced records: constructors + `class operator` — DONE
 
 - **Type:** feature (Pascal frontend)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** constructors DONE 2026-07-13; `class operator` still open.
+- **Status:** done — constructors AND `class operator` landed 2026-07-13.
 - **Follows:** [[feature-pascal-advanced-records]] (methods landed; these are the two
   deliberately-excluded slices).
 
@@ -80,8 +80,25 @@ parse. The call node is not run through the postfix tail. Minor, and separable.
 make test green, make bootstrap green (FPC seed), make lib-test green, self-host
 byte-identical, `testmgr --tier full` 1215/1215 GREEN.
 
-## Still open: `class operator`
-`class operator + (const a, b: TPt): TPt` — a static function with a fixed name mangling,
-hooked into binary-op resolution. pxx already has operator overloading for classes
-([[project_operator_overloading_exists_syntax_limits]]); this is wiring records into it.
-FPC's typshrdh.inc uses it on TPoint/TSize/TRect, so a full parse of that still needs it.
+## `class operator` LANDED 2026-07-13 — and it was mostly already there
+
+The discovery that made this small: **a plain top-level `operator + (const a, b: TPt): TPt`
+on records ALREADY worked.** pxx keys an operator on its OPERAND TYPES, not on an owning
+type. So FPC's advanced-record spelling needed no new machinery at all — only for the
+existing machinery to accept it:
+
+- `class operator + (...)` INSIDE the record is the SIGNATURE. It carries nothing the
+  definition does not, so it is parsed and discarded.
+- `class operator TPt.+ (...)` at top level is the DEFINITION. ParseOperatorDef now drops the
+  `class` prefix and the `TRec.` qualifier and proceeds exactly as for a plain `operator`.
+  Dispatched from the tkClass branch of the top-level decl loop, with the same
+  pre-scan handling a plain operator gets (bug-unit-operator-def-silently-skipped).
+
+Verified with `+` and `=` on a record that also has a constructor and methods.
+
+### Known gap (filed, not bodged): operator operands that are CALL RESULTS
+`TPt.Create(1,2) + TPt.Create(10,20)` fails with "no operator overload found for record
+operands". The operands are record-valued CALL nodes, and operator dispatch only recognises
+record operands it can see as variables/lvalues. Variables work
+(`d := b + c`), which is what b268 pins. Split out as
+[[bug-pascal-operator-on-record-call-result]].
