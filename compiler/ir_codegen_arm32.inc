@@ -129,7 +129,7 @@ begin
   end
   else if (Syms[idx].Kind = skParam) and
           (Syms[idx].IsRef or Syms[idx].IsArray or
-           (Syms[idx].TypeKind = tyString) or (Syms[idx].TypeKind = tySet)) then
+           TypeIsFrozenString(Syms[idx].TypeKind) or (Syms[idx].TypeKind = tySet)) then
   begin
     { By-ref, open-array, fixed-string, or set param: the slot holds a pointer
       the caller passed (the array data / buffer / forwarded slot), so load the
@@ -817,7 +817,7 @@ begin
     EmitCallProc(procIdx);
     EmitI32($E28DD004);             { add sp, sp, #4 }
   end
-  else if tk = tyString then
+  else if TypeIsFrozenString(tk) then
   begin
     IREmitNodeArm32(valNode);       { r0 = inline string buffer }
     EmitI32($E1A02000);             { mov r2, r0 }
@@ -853,7 +853,7 @@ begin
     EmitI32($E5100008 or (valueReg shl 16) or (lenReg shl 12)); { ldr len, [value,#-8] }
     Patch32(jmpPos, $0A000000 or ((((CodeLen - jmpPos) div 4) - 2) and $00ffffff));
   end
-  else if tk = tyString then
+  else if TypeIsFrozenString(tk) then
   begin
     EmitI32($E5900000 or (valueReg shl 16) or (lenReg shl 12)); { ldr len, [value] }
     EmitI32($E2800008 or (valueReg shl 16) or (srcReg shl 12)); { add src, value, #8 }
@@ -1040,7 +1040,7 @@ begin
           end;
           Exit;
         end;
-        if (Syms[si].TypeKind = tyString) and not Syms[si].IsArray then
+        if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
         begin
           { Frozen inline-string assignment (s := <string>): copy [len:8][chars]
             from the source into s's buffer (r6=dst, r5=src, r4=count). Without
@@ -1113,7 +1113,7 @@ begin
             EmitI32($ED810B00);  { vstr d0, [r1] }
           Exit;
         end;
-        if (tk = tyString) and not Syms[si].IsArray and
+        if TypeIsFrozenString(tk) and not Syms[si].IsArray and
            (IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] = -Ord(tkArgStr)) then
         begin
           argNode := IRB[IRB[node]];
@@ -1121,7 +1121,7 @@ begin
           EmitArgvToFixedStringArm32(si);
           Exit;
         end;
-        if (tk = tyString) and not Syms[si].IsArray and
+        if TypeIsFrozenString(tk) and not Syms[si].IsArray and
            (IntToTypeKind(IRTk[IRB[node]]) in [tyString, tyAnsiString]) then
         begin
           { Legacy inline string struct ([len:8][data]) assignment: copy the
@@ -1711,7 +1711,7 @@ begin
           valNode := IRA[argNode];
           if (IntToTypeKind(IRTk[valNode]) = tyString) or
              ((IRKind[valNode] = IR_LEA) and
-              (Syms[IRA[valNode]].TypeKind = tyString) and
+              TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
              (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
@@ -2153,7 +2153,8 @@ begin
         begin
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              (Procs[procIdx].Params[nArgs].TypeKind = tyAnsiString) and
-             (IntToTypeKind(IRTk[argNode]) in [tyChar, tyString]) then
+             ((IntToTypeKind(IRTk[argNode]) = tyChar) or
+              TypeIsFrozenString(IntToTypeKind(IRTk[argNode]))) then
           begin
             EmitAnsiStringFromNodeArm32(IRA[argNode]);
             EmitI32($E92D0001); { push {r0} }

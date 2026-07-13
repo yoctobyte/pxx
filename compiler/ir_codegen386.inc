@@ -1141,7 +1141,7 @@ begin
           end;
           Exit;
         end;
-        if (Syms[si].TypeKind = tyString) and not Syms[si].IsArray then
+        if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
         begin
           { Frozen inline-string assignment (s := <string>): copy [len:8][chars]
             from the source into s's buffer. Without this the scalar store below
@@ -1353,7 +1353,7 @@ begin
         end
         else if (Syms[si].Kind = skParam) and
                 (Syms[si].IsRef or Syms[si].IsArray or
-                 (Syms[si].TypeKind = tyString)) then
+                 TypeIsFrozenString(Syms[si].TypeKind)) then
         begin
           { By-ref, open-array, or fixed-string param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),
@@ -2102,7 +2102,7 @@ begin
           valNode := IRA[argNode];
           if (IntToTypeKind(IRTk[valNode]) = tyString) or
              ((IRKind[valNode] = IR_LEA) and
-              (Syms[IRA[valNode]].TypeKind = tyString) and
+              TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
              (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then

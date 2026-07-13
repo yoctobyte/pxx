@@ -181,7 +181,7 @@ begin
     EmitCallProc(procIdx);
     EmitI32($910043FF);           { add sp, sp, #16 }
   end
-  else if tk = tyString then
+  else if TypeIsFrozenString(tk) then
   begin
     IREmitNodeAarch64(valNode);   { x0 = inline string buffer }
     EmitI32($AA0003E2);           { mov x2, x0 }
@@ -215,7 +215,7 @@ begin
     { ldur len, [value, #-8] }
     EmitI32($F85F8000 or (valueReg shl 5) or lenReg);
   end
-  else if tk = tyString then
+  else if TypeIsFrozenString(tk) then
   begin
     EmitI32($F9400000 or (valueReg shl 5) or lenReg);  { ldr len, [value] }
     EmitI32($91002000 or (valueReg shl 5) or srcReg);  { add src, value, #8 }
@@ -925,7 +925,7 @@ begin
           end;
           Exit;
         end;
-        if (Syms[si].TypeKind = tyString) and not Syms[si].IsArray then
+        if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
         begin
           { Frozen inline-string assignment (s := <string>): copy [len:8][chars]
             from the source into s's buffer. Mirrors the x86-64 path; without it
@@ -1022,7 +1022,7 @@ begin
         end
         else if (Syms[si].Kind = skParam) and
                 (Syms[si].IsRef or Syms[si].IsArray or
-                 (Syms[si].TypeKind = tyString) or (Syms[si].TypeKind = tySet)) then
+                 TypeIsFrozenString(Syms[si].TypeKind) or (Syms[si].TypeKind = tySet)) then
         begin
           { By-ref, open-array, fixed-string, or set param: the slot holds a
             pointer the caller passed (the array data / buffer / forwarded slot),
@@ -1570,7 +1570,7 @@ begin
           valNode := IRA[argNode];
           if (IntToTypeKind(IRTk[valNode]) = tyString) or
              ((IRKind[valNode] = IR_LEA) and
-              (Syms[IRA[valNode]].TypeKind = tyString) and
+              TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
              (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
@@ -1976,7 +1976,22 @@ begin
         nArgs := 0;
         while argNode <> -1 do
         begin
-          IREmitNodeAarch64(IRA[argNode]);
+          { A frozen inline string (or a char) handed to a MANAGED string parameter has
+            to become a heap handle first: the callee will treat the value as one and
+            read its length at [handle-8]. Passing the raw buffer address instead made
+            the callee read the 8 bytes BEFORE the buffer as a length -- a silent wrong
+            answer at best, a segfault at worst (GetEnumValue's CompareText(sp^, name),
+            where sp^ is an interned name in an RTTI blob). Literals already arrive
+            converted from IRLowerCallArg and are tagged tyAnsiString, so they do not
+            match here and cannot double-convert. Mirrors arm32/i386. }
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[nArgs].TypeKind = tyAnsiString) and
+             (not Procs[procIdx].Params[nArgs].IsRef) and
+             ((IntToTypeKind(IRTk[argNode]) = tyChar) or
+              TypeIsFrozenString(IntToTypeKind(IRTk[argNode]))) then
+            EmitAnsiStringFromNodeA64(IRA[argNode])
+          else
+            IREmitNodeAarch64(IRA[argNode]);
           EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
           Inc(nArgs);
           argNode := IRB[argNode];

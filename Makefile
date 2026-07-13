@@ -466,6 +466,10 @@ test-core: $(COMPILER)
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	# frozen inline strings (string[N]) on the cross backends: store, Length, and passing
+	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
+	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
+	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
 	# a source type ALIAS must beat the built-in type NAME of the same name (the chain ran
 	# before the alias table, so a builtin silently won -- fatal for the compiler's own PWord)
 	./$(COMPILER) test/test_typename_alias_wins_b304.pas /tmp/test_typename_alias_wins_b30426
