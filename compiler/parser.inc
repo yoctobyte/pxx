@@ -13332,6 +13332,24 @@ begin
       else if CaseEqual(lo, 'longbool') then Result := tyInteger
       else if CaseEqual(lo, 'wordbool') then Result := tyUInt16
       else if CaseEqual(lo, 'bytebool') then Result := tyUInt8
+      { More System names that were never recognised. Until the unknown-name fallback was
+        closed they were all silently 4-byte Integers, which for TDateTime (a Double!) and
+        for the string aliases was badly wrong, not merely mis-sized. A user or RTL
+        declaration still wins — FindTypeAlias is consulted before this. TDateTime and
+        Currency deliberately match what lib/rtl/sysutils already declares them as. }
+      else if CaseEqual(lo, 'widechar') then Result := tyUInt16    { 2 bytes, not 4 }
+      else if CaseEqual(lo, 'comp') then Result := tyInt64
+      else if CaseEqual(lo, 'tdatetime') then Result := tyDouble
+      else if CaseEqual(lo, 'currency') then Result := tyDouble
+      else if CaseEqual(lo, 'sizeint') then Result := tyNativeInt
+      else if CaseEqual(lo, 'sizeuint') then Result := tyNativeUInt
+      else if CaseEqual(lo, 'utf8string') or CaseEqual(lo, 'rawbytestring') then Result := tyAnsiString
+      else if CaseEqual(lo, 'olevariant') then Result := tyVariant
+      else if CaseEqual(lo, 'pwidechar') then
+      begin
+        LastTypePointerElemTk := tyUInt16;
+        Result := tyPointer;
+      end
       else if CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8') then Result := tyInt8
       else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16') then Result := tyInt16

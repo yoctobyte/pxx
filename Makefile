@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# System type names that never existed (TDateTime was a 4-byte INT, not a Double)
+	./$(COMPILER) test/test_system_type_names_b267.pas /tmp/test_system_type_names_b26726
+	test "$$(/tmp/test_system_type_names_b26726)" = "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"
 	# an UNKNOWN type name is an ERROR (it used to become a silent 4-byte Integer).
 	# Positive half: forward `^` refs, named dyn-array types, AnsiChar/Int16 widths.
 	./$(COMPILER) test/test_unknown_type_rejected_b266.pas /tmp/test_unknown_type_rejected_b26626
