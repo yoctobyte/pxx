@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T02:16:28Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6e0395e5495f72a8c046d8a88c77183f7989dcd2",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T02:18:18Z",
    "fixed": [],
    "new_red": [
@@ -424,6 +416,14 @@
    "new_red": [],
    "sha": "024c63087f0bb447983bf0fad0eacc4955ddf4fb",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T07:33:43Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "41dc1ce054ba6db50d73a82c227ebb4265d2c9b3",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1063,6 +1063,7 @@
   "test-core#src:test/test_class_var_section_b244.pas": "pass",
   "test-core#src:test/test_classname_b271.pas": "pass",
   "test-core#src:test/test_classref.pas": "pass",
+  "test-core#src:test/test_classtype_inheritsfrom_b274.pas": "pass",
   "test-core#src:test/test_collections.pas": "pass",
   "test-core#src:test/test_comment_directive.pas": "pass",
   "test-core#src:test/test_comments.pas": "pass",
@@ -1652,11 +1653,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T07:30:13Z",
-  "sha": "024c63087f0bb447983bf0fad0eacc4955ddf4fb",
-  "tier": "full",
+  "date": "2026-07-13T07:33:43Z",
+  "sha": "41dc1ce054ba6db50d73a82c227ebb4265d2c9b3",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 190.2
+  "wall": 80.4
  },
  "last_bench": {
   "conf_rows": 550,
