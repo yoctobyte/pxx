@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# System.LineEnding with no `uses`; a source's own LineEnding still wins
+	./$(COMPILER) test/test_lineending_b260.pas /tmp/test_lineending_b26026
+	test "$$(/tmp/test_lineending_b26026)" = "$$(printf 'const-concat-len=3\nis-lf=TRUE\nexpr-len=2\nle-len=1')"
 	# TFPList — FPC's plain pointer list, the name its sources actually write
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_tfplist_b259.pas /tmp/test_tfplist_b25926
 	test "$$(/tmp/test_tfplist_b25926)" = "$$(printf 'count=3\nidx-b=1\nitem0=10\nafter-delete=2 item0=20\nafter-remove=1 item0=20\nis-tlist=TRUE\nafter-clear=0')"

@@ -2114,6 +2114,24 @@ begin
   Result := callNode;
 end;
 
+function RegisterLineEndingConst: Integer;
+{ Intern System.LineEnding as an ordinary untyped string constant and return its index,
+  so every later use is just a frozen string literal. Called lazily, only once nothing
+  else has claimed the name — see the callers. Posix; Windows is not a target. }
+begin
+  Result := FindStrConst('LineEnding');
+  if Result >= 0 then Exit;
+  if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+  if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+  StrConstName[StrConstCount] := 'LineEnding';
+  StrConstSOff[StrConstCount] := TokCharLen;
+  StrConstSLen[StrConstCount] := 1;
+  TokChars[TokCharLen] := #10;
+  Inc(TokCharLen);
+  Result := StrConstCount;
+  Inc(StrConstCount);
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 
@@ -7841,6 +7859,14 @@ begin
         Exit;
       end;
       sci := FindStrConst(name);
+      if (sci < 0) and CaseEqual(name, 'LineEnding') and (FindSym(name) < 0) then
+      begin
+        { System.LineEnding as an ordinary expression (`s := s + LineEnding;`). Same
+          FALLBACK discipline as the const-concat path: only when nothing else declares
+          the name, so a source's own LineEnding still wins. Interned so it becomes an
+          ordinary frozen string literal from here on. }
+        sci := RegisterLineEndingConst;
+      end;
       if sci >= 0 then
       begin
         { Untyped string constant — expand to a string literal over its span. }
@@ -14309,6 +14335,17 @@ begin
                 if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
                 TokChars[TokCharLen] := TokChars[si]; Inc(TokCharLen); Inc(scLen);
               end;
+            end
+            else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'LineEnding') then
+            begin
+              { System.LineEnding — FPC has it with no `uses`, and fcl-fpcunit builds its
+                message formats out of it (`'Expected:' + LineEnding + '"%s"'`). A
+                FALLBACK, reached only after FindStrConst misses, so a source that
+                declares its own LineEnding still wins — registering it up front would
+                shadow that, which is the trap bug-pascal-builtin-pointer-type-cast
+                records. Posix line ending; Windows is not a target. }
+              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+              TokChars[TokCharLen] := #10; Inc(TokCharLen); Inc(scLen);
             end
             else
               Error('const string concatenation: expected a string/char literal or string constant');
