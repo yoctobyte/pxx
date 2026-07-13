@@ -1,6 +1,22 @@
 {
  "history": [
   {
+   "date": "2026-07-13T15:03:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "83195674244ec59e1325c794c9f0987d63988fed",
+   "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T15:35:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b8be0b4a4b1da6c351055d31e714cca9b6daf7cc",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
    "date": "2026-07-13T15:40:10Z",
    "fixed": [],
    "new_red": [],
@@ -409,33 +425,14 @@
    "verdict": "GREEN"
   },
   {
-   "date": "2026-07-13T22:24:54Z",
+   "date": "2026-07-13T22:40:38Z",
    "fixed": [
     "test-core#src:test/test_fpc_compat_batch2.pas",
     "test-core#src:test/test_widechar_to_utf8_b319.pas"
    ],
    "new_red": [],
-   "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
+   "sha": "02c52efb9f59d3b2efc9b216274ccdfcf8751598",
    "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-07-13T22:27:50Z",
-   "fixed": [
-    "test-c-conformance-aarch64#shard3/6",
-    "test-c-conformance-arm32#shard3/6"
-   ],
-   "new_red": [],
-   "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
-   "date": "2026-07-13T22:29:37Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
-   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -690,13 +687,13 @@
   "test-c-conformance-aarch64#shard0/6": "pass",
   "test-c-conformance-aarch64#shard1/6": "pass",
   "test-c-conformance-aarch64#shard2/6": "pass",
-  "test-c-conformance-aarch64#shard3/6": "pass",
+  "test-c-conformance-aarch64#shard3/6": "fail",
   "test-c-conformance-aarch64#shard4/6": "pass",
   "test-c-conformance-aarch64#shard5/6": "pass",
   "test-c-conformance-arm32#shard0/6": "pass",
   "test-c-conformance-arm32#shard1/6": "pass",
   "test-c-conformance-arm32#shard2/6": "pass",
-  "test-c-conformance-arm32#shard3/6": "pass",
+  "test-c-conformance-arm32#shard3/6": "fail",
   "test-c-conformance-arm32#shard4/6": "pass",
   "test-c-conformance-arm32#shard5/6": "pass",
   "test-c-conformance-i386#shard0/6": "pass",
@@ -1411,6 +1408,7 @@
   "test-core#src:test/test_record_alignment.pas": "pass",
   "test-core#src:test/test_record_const_array_field.pas": "pass",
   "test-core#src:test/test_record_copy.pas": "pass",
+  "test-core#src:test/test_record_helper_for_string_b331.pas": "pass",
   "test-core#src:test/test_record_layout_stress.pas": "pass",
   "test-core#src:test/test_record_multifield.pas": "pass",
   "test-core#src:test/test_record_temp_byval_arg.pas": "pass",
@@ -1733,29 +1731,29 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T22:29:37Z",
-  "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
-  "tier": "opt",
+  "date": "2026-07-13T22:40:38Z",
+  "sha": "02c52efb9f59d3b2efc9b216274ccdfcf8751598",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 99.3
+  "wall": 72.9
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-13T22:33:43Z",
+  "date": "2026-07-13T22:23:06Z",
   "rc": 0,
   "rows": 20,
-  "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a"
+  "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e"
  },
  "last_full": {
-  "date": "2026-07-13T22:27:50Z",
-  "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a",
+  "date": "2026-07-13T22:16:52Z",
+  "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
   "tier": "full",
-  "verdict": "GREEN",
-  "wall": 168.6
+  "verdict": "RED",
+  "wall": 214.5
  },
  "last_opt": {
-  "date": "2026-07-13T22:29:41Z",
-  "sha": "2cbc89b733a9bbec945012e6a5c520c52e9a712a"
+  "date": "2026-07-13T22:18:57Z",
+  "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e"
  },
  "open_regressions": [
   {
@@ -1777,6 +1775,24 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+   "good": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+   "job": "test-c-conformance-aarch64#shard3/6",
+   "name": "test-c-conformance-aarch64#shard3/6",
+   "opened": "2026-07-13T22:16:52Z",
+   "range": [],
+   "src": "tools/run_c_conformance.sh"
+  },
+  {
+   "bad": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+   "good": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+   "job": "test-c-conformance-arm32#shard3/6",
+   "name": "test-c-conformance-arm32#shard3/6",
+   "opened": "2026-07-13T22:16:52Z",
+   "range": [],
+   "src": "tools/run_c_conformance.sh"
   }
  ]
 }
