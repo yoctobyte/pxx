@@ -432,7 +432,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
 	# published-method RTTI: discover by name, bind, and RUN (feature-rtti-method-reflection)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_rtti_method_reflection_b254.pas /tmp/test_rtti_method_reflection_b25426
-	test "$$(/tmp/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE')"
+	test "$$(/tmp/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE\ncls-name=TMyCase\ncls-count=3\ncls-method=TestAlpha addr=TRUE\ncls-method=TestBeta addr=TRUE\ncls-method=TestInherited addr=TRUE')"
 	# `packed array` is legal on a FIELD/var, not just `packed record`
 	./$(COMPILER) test/test_packed_array_field_b258.pas /tmp/test_packed_array_field_b25826
 	test "$$(/tmp/test_packed_array_field_b25826)" = "$$(printf 'sum=22\nelems=7 9')"

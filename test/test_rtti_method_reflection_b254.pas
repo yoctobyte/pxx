@@ -50,6 +50,7 @@ var
   c: TMyCase;
   i: Integer;
   m: TRttiProc;
+  k: TClass;
 begin
   c := TMyCase.Create;
 
@@ -73,6 +74,16 @@ begin
   { an unpublished name binds to nothing rather than to garbage }
   m := BindPublishedMethod(c, 'Helper');
   writeln('helper-assigned=', Assigned(m));
+
+  { class-level: a pxx TClass value IS the RTTI blob, so no instance is needed.
+    This is what a GetMethodList(AClass, ...) helper is built on — FPC's own
+    version hand-walks the internal VMT, which is not portable. }
+  k := TMyCase;
+  writeln('cls-name=', ClassRttiName(k));
+  writeln('cls-count=', ClassPublishedMethodCount(k));
+  for i := 0 to ClassPublishedMethodCount(k) - 1 do
+    writeln('cls-method=', ClassPublishedMethodName(k, i),
+            ' addr=', ClassPublishedMethodAddress(k, i) <> nil);
 
   c.Free;
 end.

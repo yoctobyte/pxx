@@ -58,6 +58,16 @@ function GetPublishedMethod(Instance: TObject; Index: Integer): TRttiMethod;
 function BindPublishedMethod(Instance: TObject; const Name: string): TRttiProc;
 function BindPublishedMethodByIndex(Instance: TObject; Index: Integer): TRttiProc;
 
+{ ---- class-level (no instance) ----------------------------------------------
+  A pxx `TClass` value IS the RTTI blob pointer (AN_CLASSREF yields it), so these
+  need no object at all. That is what a `GetMethodList(AClass, ...)`-style helper
+  wants: FPC's own version hand-walks the internal VMT, which is not portable —
+  this is the same information off our own blob. }
+function ClassPublishedMethodCount(AClass: TClass): Integer;
+function ClassPublishedMethodName(AClass: TClass; Index: Integer): string;
+function ClassPublishedMethodAddress(AClass: TClass; Index: Integer): Pointer;
+function ClassRttiName(AClass: TClass): string;
+
 implementation
 
 type
@@ -227,6 +237,34 @@ end;
 function BindPublishedMethod(Instance: TObject; const Name: string): TRttiProc;
 begin
   BindPublishedMethod := BindMethodPtr(FindPublishedMethod(Instance, Name), Instance);
+end;
+
+{ ---- class-level: the TClass value already IS the blob ---------------------- }
+
+function ClassPublishedMethodCount(AClass: TClass): Integer;
+begin
+  ClassPublishedMethodCount := RttiMethodCount(Pointer(AClass));
+end;
+
+function ClassPublishedMethodName(AClass: TClass; Index: Integer): string;
+var e: Pointer;
+begin
+  e := RttiMethodEntry(Pointer(AClass), Index);
+  if e = nil then ClassPublishedMethodName := ''
+  else ClassPublishedMethodName := CStrToStr(PtrAt(e, RTTI_METH_OFS_NAME));
+end;
+
+function ClassPublishedMethodAddress(AClass: TClass; Index: Integer): Pointer;
+var e: Pointer;
+begin
+  e := RttiMethodEntry(Pointer(AClass), Index);
+  if e = nil then ClassPublishedMethodAddress := nil
+  else ClassPublishedMethodAddress := PtrAt(e, RTTI_METH_OFS_CODE);
+end;
+
+function ClassRttiName(AClass: TClass): string;
+begin
+  ClassRttiName := GetRttiClassName(Pointer(AClass));
 end;
 
 end.
