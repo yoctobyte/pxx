@@ -471,6 +471,11 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# a VARIABLE in scope beats an untyped string CONSTANT of the same name: the const
+	# table is not scoped, so a `const S` in one method silently replaced a later
+	# method's `var S : TClass` with the constant's TEXT (verified against FPC)
+	./$(COMPILER) test/test_local_var_beats_string_const_b313.pas /tmp/test_local_var_const_b31326
+	test "$$(/tmp/test_local_var_const_b31326)" = "$$(printf 'from the const\n[from the var] / from the var\n[arg]|arg\n[global]')"
 	# a source type ALIAS must beat the built-in type NAME of the same name (the chain ran
 	# before the alias table, so a builtin silently won -- fatal for the compiler's own PWord)
 	./$(COMPILER) test/test_typename_alias_wins_b304.pas /tmp/test_typename_alias_wins_b30426

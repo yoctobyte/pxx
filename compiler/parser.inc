@@ -5958,6 +5958,12 @@ begin
   else if CaseEqual(nm, 'pdouble') or CaseEqual(nm, 'pextended') then Result := tyDouble
   else if CaseEqual(nm, 'pboolean') then Result := tyBoolean
   else if CaseEqual(nm, 'ppointer') then Result := tyPointer
+  { PShortString — FPC's typinfo/fpcunit method-name tables are built out of it
+    (`TMethodNameRec.name : pshortstring`). tyChar for PAnsiChar/PChar is deliberately
+    NOT here: PChar has its own dedicated handling (PChar<->string conversions, the
+    NUL-terminated model), and routing it through the generic builtin-pointer alias
+    would bypass that. }
+  else if CaseEqual(nm, 'pshortstring') then Result := tyShortString
   else Result := tyUnknown;
 end;
 
@@ -8812,6 +8818,22 @@ begin
         Exit;
       end;
       sci := FindStrConst(name);
+      { A VARIABLE in scope beats an untyped string constant of the same name. The string
+        constant table is not scoped -- a `const S = 'A string';` declared inside one method
+        stays visible to every later one -- so without this test a later method's local
+        `var S : TJSONString` was silently EXPANDED INTO THE CONSTANT'S TEXT. ParseFactor
+        handed back an AN_STR_LIT, consumed the identifier, and left `.AsJSON` unconsumed;
+        the caller then reported "expected ," at the dot, pointing at the selector rather
+        than at the name it had just mis-resolved.
+
+        Pascal scoping says the innermost declaration wins, and the local var IS innermost
+        here. Same discipline the LineEnding fallback below already applies. Found in
+        fcl-json's testjsondata.pp, which declares a method-local `const S` early on and a
+        method-local `var S : TJSONString` later -- hence the decl-ORDER dependence.
+
+        (The constant table not being SCOPED at all is a separate, larger defect --
+        bug-pascal-string-const-not-scoped -- and this guard does not pretend to fix it.) }
+      if (sci >= 0) and (FindSym(name) >= 0) then sci := -1;
       if (sci < 0) and CaseEqual(name, 'LineEnding') and (FindSym(name) < 0) then
       begin
         { System.LineEnding as an ordinary expression (`s := s + LineEnding;`). Same
@@ -14534,7 +14556,8 @@ begin
       else if (not tnHasAlias) and (CaseEqual(lo, 'qword') or CaseEqual(lo, 'uint64')) then Result := tyUInt64
       else if (not tnHasAlias) and (CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint')) then Result := tyNativeInt
       else if (not tnHasAlias) and (CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint')) then Result := tyNativeUInt
-      else if (not tnHasAlias) and (CaseEqual(lo, 'pointer')) then Result := tyPointer
+      else if (not tnHasAlias) and
+              (CaseEqual(lo, 'pointer') or CaseEqual(lo, 'codepointer')) then Result := tyPointer
       else if (not tnHasAlias) and (CaseEqual(lo, 'object')) then
       begin
         { `object`: a rooted object reference — holds ANY class instance
