@@ -27,6 +27,7 @@ Usage:
 
 import argparse
 import atexit
+import filecmp
 import fnmatch
 import json
 import os
@@ -1281,8 +1282,62 @@ def build_compiler():
                         "VERIFY_COMPILER=%s-verify" % priv,
                         "BUILD_COMPILER_MANAGED=%s-mbuild" % priv,
                         "VERIFY_COMPILER_MANAGED=%s-mverify" % priv], cwd=REPO)
-    if r.returncode != 0:
+    if r.returncode == 0:
+        return
+    # The make rule demands a ONE-PASS fixedpoint: seed compiles the sources to
+    # stage2, stage2 compiles them to stage3, cmp stage2 stage3. That holds only
+    # if the seed ALREADY matches the current sources. It does not after any
+    # codegen-changing commit -- stage2 was produced by the old seed, stage3 by
+    # the new stage2, so they legitimately differ and convergence needs one more
+    # round. Bootstraps have always worked this way.
+    #
+    # A watcher hops across SHAs with a persistent compiler/pascal26, so its seed
+    # is stale constantly: `differ: byte 97` appeared 1445 times in the borg log,
+    # each one killing testmgr before it ran a single test ("no report (rc=1) --
+    # infra problem, not recording a verdict"). That is why the watcher kept
+    # falling behind: it was not testing, it was failing to build.
+    #
+    # So iterate to a REAL fixedpoint -- but bounded, and still fail loudly if it
+    # never converges: a compiler that cannot reproduce itself is a genuine bug,
+    # and quietly looping until it does would hide exactly the thing the
+    # self-host gate exists to catch.
+    if not converge_seed(priv):
         sys.exit("testmgr: building %s failed" % COMPILER)
+
+
+def converge_seed(priv, max_rounds=4):
+    """Iterate seed -> stage_n until stage_n reproduces itself, then install it.
+
+    Returns True if a fixedpoint was reached (and compiler/pascal26 now holds it).
+    """
+    src = os.path.join(REPO, "compiler", "compiler.pas")
+    seed = os.path.join(REPO, COMPILER)
+    if not os.path.exists(seed):
+        return False
+    print("testmgr: seed is stale for these sources (one-pass fixedpoint failed) "
+          "— iterating the bootstrap to convergence", flush=True)
+    cur = seed
+    for rnd in range(1, max_rounds + 1):
+        a = "%s-iter%d-a" % (priv, rnd)
+        b = "%s-iter%d-b" % (priv, rnd)
+        for stage, out in ((cur, a), (a, b)):
+            r = subprocess.run([stage, src, out], cwd=REPO,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            if r.returncode != 0 or not os.path.exists(out):
+                print("testmgr: bootstrap round %d failed to compile" % rnd,
+                      flush=True)
+                return False
+        if filecmp.cmp(a, b, shallow=False):
+            # a reproduces itself byte-for-byte: that IS the fixedpoint.
+            shutil.copyfile(a, seed)
+            os.chmod(seed, 0o755)
+            print("testmgr: bootstrap converged after %d round(s) — seed refreshed"
+                  % rnd, flush=True)
+            return True
+        cur = a         # not yet: use this stage as the next seed
+    print("testmgr: bootstrap did NOT converge in %d rounds — this is a real "
+          "self-host bug, not a stale seed" % max_rounds, flush=True)
+    return False
 
 
 # ------------------------------------------------------------- benchmark ---
