@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T05:33:35Z",
-   "fixed": [],
-   "new_red": [
-    "test-c-conformance-aarch64#shard3/6"
-   ],
-   "sha": "35aba06067ba4b5233f984884ef6c3825671a580",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-13T05:35:19Z",
    "fixed": [],
    "new_red": [],
@@ -425,18 +415,23 @@
    "sha": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T11:18:23Z",
+   "fixed": [],
+   "new_red": [
+    "test-aarch64#src:test/test_lfm.pas",
+    "test-aarch64#src:test/test_streaming_enumset.pas"
+   ],
+   "sha": "adaecd1206f335077795c37d19e3fa1ef472762b",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -520,7 +515,7 @@
   "test-aarch64#src:test/test_interfaces_is.pas": "pass",
   "test-aarch64#src:test/test_interfaces_multi_secondary.pas": "pass",
   "test-aarch64#src:test/test_interfaces_param.pas": "pass",
-  "test-aarch64#src:test/test_lfm.pas": "pass",
+  "test-aarch64#src:test/test_lfm.pas": "fail",
   "test-aarch64#src:test/test_managed_record_temp_init.pas": "pass",
   "test-aarch64#src:test/test_managed_strlen_deref.pas": "pass",
   "test-aarch64#src:test/test_methcall.pas": "pass",
@@ -537,7 +532,7 @@
   "test-aarch64#src:test/test_set_runtime.pas": "pass",
   "test-aarch64#src:test/test_single_in_aggregate.pas": "pass",
   "test-aarch64#src:test/test_streaming.pas": "pass",
-  "test-aarch64#src:test/test_streaming_enumset.pas": "pass",
+  "test-aarch64#src:test/test_streaming_enumset.pas": "fail",
   "test-aarch64#src:test/test_timer.pas": "pass",
   "test-aarch64#src:test/test_uint64_ops.pas": "pass",
   "test-aarch64#src:test/test_varrec_alloc_after.pas": "pass",
@@ -992,6 +987,7 @@
   "test-core#src:test/test_array_of_const.pas": "pass",
   "test-core#src:test/test_array_of_const_types.pas": "pass",
   "test-core#src:test/test_array_of_string.pas": "pass",
+  "test-core#src:test/test_arrayofconst_to_method_b287.pas": "pass",
   "test-core#src:test/test_asm.pas": "pass",
   "test-core#src:test/test_asm_branch.pas": "pass",
   "test-core#src:test/test_asm_emit.pas": "pass",
@@ -1072,6 +1068,7 @@
   "test-core#src:test/test_classname_b271.pas": "pass",
   "test-core#src:test/test_classref.pas": "pass",
   "test-core#src:test/test_classref_array_const_b285.pas": "pass",
+  "test-core#src:test/test_classref_op_chained_b296.pas": "pass",
   "test-core#src:test/test_classtype_inheritsfrom_b274.pas": "pass",
   "test-core#src:test/test_collections.pas": "pass",
   "test-core#src:test/test_comment_directive.pas": "pass",
@@ -1085,6 +1082,7 @@
   "test-core#src:test/test_const_array_of_record.pas": "pass",
   "test-core#src:test/test_const_array_of_string.pas": "pass",
   "test-core#src:test/test_const_before_ctor.pas": "pass",
+  "test-core#src:test/test_const_before_unit_init_b292.pas": "pass",
   "test-core#src:test/test_const_bitwise_shift.pas": "pass",
   "test-core#src:test/test_const_open_array_managed.pas": "pass",
   "test-core#src:test/test_const_precedence.pas": "pass",
@@ -1117,6 +1115,7 @@
   "test-core#src:test/test_ctor_string_literal_arg.pas": "pass",
   "test-core#src:test/test_decl_order_global_error.pas@2": "pass",
   "test-core#src:test/test_decl_order_lax.pas": "pass",
+  "test-core#src:test/test_decl_order_ret_recid_b291.pas": "pass",
   "test-core#src:test/test_declared_directive.pas": "pass",
   "test-core#src:test/test_default_keyword.pas": "pass",
   "test-core#src:test/test_default_params_methods.pas": "pass",
@@ -1174,6 +1173,7 @@
   "test-core#src:test/test_forin_implicit_field.pas": "pass",
   "test-core#src:test/test_forin_member_access.pas": "pass",
   "test-core#src:test/test_forin_native.pas": "pass",
+  "test-core#src:test/test_forin_property_b295.pas": "pass",
   "test-core#src:test/test_forin_set_member.pas": "pass",
   "test-core#src:test/test_fortran_skeleton.f90": "pass",
   "test-core#src:test/test_forward_class_base.pas": "pass",
@@ -1201,6 +1201,7 @@
   "test-core#src:test/test_hex_char_code.pas": "pass",
   "test-core#src:test/test_high_low_const_expr.pas": "pass",
   "test-core#src:test/test_hint_sizeof.pas": "pass",
+  "test-core#src:test/test_ident_ordinal_cast_b286.pas": "pass",
   "test-core#src:test/test_impl_static_and_pchar_index.pas": "pass",
   "test-core#src:test/test_include_fi_search.pas": "pass",
   "test-core#src:test/test_indexed_proc_call.pas": "pass",
@@ -1348,6 +1349,7 @@
   "test-core#src:test/test_proc_const_record.pas": "pass",
   "test-core#src:test/test_procaddr.pas": "pass",
   "test-core#src:test/test_proctype.pas": "pass",
+  "test-core#src:test/test_property_index_b293.pas": "pass",
   "test-core#src:test/test_property_redecl_b283.pas": "pass",
   "test-core#src:test/test_pthread_header.pas": "pass",
   "test-core#src:test/test_ptr_alias.pas": "pass",
@@ -1377,6 +1379,7 @@
   "test-core#src:test/test_rtti_emit.pas@2": "pass",
   "test-core#src:test/test_rtti_method_reflection_b254.pas": "pass",
   "test-core#src:test/test_rtti_reg.pas": "pass",
+  "test-core#src:test/test_runtime_set_member_b294.pas": "pass",
   "test-core#src:test/test_rust_advanced.rs": "pass",
   "test-core#src:test/test_rust_assoc_fns.rs": "pass",
   "test-core#src:test/test_rust_chess_perft.rs": "pass",
@@ -1386,6 +1389,7 @@
   "test-core#src:test/test_scheduler.pas": "pass",
   "test-core#src:test/test_scheduler_exc.pas": "pass",
   "test-core#src:test/test_scopedenums.pas": "pass",
+  "test-core#src:test/test_selector_after_property_b289.pas": "pass",
   "test-core#src:test/test_set_const_expr_b281.pas": "pass",
   "test-core#src:test/test_set_default_param_b282.pas": "pass",
   "test-core#src:test/test_set_of_char_const.pas": "pass",
@@ -1451,6 +1455,7 @@
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
+  "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
   "test-core#src:test/test_types_point_methods_b269.pas": "pass",
   "test-core#src:test/test_uint64_ops.pas": "pass",
   "test-core#src:test/test_unicodestring_alias.pas": "pass",
@@ -1479,6 +1484,7 @@
   "test-core#src:test/test_varrec_branch.pas": "pass",
   "test-core#src:test/test_varrec_string.pas": "pass",
   "test-core#src:test/test_virtual_call_string_args.pas": "pass",
+  "test-core#src:test/test_virtual_class_method_b290.pas": "pass",
   "test-core#src:test/test_virtual_keyword_result.pas": "pass",
   "test-core#src:test/test_virtual_managed_arg.pas": "pass",
   "test-core#src:test/test_virtual_proc.pas": "pass",
@@ -1614,11 +1620,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1675,11 +1676,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T09:21:38Z",
-  "sha": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 108.5
+  "date": "2026-07-13T11:18:23Z",
+  "sha": "adaecd1206f335077795c37d19e3fa1ef472762b",
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 230.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1689,11 +1690,11 @@
   "sha": "2eaced377605f3c8c21c0b3a182ba35ff84003b8"
  },
  "last_full": {
-  "date": "2026-07-13T09:19:43Z",
-  "sha": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
+  "date": "2026-07-13T11:18:23Z",
+  "sha": "adaecd1206f335077795c37d19e3fa1ef472762b",
   "tier": "full",
   "verdict": "RED",
-  "wall": 230.2
+  "wall": 230.0
  },
  "last_opt": {
   "date": "2026-07-13T09:21:42Z",
@@ -1728,6 +1729,60 @@
    "opened": "2026-07-13T09:11:06Z",
    "range": [],
    "src": "tools/run_c_conformance.sh"
+  },
+  {
+   "bad": "adaecd1206f335077795c37d19e3fa1ef472762b",
+   "good": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
+   "job": "test-aarch64#src:test/test_lfm.pas",
+   "name": "test-aarch64#63",
+   "opened": "2026-07-13T11:18:23Z",
+   "range": [
+    "f383a549f8cbbd884a3d764cc02a58aea64f2522",
+    "be6076b7b560ed8ca88ce5c4ba021417c6b5ffce",
+    "c4d365d42668bb3a61cda0c2f0fd499b817c096a",
+    "7adb44341afbb93c1be7966c40e20a48a84215b7",
+    "f573140a507266ad7267bf89757d7f27bd9c8e8a",
+    "4d87480775f9e0201d07e8fb271a5cce33dda709",
+    "41d6c04aaebc654470b06b05c62bd2b842f3da82",
+    "ac38180bb8879641738b13e063ede8eb1d7ecefe",
+    "9e6edb3d3f41fdeb3a94b5c7dda3e26f04147775",
+    "a403c0510edc1f9081a11413fdca421616d3ef0e",
+    "14734cdb2040ba8870bd661c071ccca8dde517f7",
+    "ea3a1a663c175549866914363985a27a0c5bc5b4",
+    "aff85b4f021d580aadb1f4cb68319382024a96c6",
+    "012dd3d9ff7f218f540f71877557abf6771a17e6",
+    "55a04738d7dbdbe9b703344663a4ed42c12aa914",
+    "df9ea5964932ef08a7495cc99eb7163342a2a287",
+    "adaecd1206f335077795c37d19e3fa1ef472762b"
+   ],
+   "src": "test/test_lfm.pas tools/run_target.sh"
+  },
+  {
+   "bad": "adaecd1206f335077795c37d19e3fa1ef472762b",
+   "good": "2eaced377605f3c8c21c0b3a182ba35ff84003b8",
+   "job": "test-aarch64#src:test/test_streaming_enumset.pas",
+   "name": "test-aarch64#62",
+   "opened": "2026-07-13T11:18:23Z",
+   "range": [
+    "f383a549f8cbbd884a3d764cc02a58aea64f2522",
+    "be6076b7b560ed8ca88ce5c4ba021417c6b5ffce",
+    "c4d365d42668bb3a61cda0c2f0fd499b817c096a",
+    "7adb44341afbb93c1be7966c40e20a48a84215b7",
+    "f573140a507266ad7267bf89757d7f27bd9c8e8a",
+    "4d87480775f9e0201d07e8fb271a5cce33dda709",
+    "41d6c04aaebc654470b06b05c62bd2b842f3da82",
+    "ac38180bb8879641738b13e063ede8eb1d7ecefe",
+    "9e6edb3d3f41fdeb3a94b5c7dda3e26f04147775",
+    "a403c0510edc1f9081a11413fdca421616d3ef0e",
+    "14734cdb2040ba8870bd661c071ccca8dde517f7",
+    "ea3a1a663c175549866914363985a27a0c5bc5b4",
+    "aff85b4f021d580aadb1f4cb68319382024a96c6",
+    "012dd3d9ff7f218f540f71877557abf6771a17e6",
+    "55a04738d7dbdbe9b703344663a4ed42c12aa914",
+    "df9ea5964932ef08a7495cc99eb7163342a2a287",
+    "adaecd1206f335077795c37d19e3fa1ef472762b"
+   ],
+   "src": "test/test_streaming_enumset.pas tools/run_target.sh"
   }
  ]
 }
