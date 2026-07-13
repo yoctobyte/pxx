@@ -471,6 +471,11 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# a SELECTOR after a function call used as a STATEMENT was silently dropped —
+	# GetBox.Poke; / GetBox.SetVal(42); / GetBox.Val := 5; / GetBoxAt(0).M(..) all
+	# vanished with no diagnostic (fpjson's RegisterTest registered 0 of 203 tests)
+	./$(COMPILER) test/test_stmt_call_result_selector_b318.pas /tmp/test_stmt_call_selector_b31826
+	test "$$(/tmp/test_stmt_call_selector_b31826)" = "$$(printf 'poke val=0\na=42\nb=5\nc=7\nd=7')"
 	# a ROUTINE-LOCAL const array of CLASS REFERENCES registered a PENDING GLOBAL init
 	# holding the routine-local symbol index — rolled back with the scope, so main lowered
 	# a dangling IR_LEA ("invalid symbol in lea"). Verified against FPC.
