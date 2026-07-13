@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `8997639f144f` | 2026-07-13T01:48:23Z | GREEN (native) | 71.0s | `99fbd9610a5e` RED |
+| borg | `8997639f144f` | 2026-07-13T01:51:31Z | RED (full) | 179.4s | `8997639f144f` RED |
 
 ## Open regressions
-- **test-c-conformance-aarch64#shard3/6** — tools/run_c_conformance.sh (borg): bad `99fbd9610a5e`, last good `99fbd9610a5e`, 0 commit(s) in range
+- **test-core#src:test/test_string_to_pchar_auto.pas** — test/test_string_to_pchar_auto.pas (borg): bad `8997639f144f`, last good `8997639f144f`, 0 commit(s) in range

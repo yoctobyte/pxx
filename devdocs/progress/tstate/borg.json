@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T21:29:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "512fd76fb4bb1c5ada93f28cdef4dedcb3a7ff01",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T21:44:30Z",
    "fixed": [],
    "new_red": [],
@@ -411,18 +403,24 @@
    "sha": "8997639f144fc690145e51c980d5c50b94986a89",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T01:51:31Z",
+   "fixed": [
+    "test-c-conformance-aarch64#shard3/6"
+   ],
+   "new_red": [
+    "test-core#src:test/test_string_to_pchar_auto.pas"
+   ],
+   "sha": "8997639f144fc690145e51c980d5c50b94986a89",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
   "test-aarch64#src:test/ccross_entry.c": "pass",
@@ -663,7 +661,7 @@
   "test-c-conformance-aarch64#shard0/6": "pass",
   "test-c-conformance-aarch64#shard1/6": "pass",
   "test-c-conformance-aarch64#shard2/6": "pass",
-  "test-c-conformance-aarch64#shard3/6": "fail",
+  "test-c-conformance-aarch64#shard3/6": "pass",
   "test-c-conformance-aarch64#shard4/6": "pass",
   "test-c-conformance-aarch64#shard5/6": "pass",
   "test-c-conformance-arm32#shard0/6": "pass",
@@ -1399,7 +1397,7 @@
   "test-core#src:test/test_string_delete_insert.pas": "pass",
   "test-core#src:test/test_string_ordering.pas": "pass",
   "test-core#src:test/test_string_sized.pas": "pass",
-  "test-core#src:test/test_string_to_pchar_auto.pas": "pass",
+  "test-core#src:test/test_string_to_pchar_auto.pas": "fail",
   "test-core#src:test/test_succ_pred_odd.pas": "pass",
   "test-core#src:test/test_symslot_stale_ndims.pas": "pass",
   "test-core#src:test/test_syncobjs.pas": "pass",
@@ -1578,11 +1576,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
   "test-riscv32#src:test/ccross_entry.c": "pass",
@@ -1639,11 +1632,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T01:48:23Z",
+  "date": "2026-07-13T01:51:31Z",
   "sha": "8997639f144fc690145e51c980d5c50b94986a89",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 71.0
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 179.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1653,11 +1646,11 @@
   "sha": "99fbd9610a5eee835c18d0724a20bc4e3526920c"
  },
  "last_full": {
-  "date": "2026-07-13T01:39:38Z",
-  "sha": "99fbd9610a5eee835c18d0724a20bc4e3526920c",
+  "date": "2026-07-13T01:51:31Z",
+  "sha": "8997639f144fc690145e51c980d5c50b94986a89",
   "tier": "full",
   "verdict": "RED",
-  "wall": 196.5
+  "wall": 179.4
  },
  "last_opt": {
   "date": "2026-07-13T01:41:57Z",
@@ -1665,13 +1658,13 @@
  },
  "open_regressions": [
   {
-   "bad": "99fbd9610a5eee835c18d0724a20bc4e3526920c",
-   "good": "99fbd9610a5eee835c18d0724a20bc4e3526920c",
-   "job": "test-c-conformance-aarch64#shard3/6",
-   "name": "test-c-conformance-aarch64#shard3/6",
-   "opened": "2026-07-13T01:39:38Z",
+   "bad": "8997639f144fc690145e51c980d5c50b94986a89",
+   "good": "8997639f144fc690145e51c980d5c50b94986a89",
+   "job": "test-core#src:test/test_string_to_pchar_auto.pas",
+   "name": "test-core#580",
+   "opened": "2026-07-13T01:51:31Z",
    "range": [],
-   "src": "tools/run_c_conformance.sh"
+   "src": "test/test_string_to_pchar_auto.pas"
   }
  ]
 }
