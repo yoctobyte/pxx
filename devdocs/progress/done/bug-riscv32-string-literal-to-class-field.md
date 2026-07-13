@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (cross-target codegen — riscv32 only)
 - **Track:** A — core (riscv32 backend / frozen-string store)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** splitting the reproduction for [[bug-cross-metaclass-new-with-args]] — this
   is NOT a metaclass bug, it just happened to be in the same test.
 
@@ -49,3 +49,6 @@ itself is fine — it is the FROZEN LITERAL source operand that is being dropped
 
 ## Gate
 `make test` + self-host byte-identical + cross (riscv32 in particular).
+
+## Log
+- 2026-07-13 — resolved, commit pending.

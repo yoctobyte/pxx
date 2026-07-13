@@ -1004,6 +1004,89 @@ begin
           else rv32_sw(reg_a1, reg_a0, 0);
           Exit;
         end;
+        if tk = tyAnsiString then
+        begin
+          { MANAGED-STRING store through an ADDRESS (a class/record FIELD, an array
+            element, a deref). IR_STORE_SYM has had this since managed strings landed;
+            IR_STORE_MEM never got it, so a store through an address just wrote the raw
+            source word into the slot.
+
+            For a value that ALREADY is a handle (a concat result, a function result, a
+            copy of another string) the raw word happens to be right, which is why
+            `F := 'a' + n` and `s := 'lit'; F := s` both worked and hid this. A FROZEN
+            LITERAL is not a handle -- it is the address of inline data -- so
+            `F := 'lit'` stored a pointer to the literal into a managed slot and the
+            field read back EMPTY. Silent, no crash. Same shape as i386's IR_STORE_MEM,
+            which has always had this branch.
+
+            Build the new handle in a0 exactly as IR_STORE_SYM does, then publish it
+            through the slot address: store new, DecRef old. }
+          valNode := IRB[node];
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            j := InternStr(sVal);
+            EmitLoadImmRISCV32(reg_a0, Strs[j].Len);            { arg0 = len }
+            EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
+            procIdx := FindProc('PXXStrFromLit');
+            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);                              { a0 = handle }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            IREmitNodeRISCV32(valNode);                         { a0 = char code }
+            rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
+            rv32_addi(reg_a1, reg_sp, 0);                       { arg1 = &char }
+            rv32_addi(reg_a0, reg_zero, 1);                     { arg0 = len 1 }
+            procIdx := FindProc('PXXStrFromLit');
+            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);
+            rv32_addi(reg_sp, reg_sp, 8);
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          begin
+            IREmitNodeRISCV32(valNode);                         { a0 = inline buffer addr }
+            rv32_lw(reg_a2, reg_a0, 0);                         { len = [buf] }
+            rv32_addi(reg_a1, reg_a0, 8);                       { arg1 = buf+8 }
+            rv32_addi(reg_a0, reg_a2, 0);                       { arg0 = len }
+            procIdx := FindProc('PXXStrFromLit');
+            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);
+          end
+          else
+          begin
+            IREmitNodeRISCV32(valNode);                         { a0 = source handle }
+            { a fresh result (concat / user call) already carries its +1; a plain copy
+              of another handle must IncRef }
+            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              procIdx := FindProc('PXXStrIncRef');
+              if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
+              EmitCallProc(procIdx);
+              rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);
+            end;
+          end;
+
+          { publish through the slot ADDRESS: [slot] := new, then DecRef the old }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeRISCV32(IRA[node]);                                { a0 = slot address }
+          InLValueWrite := savedLVW;
+          rv32_addi(reg_t0, reg_a0, 0);                                { t0 = slot addr }
+          rv32_lw(reg_a1, reg_t0, 0);                                  { a1 = old handle }
+          rv32_lw(reg_a0, reg_sp, 0);                                  { a0 = new handle }
+          rv32_sw(reg_a0, reg_t0, 0);                                  { [slot] := new }
+          rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+          rv32_addi(reg_sp, reg_sp, 4);                                { drop the pushed new }
+          Exit;
+        end;
+
         IREmitNodeRISCV32(IRB[node]);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);

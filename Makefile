@@ -444,6 +444,10 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# managed-string store through an ADDRESS (class field / record field / array elem):
+	# a frozen LITERAL is not a handle, and riscv32's IR_STORE_MEM stored the raw word
+	./$(COMPILER) test/test_managed_store_via_addr_b279.pas /tmp/test_managed_store_via_addr_b27926
+	test "$$(/tmp/test_managed_store_via_addr_b27926)" = "$$(printf 'field-lit=[field-lit]\nmethod-lit=[in-method-lit]\nmethod-cat=[cat:x]\nfield-var=[via-var]\nfield-self-cat=[via-var!]\nrec-lit=[rec-lit]\nrec-cat=[rec:via-var]\narr-lit=[arr-lit]\narr-cat=[arr:via-var]\narr-copy=[arr-lit]\nchar-lit=[z]')"
 	# a callable METHOD POINTER built by hand from a TMethod record: the cast is a
 	# reinterpret of the same {Code,Data} words (fpcunit's RunBare)
 	./$(COMPILER) test/test_method_ptr_cast_b277.pas /tmp/test_method_ptr_cast_b27726
