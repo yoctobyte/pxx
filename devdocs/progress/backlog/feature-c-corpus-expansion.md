@@ -188,3 +188,26 @@ initializers (`struct Wrap g[] = {((struct Wrap){f}), f}` desyncs the top-level
 parser before any other 00216 feature is even reached). That is the large,
 self-host-fragile keystone; full 5-path map in feature-c-compound-literals.
 Step 1 is done bar this one deferred feature. Steps 2 (zlib) / 3 (tcc) unchanged.
+
+## 2026-07-13 — step 4 (csmith) BLOCKED on a one-line install; everything else on the ladder is done
+
+Steps 1-3 are complete (c-testsuite 220/220, zlib byte-identical to the gcc oracle, tcc
+self-compiles and the pxx/gcc lineages converge). Duktape is parked on
+[[bug-c-duktape-double-formatting]]. That leaves **step 4, the csmith differential fuzzer**
+— the highest-leverage item left here, because it is a one-time harness that then finds
+miscompiles on its own, overnight, forever.
+
+It cannot be started unattended: `csmith` is not installed and `sudo` requires a password.
+
+**One command unblocks it (user):**
+
+```sh
+sudo apt install csmith creduce      # csmith 2.3.0 is in the archive; creduce minimises hits
+```
+
+Once that is in, the harness is small: generate with `csmith --output t.c`, compile the same
+file with `gcc -O2 -I/usr/include/csmith` and with pxx, run both, diff stdout; on a
+mismatch, `creduce` down to a minimal repro and file it. csmith programs are self-checking
+(they print a checksum of all globals), so the oracle is just "same checksum", and its
+output is UB-free by construction, so a difference is always a real miscompile in one of
+the two compilers.
