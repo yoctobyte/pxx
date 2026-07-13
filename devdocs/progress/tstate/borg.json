@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T14:09:06Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f57ab8b0d4f7b1c148c999205a0f74fa2dc09c59",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T14:40:06Z",
    "fixed": [],
    "new_red": [],
@@ -429,6 +421,16 @@
    "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-13T22:04:08Z",
+   "fixed": [
+    "test-c-conformance-aarch64#shard3/6"
+   ],
+   "new_red": [],
+   "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -676,7 +678,7 @@
   "test-c-conformance-aarch64#shard0/6": "pass",
   "test-c-conformance-aarch64#shard1/6": "pass",
   "test-c-conformance-aarch64#shard2/6": "pass",
-  "test-c-conformance-aarch64#shard3/6": "fail",
+  "test-c-conformance-aarch64#shard3/6": "pass",
   "test-c-conformance-aarch64#shard4/6": "pass",
   "test-c-conformance-aarch64#shard5/6": "pass",
   "test-c-conformance-arm32#shard0/6": "pass",
@@ -1713,11 +1715,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T22:00:22Z",
+  "date": "2026-07-13T22:04:08Z",
   "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
-  "tier": "native",
+  "tier": "full",
   "verdict": "RED",
-  "wall": 93.6
+  "wall": 214.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1727,11 +1729,11 @@
   "sha": "d94db8d6b0ccc8a1ce8441e7104293aeff071199"
  },
  "last_full": {
-  "date": "2026-07-13T21:58:13Z",
-  "sha": "0348fae0ff3313631fad0fba4afdd811ce4b35c1",
+  "date": "2026-07-13T22:04:08Z",
+  "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
   "tier": "full",
   "verdict": "RED",
-  "wall": 240.5
+  "wall": 214.9
  },
  "last_opt": {
   "date": "2026-07-13T21:25:35Z",
@@ -1783,15 +1785,6 @@
     "d94db8d6b0ccc8a1ce8441e7104293aeff071199"
    ],
    "src": "test/test_widechar_to_utf8_b319.pas"
-  },
-  {
-   "bad": "0348fae0ff3313631fad0fba4afdd811ce4b35c1",
-   "good": "0348fae0ff3313631fad0fba4afdd811ce4b35c1",
-   "job": "test-c-conformance-aarch64#shard3/6",
-   "name": "test-c-conformance-aarch64#shard3/6",
-   "opened": "2026-07-13T21:58:13Z",
-   "range": [],
-   "src": "tools/run_c_conformance.sh"
   },
   {
    "bad": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
