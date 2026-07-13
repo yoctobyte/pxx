@@ -4513,6 +4513,13 @@ begin
 
   node := AllocNode(AN_CALL);
   ASTIVal[node] := -SPECIAL_IN;
+  { `x in [consts]` is a BOOLEAN. This node carried no type at all, so it defaulted to
+    tyUnknown and was treated as an integer: `writeln(e in [a,b])` printed 1 instead of TRUE,
+    and `(e in [a,b]) and (ch in ['a'..'z'])` did a BITWISE and of two booleans -- numerically
+    right only because the operands happen to be 0/1. The runtime-set path (an ordinary binop)
+    has always been typed tyBoolean, so the same expression behaved differently depending on
+    which path it took. }
+  ASTTk[node] := Ord(tyBoolean);
 
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := leftExpr;
@@ -4550,6 +4557,7 @@ begin
     end;
   end;
   Expect(tkRBrack, ']');
+  LastExprTk := tyBoolean;
   Result := node;
 end;
 

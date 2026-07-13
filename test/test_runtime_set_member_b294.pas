@@ -24,6 +24,9 @@ begin
     else
       writeln(i, ': ', c);
   end;
-  { the all-constant path must still work }
+  { the all-constant path must still work -- AND yield a BOOLEAN. It carried no type at all,
+    so it defaulted to tyUnknown and printed 1/0, while the runtime path printed TRUE/FALSE:
+    the same expression behaved differently depending on which path it took. Worse, an `and`
+    of two of them was a BITWISE integer and, right only because the operands are 0/1. }
   writeln('const set: ', 'b' in ['a'..'c'], ' ', 'z' in ['a'..'c']);
 end.
