@@ -12619,7 +12619,7 @@ var
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
-  isLn, slIsArrTarget, slIsDynArr: Boolean;
+  isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
@@ -13757,6 +13757,49 @@ begin
           end;
         end;
       end;
+
+        { A SELECTOR after a function call used as a statement:
+          `GetRegistry.AddTest(X);` / `GetBox.Val := 5;` / `GetBoxAt(I).M(...)`.
+          The plain call branches below consume only the call itself; the trailing
+          `.member` then fell into the default skip-to-';' branch and the WHOLE
+          statement was silently dropped (fpjson's RegisterTest registered
+          nothing). The expression parser already resolves the full chain — incl.
+          method calls on the result — so delegate the statement to it, same
+          shape as the tkLParen `(o as T).M;` case. A trailing `:=` makes it a
+          store through the result's member. (bug-pascal-statement-call-result-selector) }
+        if (procIdx >= 0) and (si < 0) and Procs[procIdx].IsFunc then
+        begin
+          frDot := Tokens[TokPos].Kind = tkDot;
+          if (not frDot) and (Tokens[TokPos].Kind = tkLParen) then
+          begin
+            { scan the matching ')' — a '.' right after it makes this a
+              call-result selector statement }
+            i := TokPos; smMai := 0;
+            repeat
+              if Tokens[i].Kind = tkLParen then Inc(smMai)
+              else if Tokens[i].Kind = tkRParen then Dec(smMai);
+              Inc(i);
+            until (smMai = 0) or (Tokens[i].Kind = tkEOF);
+            frDot := Tokens[i].Kind = tkDot;
+          end;
+          if frDot then
+          begin
+            ParseExpr;
+            valNode := CurASTNode;
+            if CurTok.Kind = tkAssign then
+            begin
+              Next;
+              ParseExpr;
+              node := AllocNode(AN_ASSIGN);
+              ASTLeft[node] := valNode;
+              ASTRight[node] := CurASTNode;
+            end
+            else
+              node := valNode;
+            Result := node;
+            Exit;
+          end;
+        end;
 
         if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
