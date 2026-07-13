@@ -6098,12 +6098,12 @@ end;
   gate is what caught that. See bug-pascal-builtin-pointer-type-cast. }
 function BuiltinPtrNameElemTk(const nm: AnsiString): TTypeKind;
 begin
-  if CaseEqual(nm, 'pinteger') or CaseEqual(nm, 'plongint') then Result := tyInt32
-  else if CaseEqual(nm, 'pshortint') then Result := tyInt8
-  else if CaseEqual(nm, 'psmallint') then Result := tyInt16
-  else if CaseEqual(nm, 'pbyte') then Result := tyUInt8
-  else if CaseEqual(nm, 'pword') then Result := tyUInt16
-  else if CaseEqual(nm, 'pcardinal') or CaseEqual(nm, 'plongword') or CaseEqual(nm, 'pdword') then Result := tyUInt32
+  if CaseEqual(nm, 'pinteger') or CaseEqual(nm, 'plongint') or CaseEqual(nm, 'pint32') then Result := tyInt32
+  else if CaseEqual(nm, 'pshortint') or CaseEqual(nm, 'pint8') then Result := tyInt8
+  else if CaseEqual(nm, 'psmallint') or CaseEqual(nm, 'pint16') then Result := tyInt16
+  else if CaseEqual(nm, 'pbyte') or CaseEqual(nm, 'puint8') then Result := tyUInt8
+  else if CaseEqual(nm, 'pword') or CaseEqual(nm, 'puint16') then Result := tyUInt16
+  else if CaseEqual(nm, 'pcardinal') or CaseEqual(nm, 'plongword') or CaseEqual(nm, 'pdword') or CaseEqual(nm, 'puint32') then Result := tyUInt32
   else if CaseEqual(nm, 'pint64') then Result := tyInt64
   else if CaseEqual(nm, 'pqword') or CaseEqual(nm, 'puint64') then Result := tyUInt64
   else if CaseEqual(nm, 'pnativeint') or CaseEqual(nm, 'pptrint') then Result := tyNativeInt
@@ -14424,6 +14424,23 @@ begin
                    statement, never an lvalue }
                  (ASTKind[valNode] = AN_IF) then
                 node := valNode
+              else if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
+              begin
+                { Pascal compound assignment `a += e;` (and -= *= /=) — FPC's
+                  {$COPERATORS} extension, always-on here like the rest of the
+                  lax dialect (rtl-generics' hash mixers use it heavily). The
+                  expression parser already owns the node + IR lowering (the C
+                  frontend's path); this just accepts it in statement position. }
+                castPrevTok := Ord(CurTok.Kind); Next;
+                ParseExpr;
+                node := AllocNode(AN_COMPOUND_ASSIGN);
+                ASTLeft[node] := valNode; ASTRight[node] := CurASTNode;
+                if castPrevTok = Ord(tkPlusEq) then ASTIVal[node] := Ord(tkPlus)
+                else if castPrevTok = Ord(tkMinusEq) then ASTIVal[node] := Ord(tkMinus)
+                else if castPrevTok = Ord(tkStarEq) then ASTIVal[node] := Ord(tkStar)
+                else ASTIVal[node] := Ord(tkSlash);
+                ASTTk[node] := ASTTk[valNode];
+              end
               else
               begin
                 Expect(tkAssign, ':=');
@@ -15300,7 +15317,35 @@ begin
 	        only — a local section initializer should use inline `var x := v`. }
 	      if n <> 1 then Error('initializer requires a single variable');
 	      if CurProc >= 0 then
-	        Error('local var-section initializer not supported; use `var x := value;`');
+	      begin
+	        { LOCAL var-section initializer `var a: UInt32 = 1;` — FPC-legal (an
+	          assignment on entry, every call). Reuse the routine-local
+	          typed-const machinery (flushed into the prologue): scalar
+	          ordinal/float consts and string literals. Aggregates keep the
+	          error. (rtl-generics' Adler32 declares two of these.) }
+	        if isArr or isDyn then
+	          Error('local var-section ARRAY initializer not supported; assign in statements');
+	        if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+	        LocalInitSym[LocalInitCount]  := idx;
+	        LocalInitElem[LocalInitCount] := -1;
+	        LocalInitFOff[LocalInitCount] := -1;
+	        if CurTok.Kind = tkString then
+	        begin
+	          LocalInitKind[LocalInitCount] := 1;
+	          LocalInitVal[LocalInitCount]  := Tokens[TokPos - 1].SOffset;
+	          LocalInitFLen[LocalInitCount] := Tokens[TokPos - 1].SLen;
+	          Next;
+	        end
+	        else
+	        begin
+	          LocalInitKind[LocalInitCount] := 0;
+	          LocalInitVal[LocalInitCount]  := ParseInitVal;
+	          LocalInitTk[LocalInitCount]   := Ord(tk);
+	        end;
+	        Inc(LocalInitCount);
+	        Eat(tkSemicolon);
+	        Continue;
+	      end;
 	      if isDyn then Error('dynamic array initializer not supported');
 	      if CurTok.Kind = tkLParen then
 	      begin
@@ -15426,7 +15471,7 @@ begin
   only read as a TYPE when it is not followed by `..` AND it names an enum type. Otherwise
   it falls through to the ordinary constant range. }
 procedure ParseArrayDimBounds(var lo, hi: Integer);
-var eid: Integer;
+var eid: Integer; btk: TTypeKind; blo, bhi: Int64;
 begin
   if CurTok.Kind = tkBoolean_T then
   begin
@@ -15435,6 +15480,23 @@ begin
   if CurTok.Kind = tkChar_T then
   begin
     lo := 0; hi := 255; Next; Exit;
+  end;
+  { A SMALL ordinal type as the whole index: `array[Byte] of ...`
+    (rtl-generics' bucket tables). Only when the type IS the dimension (next
+    token ends it) — `array[Byte(x)..2]` keeps the constant-range path. The
+    32/64-bit ordinals stay errors: a 4-billion-element static array is a
+    mistake, and FPC's own targets reject most of them too. }
+  if ((CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T)) and
+     (TokPos < TokCount) and
+     ((Tokens[TokPos].Kind = tkRBrack) or (Tokens[TokPos].Kind = tkComma)) then
+  begin
+    btk := ParseTypeKind;
+    if OrdinalTypeBound(btk, False, blo) and OrdinalTypeBound(btk, True, bhi) and
+       (bhi - blo < 65536) then
+    begin
+      lo := blo; hi := bhi; Exit;
+    end;
+    Error('array index type too large (use an explicit small range)');
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind <> tkDotDot) then

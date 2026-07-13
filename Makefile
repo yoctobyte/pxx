@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# rtl-generics dialect prereqs: array[Byte], PUInt8-family names, local
+	# var-section ordinal initializers, compound-assign statements (+= -= *= /=)
+	./$(COMPILER) test/test_dialect_generics_prereqs_b329.pas /tmp/test_generics_prereq_b32926
+	test "$$(/tmp/test_generics_prereq_b32926)" = "$$(printf 'span=256\nadler=1572875\ncompound=48\nsecond-call a resets: 1')"
 	# a metaclass ARRAY ELEMENT as receiver: Map[0].Tag (virtual class method),
 	# Map[0].Create (virtual ctor) — fell to plain-pointer paths, silent garbage
 	./$(COMPILER) test/test_metaclass_array_element_b328.pas /tmp/test_mc_elem_b32826

@@ -2952,9 +2952,14 @@ begin
         while (j <= Length(src)) and (src[j] <> '}') and (src[j] <> #10) do
         begin
           c := src[j];
+          { Windows-style separators in include paths ({$I inc\foo.inc} —
+            rtl-generics writes them) resolve on unix like FPC does:
+            translate to '/'. }
 {$ifdef FPC}
+          if c = '\' then c := '/';
           if (c <> '''') and (c <> '"') and (c <> ' ') then AppendChar(fname, c);
 {$else}
+          if c = 92 then c := 47;
           if (c <> 39) and (c <> 34) and (c <> 32) then AppendChar(fname, Chr(c));
 {$endif}
           Inc(j);
