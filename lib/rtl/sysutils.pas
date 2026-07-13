@@ -164,6 +164,12 @@ const
 var
   DefaultSystemCodePage: Word;
 
+{ FPC SysUtils.FreeAndNil: free the object and nil the reference, in that order. The parameter
+  is UNTYPED (`var Obj`) exactly as in FPC, so any class-typed variable can be passed without a
+  cast. Niling AFTER the free is the point of it: a destructor that re-enters and reads the
+  variable sees nil, not a dangling pointer. }
+procedure FreeAndNil(var Obj);
+
 { FPC System.StrPas: a NUL-terminated PChar as a Pascal string ('' for nil). StrLen is its
   length. }
 function StrPas(P: PChar): AnsiString;
@@ -394,10 +400,6 @@ function DeleteFile(const FileName: string): Boolean;
 function GetTempDir: string;
 function GetTempFileName(const Dir, Prefix: string): string;
 
-{ Free an object reference and nil it (FPC SysUtils). Frees the instance
-  memory; a user Destroy is NOT dispatched (matches the builtin root Free —
-  PXX has no RTTI destructor dispatch from an untyped reference yet). }
-procedure FreeAndNil(var Obj: TObject);
 
 type
   TTextLineBreakStyle = (tlbsLF, tlbsCRLF, tlbsCR);
@@ -415,6 +417,18 @@ procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
 implementation
 
 uses platform, platform_types;
+
+procedure FreeAndNil(var Obj);
+var
+  tmp: TObject;
+  ref: ^Pointer;
+begin
+  ref := @Obj;
+  tmp := TObject(ref^);
+  ref^ := nil;          { nil FIRST, then free -- FPC's order, so a re-entrant destructor
+                          cannot see a dangling reference }
+  if tmp <> nil then tmp.Free;
+end;
 
 function StrLen(P: PChar): Integer;
 var n: Integer;
@@ -1666,14 +1680,6 @@ begin
   Result := '/tmp/';
 end;
 
-procedure FreeAndNil(var Obj: TObject);
-begin
-  if Pointer(Obj) <> nil then
-  begin
-    FreeMem(Pointer(Obj));
-    Obj := nil;
-  end;
-end;
 
 function GetTempFileName(const Dir, Prefix: string): string;
 var

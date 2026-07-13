@@ -444,6 +444,10 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# FreeAndNil must RUN THE DESTRUCTOR (it silently skipped it: Free through an untyped
+	# reference does not dispatch Destroy)
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_freeandnil_destructor_b300.pas /tmp/test_freeandnil_destructor_b30026
+	test "$$(/tmp/test_freeandnil_destructor_b30026)" = "$$(printf 'freeing parent:\n  TParent.Destroy\n  TChild.Destroy\nparent nil : TRUE\ndestructors: 1 (1 = the child, via TParent.Destroy)\nfreeing child:\n  TChild.Destroy\nchild nil  : TRUE\ndestructors: 2 (2)')"
 	# a CLASS PROPERTY through the class name: TD.Compressed := True
 	./$(COMPILER) test/test_class_property_b299.pas /tmp/test_class_property_b29926
 	test "$$(/tmp/test_class_property_b29926)" = "$$(printf 'default : FALSE 0\nafter   : TRUE 7\nagain   : FALSE 7')"

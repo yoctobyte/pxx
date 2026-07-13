@@ -12421,7 +12421,7 @@ end;
 
 function ParseStatementAST: Integer;
 var
-  smmiS, pvSig, pvTarget, smSelfNode: Integer;
+  smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
   pvIsMeth: Boolean;
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
@@ -12900,6 +12900,36 @@ begin
         if CaseEqual(name, 'Break') then node := AllocNode(AN_BREAK)
         else node := AllocNode(AN_CONTINUE);
         Next;
+      end
+      else if CaseEqual(name, 'FreeAndNil') and (FindSym(name) < 0) and
+              (Tokens[TokPos].Kind = tkLParen) and
+              (Tokens[TokPos + 1].Kind = tkIdent) and
+              (Tokens[TokPos + 2].Kind = tkRParen) and
+              (FindSym(GetTokenStr(TokPos + 1)) >= 0) and
+              (Syms[FindSym(GetTokenStr(TokPos + 1))].RecName >= REC_UCLASS_BASE) and
+              (not UClsIsRecord[Syms[FindSym(GetTokenStr(TokPos + 1))].RecName - REC_UCLASS_BASE]) then
+      begin
+        { `FreeAndNil(x)` where x is a class-typed VARIABLE.
+
+          It cannot be a library routine and be correct. FPC's takes an untyped `var Obj`, so
+          inside it the reference is TObject -- and `Free` through an untyped/TObject reference
+          does NOT dispatch Destroy in this compiler (the VMT slot is not known from a
+          reference with no class id). So every destructor of every object freed that way was
+          SILENTLY SKIPPED: no `inherited`, no child cleanup. It looked fine, because the
+          memory really was released.
+
+          At the CALL SITE the variable's static type IS known, and that is exactly what
+          `obj.Free` already uses to dispatch Destroy through the VMT -- and GenMakeFreeObject
+          already nils the variable afterwards, which is the whole of FreeAndNil. So this is
+          the same node `x.Free` builds, and it is correct for free.
+
+          A local named FreeAndNil still wins; anything that is not a plain class variable
+          falls through to the library routine. }
+        fanSym := FindSym(GetTokenStr(TokPos + 1));
+        Next; Next;   { consume 'FreeAndNil' and '(' }
+        Next;         { consume the variable }
+        Expect(tkRParen, ')');
+        node := GenMakeFreeObject(fanSym);
       end
       else if CaseEqual(name, 'get_caller_stackinfo') and
               (FindProc(name) < 0) and (FindSym(name) < 0) and
