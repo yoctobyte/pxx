@@ -207,6 +207,11 @@ function QuotedStr(const s: AnsiString): AnsiString;
   (max chars for %s, fraction digits for %f). FPC SysUtils.Format. }
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 
+{ FPC's UnicodeString-returning Format. This RTL has a single byte-string model
+  (string = AnsiString), so it is Format -- declared because FPC code calls it by
+  name (fpcunit's ComparisonMsg does). }
+function UnicodeFormat(const fmt: AnsiString; const args: array of const): AnsiString;
+
 { Path helpers (POSIX '/' delimiter; '\' also accepted as a separator). }
 function ExtractFileName(const path: AnsiString): AnsiString;   { after last sep }
 function ExtractFilePath(const path: AnsiString): AnsiString;   { up to & incl last sep }
@@ -1093,6 +1098,11 @@ begin
     r := r + FmtPad(piece, width, leftAlign, zeroPad);
   end;
   Result := r;
+end;
+
+function UnicodeFormat(const fmt: AnsiString; const args: array of const): AnsiString;
+begin
+  Result := Format(fmt, args);
 end;
 
 function DirentByte(buf: Pointer; off: Integer): Byte;

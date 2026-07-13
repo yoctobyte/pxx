@@ -5515,6 +5515,7 @@ end;
 
 procedure ParseFactor;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    smmiS: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
@@ -6972,6 +6973,36 @@ begin
       begin
         idx := FindSym(name);
         procIdx := FindProc(name);
+      end;
+
+      { Bare call to a sibling CLASS (static) method, from inside a class method.
+
+        CurSelfClass is deliberately unset in a `class procedure` -- it is static and
+        has no Self -- so every implicit-Self dispatch above is skipped, and the name
+        used to fall through to "undefined variable". But a static method needs no
+        Self: it is callable exactly like a plain proc, so all that was missing was
+        finding it. Bind procIdx and let the ordinary call machinery (args, defaults,
+        overloads) do the rest.
+
+        Keyed on CurMethClass, which IS set for both method kinds -- the same reason
+        the bare `class var` lookup uses it. Only STATIC methods qualify: an instance
+        method reached from a class method has no instance to run on, and must keep
+        failing. A local/param (idx >= 0), a real proc (procIdx >= 0) or a unit
+        qualifier all still win. This is fpcunit's TAssert.FailEquals calling Fail. }
+      if (procIdx < 0) and (idx < 0) and (qUnit < 0) and
+         (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) then
+      begin
+        smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
+        if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
+        begin
+          procIdx := UMthProc_[smmiS];
+          { A method's proc is registered under its QUALIFIED name, so the call
+            machinery's overload re-match (which resolves by NAME) would find no
+            candidate for the bare name and reject the args. Hand it the registered
+            name: overload resolution then runs over exactly this method's own
+            overload set, which is what it should have been all along. }
+          name := Procs[procIdx].Name;
+        end;
       end;
 
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
@@ -11693,6 +11724,7 @@ end;
 
 function ParseStatementAST: Integer;
 var
+  smmiS: Integer;
   name: AnsiString;
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -12770,6 +12802,37 @@ begin
            (CurSelfClass >= REC_UCLASS_BASE) and
            (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
           procIdx := -1;
+
+      { Bare call to a sibling CLASS (static) method, from inside a class method.
+
+        CurSelfClass is deliberately unset in a `class procedure` -- it is static and
+        has no Self -- so every implicit-Self dispatch above is skipped, and the name
+        used to fall through to "undefined variable". But a static method needs no
+        Self: it is callable exactly like a plain proc, so all that was missing was
+        finding it. Bind procIdx and let the ordinary call machinery (args, defaults,
+        overloads) do the rest.
+
+        Keyed on CurMethClass, which IS set for both method kinds -- the same reason
+        the bare `class var` lookup uses it. Only STATIC methods qualify: an instance
+        method reached from a class method has no instance to run on, and must keep
+        failing. A local/param (idx >= 0), a real proc (procIdx >= 0) or a unit
+        qualifier all still win. This is fpcunit's TAssert.FailEquals calling Fail. }
+      if (procIdx < 0) and (si < 0) and (qUnit < 0) and
+         (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) then
+      begin
+        smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
+        if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
+        begin
+          procIdx := UMthProc_[smmiS];
+          { A method's proc is registered under its QUALIFIED name, so the call
+            machinery's overload re-match (which resolves by NAME) would find no
+            candidate for the bare name and reject the args. Hand it the registered
+            name: overload resolution then runs over exactly this method's own
+            overload set, which is what it should have been all along. }
+          name := Procs[procIdx].Name;
+        end;
+      end;
+
         if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;

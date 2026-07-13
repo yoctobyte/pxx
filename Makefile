@@ -437,6 +437,10 @@ test-core: $(COMPILER)
 	# through a UNIT, with overloads, by-ref Self, record results, props over fields
 	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas /tmp/test_types_point_methods_b26926
 	test "$$(/tmp/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
+	# bare call to a sibling CLASS (static) method from inside a class method
+	# (fpcunit's TAssert.FailEquals calling Fail) -- incl. overloads
+	./$(COMPILER) test/test_class_method_bare_call_b272.pas /tmp/test_class_method_bare_call_b27226
+	test "$$(/tmp/test_class_method_bare_call_b27226)" = "$$(printf 'helper: from class method\ntwice: 42\nover int: 7\nover str: seven\nv=42\nhelper: from instance method')"
 	# TObject.ClassName / TClass.ClassName -- every class carries an RTTI header now,
 	# so it answers for classes that publish nothing (fpcunit's GetN(C: TClass))
 	./$(COMPILER) test/test_classname_b271.pas /tmp/test_classname_b27126
