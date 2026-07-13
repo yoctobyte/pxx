@@ -34,6 +34,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
+.PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
@@ -3668,6 +3669,16 @@ test-cjson: $(COMPILER)
 # Auto-skips when the gitignored suite is absent (tools/install_lib_candidates.sh
 # c-testsuite). Known-fails are EXPLICIT in test/c-conformance/pxx.skip, one
 # ticket-referenced line per test; anything else failing = regression, exit 1.
+# Differential fuzzing vs gcc on random csmith programs. NOT part of `make test` --
+# it is open-ended by nature (run it for as long as you like). Needs the csmith
+# generator (apt install csmith) and its headers
+# (tools/install_lib_candidates.sh csmith). Exits non-zero only on a MISCOMPILE.
+#   make fuzz-csmith                 # 100 programs
+#   make fuzz-csmith FUZZ_ITERS=1000
+FUZZ_ITERS ?= 100
+fuzz-csmith: $(COMPILER)
+	tools/csmith_fuzz.py --iters $(FUZZ_ITERS)
+
 test-c-conformance: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER)
 
