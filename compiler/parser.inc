@@ -5924,6 +5924,55 @@ end;
 { Map a built-in ordinal TYPE name to its TTypeKind, or tyUnknown if the name is
   not a (supported) ordinal builtin. Covers the names that lex as tkIdent (the
   dedicated type tokens are handled directly via ParseTypeKind). }
+{ The built-in POINTER type names (PInteger, PByte, PDouble, ...): the type they point AT, or
+  tyUnknown if the name is not one of them. Element rec is never a record here.
+
+  These are consulted ONLY AFTER FindTypeAlias misses, everywhere they are used. That ordering is
+  the whole safety property, and it is not optional: registering them as real aliases up front
+  looks right, compiles, and SILENTLY BREAKS THE COMPILER -- FindTypeAlias scans forward and
+  returns the FIRST match, so a pre-registered builtin shadows the source's own declaration, and
+  this compiler declares `PWord = ^NativeInt` (the machine word). The self-host byte-identical
+  gate is what caught that. See bug-pascal-builtin-pointer-type-cast. }
+function BuiltinPtrNameElemTk(const nm: AnsiString): TTypeKind;
+begin
+  if CaseEqual(nm, 'pinteger') or CaseEqual(nm, 'plongint') then Result := tyInt32
+  else if CaseEqual(nm, 'pshortint') then Result := tyInt8
+  else if CaseEqual(nm, 'psmallint') then Result := tyInt16
+  else if CaseEqual(nm, 'pbyte') then Result := tyUInt8
+  else if CaseEqual(nm, 'pword') then Result := tyUInt16
+  else if CaseEqual(nm, 'pcardinal') or CaseEqual(nm, 'plongword') or CaseEqual(nm, 'pdword') then Result := tyUInt32
+  else if CaseEqual(nm, 'pint64') then Result := tyInt64
+  else if CaseEqual(nm, 'pqword') or CaseEqual(nm, 'puint64') then Result := tyUInt64
+  else if CaseEqual(nm, 'pnativeint') or CaseEqual(nm, 'pptrint') then Result := tyNativeInt
+  else if CaseEqual(nm, 'pnativeuint') or CaseEqual(nm, 'pptruint') then Result := tyNativeUInt
+  else if CaseEqual(nm, 'psingle') then Result := tySingle
+  else if CaseEqual(nm, 'pdouble') or CaseEqual(nm, 'pextended') then Result := tyDouble
+  else if CaseEqual(nm, 'pboolean') then Result := tyBoolean
+  else if CaseEqual(nm, 'ppointer') then Result := tyPointer
+  else Result := tyUnknown;
+end;
+
+{ The alias index for a built-in pointer name, REGISTERING it on first use. Registering lazily is
+  what keeps a source declaration winning: FindTypeAlias is consulted first by every caller, so a
+  real `PInteger` in the source or the RTL is found before we ever get here. Returns -1 for a name
+  that is not a builtin pointer. }
+function EnsureBuiltinPtrAlias(const nm: AnsiString): Integer;
+var elemTk: TTypeKind; noff, i: Integer;
+begin
+  Result := -1;
+  elemTk := BuiltinPtrNameElemTk(nm);
+  if elemTk = tyUnknown then Exit;
+  noff := TokCharLen;
+  for i := 1 to Length(nm) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := nm[i];
+    Inc(TokCharLen);
+  end;
+  RegisterPtrAlias(noff, Length(nm), Ord(elemTk), REC_NONE, 0, 0);
+  Result := AliasCount - 1;
+end;
+
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind;
 begin
   if CaseEqual(nm, 'shortint') then Result := tyInt8
@@ -8245,6 +8294,12 @@ begin
       if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         aliasIdx := FindTypeAlias(name);
+        { ...and, only if that missed, a BUILT-IN pointer name: `PInteger(p)^`. Registered
+          lazily, on first use, which is what keeps a source declaration winning -- FindTypeAlias
+          ran first, so a real PInteger in the source or the RTL was already found. Registering
+          these up front instead shadows the source (FindTypeAlias is first-wins) and silently
+          re-types this compiler's own `PWord = ^NativeInt`. }
+        if aliasIdx < 0 then aliasIdx := EnsureBuiltinPtrAlias(name);
         if aliasIdx >= 0 then
         begin
           Next; { consume alias type name }
@@ -14431,6 +14486,25 @@ begin
       else if CaseEqual(lo, 'pwidechar') then
       begin
         LastTypePointerElemTk := tyUInt16;
+        Result := tyPointer;
+      end
+      { The built-in pointer names — PInteger, PByte, PDouble, ...
+
+        The FindTypeAlias test is EXPLICIT and load-bearing. The comment above claims the alias
+        table is consulted before this chain; it is NOT — the chain runs first, and every name in
+        it therefore shadows a source declaration of the same name. For `widechar`/`tdatetime`
+        that is latent (nobody redeclares them). For the P-names it is fatal: this compiler
+        declares `PWord = ^NativeInt` (the machine word), and a builtin `PWord = ^UInt16`
+        silently re-types it — `pw^` then reads two bytes instead of eight. Caught here by a test
+        that declared its own PWord; the self-host gate did NOT catch it, so do not rely on that
+        alone.
+
+        (The chain's ordering is wrong in general and should be fixed at the top rather than
+        per-name — filed as bug-pascal-builtin-typename-shadows-source-alias.) }
+      else if (FindTypeAlias(lo) < 0) and (BuiltinPtrNameElemTk(lo) <> tyUnknown) then
+      begin
+        LastTypePointerElemTk := BuiltinPtrNameElemTk(lo);
+        LastTypePointerElemRec := REC_NONE;
         Result := tyPointer;
       end
       else if CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8') then Result := tyInt8

@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** bug (compat — hard error, easy workaround)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 
 ## Symptom
 ```pascal
@@ -52,3 +52,6 @@ Declare the alias locally: `type PInt = ^Integer;`. Costs one line.
 ## Gate
 `make test` + self-host byte-identical (this is the check that catches the shadowing —
 do not skip it) + cross.
+
+## Log
+- 2026-07-13 — resolved, commit pending.

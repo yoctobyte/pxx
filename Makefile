@@ -466,6 +466,10 @@ test-core: $(COMPILER)
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	# built-in POINTER type names (PInteger/PByte/PDouble) in a type position AND a cast --
+	# and a SOURCE declaration of the same name must still WIN (the compiler's own PWord)
+	./$(COMPILER) test/test_builtin_pointer_types_b303.pas /tmp/test_builtin_pointer_types_b30326
+	test "$$(/tmp/test_builtin_pointer_types_b30326)" = "$$(printf 'source PWord is ^NativeInt : TRUE\ncast via source PWord      : TRUE\nsource PInteger is ^Int64  : -5\nPByte      : 200\nPCardinal  : 4000000000\nPDouble    : 2.5\ndone')"
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas /tmp/test_deref_managed_string_b30226
