@@ -6744,6 +6744,38 @@ begin
         Exit;
       end;
 
+      if (CaseEqual(name, 'get_frame') or CaseEqual(name, 'get_pc_addr')) and
+         (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        { FPC's System stack-frame intrinsics, reached with no `uses` -- so they are
+          soft keywords (a real symbol of the same name still wins, per the guard).
+
+            get_frame    the current function's frame pointer
+            get_pc_addr  the return address of the current function
+
+          FPC allows both bare and with an empty (). Diagnostic code (fpcunit's
+          CallerAddr, any backtrace) walks the chain with these plus
+          get_caller_stackinfo below. }
+        { The program body runs at the ELF entry, where SysV leaves no linked frame
+          (rbp = 0 -- it IS the outermost frame). So there is nothing to read and
+          nothing to walk: say so at compile time rather than fault at runtime.
+          Routines, including unit init sections, all have a real prologue. }
+        if CurProc < 0 then
+          Error(name + ' needs a stack frame, and the program body has none (it is the outermost frame): call it from a routine');
+        if CaseEqual(name, 'get_frame') then node := AllocNode(AN_FRAME)
+        else node := AllocNode(AN_PCADDR);
+        ASTTk[node] := Ord(tyPointer);
+        Next;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__pxxmulhi_u64') then
       begin
         { __pxxmulhi_u64(a, b): the HIGH 64 bits of the unsigned 128-bit product
@@ -12056,6 +12088,26 @@ begin
         if CaseEqual(name, 'Break') then node := AllocNode(AN_BREAK)
         else node := AllocNode(AN_CONTINUE);
         Next;
+      end
+      else if CaseEqual(name, 'get_caller_stackinfo') and
+              (FindProc(name) < 0) and (FindSym(name) < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { get_caller_stackinfo(var bp, var addr): FPC's System intrinsic that steps
+          one frame up the saved-fp chain, setting addr to the return address into
+          bp's caller and bp to that caller's frame. Both args are lvalues, written
+          through -- so it is a statement-level soft keyword like Inc/Dec, not an
+          expression. IRLowerAST does the two loads and two stores. }
+        if CurProc < 0 then
+          Error('get_caller_stackinfo needs a stack frame, and the program body has none (it is the outermost frame): call it from a routine');
+        node := AllocNode(AN_CALLERINFO);
+        Next; Expect(tkLParen, '(');
+        ParseExpr;
+        ASTLeft[node] := CurASTNode;    { bp }
+        Expect(tkComma, ',');
+        ParseExpr;
+        ASTRight[node] := CurASTNode;   { addr }
+        Expect(tkRParen, ')');
       end
       else if (CaseEqual(name, 'Inc') or CaseEqual(name, 'Dec')) and
               (FindProc(name) < 0) and (FindSym(name) < 0) and

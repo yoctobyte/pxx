@@ -893,6 +893,12 @@ begin
         EmitB($B8); EmitDataRef(Integer(IRIVal[node]));
       end;
 
+    IR_FRAME:
+      { get_frame: ebp is the frame pointer (push ebp; mov ebp, esp). }
+      begin
+        EmitB($89); EmitB($E8);   { mov eax, ebp }
+      end;
+
     IR_LOAD_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'load');

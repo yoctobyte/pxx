@@ -103,6 +103,7 @@ begin
     IR_CALL_IND: Result := 'call_ind';
     IR_CONST_DATA: Result := 'const_data';
     IR_MULHI: Result := 'mulhi';
+    IR_FRAME: Result := 'frame';
   else
     Result := 'unknown';
   end;
@@ -184,7 +185,8 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
-      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT, IR_RESOURCES:
+      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT, IR_RESOURCES,
+      IR_FRAME:
         begin end;
 
       IR_LOAD_SYM:
@@ -2491,8 +2493,45 @@ begin
   Dec(InliningActive);
 end;
 
+{ The stack-frame intrinsics all rest on ONE assumption: a linked frame-pointer
+  chain, where [fp] is the caller's fp. Every pxx prologue builds one -- except on
+  xtensa, whose register windows have no such chain. Refuse there rather than hand
+  back a plausible-looking pointer into nothing. }
+procedure IRRejectNoFramePointer(const what: AnsiString);
+begin
+  if TargetArch = TARGET_XTENSA then
+    Error(what + ': the stack-frame intrinsics need a linked frame-pointer chain, and xtensa''s register windows have none');
+end;
+
+{ Where the saved CALLER frame pointer and the RETURN ADDRESS sit, relative to the
+  current frame pointer. Read straight off EmitProcPrologue -- these two functions
+  are the only place the frame layout is encoded, so a prologue change has exactly
+  one other site to update.
+
+  x86-64  push rbp; mov rbp,rsp            -> [fp+0] caller fp, [fp+8]  ret
+  i386    push ebp; mov ebp,esp            -> [fp+0] caller fp, [fp+4]  ret
+  arm32   push {fp,lr}; mov fp,sp          -> [fp+0] caller fp, [fp+4]  ret
+  aarch64 stp x29,x30,[sp,#-16]!; mov x29,sp -> [fp+0] caller fp, [fp+8] ret
+  riscv32 sw ra,[sp+12]; sw s0,[sp+8]; mv s0,sp
+
+  riscv32 is the odd one: s0 is left pointing at the BOTTOM of the frame, not above
+  the saved pair, so its links are at +8/+12 rather than +0/+PtrSize. Assuming the
+  common layout here would have silently walked into the locals. }
+function FramePrevFpOffset: Integer;
+begin
+  if TargetArch = TARGET_RISCV32 then Result := 8
+  else Result := 0;
+end;
+
+function FrameRetAddrOffset: Integer;
+begin
+  if TargetArch = TARGET_RISCV32 then Result := 12
+  else Result := TypeSize(tyPointer);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
+    frameNode, slotNode, bpAddr, addrAddr, bpVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -3595,6 +3634,61 @@ begin
         Error('__pxxmulhi_u64 requires a 64-bit target (x86-64 / aarch64); use MulHiU64 from lib/rtl for a portable path');
       Result := IRAppend(IR_MULHI, IRLowerAST(ASTLeft[node]),
                   IRLowerAST(ASTRight[node]), -1, 0, ASTTk[node]);
+    end;
+
+    AN_FRAME:
+    begin
+      { get_frame. The one op the backends implement; everything else below is
+        built out of it. }
+      IRRejectNoFramePointer('get_frame');
+      Result := IRAppend(IR_FRAME, -1, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_PCADDR:
+    begin
+      { get_pc_addr = the return address of the CURRENT function, which the
+        prologue parked one word above the saved frame pointer: [fp + PtrSize].
+        So it is a plain load off IR_FRAME -- no backend op of its own. }
+      IRRejectNoFramePointer('get_pc_addr');
+      frameNode := IRAppend(IR_FRAME, -1, -1, -1, 0, Ord(tyPointer));
+      slotNode := IRAppend(IR_BINOP, frameNode,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, FrameRetAddrOffset, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
+      Result := IRAppend(IR_LOAD_MEM, slotNode, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_CALLERINFO:
+    begin
+      { get_caller_stackinfo(var bp, var addr): step ONE frame up the saved-fp
+        chain. Reads bp, then
+
+          addr := [bp + PtrSize]   { return address into bp's caller }
+          bp   := [bp]             { bp's caller's frame }
+
+        in that ORDER -- addr is derived from the OLD bp, so overwriting bp first
+        would hand back the wrong return address. Loads and stores only; the frame
+        register itself is never named here, so no backend op is needed.
+
+        The caller is expected to have checked bp <> nil; a nil bp faults, exactly
+        as it does in FPC. }
+      IRRejectNoFramePointer('get_caller_stackinfo');
+      bpAddr := IRLowerAddress(ASTLeft[node]);       { &bp   }
+      addrAddr := IRLowerAddress(ASTRight[node]);    { &addr }
+      bpVal := IRAppend(IR_LOAD_MEM, bpAddr, -1, -1, 0, Ord(tyPointer));
+      slotNode := IRAppend(IR_BINOP, bpVal,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, FrameRetAddrOffset, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
+      IRAppend(IR_STORE_MEM, addrAddr,
+        IRAppend(IR_LOAD_MEM, slotNode, -1, -1, 0, Ord(tyPointer)),
+        -1, 0, Ord(tyPointer));
+      { re-load bp: the store above may have clobbered the accumulator }
+      bpVal := IRAppend(IR_LOAD_MEM, bpAddr, -1, -1, 0, Ord(tyPointer));
+      slotNode := IRAppend(IR_BINOP, bpVal,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, FramePrevFpOffset, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
+      Result := IRAppend(IR_STORE_MEM, bpAddr,
+        IRAppend(IR_LOAD_MEM, slotNode, -1, -1, 0, Ord(tyPointer)),
+        -1, 0, Ord(tyPointer));
     end;
 
     AN_YIELD:

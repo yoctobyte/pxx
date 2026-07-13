@@ -1159,6 +1159,10 @@ begin
           EmitI32($F9400000);            { ldr x0, [x0] }
       end;
 
+    IR_FRAME:
+      { get_frame: x29 is the frame pointer (stp x29,x30,[sp,#-16]!; mov x29,sp). }
+      EmitI32($AA1D03E0); { mov x0, x29 }
+
     IR_MULHI:
       begin
         { Unsigned 64x64->128, high half. Same operand dance as an integer

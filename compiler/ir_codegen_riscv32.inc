@@ -638,6 +638,12 @@ begin
       { Absolute data address (sentinel-resolvable), see the x86-64 case. }
       EmitLoadDataRefRISCV32(reg_a0, Integer(IRIVal[node]));
 
+    IR_FRAME:
+      { get_frame: s0 is the frame pointer. NOTE it points at the BOTTOM of the
+        frame here, so the saved caller fp and the return address are at +8/+12,
+        not +0/+4 -- see FramePrevFpOffset / FrameRetAddrOffset in ir.inc. }
+      rv32_addi(reg_a0, reg_s0, 0);   { mv a0, s0 }
+
     IR_ASM:
       begin
         { Inline asm block: replay the parse-time-captured text lines

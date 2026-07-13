@@ -1808,6 +1808,14 @@ begin
         IREmitCodeCall(CloneStubAddr);
       end;
 
+    IR_FRAME:
+      { get_frame: the current frame pointer. Every pxx prologue does
+        `push rbp; mov rbp, rsp`, so rbp IS this function's frame and [rbp] the
+        caller's. }
+      begin
+        EmitB($48); EmitB($89); EmitB($E8);            { mov rax, rbp }
+      end;
+
     IR_MULHI:
       begin
         { Unsigned 64x64->128; keep the high half. `mul r64` is fixed-operand:

@@ -948,6 +948,10 @@ begin
       { Absolute data address (sentinel-resolvable), see the x86-64 case. }
       EmitLoadDataRefArm32(0, Integer(IRIVal[node]));
 
+    IR_FRAME:
+      { get_frame: fp (r11) is the frame pointer (push {fp,lr}; mov fp, sp). }
+      EmitI32($E1A0000B); { mov r0, fp }
+
     IR_LOAD_SYM:
       begin
         si := IRA[node];

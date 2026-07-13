@@ -437,6 +437,10 @@ test-core: $(COMPILER)
 	# through a UNIT, with overloads, by-ref Self, record results, props over fields
 	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas /tmp/test_types_point_methods_b26926
 	test "$$(/tmp/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
+	# System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo
+	# (fpcunit's CallerAddr walks the saved-fp chain with them)
+	./$(COMPILER) test/test_stack_frame_intrinsics_b270.pas /tmp/test_stack_frame_intrinsics_b27026
+	test "$$(/tmp/test_stack_frame_intrinsics_b27026)" = "$$(printf 'frame nonnil: TRUE\npc nonnil: TRUE\nempty parens: TRUE\nwalk: TRUE\nper-site distinct: TRUE\nascending: TRUE')"
 	# System type names that never existed (TDateTime was a 4-byte INT, not a Double)
 	./$(COMPILER) test/test_system_type_names_b267.pas /tmp/test_system_type_names_b26726
 	test "$$(/tmp/test_system_type_names_b26726)" = "$$(printf 'WideChar=2\nComp=8\nTDateTime=8\nCurrency=8\nSizeInt=8 SizeUInt=8\nPWideChar=8\nbools=4 2 1\ndt=1.75\nstr=hi hi')"
