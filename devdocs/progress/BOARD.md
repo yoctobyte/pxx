@@ -31,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (103)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -133,6 +133,7 @@ _none_
 | regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard0-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard0/6 red at e530da678bc9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-arm32-shard3-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard3/6 red at e6844ff49085 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
@@ -897,6 +898,7 @@ _none_
 - [p 70] [T] regression-test-aarch64-test-cross-sysopen-family
 - [p 70] [T] regression-test-aarch64-test-lfm
 - [p 70] [T] regression-test-aarch64-test-streaming-enumset
+- [p 70] [T] regression-test-c-conformance-aarch64-shard0-6
 - [p 70] [T] regression-test-c-conformance-arm32-shard3-6
 - [p 70] [T] regression-test-core-test-sqlite-crud-lazy
 - [p 65] [A] feature-c-corpus-expansion

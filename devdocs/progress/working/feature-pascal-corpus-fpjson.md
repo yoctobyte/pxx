@@ -79,22 +79,48 @@ Only the SCANNER's `\uXXXX` escape path, which builds a UTF-16 surrogate pair
 faking it is exactly the failure mode this corpus keeps catching. **fpjson's DOM does not need
 it**; only parsing JSON *text* containing `\u` escapes does.
 
-## fpjson's OWN suite (testjsondata.pp, 4138 lines) — started
-Now reachable, because fpcunit runs. Walls cleared for it so far:
-- `for F in Data do` where the container is a PROPERTY, not a bare variable (b295)
-- class-reference ops chained after a value: `d.M.ClassName` (b296)
+## fpjson's OWN suite (testjsondata.pp, 4138 lines) — long tail, no blocker
+Reachable because fpcunit runs. Walls cleared FOR the suite, each a real feature:
 
-Current blocker: [[bug-pascal-paren-expr-loses-class-id]] — `(Data as TJSONArray)[0].ClassType`.
-A parenthesised expression arrives at ParseFactor's suffix tail with recName = REC_NONE, so
-`[i]` does not dispatch the default property (leaving an unlowerable AN_AS_CAST) and `.Member`
-is silently dropped. The information IS there (ResolveNodeRec knows an as-cast's class); the
-paren tail is simply a THIRD copy of member/index dispatch that does not ask for it. The fix is
-to hand off to ParseClassRecordSelectors rather than grow another copy — the same
-de-duplication that fixed the method call paths.
+| landed | what it was |
+| --- | --- |
+| b295 | `for F in Data` — a container EXPRESSION (a property) with GetEnumerator |
+| b296 | class-reference ops chained after a value (`d.M.ClassName`) — were silently DROPPED |
+| b297 | a PARENTHESISED expression keeps its class id (`(b as T)[i]`, `(b as T).ClassName`) |
+| b298 | `array of const` literal to an OVERLOADED ctor — silently passed GARBAGE |
+| b299 | CLASS PROPERTIES through the class name (also resolves feature-pascal-class-property) |
+| b300 | **FreeAndNil SILENTLY SKIPPED THE DESTRUCTOR** |
+
+b300 is the one to remember: every object freed through FreeAndNil had its destructor skipped —
+no `inherited`, no child cleanup — because the RTL called FreeMem directly AND `Free` through an
+untyped reference cannot dispatch Destroy (the VMT slot is unknown without a class id). It is
+now an intrinsic that uses the call site's static type, which is what `obj.Free` already did
+correctly.
+
+### State
+The suite's remaining walls are a LONG TAIL, not an architectural blocker. Each one is
+CONTEXTUAL — it reproduces green in isolation and only fails inside the real file — so each
+needs instrumentation against testjsondata.pp itself, at roughly one compile (~2 min) per
+iteration. Current one: line 2062, `by-reference argument must be a variable` in
+`TTestFloat.DoTest`, where `Str(F,S)` / `Delete(S,1,1)` / `TestJSONType(J,...)` all compile
+fine standalone.
+
+This deserves its own focused session rather than being chased at the tail of a long one. The
+method that works (proven repeatedly tonight): do NOT keep writing reproductions — blank the
+failing line in a COPY of the real file to walk the wall forward, then instrument the compiler
+at the exact dispatch. See [[project_dump_tokens_before_theorising]].
+
+**Rung 2's actual goal — fpjson compiles and produces correct JSON — is DONE.** The suite is a
+bonus oracle on top of it.
+
+## What is left in fpjson proper
+Only the SCANNER's `\uXXXX` escape path, which builds a UTF-16 surrogate pair. That is a
+genuine string-model boundary, not a bug — [[feature-unicodestring-model]]. fpjson's DOM does
+not need it.
 
 ## Next
 Rung 3 — reassess. Likely `rtl-generics` (generic classes x interfaces x class constraints) or
-`fcl-xml` DOM. Also now unblocked: fpjson's OWN fpcunit suite, since fpcunit runs.
+`fcl-xml` DOM.
 
 ## Gate
 `make test` + self-host byte-identical + cross.
