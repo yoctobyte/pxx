@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-12T20:54:40Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aecb0de8900104095ad25931bd462aaadf846431",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-12T20:57:41Z",
    "fixed": [],
    "new_red": [],
@@ -412,6 +404,14 @@
    "new_red": [],
    "sha": "35c57c37b5cb03ca117088917cc4bd907cb1a670",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T01:20:10Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "3f4b6ce3d74ec5500a07151e5c6386f3cabfd172",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1393,6 +1393,7 @@
   "test-core#src:test/test_streaming.pas": "pass",
   "test-core#src:test/test_streaming_enumset.pas": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
+  "test-core#src:test/test_strict_visibility_b262.pas": "pass",
   "test-core#src:test/test_string_concat.pas": "pass",
   "test-core#src:test/test_string_copy_intrinsic.pas": "pass",
   "test-core#src:test/test_string_default_param_b245.pas": "pass",
@@ -1639,11 +1640,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T01:11:56Z",
-  "sha": "35c57c37b5cb03ca117088917cc4bd907cb1a670",
-  "tier": "opt",
+  "date": "2026-07-13T01:20:10Z",
+  "sha": "3f4b6ce3d74ec5500a07151e5c6386f3cabfd172",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 102.4
+  "wall": 68.7
  },
  "last_bench": {
   "conf_rows": 550,
