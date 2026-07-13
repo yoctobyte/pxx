@@ -186,3 +186,20 @@ bare sibling calls. Everything else in the list is reachable from that one decis
 [[feature-pascal-corpus-fpjson]] (rung 2) — and fpcunit being green is what unlocks it, since
 every FPC library's own suite is written against fpcunit.
 - 2026-07-13 — resolved, commit pending.
+
+## 2026-07-13 (later) — the chain is CROSS-PORTABLE too
+
+Both blockers named above are fixed, and fpcunit now runs on the cross targets with identical
+results (`run: 3 / failures: 1 / errors: 0` on x86-64, i386 and aarch64 under qemu):
+
+- [[bug-cross-metaclass-new-with-args]] — RESOLVED, and it was never target-specific. It was
+  ARGUMENT-specific: AN_METACLASS_NEW lowered ctor args with a raw `IRLowerAST` instead of the
+  parameter-aware `IRLowerCallArg` every other call path uses. An Integer argument agreed and
+  had always worked on all five targets; a `const s: string` did not, and only x86-64's IR_ARG
+  emit forgave it.
+- [[bug-riscv32-string-literal-to-class-field]] — RESOLVED. riscv32's IR_STORE_MEM had no
+  managed-string branch, so a frozen LITERAL (which is not a handle) stored a pointer to inline
+  data into a managed slot and the field read back empty. Silently.
+
+Both were pre-existing and both were SILENT. Neither would have been found without pushing a
+real library through the compiler — which is the entire argument for the corpus ladder.
