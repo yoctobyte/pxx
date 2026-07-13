@@ -444,6 +444,9 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# `for F in <property>` -- a container EXPRESSION with GetEnumerator, not a bare variable
+	./$(COMPILER) test/test_forin_property_b295.pas /tmp/test_forin_property_b29526
+	test "$$(/tmp/test_forin_property_b29526)" = "$$(printf '1 2 3 \n7 8 9 ')"
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"

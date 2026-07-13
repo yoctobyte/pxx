@@ -11148,6 +11148,7 @@ begin
 end;
 
 function ParseForStatementAST: Integer;
+var forcNode, forcRec, forcSym, forcAssign, forcLoop: Integer;   { for-in over a container EXPRESSION }
 var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
   pair1, pair2, pair3, isDownNode: Integer;
@@ -11238,9 +11239,14 @@ begin
       Result := ParseForInEnumTypeAST(varIdx, fsym);
       Exit;
     end;
-    { iterable variable (string / array / dynarray / open-array param) }
+    { iterable variable (string / array / dynarray / open-array param).
+
+      Only a BARE one: `for x in o.Bag do` starts with an identifier too, and used to be
+      grabbed here as the variable `o` -- which then failed with "variable is not a string or
+      array" instead of reaching the container-expression path below. `do` immediately after
+      the name is what says the container really is just this variable. }
     fsym := FindSym(CurTok.SVal);
-    if fsym >= 0 then
+    if (fsym >= 0) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
     begin
       Next;
       Result := ParseForInVarAST(varIdx, fsym);
@@ -11266,6 +11272,32 @@ begin
         Exit;
       end;
     end;
+    { GENERAL container EXPRESSION with a GetEnumerator: `for F in Data do` where Data is a
+      PROPERTY (fcl-json's own suite), a field of another object, a function result -- anything
+      that is not a bare variable and so has no symbol for the paths above to key on.
+
+      Parse it as an expression, materialise it into a hidden local, and hand THAT to the
+      existing enumerator loop. The container is evaluated exactly ONCE, which is both what FPC
+      does and what a property getter with side effects requires. }
+    ParseExpr;
+    forcNode := CurASTNode;
+    forcRec := ResolveNodeRec(forcNode);
+    if (forcRec >= REC_UCLASS_BASE) and
+       (FindUMeth(forcRec - REC_UCLASS_BASE, 'GetEnumerator') >= 0) then
+    begin
+      forcSym := AllocVar('', tyClass);
+      Syms[forcSym].RecName := forcRec;
+      forcAssign := GenMakeAssign(GenMakeIdent(forcSym, tyClass), forcNode);
+      forcLoop := ParseForInEnumeratorAST(varIdx, forcSym, forcRec - REC_UCLASS_BASE);
+      Result := AllocNode(AN_SEQ);
+      ASTLeft[Result] := forcAssign;
+      forcNode := AllocNode(AN_SEQ);
+      ASTLeft[forcNode] := forcLoop;
+      ASTRight[forcNode] := -1;
+      ASTRight[Result] := forcNode;
+      Exit;
+    end;
+
     Error('for-in: not a generator, enum type, or iterable variable');
   end;
   Expect(tkAssign, ':=');
