@@ -329,15 +329,37 @@ def cmd_stop(clone):
         print("daemon not running")
     else:
         os.kill(pid, signal.SIGTERM)
-        print("SIGTERM sent (pid %d) — waiting (aborts any running gate)" % pid)
-        for _ in range(120):
+        print("SIGTERM sent (pid %d) — aborting any running gate" % pid)
+        for _ in range(60):
             if not pid_alive(pid, "twatch.py"):
                 break
             time.sleep(1)
         else:
-            print("%sstill alive after 120s%s — kill -9 %d by hand" % (RED, OFF, pid))
+            # Escalate rather than hand the problem back. "kill -9 N by hand" is
+            # not a stop command, it is homework -- and it leaves the user
+            # staring at a prompt that looks hung, which is how this started.
+            print("%sno exit after 60s — SIGKILL%s" % (RED, OFF))
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+            time.sleep(2)
+            # A SIGKILLed daemon cannot tear down its own testmgr child, and a
+            # testmgr re-execs itself into a systemd scope (reparented to pid 1),
+            # so it would survive as an orphan, hold memory, and starve the next
+            # run. Reap it here.
+            for p in os.listdir("/proc"):
+                if p.isdigit() and pid_alive(int(p), "testmgr.py") \
+                        and pid_alive(int(p), clone):
+                    try:
+                        os.killpg(os.getpgid(int(p)), signal.SIGKILL)
+                        print("reaped orphaned testmgr (pid %s)" % p)
+                    except OSError:
+                        pass
+        if pid_alive(pid, "twatch.py"):
+            print("%sdaemon still alive (pid %d)%s" % (RED, OFF, pid))
             rc = 1
-        if rc == 0:
+        else:
             print("daemon stopped")
     wp = web_pid(clone)
     if wp:

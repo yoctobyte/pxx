@@ -81,6 +81,34 @@ def load_conf(clone_path):
     return conf
 
 
+def kill_child(proc, grace=30):
+    """Tear down a running testmgr: SIGINT (clean teardown), then SIGKILL.
+
+    SIGINT first because testmgr handles it and kills its own job process groups
+    — that is what stops orphaned qemu/compiler children being left behind. But
+    it must not be trusted indefinitely: a testmgr wedged badly enough to ignore
+    SIGINT is exactly the case where a stop has to still stop. Hence the grace,
+    then the hammer. Group-kill (the child was started with start_new_session,
+    so it leads its own group) so nothing under it survives either.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGINT)
+        proc.wait(timeout=grace)
+        return
+    except ProcessLookupError:
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def set_phase(clone, host, phase, **kw):
     d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase}
     d.update(kw)
@@ -210,6 +238,18 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
     wp = os.path.join(clone.path, WATCH_REL)
     while proc.poll() is None:
         time.sleep(1)
+        # STOP (SIGTERM/SIGINT) must tear the gate down HERE, every second.
+        # The signal handler only sets the flag, and the flag was previously only
+        # read between cycles -- but the daemon spends nearly all of its life
+        # right here, blocked on a testmgr child that can have several minutes of
+        # work left. So `trackt stop` would sit through the whole remaining gate,
+        # hit its 120s patience, and tell the user to `kill -9` by hand. Its own
+        # message ("aborts any running gate") was simply not true.
+        if STOP:
+            print("twatch: stopping — tearing down the running %s gate" % tier,
+                  flush=True)
+            kill_child(proc)
+            return None, "aborted"
         if time.monotonic() - last_check >= 30:
             last_check = time.monotonic()
             try:                       # keep the heartbeat fresh mid-run
@@ -222,15 +262,7 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
             if abort_check and abort_check():
                 print("twatch: aborting %s run (new work preempts it)" % tier,
                       flush=True)
-                try:
-                    os.killpg(proc.pid, signal.SIGINT)
-                    proc.wait(timeout=120)
-                except (ProcessLookupError, subprocess.TimeoutExpired):
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    proc.wait()
+                kill_child(proc)
                 return None, "aborted"
     if not os.path.exists(rep_path):
         # testmgr died before reporting. One likely cause: a STALE seed
@@ -656,6 +688,11 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
 
     out = []
     while proc.poll() is None:
+        if STOP:            # a stop must not wait out a 10-minute fuzz slice
+            kill_child(proc, grace=5)
+            print("twatch: stopping — fuzz slice discarded", flush=True)
+            set_phase(clone, host, "idle")
+            return "aborted"
         if preempted():
             # A real push outranks speculative work: kill the GROUP (the runner
             # spawns compilers and qemu) and drop the slice on the floor.
