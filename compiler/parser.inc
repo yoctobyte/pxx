@@ -2074,6 +2074,55 @@ begin
   UClsHasGuid[ci] := True;
 end;
 
+{ X.ClassName, for both shapes it can take:
+
+    an INSTANCE      -> __pxxClassName(__pxxRttiOf(x))  (blob is at [[x+0] - 8])
+    a CLASS REFERENCE-> __pxxClassName(c)                (a TClass value IS the blob ptr)
+
+  FPC declares ClassName on TObject in System, so callers reach it with no `uses`.
+  Every class now carries an RTTI header (see rtti_emit.inc), so this answers for
+  ANY class, not only those with published members -- which is what makes
+  fpcunit's `GetN(C: TClass)` work.
+
+  Consumes an optional empty '()'. Returns -1 when the builtin helpers are not
+  linked, so the caller falls through to its normal handling. }
+function GenMakeClassNameCall(objNode: Integer; isClassRef: Boolean): Integer;
+var pName, pOf, callNode, ofNode, argSeq, inner: Integer;
+begin
+  Result := -1;
+  pName := FindProc('__pxxClassName');
+  if pName < 0 then Exit;
+
+  inner := objNode;
+  if not isClassRef then
+  begin
+    pOf := FindProc('__pxxRttiOf');
+    if pOf < 0 then Exit;
+    ofNode := AllocNode(AN_CALL);
+    ASTIVal[ofNode] := pOf;
+    ASTTk[ofNode] := Ord(Procs[pOf].RetType);
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := objNode;
+    ASTLeft[ofNode] := argSeq;
+    inner := ofNode;
+  end;
+
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := pName;
+  ASTTk[callNode] := Ord(Procs[pName].RetType);
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := inner;
+  ASTLeft[callNode] := argSeq;
+
+  { FPC allows both `x.ClassName` and `x.ClassName()`. }
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    Expect(tkRParen, ')');
+  end;
+  Result := callNode;
+end;
+
 function GenMakeGetInterfaceCall(objNode: Integer): Integer;
 { Rewrite `<obj>.GetInterface(IID, Obj)` (and the bare, implicit-Self form) to
   __pxxGetInterface(<obj>, @IID, @Obj). CurTok must be on the '('.
@@ -3482,7 +3531,24 @@ begin
          (Syms[ASTIVal[node]].TypeKind = tyPointer) and
          (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
          (Syms[ASTIVal[node]].PtrElemRec = REC_NONE) then
+      begin
+        { ...but ClassName IS answerable on a bare class reference: a TClass value
+          is the RTTI blob pointer, and the name sits at its +0. This is exactly
+          fpcunit's `function GetN(C: TClass): string; begin Result := C.ClassName`. }
+        if (CurTok.Kind = tkIdent) and CaseEqual(fieldName, 'ClassName') then
+        begin
+          Next;                     { consume 'ClassName' }
+          mcallNode := GenMakeClassNameCall(node, True);
+          if mcallNode >= 0 then
+          begin
+            tk := tyAnsiString;
+            recName := REC_NONE;
+            Result := mcallNode;
+            Exit;
+          end;
+        end;
         Error('member access on a bare object reference; cast to a concrete class first');
+      end;
 
       { Check if it is a property on a class }
       mci := -1; pri := -1;
@@ -3653,6 +3719,22 @@ begin
         if mcallNode >= 0 then
         begin
           tk := tyBoolean;
+          recName := REC_NONE;
+          Result := mcallNode;
+          Exit;
+        end;
+      end;
+
+      { obj.ClassName -- FPC has it on TObject in System. Only when the class has no
+        method of that name, so a user's own ClassName still wins. }
+      if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
+         CaseEqual(fieldName, 'ClassName') then
+      begin
+        Next;                        { consume 'ClassName' }
+        mcallNode := GenMakeClassNameCall(node, False);
+        if mcallNode >= 0 then
+        begin
+          tk := tyAnsiString;
           recName := REC_NONE;
           Result := mcallNode;
           Exit;
@@ -20806,6 +20888,13 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname') or
         CaseEqual(GetTokenStr(i), 'getinterface')) and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { `x.ClassName` lowers to __pxxClassName (+ __pxxRttiOf for an instance) — see
+      GenMakeClassNameCall. Unlike the helpers above it takes NO arguments, so it is
+      normally written with no '(' and must be matched on the bare name. A class with
+      a member of that name shadows at the call site, leaving the helpers unused. }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'classname') and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /

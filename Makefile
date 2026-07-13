@@ -437,6 +437,10 @@ test-core: $(COMPILER)
 	# through a UNIT, with overloads, by-ref Self, record results, props over fields
 	./$(COMPILER) -Fulib/rtl test/test_types_point_methods_b269.pas /tmp/test_types_point_methods_b26926
 	test "$$(/tmp/test_types_point_methods_b26926)" = "$$(printf 'p=3,4\nq=3,4\noff=13,24\noffp=16,28\nzero=FALSE\nzero0=TRUE\nadd=14,26\nsub=10,20\nrect=20x10 w=20 h=10\nempty=FALSE\nin=TRUE out=FALSE\nsize=7x9\nsizew=11')"
+	# TObject.ClassName / TClass.ClassName -- every class carries an RTTI header now,
+	# so it answers for classes that publish nothing (fpcunit's GetN(C: TClass))
+	./$(COMPILER) test/test_classname_b271.pas /tmp/test_classname_b27126
+	test "$$(/tmp/test_classname_b27126)" = "$$(printf 'inst: TBase TDerived TPub\nparens: TBase\nclassref: TBase TDerived TPub\nnil: <NIL>\nvar: TDerived\nvar2: TBase\ndynamic: TDerived')"
 	# System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo
 	# (fpcunit's CallerAddr walks the saved-fp chain with them)
 	./$(COMPILER) test/test_stack_frame_intrinsics_b270.pas /tmp/test_stack_frame_intrinsics_b27026

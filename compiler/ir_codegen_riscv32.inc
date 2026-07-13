@@ -638,6 +638,11 @@ begin
       { Absolute data address (sentinel-resolvable), see the x86-64 case. }
       EmitLoadDataRefRISCV32(reg_a0, Integer(IRIVal[node]));
 
+    IR_CLASSREF:
+      { metaclass value -> a0 = address of class ci's RTTI blob. Same per-class
+        sentinel data-ref the other backends use (patched after EmitRTTI). }
+      EmitLoadDataRefRISCV32(reg_a0, -(CLASSREF_DATAREF_BASE + IRA[node]));
+
     IR_FRAME:
       { get_frame: s0 is the frame pointer. NOTE it points at the BOTTOM of the
         frame here, so the saved caller fp and the return address are at +8/+12,

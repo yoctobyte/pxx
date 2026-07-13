@@ -60,6 +60,25 @@ type
     property Message: string read FMessage write FMessage;
   end;
 
+  { The metaclass of Exception. FPC declares it in System, but our Exception lives
+    here, so here is where `class of` it can be formed. Code that catches by class
+    (fpcunit records the expected exception class of a test) needs it. }
+  ExceptClass = class of Exception;
+
+  { The System hook that renders a code address for a backtrace line. FPC lets a
+    program replace it (a symbolising debugger, a line-info unit); the default just
+    formats the address. fpcunit's AddrsToStr feeds it CallerAddr's result to say
+    WHERE an assertion failed. }
+  TBackTraceStrFunc = function(Addr: Pointer): string;
+
+var
+  { Replaceable; defaults to SysBackTraceStr below. }
+  BackTraceStrFunc: TBackTraceStrFunc;
+
+{ The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
+  $0, which is what the callers' "no address known" path already expects. }
+function SysBackTraceStr(Addr: Pointer): string;
+
 { Int64 -> decimal string (covers Integer via widening). Handles negatives. }
 function IntToStr(value: Int64): AnsiString;
 
@@ -1579,7 +1598,13 @@ begin
     end;
 end;
 
+function SysBackTraceStr(Addr: Pointer): string;
+begin
+  Result := '  $' + IntToHex(PtrUInt(Addr), 2 * SizeOf(Pointer));
+end;
+
 initialization
+  BackTraceStrFunc := @SysBackTraceStr;
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';

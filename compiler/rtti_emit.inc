@@ -97,6 +97,20 @@ begin
   end;
 end;
 
+{ Streamable = the class declares or inherits a published member, or implements a
+  guided interface. This is what the RTTI REGISTRY (GetClass / .lfm streaming) lists.
+
+  It used to be enough to ask "does this class have an RTTI blob", because a blob was
+  only emitted for exactly these classes. That proxy is now WRONG: every class carries
+  a blob so that ClassName can answer for it. Registering all of them would let
+  GetClass resolve names that were never meant to be streamable -- and it silently
+  changed the registry count, which is what test_rtti_reg caught. }
+function ClassIsStreamable(ci: Integer): Boolean;
+begin
+  ClassIsStreamable := (not UClsIsRecord[ci]) and
+    (ClassHasPublished(ci) or ClassImplementsGuidedInterface(ci));
+end;
+
 procedure DataPutZeros(n: Integer);
 var i: Integer;
 begin
@@ -278,11 +292,19 @@ begin
 
   if UClsCount > 0 then
   begin
-    { Pass 1: reserve a header per published class so forward type refs resolve. }
+    { Pass 1: reserve a header per class so forward type refs resolve.
+
+      EVERY class gets one, not just the published/guided ones. The header is where
+      the class NAME lives, and ClassName has to answer for any class at all --
+      fpcunit's `GetN(C: TClass)` is handed classes that publish nothing. The
+      published-only gate used to make ClassName a coin flip: it worked on a class
+      that happened to publish something and returned '' on one that did not.
+
+      Unpublished classes just get zero counts and no prop/meth arrays, so the cost
+      is one RTTI_CLS_SIZE header plus an interned name per class. }
     for ci := 0 to UClsCount - 1 do
     begin
-      if (not UClsIsRecord[ci]) and
-         (ClassHasPublished(ci) or ClassImplementsGuidedInterface(ci)) then
+      if not UClsIsRecord[ci] then
       begin
         UClsRTTIOff[ci] := DataLen;
         DataPutZeros(RTTI_CLS_SIZE);
@@ -429,7 +451,7 @@ begin
       the class-RTTI Pass-1 predicate above. }
     regEntries := 0;
     for ci := 0 to UClsCount - 1 do
-      if (UClsRTTIOff[ci] >= 0) and (not UClsIsRecord[ci]) then Inc(regEntries);
+      if (UClsRTTIOff[ci] >= 0) and ClassIsStreamable(ci) then Inc(regEntries);
     if regEntries > 0 then
     begin
       RTTIRegistryOff := DataLen;
@@ -438,7 +460,7 @@ begin
       PatchDataU64(RTTIRegistryOff, regEntries);
       for ci := 0 to UClsCount - 1 do
       begin
-        if (UClsRTTIOff[ci] < 0) or UClsIsRecord[ci] then continue;
+        if (UClsRTTIOff[ci] < 0) or (not ClassIsStreamable(ci)) then continue;
         entryPos := DataLen;
         DataPutZeros(16);
         nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);

@@ -561,6 +561,17 @@ begin
   Result := s;
 end;
 
+function __pxxClassName(Rtti: Pointer): AnsiString;
+{ x.ClassName. Rtti is the class blob; its +0 field is a POINTER to the interned
+  name (NOT the name itself -- __pxxRttiName wants that pointer, so deref first).
+  Every class carries a blob now, so this answers for any class; nil only when the
+  caller had no class at all. }
+begin
+  Result := '';
+  if Rtti = nil then Exit;
+  Result := __pxxRttiName(PPxxPtr_(Rtti)^);
+end;
+
 function __pxxSameNameCI(const a, b: AnsiString): Boolean;
 var i: Integer;
 begin
