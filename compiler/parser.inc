@@ -15192,6 +15192,16 @@ begin
         begin
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          { `strict private` / `strict protected` (FPC/Delphi). pxx does not enforce
+            access at all (project policy), so strict adds nothing to enforce — it is
+            consumed and the section is treated as the plain visibility that follows.
+            Unconsumed, `strict` was read as a FIELD name and demanded a ':'. }
+          if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
+             (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+             (CaseEqual(GetTokenStr(TokPos), 'private') or
+              CaseEqual(GetTokenStr(TokPos), 'protected')) then
+            Next;
+
           { Visibility section markers. Not reserved words, so treat as section
             switch only when immediately at member-start position. Access is not
             enforced (project policy); we only record the published flag for RTTI. }
