@@ -955,6 +955,10 @@ test-core: $(COMPILER)
 	# operand's side effects, which must still run
 	./$(COMPILER) test/ccomma_struct_arg_b307.c /tmp/ccomma_struct_arg_b30726
 	test "$$(/tmp/ccomma_struct_arg_b30726)" = "$$(printf 'plain=10\ncomma=10\ncomma-big=10\nnested-comma=10\nside=2\nassign-comma=2 7 side=0\nassign-comma-big=10 side=1')"
+	# anonymous bit-fields (`T : width` padding, `T : 0` alignment) -- the aggregate used
+	# to be REJECTED and fell back to opaque: sizeof 0, every field garbage, silently
+	./$(COMPILER) test/canon_bitfield_b310.c /tmp/canon_bitfield_b31026
+	test "$$(/tmp/canon_bitfield_b31026)" = "$$(printf 'A size=4 a=5 b=6\nB size=16 x=11 y=22\nC size=4 a=5 b=6\nD size=8 a=5 b=6\nU size=8 f0=18446744073709551612\nA written a=7 b=1\nD written a=2 b=7')"
 	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
 	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
 	./$(COMPILER) test/csigned_bitfield_b306.c /tmp/csigned_bitfield_b30626

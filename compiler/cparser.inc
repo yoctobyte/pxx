@@ -8437,16 +8437,18 @@ begin
     end
     else if depth >= 1 then
     begin
-      { Named bit-fields `name : width` are now laid out (as a full storage unit
-        per field — see ParseCStructInto), so they no longer force the opaque
-        fallback. An ANONYMOUS bit-field (`T : width`, padding / `:0` alignment)
-        has no name token before the colon and ParseCStructInto cannot model it,
-        so still reject those. struct/union/enum keywords are OK as field types
-        (`struct Tag *next`, `enum E e`) because ParseCDeclType resolves a tag
-        reference; an INLINE anonymous aggregate body is rejected via the
-        nested-brace check above. }
-      if (Tokens[i].Kind = tkColon) and (Tokens[i-1].Kind <> tkIdent) then
-        begin Result := False; Exit; end;
+      { Bit-fields are laid out by ParseCStructInto -- NAMED ones as a packed field
+        with bit metadata, and ANONYMOUS ones (`T : width` padding, `T : 0` alignment)
+        as reserved bits that declare no member. Neither forces the opaque fallback
+        any more.
+
+        Rejecting anonymous bit-fields here used to make the whole aggregate opaque:
+        sizeof came out 0 and every field read back garbage, silently. csmith emits them
+        constantly (`volatile unsigned : 0;` inside a union) and that is how it surfaced.
+
+        struct/union/enum keywords are OK as field types (`struct Tag *next`, `enum E e`)
+        because ParseCDeclType resolves a tag reference; an INLINE anonymous aggregate
+        body is still rejected via the nested-brace check above. }
     end;
     Inc(i);
   end;
@@ -8547,6 +8549,7 @@ var
   fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
   fTk: TTypeKind;
   isArr, firstDecl, subIsUnion, fldBaseIsEnum: Boolean;
+  anonBitW, anonBitBytes: Integer;
   { The parent's fields are BUFFERED during the walk and appended to the shared
     UFld pool only AFTER the body (and any nested sub-records) are laid out, so the
     parent's fields stay contiguous — FindUField scans [base, base+count). Without
@@ -8800,6 +8803,64 @@ begin
         begin
           declStars := 0;
           while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+        end;
+        { ANONYMOUS bit-field `T : width;` -- no name, so the declarator has a `:` where
+          the identifier would be. It reserves BITS but declares no member:
+
+            unsigned : 3;   padding -- skip 3 bits inside the current storage unit
+            unsigned : 0;   an alignment directive -- force the NEXT bit-field to start
+                            a fresh storage unit; occupies nothing itself
+
+          Falling through to the Break below left the `: width ;` tokens unconsumed, the
+          member loop desynced, and the WHOLE aggregate came out with no fields and
+          sizeof 0 -- every read of it returned garbage. Silent. csmith produces these
+          constantly (`volatile unsigned : 0;` inside a union). }
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          anonBitW := CEvalConstExpr;
+          if anonBitW < 0 then anonBitW := 0;
+          if anonBitW = 0 then
+          begin
+            { `T : 0` -- close the unit AND round up to T's storage boundary, so the next
+              bit-field genuinely starts a new unit. Closing alone left curOff mid-unit
+              (a 3-bit field leaves curOff at 1), the next field reopened at that same
+              byte, and `struct { unsigned a:3; unsigned :0; unsigned b:3; }` came out 4
+              bytes where gcc gives 8. }
+            anonBitBytes := TypeSize(IntToTypeKind(fTk));
+            if anonBitBytes < 1 then anonBitBytes := 1;
+            if not isUnion then curOff := AlignTo(curOff, anonBitBytes);
+            if anonBitBytes > maxAlign then maxAlign := anonBitBytes;
+            bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
+          end
+          else
+          begin
+            if anonBitW > 32 then anonBitW := 32;
+            if isUnion then
+            begin
+              if (bitUnitOff < 0) or (bitUnitUsed + anonBitW > 32) then
+              begin
+                bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+              end;
+            end
+            else if (bitUnitOff < 0) or (bitUnitUsed + anonBitW > 32) then
+            begin
+              bitUnitOff := curOff; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+            end;
+            bitUnitUsed := bitUnitUsed + anonBitW;
+            anonBitBytes := (bitUnitUsed + 7) div 8;
+            if anonBitBytes < 1 then anonBitBytes := 1;
+            if anonBitBytes > 4 then anonBitBytes := 4;
+            if isUnion then
+            begin
+              if anonBitBytes > curOff then curOff := anonBitBytes;
+            end
+            else
+              curOff := bitUnitOff + anonBitBytes;
+          end;
+          if maxAlign < 1 then maxAlign := 1;
+          if not Eat(tkComma) then Break;    { `T : 3, name : 4;` is legal }
+          Continue;
         end;
         if CurTok.Kind <> tkIdent then Break;
         fnOff := Tokens[TokPos-1].SOffset;
