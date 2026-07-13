@@ -22,6 +22,13 @@ interface
 uses sysutils, platform;   { CompareStr for Sort; PAL file API for TFileStream }
 
 type
+  { FPC declares these in Classes. Real classes, not aliases: code catches them by type and
+    `is`/`as` must distinguish them. fcl-json's scanner derives EScannerError from EParserError. }
+  EParserError    = class(Exception) end;
+  EStreamError    = class(Exception) end;
+  EComponentError = class(Exception) end;
+  EFilerError     = class(EStreamError) end;
+
   { ---- IInterface: the root interface (FPC declares it in System) ----
     FPC hands every unit IInterface/IUnknown and HResult from System. pxx has no
     auto-injected System unit, so any FPC source that names them — fcl-fpcunit's

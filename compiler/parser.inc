@@ -1872,6 +1872,20 @@ end;
 { Parse an indexed-property subscript `[e1 {, e2}]` (bracket not yet consumed)
   into a chain of AN_ARG nodes. head = first arg, tail = last (so a setter's value
   arg can be spliced after). Supports multi-index `obj.Cells[a, b]` / `obj[a, b]`. }
+{ The `index N` constant of a property, as the accessor's first argument. Does nothing for a
+  property without one, so it is safe to call unconditionally beside ParsePropIndexArgs. }
+procedure PropIndexConstArg(pri: Integer; var head, tail: Integer);
+var n: Integer;
+begin
+  if (pri < 0) or (not UPropHasIndex[pri]) then Exit;
+  n := AllocNode(AN_INT_LIT);
+  ASTIVal[n] := UPropIndexVal[pri];
+  ASTTk[n] := Ord(tyInteger);
+  head := AllocNode(AN_ARG);
+  ASTLeft[head] := n;
+  tail := head;
+end;
+
 procedure ParsePropIndexArgs(var head, tail: Integer);
 var n: Integer;
 begin
@@ -3873,7 +3887,8 @@ begin
 
             if CurTok.Kind = tkIdent then Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
+            else PropIndexConstArg(pri, margIdx, mlastArg);
             Expect(tkAssign, ':=');
             ParseExpr;
 
@@ -3931,7 +3946,8 @@ begin
 
             Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
+            else PropIndexConstArg(pri, margIdx, mlastArg);
             if UMthVirSlot[mmi] >= 0 then
             begin
               mcallNode := AllocNode(AN_VIRTUAL_CALL);
@@ -4336,9 +4352,67 @@ begin
   Result := mcallNode;
 end;
 
+{ True when the `[...]` group starting at CurTok contains any element that is NOT a
+  compile-time constant -- a variable, a deref, a computed expression. Scans to the matching
+  ']' without consuming anything. }
+function SetLiteralHasRuntimeElement: Boolean;
+var i, d, si: Integer;
+begin
+  Result := False;
+  if CurTok.Kind <> tkLBrack then Exit;
+  i := TokPos;          { first token INSIDE the bracket }
+  d := 1;
+  while (i < TokCount) and (d > 0) do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(d)
+    else if Tokens[i].Kind = tkRBrack then
+    begin
+      Dec(d);
+      if d = 0 then Exit;
+    end
+    else if Tokens[i].Kind = tkIdent then
+    begin
+      si := FindSym(GetTokenStr(i));
+      { a plain constant (including an enum value) is fine; anything else is runtime }
+      if (si < 0) or (Syms[si].Kind <> skConst) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end
+    else if not (Tokens[i].Kind in [tkInteger, tkString, tkComma, tkDotDot]) then
+    begin
+      { a deref, a call, an operator -- not a constant element }
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function ParseSetMembershipAST(leftExpr: Integer): Integer;
 var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
 begin
+  { `x in [#0, C]` where C is a VARIABLE (fcl-json's scanner scans a string with
+    `FTokenStr^ in [#0, C]`, C being the active quote character). The constant-only path
+    below cannot express that -- it folds every element to an AN_INT_LIT.
+
+    But a set LITERAL already supports runtime elements (ParseSetLiteralAST builds the mask at
+    runtime), and `x in <set value>` already works as an ordinary AN_BINOP. So a runtime
+    literal simply routes through those two, and the all-constant case keeps its baked-blob
+    fast path untouched -- which matters, because that path is what the self-host binary
+    depends on being byte-identical. }
+  if SetLiteralHasRuntimeElement then
+  begin
+    node := AllocNode(AN_BINOP);
+    ASTIVal[node] := Ord(tkIn);
+    ASTLeft[node] := leftExpr;
+    ASTRight[node] := ParseSetLiteralAST;
+    ASTTk[node] := Ord(tyBoolean);
+    Result := node;
+    Exit;
+  end;
+
   node := AllocNode(AN_CALL);
   ASTIVal[node] := -SPECIAL_IN;
 
@@ -5067,7 +5141,8 @@ begin
             mpi := UMthProc_[mmi];
             Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA);
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA)
+            else PropIndexConstArg(pri, margIdx, lastA);
             Expect(tkAssign, ':=');
             ParseExpr;
             if UMthVirSlot[mmi] >= 0 then
@@ -5127,7 +5202,8 @@ begin
             mpi := UMthProc_[mmi];
             Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA);
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, lastA)
+            else PropIndexConstArg(pri, margIdx, lastA);
             if UMthVirSlot[mmi] >= 0 then
             begin
               callN := AllocNode(AN_VIRTUAL_CALL);
@@ -6244,7 +6320,8 @@ begin
               mpi := UMthProc_[mmi];
               Next; { consume property name }
               margIdx := -1;
-              if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
+              if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg)
+            else PropIndexConstArg(pri, margIdx, mlastArg);
               if UMthVirSlot[mmi] >= 0 then
               begin
                 mcallNode := AllocNode(AN_VIRTUAL_CALL);
@@ -16098,7 +16175,8 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   etid, propEnumId, propSetEnumId: Integer;
-  propIsIndexed, propIsDefault, propRedecl: Boolean;   { indexed (array) property + `default;` + `property X;` redeclaration }
+  propIsIndexed, propIsDefault, propRedecl, propHasIndex: Boolean;
+  propIndexVal: Int64;   { indexed (array) property + `default;` + `property X;` redeclaration }
   propBase: Integer;                                   { the ancestor row a redeclaration copies }
   mFullName: AnsiString;
   aLo, aHi: Integer; aElemTk: TTypeKind;
@@ -16986,6 +17064,8 @@ begin
               UPropSetEnumId[i] := UPropSetEnumId[propBase];
               UPropIsIndexed[i] := UPropIsIndexed[propBase];
               UPropIsDefault[i] := propIsDefault or UPropIsDefault[propBase];
+              UPropHasIndex[i] := UPropHasIndex[propBase];
+              UPropIndexVal[i] := UPropIndexVal[propBase];
             end
             else
             begin
@@ -17002,6 +17082,18 @@ begin
             propRec := LastTypeRecId;
             propEnumId := LastTypeEnumId;
             propSetEnumId := LastTypeSetEnumId;
+
+            { `index N` — a COMPILE-TIME constant handed to the accessor as its first
+              argument, so several properties can share one getter/setter. Distinct from an
+              indexed property, whose index is a runtime subscript. }
+            propHasIndex := False;
+            propIndexVal := 0;
+            if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'index') then
+            begin
+              Next;
+              propIndexVal := ConstEval;
+              propHasIndex := True;
+            end;
 
             rFOff := 0; rFLen := 0;
             rMOff := 0; rMLen := 0;
@@ -17079,6 +17171,8 @@ begin
             UPropSetEnumId[i] := propSetEnumId;
             UPropIsIndexed[i] := propIsIndexed;
             UPropIsDefault[i] := propIsDefault;
+            UPropHasIndex[i] := propHasIndex;
+            UPropIndexVal[i] := propIndexVal;
             end;   { close the non-redeclaration branch }
           end
           else if CurTok.Kind = tkIdent then

@@ -150,6 +150,20 @@ function StrToIntDef(const s: AnsiString; def: Integer): Integer;
 function StrToInt(const s: AnsiString): Integer;
 function StrToInt64Def(const s: AnsiString; def: Int64): Int64;
 
+{ FPC codepage identifiers. This RTL is byte-transparent -- it neither decodes nor recodes --
+  and the bytes it carries through are whatever the source gave it, which for JSON/HTTP/etc is
+  UTF-8. So DefaultSystemCodePage reports CP_UTF8, and code that asks "do I need to convert?"
+  correctly concludes it does not. That is the honest answer for this string model, not a
+  placeholder: see UTF8Decode above, which is the identity for the same reason. }
+const
+  CP_ACP   = 0;
+  CP_UTF16 = 1200;
+  CP_UTF8  = 65001;
+  CP_NONE  = $FFFF;
+
+var
+  DefaultSystemCodePage: Word;
+
 { FPC System.StrPas: a NUL-terminated PChar as a Pascal string ('' for nil). StrLen is its
   length. }
 function StrPas(P: PChar): AnsiString;
@@ -1872,6 +1886,7 @@ begin
 end;
 
 initialization
+  DefaultSystemCodePage := CP_UTF8;   { byte-transparent -- see the declaration }
   BackTraceStrFunc := @SysBackTraceStr;
   TimeSeparator := ':';
   DateSeparator := '-';

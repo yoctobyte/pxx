@@ -1996,6 +1996,8 @@ var
   UPropEnumId : array[0..MAX_UPROP-1] of Integer;  { enum type index if prop is enum-typed, else -1 }
   UPropSetEnumId : array[0..MAX_UPROP-1] of Integer;  { element enum type index if prop is set-typed, else -1 }
   UPropIsIndexed : array[0..MAX_UPROP-1] of Boolean;  { array property: `property Items[i: TIdx]: T` — getter/setter take the index as an extra arg }
+  UPropHasIndex : array[0..MAX_UPROP-1] of Boolean;  { `property P: T index N read GetO write SetO` — a COMPILE-TIME constant passed to the accessor as its first argument, so several properties can share one getter/setter (fcl-json's scanner: `Strict: Boolean index joStrict read GetO write SetO`). Distinct from UPropIsIndexed, whose index is a runtime SUBSCRIPT. }
+  UPropIndexVal : array[0..MAX_UPROP-1] of Int64;    { that constant }
   UPropIsDefault : array[0..MAX_UPROP-1] of Boolean;  { `default;` indexed property: `obj[i]` lowers through it }
   UPropCount  : Integer;
 

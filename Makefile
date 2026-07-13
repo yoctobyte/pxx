@@ -444,6 +444,12 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# the property `index` specifier (several properties sharing one accessor)
+	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
+	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	# a set constructor with a RUNTIME element, used with `in`
+	./$(COMPILER) test/test_runtime_set_member_b294.pas /tmp/test_runtime_set_member_b29426
+	test "$$(/tmp/test_runtime_set_member_b29426)" = "$$(printf '1: a\n2: b\n3: quote\n4: c\n5: d\nconst set: 1 0')"
 	# VIRTUAL CLASS METHODS dispatch on the RUNTIME class (fpjson JSONType)
 	./$(COMPILER) test/test_virtual_class_method_b290.pas /tmp/test_virtual_class_method_b29026
 	test "$$(/tmp/test_virtual_class_method_b29026)" = "$$(printf 'base inst : 0 base\nmid  inst : 1 mid\nleaf inst : 2 mid  (Name inherited from TMid)\nnamed     : 0 1 2')"
