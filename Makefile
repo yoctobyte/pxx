@@ -942,6 +942,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# a global pointer initialised to &multidim_array[i][j][k]: only ONE subscript was
+	# consumed, so the whole initializer was silently SKIPPED and the pointer stayed null
+	./$(COMPILER) test/cglobal_addr_multidim_elem_b312.c /tmp/cglobal_addr_multidim_b31226
+	test "$$(/tmp/cglobal_addr_multidim_b31226)" = "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
 	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
 	# element was initialised and the rest stayed zero (silently)
 	./$(COMPILER) test/cmultidim_struct_array_init_b311.c /tmp/cmultidim_struct_array_b31126

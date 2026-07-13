@@ -5495,6 +5495,7 @@ end;
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
+    initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
@@ -6413,15 +6414,32 @@ begin
            (Tokens[TokPos].Kind in [tkComma, tkSemicolon, tkLBrack]) then
         begin
           Next;                     { consume target ident }
+          { Every subscript, not just the first: `&a[3][4][2]` on a MULTIDIM array. Only
+            one `[...]` was consumed, and the leftover `[` then failed the comma/semicolon
+            check below, so the whole initializer was SKIPPED -- the pointer stayed null
+            and the first store through it segfaulted. Row-major flat index:
+            flat := flat * span[d] + i[d], with the spans from SymArrDimSpan. }
           initOff := 0;
-          if CurTok.Kind = tkLBrack then
+          initDim := 0;
+          while CurTok.Kind = tkLBrack do
           begin
             Next;                   { consume '[' }
-            initOff := CEvalConstExpr;
-            if Syms[initSymIdx].ElemType <> tyUnknown then
-              initOff := initOff * TypeSize(Syms[initSymIdx].ElemType);
+            initIx := CEvalConstExpr;
             Expect(tkRBrack, ']');  { consume ']' }
+            if initDim = 0 then
+              initOff := initIx
+            else
+            begin
+              initSpan := 1;
+              if (SymArrNDims[initSymIdx] > initDim) then
+                initSpan := SymArrDimSpan[initSymIdx * MAX_ARR_DIMS + initDim];
+              if initSpan < 1 then initSpan := 1;
+              initOff := initOff * initSpan + initIx;
+            end;
+            Inc(initDim);
           end;
+          if (initDim > 0) and (Syms[initSymIdx].ElemType <> tyUnknown) then
+            initOff := initOff * TypeSize(Syms[initSymIdx].ElemType);
           if CurTok.Kind in [tkComma, tkSemicolon] then
           begin
             PendingInitSym[PendingInitCount]  := idx;
