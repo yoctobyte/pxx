@@ -1450,6 +1450,19 @@ var argTk: TTypeKind;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
 begin
+  { A WideChar VALUE passed to a string parameter converts to its UTF-8
+    encoding (fpjson's `UTF8Encode(WideChar(U1))`). Without this the 16-bit
+    ordinal was retained AS A STRING POINTER by the managed-arg path — silent
+    corruption, then a crash inside the callee. }
+  if (cpi >= 0) and (not isRefArg) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     ((Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) or
+      (Procs[cpi].Params[pathIdx].TypeKind = tyString)) and
+     NodeIsWideCharVal(argAST) then
+  begin
+    Result := IRLowerCallArg(cpi, pathIdx, WrapWideCharToUTF8(argAST), isRefArg);
+    Exit;
+  end;
   { C double->int argument coercion: a float argument passed to a named INTEGER
     parameter is truncated. Do it backend-agnostically by spilling the float to a
     hidden integer local — its IR_STORE_SYM reuses the double->int conversion
@@ -2833,6 +2846,13 @@ begin
           vrTag := 1              { vtBoolean }
         else if vrElemTk = tyChar then
           vrTag := 2              { vtChar }
+        else if IsNodePChar(ASTLeft[item]) then
+          vrTag := 6              { vtPChar — before the generic pointer tag; FPC
+                                    boxes PChar(s) as VPChar, and consumers (fpjson's
+                                    TJSONArray.Create) dispatch on it (b320) }
+        else if vrElemTk = tyClass then
+          vrTag := 7              { vtObject — a class INSTANCE; fell to vtInteger
+                                    before, so consumers read a truncated pointer }
         else if vrElemTk = tyPointer then
           vrTag := 5              { vtPointer }
         else if (vrElemTk = tyInt64) or (vrElemTk = tyUInt64) then
@@ -3554,8 +3574,10 @@ begin
         right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
         Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, Ord(tyPointer));
       end
-      else if ASTIVal[node] = -1 then
+      else if (ASTIVal[node] = -1) or (ASTIVal[node] = -3) then
       begin
+        { -3 = the WideChar value cast: identical width-truncating semantics
+          here; only string contexts treat it specially (UTF-8 conversion). }
         { Builtin numeric/ordinal reinterpret (Int64/UInt64/Integer/Cardinal/...):
           re-tag the result IR node with the cast's width so width-sensitive ops
           (e.g. tkShl's 32-bit wrap) read the operand's real width. Without this,
@@ -4382,6 +4404,12 @@ begin
       begin
       if (lhsTk = tyString) or (lhsTk = tyAnsiString) then
       begin
+        { A WideChar VALUE assigned to a string converts to its UTF-8 encoding
+          (fpjson's `U := widechar(U1)`). Without this the 16-bit ordinal fell
+          into the managed-assign path, which retained it AS A POINTER —
+          silent memory corruption, then a crash. }
+        if NodeIsWideCharVal(ASTRight[node]) then
+          ASTRight[node] := WrapWideCharToUTF8(ASTRight[node]);
         if IsNodePChar(ASTRight[node]) and not CProgramMode then
         begin
           procIdx := FindProc('PCharToString');
@@ -5855,9 +5883,25 @@ begin
             its existing fall-through-on-match still lands on the body. }
           excTargetCi := ASTIVal[handlerNode] - REC_UCLASS_BASE;
           excBodyLabel := IRNewLabel;
-          for excDescCi := 0 to UClsCount - 1 do
-            if (excDescCi <> excTargetCi) and IsClassDescOrSelf(excDescCi, excTargetCi) then
-              last := IRAppend(IR_EXC_MATCH_HIT, excBodyLabel, -1, -1, REC_UCLASS_BASE + excDescCi, 0);
+          { OPEN-WORLD GAP: this enumeration runs when the handler's OWN unit
+            lowers, so an exception class declared in a unit compiled LATER is
+            not in the set — fpcunit's `on E: Exception do` silently failed to
+            catch fpjson's EJSON purely because of unit order. The dominant
+            catch-all — a ROOT exception class (no parent, named Exception) —
+            can match unconditionally: everything raisable descends from it.
+            Non-root targets keep the enumeration (their descendant sets are
+            almost always same-unit); the general fix is a runtime parent-chain
+            walk, filed as bug-pascal-except-on-class-open-world. }
+          if (UClsParent[excTargetCi] < 0) and
+             CaseEqual(GetTokenStrFromRaw(UClsNOff[excTargetCi], UClsNLen[excTargetCi]),
+                       'Exception') then
+            last := IRAppend(IR_JUMP, excBodyLabel, -1, -1, 0, 0)
+          else
+          begin
+            for excDescCi := 0 to UClsCount - 1 do
+              if (excDescCi <> excTargetCi) and IsClassDescOrSelf(excDescCi, excTargetCi) then
+                last := IRAppend(IR_EXC_MATCH_HIT, excBodyLabel, -1, -1, REC_UCLASS_BASE + excDescCi, 0);
+          end;
           last := IRAppend(IR_EXC_MATCH, handlerNextLabel, -1, -1, ASTIVal[handlerNode], 0);
           last := IRAppend(IR_LABEL, -1, -1, -1, excBodyLabel, 0);
         end;

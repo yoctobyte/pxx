@@ -2464,8 +2464,9 @@ const MAX_OVL_CAND = 32;
 var
   cand: array[0..MAX_OVL_CAND-1] of Integer;
   argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  argRec: array[0..MAX_PROC_PARAMS-1] of Integer;
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
-  score, bestScore, rank: Integer;
+  score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   ok: Boolean;
   lo, name2: AnsiString;
 begin
@@ -2525,6 +2526,10 @@ begin
     begin
       ParseExpr;
       argTk[nArgs] := IntToTypeKind(ASTTk[CurASTNode]);
+      if argTk[nArgs] = tyClass then
+        argRec[nArgs] := ResolveNodeRec(CurASTNode)
+      else
+        argRec[nArgs] := REC_NONE;
       Inc(nArgs);
       if CurTok.Kind = tkComma then Next else Break;
     end;
@@ -2554,6 +2559,30 @@ begin
     for j := 0 to nArgs - 1 do
     begin
       rank := OverloadArgRank(Procs[pi].Params[base + j].TypeKind, argTk[j]);
+      { CLASS-IDENTITY-aware refinement: two tyClass params tie at rank 0, so
+        `Add(TJSONData)` vs `Add(TJSONObject)` picked whichever was declared
+        first regardless of the argument's class. FPC picks the EXACT class,
+        accepts an up-cast to an ancestor as merely compatible, and rejects an
+        unrelated class. Both recs must be known — REC_NONE (nil, untagged)
+        keeps the kind-level rank. (bug-pascal-overload-impl-decl-signature-match) }
+      if (rank < 3) and (Procs[pi].Params[base + j].TypeKind = tyClass) and
+         (argTk[j] = tyClass) and ((base + j) < MAX_PROC_PARAMS) then
+      begin
+        pRec := ProcParamRecId[pi * MAX_PROC_PARAMS + base + j];
+        aRec := argRec[j];
+        if (pRec >= REC_UCLASS_BASE) and (aRec >= REC_UCLASS_BASE) and (pRec <> aRec) then
+        begin
+          upDist := 0;
+          upCurr := aRec - REC_UCLASS_BASE;
+          while (upCurr >= 0) and (upCurr <> pRec - REC_UCLASS_BASE) do
+          begin
+            Inc(upDist);
+            upCurr := UClsParent[upCurr];
+          end;
+          if upCurr < 0 then rank := 3        { unrelated class: impossible }
+          else rank := 2;                     { ancestor up-cast: exact wins }
+        end;
+      end;
       if rank >= 3 then ok := False;
       score := score + rank;
     end;
@@ -5752,6 +5781,31 @@ begin
   Result := wCall;
 end;
 
+{ A WIDECHAR value cast node — AN_PTR_CAST with the -3 sentinel (see the
+  ordinal-cast site). String contexts convert it to UTF-8 instead of treating
+  the 16-bit ordinal as a string pointer. }
+function NodeIsWideCharVal(n: Integer): Boolean;
+begin
+  Result := (n >= 0) and (ASTKind[n] = AN_PTR_CAST) and (Integer(ASTIVal[n]) = -3);
+end;
+
+{ Wrap a WideChar value node in __pxxWideCharToUTF8(node) so the UTF-16 code
+  unit becomes its UTF-8 byte encoding (builtin unit, auto-pulled when a
+  `widechar(` cast appears in the token pre-scan). }
+function WrapWideCharToUTF8(argNode: Integer): Integer;
+var procIdx, wArg, wCall: Integer;
+begin
+  procIdx := FindProc('__pxxWideCharToUTF8');
+  if procIdx < 0 then Error('WideChar->string conversion: __pxxWideCharToUTF8 helper not loaded');
+  wArg := AllocNode(AN_ARG);
+  ASTLeft[wArg] := argNode; ASTRight[wArg] := -1; ASTTk[wArg] := Ord(tyInteger);
+  wCall := AllocNode(AN_CALL);
+  ASTIVal[wCall] := procIdx;
+  ASTTk[wCall] := Ord(Procs[procIdx].RetType);
+  ASTLeft[wCall] := wArg; ASTRight[wCall] := -1;
+  Result := wCall;
+end;
+
 { Metaclass descendant enforcement. When the assignment target is a `class of
   TBase` variable (a tyPointer sym whose element is tyClass with a user-class
   rec id), the assigned value must be TBase or a descendant. Two RHS shapes
@@ -5849,7 +5903,8 @@ begin
   currArg := argsHead;
   for i := 0 to nArgs-1 do
   begin
-    if IsNodePChar(ASTLeft[currArg]) then hasPChar := True;
+    if IsNodePChar(ASTLeft[currArg]) or NodeIsWideCharVal(ASTLeft[currArg]) then
+      hasPChar := True;   { either coercion retry below may run; quiet the first-match diag }
     currArg := ASTRight[currArg];
   end;
 
@@ -5906,6 +5961,41 @@ begin
              ((Procs[pi].Params[i].TypeKind = tyString) or
               (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
             ASTLeft[currArg] := WrapPCharToString(exprNode);
+          currArg := ASTRight[currArg];
+        end;
+        Result := pi;
+        Exit;
+      end;
+    end;
+    { WideChar -> string implicit conversion in a call argument, same failed-match
+      retry shape as PChar above: a WideChar VALUE (the -3 cast) binding a string
+      parameter converts to its UTF-8 encoding (fpjson's UTF8Encode(WideChar(U1))).
+      The as-is match already covers ordinal parameters, so this never overrides
+      a stricter match. }
+    pcharRetry := False;
+    currArg := argsHead;
+    for i := 0 to nArgs-1 do
+    begin
+      if NodeIsWideCharVal(ASTLeft[currArg]) then
+        begin retryTypes[i] := tyAnsiString; pcharRetry := True; end
+      else
+        retryTypes[i] := argTypes[i];
+      currArg := ASTRight[currArg];
+    end;
+    if pcharRetry then
+    begin
+      if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
+      else pi := MatchProcCall(name, nArgs, retryTypes);
+      if pi >= 0 then
+      begin
+        currArg := argsHead;
+        for i := 0 to nArgs-1 do
+        begin
+          exprNode := ASTLeft[currArg];
+          if NodeIsWideCharVal(exprNode) and
+             ((Procs[pi].Params[i].TypeKind = tyString) or
+              (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
+            ASTLeft[currArg] := WrapWideCharToUTF8(exprNode);
           currArg := ASTRight[currArg];
         end;
         Result := pi;
@@ -6751,7 +6841,8 @@ begin
            right. The tyBoolean guard above still keeps a genuine Boolean element logical. }
          (ASTKind[left] = AN_INDEX) or (ASTKind[left] = AN_FIELD) or
          (ASTKind[left] = AN_DEREF) or
-         ((ASTKind[left] = AN_PTR_CAST) and (Integer(ASTIVal[left]) = -1)) or
+         ((ASTKind[left] = AN_PTR_CAST) and
+          ((Integer(ASTIVal[left]) = -1) or (Integer(ASTIVal[left]) = -3))) or
          ((ASTKind[left] = AN_CALL) and
           ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
            (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)))) or
@@ -7531,7 +7622,15 @@ begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
         node := AllocNode(AN_PTR_CAST);
         ASTLeft[node] := CurASTNode;
-        ASTIVal[node] := -1;
+        { -3 = a WIDECHAR value cast: same width-truncating value cast as -1
+          (every consumer treats them alike), but string contexts recognise it
+          and convert the UTF-16 code unit to UTF-8 (__pxxWideCharToUTF8 /
+          the surrogate-aware pair helper) instead of mistreating the ordinal
+          as a managed-string pointer. }
+        if CaseEqual(name, 'widechar') then
+          ASTIVal[node] := -3
+        else
+          ASTIVal[node] := -1;
         ASTTk[node] := Ord(tk);
         CurASTNode := node;
         LastExprTk := tk;
@@ -9385,6 +9484,37 @@ begin
     left := CurASTNode;
     ParseTerm;
     right := CurASTNode;
+    { WideChar concatenation is STRING building, not integer addition (FPC:
+      WideChar+WideChar is a two-unit UTF-16 string). Both sides widechar ->
+      the surrogate-aware pair helper, so `WideChar(u1)+WideChar(u2)` of a
+      surrogate pair yields the single 4-byte code point (fpjson's \uXXXX
+      decoder). One widechar side against a string -> convert that side to
+      its UTF-8 encoding and concatenate normally. }
+    if (op = tkPlus) and NodeIsWideCharVal(left) and NodeIsWideCharVal(right) then
+    begin
+      opci := FindProc('__pxxWideCharPairToUTF8');
+      if opci < 0 then Error('WideChar concatenation: __pxxWideCharPairToUTF8 helper not loaded');
+      node := AllocNode(AN_ARG);
+      ASTLeft[node] := left; ASTTk[node] := Ord(tyInteger);
+      left := AllocNode(AN_ARG);
+      ASTLeft[left] := right; ASTRight[left] := -1; ASTTk[left] := Ord(tyInteger);
+      ASTRight[node] := left;
+      left := node;
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := opci;
+      ASTTk[node] := Ord(Procs[opci].RetType);
+      ASTLeft[node] := left; ASTRight[node] := -1;
+      CurASTNode := node;
+      continue;
+    end;
+    if (op = tkPlus) and NodeIsWideCharVal(left) and
+       ((ASTTk[right] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyString)) or
+        (ASTTk[right] = Ord(tyChar))) then
+      left := WrapWideCharToUTF8(left)
+    else if (op = tkPlus) and NodeIsWideCharVal(right) and
+       ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[left] = Ord(tyString)) or
+        (ASTTk[left] = Ord(tyChar))) then
+      right := WrapWideCharToUTF8(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
@@ -17421,6 +17551,7 @@ begin
               begin
                 mPNames[i] := mPNames[i-1];
                 mPTypes[i] := mPTypes[i-1];
+                mPTypesRec[i] := mPTypesRec[i-1];
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
                 mPUntyped[i] := mPUntyped[i-1];
@@ -17434,6 +17565,7 @@ begin
               mPNames[0] := 'Self';
               if isClassMethod then mPTypes[0] := tyPointer
               else mPTypes[0] := tyClass;
+              mPTypesRec[0] := REC_NONE;   { must agree with the impl side's Self }
               mPArr[0]   := False;
               mPByRef[0] := False;
               mPUntyped[0] := False;
@@ -17450,11 +17582,22 @@ begin
             AppendChar(mFullName, '.');
             for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
 
-            mpi := FindProcOverload(mFullName, mNParams, mPTypes, mPArr, mPByRef);
+            { REC-AWARE decl lookup and registration: two same-arity overloads whose
+              class/record param identities differ are DIFFERENT overloads. The
+              rec-blind FindProcOverload found `Add(AnObject: TJSONObject)` when
+              registering `Add(Item: TJSONData)`'s sibling, so both DECLS shared one
+              proc and each IMPL body clobbered the other's — fpjson's
+              `Add(TJSONData(AnObject))` then re-dispatched to Add(TJSONObject) and
+              recursed to stack overflow (bug-pascal-overload-impl-decl-signature-match). }
+            mpi := FindProcOverloadRec(mFullName, mNParams, mPTypes, mPTypesRec, mPArr, mPByRef);
             if mpi < 0 then
             begin
               mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
               Procs[mpi].BodyAddr := -1;
+              for i := 0 to mNParams-1 do
+                if (i < MAX_PROC_PARAMS) and
+                   ((mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord)) then
+                  ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
               for i := 0 to mNParams-1 do
               begin
@@ -22329,6 +22472,15 @@ begin
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { A `WideChar(x)` value cast may need the UTF-8 conversion helpers
+      (__pxxWideCharToUTF8 / the pair form) when the value flows into a string
+      context — pull the builtin unit so they resolve. Same shape as the Copy
+      pull above; a variable/type named widechar shadows at the cast site,
+      leaving the helpers unused. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'widechar') and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /

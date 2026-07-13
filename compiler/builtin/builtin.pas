@@ -25,6 +25,16 @@ procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): AnsiString;
 
+{ WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
+  lowering (`s := WideChar(u)`, `WideChar(u1)+WideChar(u2)`, a WideChar(x) passed
+  to a string parameter). pxx's one string model is UTF-8 bytes, so a UTF-16 code
+  unit converts at the boundary. The PAIR form is surrogate-aware: a high+low
+  surrogate pair combines into one 4-byte code point (FPC's UTF-16 -> UTF-8
+  conversion does the same); anything else encodes each unit independently.
+  A LONE surrogate encodes as '?', matching FPC's invalid-sequence behaviour. }
+function __pxxWideCharToUTF8(u: Integer): AnsiString;
+function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
+
 { Substring intrinsic backing bare `Copy(s, index[, count])` on a string with no
   user `Copy` in scope — so frozen/managed string Copy works with no `uses`
   (the lib `sysutils.Copy` is the same routine for the explicit-uses path). FPC
@@ -439,6 +449,52 @@ begin
       c := p[i];
     end;
   end;
+end;
+
+function __pxxWideCharToUTF8(u: Integer): AnsiString;
+var c: Char;
+begin
+  u := u and $FFFF;
+  Result := '';
+  if u < $80 then
+  begin
+    c := Chr(u);
+    Result := Result + c;
+  end
+  else if u < $800 then
+  begin
+    c := Chr($C0 or (u shr 6));        Result := Result + c;
+    c := Chr($80 or (u and $3F));      Result := Result + c;
+  end
+  else if (u >= $D800) and (u <= $DFFF) then
+  begin
+    { a lone UTF-16 surrogate is not a code point; FPC's conversion yields '?' }
+    Result := '?';
+  end
+  else
+  begin
+    c := Chr($E0 or (u shr 12));           Result := Result + c;
+    c := Chr($80 or ((u shr 6) and $3F));  Result := Result + c;
+    c := Chr($80 or (u and $3F));          Result := Result + c;
+  end;
+end;
+
+function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
+var cp: Integer; c: Char;
+begin
+  u1 := u1 and $FFFF;
+  u2 := u2 and $FFFF;
+  if (u1 >= $D800) and (u1 <= $DBFF) and (u2 >= $DC00) and (u2 <= $DFFF) then
+  begin
+    cp := $10000 + ((u1 - $D800) shl 10) + (u2 - $DC00);
+    Result := '';
+    c := Chr($F0 or (cp shr 18));           Result := Result + c;
+    c := Chr($80 or ((cp shr 12) and $3F)); Result := Result + c;
+    c := Chr($80 or ((cp shr 6) and $3F));  Result := Result + c;
+    c := Chr($80 or (cp and $3F));          Result := Result + c;
+  end
+  else
+    Result := __pxxWideCharToUTF8(u1) + __pxxWideCharToUTF8(u2);
 end;
 
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;

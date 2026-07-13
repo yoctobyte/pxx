@@ -471,6 +471,24 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# array-of-const boxing: PChar(S) = vtPChar(6) not vtPointer; class instance =
+	# vtObject(7) not vtInteger (fpjson's TJSONArray.Create([PChar(S)]) raised)
+	./$(COMPILER) test/test_varrec_pchar_object_b320.pas /tmp/test_varrec_pchar_b32026
+	test "$$(/tmp/test_varrec_pchar_b32026)" = "$$(printf '  [0] vtype=0 int=42\n  [1] vtype=6 pchar-first=A\n  [2] vtype=7 obj.tag=77\n  [3] vtype=11 str=managed')"
+	# method overloads distinguished only by CLASS IDENTITY: rec-aware decl
+	# registration + exact-class-beats-ancestor ranking; the TJSONData(x) cast in
+	# fpjson's Add(TJSONObject) recursed into ITSELF to stack overflow
+	./$(COMPILER) test/test_overload_class_identity_b321.pas /tmp/test_ovl_classid_b32126
+	test "$$(/tmp/test_ovl_classid_b32126)" = "$$(printf 'Add(TDer)\nAdd(TBase)\nAdd(TBase)\nAdd(Integer)')"
+	# `on E: Exception` must catch exception classes from LATER-compiled units —
+	# the descendant enumeration is per-unit; root Exception now matches all
+	./$(COMPILER) test/test_except_cross_unit_class_b322.pas /tmp/test_exc_openworld_b32226
+	test "$$(/tmp/test_exc_openworld_b32226)" = "$$(printf 'caught ELate: late class\nafter')"
+	# WideChar values in STRING contexts (assign, +concat, string param) convert to
+	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
+	# was silently retained as a string POINTER -> memory corruption + crash
+	./$(COMPILER) test/test_widechar_to_utf8_b319.pas /tmp/test_widechar_utf8_b31926
+	test "$$(/tmp/test_widechar_utf8_b31926)" = "$$(printf '1=\xc3\xb8 len=2\n2=\xf0\x9f\x8c\x9f len=4\n3=x\xc3\xa9\n4=Abc\n5=\xc3\xb8\n6=AB\n7=?\n8=TRUE')"
 	# a SELECTOR after a function call used as a STATEMENT was silently dropped —
 	# GetBox.Poke; / GetBox.SetVal(42); / GetBox.Val := 5; / GetBoxAt(0).M(..) all
 	# vanished with no diagnostic (fpjson's RegisterTest registered 0 of 203 tests)
