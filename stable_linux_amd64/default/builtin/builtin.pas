@@ -561,6 +561,37 @@ begin
   Result := s;
 end;
 
+function __pxxInheritsFrom(Rtti, Other: Pointer): Boolean;
+{ X.InheritsFrom(C): True when Rtti IS C or descends from it, walking the blob's
+  parent chain. FPC's TObject.InheritsFrom is reflexive -- a class inherits from
+  itself -- and so is this. nil never inherits from anything. }
+var cur: Pointer;
+begin
+  Result := False;
+  if (Rtti = nil) or (Other = nil) then Exit;
+  cur := Rtti;
+  while cur <> nil do
+  begin
+    if cur = Other then
+    begin
+      Result := True;
+      Exit;
+    end;
+    cur := PPxxPtr_(PtrUInt(cur) + PXX_RTTI_PARENT)^;
+  end;
+end;
+
+function __pxxClassName(Rtti: Pointer): AnsiString;
+{ x.ClassName. Rtti is the class blob; its +0 field is a POINTER to the interned
+  name (NOT the name itself -- __pxxRttiName wants that pointer, so deref first).
+  Every class carries a blob now, so this answers for any class; nil only when the
+  caller had no class at all. }
+begin
+  Result := '';
+  if Rtti = nil then Exit;
+  Result := __pxxRttiName(PPxxPtr_(Rtti)^);
+end;
+
 function __pxxSameNameCI(const a, b: AnsiString): Boolean;
 var i: Integer;
 begin

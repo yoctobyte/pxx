@@ -466,6 +466,10 @@ test-core: $(COMPILER)
 	# the property `index` specifier (several properties sharing one accessor)
 	./$(COMPILER) test/test_property_index_b293.pas /tmp/test_property_index_b29326
 	test "$$(/tmp/test_property_index_b29326)" = "$$(printf '  [set idx=0 -> TRUE]\n  [set idx=2 -> TRUE]\nStrict   =   [get idx=0]\nTRUE\nUseUTF8  =   [get idx=1]\nFALSE\nComments =   [get idx=2]\nTRUE')"
+	# a source type ALIAS must beat the built-in type NAME of the same name (the chain ran
+	# before the alias table, so a builtin silently won -- fatal for the compiler's own PWord)
+	./$(COMPILER) test/test_typename_alias_wins_b304.pas /tmp/test_typename_alias_wins_b30426
+	test "$$(/tmp/test_typename_alias_wins_b30426)" = "$$(printf 'TDateTime=8 (8, as Int64)\nCurrency =4 (4)\nValReal  =4 (4)\nComp     =4 (4)\nWideChar =1 (1)\nSizeInt  =2 (2)')"
 	# built-in POINTER type names (PInteger/PByte/PDouble) in a type position AND a cast --
 	# and a SOURCE declaration of the same name must still WIN (the compiler's own PWord)
 	./$(COMPILER) test/test_builtin_pointer_types_b303.pas /tmp/test_builtin_pointer_types_b30326
