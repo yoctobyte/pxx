@@ -6,4 +6,4 @@
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
-- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `82f4ca7a2ecd`, last good `7bbe37c7bc60`, 4 commit(s) in range
+- **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `82f4ca7a2ecd`, last good `45862e896fba`, 2 commit(s) in range
