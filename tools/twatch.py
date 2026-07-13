@@ -624,7 +624,18 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     into a ticket in the owning lane.
     """
     minutes = float(CONF.get("fuzz_minutes", 10))
-    seed0 = int(st.get("fuzz_seed", 1))
+    # The seed cursor lives in an UNTRACKED, clone-local file — deliberately NOT
+    # in tstate/<host>.json. That file is tracked, so recording the cursor there
+    # would dirty the tree every slice, and the dirty-pause check then forces a
+    # publish to un-wedge the next cycle: a commit+push every ~10 minutes,
+    # forever, even on a clean fuzz run. Commit spam on master. A seed cursor is
+    # local bookkeeping, not shared state — only FINDINGS are worth publishing.
+    cursor = os.path.join(clone.path, ".testmgr", "fuzz.json")
+    try:
+        with open(cursor) as f:
+            seed0 = int(json.load(f).get("next_seed", 1))
+    except (OSError, ValueError):
+        seed0 = 1
     runner = os.path.join(clone.path, "tools/pasmith_run.py")
     if not os.path.exists(runner) or not shutil.which("fpc"):
         return False        # no generator at this sha, or no oracle: skip silently
@@ -663,29 +674,33 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     m = re.search(r"(\d+) programs, (\d+) divergences", out)
     if m:
         nprog, ndiv = int(m.group(1)), int(m.group(2))
-    st = load_state(clone, host)
-    st["fuzz_seed"] = seed0 + max(nprog, 1)      # never re-walk the same seeds
-    st["last_fuzz"] = {"sha": sha, "date": utcnow(),
-                       "programs": nprog, "divergences": ndiv}
-    save_state(clone, host, st)
+    write_json_atomic(cursor, {"next_seed": seed0 + max(nprog, 1),
+                               "last_sha": sha, "date": utcnow(),
+                               "programs": nprog, "divergences": ndiv})
+    if not ndiv:
+        # Clean slice: nothing to say, and nothing to commit. A fuzzer that
+        # pushes "0 divergences" every 10 minutes is noise, and it would bury the
+        # signal tstate exists to carry.
+        print("twatch: fuzz %s — %d programs, clean" % (sha[:12], nprog), flush=True)
+        set_phase(clone, host, "idle")
+        return True
 
-    if ndiv:
-        # Publish the reproducer stanzas into tstate/ for triage. The seed IS
-        # the reproducer (pasmith is deterministic), so a few hundred bytes of
-        # text is a complete, permanent bug report -- no source to attach.
-        dst = os.path.join(clone.path, TSTATE_REL, "fuzz")
-        os.makedirs(dst, exist_ok=True)
-        kept = 0
-        for f in sorted(os.listdir(findings)) if os.path.isdir(findings) else []:
-            if f.endswith(".txt"):
-                shutil.copy(os.path.join(findings, f),
-                            os.path.join(dst, "%s-%s" % (sha[:12], f)))
-                kept += 1
-        print("twatch: fuzz found %d divergence(s) in %d programs — published %d "
-              "to tstate/fuzz (NOT ticketed: needs triage, the generator is the "
-              "first suspect)" % (ndiv, nprog, kept), flush=True)
-    clone.publish("tstate(%s): fuzz %s %d programs, %d divergences"
-                  % (host, sha[:12], nprog, ndiv))
+    # A finding: publish the reproducer stanzas into tstate/ for triage. The seed
+    # IS the reproducer (pasmith is deterministic), so a few hundred bytes of
+    # text is a complete, permanent bug report -- no source to attach.
+    dst = os.path.join(clone.path, TSTATE_REL, "fuzz")
+    os.makedirs(dst, exist_ok=True)
+    kept = 0
+    for f in sorted(os.listdir(findings)) if os.path.isdir(findings) else []:
+        if f.endswith(".txt"):
+            shutil.copy(os.path.join(findings, f),
+                        os.path.join(dst, "%s-%s" % (sha[:12], f)))
+            kept += 1
+    print("twatch: fuzz found %d divergence(s) in %d programs — published %d to "
+          "tstate/fuzz (NOT ticketed: needs triage, the generator is the first "
+          "suspect)" % (ndiv, nprog, kept), flush=True)
+    clone.publish("tstate(%s): fuzz %s — %d divergence(s) in %d programs"
+                  % (host, sha[:12], ndiv, nprog))
     set_phase(clone, host, "idle")
     return True
 
