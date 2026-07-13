@@ -69,12 +69,32 @@ Making it an error is a one-line change, and **the compiler still self-hosts wit
 not track across includes. Two hypotheses were tried and BOTH were wrong (an unresolved
 include; then a self-referencing type). Do not guess a third.
 
-### How to actually find it
-1. Re-apply the one-line error in ParseTypeKind's final `else`.
-2. Give the error real provenance first — include the current FILE and a token-context
-   window, the way the "Expected: X but got Y" path already does. Without that this is
-   unfindable, and that diagnostic gap is worth fixing on its own merits.
-3. Then bisect `typshrdh.inc` / `types.pp` with that error in hand.
+### The diagnostic is now IN, and it found the construct
+Every Error now prints the `near:` token window (2026-07-13). With the strict error
+re-applied, it says:
+
+```
+pascal26:19: error: unknown type (TPoint)
+  near: dupError   PPoint   >>> TPoint  TPoint
+```
+
+So the failing token is the `TPoint` in **`PPoint = ^TPoint;`** — `typshrdh.inc` line 90.
+TPoint itself is declared at line 62 of the same file, i.e. BEFORE it. So the question is
+not "where" any more, it is:
+
+**Why is TPoint not registered by the time `PPoint = ^TPoint` is parsed, given it is
+declared 28 lines earlier?**
+
+The likely answer: TPoint is a full ADVANCED RECORD — `public`, `constructor Create`,
+`class function`, `class operator` — and pxx cannot parse any of that
+([[feature-pascal-advanced-records]]). A minimal advanced record fails outright under the
+LAX compiler too (`Expected: :, but got: function`), yet the real one somehow survives and
+`SizeOf(TPoint) = 8` with `p.X` working — so something about that declaration is being
+partially skipped rather than parsed, and the name never lands in the record table even
+though the type ends up usable. THAT is the thing to understand.
+
+Next step: instrument the named-record branch (does `AddUClass` run for TPoint? does
+`ParseRecordFields` get called, and where does it stop?), rather than guessing again.
 
 Advanced-record support is the likely prerequisite either way, since that declaration
 cannot currently be parsed as written.
