@@ -430,6 +430,9 @@ test-core: $(COMPILER)
 	# constref + untyped `out` in an interface method + cdecl directive + RTL IInterface/HResult
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_interface_constref_cdecl_b249.pas /tmp/test_interface_constref_cdecl_b24926
 	test "$$(/tmp/test_interface_constref_cdecl_b24926)" = "$$(printf 'ping\naddref=-1\nrelease=-1\nqi=-1\nn=7 s=hi')"
+	# TFPList — FPC's plain pointer list, the name its sources actually write
+	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_tfplist_b259.pas /tmp/test_tfplist_b25926
+	test "$$(/tmp/test_tfplist_b25926)" = "$$(printf 'count=3\nidx-b=1\nitem0=10\nafter-delete=2 item0=20\nafter-remove=1 item0=20\nis-tlist=TRUE\nafter-clear=0')"
 	# published-method RTTI: discover by name, bind, and RUN (feature-rtti-method-reflection)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_rtti_method_reflection_b254.pas /tmp/test_rtti_method_reflection_b25426
 	test "$$(/tmp/test_rtti_method_reflection_b25426)" = "$$(printf 'class=TMyCase\ncount=3\nmethod=TestAlpha\nmethod=TestBeta\nmethod=TestInherited\nfind-helper=FALSE\nfind-missing=FALSE\nfind-lowercase=TRUE\nlog=AB\nhelper-assigned=FALSE\ncls-name=TMyCase\ncls-count=3\ncls-method=TestAlpha addr=TRUE\ncls-method=TestBeta addr=TRUE\ncls-method=TestInherited addr=TRUE')"

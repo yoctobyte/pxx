@@ -176,6 +176,16 @@ type
     property Items[Index: Integer]: Pointer read GetItem write SetItem; default;
   end;
 
+  { ---- TFPList: FPC's plain pointer list ----
+    In FPC, TFPList is the non-notifying pointer list and TList adds the Notify hook
+    on top. Our TList already carries exactly TFPList's surface (Add / Clear / Delete
+    / Insert / IndexOf / Remove / Count / Items), so TFPList is that list under the
+    name FPC sources actually write — fcl-fpcunit's suites are full of it. A
+    descendant rather than an alias, so it is a distinct class for `is`/`as` and for
+    a parameter typed TFPList. }
+  TFPList = class(TList)
+  end;
+
   { ---- TStrings: abstract string-list base ---- }
   TStrings = class
   protected
