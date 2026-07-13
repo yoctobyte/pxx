@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** feature (Pascal frontend)
 - **Track:** P — Pascal frontend (shared `parser.inc`, so Track A file-lane)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** working
 
 ## What is missing
 A record with methods does not parse at all:
