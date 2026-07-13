@@ -6275,6 +6275,15 @@ begin
       bitNot :=
         ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) and
         ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT) or
+         { An ARRAY ELEMENT, a record/class FIELD and a DEREF carry the declared type of
+           the element / field / pointee, which is exactly as authoritative as a variable's
+           — and they were missing from this list, so `not arr[i]` and `not rec.f` were
+           lowered as a BOOLEAN not. `not rb[0]` printed TRUE, and `mask[i] and not
+           rhs[i]` silently produced garbage: bit manipulation on array elements (masks,
+           hashing, crypto) was quietly wrong while the same code on a plain variable was
+           right. The tyBoolean guard above still keeps a genuine Boolean element logical. }
+         (ASTKind[left] = AN_INDEX) or (ASTKind[left] = AN_FIELD) or
+         (ASTKind[left] = AN_DEREF) or
          ((ASTKind[left] = AN_PTR_CAST) and (Integer(ASTIVal[left]) = -1)) or
          ((ASTKind[left] = AN_CALL) and
           ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
@@ -14507,25 +14516,25 @@ begin
 	  end;
 	end;
 
-function BakeSetConst: Integer;
-{ Parse a constant `[...]` set literal (elements + `lo..hi` ranges, all
-  ConstEval-able) and bake its 32-byte (256-bit) bitmask into Data[]; return the
-  Data offset. Same blob shape IR_SET_LIT emits for an all-constant literal, so a
-  use resolves to that address. CurTok must be `[`. }
-var lo, hi, vv, idx, i, bit, k: Integer;
+{ Accumulate a constant set TERM into mask[0..31]: either a `[...]` literal (elements and
+  `lo..hi` ranges, all ConstEval-able) or the NAME of an already-baked set constant, whose
+  mask is read straight back out of Data[]. }
+procedure ConstSetTerm(var mask: array of Byte);
+var lo, hi, vv, i, bit, k, sci, srcOff: Integer;
 begin
+  if CurTok.Kind = tkIdent then
+  begin
+    sci := FindSetConst(CurTok.SVal);
+    if sci < 0 then
+      Error('set constant expected: ' + CurTok.SVal);
+    srcOff := SetConstOff[sci];
+    for i := 0 to 31 do mask[i] := Data[srcOff + i];
+    Next;
+    Exit;
+  end;
+
   Expect(tkLBrack, '[');
-  while (DataLen mod 8) <> 0 do
-  begin
-    if DataLen >= MAX_DATA then Error('data overflow');
-    Data[DataLen] := 0; Inc(DataLen);
-  end;
-  idx := DataLen;
-  for i := 0 to 31 do
-  begin
-    if DataLen >= MAX_DATA then Error('data overflow');
-    Data[DataLen] := 0; Inc(DataLen);
-  end;
+  for i := 0 to 31 do mask[i] := 0;
   if CurTok.Kind <> tkRBrack then
     repeat
       lo := ConstEval;
@@ -14539,10 +14548,66 @@ begin
           source (Shl8_ lives in ir.inc, included after this file). }
         bit := 1;
         for k := 1 to (vv mod 8) do bit := bit * 2;
-        Data[idx + (vv div 8)] := Data[idx + (vv div 8)] or bit;
+        mask[vv div 8] := mask[vv div 8] or bit;
       end;
     until not Eat(tkComma);
   Expect(tkRBrack, ']');
+end;
+
+function BakeSetConst: Integer;
+{ Evaluate a constant SET EXPRESSION and bake its 32-byte (256-bit) mask into Data[];
+  return the Data offset. Same blob shape IR_SET_LIT emits for an all-constant literal, so
+  a use resolves to that address.
+
+  A term is a `[...]` literal or the name of an earlier set constant, and terms combine
+  with the set operators, left-associative:
+
+      +   union          (FPC also spells it `or` for sets)
+      -   difference
+      *   intersection   (`and`)
+
+  This is what lets one set constant be defined from another --
+  `ActualValueJSONTypes = ValueJSONTypes - [jtNull]` (fpjson) — which is the ordinary way
+  FPC code writes these. Previously only a bare literal parsed, and a named set on the
+  right-hand side fell into the integer ConstEval and died there.
+
+  CurTok is on the first token of the expression. }
+var mask, rhs: array[0..31] of Byte;
+    i, idx: Integer;
+    op: TTokenKind;
+begin
+  ConstSetTerm(mask);
+  while CurTok.Kind in [tkPlus, tkMinus, tkStar, tkOr, tkAnd] do
+  begin
+    op := CurTok.Kind;
+    Next;
+    ConstSetTerm(rhs);
+    for i := 0 to 31 do
+      case op of
+        tkPlus, tkOr:   mask[i] := mask[i] or rhs[i];
+        { difference: complement rhs within the byte. Deliberately `255 - rhs[i]` and NOT
+          `and not rhs[i]`, even though the latter now works: `not` on an ARRAY ELEMENT was
+          lowered as a boolean not (fixed in this same commit), and the compiler is built by
+          the PREVIOUS binary -- which still has that bug. Compiler source must not depend
+          on a fix it is itself introducing, or stage 1 miscompiles. Same class of trap as
+          `shl` (see the Shl8_ note in this file). }
+        tkMinus:        mask[i] := mask[i] and (255 - rhs[i]);
+        tkStar, tkAnd:  mask[i] := mask[i] and rhs[i];
+      end;
+  end;
+
+  { emit the folded mask }
+  while (DataLen mod 8) <> 0 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0; Inc(DataLen);
+  end;
+  idx := DataLen;
+  for i := 0 to 31 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := mask[i]; Inc(DataLen);
+  end;
   Result := idx;
 end;
 
@@ -15040,10 +15105,16 @@ begin
     else
     begin
       Expect(tkEq, '=');
-      if CurTok.Kind = tkLBrack then
+      if (CurTok.Kind = tkLBrack) or
+         ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
       begin
         { Untyped set constant `const S = [1,2,3]`: bake a plain-ordinal set mask
-          (no element enum type) and record it; uses resolve to AN_SET_CONST_REF. }
+          (no element enum type) and record it; uses resolve to AN_SET_CONST_REF.
+
+          The value may be a set EXPRESSION, not just a literal -- `S2 = S1 - [b]` --
+          so it can also START with the name of an earlier set constant. Without that
+          second test the name fell through to the integer const path and died in
+          ConstEval. }
         if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
         SetConstName[SetConstCount]   := name;
         SetConstEnumId[SetConstCount] := -1;

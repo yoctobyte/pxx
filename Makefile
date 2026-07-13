@@ -444,6 +444,12 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# unary `not` on an ARRAY ELEMENT / FIELD / DEREF must be BITWISE, not boolean
+	./$(COMPILER) test/test_bitwise_not_lvalue_b280.pas /tmp/test_bitwise_not_lvalue_b28026
+	test "$$(/tmp/test_bitwise_not_lvalue_b28026)" = "$$(printf 'byte elem : 5 (5)\nint elem  : 5 (5)\nint64 elem: 5 (5)\nrec byte  : 5 (5)\nrec int   : 5 (5)\nderef     : 5 (5)\nplain var : 5 (5)\nnot elem  : -3\nnot var   : -3\nbool elem : TRUE (TRUE)\nbool elem2: FALSE (FALSE)')"
+	# constant SET EXPRESSIONS: one set const defined from another (+ - *)
+	./$(COMPILER) test/test_set_const_expr_b281.pas /tmp/test_set_const_expr_b28126
+	test "$$(/tmp/test_set_const_expr_b28126)" = "$$(printf 'S1: abc\nSA: bc\nSB: ac\nSC: ac\nSD: abc\nSE: acd\nSF: bc\nSG: bcd')"
 	# managed-string store through an ADDRESS (class field / record field / array elem):
 	# a frozen LITERAL is not a handle, and riscv32's IR_STORE_MEM stored the raw word
 	./$(COMPILER) test/test_managed_store_via_addr_b279.pas /tmp/test_managed_store_via_addr_b27926
