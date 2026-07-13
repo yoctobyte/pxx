@@ -4,7 +4,7 @@ prio: 50
 
 # passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data
 
-- **Track:** P (Pascal frontend / interface coercion)
+- **Track:** A/P (interface VALUE MODEL — COM single-pointer ABI)
 - **Found:** 2026-07-13 while building an ITestListener tracer for the fcl-json
   suite run (rung 2). Sidestepped there; unfixed.
 
@@ -30,10 +30,29 @@ Passing `TTracer.Create` directly as the argument does not even parse
   (or COM-style interface value) is expected. FListeners then stores it, and
   the dispatch loop reads a method table from the wrong word.
 
-## Where
-IRLowerCallArg (interface param + tyClass arg → build the same fat pointer the
-assignment path builds, via IRMaterializeIntfCast). Also check the ctor-call
-argument path (bespoke push loop in ir_codegen) and method calls.
+## ANALYZED 2026-07-13 (fable-nightA) — root cause is the VALUE MODEL, not arg coercion
+Class→interface ARG coercion works (minimal repros pass, plain and COM/GUID,
+incl. storing through a param into a field and dispatching later). What fpcunit
+actually does is:
+
+```pascal
+FListeners.Add(pointer(AListener));            { TFPList of raw pointers }
+...
+ITestListener(FListeners[i]).StartTest(ATest); { cast back, then call }
+```
+
+`Pointer(intf)` → `ITestListener(ptr)` is an idiomatic FPC ROUNDTRIP: an FPC
+COM interface value IS one pointer (methods dispatch through [ptr] with
+compiler thunks adjusting Self). Our interface value is a 16-byte CORBA fat
+pointer {IMT, instance} — `pointer(intf)` can only keep one word, and the
+rebuilt "interface" dispatches through garbage (observed: `call *0x20(%rax)`
+with rax in rodata).
+
+So the fix is a MODEL decision: real single-pointer COM interfaces (embedded
+per-interface vtables in the instance + Self-adjusting thunks), or an interning
+table mapping the fat pair to a stable handle so Pointer() roundtrips. The
+former is FPC's ABI and what Delphi-shaped code keeps assuming; the latter is a
+shim with lifetime questions. Track A ticket-sized either way.
 
 ## Why it matters
 fpcunit's real console/XML runners attach listeners this way; any COM/CORBA

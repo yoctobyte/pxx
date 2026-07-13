@@ -44,7 +44,7 @@ _none_
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
-| bug-pascal-interface-arg-not-converted-from-class | P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
+| bug-pascal-interface-arg-not-converted-from-class | A+P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
@@ -951,7 +951,7 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
 - [p 50] [A] bug-c-struct-byval-varargs-32bit
-- [p 50] [P] bug-pascal-interface-arg-not-converted-from-class
+- [p 50] [A+P] bug-pascal-interface-arg-not-converted-from-class
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [P] feature-pascal-record-constructors
