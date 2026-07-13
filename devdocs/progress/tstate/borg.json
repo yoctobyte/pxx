@@ -1755,14 +1755,13 @@
    "src": "tools/optdiff.sh"
   },
   {
-   "bad": "a303fb3d090bdbc9de5d5956cd5f83045d851f28",
+   "bad": "603cf2bda859c38146854e698430b3fc2160b741",
    "good": "9ae7a3617ccb49c4740fd0ab02e1494a98fc8bd3",
    "job": "fpc-bootstrap#src:compiler/compiler.pas",
    "name": "fpc-bootstrap#00",
    "opened": "2026-07-13T17:25:45Z",
    "range": [
-    "603cf2bda859c38146854e698430b3fc2160b741",
-    "a303fb3d090bdbc9de5d5956cd5f83045d851f28"
+    "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
   },
