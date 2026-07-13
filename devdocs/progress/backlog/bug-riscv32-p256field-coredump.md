@@ -87,3 +87,31 @@ backend appears to lack on the *write* side).
 **Blast radius is far wider than crypto:** any RTL or user code that writes into a
 `var` array param mis-executes on riscv32 — silently for 32-bit elements. Anything
 riscv32/ESP32 should be treated as suspect until this is fixed.
+
+## 2026-07-13: the blast radius is the WHOLE 32-bit crypto stack
+
+This ticket is badly named. It is not a p256field bug. Measured today, with the
+existing `test/lib_*` suites, no new code:
+
+| test | riscv32 | arm32 | x86-64 / aarch64 |
+|---|---|---|---|
+| `lib_sha256` (SHA-256 + HMAC + HKDF) | **core-dump** | ok | ok |
+| `lib_chacha20poly1305` | **core-dump** | **core-dump** | ok |
+| `lib_p256field` | **core-dump** | ok | ok |
+
+**An ESP32 cannot currently compute a SHA-256.** Not a signature — a *hash*. That
+takes out HMAC, HKDF, the AEAD, and therefore any secure transport on the chip,
+independently of ECDSA.
+
+Prime suspect is the defect already reduced above: **writes through a `var` array
+parameter are lost (32-bit elements) or crash (64-bit elements) on the 32-bit
+backends.** SHA-256 and ChaCha are exactly that shape — a `var state: array[...]`
+mutated in place — which fits the observed pattern, including why arm32 survives
+SHA-256 (32-bit words) but dies on ChaCha.
+
+**Consequence:** anything riscv32/xtensa/arm32 that touches crypto is broken today.
+The ESP32 story (`examples/esp32/net-c3` proves *networking* works) does not extend to
+anything sealed or authenticated.
+
+Downstream: pastella's ESP32-capable sensor MVP is blocked on this — not on ECDSA
+performance, and not on p256field.
