@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T14:45:59Z",
-   "fixed": [
-    "test-c-conformance-aarch64#shard3/6",
-    "test-c-conformance-arm32#shard3/6"
-   ],
-   "new_red": [],
-   "sha": "fc508a8376af6ea6a5d755775e4ba101b27e3651",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T14:47:55Z",
    "fixed": [],
    "new_red": [],
@@ -431,6 +420,14 @@
    "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-13T22:13:10Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1483,6 +1480,7 @@
   "test-core#src:test/test_system_qualified_vs_method_b323.pas": "pass",
   "test-core#src:test/test_system_type_names_b267.pas": "pass",
   "test-core#src:test/test_sysutils_datetime.pas": "pass",
+  "test-core#src:test/test_text_macros_rotates_b330.pas": "pass",
   "test-core#src:test/test_textfile.pas": "pass",
   "test-core#src:test/test_textfile_in_unit.pas": "pass",
   "test-core#src:test/test_tfplist_b259.pas": "pass",
@@ -1726,11 +1724,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-13T22:06:21Z",
-  "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 126.7
+  "date": "2026-07-13T22:13:10Z",
+  "sha": "04dc65dfc82f235abb347c8bbcf69cd1cf60e93e",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 100.9
  },
  "last_bench": {
   "conf_rows": 550,
