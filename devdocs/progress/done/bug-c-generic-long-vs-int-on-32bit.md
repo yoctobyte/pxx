@@ -57,3 +57,21 @@ compatibility.
 
 `make test-c-conformance-{i386,arm32,riscv32}` green (00219.c passes), native
 `test-c-conformance` stays green, plus C's usual gate.
+
+
+## RESOLVED 2026-07-13 — duplicate of [[bug-c-generic-long-vs-int-ilp32]]
+
+Filed independently by the Track T watcher from the failing job; fixed the same day from the
+failing TEST. Same bug, two tickets — worth noting that the watcher's job-level report and a
+dev agent's test-level dig produced separate tickets for one root cause.
+
+Root cause: `_Generic`'s descriptor came from TTypeKind alone, which cannot express a type
+whose width matches another's — on ILP32 `long` collapses onto `int` (and on LP64 `long
+long` onto `long`). A long RANK now rides alongside TTypeKind (SymCLongRank / ASTCLongRank /
+CExprLongRank) and re-tags the descriptor on BOTH the controlling and the association side.
+
+Scope was wider than this ticket's symptom: an ILP32 `long` VARIABLE and an `unsigned long`
+variable were equally broken, and LP64 had the mirror bug. See the other ticket for detail.
+
+Verified: `test-c-conformance-i386#shard2/6` PASSES. Regression: `test/cgeneric_long_rank_b250.c`
+(run as both a 64-bit and a 32-bit binary).
