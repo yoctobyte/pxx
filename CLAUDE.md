@@ -112,13 +112,22 @@ frontend)"). **At session start, infer your track from the request:**
   Rust→IR lowering, `lib/rrtl` (as it lands), Rust tests. Live work in
   `devdocs/progress/working/feature-rust-*`. Same rule as C/Z: own your frontend
   files; shared-internals change → **file a Track A ticket**. Works on `master`.
-- **Track T — testing infra (watcher + agentic test manager).** Owns
+- **Track T — Tools & Testing (watcher, agentic test manager, fuzzers).** Owns
   `tools/testmgr.py`, `tools/twatch.py`, `devdocs/progress/tstate/**` and the
-  report format. Face 1 = the standalone twatch daemon (any box, its own
-  dedicated clone, publishes sparse per-SHA regression reports to `tstate/`
-  ONLY — that's the watcher identity's whole write scope). Face 2 = an agent
-  (supervised session or cron) that consumes tstate, files/updates regression
-  tickets like any track agent, and maintains the Track T codebase itself.
+  report format — plus the **fuzzing tooling**: `tools/fuzz.sh` (mutation +
+  cross-target differential), `tools/pasmith.py` / `tools/pasmith_run.py`
+  (random Object Pascal generator + FPC differential driver), and any Csmith
+  runs. T is "a tool used for testing", not "regression testing only": fuzzing
+  is testing whose oracle is a second implementation rather than a recorded
+  expectation, so it lands here. Face 1 = the standalone twatch daemon (any
+  box, its own dedicated clone, publishes sparse per-SHA regression reports to
+  `tstate/` ONLY — that's the watcher identity's whole write scope). Face 2 =
+  an agent (supervised session or cron) that consumes tstate, files/updates
+  regression tickets like any track agent, maintains the Track T codebase
+  itself, and **fuzzes in spare cycles**.
+  **T owns the TOOL, never the bug.** A fuzz/tstate finding is filed into the
+  owning lane — IR/codegen → A, dialect/frontend → P, RTL/ansistring → B —
+  exactly like a tstate NEW-RED. T does not fix the compiler.
   Once a watcher is live, dev tracks may gate pushes on `testmgr --tier
   quick` + self-host fixedpoint; the full matrix runs offloaded, so master
   MAY carry cross-target reds for hours — tstate is the truth, and a
@@ -256,18 +265,22 @@ behind `-O3`, promote to `-O2` per-pass only after the full gate; `-O2` is the
 proven default and the stable fallback. Land only green.
 
 ### Track T in one line
-Own the test infra: `tools/testmgr.py`, `tools/twatch.py`,
-`devdocs/progress/tstate/**`. Face 1 (watcher daemon) writes ONLY `tstate/`;
-face 2 (agent, supervised or cron) files regression tickets and OWNS the T
-codebase: it is free to improve/refactor/optimize Track T sources (testmgr,
-twatch, report format, tier composition) on its own initiative — no ticket or
-approval needed, self-optimization is part of the job. Gate for T tooling
-changes = `tools/testmgr.py --tier full` green — and test the tooling itself
-with QUICK tiers + a scratch bare repo, never long runs. Track T pushes CODE
-too (its own tooling), not just tstate — those commits belong to lane T and
-follow the push-your-own-lane rule: T touches `tools/testmgr.py` /
-`tools/twatch*` / `tstate/**` and nothing else; a compiler or test-target gap
-it hits → ticket for the owning track.
+Own the tools & test infra: `tools/testmgr.py`, `tools/twatch.py`,
+`devdocs/progress/tstate/**`, and the fuzzers (`tools/fuzz.sh`,
+`tools/pasmith*.py`, Csmith runs). Face 1 (watcher daemon) writes ONLY
+`tstate/`; face 2 (agent, supervised or cron) files regression tickets, fuzzes
+in spare cycles, and OWNS the T codebase: it is free to improve/refactor/
+optimize Track T sources (testmgr, twatch, fuzzers, report format, tier
+composition) on its own initiative — no ticket or approval needed,
+self-optimization is part of the job. Gate for T tooling changes =
+`tools/testmgr.py --tier full` green — and test the tooling itself with QUICK
+tiers + a scratch bare repo, never long runs. Track T pushes CODE too (its own
+tooling), not just tstate — those commits belong to lane T and follow the
+push-your-own-lane rule: T touches `tools/testmgr.py` / `tools/twatch*` /
+`tools/fuzz.sh` / `tools/pasmith*` / `tstate/**` and nothing else. **T owns the
+tool, never the bug**: a compiler or test-target gap it hits (including a fuzz
+divergence) → ticket for the owning track (IR/codegen → A, dialect → P,
+RTL → B), never a fix under T.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,
