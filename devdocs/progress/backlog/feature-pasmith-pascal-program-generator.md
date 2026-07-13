@@ -96,20 +96,46 @@ grammar then comes free.
 Run all of them, **majority vote**. A lone dissenter is the bug. This makes triage
 mechanical instead of a judgment call.
 
-### Triage rule — the two assumptions are NOT equally valid
-Prior is overwhelmingly "pasmith emitted something it shouldn't have". Ordered:
+### Triage rule — ordered suspicion, NOT dismissal
+The prior favours "pasmith emitted something it shouldn't have", so that's where you
+*look first*. It is an ordering of investigation, **not a verdict** — see the
+selection-effect note below, which is the whole reason this section exists.
 
-| observation | conclusion |
+| observation | investigate in this order |
 | --- | --- |
-| FPC **rejects** the program (compile error) | **Always a pasmith bug.** The generator's contract is that it emits only valid, well-typed `{$mode objfpc}` code. Never blame FPC here. |
-| FPC compiles; pxx and FPC outputs differ | Suspect, in order: **(a)** pasmith emitted implementation-defined / UB code — audit the generator's UB-avoidance FIRST; **(b)** a pxx bug; **(c)** an FPC bug, last. |
-| pxx targets disagree with each other | Backend/codegen bug (Track A) — same as `fuzz.sh` today. |
-| pxx `-O0` vs `-O2`/`-O3` disagree | Optimizer bug (Track A / Track O lane). |
+| FPC **rejects** the program (compile error) | **(a)** pasmith emitted invalid code — its contract is valid, well-typed `{$mode objfpc}` only; **(b)** we're relying on a dialect corner where pxx and FPC legitimately differ (→ a `compat-pascal-*` finding, not a bug in either); **(c)** FPC wrongly rejects valid code — a real FPC bug class, rarer but it exists. |
+| FPC compiles; pxx and FPC outputs differ | **(a)** pasmith emitted implementation-defined / UB code — audit the generator's UB-avoidance FIRST, it's the cheapest check and the most common cause; **(b)** a pxx bug; **(c)** an FPC bug. |
+| pxx targets disagree with each other | Backend/codegen bug (Track A) — same as `fuzz.sh` today. FPC not involved. |
+| pxx `-O0` vs `-O2`/`-O3` disagree | Optimizer bug (Track A / Track O lane). FPC not involved. |
 
-An FPC bug is a real possible outcome and worth reporting upstream when it happens —
-but it must be **earned**, never assumed. Rule of thumb: if the minimized reproducer
-isn't small enough and clean enough that you'd be comfortable posting it to the FPC
-bugtracker, it isn't an FPC bug yet.
+**Do NOT auto-dismiss an FPC failure (user, 2026-07-13).** The tempting shortcut —
+"FPC is battle-tested, therefore it's us, close the case" — is wrong, and wrong for a
+structural reason, not a charitable one:
+
+> That "FPC is ~98% right" prior is a base rate over **all Pascal programs humans have
+> ever written**. A fuzzer does not sample from that distribution. It deliberately
+> samples the tail nobody has written before — which is *precisely* the region where
+> FPC's own test suite is thinnest. Conditional on "we hit a shape no human wrote",
+> P(FPC bug) is far higher than FPC's base bug rate. This is not hypothetical: Csmith
+> found real bugs in GCC and LLVM, which are hammered orders of magnitude harder than
+> FPC is.
+
+So the base rate tells you **where to look first**; it does not tell you where to
+stop. Every FPC failure gets **judgement**, not reflex: read the generated code, read
+the FPC docs / language spec for the construct, check the FPC bugtracker, diff FPC
+versions if available. Concretely, an FPC failure is only closed as "our bug" once you
+can *point at the specific line* pasmith emitted that it shouldn't have — "FPC is
+probably right" is not a resolution.
+
+An FPC bug is a legitimate, valuable outcome of this tool and should be reported
+upstream when found. It still has to be **earned**: shrink it first. Rule of thumb —
+if the minimized reproducer isn't small and clean enough that you'd be comfortable
+posting it to the FPC bugtracker, it isn't an FPC bug *yet*; it's an unfinished
+investigation.
+
+Corollary — this is what the extra oracles are *for*. FPC `-O0` vs FPC `-O2`
+disagreeing on the same program is an FPC bug with no judgement call needed at all:
+FPC contradicts itself, pxx isn't even in the room. Run it; it's free.
 
 ### Feature ladder — ship v1 narrow, widen on evidence
 Each rung is independently useful; do not build them all before running.
@@ -197,3 +223,12 @@ test.
   (5) grammar fuzzing is the obvious wrong answer;
   (6) Track T is "Tools and Testing" — T owns the tool, findings file into the
   owning lane.
+- 2026-07-13 — triage rule corrected after user pushback. The first draft said "FPC
+  rejects the program → ALWAYS a pasmith bug"; that is wrong. FPC is the oracle, not
+  the ground truth, and a fuzzer samples exactly the tail where FPC's own coverage is
+  thinnest — so an FPC failure is a judgement call (read the code, read the spec,
+  check the bugtracker), never a reflex dismissal. Finding a real FPC bug is an
+  expected and welcome outcome of this tool, not an embarrassment to explain away.
+  Rewrote the triage section as ordered *suspicion* rather than verdicts, added the
+  selection-effect argument, and noted FPC-vs-itself (`-O0` vs `-O2`) as the oracle
+  that needs no judgement at all.
