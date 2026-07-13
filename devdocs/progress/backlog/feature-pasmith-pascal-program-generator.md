@@ -208,6 +208,91 @@ reproducer + a ticket in the owning lane + a permanent `test/test_*.pas` regress
 test.
 
 ## Log
+- 2026-07-13 — **shrinker removed; OOP + ansistring rungs landed** (commits 9e0cf382,
+  07f4b35f). Two corrections to this ticket's own design, both from the user:
+
+  **(1) No shrinker. Reduction was cargo-culted from Csmith without its premise.**
+  Csmith shrinks because its reproducers go to *strangers* who won't read 40KB. Ours
+  go to an agent in this repo, and the program is **seeded** — `--seed N` plus the
+  gen-args now recorded in the source header reproduce it byte-for-byte, for free,
+  forever. Source size buys nothing. Worse, the pressure to shrink pushes toward
+  generating *small* programs, which makes the fuzzer's job easy and **the compiler's
+  job easy** — the exact opposite of the point. As the user put it: 768 lines is
+  "hardly the interface section of some complex unit"; vtables, inheritance chains and
+  ctor/dtor ordering don't begin to strain a compiler until programs are large. (The
+  shrinker didn't even work: chunk deletion breaks Pascal's block structure, so nearly
+  every candidate failed to compile — 758 lines in, 758 out, budget exhausted.)
+  **Replaced by trace-diff localization**, which answers the real question ("which
+  construct diverged?") without touching program size: `--trace` emits the running
+  checksum after every statement; the driver diffs two oracles' traces; the first
+  differing checkpoint IS the guilty statement. O(1) compiles instead of O(lines), and
+  it gets **better** with bigger programs instead of collapsing. On seed 111 it named
+  statement 7 of 21 in seconds, where the shrinker had made zero progress in 45s.
+  Corollary for the ladder below: **generate BIG programs.** Size is a feature.
+
+  **(2) `--check` is the tool's gate, and it is fast and non-iterative.** pasmith's
+  contract is "emits valid, well-typed objfpc" — so *FPC accepting the program IS the
+  contract*, and that is a syntax/semantics question a compile answers in full. No
+  running, no oracles, no iteration. 250 seeds / 0 rejects / ~6s for 50. Run it after
+  every touch of `pasmith.py`. Divergence hunting is a separate, slower activity — do
+  not conflate them.
+
+  **OOP rung (the actual goal).** `--classes N` builds a *chain* of N classes, each
+  overriding its parent's virtuals and calling `inherited`, so one call through a
+  base-typed reference walks the whole chain. Objects are declared as the base and
+  instantiated as random derived types, so no call is statically resolvable (a
+  devirtualising optimiser that gets this wrong surfaces as an `-O`-level
+  self-contradiction). Destructors fold into the checksum, making dtor **count and
+  order** observable — a missed or doubled destructor changes the number. `--strs N`
+  adds ansistrings: concat, `Copy` with live indices, `Length`, char indexing, strings
+  as fields and method results. Verified both compilers agree on all of it before
+  generating any of it.
+  Three more generator bugs, all caught by the FPC gate: the ctor's `v` leaking into
+  method scope; method bodies not covering all 8 integer types (which resurrected the
+  constant-folding class via `leaf()`'s literal fallback); and `str_expr` emitting
+  `o0.Name` *inside* `Name` — infinite recursion, breaking terminates-by-construction.
+  Gate after fixes: 120 seeds at `--classes 5 --strs 3`, 0 rejects, 15s.
+
+  **Status of divergences: parked, deliberately.** A 300-seed scalar run found 11
+  pxx-vs-FPC checksum disagreements (all 11 with pxx self-consistent across -O0/-O2/-O3
+  and FPC self-consistent — i.e. one systematic difference, not 11 bugs). Not chased:
+  the user's call is that the tool comes first. They are reproducible from their seeds
+  whenever someone wants them (`--seeds 100-400 --stmts 20 --vars 10 --depth 4`).
+- 2026-07-13 — **v1 landed** (`tools/pasmith.py` + `tools/pasmith_run.py`, commit
+  bab094f5). Scalar rung: all 8 integer widths + boolean + char, guarded div/mod,
+  masked shifts, `if`/`case`/bounded-`for`, pure functions over a DAG call graph,
+  single-checksum output, seeded. Oracles wired: `fpc -O-`/`-O2`, `pxx -O0/-O2/-O3`,
+  and `--cross` for the QEMU targets. Line-wise delta-debug shrinker, gated on the
+  divergence still reproducing *with the same signature* (otherwise a shrinker
+  happily "reduces" a codegen bug into an unrelated compile error).
+  CLAUDE.md Track T charter widened to "Tools & Testing" (commit 2b42f2fb): fuzzers
+  now formally live in T alongside testmgr/twatch, and `tools/fuzz.sh` — previously
+  orphaned under Track A — moves with them.
+
+  **Two generator bugs found before any compiler bug**, both false-positive sources,
+  and both worth recording because they are the failure mode that kills a fuzzer:
+  1. **Constant folding.** All-constant subexpressions (`qword(231) shl 63`) overflow
+     during *compile-time* folding, which FPC rejects as a hard **error** even under
+     `{$Q-}` — that directive governs runtime wraparound, not constant evaluation.
+     7/25 seeds were rejected by FPC. Fixed structurally rather than by patching:
+     integer expression leaves are now always *variables*, never literals. A variable
+     cannot be folded, so the class is unreachable by construction. (Literals survive
+     only where they cannot overflow: initialisers, `for` bounds, case labels, masks.)
+  2. **Clobbered `for` control variables.** Loop control vars were globals shared by
+     main and every function, so a loop whose body called a function that also looped
+     had its counter overwritten mid-flight. Modifying a `for` control var inside its
+     own loop is **undefined** in Pascal — and the two compilers duly disagreed: FPC
+     re-reads the counter from memory and spins forever, pxx keeps it in a register
+     and terminates. A divergence *neither compiler owns*. It presented as 3
+     "pxx vs FPC checksum mismatches" + 2 "FPC hangs", i.e. it looked exactly like a
+     juicy compiler bug. Fixed: per-function local loop vars.
+
+  This is the ticket's UB-free-BY-CONSTRUCTION invariant earning its keep on day one:
+  every one of those 6 apparent findings was the generator's fault. **A finding from
+  an unsound generator is worth nothing**, which is why the generator gets audited
+  first (triage step (a)) and why v1 is scalar-only — prove the harness on ground
+  where the answer is known before believing it about ansistring.
+  After both fixes: 30/30 seeds clean.
 - 2026-07-13 — filed. Origin: Csmith found real bugs in the C frontend; user asked
   whether an FPC-dialect equivalent exists. It does not — this builds it. Key design
   conclusions from that discussion, recorded so they aren't re-litigated at pickup:
