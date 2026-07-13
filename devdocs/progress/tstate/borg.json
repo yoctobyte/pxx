@@ -1648,10 +1648,10 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-07-13T01:17:17Z",
+  "date": "2026-07-13T01:30:18Z",
   "rc": 0,
   "rows": 21,
-  "sha": "35c57c37b5cb03ca117088917cc4bd907cb1a670"
+  "sha": "3f4b6ce3d74ec5500a07151e5c6386f3cabfd172"
  },
  "last_full": {
   "date": "2026-07-13T01:23:13Z",
