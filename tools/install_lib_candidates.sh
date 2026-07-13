@@ -364,8 +364,49 @@ EOF
   say "quickjs -> $DEST/quickjs"
 }
 
+fetch_csmith() {
+  # csmith's RUNTIME HEADER (csmith.h + safe_math/platform headers), which every
+  # generated program #includes. The generator itself is the `csmith` binary from the
+  # distro package; the header lives in the separate libcsmith-dev package.
+  #
+  # We do NOT require root: `apt-get download` fetches the .deb into a temp dir as a
+  # normal user and `dpkg-deb -x` unpacks it. If the header is already installed
+  # system-wide (/usr/include/csmith), the fuzz harness finds it there and this is a
+  # no-op you never need to run.
+  if present csmith; then say "csmith headers present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  command -v csmith >/dev/null 2>&1 || \
+    say "NOTE: the csmith GENERATOR is not on PATH — install it (apt install csmith); this fetches only the headers"
+
+  local tmp; tmp="$(mktemp -d)"
+  ( cd "$tmp" && apt-get download libcsmith-dev >/dev/null 2>&1 ) || {
+    rm -rf "$tmp"
+    die "could not 'apt-get download libcsmith-dev' (no network, or not a Debian/Ubuntu box).
+     Fallback: copy csmith.h and its siblings from the csmith source tree's runtime/ dir
+     into $DEST/csmith/include/"
+  }
+  ( cd "$tmp" && dpkg-deb -x libcsmith-dev_*.deb x ) || { rm -rf "$tmp"; die "dpkg-deb -x failed"; }
+
+  local src; src="$(find "$tmp/x" -name csmith.h -printf '%h\n' -quit)"
+  [ -n "$src" ] || { rm -rf "$tmp"; die "csmith.h not found inside the .deb"; }
+  mkdir -p "$DEST/csmith/include"
+  cp -a "$src/." "$DEST/csmith/include/"
+  rm -rf "$tmp"
+
+  cat > "$DEST/csmith/PROVENANCE.md" <<EOF
+# csmith runtime headers
+Upstream: https://github.com/csmith-project/csmith (packaged as libcsmith-dev)
+Paths: include/ (csmith.h, safe_math*.h, platform_*.h, random_inc.h — the headers a
+generated program #includes; the generator binary comes from the \`csmith\` package).
+Installed by tools/install_lib_candidates.sh (apt-get download + dpkg-deb -x, no root).
+Vendor source — gitignored, never committed.
+License: BSD-2-Clause (see the csmith project).
+Used by: tools/csmith_fuzz.py (\`make fuzz-csmith\`) — differential fuzzing pxx vs gcc.
+EOF
+  say "csmith headers -> $DEST/csmith/include"
+}
+
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_csmith ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -381,7 +422,8 @@ EOF
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess)" ;;
+    csmith)        fetch_csmith ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

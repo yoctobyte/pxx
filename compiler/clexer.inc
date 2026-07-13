@@ -229,6 +229,138 @@ begin
   end;
 end;
 
+{ C99 hex float literal: 0x1.8p3, 0x1.0p-28f, 0x1p+10. SrcPos sits just past the
+  `0x`. These are EXACT binary values -- value = M * 2**(binExp - 4*fracDigits),
+  M being the hex digits read as one integer -- so the bits are built with integer
+  arithmetic rather than a decimal string round-trip. No `shl` (not self-hostable):
+  powers of two come from doubling/halving loops, as in StrToDoubleBits.
+
+  csmith's safe_math.h is full of these (`0x1.0p-100f * FLT_MAX`); without them the
+  lexer read `0x1`, then met `.0p-100f` and reported "field name expected after .". }
+procedure CLexHexFloatTail;
+var
+  m, mant, bitsv, p52: Int64;
+  fracDigits, binExp, expSign, dropped, lead, shiftBits, i, d: Integer;
+  sawDigit, sticky, roundBit: Boolean;
+  expField: Integer;
+begin
+  m := 0; fracDigits := 0; binExp := 0; dropped := 0;
+  sawDigit := False; sticky := False;
+
+  { mantissa: hex digits, optionally with one `.` }
+  while SrcPos <= Length(Source) do
+  begin
+    if Source[SrcPos] in ['0'..'9'] then d := Ord(Source[SrcPos]) - 48
+    else if Source[SrcPos] in ['a'..'f'] then d := Ord(Source[SrcPos]) - 87
+    else if Source[SrcPos] in ['A'..'F'] then d := Ord(Source[SrcPos]) - 55
+    else d := -1;
+    if d < 0 then break;
+    sawDigit := True;
+    { Stop growing m once another digit could overflow; a skipped digit is a
+      low-order one, so the value keeps its place by gaining 4 binary exponents
+      (truncation -- remember it in sticky so rounding stays honest). }
+    if m <= 576460752303423487 then      { (2**63-1) div 16, room for one more digit }
+    begin
+      m := m * 16 + d;
+      if fracDigits > 0 then Inc(fracDigits);
+    end
+    else
+    begin
+      if d <> 0 then sticky := True;
+      if fracDigits = 0 then Inc(dropped);
+    end;
+    Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '.') and (fracDigits = 0) then
+    begin
+      fracDigits := 1;   { 1 = "the dot has been seen"; digits counted from here }
+      Inc(SrcPos);
+    end;
+  end;
+  { a `.` with no digits before it (`0x.8p0`) }
+  if (not sawDigit) and (SrcPos <= Length(Source)) and (Source[SrcPos] = '.') then
+  begin
+    fracDigits := 1;
+    Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and
+          ((Source[SrcPos] in ['0'..'9']) or (Source[SrcPos] in ['a'..'f']) or
+           (Source[SrcPos] in ['A'..'F'])) do
+    begin
+      if Source[SrcPos] in ['0'..'9'] then d := Ord(Source[SrcPos]) - 48
+      else if Source[SrcPos] in ['a'..'f'] then d := Ord(Source[SrcPos]) - 87
+      else d := Ord(Source[SrcPos]) - 55;
+      m := m * 16 + d; Inc(fracDigits); Inc(SrcPos);
+    end;
+  end;
+  if fracDigits > 0 then Dec(fracDigits);   { drop the "dot seen" marker }
+
+  { binary exponent: p/P followed by an optionally-signed decimal }
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['p','P']) then
+  begin
+    Inc(SrcPos);
+    expSign := 1;
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] = '+') then Inc(SrcPos)
+    else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '-') then
+      begin expSign := -1; Inc(SrcPos); end;
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
+    begin
+      binExp := binExp * 10 + (Ord(Source[SrcPos]) - 48);
+      Inc(SrcPos);
+    end;
+    binExp := binExp * expSign;
+  end;
+  { f/F/l/L suffix — the value is carried as double bits either way, as for
+    decimal literals }
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then Inc(SrcPos);
+
+  CurTok.Kind := tkFloat;
+  if m = 0 then begin CurTok.IVal := 0; Exit; end;
+
+  { value = m * 2**binExp, corrected for the digits after the dot and any we had
+    to truncate off the low end }
+  binExp := binExp - 4 * fracDigits + 4 * dropped;
+
+  { normalise: lead = index of m's top set bit }
+  lead := 0;
+  mant := m;
+  while mant > 1 do begin mant := mant div 2; Inc(lead); end;
+
+  p52 := 4503599627370496;   { 2**52 }
+  mant := m;
+  shiftBits := lead - 52;
+  if shiftBits > 0 then
+  begin
+    { drop shiftBits low bits, round to nearest / ties to even }
+    roundBit := False;
+    for i := 1 to shiftBits do
+    begin
+      if (mant - (mant div 2) * 2) <> 0 then
+      begin
+        if i = shiftBits then roundBit := True else sticky := True;
+      end;
+      mant := mant div 2;
+    end;
+    if roundBit and (sticky or ((mant - (mant div 2) * 2) <> 0)) then
+    begin
+      mant := mant + 1;
+      if mant >= p52 * 2 then begin mant := mant div 2; Inc(lead); end;
+    end;
+  end
+  else
+    for i := 1 to -shiftBits do mant := mant * 2;
+
+  expField := lead + binExp + 1023;
+  if expField >= 2047 then
+    { overflow -> +Inf, as StrToDoubleBits does }
+    CurTok.IVal := 9218868437227405312
+  else if expField <= 0 then
+    CurTok.IVal := 0                      { underflow -> 0 (subnormals flushed) }
+  else
+  begin
+    bitsv := mant - p52;                  { strip the implicit leading 1 }
+    CurTok.IVal := Int64(expField) * p52 + bitsv;
+  end;
+end;
+
 { Scan the fractional/exponent/suffix tail of a C float literal that begins at
   numStart (SrcPos is positioned at the `.` or `e`/`E`), and emit a tkFloat whose
   IVal carries the IEEE-754 double bit pattern (matching the Pascal lexer). }
@@ -263,7 +395,7 @@ var
   s: AnsiString;
   n: Int64;
   done, wide: Boolean;
-  numStart, valEnd: Integer;
+  numStart, valEnd, i: Integer;
 begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
@@ -344,7 +476,20 @@ begin
     if (SrcPos <= Length(Source)) and
        ((Source[SrcPos] = 'x') or (Source[SrcPos] = 'X')) then
     begin
-      Inc(SrcPos); n := 0; done := False;
+      Inc(SrcPos);
+      { C99 hex FLOAT (0x1.0p-28f) vs hex integer: scan past the hex digits and look
+        for a `.` or a `p`/`P`. Only those two make it a float -- a bare `0x1f` is the
+        integer 31 with no suffix, and `0xEp` cannot occur (p is not a hex digit). }
+      done := False; i := SrcPos;
+      while (i <= Length(Source)) and
+            ((Source[i] in ['0'..'9']) or (Source[i] in ['a'..'f']) or
+             (Source[i] in ['A'..'F'])) do Inc(i);
+      if (i <= Length(Source)) and ((Source[i] = '.') or (Source[i] in ['p','P'])) then
+      begin
+        CLexHexFloatTail;
+        Exit;
+      end;
+      n := 0; done := False;
       CLexHexOctal := True;
       while (SrcPos <= Length(Source)) and not done do
       begin
@@ -528,7 +673,18 @@ begin
     '}': CurTok.Kind := tkEnd;
     ';': CurTok.Kind := tkSemicolon;
     ',': CurTok.Kind := tkComma;
-    '.': CurTok.Kind := tkDot;
+    '.': begin
+           { A float may begin with the dot (`.5f`, `.25`). Only a DIGIT makes it one,
+             so `...` and `p->m` still lex as dots. SrcPos is already past the `.`, and
+             CLexFloatTail wants to start ON it. }
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) then
+           begin
+             Dec(SrcPos);
+             CLexFloatTail(SrcPos);
+             Exit;
+           end;
+           CurTok.Kind := tkDot;
+         end;
     ':': CurTok.Kind := tkColon;
     '?': CurTok.Kind := tkQuestion;
     '~': CurTok.Kind := tkNot;

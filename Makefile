@@ -941,6 +941,10 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
+	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
+	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
+	./$(COMPILER) test/csigned_bitfield_b306.c /tmp/csigned_bitfield_b30626
+	test "$$(/tmp/csigned_bitfield_b30626)" = "$$(printf 'A.a=-5\nB.a=-3 B.b=-9 B.c=7\nC.a=-1\nD.a=140 D.b=560 D.c=423 D.d=-5\nlocal A.a=-2\nlocal B.a=3 B.b=-16 B.c=15\nmin5=-16\nmax5=15\nzero=0\nu4=15')"
 	./$(COMPILER) test/cparams_17_32_b150.c /tmp/cparams_17_32_26
 	test "$$(/tmp/cparams_17_32_26)" = "$$(printf 's=153\nt=528')"
 	./$(COMPILER) test/cexpr_b.c /tmp/cexpr_b26

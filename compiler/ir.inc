@@ -649,11 +649,13 @@ end;
 
 function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer;
 var recId, width, shift: Integer; fieldName: AnsiString; value, maskNode: Integer;
+    fieldTk: TTypeKind; signBit: Int64; sbNode: Integer;
 begin
   recId := ResolveNodeRec(ASTLeft[fieldNode]);
   fieldName := GetASTIdentName(fieldNode);
   width := RecFieldBitWidth(recId, fieldName);
   shift := RecFieldBitShift(recId, fieldName);
+  fieldTk := RecFieldType(recId, fieldName);
   storageTk := IRBitStorageTk(RecFieldBitBytes(recId, fieldName));
   value := IRAppend(IR_LOAD_MEM, storageAddr, -1, -1, 0, Ord(storageTk));
   if shift > 0 then
@@ -662,6 +664,29 @@ begin
                       Ord(tkIdent), 0, Ord(storageTk));
   maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(storageTk));
   Result := IRAppend(IR_BINOP, value, maskNode, Ord(tkAnd), 0, Ord(storageTk));
+
+  { A SIGNED bitfield stores a two's-complement value in `width` bits, so the mask
+    above hands it back ZERO-extended: `signed f : 7` holding -5 reads as 123. C says
+    -5. Sign-extend it branchlessly with (v xor signBit) - signBit -- no arithmetic
+    shift, no new IR op, correct for every width.
+
+    Only when the field is signed AND narrower than its storage unit: a full-width
+    field is already right, and an unsigned field must stay zero-extended.
+
+    csmith found this on its fourth program, and every signed bitfield in every
+    generated program was wrong. The C corpora (lua/sqlite/tcc) never caught it
+    because their bitfields are unsigned -- the bug was invisible to a decade of
+    real-world C. }
+  if (width < TypeSize(storageTk) * 8) and
+     ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
+      (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
+  begin
+    signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
+    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
+    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(storageTk));
+    sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
+    Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(storageTk));
+  end;
 end;
 
 function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer;
