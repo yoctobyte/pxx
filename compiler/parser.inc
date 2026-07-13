@@ -2258,6 +2258,16 @@ begin
   begin
     Next;
     ai := 1;                    { param 0 is Self }
+    { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC accepts
+      it (it is the ordinary way to call `FormatJSON()` in fcl-json's own test suite); the
+      loop below would hand the `)` to ParseExpr and report "expected expression". A method
+      with no parameters at all already worked, because the loop simply never ran. }
+    if CurTok.Kind = tkRParen then
+    begin
+      if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+        FillDefaultArgs(mpi, 1, callNode, lastArg);
+      ai := Procs[mpi].ParamCount;    { nothing to parse; Expect(tkRParen) below consumes it }
+    end;
     while ai <= Procs[mpi].ParamCount - 1 do
     begin
       { An `array of const` argument written as a LITERAL -- `DoError(msg, ['Nil', x])`
@@ -4211,6 +4221,16 @@ begin
           begin
             Next;
             mai := 1; { param 0 = Self (provided by the fat pointer) }
+            { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+              accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+              the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+              already worked, because the loop simply never ran. }
+            if CurTok.Kind = tkRParen then
+            begin
+              if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+                FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+              mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+            end;
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -4282,6 +4302,16 @@ begin
           begin
             Next;
             mai := 1;
+            { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+              accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+              the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+              already worked, because the loop simply never ran. }
+            if CurTok.Kind = tkRParen then
+            begin
+              if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+                FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+              mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+            end;
             while mai <= Procs[mpi].ParamCount-1 do
             begin
               if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -4419,6 +4449,16 @@ begin
   begin
     Next;
     mai := 1; { param 0 = Self (the allocated instance) }
+    { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+      accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+      the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+      already worked, because the loop simply never ran. }
+    if CurTok.Kind = tkRParen then
+    begin
+      if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+        FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+      mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+    end;
     while mai <= Procs[mpi].ParamCount-1 do
     begin
       if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -5398,6 +5438,16 @@ begin
         begin
           Next;
           mai := 1;  { param 0 = Self }
+          { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+            accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+            the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+            already worked, because the loop simply never ran. }
+          if CurTok.Kind = tkRParen then
+          begin
+            if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+              FillDefaultArgs(mpi, 1, callN, lastA);
+            mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+          end;
           while mai <= Procs[mpi].ParamCount - 1 do
           begin
             if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -6464,6 +6514,16 @@ begin
             begin
               Next;
               mai := 1; { param 0 = Self (provided by the fat pointer) }
+              { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+                accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+                the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+                already worked, because the loop simply never ran. }
+              if CurTok.Kind = tkRParen then
+              begin
+                if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+                  FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+              end;
               while mai <= Procs[mpi].ParamCount-1 do
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
@@ -6522,6 +6582,16 @@ begin
             begin
               Next;
               mai := 1;
+              { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
+                accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
+                the `)` to ParseExpr and reports "expected expression". A method with NO parameters
+                already worked, because the loop simply never ran. }
+              if CurTok.Kind = tkRParen then
+              begin
+                if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
+                  FillDefaultArgs(mpi, 1, mcallNode, mlastArg);
+                mai := Procs[mpi].ParamCount;   { nothing to parse; Expect(tkRParen) consumes it }
+              end;
               while mai <= Procs[mpi].ParamCount - 1 do
               begin
                 if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
