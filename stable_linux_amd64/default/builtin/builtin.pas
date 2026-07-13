@@ -57,6 +57,18 @@ procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Intege
 function __pxxMethodAddress(Instance: Pointer; const Name: AnsiString): Pointer;
 function __pxxMethodName(Instance: Pointer; Address: Pointer): AnsiString;
 
+{ FPC's TObject.GetInterface(const IID: TGUID; out Obj): Boolean — look an
+  implemented interface up BY GUID at runtime and hand back the interface value.
+
+  The class RTTI blob carries an interface table at +80/+88: one 24-byte entry per
+  implemented interface that declared a GUID, holding the 16 raw GUID bytes followed
+  by a pointer to that (class, interface) IMT. On a hit we write the 16-byte fat
+  pointer {IMT, instance} — exactly what a pxx interface variable is — through Obj.
+
+  IID and Obj are passed as untyped pointers so the builtin unit does not need TGuid
+  in scope; the parser hands over their addresses. }
+function __pxxGetInterface(Instance: Pointer; IID: Pointer; Obj: Pointer): Boolean;
+
 { Bare `Abs(x)` / `Sqr(x)` lower to these (see ParseFactor) so the System
   intrinsics work with no `uses` and the argument is evaluated once (the naive
   e*e / if e<0 fold would double-evaluate a side-effecting argument). }
@@ -583,6 +595,59 @@ begin
         if PPxxPtr_(PtrUInt(e) + 8)^ = Address then
         begin
           Result := __pxxRttiName(PPxxPtr_(e)^);
+          Exit;
+        end;
+      end;
+    rtti := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_PARENT)^;
+  end;
+end;
+
+const
+  PXX_RTTI_IFCOUNT   = 80;
+  PXX_RTTI_IFACES    = 88;
+  PXX_RTTI_IFSIZE    = 24;   { {GUID:16, IMT ptr:8} }
+
+function __pxxGuidEq(a, b: Pointer): Boolean;
+var pa, pb: PByte; i: Integer;
+begin
+  pa := PByte(a);
+  pb := PByte(b);
+  Result := True;
+  for i := 0 to 15 do
+    if pa[i] <> pb[i] then
+    begin
+      Result := False;
+      Exit;
+    end;
+end;
+
+function __pxxGetInterface(Instance: Pointer; IID: Pointer; Obj: Pointer): Boolean;
+var
+  rtti, ifaces, e: Pointer;
+  outp: PPxxPtr_;
+  cnt, i: Integer;
+begin
+  Result := False;
+  if (Instance = nil) or (IID = nil) then Exit;
+  rtti := __pxxRttiOf(Instance);
+  while rtti <> nil do
+  begin
+    cnt := Integer(PPxxInt_(PtrUInt(rtti) + PXX_RTTI_IFCOUNT)^);
+    ifaces := PPxxPtr_(PtrUInt(rtti) + PXX_RTTI_IFACES)^;
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(PtrUInt(ifaces) + PtrUInt(i * PXX_RTTI_IFSIZE));
+        if __pxxGuidEq(e, IID) then
+        begin
+          if Obj <> nil then
+          begin
+            { a pxx interface value is the 16-byte fat pointer {IMT, instance} }
+            outp := PPxxPtr_(Obj);
+            outp^ := PPxxPtr_(PtrUInt(e) + 16)^;                  { IMT }
+            PPxxPtr_(PtrUInt(Obj) + 8)^ := Instance;              { instance }
+          end;
+          Result := True;
           Exit;
         end;
       end;

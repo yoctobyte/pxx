@@ -210,3 +210,4 @@
 2026-07-12T14:34:02Z  v210  6fce864499f015602b7648081697117f053f99fc833ee5c69f2b8e889293d98b  d526b66ba21bebf199bdad81aebc10746031fd32  tickets: builtin-tobject-class slice 1 (instantiation) landed; RTTI methods remain
 2026-07-12T18:19:07Z  v211  03aba66f493569a6c644b7934629d8400d548c03a239a8862bbfd9ef2ce24c79  dc288ee446add1a69ab16d7bb77dc3cecc41f237  tstate(borg): opt 2ec53989d21f done
 2026-07-12T23:14:55Z  v212  c344e9016131485596a990f4069bafa03370a05140bd713ba81fb4aae4c52f09  b039b3b6f3dbdebb84a2015c0552a62a481042c5  perf(heap): segregated free lists — O(1) alloc/free, ~6% off self-compile
+2026-07-13T00:19:17Z  v213  8667cbbc71069278f53c703b8f4c7e9a921917942a032bc054095de764e68501  671b0e74307a3ef6c903cccc456e023782a3291e  feat(rtl/rtti): class-level published-method enumeration (no instance needed)
