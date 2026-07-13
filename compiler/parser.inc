@@ -785,6 +785,7 @@ procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
 procedure ParseRecordMethodDecl(ci: Integer); forward;
+procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
@@ -14762,6 +14763,70 @@ end;
   (ParseTypeKind's tkRecord/tkPacked case — feature-anonymous-record-type).
   Handles comma field lists, nested fixed/dynamic array fields, and
   case/variant sections; sets UClsSize_/UClsAlign. }
+procedure ParseRecordPropertyDecl(ci: Integer);
+{ `property Height: Longint read cy write cy;` inside a record. FPC's own RTL uses this —
+  typshrdh.inc's TSize and TRect are records with properties — so nothing that includes them
+  parses without it.
+
+  Only the FIELD-BACKED form is supported, which is what those declarations are: read/write
+  name an existing field, and the property is registered so `r.Height` resolves through the
+  ordinary property path. A method-backed accessor on a record would need the record's own
+  method table wired into the accessor lookup; it is rejected loudly rather than
+  half-supported. }
+var
+  pnOff, pnLen, pri: Integer;
+  rFOff, rFLen, wFOff, wFLen: Integer;
+  pTk: TTypeKind;
+  pRec: Integer;
+begin
+  Next;  { consume `property` }
+  if not IsMemberNameTok then Error('expected record property name');
+  pnOff := Tokens[TokPos-1].SOffset;
+  pnLen := Tokens[TokPos-1].SLen;
+  Next;
+
+  Expect(tkColon, ':');
+  pTk := ParseTypeKind;
+  pRec := LastTypeRecId;
+
+  rFOff := 0; rFLen := 0;
+  wFOff := 0; wFLen := 0;
+
+  { `read` / `write` are TOKENS here (tkRead / tkwrite — they double as the I/O builtins),
+    not identifiers. Testing for tkIdent silently never matched. }
+  while (CurTok.Kind = tkRead) or (CurTok.Kind = tkwrite) do
+  begin
+    if CurTok.Kind = tkRead then
+    begin
+      Next;
+      if not IsMemberNameTok then Error('expected record property read field');
+      if FindUField(ci, CurTok.SVal) < 0 then
+        Error('record property accessor must be a field: ' + CurTok.SVal);
+      rFOff := Tokens[TokPos-1].SOffset;
+      rFLen := Tokens[TokPos-1].SLen;
+      Next;
+    end
+    else
+    begin
+      Next;
+      if not IsMemberNameTok then Error('expected record property write field');
+      if FindUField(ci, CurTok.SVal) < 0 then
+        Error('record property accessor must be a field: ' + CurTok.SVal);
+      wFOff := Tokens[TokPos-1].SOffset;
+      wFLen := Tokens[TokPos-1].SLen;
+      Next;
+    end;
+  end;
+  Eat(tkSemicolon);
+
+  pri := AddUProperty(ci, pnOff, pnLen, Ord(pTk), pRec);
+  UPropReadFOff[pri] := rFOff;  UPropReadFLen[pri] := rFLen;
+  UPropReadMOff[pri] := 0;      UPropReadMLen[pri] := 0;
+  UPropWriteFOff[pri] := wFOff; UPropWriteFLen[pri] := wFLen;
+  UPropWriteMOff[pri] := 0;     UPropWriteMLen[pri] := 0;
+  UPropPub[pri] := 0;
+end;
+
 procedure ParseRecordMethodDecl(ci: Integer);
 { A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
   own RTL leans on it — TPoint/TSize/TRect are all advanced records).
@@ -14930,6 +14995,11 @@ begin
        ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')) then
     begin
       ParseRecordMethodDecl(ci);
+      continue;
+    end;
+    if CurTok.Kind = tkProperty then
+    begin
+      ParseRecordPropertyDecl(ci);
       continue;
     end;
     { `class function` / `class procedure` in a record: consume the prefix and treat it as

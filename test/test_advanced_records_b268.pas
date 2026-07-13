@@ -29,6 +29,9 @@ type
     function Add(const other: TPt): TPt;
   private
     function Half: Longint;
+  public
+    { field-backed properties in a record — FPC's own TSize/TRect are records with these }
+    property FirstCoord: Longint read X write X;
   end;
 
 constructor TPt.Create(ax, ay: Longint);
@@ -115,4 +118,10 @@ begin
   writeln('op-eq=', d = b);
   b := TPt.Create(0, 0);
   writeln('op-neq=', d = b);
+
+  { record property: read and WRITE through it }
+  b := TPt.Create(7, 8);
+  writeln('prop-read=', b.FirstCoord);
+  b.FirstCoord := 70;
+  writeln('prop-write=', b.X);
 end.

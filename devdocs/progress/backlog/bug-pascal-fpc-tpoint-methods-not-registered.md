@@ -76,3 +76,27 @@ where `public` goes.
 
 ## Gate
 `make test` + self-host byte-identical.
+
+
+## 2026-07-13 — record PROPERTIES landed, and they were NOT the cause
+While chasing this, `property` inside a record turned out to be unsupported at all
+(`Expected: :, but got: write`). FPC's own typshrdh.inc declares TSize and TRect as records
+WITH properties, so that was a real gap and is now fixed (field-backed properties; read and
+write both work; the accessor `read`/`write` are TOKENS, not identifiers, which is why a
+tkIdent test silently never matched).
+
+**But TPoint still fails identically.** So the property gap was not the cause either. Ruled
+out so far, all verified by reproduction:
+- the record parser and advanced records (methods, OVERLOADED methods, ctors, class operators,
+  properties — every shape TPoint uses, all working standalone);
+- a record with methods declared in a UNIT;
+- a record with methods pulled in via `{$i}` inside a unit's type section;
+- a record with methods inside the `{$else}` branch of a conditional, via `{$i}`;
+- `{$endif <NAME>}` with a trailing identifier.
+
+Each of those was built as a minimal reproduction of the real declaration and each COMPILES
+AND RUNS. Something about the real types.pp/typshrdh.inc still eats the tail of TPoint's body
+before the parser sees it.
+
+Next: stop reproducing and go the other way — bisect the REAL typshrdh.inc/types.pp by cutting
+it down until the failure disappears.
