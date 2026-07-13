@@ -491,10 +491,10 @@ skip	toperator89.pp	toperator	gap	overloading implicit assignment operator `:=` 
 pass	toperator8.pp	toperator	-	
 pass	toperator90.pp	toperator	-	
 skip	toperator91.pp	toperator	gap	class operators Explicit/Implicit overloaded on ShortString[N] result types
-pass	toperator92.pp	toperator	-	
+fail	toperator92.pp	toperator	-	accepted-invalid: %FAIL test compiled
 skip	toperator93.pp	toperator	gap	class operator Implicit returning String[80] shortstring type
 skip	toperator94.pp	toperator	gap	objfpc `class operator :=` implicit conversion to shortstring types
-pass	toperator95.pp	toperator	-	
+fail	toperator95.pp	toperator	-	accepted-invalid: %FAIL test compiled
 skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
 skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/widestring/pchar params
