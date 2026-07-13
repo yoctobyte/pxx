@@ -215,3 +215,4 @@
 2026-07-13T03:34:51Z  v215  64cb58c2a4a0d9a9978a21ddcb055fd4ac8452a9f90fb5a86bd533ebe7e831c4  070d4102e86614f25de2b5a3e10eca7068f0f45a  fix(pfront): an unknown type name is an ERROR — closes the silent-Integer hole
 2026-07-13T03:39:47Z  v216  67cc94bdfee0dd33000cf9b414a4c27b8a7cf7c64f7ee23607426216bbda5dfc  070d4102e86614f25de2b5a3e10eca7068f0f45a  fix(pfront): an unknown type name is an ERROR — closes the silent-Integer hole
 2026-07-13T04:40:34Z  v217  0e47ebbad393a33196cceae683d092222729732382177645b666a8dc82e608b0  f8f91c50aa489a89bb2154b02daf59092a166e43  feat(pfront): the System type names that never existed (TDateTime was an INT)
+2026-07-13T05:32:31Z  v218  0f853408b3a1e47d34eaff88bf12a57f82222f667a5524275c189be1bc00b501  35aba06067ba4b5233f984884ef6c3825671a580  feat(pfront): advanced records — methods inside a record
