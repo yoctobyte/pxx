@@ -6,7 +6,7 @@ prio: 58
 
 - **Type:** feature (compat — real-code validation of the OO surface)
 - **Track:** P — Pascal frontend, tag: compat
-- **Status:** working — 2026-07-13. **fpjson COMPILES AND PRODUCES CORRECT JSON.** The DOM, the
+- **Status:** done
   formatter and every accessor are green. Remaining: the SCANNER's `\uXXXX` path needs UTF-16.
 - **Follows:** [[feature-pascal-corpus-fpcunit]] (rung 1 — DONE, compiles and runs)
 
@@ -280,3 +280,6 @@ Remaining items on this ticket's original scope:
   [[feature-unicodestring-model]] genuinely bites (WideString(...) casts);
   a separate rung when picked up.
 - [[bug-pascal-metaclass-array-element-not-a-receiver]] still open (p55).
+
+## Log
+- 2026-07-13 — resolved, commit a1565ed5.

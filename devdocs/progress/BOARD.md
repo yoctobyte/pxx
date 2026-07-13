@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
-| feature-pascal-corpus-fpjson | P | 58 | feature | fpjson (fcl-json) — rung 2 of the Pascal OOP corpus | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (4)
@@ -32,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (107)
+## backlog (106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -108,7 +107,6 @@ _none_
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
-| feature-pascal-corpus-fpjson | P | 58 | feature | Pascal corpus: fcl-json — polymorphic TJSONData hierarchy + RTTI streaming | feature-pascal-corpus-fpcunit |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-record-constructors | P | 50 | feature | Advanced records: constructors + `class operator` — DONE | — |
@@ -204,7 +202,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (684)
+## done (685)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -746,7 +744,8 @@ _none_
 | feature-pascal-advanced-records | P | 55 | feature | Advanced records: methods (and `public`/`private`) inside a record | — |
 | feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
-| feature-pascal-corpus-fpcunit | P | 55→58 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
+| feature-pascal-corpus-fpcunit | P | 55 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
+| feature-pascal-corpus-fpjson | P | 58 | feature | fpjson (fcl-json) — rung 2 of the Pascal OOP corpus | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
@@ -935,7 +934,6 @@ _none_
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
-- [p 58] [P] feature-pascal-corpus-fpjson (unblocks 1)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A+C] bug-c-bitfield-packing-sizeof-vs-gcc
 - [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
@@ -984,6 +982,7 @@ _none_
 - [p 45] [B] feature-networking
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [A] feature-parallel-processing
+- [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [P] feature-pascal-typed-metaclass
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
@@ -1022,4 +1021,3 @@ _none_
 
 - **2** — feature-web-track-w-bootstrap
 - **1** — decide-1-0-scope-promise
-- **1** — feature-pascal-corpus-fpjson
