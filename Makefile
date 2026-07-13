@@ -444,6 +444,15 @@ test-core: $(COMPILER)
 	# and the other half: a bare proc-var stays a VALUE in every other position
 	./$(COMPILER) test/test_bare_procvar_call_b273.pas /tmp/test_bare_procvar_call_b27326
 	test "$$(/tmp/test_bare_procvar_call_b27326)" = "$$(printf 'assigned: TRUE\nsame: TRUE\ncalls so far: 0\nplain\nplain\nplain\nparam assigned: TRUE\nplain\nfunc via parens: 7\nmeth assigned: TRUE\nmeth n=5\nmeth n=5\ntotal calls: 8')"
+	# VIRTUAL CLASS METHODS dispatch on the RUNTIME class (fpjson JSONType)
+	./$(COMPILER) test/test_virtual_class_method_b290.pas /tmp/test_virtual_class_method_b29026
+	test "$$(/tmp/test_virtual_class_method_b29026)" = "$$(printf 'base inst : 0 base\nmid  inst : 1 mid\nleaf inst : 2 mid  (Name inherited from TMid)\nnamed     : 0 1 2')"
+	# a method's RETURN-TYPE class id must be recorded at its DECLARATION
+	./$(COMPILER) test/test_decl_order_ret_recid_b291.pas /tmp/test_decl_order_ret_recid_b29126
+	test "$$(/tmp/test_decl_order_ret_recid_b29126)" = "$$(printf '#1 #2 #3 ')"
+	# CONSTANT initializers run BEFORE any unit initialization section
+	./$(COMPILER) -Futest test/test_const_before_unit_init_b292.pas /tmp/test_const_before_unit_init_b29226
+	test "$$(/tmp/test_const_before_unit_init_b29226)" = "$$(printf 'captured by init: [, ]\nunit const      : [, ]')"
 	# a SELECTOR after an indexed-property read: obj.Items[i].Method, incl. as a call ARG
 	./$(COMPILER) test/test_selector_after_property_b289.pas /tmp/test_selector_after_property_b28926
 	test "$$(/tmp/test_selector_after_property_b28926)" = "$$(printf 'took 100\ntook 200\ntook 300\ntook 400\nchained: 200')"

@@ -312,6 +312,15 @@ const
   AN_PCADDR        = 84; { get_pc_addr: the return address of the current function --
                            i.e. a PC inside its CALLER. No operands. Composed in
                            IRLowerAST as a load of [frame + PtrSize]; no backend op. }
+  AN_CLASS_VIRTUAL_CALL = 88; { a VIRTUAL CLASS METHOD called through a receiver: Left = the
+                           AN_ARG chain (arg 0 = the metaclass Self -- the RTTI blob pointer),
+                           IVal = the declared proc (signature), SOffset = the VMT slot.
+                           Dispatches on the RUNTIME class: the blob's VMT sits at
+                           [blob + RTTI_OFS_VMT], so the code address is
+                           [[Self + 24] + slot*PtrSize]. Lowered to IR_CALL_IND from ordinary
+                           loads -- no backend op, because a class method's Self is the BLOB,
+                           not an instance, so IR_VIRTUAL_CALL (which loads the VMT from
+                           [Self + 0]) cannot be reused. }
   AN_TYPEINFO      = 87; { TypeInfo(TEnum): ASTIVal = enum type id. Yields the address of the
                            enum's RTTI blob {name, count, names[]} -- the same blob EmitRTTI
                            already writes for enum-typed published properties. Lowers to
@@ -2081,6 +2090,11 @@ var
     (`class procedure`), which has no Self and so leaves CurSelfClass unset.
     Only class-level members — a `class var` — are reachable through it. }
   CurMethClass : Integer;
+  { The VMT slot of the class method GenMakeStaticMethodCall is about to build a call for, or
+    -1 when it is not virtual. A side channel rather than a parameter because the builder has
+    several callers and only the UMeth index knows the slot; every caller sets it immediately
+    before calling, and the builder consumes and clears it. }
+  GenVirtSlot : Integer;
 
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;

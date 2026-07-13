@@ -2531,7 +2531,7 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
-    frameNode, slotNode, bpAddr, addrAddr, bpVal: Integer;
+    frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -3634,6 +3634,54 @@ begin
         Error('__pxxmulhi_u64 requires a 64-bit target (x86-64 / aarch64); use MulHiU64 from lib/rtl for a portable path');
       Result := IRAppend(IR_MULHI, IRLowerAST(ASTLeft[node]),
                   IRLowerAST(ASTRight[node]), -1, 0, ASTTk[node]);
+    end;
+
+    AN_CLASS_VIRTUAL_CALL:
+    begin
+      { A VIRTUAL CLASS METHOD, dispatched on the RUNTIME class.
+
+        Arg 0 is the metaclass Self -- the RTTI blob pointer -- NOT an instance, so
+        IR_VIRTUAL_CALL cannot be reused: it loads the VMT from [Self + 0], which on a blob
+        is the name pointer. The blob keeps its VMT at +24 (RTTI_CLS layout), so:
+
+            vmt  := [Self + 24]
+            code := [vmt + slot * PtrSize]
+            call code(args)
+
+        Ordinary loads and an IR_CALL_IND -- target-independent, no backend op. }
+      cpi := ASTIVal[node];
+      first := -1; last := -1;
+      item := ASTLeft[node];
+      pathIdx := 0;
+      while item <> -1 do
+      begin
+        isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        if first < 0 then first := argNode else IRB[last] := argNode;
+        last := argNode;
+        if pathIdx = 0 then selfVal := value;   { the blob }
+        item := ASTRight[item];
+        Inc(pathIdx);
+      end;
+
+      outNode := IRAppend(IR_BINOP, selfVal,
+                   IRAppend(IR_CONST_INT, -1, -1, -1, 24, Ord(tyInteger)),
+                   Ord(tkPlus), 0, Ord(tyPointer));
+      value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));    { vmt }
+      { slot * 8, NOT * PtrSize: the VMT (like the rest of the data blob) keeps 8-byte slots on
+        EVERY target -- on 32-bit the address sits in the low dword and a pointer-sized load
+        reads it. Scaling by TARGET_PTR_SIZE indexed the wrong entry on the ILP32 targets.
+        This is the same convention IR_VIRTUAL_CALL's per-backend emit already uses. }
+      outNode := IRAppend(IR_BINOP, value,
+                   IRAppend(IR_CONST_INT, -1, -1, -1,
+                            Integer(ASTSOffset[node]) * 8, Ord(tyInteger)),
+                   Ord(tkPlus), 0, Ord(tyPointer));
+      callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { code }
+
+      Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
+      if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
+        IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
     AN_TYPEINFO:

@@ -2215,6 +2215,16 @@ begin
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := mpi;
   ASTTk[callNode] := Ord(Procs[mpi].RetType);
+  { A VIRTUAL class method dispatches on the RUNTIME class, exactly as an instance one does:
+    fpjson's `class function JSONType: TJSONType; virtual;` is read through a TJSONData
+    reference and must answer for the object actually there. Self is the metaclass, so the
+    VMT comes from the blob rather than from [Self+0] -- see AN_CLASS_VIRTUAL_CALL. }
+  if GenVirtSlot >= 0 then
+  begin
+    ASTKind[callNode] := AN_CLASS_VIRTUAL_CALL;
+    ASTSOffset[callNode] := GenVirtSlot;
+  end;
+  GenVirtSlot := -1;   { consumed: never leaks into the next call built }
 
   argSeq := AllocNode(AN_ARG);
   ASTLeft[argSeq] := selfNode;
@@ -3293,6 +3303,7 @@ begin
           mselfArg := AllocNode(AN_CLASSREF);
           ASTIVal[mselfArg] := ci;
           ASTTk[mselfArg] := Ord(tyPointer);
+          GenVirtSlot := UMthVirSlot[mmi];
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           tk := Procs[mpi].RetType;
           recName := ProcRetRecId[mpi];
@@ -3755,6 +3766,7 @@ begin
         begin
           mpi := UMthProc_[mmi];
           Next; { consume the method name }
+          GenVirtSlot := UMthVirSlot[mmi];
           node := GenMakeStaticMethodCall(mpi, node);
           tk := Procs[mpi].RetType;
           recName := ProcRetRecId[mpi];
@@ -4116,6 +4128,7 @@ begin
             of the variable -- so it comes from __pxxRttiOf(obj), not a fixed
             AN_CLASSREF. }
           mselfArg := GenMakeRttiOfCall(node);
+          GenVirtSlot := UMthVirSlot[mmi];
           mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
           node := mcallNode;
           tk := Procs[mpi].RetType;
@@ -7334,6 +7347,7 @@ begin
           if smSelfNode >= 0 then
           begin
             Next;                 { consume the method name }
+            GenVirtSlot := UMthVirSlot[smmiS];
             node := GenMakeStaticMethodCall(UMthProc_[smmiS], smSelfNode);
             LastExprTk := Procs[UMthProc_[smmiS]].RetType;
             CurASTNode := node;
@@ -8422,7 +8436,8 @@ begin
             mselfArg := AllocNode(AN_CLASSREF);
             ASTIVal[mselfArg] := ci;
             ASTTk[mselfArg] := Ord(tyPointer);
-            mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
+            GenVirtSlot := UMthVirSlot[mmi];
+          mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);
             LastExprTk := Procs[mpi].RetType;
             CurASTNode := mcallNode;
             Exit;
@@ -13199,6 +13214,7 @@ begin
           if smSelfNode >= 0 then
           begin
             Next;                 { consume the method name }
+            GenVirtSlot := UMthVirSlot[smmiS];
             node := GenMakeStaticMethodCall(UMthProc_[smmiS], smSelfNode);
             LastExprTk := Procs[UMthProc_[smmiS]].RetType;
             CurASTNode := node;
@@ -16102,6 +16118,7 @@ var
   mPDefaultIsStr: array[0..MAX_PROC_PARAMS-1] of Boolean;
   mPDefaultIsSet: array[0..MAX_PROC_PARAMS-1] of Boolean;   { twin of mPDefaultIsStr, for SET defaults }
   mDefaultIsSet: Boolean;
+  mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
   mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
@@ -16333,7 +16350,13 @@ begin
             end;
             Expect(tkRParen, ')');
           end;
-          if mIsFunc then begin Expect(tkColon, ':'); mRetType := ParseTypeKind; end;
+          mRetRecId := REC_NONE;
+          if mIsFunc then
+          begin
+            Expect(tkColon, ':');
+            mRetType := ParseTypeKind;
+            mRetRecId := LastTypeRecId;   { the return type's class/record id }
+          end;
           Eat(tkSemicolon);
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
@@ -16344,6 +16367,14 @@ begin
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
           mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
           Procs[mpi].BodyAddr := -1;
+          { Record the return type's class/record id AT THE DECLARATION. It used to be set
+            only when the method's BODY was parsed -- so a method called before its own
+            implementation appeared (an ordinary thing inside one unit: fpjson's
+            TJSONData.DumpJSON reads `O.Items[I].DumpJSON(S)` long before
+            TJSONObject.GetItem's body) had ProcRetRecId = REC_NONE, and a selector on its
+            result could not resolve. `.DumpJSON` silently degraded to a FIELD access, and the
+            statement then demanded a ':='. }
+          if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
@@ -16738,7 +16769,10 @@ begin
             begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
-            end;
+              mRetRecId := LastTypeRecId;   { see the twin site above }
+            end
+            else
+              mRetRecId := REC_NONE;
             Eat(tkSemicolon);
 
             { The DECL side's twin of the impl-side Self injection: every method carries a
@@ -16784,6 +16818,7 @@ begin
             begin
               mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
               Procs[mpi].BodyAddr := -1;
+              if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
               for i := 0 to mNParams-1 do
               begin
                 if (i < MAX_PROC_PARAMS) then ProcParamUntyped[mpi * MAX_PROC_PARAMS + i] := mPUntyped[i];
@@ -21980,14 +22015,24 @@ begin
     EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
   end;
 
-  { Run unit initialization sections before the program body, in dependency
-    order (a used unit is fully parsed — and its init proc registered — before
-    the using unit). This is where e.g. the LCL `Forms` unit creates Application. }
+  { Constant global/class initializers FIRST — before any user code runs.
+
+    They are CONSTANTS: a `const` array's contents cannot depend on anything a unit's
+    initialization section does, but the reverse is emphatically not true. fpjson's
+    initialization section reads a class const (`FElementSep := ElementSeps[FCompressedJSON]`)
+    and, with the old order, read it while it was still all zeros — so every JSON document it
+    formatted came out with no separators, no braces and no colons. Silently: the structure
+    was right, the punctuation was simply absent.
+
+    Emitting the initializers first is also just what the words mean. A constant that does not
+    hold its value until after the program has started running is not a constant. }
+  CompilePendingGlobalInits;
+
+  { ...then unit initialization sections, in dependency order (a used unit is fully parsed —
+    and its init proc registered — before the using unit). This is where e.g. the LCL `Forms`
+    unit creates Application. }
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
-
-  { Constant global-var initializers run after unit init, before the body. }
-  CompilePendingGlobalInits;
 
   Expect(tkBegin, 'begin');
   DbgMainBodyStart := CodeLen;   { -g: program-body code range → main subprogram }
