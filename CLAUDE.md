@@ -1,4 +1,4 @@
-# frankonpiler — agent guide
+# pxx — agent guide
 
 PXX / pascal26: a self-hosting Pascal-dialect compiler (FPC-seeded), with its own
 RTL, multiple backends (x86-64 default IR; i386 / aarch64 / arm32 / xtensa /
