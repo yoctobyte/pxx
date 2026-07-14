@@ -4848,6 +4848,13 @@ var
   CAggInitRec: array[0..MAX_C_AGG_INITS-1] of Integer;
   CAggInitLen: array[0..MAX_C_AGG_INITS-1] of Integer;   { array length (elements) }
   CAggInitIsArr: array[0..MAX_C_AGG_INITS-1] of Boolean;
+  { Deferred SCALAR pointer-global initializers, replayed at main next to the
+    aggregates: any init expression the fast paths in ParseCGlobalVarDecl can't
+    fold — `(char*)&g`, `&st.field`, `arr + 1` — used to be silently SKIPPED,
+    leaving the pointer null (csmith seed 3's crash family, b351). }
+  CScalInitCount: Integer;
+  CScalInitSym: array[0..MAX_C_AGG_INITS-1] of Integer;
+  CScalInitTok: array[0..MAX_C_AGG_INITS-1] of Integer;  { first token of the init expression }
 
 procedure CInitWalkRecord(ci: Integer; braced, emit: Boolean); forward;
 procedure CInitWalkArray(elemTkOrd, elemRec, symIdx, fldIdx, dimLevel, nDims,
@@ -5408,11 +5415,49 @@ end;
 
 { EMIT mode: run every deferred aggregate initializer, at the start of `main`
   (called right after CompilePendingGlobalInits). Restores the parse position. }
+{ Register a deferred scalar pointer-global init (expression starts at
+  startTok) and skip the initializer tokens up to the delimiting comma /
+  semicolon (nesting-aware, so `(a, b)` or `arr[f(1, 2)]` don't end it early). }
+procedure CDeferScalarPtrInitSkip(symIdx, startTok: Integer);
+var d: Integer;
+begin
+  if (symIdx >= 0) and (CScalInitCount < MAX_C_AGG_INITS) then
+  begin
+    CScalInitSym[CScalInitCount] := symIdx;
+    CScalInitTok[CScalInitCount] := startTok;
+    Inc(CScalInitCount);
+  end;
+  d := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if CurTok.Kind in [tkRParen, tkRBrack, tkEnd] then Dec(d)
+    else if (d = 0) and (CurTok.Kind in [tkComma, tkSemicolon]) then Exit;
+    Next;
+  end;
+end;
+
 procedure CEmitDeferredCAggInits;
 var i, savedIdx, cons, ndims, span0, eb, edi: Integer;
+    sTarget, sExpr, sAsn: Integer;
 begin
-  if CAggInitCount = 0 then Exit;
+  if (CAggInitCount = 0) and (CScalInitCount = 0) then Exit;
   savedIdx := TokPos - 1;
+  { deferred scalar pointer inits: re-seek and replay `p := <expr>` through the
+    ordinary ParseCExpr + CompileAST path, like the aggregate walker's leaves }
+  for i := 0 to CScalInitCount - 1 do
+  begin
+    TokPos := CScalInitTok[i]; Next;   { CurTok = first expression token }
+    sTarget := AllocNode(AN_IDENT);
+    ASTIVal[sTarget] := CScalInitSym[i];
+    ASTTk[sTarget] := Ord(tyPointer);
+    sExpr := ParseCExpr;
+    sAsn := AllocNode(AN_ASSIGN);
+    ASTLeft[sAsn] := sTarget; ASTRight[sAsn] := sExpr;
+    ASTTk[sAsn] := Ord(tyPointer);
+    CompileAST(sAsn);
+    ASTNodeCount := 0;
+  end;
   for i := 0 to CAggInitCount - 1 do
   begin
     TokPos := CAggInitTok[i]; Next;   { CurTok = the opening brace }
@@ -5498,7 +5543,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
-    ptrArrDeferTok, ptrArrDeferCnt: Integer;
+    ptrArrDeferTok, ptrArrDeferCnt, initStartTok: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
@@ -6034,6 +6079,7 @@ begin
     if CurTok.Kind = tkAssign then
     begin
       Next;
+      initStartTok := TokPos - 1;   { first token of the initializer expression }
       { File-scope compound-literal initializer for a record var: `= (T){...}` or
         `= ((T){...})` (00216 `struct S gs = ((struct S){1,2,3,4})`). Strip the
         wrapping parens and the `(T)` cast so the record brace-init branch below
@@ -6435,8 +6481,8 @@ begin
           end;
         end
         else
-          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-                (CurTok.Kind <> tkEOF) do Next;
+          { `&(...)` that is not a record compound literal: replay at main }
+          CDeferScalarPtrInitSkip(idx, initStartTok);
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
@@ -6490,13 +6536,21 @@ begin
             Inc(PendingInitCount);
           end
           else
-            while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-                  (CurTok.Kind <> tkEOF) do Next;
+            { `&g` followed by something the offset folder can't finish
+              (`&st.a + 1`...): replay the whole expression at main }
+            CDeferScalarPtrInitSkip(idx, initStartTok);
         end
         else
-          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-                (CurTok.Kind <> tkEOF) do Next;
+          { `&` of a non-global name or a non-flat follow (`&st.field`,
+            `&arr[i].f`): replay at main }
+          CDeferScalarPtrInitSkip(idx, initStartTok);
       end
+      else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) then
+        { Any other scalar pointer initializer the fast paths above can't fold
+          — `(char*)&g`, `arr + 1`, a bare array name decaying — used to be
+          silently SKIPPED (the pointer read back null, csmith seed 3 family):
+          replay the expression at main via the deferred-scalar table (b351). }
+        CDeferScalarPtrInitSkip(idx, initStartTok)
       else
         while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
               (CurTok.Kind <> tkEOF) do Next;
@@ -7042,6 +7096,7 @@ begin
   firstIdx := TokPos - 1;
   CProgramMode := True;
   CAggInitCount := 0;
+  CScalInitCount := 0;
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
@@ -9045,11 +9100,14 @@ begin
           if bitWidth > sz * 8 then bitWidth := sz * 8;
           if isUnion then
           begin
-            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > 32) then
-            begin
-              bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
-            end;
-            thisOff := bitUnitOff;
+            { UNION bitfields all alias the same storage at offset 0, and each
+              member is its own declaration — so EVERY one starts at bit 0.
+              This used to accumulate bitUnitUsed like the struct path, packing
+              them sequentially: `union { unsigned f1:14; unsigned f2:14; }`
+              read/wrote f2 at bits 14..27 instead of 0..13 — a silent wrong
+              value gcc disagrees with (csmith seed 3 checksum divergence). }
+            bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+            thisOff := 0;
           end
           else
           begin

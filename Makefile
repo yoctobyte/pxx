@@ -1109,6 +1109,14 @@ test-core: $(COMPILER)
 	# (void*)0, &a[i][j], a cast) was zero-skipped WHOLE; now defers to the walker
 	./$(COMPILER) test/cglobal_1d_ptr_array_addr_init_b350.c /tmp/cglobal_1d_ptr_array_b35026
 	test "$$(/tmp/cglobal_1d_ptr_array_b35026)" = "$$(printf 'g474=7 7\nholes=-1 7 -1 7\nmix=null hi zz\ndeep=6 2\nunsized=7 -1 7 n=3\ndblderef=7')"
+	# a SCALAR pointer global init the fast paths can't fold ((char*)&g, &st.f,
+	# arr+1) was silently skipped (null pointer); now defers to a replay at main
+	./$(COMPILER) test/cglobal_scalar_ptr_init_defer_b351.c /tmp/cglobal_scalar_ptr_b35126
+	test "$$(/tmp/cglobal_scalar_ptr_b35126)" = "7 3 1 2 5 6 3 lit"
+	# UNION bitfields must all start at bit 0 (they were packed sequentially like
+	# struct bitfields -- f2 read bits 14..27, silent wrong value vs the gcc oracle)
+	./$(COMPILER) test/cunion_bitfield_overlap_b352.c /tmp/cunion_bitfield_b35226
+	test "$$(/tmp/cunion_bitfield_b35226)" = "$$(printf 'f0=fffffffb f1=3ffb f2=3ffb f3=fffffffb sz=4\nafter: f0=ffffc005 f1=5\nstruct: a=5 b=9\nstruct after: a=5 b=3')"
 	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
 	# element was initialised and the rest stayed zero (silently)
 	./$(COMPILER) test/cmultidim_struct_array_init_b311.c /tmp/cmultidim_struct_array_b31126
