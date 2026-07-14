@@ -3,7 +3,7 @@ title: PXX — a self-hosting Pascal compiler
 order: 0
 ---
 
-# PXX (pascal26)
+# PXX
 
 PXX is a **from-scratch**, self-hosting Pascal-dialect compiler. It is **its own
 linker** — it emits final Linux ELF executables directly, with no external
