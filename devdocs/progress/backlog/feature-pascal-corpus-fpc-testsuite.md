@@ -89,3 +89,31 @@ diagnostics; PXX's default keeps lax first-match labels). tclass13c
 per-class nested-type registry, near-zero value; revisit only if nested-type
 lookups matter elsewhere. Triage details in
 bug-pascal-missing-diagnostics-fail-tests.
+
+## 2026-07-14 — UNPARKED, and the numbers in this ticket are stale.
+
+The sole-A parking excuse is gone: both big parser clusters it was blocked on
+(`bug-pascal-headerless-program`, `feature-pascal-delphi-generics-syntax`) plus
+`feature-pascal-generic-nonclass-templates` are in `done/`.
+
+**Current sweep at HEAD: 283 pass / 7 fail / 226 skip** (this ticket's text claims a 279/0
+sweep, and the baseline it quotes is 222 — both stale). Today's session moved it 273 -> 283
+by burning the whole advanced-record legality cluster (b347) plus tenum4 / the template
+cluster / tsealed (b342-b344).
+
+The 7 that remain, correctly classified (the diagnostics umbrella had these filed as "13 of
+17 = one visibility bug", which was **wrong** — only ONE of them is visibility):
+
+- `tclass12b` — `strict private` const reached from a DESCENDANT. The only real *visibility*
+  test. Access control is still not enforced anywhere.
+- `tclass14b` — a published class property.
+- `toperator71 / 92 / 95` — operator declaration rules (a global `operator =` on a class
+  type; two `Implicit` overloads differing only in RESULT type).
+- `tdefault8` — **compile gap**: a nested type reference (`TTest.TRecord`) -> `unknown type`.
+- `tset4` — **compile gap**: `TSysCharSet` is missing from the RTL.
+
+The two compile gaps are the only ones that are not diagnostics, and they are the ones worth
+taking first — a program that will not compile is a bigger hole than a program we fail to
+reject.
+
+Moved back to `backlog/`.

@@ -115,3 +115,36 @@ anything sealed or authenticated.
 
 Downstream: pastella's ESP32-capable sensor MVP is blocked on this — not on ECDSA
 performance, and not on p256field.
+
+
+## 2026-07-14 — RE-VERIFIED. Core defect stands; the ticket's BLAST-RADIUS theory is wrong.
+
+Re-measured at HEAD. The reduced repro still holds and is the sharp statement of the bug:
+
+    a `var` array parameter, indexed and WRITTEN, on riscv32 -> the writes are silently LOST
+    (32-bit elements) or it segfaults (64-bit ones). i386 / arm32 / x86-64 are all correct.
+
+So: **riscv32 has no deref-the-parameter-pointer path on the WRITE side of an indexed lvalue
+for a by-ref array param.** That is the defect; it is real and it is riscv32-only.
+
+Two corrections to what this ticket says:
+
+- **"core-dumps" is stale.** `lib_p256field` no longer core-dumps on riscv32 — it now fails
+  to COMPILE: `target riscv32: unsupported node in IR codegen: copy_rec_managed`. A second,
+  separate riscv32 gap that the crash used to mask.
+
+- **The "prime suspect covers arm32 too" reasoning is WRONG, and it was hiding a second bug.**
+  Measured at HEAD:
+
+    | target  | lib_sha256 | lib_chacha20poly1305 |
+    |---------|------------|----------------------|
+    | arm32   | **PASS**   | **SIGSEGV**          |
+    | riscv32 | SIGSEGV    | SIGSEGV              |
+
+  arm32 **passes** this ticket's own var-array-param repro, yet still segfaults on
+  chacha20poly1305. Whatever breaks arm32 there is therefore NOT this defect. Filed
+  separately as [[bug-arm32-chacha20poly1305-segfault]] — fixing riscv32 will not fix it,
+  and anyone who assumed otherwise would have "fixed" arm32 by accident and moved on.
+
+Scope of this ticket is now **riscv32 only**: the by-ref array-param write path, plus the
+`copy_rec_managed` codegen gap it exposed.

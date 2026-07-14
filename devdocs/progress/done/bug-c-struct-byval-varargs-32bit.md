@@ -51,3 +51,16 @@ make test-c-conformance-i386
 
 `make test-c-conformance-{i386,arm32,riscv32}` green (00204.c passes), plus A's
 usual gate: `make test` + self-host fixedpoint byte-identical + cross.
+
+## 2026-07-14 — NOT REPRODUCIBLE. Closing as stale (fixed by other work).
+
+Compiled `c-testsuite/00204.c` for **i386, arm32, riscv32 and aarch64** and diffed each
+run against `00204.c.expected`: **all four match, byte-identical, full output** — no
+truncated tail. The ticket's own repro is green on every target it names.
+
+No commit is credited because none was aimed at this: it fell out of the 32-bit variadic /
+struct-by-pointer ABI work (the `v178` variadic ABI arc and the 32-bit heap/PWord fixes).
+Closed as not-reproducible rather than fixed.
+
+## Log
+- 2026-07-14 — resolved, commit 20e1232c.

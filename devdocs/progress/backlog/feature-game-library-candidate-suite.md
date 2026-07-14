@@ -152,3 +152,19 @@ green library suite.
   filed; further Pascal-ladder candidates (Apus, Castle) hit the same
   include-path/lexer walls, so parked until the three Track P tickets above
   land. Slice B remains done; slice D untouched.
+
+## 2026-07-14 — UNPARKED. The blockers it was waiting on are all DONE.
+
+Triage sweep re-checked every reason this was parked. All three Pascal-ladder blockers are
+in `done/` **and verified fixed at HEAD**:
+
+- `array[0..High(Byte)]` and `array[0..High(LongWord) shr 1 - 1]` compile (a probe prints 256);
+- `{$include <inttypes.h>}` inside a `(* ... *)` block comment is now correctly ignored;
+- a MISSING `{$I}` is now a **loud** error (`cannot open include file`) instead of a silent
+  skip, and `-Fi<dir>` exists for include search paths.
+
+So slice B is done and **slice C can resume immediately**: re-probe ZenGL unpatched, then
+Apus / Castle. Slice D (graduation) untouched.
+
+Moved back to `backlog/` — it was sitting in `unfinished/` behind a wall that no longer
+exists.

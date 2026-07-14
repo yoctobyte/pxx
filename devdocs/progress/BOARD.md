@@ -17,14 +17,12 @@ _none_
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
-## unfinished (4)
+## unfinished (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
-| feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 
 ## blocked (1)
 
@@ -32,19 +30,20 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-bitfield-packing-sizeof-vs-gcc | A+C | 55 | bug | bug: bitfield struct layout — sizeof disagrees with gcc (#pragma pack ignored?) | — |
+| bug-arm32-chacha20poly1305-segfault | A | 50 | bug | arm32: `lib_chacha20poly1305` segfaults — and it is NOT the riscv32 array-param bug | — |
 | bug-c-csmith-seed2-segfault | A+C | 60 | bug | bug: pxx-built csmith program segfaults (csmith seed 2), -O0 | — |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
-| bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
+| bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
+| bug-pascal-tinterfacedobject-missing-silent-segfault | A | 60 | bug | `TInterfacedObject` does not exist — inheriting from it compiles, then segfaults under ARC | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -87,6 +86,7 @@ _none_
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
+| feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
@@ -103,6 +103,7 @@ _none_
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
+| feature-pascal-corpus-fpc-testsuite | P | 60 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
@@ -187,17 +188,15 @@ _none_
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
-## done-followup (5)
+## done-followup (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-static-array-length-direct | A | 50 | bug | `Length`/`High` of a static array used directly returns garbage | — |
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
-| feature-interfaces | A | 50 | feature | Interfaces | — |
-| feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (701)
+## done (704)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -328,6 +327,7 @@ _none_
 | bug-c-stb-sprintf-float-empty | C | 40 | bug | stb_sprintf %f/%g produces empty output under pxx | — |
 | bug-c-string-literal-binop-decay | C | 55 | bug | C: string literal as binop operand must decay to char* value (== compare SIGSEGVs) | — |
 | bug-c-string-literal-to-pointer-prefix | C | 50 | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
+| bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
 | bug-c-struct-member-ptr-to-fnptr-deref-call | C | 30 | bug | C: call through deref of a STRUCT-MEMBER pointer-to-function-pointer | — |
 | bug-c-struct-pointer-index-stride | C | 50 | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-c-switch-nonblock-and-duffs-device | C | 55 | bug | C switch: non-compound body + case labels inside nested statements (Duff's device) | — |
@@ -714,6 +714,7 @@ _none_
 | feature-inline-loop-var-rio | A | 50 | feature | Inline loop variables — `for var i := 0 to N` / `for var x in coll` (Delphi 10.3 Rio) | — |
 | feature-int-to-float-assign | A | 50 | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-interface-refcounting | A | 50 | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-interfaces | A | 50 | feature | Interfaces | — |
 | feature-ir-fuzzer | A | 65 | feature | IR correctness fuzzer — cross-target differential + mutation-seeded | — |
 | feature-json-library | B | 50 | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | A | 50 | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
@@ -728,6 +729,7 @@ _none_
 | feature-member-access-on-call-result | B | 50 | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-construct-dispatch | A | 50 | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
 | feature-metaclass-descendant-enforcement | A | 50 | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | 50 | feature | Multidimensional fixed arrays | — |
@@ -929,22 +931,25 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [T] feature-pasmith-widen-grammar
 - [p 60] [A+C] bug-c-csmith-seed2-segfault
+- [p 60] [A] bug-pascal-tinterfacedobject-missing-silent-segfault
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [A] feature-float-exception-mask-control
+- [p 60] [B+C] feature-game-library-candidate-suite
 - [p 60] [A] feature-inline-asm-xtensa
 - [p 60] [O] feature-inline-routines
 - [p 60] [O] feature-opt-store-reload-elimination
+- [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
-- [p 55] [A+C] bug-c-bitfield-packing-sizeof-vs-gcc
+- [p 55] [C] bug-c-pragma-pack-ignored
 - [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
@@ -957,8 +962,8 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [A] bug-arm32-chacha20poly1305-segfault
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
-- [p 50] [A] bug-c-struct-byval-varargs-32bit
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro

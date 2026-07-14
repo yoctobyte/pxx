@@ -1,7 +1,7 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** done-followup — **effectively done.** CORBA surface COMPLETE 2026-06-19
+- **Status:** done
   (declare/implement/assign/call, is/as/Supports, implicit coercion, identity,
   nil, inheritance, all 4 targets). The only remaining work — automatic interface
   refcounting (ARC) — is split to feature-interface-refcounting and **deferred
@@ -124,3 +124,22 @@ self-host fixedpoint holds.
   Tests: test_interfaces_as / _param / _inherit. **Remaining open = COM ARC only**
   (refcounting), plus the out-of-scope `implements` delegation + method-resolution
   clauses. The non-COM CORBA surface is complete.
+
+## 2026-07-14 — CLOSED. The last open item shipped.
+
+The only thing keeping this in `done-followup/` was deferred COM/ARC refcounting. That
+landed: `feature-interface-refcounting` is in `done/`, and both `test/test_interface_arc.pas`
+and `test/test_interface_arc_exc.pas` run green at HEAD (create=2 / freed=2, and freed=3 on
+the exception-unwind path). b337 then settled the ABI on top of it (an interface VALUE is
+ONE pointer, FPC-compatible).
+
+Nothing remains under this slug.
+
+## Spun out — a real gap found while verifying this
+
+`class(TInterfacedObject, IFoo)` where `TInterfacedObject` / `IInterface` are **not declared
+by the user** compiles silently and **segfaults at runtime**. There is no RTL-provided
+`TInterfacedObject`; every interface test in tree declares its own, which is exactly why
+nobody noticed. That is a missing diagnostic AND an RTL gap, and it is filed separately as
+[[bug-pascal-tinterfacedobject-missing-silent-segfault]] rather than left buried here.
+- 2026-07-14 — resolved, commit 20e1232c.

@@ -158,3 +158,27 @@ exists.
   batch if this is picked up again.
 - Everything the user triaged as `dialect-pass` (tgenconstraint38/39, tover3, tenum2,
   tgeneric14/20/30) stays closed by design — strictness belongs behind `--strict-*`.
+
+## 2026-07-14 (later) — the RECORD cluster is burned (b347); and a correction
+
+Landed b347: what a RECORD may legally CONTAIN. Ten of the sweep's failures, five rules —
+no `published`, no `protected`/`strict protected` (records do not inherit), a record's
+`class` method must be `static`, a record constructor needs a MANDATORY parameter
+(`Create(I: Integer = 0)` is the same hole spelled differently), and a LOCAL or ANONYMOUS
+record type gets fields only (a method there could never be given an implementation).
+
+**Correction — do not repeat this:** a triage pass claimed *"13 of the 17 failures are ONE
+bug: member visibility is not enforced"*. That was **wrong**, and it would have sent someone
+to write an access-control checker to fix tests that have nothing to do with access control.
+The `terecs*` cluster is **declaration legality**, not visibility. Exactly ONE of the
+seventeen (`tclass12b` — `strict private` reached from a descendant) is really visibility.
+
+Visibility genuinely IS unenforced (`private` fields are readable and writable from outside
+the type, and the record parser said so in a comment) — it is simply not what those tests
+were failing on. Worth its own ticket when someone takes it; note FPC's rule is UNIT-scoped
+(`private` = visible to the whole unit), not type-scoped, so the naive "same type only"
+check would be wrong.
+
+Sweep now **283 pass / 7 fail** (from 273/17). Remaining: `tclass12b`, `tclass14b`,
+`toperator71/92/95`, and the two real compile gaps `tdefault8` (nested type reference) and
+`tset4` (`TSysCharSet` missing from the RTL).

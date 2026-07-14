@@ -1,7 +1,7 @@
 # `mimic FPC` compatibility mode
 
 - **Type:** feature
-- **Status:** DONE (core mechanism) — 2026-06-22. Follow-ups: docs, the scoped-v2
+- **Status:** done
   manifest, and Synapse-driven define-set growth (now [[feature-synapse-compile-check]]).
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-10 (user decision after Synapse directive-wall pass)
@@ -175,3 +175,13 @@ semantics will fail loudly at parse — that is the correct failure shape.
   architecture directive section); scoped per-library v2 manifest
   ([[feature-dynamic-include-paths-config]]); grow the define set only when a real
   library probe demands it.
+
+## 2026-07-14 — CLOSED. Follow-ups shipped or tracked elsewhere.
+
+The listed follow-ups exist at HEAD: the user-facing docs are in `docs/language/fpc-compatibility.md`
+and `docs/reference/cli.md`, and the scoped-v2 include-path manifest is tracked on its own
+ticket (`feature-dynamic-include-paths-config`). Growth of the predefined-define set is
+demand-driven and needs no standing ticket.
+
+Nothing remains unique to this slug.
+- 2026-07-14 — resolved, commit 20e1232c.
