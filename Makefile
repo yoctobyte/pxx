@@ -1105,6 +1105,10 @@ test-core: $(COMPILER)
 	# consumed, so the whole initializer was silently SKIPPED and the pointer stayed null
 	./$(COMPILER) test/cglobal_addr_multidim_elem_b312.c /tmp/cglobal_addr_multidim_b31226
 	test "$$(/tmp/cglobal_addr_multidim_b31226)" = "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
+	# a 1-D GLOBAL pointer array with an element the flat pre-scan can't fold (&g,
+	# (void*)0, &a[i][j], a cast) was zero-skipped WHOLE; now defers to the walker
+	./$(COMPILER) test/cglobal_1d_ptr_array_addr_init_b350.c /tmp/cglobal_1d_ptr_array_b35026
+	test "$$(/tmp/cglobal_1d_ptr_array_b35026)" = "$$(printf 'g474=7 7\nholes=-1 7 -1 7\nmix=null hi zz\ndeep=6 2\nunsized=7 -1 7 n=3\ndblderef=7')"
 	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
 	# element was initialised and the rest stayed zero (silently)
 	./$(COMPILER) test/cmultidim_struct_array_init_b311.c /tmp/cmultidim_struct_array_b31126

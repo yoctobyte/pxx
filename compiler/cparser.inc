@@ -5498,6 +5498,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     initDim, initIx, initSpan: Integer;
     negFloat: Boolean; signMask: Int64; dvv: Double;
     arrLen, dimCount, nArrElems, flatInitCount, ei, idx2: Integer;
+    ptrArrDeferTok, ptrArrDeferCnt: Integer;
     dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
@@ -5806,6 +5807,8 @@ begin
       arrLen := flatLen;
     end;
     nArrElems := 0;
+    ptrArrDeferTok := -1;
+    ptrArrDeferCnt := 0;
     { FLAT (1-D) pointer-array globals only. A MULTIDIM pointer array must be left for
       the brace-elision walker below (the `dimCount >= 2` branch): this pre-scan has no
       notion of nested braces or of the array's shape, and it would consume the whole
@@ -5816,6 +5819,7 @@ begin
        (dimCount < 2) and
        (Tokens[TokPos].Kind = tkBegin) then
     begin
+      ptrArrDeferTok := TokPos;  { the opening brace's token index (not yet a defer) }
       Next; Next;  { consume assignment and opening initializer token }
       while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
       begin
@@ -5870,9 +5874,21 @@ begin
         Break;
       end;
       if nArrElems >= 0 then
-        Expect(tkEnd, '}')
+      begin
+        Expect(tkEnd, '}');
+        ptrArrDeferTok := -1;   { flat pre-scan handled it; nothing to defer }
+      end
       else
       begin
+        { An element the flat pre-scan cannot fold — `&g`, `(void*)0`, a cast,
+          `&a[i][j]` — used to zero-skip the WHOLE initializer, so every element
+          (including foldable ones) silently read back nil and csmith programs
+          dereferencing e.g. `static const int32_t *g[2] = {&g_79,&g_79}` died
+          (bug-c-csmith-seed2-segfault). Defer the whole brace to the recursive
+          walker instead (registered after the sym is allocated below); it
+          replays via ParseCExpr at main, the same path 2-D pointer arrays and
+          struct fields already lower through. }
+        ptrArrDeferCnt := CBraceTopLevelInitCountAt(ptrArrDeferTok);
         depth := 1;
         while (depth > 0) and (CurTok.Kind <> tkEOF) do
         begin
@@ -5887,7 +5903,13 @@ begin
     begin
       if arrLen < 1 then
       begin
-        if nArrElems > 0 then arrLen := nArrElems
+        if ptrArrDeferTok >= 0 then
+        begin
+          { unsized `T *x[] = {...}` deferred to the walker: size by the
+            top-level element count scanned before the skip }
+          if ptrArrDeferCnt > 0 then arrLen := ptrArrDeferCnt else arrLen := 1;
+        end
+        else if nArrElems > 0 then arrLen := nArrElems
         else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
                 (baseTk <> tyRecord) and (baseTk <> tyPointer) and
                 TypeIsOrdinal(baseTk) then
@@ -5963,6 +5985,22 @@ begin
       SymPtrBaseRec[idx] := CTypePtrBaseRec;
       { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
       if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
+    end;
+    { 1-D pointer-array initializer the flat pre-scan bailed on: replay the
+      whole brace through the recursive walker at main (see the defer note in
+      the pre-scan above). Registered here because the sym index only exists
+      now. }
+    if (ptrArrDeferTok >= 0) and (idx >= 0) then
+    begin
+      if CAggInitCount < MAX_C_AGG_INITS then
+      begin
+        CAggInitSym[CAggInitCount] := idx;
+        CAggInitTok[CAggInitCount] := ptrArrDeferTok;
+        CAggInitRec[CAggInitCount] := REC_NONE;
+        CAggInitLen[CAggInitCount] := arrLen;
+        CAggInitIsArr[CAggInitCount] := True;
+        Inc(CAggInitCount);
+      end;
     end;
     for ei := 0 to nArrElems - 1 do
     begin
