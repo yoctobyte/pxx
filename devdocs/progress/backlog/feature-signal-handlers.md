@@ -5,8 +5,8 @@ prio: 65  # auto
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working
-- **Owner:** fable-nightA
+- **Status:** backlog — not in progress; x86-64 (b336) and aarch64 (b370) slices landed, pinned and tested; remaining = i386/arm32 restorer stubs, riscv32 (vdso path, mirrors aarch64), SA_SIGINFO/ucontext, --threadsafe masks.
+- **Owner:** — (unclaimed; parked to backlog 2026-07-14)
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
   [[decide-int-div-zero-behavior-unification]]).

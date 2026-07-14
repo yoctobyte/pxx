@@ -5,8 +5,8 @@ prio: 55
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** working — v1+v2 landed 2026-07-14 (b331); v3 = type-name receivers, rvalue receivers, class helpers
-- **Owner:** fable-nightA
+- **Status:** backlog — not in progress; v1+v2 landed and pinned (test_record_helper_for_string_b331 green); remaining = v3 (type-name receivers, rvalue receivers, class helpers).
+- **Owner:** — (unclaimed; parked to backlog 2026-07-14)
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
   code across the FPC/Delphi ecosystem.
