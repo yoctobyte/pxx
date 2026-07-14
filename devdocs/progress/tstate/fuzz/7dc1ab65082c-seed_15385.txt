@@ -1,0 +1,16 @@
+seed=15385
+note=pxx and FPC each self-consistent but disagree -- investigate in order: (a) pasmith emitted UB/impl-defined code, (b) pxx bug, (c) FPC bug. Do NOT auto-dismiss (c).
+
+fpc-O0       3342975533062653083
+fpc-O2       3342975533062653083
+pxx-O0       7431499988070037601
+pxx-O2       7431499988070037601
+pxx-O3       7431499988070037601
+
+first divergence at checkpoint 17 of 21
+    pxx-O0     16411037591491855743
+    fpc-O0     9419691147684164645
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 15385 --vars 10 --funcs 3 --stmts 20 --depth 3
