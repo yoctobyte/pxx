@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (103)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
-| bug-pascal-tinterfacedobject-missing-silent-segfault | A | 60 | bug | `TInterfacedObject` does not exist — inheriting from it compiles, then segfaults under ARC | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -196,7 +195,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (704)
+## done (705)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -476,6 +475,7 @@ _none_
 | bug-pascal-paren-expr-loses-class-id | P | 50 | bug | A parenthesised expression loses its class id: `(b as T)[i]` and `(b as T).ClassName` | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |
 | bug-pascal-string-const-not-scoped | P | 55 | bug | bug: untyped string constants are not SCOPED — a method's local const leaks to every later routine | — |
+| bug-pascal-tinterfacedobject-missing-silent-segfault | A | 60 | bug | `TInterfacedObject` does not exist — inheriting from it compiles, then segfaults under ARC | — |
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
@@ -931,7 +931,6 @@ _none_
 - [p 65] [O] feature-optimization-levels
 - [p 65] [T] feature-pasmith-widen-grammar
 - [p 60] [A+C] bug-c-csmith-seed2-segfault
-- [p 60] [A] bug-pascal-tinterfacedobject-missing-silent-segfault
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays

@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** bug (missing diagnostic + RTL gap — silent runtime crash)
 - **Track:** A — core (unknown base class silently accepted) + B (the RTL type)
-- **Status:** working
+- **Status:** done
   closure.
 
 ## Reproduction
@@ -63,3 +63,6 @@ hits it.
 ## Gate
 `make test` + self-host byte-identical; the repro above either compiles-and-runs (once the
 RTL type exists) or fails at COMPILE time — never segfaults.
+
+## Log
+- 2026-07-14 — resolved, commit 068ef1e1.
