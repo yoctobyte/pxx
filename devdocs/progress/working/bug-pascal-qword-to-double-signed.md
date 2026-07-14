@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** bug (silent wrong value). **Track A** (IR float-conversion lowering,
   all backends).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14
 - **Found by:** tint642.pp burn-down (testqwordtypecast, `do_error(20)`) while
   resolving [[bug-pascal-record-cast-field-offset]].
