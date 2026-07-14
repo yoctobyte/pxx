@@ -35,3 +35,6 @@ the token stream counting scalars and skipping `{`/`}` as if they were noise. It
 track the dimension it is in and pad each nested group out to that dimension's span
 (the recursive walker `CInitWalkArray` already knows how to do this — the pre-scan is the
 one that doesn't).
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
