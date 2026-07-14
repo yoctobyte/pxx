@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T22:40:38Z",
-   "fixed": [
-    "test-core#src:test/test_fpc_compat_batch2.pas",
-    "test-core#src:test/test_widechar_to_utf8_b319.pas"
-   ],
-   "new_red": [],
-   "sha": "02c52efb9f59d3b2efc9b216274ccdfcf8751598",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T22:43:46Z",
    "fixed": [
     "test-c-conformance-aarch64#shard3/6",
@@ -422,18 +411,23 @@
    "sha": "ced335f51312b4a3a70ac0023a506057706535ab",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-14T12:42:55Z",
+   "fixed": [
+    "test-c-conformance-aarch64#shard3/6",
+    "test-c-conformance-arm32#shard3/6"
+   ],
+   "new_red": [],
+   "sha": "ced335f51312b4a3a70ac0023a506057706535ab",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -675,13 +669,13 @@
   "test-c-conformance-aarch64#shard0/6": "pass",
   "test-c-conformance-aarch64#shard1/6": "pass",
   "test-c-conformance-aarch64#shard2/6": "pass",
-  "test-c-conformance-aarch64#shard3/6": "fail",
+  "test-c-conformance-aarch64#shard3/6": "pass",
   "test-c-conformance-aarch64#shard4/6": "pass",
   "test-c-conformance-aarch64#shard5/6": "pass",
   "test-c-conformance-arm32#shard0/6": "pass",
   "test-c-conformance-arm32#shard1/6": "pass",
   "test-c-conformance-arm32#shard2/6": "pass",
-  "test-c-conformance-arm32#shard3/6": "fail",
+  "test-c-conformance-arm32#shard3/6": "pass",
   "test-c-conformance-arm32#shard4/6": "pass",
   "test-c-conformance-arm32#shard5/6": "pass",
   "test-c-conformance-i386#shard0/6": "pass",
@@ -1677,11 +1671,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c": "pass",
   "test-riscv32#src:test/ccross_double_to_int.c": "pass",
@@ -1740,11 +1729,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T12:39:03Z",
+  "date": "2026-07-14T12:42:55Z",
   "sha": "ced335f51312b4a3a70ac0023a506057706535ab",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 90.6
+  "wall": 215.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1754,11 +1743,11 @@
   "sha": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0"
  },
  "last_full": {
-  "date": "2026-07-14T12:14:46Z",
-  "sha": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
+  "date": "2026-07-14T12:42:55Z",
+  "sha": "ced335f51312b4a3a70ac0023a506057706535ab",
   "tier": "full",
-  "verdict": "RED",
-  "wall": 211.4
+  "verdict": "GREEN",
+  "wall": 215.3
  },
  "last_opt": {
   "date": "2026-07-14T12:17:04Z",
@@ -1784,24 +1773,6 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
-   "good": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
-   "job": "test-c-conformance-aarch64#shard3/6",
-   "name": "test-c-conformance-aarch64#shard3/6",
-   "opened": "2026-07-14T12:14:46Z",
-   "range": [],
-   "src": "tools/run_c_conformance.sh"
-  },
-  {
-   "bad": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
-   "good": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
-   "job": "test-c-conformance-arm32#shard3/6",
-   "name": "test-c-conformance-arm32#shard3/6",
-   "opened": "2026-07-14T12:14:46Z",
-   "range": [],
-   "src": "tools/run_c_conformance.sh"
   }
  ]
 }
