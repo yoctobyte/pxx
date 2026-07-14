@@ -57,7 +57,7 @@ tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes
 terecs6.pp	gap: Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)
-tforin24.pp	gap: enumerator SELECTION by loop-var type (op-enumerator dispatches now, but the D:String loop needs TStrings.GetEnumerator to win over the object operator; exit 0 with wrong output — keep skipped)
+tforin24.pp	gap: enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
 tforin28.pp	gap: for-in over a set constructor literal [One, Three]
 tforin2.pp	gap: for-in over a CALL-result string container (getstring(s)) + string op-enumerator
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
@@ -95,14 +95,12 @@ toperator89.pp	gap: overloading implicit assignment operator `:=` (global operat
 toperator9.pp	gap: operator overload for `in` on a record type not supported by the parser
 tover1.pp	gap: overload resolution across shortstring/ansistring/widestring/pchar params
 tsetsize.pp	wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
-tstatic5.pp	gap: `class var` blocks and class properties in classes not implemented
 tstring10.pp	gap: punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed)
 tstring11.pp	gap: overload resolution RawByteString vs UnicodeString (char/array/pchar args)
 tstring1.pp	gap: shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
 tstring3.pp	gap: typed-const array of short/ansistring initialized from char & resourcestring consts
 tstring4.pp	wontfix: reads ansistring refcount/length header words — FPC internal string layout
 tstring9.pp	gap: pchar / array-of-char assignment to string and widestring conversions
-tarray1.pp	gap: open-array constructor of class-of (metaclass) values `p([tc2])`
 tarray3.pp	gap: typed-const array-of-char from string literal, openstring {$P+}, char-array/string compare
 tarray6.pp	gap: local var-section initializers (`var S: AnsiString = 'abcd'`) + wide/ansi conversions
 tclass13a.pp	gap: nested `type` sections inside classes (nested class overriding parent's)
@@ -112,11 +110,10 @@ tenum1.pp	gap: subrange type over an enum (`weekend = sat..sun`) not parsed
 tenum2.pp	wontfix: dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
 tenum6.pp	gap: `Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool ('FALSE')
 texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
-texception2.pp	gap: `on <class> do` handler without a variable name; float div-by-zero exception
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
 tforin12.pp	gap: initializing array-of-char elements from string literals in an array const
 tforin13.pp	gap: for-in over a set constructor with ranges (`for ch in ['a'..'c', ...]`)
-tforin14.pp	gap: open-array constructor of array-typed records + for-in over open array
+tforin14.pp	gap: for-in variant prints ADDRESSES not element values (silent wrong output, exit 0) — re-triaged 2026-07-15, needs its own minimal repro
 tforin15.pp	gap: `operator enumerator` (custom enumerator operator) not supported
 tforin16.pp	gap: for-in over a string constant
 tforin17.pp	gap: for-in over a string literal
@@ -134,7 +131,6 @@ tgeneric5.pp	gap: objfpc generic syntax + `typeinfo(_T)` intrinsic and typinfo u
 tgeneric6.pp	gap: objfpc generic syntax + nested record/pointer types inside a generic class
 tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects runtime error 201)
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
-tgeneric9.pp	gap: two-parameter generic `TMap<TK,TD>` specialization produces wrong result
 tgeneric92.pp	gap: objfpc generic syntax + `with` over a generic type parameter record
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
@@ -147,12 +143,10 @@ tover4.pp	gap: 80-bit extended/cextended float type and overload resolution acro
 tprocvar1.pp	gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars
 tprocvar2.pp	gap: typed const procvar initialized with bare proc name (TP mode), procvar via move()
 tprocvar3.pp	gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
-tprop.pp	wontfix: requires FPC `variants` unit / Variant type as FPC ships it
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)
 trange2.pp	gap: {$R+} range-check errors on longint<->cardinal conversion raising exceptions
 trange3.pp	gap: {$R+} range checking on array indexes (currently segfaults instead of raising)
 trange5.pp	gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
-tsealed4.pp	gap: `class abstract` / `class sealed` modifiers (repeated) in class declarations
 tsealed6.pp	gap: `object abstract` / `object sealed` modifiers in object declarations
 tset2a.pp	gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics
 tset2b.pp	gap: explicit enum ordinal values (dA:=8) + {$packset 2} packed-set semantics
@@ -170,9 +164,8 @@ toperator3.pp	gap: unit-level `operator +` overload on records, mutually-used un
 toperator4.pp	gap: unit-level `operator +` overload on records with real fields
 tarray16.pp	gap: dynamic-array const initializers ([1,2,3]) and delphi-mode generic function CheckArray<T>
 tarray18.pp	gap: `class operator :=` / Explicit on records taking open `array of LongInt`
-tclass10c.pp	gap: `class var` block inside class visibility section; later section resets to plain fields
 tclass11a.pp	gap: nested class types inside a class (strict private / public `type` sections)
-tclass12a.pp	gap: `strict private const` section inside class + static class procedure
+tclass12a.pp	gap: Extended-precision Str formatting — value identical, pxx prints double-width 3.1400000000000001E+000 vs FPC's 20-digit extended (no 80-bit Extended print path)
 tclass12c.pp	gap: class-local const/type/var sections, `type Integer` distinct type, property default
 tclass13.pp	wontfix: needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 tclass16.pp	gap: `class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
@@ -180,33 +173,19 @@ terecs10.pp	gap: default indexed property on a record (advanced records)
 terecs11.pp	gap: nested type section inside a record (private type: class/record/object/interface/range)
 terecs14.pp	gap: `class operator` set on records (Explicit, :=, =, In, comparison operators)
 terecs15.pp	gap: record constructors with overloads (advanced records)
-terecs16.pp	gap: record constructor (`constructor TRec.Create`) in advanced records
 terecs20.pp	gap: `class threadvar` inside a record + threading RTL
 terecs3.pp	gap: advanced-record features from a unit — class var/const/nested type, static class methods
 terecs8.pp	gap: `class var` in a record referencing its own type + class property
 texception1.pp	gap: `on <ExceptionClass> do` handler without a variable name (bare `On TAObject do`)
-tforin25.pp	gap: for-in over record with GetEnumerator (advancedrecords enumerator support)
+tforin25.pp	gap: for-in form prints nothing where FPC prints four 0 lines (silent wrong output, exit 0) — re-triaged 2026-07-15
 tforin6.pp	gap: `operator enumerator` for a class, returning an `object`-type enumerator
 tforin7.pp	gap: `enumerator MoveNext` / `enumerator Current` method+property directives
 tgenconstraint1.pp	gap: Delphi generic constraint syntax (class/record/constructor/interface constraints)
 tgeneric103.pp	gap: standalone `generic procedure Test<T>` + specialize; also unit-only compilation
 tgeneric105.pp	gap: %FAIL diagnostic — impl type params must match interface decl (TTest<S> vs <T>)
 tgeneric106.pp	gap: generic class with `class var` procvar field of type G<T>, method-of-object
-tgeneric28.pp	gap: Delphi-syntax generic record and generic array of T (only generic classes supported)
 tgeneric29.pp	gap: generic interface IGenericInterface<T>, generic record, generic array
 tgeneric30.pp	wontfix: dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
-tgeneric34.pp	gap: generic record with methods (TFoo<T> = record ... function)
-tgeneric35.pp	gap: generic record overloading a same-named non-generic record
-tgeneric37.pp	gap: overloading generic records by type-param arity (TTest, TTest<T>, TTest<T,S>)
-tgeneric38.pp	gap: generic interfaces overloaded by type-param arity
-tgeneric39.pp	gap: generic procedure-type (procvar) declarations
-tgeneric40.pp	gap: generic array types overloaded by arity
-tgeneric41.pp	gap: generic method-pointer (`procedure of object`) types
-tgeneric43.pp	gap: generic record overloading, generic declared before non-generic
-tgeneric44.pp	gap: generic interface overloading, generic declared first
-tgeneric45.pp	gap: generic procvar overloading, generic declared first
-tgeneric46.pp	gap: generic array-type overloading, generic declared first
-tgeneric47.pp	gap: generic `procedure of object` overloading, generic declared first
 tgeneric48.pp	gap: mixed generic overloads by arity (class/record/interface/procvar/array)
 tgeneric50.pp	gap: hint directives (deprecated/platform/experimental) on generics and specializations
 tgeneric60.pp	gap: nested non-generic record inside generic class, incl. out-of-line static method
@@ -220,11 +199,6 @@ tgeneric67.pp	gap: generic `object` type with nested class
 tgeneric68.pp	gap: generic `object` type with nested `object`
 tgeneric76.pp	gap: generic record with static class methods + specialized aliases (TPointEx<T>) unsupported
 tgeneric78.pp	gap: generic class implementing specialized interface + method resolution clause
-tgeneric80.pp	gap: generic records and overloaded generic/non-generic type name in same type block
-tgeneric81.pp	gap: forward pointer to non-generic record coexisting with generic record overloads
-tgeneric82.pp	gap: generic record type-name overloading by parameter count
-tgeneric89.pp	gap: pointer-to-specialization types (^TTest<LongInt>) not parsed
-tgeneric90.pp	gap: pointer to specializations plus generic/non-generic record name overloading
 tgeneric99.pp	gap: unit-/class-qualified `specialize` syntax (ugeneric99.specialize TTest<...>)
 tgenfunc12.pp	gap: generic methods with class/interface constraints and generic global functions
 tgenfunc19.pp	gap: generic global function + class helper method resolution via specialize
@@ -247,11 +221,9 @@ tmoperator8.pp	gap: management operators AddRef/Copy/Initialize/Finalize on reco
 tmoperator9.pp	gap: record management operators Initialize/Finalize called for locals
 tobject6.pp	gap: `object` type with nested type/class var/const sections and class property
 tobject7.pp	gap: `object` with private nested type, typed const and static class property
-toperator12.pp	gap: record class operator Implicit(integer): R (delphi-mode class operators)
 toperator91.pp	gap: class operators Explicit/Implicit overloaded on ShortString[N] result types
-toperator93.pp	gap: class operator Implicit returning String[80] shortstring type
+toperator93.pp	gap: pxx-compiled binary SEGFAULTS (exit 139) though compile succeeds — re-triaged 2026-07-15, crash needs a minimal repro
 toperator94.pp	gap: objfpc `class operator :=` implicit conversion to shortstring types
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
-tstatic1.pp	gap: class var + static class methods (inline static) in delphi mode
 tstatic2.pp	gap: class var with static class property and inherited access
 tclass12b.pp	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced
