@@ -6,7 +6,7 @@ prio: 60  # auto
 
 - **Type:** feature (Track A — cross codegen / call ABI)
 - **Track:** A — `compiler/**`
-- **Status:** working
+- **Status:** done
 - **Owner:** fable-a
 - **Opened:** 2026-06-25
 - **Relation:** follow-up to [[feature-real-dynlib-loader]] (route A landed,
@@ -83,3 +83,6 @@ good: OpenSSL loads on x86-64.
 byte-identical to x86-64 on all three, and is wired into test-i386 /
 test-aarch64 / test-arm32. riscv32/xtensa remain out (no dynamic-linking leg
 there yet) — reopen a target-specific slice when a consumer appears.
+
+## Log
+- 2026-07-14 — resolved, commit 38a3531f.
