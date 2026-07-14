@@ -5,10 +5,9 @@ program Esp32Timer;
   reports. The app code never touches esp_timer_create/esp_intr_alloc — only
   the library's TimerInit / OnElapsed / TimerStartPeriodicMs surface.
 
-  KNOWN WART: the callback carries `iram;` ONLY because taking a plain proc's
-  address in a relocatable .o is not wired yet
-  (bug-esp-emit-obj-proc-fixup-non-iram). esp_timer callbacks run in task
-  context and do not need IRAM; drop the marker when that ticket lands.
+  The callback is a PLAIN routine: esp_timer callbacks run in task context and
+  need no IRAM placement (@proc in a relocatable .o works for any routine since
+  bug-esp-emit-obj-proc-fixup-non-iram).
 
   Expected qemu output:
     PXX timer: started
@@ -25,7 +24,7 @@ procedure vTaskDelay(ticks: Integer); external;
 var
   ticks: Integer;
 
-procedure OnTick(arg: Pointer); iram;   { iram; = interim, see header }
+procedure OnTick(arg: Pointer);
 begin
   ticks := ticks + 1;
   esp_rom_printf('PXX timer: tick=%d'#10, ticks);

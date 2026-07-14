@@ -2106,10 +2106,16 @@ begin
       writeELF32RelIram(outPath);
       Exit;
     end;
-  { Non-iram .o: @proc relocs aren't wired here yet (the iram writer above is).
-    An ISR/@isr program always has an iram proc, so it takes that path. }
+  { @proc / proc-type values (ProcAddrFix): the extended writer above already
+    relocates them against the proc's LOCAL symbol — route through it; with no
+    iram procs its .iram1.text section is simply empty. This is what lets a
+    PLAIN (task-context) routine's address be registered as an SDK callback
+    without the iram; mislabel (bug-esp-emit-obj-proc-fixup-non-iram). }
   if ProcAddrFixCount > 0 then
-    Error('--emit-obj: @proc fixups need an iram/interrupt routine present (non-iram .o path not wired)');
+  begin
+    writeELF32RelIram(outPath);
+    Exit;
+  end;
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   { .strtab layout: 0 = empty, then proc names, app_main, external names }
