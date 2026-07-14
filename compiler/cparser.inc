@@ -9040,7 +9040,7 @@ begin
               (a 3-bit field leaves curOff at 1), the next field reopened at that same
               byte, and `struct { unsigned a:3; unsigned :0; unsigned b:3; }` came out 4
               bytes where gcc gives 8. }
-            anonBitBytes := TypeSize(IntToTypeKind(fTk));
+            anonBitBytes := TypeSize(fTk);
             if anonBitBytes < 1 then anonBitBytes := 1;
             if not isUnion then curOff := AlignTo(curOff, anonBitBytes);
             if anonBitBytes > maxAlign then maxAlign := anonBitBytes;

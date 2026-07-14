@@ -261,6 +261,8 @@ begin
   { +28   done }
 end;
 
+procedure IREmitNodeRISCV32(node: Integer); forward;
+
 procedure EmitAnsiStringFromNodeRISCV32(valNode: Integer);
 { Materialise a MANAGED string handle in a0 from a value that is NOT one — a char, or a
   frozen inline buffer. Needed at a call ARGUMENT: handing a `string[N]` straight to a
@@ -320,8 +322,6 @@ begin
   if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
   EmitCallProc(procIdx);
 end;
-
-procedure IREmitNodeRISCV32(node: Integer); forward;
 
 procedure EmitFrozenStoreRISCV32(si, valNode: Integer);
 { Store a string value into a FROZEN inline buffer (`string[N]` / shortstring): the slot
