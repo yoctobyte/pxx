@@ -3301,6 +3301,13 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_aarch64_asyncecho
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	# libc-free signal handlers on aarch64 (b370): hook fires + program RESUMES;
+	# no hook = revert to SIG_DFL + re-raise (dies 143). arm64 has NO sa_restorer
+	# and puts sa_mask at offset 16 — its own port, not a copy of the x86-64 one.
+	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_handler_callback_b336.pas /tmp/test_aarch64_sigcb
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	./$(COMPILER) --target=aarch64 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_aarch64_sigdfl
+	tools/run_target.sh aarch64 /tmp/test_aarch64_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas /tmp/test_aarch64_cdeclind
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"

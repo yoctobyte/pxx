@@ -146,3 +146,36 @@ test. Verified and pinned tonight:
 - SA_SIGINFO + ucontext (handler sees siginfo/register state) — needed to turn
   a fault into a catchable raise; the div-zero unification consumer.
 - Interaction with --threadsafe (per-thread masks).
+
+## 2026-07-14 — AARCH64 slice DONE (b370)
+
+The per-arch port the ticket flagged as "the delicate part". aarch64 is NOT a
+copy of the x86-64 stubs — two contract differences, both load-bearing:
+
+- **No SA_RESTORER.** arm64 does not define `__ARCH_HAS_SA_RESTORER`, so the
+  kernel `struct sigaction` is `{ handler(8), flags(8), mask(8) }` — no
+  restorer field, and **sa_mask sits at offset 16**, not 24. The kernel
+  supplies the sigreturn trampoline itself (lands in x30). Setting
+  SA_RESTORER here would have written the flag into the mask.
+- **x30 must be framed across the hook call.** x86-64's return address is on
+  the stack (`call hook; ret` is naturally safe); on aarch64 `blr` clobbers
+  x30 = the kernel trampoline, so dispatch does stp/ldp around it.
+
+Syscalls: rt_sigaction=134, getpid=172, kill=129. Every instruction's hex was
+verified against `aarch64-linux-gnu-as` (including the branch offsets — the
+first cut had three wrong, computed against a layout that omitted the 3-word
+glob-load, and the symptom was the no-hook path silently resuming instead of
+dying).
+
+Both existing tests now run on aarch64 under qemu and are wired into
+`make test-aarch64`: the callback path (hook fires ×2, program RESUMES at the
+interruption point) and the default-revert path (no hook -> SIG_DFL + re-raise
+-> exit 143).
+
+### What remains
+- i386 / arm32: both DO need a restorer stub (their own conventions) —
+  i386 rt_sigreturn=173, arm32 = the sigpage/SA_RESTORER dance. riscv32 uses
+  the vdso path like aarch64, so it should mirror this slice closely.
+- SA_SIGINFO + ucontext (handler sees siginfo/register state) — the
+  fault-to-catchable-raise consumer.
+- --threadsafe interaction (per-thread masks).

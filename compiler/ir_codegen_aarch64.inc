@@ -112,6 +112,97 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitSignalRuntimeA64;
+{ Libc-free signal support, aarch64 Linux (feature-signal-handlers; the x86-64
+  slice is b336). Same three stubs + 64-slot BSS hook table as x86-64, but the
+  per-arch contract DIFFERS in two ways that make this its own port:
+
+  - **No SA_RESTORER.** arm64 does not define __ARCH_HAS_SA_RESTORER, so the
+    kernel struct sigaction is { handler(8), flags(8), mask(8) } — NO restorer
+    field, and sa_mask sits at offset **16**, not 24 as on x86-64. The kernel
+    supplies the sigreturn trampoline itself (it lands in x30), so `ret` out of
+    the handler goes to it. Setting SA_RESTORER here would corrupt the mask.
+  - **x30 must be saved across the hook call.** x86-64's return address is on
+    the stack, so `call hook; ret` is naturally safe; on aarch64 `blr` clobbers
+    x30 (= the kernel's trampoline address), so dispatch frames with stp/ldp.
+
+  Clobbering callee-saved regs inside the handler is fine: the kernel restores
+  the whole register file from the ucontext at rt_sigreturn.
+  Syscalls: rt_sigaction=134, getpid=172, kill=129. Hex verified against
+  aarch64-linux-gnu-as. }
+var jmpOver, dispatchAt, adrAt, imm: Integer;
+begin
+  EmitI32($14000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
+
+  { --- dispatch (kernel handler ABI: w0 = signal number) --- }
+  SigDispatchAddr := CodeLen;
+  dispatchAt := CodeLen;
+  EmitI32($A9BF7BFD);   { stp  x29, x30, [sp, #-16]!   (x30 = kernel trampoline) }
+  EmitI32($910003FD);   { mov  x29, sp }
+  EmitI32($7100041F);   { cmp  w0, #1 }
+  EmitI32($5400014B);   { b.lt .out  (+10 words — the glob load below is 3 words) }
+  EmitI32($7101001F);   { cmp  w0, #64 }
+  EmitI32($5400010C);   { b.gt .out  (+8 words) }
+  EmitLoadGlobAddrA64(9, BSS_SIG_HOOKS);        { x9 = &hooks (3 words) }
+  EmitI32($5100040A);   { sub  w10, w0, #1 }
+  EmitI32($F86A792B);   { ldr  x11, [x9, x10, lsl #3] }
+  EmitI32($B400008B);   { cbz  x11, .dfl  (+4 words) }
+  EmitI32($D63F0160);   { blr  x11        (Pascal hook; returning resumes) }
+  { .out }
+  EmitI32($A8C17BFD);   { ldp  x29, x30, [sp], #16 }
+  EmitI32($D65F03C0);   { ret  -> kernel trampoline -> rt_sigreturn }
+  { .dfl: no hook — revert to SIG_DFL and re-raise, so an unhandled signal
+    still terminates with proper killed-by-signal status. }
+  EmitI32($2A0003F3);   { mov  w19, w0                 (sig; syscalls preserve x1-x30) }
+  EmitLoadGlobAddrA64(9, BSS_SIG_SCRATCH);      { x9 = &scratch }
+  EmitI32($D280000A);   { mov  x10, #0 }
+  EmitI32($F900012A);   { str  x10, [x9]       handler = SIG_DFL }
+  EmitI32($F900052A);   { str  x10, [x9, #8]   flags   = 0 }
+  EmitI32($F900092A);   { str  x10, [x9, #16]  mask    = 0   (NO restorer slot) }
+  EmitI32($2A1303E0);   { mov  w0, w19 }
+  EmitI32($AA0903E1);   { mov  x1, x9 }
+  EmitI32($D2800002);   { mov  x2, #0 }
+  EmitI32($D2800103);   { mov  x3, #8 }
+  EmitI32($D28010C8);   { mov  x8, #134        rt_sigaction }
+  EmitI32($D4000001);   { svc  #0 }
+  EmitI32($D2801588);   { mov  x8, #172        getpid }
+  EmitI32($D4000001);   { svc  #0              x0 = pid }
+  EmitI32($AA1303E1);   { mov  x1, x19         sig }
+  EmitI32($D2801028);   { mov  x8, #129        kill }
+  EmitI32($D4000001);   { svc  #0 }
+  EmitI32($A8C17BFD);   { ldp  x29, x30, [sp], #16 }
+  EmitI32($D65F03C0);   { ret }
+
+  { --- sethook (w0 = sig, x1 = handler), falls through into install --- }
+  SigSetHookAddr := CodeLen;
+  EmitLoadGlobAddrA64(9, BSS_SIG_HOOKS);
+  EmitI32($5100040A);   { sub  w10, w0, #1 }
+  EmitI32($1200154A);   { and  w10, w10, #63   keep the store in-table }
+  EmitI32($F82A7921);   { str  x1, [x9, x10, lsl #3] }
+
+  { --- install (w0 = sig): sigaction{dispatch, SA_RESTART, mask=0} --- }
+  SigInstallAddr := CodeLen;
+  EmitI32($2A0003EC);   { mov  w12, w0         save sig }
+  EmitLoadGlobAddrA64(9, BSS_SIG_SCRATCH);
+  adrAt := CodeLen;
+  imm := dispatchAt - adrAt;                    { adr x10, dispatch (PC-relative) }
+  EmitI32($10000000 or ((imm and 3) shl 29) or ((((imm div 4)) and $7FFFF) shl 5) or 10);
+  EmitI32($F900012A);   { str  x10, [x9]       handler = dispatch }
+  EmitI32($52A2000B);   { mov  w11, #$10000000 SA_RESTART (NO SA_RESTORER on arm64) }
+  EmitI32($F900052B);   { str  x11, [x9, #8]   flags }
+  EmitI32($D280000A);   { mov  x10, #0 }
+  EmitI32($F900092A);   { str  x10, [x9, #16]  mask = 0 }
+  EmitI32($2A0C03E0);   { mov  w0, w12 }
+  EmitI32($AA0903E1);   { mov  x1, x9 }
+  EmitI32($D2800002);   { mov  x2, #0 }
+  EmitI32($D2800103);   { mov  x3, #8 }
+  EmitI32($D28010C8);   { mov  x8, #134        rt_sigaction }
+  EmitI32($D4000001);   { svc  #0 }
+  EmitI32($D65F03C0);   { ret }
+
+  Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
+end;
+
 procedure EmitIoLockStubsA64;
 { --threadsafe statement-atomic console I/O, the aarch64 port of EmitIoLockStubs.
   Reentrant owner-tid spinlock: BSS_IO_OWNER = owning tid (0 = free), BSS_IO_DEPTH
@@ -2186,6 +2277,19 @@ begin
         EmitI32($AA0003E1);                          { mov x1, x0 (pto) }
         EmitI32($F84107E0);                          { ldr x0, [sp], #16 (pfrom) }
         EmitI32($94000000 or (((CoSwitchAddr - CodeLen) div 4) and $03ffffff)); { bl CoSwitch }
+      end;
+
+    IR_SET_SIGNAL:
+      begin
+        { SetSignalHandler(sig, handler): w0 = sig, x1 = handler -> sethook stub
+          (stores the hook slot, falls through into the installer). }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        IREmitNodeAarch64(IRB[node]);                { x0 = handler address }
+        EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRA[node]);                { x0 = signal number }
+        EmitI32($F84107E1);                          { ldr x1, [sp], #16  (handler) }
+        EmitI32($94000000 or (((SigSetHookAddr - CodeLen) div 4) and $03FFFFFF));  { bl sethook }
       end;
 
     IR_PROCADDR:

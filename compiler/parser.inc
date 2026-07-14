@@ -16,6 +16,7 @@ procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
 procedure EmitIoLockStubs386; forward;
 procedure EmitIoLockStubsA64; forward;
+procedure EmitSignalRuntimeA64; forward;
 procedure EmitIoLockStubsArm32; forward;
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
@@ -23365,6 +23366,7 @@ begin
     threadsafe atomics themselves). }
   if (TargetArch = TARGET_X86_64) and ThreadSafeMode then EmitIoLockStubs;
   if (TargetArch = TARGET_I386) and ThreadSafeMode then EmitIoLockStubs386;
+  if (TargetArch = TARGET_AARCH64) and not NoSignals then EmitSignalRuntimeA64;
   if (TargetArch = TARGET_AARCH64) and ThreadSafeMode then EmitIoLockStubsA64;
   if (TargetArch = TARGET_ARM32) and ThreadSafeMode then EmitIoLockStubsArm32;
   if hasExceptions then EnableExceptionRuntime;
@@ -23531,6 +23533,13 @@ begin
   begin
     EmitAsmX64(['mov edi, %', 2]);   IREmitCodeCall(SigInstallAddr);   { SIGINT }
     EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
+  end;
+  if (TargetArch = TARGET_AARCH64) and not NoSignals then
+  begin
+    EmitLoadImmA64(0, 2);                                              { SIGINT }
+    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
+    EmitLoadImmA64(0, 15);                                             { SIGTERM }
+    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
   end;
 
   { Constant global/class initializers FIRST — before any user code runs.
