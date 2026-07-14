@@ -64,3 +64,6 @@ lazycasing warnings) unchanged.
 
 NOTE for Track T: `pinned_tmp_paths()` in tools/testmgr.py existed solely for
 this line and can now be deleted — that's T's file, so it is left to T.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
