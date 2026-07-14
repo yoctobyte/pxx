@@ -17,7 +17,7 @@ auto	tarray4.pp	tarray	-	knownrunerror
 pass	tarray5.pp	tarray	-	
 skip	tarray6.pp	tarray	gap	local var-section initializers (`var S: AnsiString = 'abcd'`) + wide/ansi conversions
 skip	tarray7.pp	tarray	gap	open-array slice syntax a[lo..hi] passed to open-array param
-skip	tarray8.pp	tarray	gap	RTL `UniqueString` missing; also `out` open-array-of-string implicit init
+pass	tarray8.pp	tarray	-	
 auto	tarray9.pp	tarray	-	opt
 skip	tarrconstr1.pp	tarrconstr	gap	Delphi dynamic-array constructor TAB.Create(...)
 pass	tarrconstr2.pp	tarrconstr	-	
@@ -371,7 +371,7 @@ skip	tgenfunc7.pp	tgenfunc	gap	generic functions/methods imported from another u
 skip	tgenfunc8.pp	tgenfunc	gap	generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 skip	tgenfunc9.pp	tgenfunc	gap	generic methods with private/protected visibility specialized from caller
 pass	tint641.pp	tint64	-	
-skip	tint642.pp	tint64	gap	RTL `HexStr` missing; qword arithmetic torture test
+skip	tint642.pp	tint64	gap	record-cast lvalue field offset bug — tqwordrec(q).high reads/writes offset 0 (bug-pascal-record-cast-field-offset); HexStr/Lo/Hi/Swap/Erase landed
 skip	tint643.pp	tint64	gap	`on eintoverflow do` handler without a var name; qword overflow ($Q+) detection
 auto	tint644.pp	tint64	-	opt
 auto	tinterface1.pp	tinterface	-	version
@@ -520,7 +520,7 @@ pass	tsealed3.pp	tsealed	-
 skip	tsealed4.pp	tsealed	gap	`class abstract` / `class sealed` modifiers (repeated) in class declarations
 pass	tsealed5.pp	tsealed	-	
 skip	tsealed6.pp	tsealed	gap	`object abstract` / `object sealed` modifiers in object declarations
-skip	tset1.pp	tset	gap	RTL `RandSeed` variable missing (Random seeding); rest is plain set ops
+pass	tset1.pp	tset	-	
 skip	tset2a.pp	tset	gap	explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics
 skip	tset2b.pp	tset	gap	explicit enum ordinal values (dA:=8) + {$packset 2} packed-set semantics
 skip	tset2c.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 1} packed-set semantics
@@ -538,7 +538,7 @@ skip	tstatic2.pp	tstatic	gap	class var with static class property and inherited 
 pass	tstatic3.pp	tstatic	-	
 pass	tstatic4.pp	tstatic	-	
 skip	tstatic5.pp	tstatic	gap	`class var` blocks and class properties in classes not implemented
-skip	tstring10.pp	tstring	gap	RTL `Flush(output)` missing; also punicodechar/unicodestring conversions
+skip	tstring10.pp	tstring	gap	punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed)
 skip	tstring11.pp	tstring	gap	overload resolution RawByteString vs UnicodeString (char/array/pchar args)
 skip	tstring1.pp	tstring	gap	shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
 skip	tstring2.pp	tstring	gap	RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
@@ -546,6 +546,6 @@ skip	tstring3.pp	tstring	gap	typed-const array of short/ansistring initialized f
 skip	tstring4.pp	tstring	wontfix	reads ansistring refcount/length header words — FPC internal string layout
 skip	tstring5.pp	tstring	gap	RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
 auto	tstring6.pp	tstring	-	version
-skip	tstring7.pp	tstring	gap	RTL `RunError` procedure missing
-skip	tstring8.pp	tstring	gap	RTL `strings` unit StrPos (PChar routines)
+pass	tstring7.pp	tstring	-	
+pass	tstring8.pp	tstring	-	
 skip	tstring9.pp	tstring	gap	pchar / array-of-char assignment to string and widestring conversions
