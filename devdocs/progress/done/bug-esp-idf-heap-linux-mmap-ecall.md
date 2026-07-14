@@ -5,7 +5,7 @@ prio: 35  # ESP parked (user 2026-07-12): Pascal has prio; still the top ESP tic
 # ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes
 
 - **Type:** bug (runtime / builtin heap) — **Track A** (`compiler/builtin/builtinheap.pas`)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11, hit by [[feature-esp-peripheral-callback-api]] slice 1
   (examples/esp32/timer-c3) under qemu esp32c3.
 
@@ -77,3 +77,6 @@ green; quick + selfcheck green.
 callback never fires (`ticks=0 status=2`) — that is the pre-existing
 [[bug-esp-emit-obj-proc-fixup-non-iram]] territory (the example's header wart
 documents the same area), not the heap.
+
+## Log
+- 2026-07-14 — resolved, commit 98c1d40b.
