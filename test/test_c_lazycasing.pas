@@ -4,7 +4,7 @@ program test_c_lazycasing;
   declared spelling. The declaration is `add_two`; the calls use other casings.
   A warning is printed (to stdout) per mismatched call, then the program runs. }
 {$LAZYCASING ON}
-function add_two(a, b: Integer): Integer; cdecl; external '/tmp/liblazycasing.so';
+function add_two(a, b: Integer): Integer; cdecl; external 'liblazycasing.so';   { soname only — the loader finds it via LD_LIBRARY_PATH (hermetic, like test_c_argspill) }
 begin
   writeln(add_two(3, 4));    { exact case: no warning }
   writeln(ADD_TWO(10, 20));  { upper case: warns, resolves }

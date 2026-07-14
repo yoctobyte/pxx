@@ -54,3 +54,13 @@ them in a test that builds the .so somewhere it owns, not in a shared /tmp.
 `tools/testmgr.py --tier native --job 'test-core#554'` green on a box with a
 clean /tmp (`rm -f /tmp/liblazycasing.so` first — a stale copy from an old
 serial `make` masks the whole problem), and no /tmp artifacts left behind.
+
+## 2026-07-14 — RESOLVED (b368)
+
+`test_c_lazycasing.pas` now names the library by soname
+(`external 'liblazycasing.so'`), exactly like test_c_argspill; the Makefile
+recipe already runs it with `LD_LIBRARY_PATH=/tmp`. Output (incl. the two
+lazycasing warnings) unchanged.
+
+NOTE for Track T: `pinned_tmp_paths()` in tools/testmgr.py existed solely for
+this line and can now be deleted — that's T's file, so it is left to T.
