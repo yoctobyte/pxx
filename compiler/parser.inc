@@ -23204,7 +23204,18 @@ begin
       top of SRAM before entering main. EmitLoadConstXtensa drops a literal
       island for the 32-bit address. Must run before any call. }
     if EspBareBoot then
+    begin
+      { The ESP32-S3 is dual-core, and under `qemu -kernel` (no ROM/bootloader
+        to park the APP core) BOTH cores execute this entry. Two cores racing
+        through one stack/BSS double-faulted into the empty ROM vector region
+        — total UART silence (bug-esp32s3-bare-boot-no-uart-output). Core 0's
+        PRID is $CDCD (Espressif convention); spin every other core here. }
+      xtensa_rsr_prid(reg_xtensa_a8);
+      EmitLoadConstXtensa(reg_xtensa_a9, $CDCD);
+      xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
+      xtensa_j(0);                                  { any other core: spin }
       EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
+    end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
       { app_main: program-level vars are globals (BSS), so no stack locals --

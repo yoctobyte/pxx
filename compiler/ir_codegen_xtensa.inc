@@ -1050,21 +1050,52 @@ begin
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
-        EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, sz, sgn);
+        if (sz = 8) and Is64BitXtensa(tk) then
+        begin
+          { 64-bit load through memory (Int64/Double field/element): two words
+            into a2:a3. Was a single l32i — the HIGH word stayed whatever a3
+            last held (typically the index computation's base address), so a
+            64-bit `<> 0` test on a null low word took the dereference branch
+            and double-faulted (esp32s3 bare-boot total UART silence). Twin of
+            the riscv32 IR_LOAD_MEM fix. Hi first: a2 still holds the address. }
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+        end
+        else
+          EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, sz, sgn);
       end;
 
     IR_STORE_MEM:
       begin
-        IREmitNodeXtensa(IRB[node]);
-        XtensaPushA2;
-        savedLVW := InLValueWrite;
-        InLValueWrite := True;
-        IREmitNodeXtensa(IRA[node]);
-        InLValueWrite := savedLVW;
-        XtensaPopA3;
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
-        EmitSizedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, sz);
+        if (sz = 8) and Is64BitXtensa(tk) then
+        begin
+          { 64-bit store through memory: spill both value words across the
+            address evaluation, then store the pair. Was single-word — the
+            high word of an Int64/Double field/element store was dropped.
+            Twin of the riscv32 IR_STORE_MEM fix. }
+          EmitNode64Xtensa(IRB[node]);              { a2:a3 = value }
+          XtensaPush64;
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeXtensa(IRA[node]);              { a2 = dest addr }
+          InLValueWrite := savedLVW;
+          XtensaPop64ToA4A5;                        { a4:a5 = value lo:hi }
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
+          xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+        end
+        else
+        begin
+          IREmitNodeXtensa(IRB[node]);
+          XtensaPushA2;
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeXtensa(IRA[node]);
+          InLValueWrite := savedLVW;
+          XtensaPopA3;
+          EmitSizedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, sz);
+        end;
       end;
 
     IR_BINOP:

@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** bug (cross target — xtensa/ESP32-S3)
 - **Track:** A — core (xtensa backend / ESP boot path)
-- **Status:** backlog — opened 2026-07-14.
+- **Status:** working
 - **Found by:** running `make test-esp-bare` as the cross gate for
   [[bug-pascal-exceptaddr-returns-nil]] (b340), which touches every backend's raise stub.
 

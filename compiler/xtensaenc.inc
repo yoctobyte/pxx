@@ -185,6 +185,13 @@ begin
   EmitB($13);
 end;
 
+procedure xtensa_rsr_prid(ar: Integer);        { rsr.prid ar  (SR 235) }
+begin
+  EmitB((ar shl 4) or 0);
+  EmitB($EB);
+  EmitB($03);
+end;
+
 procedure xtensa_rsync;                          { rsync }
 begin
   EmitB($10); EmitB($20); EmitB($00);
