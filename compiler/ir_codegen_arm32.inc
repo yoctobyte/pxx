@@ -2564,7 +2564,17 @@ begin
             EmitI32($E5900000);     { ldr r0, [r0] = handle }
         end;
         EmitI32($E92D0001);         { push {r0} }
+        { The INDEX expression is a READ even when the whole IR_INDEX is a
+          write target: `b[Length(b)] := c` must read b's handle inside
+          Length, not its slot address. Left set, IR_LEA(b) kept the slot
+          addr, Length read [slot-8] garbage, and the store landed wild —
+          silently lost on small offsets, SIGSEGV on big ones
+          (bug-arm32-chacha20poly1305-segfault). x86-64 has had this reset
+          from the start; the other backends never got it. }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := False;
         IREmitNodeArm32(right);     { index -> r0 }
+        InLValueWrite := savedLValueWrite;
         if lo <> 0 then
         begin
           EmitLoadImmArm32(1, lo);

@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (cross target — arm32 backend)
 - **Track:** A — core (arm32 backend)
-- **Status:** backlog — opened 2026-07-14, split out of
+- **Status:** working
   [[bug-riscv32-p256field-coredump]] during a board triage sweep.
 
 ## Symptom

@@ -2205,7 +2205,14 @@ begin
             EmitI32($F9400000);                  { ldr x0, [x0] = handle }
         end;
         EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
+        { The INDEX expression is a READ even when the whole IR_INDEX is a write
+          target (`b[Length(b)] := c`): left set, IR_LEA(b) inside the index
+          kept the slot address and Length read garbage — the store landed
+          wild. Same reset x86-64 has always done (b355). }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := False;
         IREmitNodeAarch64(IRB[node]);            { index -> x0 }
+        InLValueWrite := savedLValueWrite;
         if IRC[node] <> 0 then
         begin
           EmitLoadImmA64(9, IRC[node]);          { x9 = lo }

@@ -1102,7 +1102,14 @@ begin
         end;
         XtensaPushA2;
 
+        { The INDEX expression is a READ even when the whole IR_INDEX is a write
+          target (`b[Length(b)] := c`): left set, IR_LEA(b) inside the index
+          kept the slot address and Length read garbage — the store landed
+          wild. Same reset x86-64 has always done (b355). }
+        savedLVW := InLValueWrite;
+        InLValueWrite := False;
         IREmitNodeXtensa(right);
+        InLValueWrite := savedLVW;
         if lo <> 0 then
         begin
           EmitLoadConstXtensa(reg_xtensa_a3, lo);

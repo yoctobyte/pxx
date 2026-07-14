@@ -6,7 +6,7 @@ program test_cross_str_length_index;
   (not the slot address). Output is identical on every target as on x86-64. }
 
 var
-  s: AnsiString;
+  s, t: AnsiString;
   i: Integer;
   ch: Char;
 begin
@@ -30,4 +30,15 @@ begin
   writeln(s);                    { ab }
   writeln(s[2]);                 { b }
   writeln(Length(s));            { 2 }
+
+  { b355: a write whose INDEX EXPRESSION reads the string being written.
+    Every backend but x86-64 left InLValueWrite set while emitting the index,
+    so Length(t) inside the index read t's SLOT ADDRESS as a handle — garbage
+    length, wild store: silently lost on small strings, SIGSEGV on big ones
+    (bug-arm32-chacha20poly1305-segfault's tamper-flip line). }
+  s := 'hello world';
+  t := s;                                          { shared -> COW on write }
+  t[Length(t)] := Chr(Ord(t[Length(t)]) xor 1);
+  writeln(s);                    { hello world }
+  writeln(t);                    { hello worle }
 end.

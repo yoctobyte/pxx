@@ -959,7 +959,14 @@ begin
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
+        { The INDEX expression is a READ even when the whole IR_INDEX is a write
+          target (`b[Length(b)] := c`): left set, IR_LEA(b) inside the index
+          kept the slot address and Length read garbage — the store landed
+          wild. Same reset x86-64 has always done (b355). }
+        savedLVW := InLValueWrite;
+        InLValueWrite := False;
         IREmitNodeRISCV32(right);
+        InLValueWrite := savedLVW;
         if lo <> 0 then
           rv32_addi(reg_a0, reg_a0, -lo);
 

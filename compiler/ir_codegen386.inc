@@ -3042,7 +3042,14 @@ begin
             begin EmitB($8B); EmitB($00); end;        { mov eax, [slot] = handle }
         end;
         EmitB($50);                                   { push eax }
+        { The INDEX expression is a READ even when the whole IR_INDEX is a write
+          target (`b[Length(b)] := c`): left set, IR_LEA(b) inside the index
+          kept the slot address and Length read garbage — the store landed
+          wild. Same reset x86-64 has always done (b355). }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := False;
         IREmitNode386(right);                         { index -> eax }
+        InLValueWrite := savedLValueWrite;
         if lo <> 0 then
           begin EmitB($2D); EmitI32(lo); end;         { sub eax, lo }
         if elemSize = 8 then
