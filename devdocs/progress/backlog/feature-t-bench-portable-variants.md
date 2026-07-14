@@ -42,10 +42,11 @@ Two of the three gaps were not gaps at all:
 `mandelbrot` and `raytracer` need **portable variants** in `bench/portable/` — same
 computation, no pxx-only units:
 
-- **mandelbrot** — the escape-time loop is pure float math; only the *rendering* needs
-  `ansiterm`. A `--bench` mode that computes and checksums the pixel buffer without
-  drawing it is enough, and that is already roughly what the timed argv does. Cheap; do
-  this one first.
+- ~~**mandelbrot**~~ — **DONE 2026-07-14**: `bench/portable/mandelbrot.pas`, same window,
+  same Double kernel, same positional checksum, **zero units**. Both compilers agree on
+  the checksum (which is what makes the timing comparison legitimate — same checksum means
+  same work), and it self-checks against the example's pinned `EXPECTED` before timing
+  anything. New data: **pxx -O3 1166ms vs fpc 364ms — 3.2x**.
 - **raytracer** — harder: it leans on `image`/`png` for output and `hashing` for the
   canary. A portable variant would render into a plain array and checksum it, dropping
   PNG entirely. The float/call-heavy inner loop, which is the part worth timing, does not
@@ -65,6 +66,20 @@ where it lives.
 
 ## Acceptance
 
-`bench/portable/mandelbrot.pas` and `bench/portable/raytracer.pas` exist, use only units
-FPC also has, are registered in `BENCH_SUITE` with `fpc_ok=True`, and produce `fpc` rows
-in `tstate/bench.tsv` alongside the `-O0/-O2/-O3` ones.
+`bench/portable/raytracer.pas` exists, uses only units FPC also has, is registered in
+`BENCH_SUITE` with `fpc_ok=True`, and produces `fpc` rows in `tstate/bench.tsv` alongside
+the `-O0/-O2/-O3` ones. (mandelbrot: done.)
+
+## Where the gap stands now
+
+Three FPC-comparable rows, and all three say the same thing:
+
+| workload | pxx (best -O) | fpc -O2 | ratio |
+| --- | --- | --- | --- |
+| sieve (memory-bound int) | 63.8ms | 31.8ms | 2.0x |
+| mandelbrot-p (float compute) | 1166ms | 364ms | 3.2x |
+| nbody (float) | 565ms | 64ms | 8.8x |
+| fib (call-heavy int) | 164ms | 114ms | 1.4x |
+
+nbody's 8.8x is the outlier and the obvious thing to explain — it is the only one using
+`math`, so part of that may be RTL rather than codegen. Track O has the material now.

@@ -1426,6 +1426,12 @@ FPC_LEVEL = "fpc"
 BENCH_SUITE = (
     ("mandelbrot", "examples/mandelbrot/mandelbrot.pas",
      [], ["--bench", "1600", "1200"], False),       # float compute (pxx units)
+    # The same float kernel with NO units, so FPC can compile it too and the `fpc`
+    # level gets a float-compute row. The example above stays as it is -- it is a
+    # demo and exists to USE our libraries; a benchmark should not depend on any,
+    # or a library change moves the number and nobody knows what did it.
+    ("mandelbrot-p", "bench/portable/mandelbrot.pas",
+     ["200", "150"], ["1600", "1200"], True),       # float compute, FPC-comparable
     ("raytracer", "examples/raytracer/raytracer.pas",
      [], ["--ppm", "{tmp}/rt.ppm", "480", "360"], False),  # call-heavy float
     ("sieve", "examples/primes/sieve.pas", [], [], True),   # memory-bound int, FPC-comparable

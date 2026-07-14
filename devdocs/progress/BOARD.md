@@ -28,11 +28,12 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
+| bug-fpc-bootstrap-broken-compiler-source | A | 76 | bug | compiler.pas no longer builds under FPC — the bootstrap seed is broken; the source has drifted onto pxx-only laxity | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-not-of-ord-uses-boolean-negation | A | 72 | bug | not ord(x) computes a BOOLEAN not (xor 1) instead of a bitwise complement — silently wrong integer | — |
 | bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
@@ -949,6 +950,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 78] [A] bug-pascal-shortstring-no-truncation-buffer-overrun
+- [p 76] [A] bug-fpc-bootstrap-broken-compiler-source
 - [p 72] [A] bug-pascal-not-of-ord-uses-boolean-negation
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
