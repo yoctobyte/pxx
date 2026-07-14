@@ -136,7 +136,7 @@ tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
 tgeneric9.pp	gap: two-parameter generic `TMap<TK,TD>` specialization produces wrong result
 tgeneric92.pp	gap: objfpc generic syntax + `with` over a generic type parameter record
-tint642.pp	gap: record-cast lvalue field offset bug — tqwordrec(q).high reads/writes offset 0 (bug-pascal-record-cast-field-offset); HexStr/Lo/Hi/Swap/Erase landed
+tint642.pp	gap: unsigned qword -> double conversion converts as SIGNED for values >= 2^63 (bug-pascal-qword-to-double-signed); record-cast field offsets + bitwise not-of-qword-or landed
 tint643.pp	gap: `on eintoverflow do` handler without a var name; qword overflow ($Q+) detection
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)

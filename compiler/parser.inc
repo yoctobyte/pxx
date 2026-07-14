@@ -7035,7 +7035,19 @@ begin
       opIsArith := (notOp = Ord(tkPlus)) or (notOp = Ord(tkMinus)) or
                    (notOp = Ord(tkStar)) or (notOp = Ord(tkDiv)) or
                    (notOp = Ord(tkMod)) or (notOp = Ord(tkShl)) or
-                   (notOp = Ord(tkIdent));
+                   (notOp = Ord(tkIdent)) or
+                   { and/or/xor are distrusted in general because a LOGICAL
+                     and/or is sometimes mistagged tyInteger (self-host relies
+                     on those staying logical — trusting all integer-tagged
+                     and/or breaks the fixedpoint). But an EXPLICIT sized type
+                     tag (tyInt8..tyNativeUInt, 7..16) never comes from that
+                     mistag — it means both operands really are that integer
+                     type — so `not (q3 or q4)` on qwords is bitwise
+                     (tint642's testnotqword printed a boolean flip). Plain
+                     tyInteger(1)-tagged and/or/xor stays logical. }
+                   (((notOp = Ord(tkAnd)) or (notOp = Ord(tkOr)) or
+                     (notOp = Ord(tkXor))) and
+                    (ASTTk[left] >= 7) and (ASTTk[left] <= 16));
       bitNot :=
         ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) and
         ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT) or
@@ -8706,6 +8718,25 @@ begin
         ASTIVal[node] := 0;          { plain pointer reinterpret (no char +8 adapter) }
         ASTTk[node]   := Ord(tyPointer);
         tk := tyPointer; recName := baseRec;
+        if CurTok.Kind = tkDot then
+        begin
+          { VALUE typecast used directly with `.field` — `TRec(q).high` — is
+            FPC's in-place reinterpret: the field lives at @q + offset. Build a
+            rec-tagged deref of the OPERAND'S ADDRESS so the ordinary field
+            path resolves offsets (mirrors `TRec(p)^.field`, which derefs the
+            pointer VALUE instead). Previously the AN_FIELD sat straight on the
+            PTR_CAST, ResolveNodeRec saw REC_NONE, and every field silently
+            resolved at offset 0 (bug-pascal-record-cast-field-offset). }
+          fieldNode := AllocNode(AN_ADDR);
+          ASTLeft[fieldNode] := ASTLeft[node];
+          ASTTk[fieldNode] := Ord(tyPointer);
+          indexNode := AllocNode(AN_DEREF);
+          ASTLeft[indexNode] := fieldNode;
+          ASTIVal[indexNode] := baseRec;   { pointee rec for ResolveNodeRec }
+          ASTTk[indexNode] := Ord(tyRecord);
+          node := indexNode;
+          tk := tyRecord;
+        end;
         while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
         begin
           if CurTok.Kind = tkCaret then
@@ -14520,6 +14551,19 @@ begin
               ASTIVal[indexNode] := 0;
               ASTTk[indexNode]   := Ord(tyPointer);
               valNode := indexNode;
+              if CurTok.Kind = tkDot then
+              begin
+                { `TRec(q).field := v` — in-place value typecast, same shape as
+                  the expression side: rec-tagged deref of @operand so the field
+                  offset resolves (bug-pascal-record-cast-field-offset). }
+                fieldNode := AllocNode(AN_ADDR);
+                ASTLeft[fieldNode] := ASTLeft[valNode];
+                ASTTk[fieldNode] := Ord(tyPointer);
+                valNode := AllocNode(AN_DEREF);
+                ASTLeft[valNode] := fieldNode;
+                ASTIVal[valNode] := castRec;     { pointee rec for ResolveNodeRec }
+                ASTTk[valNode] := Ord(tyRecord);
+              end;
               while CurTok.Kind in [tkCaret, tkDot] do
               begin
                 if CurTok.Kind = tkCaret then
