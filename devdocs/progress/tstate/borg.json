@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T13:28:21Z",
-   "fixed": [
-    "test-c-conformance-aarch64#shard3/6",
-    "test-c-conformance-arm32#shard3/6"
-   ],
-   "new_red": [],
-   "sha": "48ea3f2a9fef4d7f023d9d1d79cf993a729caa73",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T13:30:25Z",
    "fixed": [],
    "new_red": [],
@@ -431,12 +420,26 @@
    "sha": "dbbcc912715f639923896e65e2ad821569010071",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-14T17:26:38Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "dbbcc912715f639923896e65e2ad821569010071",
+   "tier": "opt",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
+  "optdiff#shard0/6": "pass",
+  "optdiff#shard1/6": "pass",
+  "optdiff#shard2/6": "pass",
+  "optdiff#shard3/6": "pass",
+  "optdiff#shard4/6": "pass",
+  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -1693,6 +1696,11 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
+  "test-opt#00": "pass",
+  "test-opt#src:compiler/compiler.pas@1": "pass",
+  "test-opt#src:compiler/compiler.pas@2": "pass",
+  "test-opt#src:compiler/compiler.pas@3": "pass",
+  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -1828,11 +1836,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T17:24:43Z",
+  "date": "2026-07-14T17:26:38Z",
   "sha": "dbbcc912715f639923896e65e2ad821569010071",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 199.5
+  "tier": "opt",
+  "verdict": "GREEN",
+  "wall": 108.0
  },
  "last_bench": {
   "conf_rows": 550,
