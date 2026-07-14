@@ -9,7 +9,7 @@ prio: 78
 - **Type:** bug (silent memory corruption). **Track P** (Pascal frontend — shortstring
   assignment semantics); may land in Track A if the fix belongs in the assign helper
   rather than the frontend's type lowering.
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** Track T, probing candidate constructs for
   [[feature-pasmith-widen-grammar]] before generating them. **T owns the tool, never
@@ -89,3 +89,6 @@ alike. Check `Length()` reads the clamped byte afterwards.
 - pasmith's `string[N]` rung ([[feature-pasmith-widen-grammar]]) can then be enabled;
   it is currently held back because every generated program that truncates would report
   this one bug.
+
+## Log
+- 2026-07-14 — resolved, commit 7716bd2a.
