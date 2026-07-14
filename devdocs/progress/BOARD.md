@@ -28,12 +28,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
-| bug-fpc-bootstrap-broken-compiler-source | A | 76 | bug | compiler.pas no longer builds under FPC — the bootstrap seed is broken; the source has drifted onto pxx-only laxity | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-not-of-ord-uses-boolean-negation | A | 72 | bug | not ord(x) computes a BOOLEAN not (xor 1) instead of a bitwise complement — silently wrong integer | — |
 | bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
@@ -193,7 +192,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (732)
+## done (733)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -397,6 +396,7 @@ _none_
 | bug-forin-in-method-global-var-corruption | A | 50 | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-forin-qualified-set-member-source | A | 50 | bug | `for-in` over a qualified set member source fails | — |
 | bug-forward-class-decl-with-later-base-loses-fields | A | 50 | bug | Forward class decl + full decl that adds a base loses the class's fields | — |
+| bug-fpc-bootstrap-broken-compiler-source | A | 76 | bug | compiler.pas no longer builds under FPC — the bootstrap seed is broken; the source has drifted onto pxx-only laxity | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | 50 | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-bootstrap-source-drift | A | 45 | bug | bug: `make bootstrap` (FPC cold-start) is red — compiler source drifted out of FPC compatibility | — |
 | bug-fpc-cannot-seed-head-missing-forwards | A | 60 | bug | bug: FPC could not compile HEAD — cold bootstrap broken (RESOLVED 6e523474) | — |
@@ -951,7 +951,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 76] [A] bug-fpc-bootstrap-broken-compiler-source
 - [p 72] [A] bug-pascal-not-of-ord-uses-boolean-negation
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion

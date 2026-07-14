@@ -7,7 +7,7 @@ prio: 76
 # `make bootstrap` is broken: FPC can no longer compile `compiler/compiler.pas`
 
 - **Type:** bug (bootstrap chain). **Track A** (compiler core / self-host).
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** Track T. The `fpc` level of the bench suite reported
   `selfcompile FPC-COMPILE-FAIL`, which is the same failure tstate has been carrying as
@@ -92,3 +92,6 @@ started running. Do not assume reverting the blamed commit fixes this; fix the f
   recording again.
 - **Keep it green:** the FPC bootstrap must stay a gate somewhere (tstate job is enough),
   because pxx-compiling-pxx structurally cannot detect this drift.
+
+## Log
+- 2026-07-14 — resolved, commit e4e68e88.
