@@ -88,4 +88,4 @@ Worth checking the neighbours while in there: `-ord(x)` is correct today, but `s
   properly.
 
 ## Log
-- 2026-07-14 — resolved, commit HEAD.
+- 2026-07-14 — resolved, commit ba26acaa.
