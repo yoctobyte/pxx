@@ -2047,10 +2047,14 @@ begin
     IR_CALL_IND:
       begin
         procIdx := Integer(IRIVal[node]);                 { signature proc index }
-        if (procIdx >= 0) and ProcCdecl[procIdx] then
+        if (procIdx >= 0) and ProcCdecl[procIdx] and (not CProgramMode) then
         begin
           { AAPCS64 (cdecl) indirect call through a `cdecl` proc-type value — a
-            dlsym'd C function. Mirrors the external-direct marshalling (int/ptr
+            dlsym'd C function. PASCAL-mode only: the C frontend marks every C
+            fnptr signature ProcCdecl, but a pxx-COMPILED callee reached through
+            one uses pxx's internal convention — C-mode indirect calls keep the
+            internal path, or lua's dispatch and sqlite's VFS miscompile
+            (tstate caught exactly that at b362). Mirrors the external-direct marshalling (int/ptr
             -> x0..x7, floats -> d0..d7, classes counted independently; single
             params narrowed, a single result widened; float result bridged back
             d0 -> x0 for the GPR value model), except the callee comes from a

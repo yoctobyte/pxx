@@ -2767,7 +2767,7 @@ begin
           arg0 at the LOWEST stack address, i.e. pushed LAST. The internal
           convention pushes leftmost-first, which handed a dlsym'd pow(2,10) its
           args swapped (= 100.0, not 1024.0). }
-        vaFwd := (procIdx >= 0) and (ProcVariadic[procIdx] or ProcCdecl[procIdx]);
+        vaFwd := (procIdx >= 0) and (ProcVariadic[procIdx] or (ProcCdecl[procIdx] and not CProgramMode));
         if vaFwd then
         begin
           vaO1 := 0; vaO2 := vaNvw - 1;
@@ -2868,7 +2868,7 @@ begin
           cleans up), but a C float/double result comes back in st0 — bridge it
           to xmm0, the i386 float value model, exactly like the external-direct
           path (feature-cdecl-indirect-cross-targets). }
-        if (procIdx >= 0) and ProcCdecl[procIdx] then
+        if (procIdx >= 0) and ProcCdecl[procIdx] and (not CProgramMode) then
         begin
           if Procs[procIdx].RetType = tySingle then
           begin
