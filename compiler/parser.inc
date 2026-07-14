@@ -5521,6 +5521,42 @@ begin
       if mmi >= 0 then
       begin
         mpi := UMthProc_[mmi];
+        if (ci >= 0) and UClsIsInterface[ci] then
+        begin
+          { INTERFACE receiver reached through a chained value — `IFoo(List[i]).M`,
+            `(x as IFoo).M`. Must dispatch through the IMT slot like the
+            ParseLValueAST path does: an interface method's proc is a body-less
+            SIGNATURE, so building a plain AN_CALL to it called address 0. }
+          callN := AllocNode(AN_INTF_CALL);
+          ASTRight[callN] := node;                  { the interface value }
+          ASTIVal[callN] := mpi;                    { signature proc (marshalling) }
+          ASTSOffset[callN] := UMthVirSlot[mmi];    { IMT slot }
+          ASTTk[callN] := Ord(Procs[mpi].RetType);
+          lastA := -1;
+          Next; { consume method name }
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 1;   { param 0 = Self, supplied by the interface value }
+            while CurTok.Kind <> tkRParen do
+            begin
+              ParseExpr; aNode := CurASTNode;
+              aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
+              if lastA = -1 then ASTLeft[callN] := aSeq else ASTRight[lastA] := aSeq;
+              lastA := aSeq;
+              Inc(mai);
+              if CurTok.Kind = tkComma then Next
+              else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+            end;
+            Expect(tkRParen, ')');
+          end;
+          outTk := Procs[mpi].RetType;
+          tk := outTk;
+          recId := ProcRetRecId[mpi];
+          if (tk <> tyClass) and (tk <> tyRecord) then recId := REC_NONE;
+          node := callN;
+          Continue;
+        end;
         if UMthVirSlot[mmi] >= 0 then
         begin
           callN := AllocNode(AN_VIRTUAL_CALL);
@@ -14299,8 +14335,10 @@ begin
               end;
               if CurTok.Kind in [tkDot, tkLBrack] then
                 valNode := ParseClassRecordSelectors(valNode, REC_UCLASS_BASE + smci, castTk);
-              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
-                { TClass(x).Method(args); — a method-call statement, not an assign }
+              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
+                 (ASTKind[valNode] = AN_INTF_CALL) then
+                { TClass(x).Method(args); — a method-call statement, not an assign.
+                  AN_INTF_CALL covers the interface form IFoo(List[i]).M(args). }
                 node := valNode
               else
               begin
@@ -17268,7 +17306,12 @@ begin
         UClsIsInterface[ci] := True;
         UClsIsComInterface[ci] := InterfacesComMode;
         if InterfacesComMode then ComInterfaceUsed := True;
-        UClsSize_[ci] := 2 * TARGET_PTR_SIZE;   { fat pointer {IMT, instance} }
+        { An interface VALUE is ONE pointer — the instance (FPC's ABI), so
+          Pointer(intf) roundtrips and an interface fits any pointer-shaped
+          container (fcl-fpcunit stores its listeners in a TFPList exactly so).
+          The IMT is recovered per call from the instance's RTTI blob by
+          interface id — see __pxxIntfIMT. }
+        UClsSize_[ci] := TARGET_PTR_SIZE;
         UClsAlign[ci] := TARGET_PTR_SIZE;
         UClsParent[ci] := parentIntfCi;
         { Inherit the parent interface's methods first (contiguously, before this
@@ -22700,15 +22743,23 @@ begin
     backends can't lower; bodies are {$ifndef PXX_ESP}-guarded in builtinheap). }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
   begin
-    dummyNames[0] := 'fatptr'; dummyTypes[0] := tyPointer;
-    i := RegisterProc('PXXIntfAddRef', True, tyNativeInt, 1, dummyNames, dummyTypes);
-    i := RegisterProc('PXXIntfRelease', True, tyNativeInt, 1, dummyNames, dummyTypes);
-    dummyNames[0] := 'imt';  dummyTypes[0] := tyPointer;
-    dummyNames[1] := 'inst'; dummyTypes[1] := tyPointer;
+    { All four take the interface ID as their last argument: an interface value is
+      a bare instance pointer now, so the IMT (and with it the _AddRef/_Release
+      slots) is resolved from the instance's RTTI blob by id at run time. }
+    dummyNames[0] := 'inst';    dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'ifaceId'; dummyTypes[1] := tyNativeInt;
+    i := RegisterProc('PXXIntfIMTOf', True, tyPointer, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'p';       dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'ifaceId'; dummyTypes[1] := tyNativeInt;
+    i := RegisterProc('PXXIntfAddRef', True, tyNativeInt, 2, dummyNames, dummyTypes);
+    i := RegisterProc('PXXIntfRelease', True, tyNativeInt, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'inst';    dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'ifaceId'; dummyTypes[1] := tyNativeInt;
     i := RegisterProc('PXXIntfAddRefRaw', True, tyNativeInt, 2, dummyNames, dummyTypes);
-    dummyNames[0] := 'dest'; dummyTypes[0] := tyPointer;
-    dummyNames[1] := 'src';  dummyTypes[1] := tyPointer;
-    i := RegisterProc('PXXIntfAssign', False, tyPointer, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'src';     dummyTypes[1] := tyPointer;
+    dummyNames[2] := 'ifaceId'; dummyTypes[2] := tyNativeInt;
+    i := RegisterProc('PXXIntfAssign', False, tyPointer, 3, dummyNames, dummyTypes);
   end;
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);

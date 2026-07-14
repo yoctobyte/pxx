@@ -788,6 +788,26 @@ begin
     Result := IRLowerAddress(ASTLeft[node]);
     Exit;
   end;
+  { A class/interface CAST is a pure reinterpret, so the address of the cast is
+    the address of what was cast: `IFoo(List[i]).M` takes the address of the list
+    slot, whose word IS the interface value (an interface value being a single
+    instance pointer). Without this the cast-and-call form lowered an address of
+    nothing. }
+  if (ASTKind[node] = AN_CLASS_CAST) and (ASTLeft[node] >= 0) then
+  begin
+    if IsASTLValue(ASTLeft[node]) then
+      Result := IRLowerAddress(ASTLeft[node])
+    else
+    begin
+      { the cast operand is a VALUE (a getter result — `IFoo(List[i]).M`, where
+        List[i] is an indexed property): materialise it into a hidden temp so the
+        cast has an address to be taken of. }
+      slotAddrNode := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, slotAddrNode, IRLowerAST(ASTLeft[node]), -1, 0, Ord(tyPointer));
+      Result := IRAppend(IR_LEA, slotAddrNode, -1, -1, 0, Ord(tyPointer));
+    end;
+    Exit;
+  end;
   { `&function` — a function's address IS the function-pointer value (C `&f == f`).
     The AN_PROCADDR value node already yields the code address. }
   if ASTKind[node] = AN_PROCADDR then
@@ -2291,22 +2311,25 @@ begin
 end;
 
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer;
-{ Build the CORBA fat pointer {IMT@0, instance@PTR} for `obj as IFoo` (or an
-  implicit class->interface coercion) into a hidden interface temp; return the
-  temp's symbol. The IMT is chosen by a closed-world DYNAMIC lookup: match the
-  instance's VMT against every class that implements the interface, so the cast
-  is correct even when the source is typed as a base class. nil -> {nil,nil};
-  a non-nil class that does not implement the interface traps (Halt 1) when
-  doTrap. Memoised in ASTLiftedVar: the interface-call path takes the fat
-  pointer's address twice, so this must build it once. }
+{ Build the interface value for `obj as IFoo` (or an implicit class->interface
+  coercion) into a hidden interface temp; return the temp's symbol.
+
+  An interface VALUE is ONE pointer: the instance (FPC's ABI). So the "build" is
+  just a store of the instance — what remains is the CHECK: a non-nil instance
+  whose runtime class does not implement the interface is a bad cast and traps
+  (Halt 1) when doTrap. nil -> nil, never traps. The implements test is the same
+  closed-world VMT match `is` uses.
+
+  Memoised in ASTLiftedVar: the interface-call path takes the value's address more
+  than once, so this must build it once. }
 var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl, savedRec: Integer;
-    li, vmtSym, lv, va, eq, imtPi, w1Addr: Integer;
+    li, vmtSym, lv, va, eq: Integer;
 begin
   if ASTLiftedVar[node] >= 0 then begin Result := ASTLiftedVar[node]; Exit; end;
   intfCi := Integer(ASTIVal[node]);
   savedRec := LastTypeRecId;
   LastTypeRecId := REC_UCLASS_BASE + intfCi;
-  tmpSym := AllocVar('', tyRecord);          { size = 2*TARGET_PTR_SIZE }
+  tmpSym := AllocVar('', tyRecord);          { size = TARGET_PTR_SIZE }
   LastTypeRecId := savedRec;
   ASTLiftedVar[node] := tmpSym;
 
@@ -2314,22 +2337,23 @@ begin
   instVal := IRLowerAST(ASTLeft[node]);
   IRAppend(IR_STORE_SYM, instSym, instVal, -1, 0, Ord(tyPointer));
 
-  { Zero both fat-pointer words: IMT@0 := nil, instance@PTR := instance. }
+  { the value IS the instance }
   IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
-           IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
-  w1Addr := IRAppend(IR_BINOP, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
-                     IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
-                     Ord(tkPlus), 0, Ord(tyPointer));
-  IRAppend(IR_STORE_MEM, w1Addr, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
-           -1, 0, Ord(tyPointer));
+           IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+
+  if not doTrap then
+  begin
+    Result := tmpSym;
+    Exit;
+  end;
 
   endLbl := IRNewLabel;
-  { nil instance: leave {nil,nil}, never trap. }
+  { nil instance: never traps. }
   li := IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer));
   IRAppend(IR_JUMP_IF_FALSE, endLbl,
            IRAppend(IR_BINOP, li, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
                     Ord(tkNeq), 0, Ord(tyBoolean)), -1, 0, 0);
-  { vmt := [inst]. }
+  { vmt := [inst]; matching any class that implements the interface = a good cast. }
   vmtSym := AllocVar('', tyPointer);
   IRAppend(IR_STORE_SYM, vmtSym,
            IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
@@ -2342,21 +2366,17 @@ begin
       eq := IRAppend(IR_BINOP, lv, va, Ord(tkEq), 0, Ord(tyBoolean));
       skipLbl := IRNewLabel;
       IRAppend(IR_JUMP_IF_FALSE, skipLbl, eq, -1, 0, 0);
-      imtPi := FindIMT(c, intfCi);
-      IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
-               IRAppend(IR_IMTADDR, imtPi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
-      IRAppend(IR_JUMP, endLbl, -1, -1, 0, 0);     { matched -> skip the trap }
+      IRAppend(IR_JUMP, endLbl, -1, -1, 0, 0);     { implements it -> no trap }
       IRAppend(IR_LABEL, -1, -1, -1, skipLbl, 0);
     end;
-  { Non-nil instance whose class implements no matching IMT: a bad cast. }
-  if doTrap then
-    IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
+  { non-nil instance whose class implements no matching interface: a bad cast. }
+  IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
   IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
   Result := tmpSym;
 end;
 
 function NodeIsInterface(node: Integer): Boolean;
-{ True iff the node is an interface-typed value (a CORBA fat pointer). }
+{ True iff the node is an interface-typed value (a single instance pointer). }
 var rec: Integer;
 begin
   Result := False;
@@ -2367,16 +2387,13 @@ begin
 end;
 
 function IRIntfInstanceWord(node: Integer): Integer;
-{ The instance pointer of an interface value (fat pointer's word at offset
-  TARGET_PTR_SIZE), used for identity comparison. A non-interface operand (a nil
-  literal) lowers to its plain value, so `iface = nil` compares against 0. }
+{ The instance pointer of an interface value — which, an interface value BEING a
+  single instance pointer (FPC's ABI), is just the value itself. Used for identity
+  comparison. A non-interface operand (a nil literal) lowers to its plain value, so
+  `iface = nil` compares against 0. }
 begin
   if NodeIsInterface(node) then
-    Result := IRAppend(IR_LOAD_MEM,
-                IRAppend(IR_BINOP, IRLowerAddress(node),
-                  IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
-                  Ord(tkPlus), 0, Ord(tyPointer)),
-                -1, -1, 0, Ord(tyPointer))
+    Result := IRAppend(IR_LOAD_MEM, IRLowerAddress(node), -1, -1, 0, Ord(tyPointer))
   else
     Result := IRLowerAST(node);
 end;
@@ -2693,6 +2710,7 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
+    intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
@@ -4200,10 +4218,8 @@ begin
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
               (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
       begin
-        { Interface identity: two interface values are equal iff they reference
-          the same instance, so compare the fat pointers' instance words (not the
-          IMT word, which is shared by every instance of a class). `iface = nil`
-          compares the instance word against 0. }
+        { Interface identity: an interface value IS the instance pointer, so this
+          is a plain pointer compare. `iface = nil` compares against 0. }
         left := IRIntfInstanceWord(ASTLeft[node]);
         right := IRIntfInstanceWord(ASTRight[node]);
         Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean));
@@ -4504,6 +4520,8 @@ begin
           if isComIntf then
           begin
             first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+            argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, varIdx - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+            IRB[first] := argNode;
             seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
             IRIVal[seq] := 1;  { statement-level: side-effect call, result discarded }
           end;
@@ -4515,49 +4533,50 @@ begin
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
         begin
           classIdx := ResolveNodeRec(ASTRight[node]);
-          procIdx := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
-          if procIdx < 0 then Error('class does not implement the interface');
+          { A cast TO an interface type — `IFoo(p)`, `IFoo(List[i])` — is a hard
+            REINTERPRET, not a class->interface coercion: FPC spells the recovery
+            of an interface from a pointer-shaped container exactly this way, and
+            it is only expressible at all because an interface value is a single
+            pointer. Nothing to check, nothing to convert; the ARC assign below
+            still retains it. }
+          if (classIdx >= REC_UCLASS_BASE) and UClsIsInterface[classIdx - REC_UCLASS_BASE] then
+            procIdx := 0
+          else
+          begin
+            procIdx := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
+            if procIdx < 0 then Error('class does not implement the interface');
+          end;
+          { An interface value is ONE pointer: the instance. The IMT lookup
+            (procIdx) is still done here purely to CHECK the class implements the
+            interface at compile time. }
           if isComIntf then
           begin
-            { COM/ARC class -> interface. Stash the new (IMT, instance) in scratch
-              slots, retain the new reference, release the old slot, then publish.
-              Retain-before-release keeps re-assigning the same object safe. }
-            intfTmpImt := AllocVar('', tyPointer);
-            IRAppend(IR_STORE_SYM, intfTmpImt,
-                     IRAppend(IR_IMTADDR, procIdx, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+            { COM/ARC class -> interface: retain the new reference, release the old
+              slot, then publish. Retain-before-release keeps re-assigning the same
+              object safe. }
             intfTmpInst := AllocVar('', tyPointer);
             IRAppend(IR_STORE_SYM, intfTmpInst, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
-            first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpImt, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
-            argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+            first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+            argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, varIdx - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
             IRB[first] := argNode;
             seq := IRAppendCall(FindProc('PXXIntfAddRefRaw'), first, -1, Ord(tyNativeInt));
             IRIVal[seq] := 1;
             first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+            argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, varIdx - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+            IRB[first] := argNode;
             seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
             IRIVal[seq] := 1;
-            leftAddr := IRLowerAddress(ASTLeft[node]);
-            IRAppend(IR_STORE_MEM, leftAddr,
-                     IRAppend(IR_LOAD_SYM, intfTmpImt, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
-            outNode := IRAppend(IR_BINOP, IRLowerAddress(ASTLeft[node]),
-                                IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
-                                Ord(tkPlus), 0, Ord(tyPointer));
-            Result := IRAppend(IR_STORE_MEM, outNode,
+            Result := IRAppend(IR_STORE_MEM, IRLowerAddress(ASTLeft[node]),
                                IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
             Exit;
           end;
-          leftAddr := IRLowerAddress(ASTLeft[node]);
-          IRAppend(IR_STORE_MEM, leftAddr,
-                   IRAppend(IR_IMTADDR, procIdx, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
           value := IRLowerAST(ASTRight[node]);
-          outNode := IRAppend(IR_BINOP, IRLowerAddress(ASTLeft[node]),
-                              IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
-                              Ord(tkPlus), 0, Ord(tyPointer));
-          Result := IRAppend(IR_STORE_MEM, outNode, value, -1, 0, Ord(tyPointer));
+          Result := IRAppend(IR_STORE_MEM, IRLowerAddress(ASTLeft[node]), value, -1, 0, Ord(tyPointer));
           Exit;
         end;
         { COM/ARC interface -> interface (RHS is another interface lvalue):
-          retain source, release old dest, copy the fat pointer — all in the
-          ARC-correct order inside PXXIntfAssign. }
+          retain source, release old dest, copy the single-pointer value — all in
+          the ARC-correct order inside PXXIntfAssign. }
         if isComIntf and
            ((ASTKind[ASTRight[node]] = AN_IDENT) or (ASTKind[ASTRight[node]] = AN_FIELD) or
             (ASTKind[ASTRight[node]] = AN_INDEX) or (ASTKind[ASTRight[node]] = AN_DEREF)) and
@@ -4567,6 +4586,8 @@ begin
           first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer));
           IRB[first] := argNode;
+          seq := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, varIdx - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+          IRB[argNode] := seq;
           Result := IRAppendCall(FindProc('PXXIntfAssign'), first, -1, Ord(tyPointer));
           IRIVal[Result] := 1;
           Exit;
@@ -5399,11 +5420,26 @@ begin
         instance@8}. Self = [iface+8] (prepended like a method-pointer call);
         code = [[iface+0] + slot*8]. Marshal explicit args by the signature. }
       cpi := ASTIVal[node];
-      { self = [iface+8] }
-      leftAddr := IRLowerAddress(ASTRight[node]);
-      right := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
-      outNode := IRAppend(IR_BINOP, leftAddr, right, Ord(tkPlus), 0, Ord(tyPointer));
-      value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));
+      { An interface value is ONE pointer: the instance. Self = [iface]. }
+      intfCallCi := ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE;
+      intfSelfSym := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, intfSelfSym,
+               IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer)),
+               -1, 0, Ord(tyPointer));
+      { imt := PXXIntfIMTOf(self, intfCi) — resolved from the instance's RTTI blob,
+        which is what lets the VALUE stay a single pointer. Done BEFORE the explicit
+        args are marshalled so the helper call cannot clobber them. }
+      intfImtSym := AllocVar('', tyPointer);
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfSelfSym, -1, -1, 0, Ord(tyPointer)),
+                        -1, -1, 0, Ord(tyPointer));
+      argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, intfCallCi, Ord(tyNativeInt)),
+                          -1, -1, 0, Ord(tyNativeInt));
+      IRB[first] := argNode;
+      IRAppend(IR_STORE_SYM, intfImtSym,
+               IRAppendCall(FindProc('PXXIntfIMTOf'), first, -1, Ord(tyPointer)),
+               -1, 0, Ord(tyPointer));
+
+      value := IRAppend(IR_LOAD_SYM, intfSelfSym, -1, -1, 0, Ord(tyPointer));
       first := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
       last := first;
       { explicit args: signature params 1.. (param 0 is Self) }
@@ -5437,8 +5473,8 @@ begin
         item := ASTRight[item];
         Inc(pathIdx);
       end;
-      { code = [[iface+0] + slot*8] }
-      value := IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer)); { IMT ptr }
+      { code = [imt + slot*8] }
+      value := IRAppend(IR_LOAD_SYM, intfImtSym, -1, -1, 0, Ord(tyPointer));
       right := IRAppend(IR_CONST_INT, -1, -1, -1, ASTSOffset[node] * 8, Ord(tyInteger));
       outNode := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
       callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));

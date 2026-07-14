@@ -415,9 +415,15 @@ begin
         Same contiguous-reserve-then-fill discipline as the prop/meth/field arrays:
         the entries must be laid out before anything else appends to Data[], or the
         runtime's entry[i] stride breaks. }
+      { EVERY implemented interface gets an entry, not just the GUID'd ones: the
+        interface-call path resolves an interface value's IMT from this table by
+        interface ID at run time, which is what lets an interface value be a
+        single instance pointer. A GUID-less (CORBA) interface stores a zero GUID
+        — it simply never matches a GetInterface lookup, which only ever runs
+        with a real IID. }
       ifaceCount := 0;
       for i := 0 to IMTCount - 1 do
-        if (IMTClass[i] = ci) and UClsHasGuid[IMTIntf[i]] then Inc(ifaceCount);
+        if IMTClass[i] = ci then Inc(ifaceCount);
       firstOff := -1;
       if ifaceCount > 0 then
       begin
@@ -425,12 +431,14 @@ begin
         DataPutZeros(ifaceCount * RTTI_IFACE_SIZE);
         k := 0;
         for i := 0 to IMTCount - 1 do
-          if (IMTClass[i] = ci) and UClsHasGuid[IMTIntf[i]] then
+          if IMTClass[i] = ci then
           begin
             entryOff := firstOff + k * RTTI_IFACE_SIZE;
-            for j := 0 to 15 do
-              Data[entryOff + j] := UClsGuidB[IMTIntf[i] * 16 + j];
+            if UClsHasGuid[IMTIntf[i]] then
+              for j := 0 to 15 do
+                Data[entryOff + j] := UClsGuidB[IMTIntf[i] * 16 + j];
             AddDataPtrFix(entryOff + 16, IMTOff[i]);
+            PatchDataU64(entryOff + 24, IMTIntf[i]);   { interface id = its class index }
             Inc(k);
           end;
       end;

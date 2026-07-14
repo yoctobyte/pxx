@@ -108,10 +108,15 @@ procedure PXXStrDecRef(p: Pointer);
   interfaces anyway, so exclude them there (their RegisterProc is likewise
   gated in parser.inc). }
 {$ifndef PXX_ESP}
-function PXXIntfAddRef(fatptr: Pointer): NativeInt;
-function PXXIntfRelease(fatptr: Pointer): NativeInt;
-function PXXIntfAddRefRaw(imt, inst: Pointer): NativeInt;
-procedure PXXIntfAssign(dest, src: Pointer);
+{ An interface VALUE is ONE pointer: the instance (FPC's ABI). The IMT — and so
+  the _AddRef/_Release slots — is recovered from the instance's class RTTI blob
+  by INTERFACE ID, which every call site knows statically. `p` is the address of
+  the interface SLOT (the variable/field), `inst` a bare instance. }
+function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
+function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
+function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
+function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
+procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
 {$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
@@ -1029,53 +1034,85 @@ end;
   Both are nil-safe (an uninitialised interface var is all-zero); _Release at
   zero frees the instance inside the dispatched method. }
 {$ifndef PXX_ESP}
-function PXXIntfAddRef(fatptr: Pointer): NativeInt;
-var imt, inst: Pointer; fn: TPXXIntfMethod;
+{ Blob offsets (see rtti_emit.inc / defs.inc RTTI_*): the class RTTI blob is at
+  [[inst] - 8] (the backlink word before the VMT); its interface table is
+  {GUID:16, IMT:8, id:8} entries. The parent chain is walked so an inherited
+  implementation resolves. }
+const
+  PXXH_RTTI_PARENT  = 8;
+  PXXH_RTTI_IFCOUNT = 80;
+  PXXH_RTTI_IFACES  = 88;
+  PXXH_RTTI_IFSIZE  = 32;
+  PXXH_RTTI_IF_IMT  = 16;
+  PXXH_RTTI_IF_ID   = 24;
+
+function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
+var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
+begin
+  Result := nil;
+  if inst = nil then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PWord(Pointer(Int64(vmt) - 8))^);
+  while rtti <> nil do
+  begin
+    cnt := NativeInt(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
+        if NativeInt(PWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) = ifaceId then
+        begin
+          Result := Pointer(PWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
+          Exit;
+        end;
+      end;
+    rtti := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+  end;
+end;
+
+function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
+var imt: Pointer; fn: TPXXIntfMethod;
 begin
   Result := 0;
-  if fatptr = nil then Exit;
-  inst := Pointer(PWord(Pointer(Int64(fatptr) + SizeOf(Pointer)))^);
   if inst = nil then Exit;
-  imt := Pointer(PWord(fatptr)^);
+  imt := PXXIntfIMTOf(inst, ifaceId);
   if imt = nil then Exit;
   fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
   Result := fn(inst);
 end;
 
-function PXXIntfRelease(fatptr: Pointer): NativeInt;
+function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
+var inst: Pointer;
+begin
+  Result := 0;
+  if p = nil then Exit;
+  inst := Pointer(PWord(p)^);
+  Result := PXXIntfAddRefRaw(inst, ifaceId);
+end;
+
+function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
 var imt, inst: Pointer; fn: TPXXIntfMethod;
 begin
   Result := 0;
-  if fatptr = nil then Exit;
-  inst := Pointer(PWord(Pointer(Int64(fatptr) + SizeOf(Pointer)))^);
+  if p = nil then Exit;
+  inst := Pointer(PWord(p)^);
   if inst = nil then Exit;
-  imt := Pointer(PWord(fatptr)^);
+  imt := PXXIntfIMTOf(inst, ifaceId);
   if imt = nil then Exit;
   fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
   Result := fn(inst);
 end;
 
-{ _AddRef from a raw (IMT, instance) pair — used by class -> COM-interface
-  assignment, where the new value is not yet stored as a fat pointer. }
-function PXXIntfAddRefRaw(imt, inst: Pointer): NativeInt;
-var fn: TPXXIntfMethod;
+{ ARC-correct interface->interface assignment: retain the source, then release
+  the old destination (this order is safe when dest and src alias), then copy the
+  single-word value. }
+procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
 begin
-  Result := 0;
-  if (inst = nil) or (imt = nil) then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
-  Result := fn(inst);
-end;
-
-{ ARC-correct interface->interface assignment: retain the source reference, then
-  release the old destination (this order is safe when dest and src alias), then
-  copy the fat pointer (IMT word then instance word). }
-procedure PXXIntfAssign(dest, src: Pointer);
-begin
-  PXXIntfAddRef(src);
-  PXXIntfRelease(dest);
+  PXXIntfAddRef(src, ifaceId);
+  PXXIntfRelease(dest, ifaceId);
   PWord(dest)^ := PWord(src)^;
-  PWord(Pointer(Int64(dest) + SizeOf(Pointer)))^ :=
-    PWord(Pointer(Int64(src) + SizeOf(Pointer)))^;
 end;
 {$endif}
 

@@ -788,7 +788,9 @@ end;
 const
   PXX_RTTI_IFCOUNT   = 80;
   PXX_RTTI_IFACES    = 88;
-  PXX_RTTI_IFSIZE    = 24;   { {GUID:16, IMT ptr:8} }
+  PXX_RTTI_IFSIZE    = 32;   { {GUID:16, IMT ptr:8, interface id:8} }
+  PXX_RTTI_IF_IMT    = 16;
+  PXX_RTTI_IF_ID     = 24;
 
 function __pxxGuidEq(a, b: Pointer): Boolean;
 var pa, pb: PByte; i: Integer;
@@ -825,10 +827,10 @@ begin
         begin
           if Obj <> nil then
           begin
-            { a pxx interface value is the 16-byte fat pointer {IMT, instance} }
+            { a pxx interface value is ONE pointer: the instance (FPC's ABI).
+              The IMT is recovered per call via __pxxIntfIMT. }
             outp := PPxxPtr_(Obj);
-            outp^ := PPxxPtr_(PtrUInt(e) + 16)^;                  { IMT }
-            PPxxPtr_(PtrUInt(Obj) + 8)^ := Instance;              { instance }
+            outp^ := Instance;
           end;
           Result := True;
           Exit;

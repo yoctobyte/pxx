@@ -121,7 +121,13 @@ const
 
   { RTTI blob byte layouts (all fields 8 bytes) }
   RTTI_CLS_SIZE    = 96;  { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces }
-  RTTI_IFACE_SIZE  = 24;  { {GUID:16 bytes, IMT pointer:8} — the table TObject.GetInterface searches }
+  RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8} — the per-class
+                            interface table. Every implemented interface gets an entry
+                            (GUID-less CORBA ones too, GUID = zeros): GetInterface
+                            searches it by GUID, and the interface-call path resolves an
+                            interface value's IMT from it by ID at run time — which is
+                            what lets an interface VALUE be a single instance pointer
+                            (FPC's ABI) instead of a fat {IMT,instance} pair. }
   RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
   RTTI_METH_SIZE   = 16;  { name,code }
   RTTI_FIELD_SIZE  = 16;  { name,offset (published fields, for streamed child->field wiring) }

@@ -471,6 +471,10 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# an interface VALUE is ONE pointer (the instance — FPC's ABI), so it fits a
+	# pointer-shaped container and casts back: the fcl-fpcunit listener-list shape
+	./$(COMPILER) test/test_interface_single_pointer_abi_b337.pas /tmp/test_intf_1ptr_b33726
+	test "$$(/tmp/test_intf_1ptr_b33726)" = "$$(printf 'greet a 1\nsize-is-one-word: TRUE\ngreet a 2\nsame-object: TRUE\ngreet a 3\nfrom slot 0: a\nfrom slot 1: b\nnil-is-nil: TRUE')"
 	# libc-free signal HANDLERS with a Pascal callback: hook fires, program
 	# RESUMES (SA_RESTORER + rt_sigreturn); no-hook reverts to default and
 	# re-raises, so an unhandled SIGTERM still exits 143 killed-by-signal

@@ -373,7 +373,8 @@ end;
 
 function SymIsComInterface(symIdx: Integer): Boolean;
 { True iff the local/var symbol is a COM/ARC interface value (a reference-counted
-  fat pointer): modelled as a tyRecord whose rec id is a COM-interface UCls. }
+  single-pointer interface value): modelled as a tyRecord whose rec id is a
+  COM-interface UCls. }
 var ci: Integer;
 begin
   Result := False;
@@ -5029,6 +5030,7 @@ begin
         procIdx := FindProc('PXXIntfRelease');
         if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
         x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { lea rdi, [rbp+off] }
+        x64_mov_reg_imm(8, rRSI, Syms[i].RecName - REC_UCLASS_BASE);  { rsi = interface id }
         EmitCallProc(procIdx);
       end
       else if Syms[i].TypeKind = tyAnsiString then
@@ -5241,11 +5243,13 @@ begin
           begin
             { COM/ARC interface local: _Release the held reference (nil-safe). }
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
-            EmitB($50);                                        { push eax }
+            EmitB($50);                                        { push eax   (arg1 = slot) }
+            EmitB($B8); EmitI32(Syms[i].RecName - REC_UCLASS_BASE);  { mov eax, ifaceId }
+            EmitB($50);                                        { push eax   (arg2 = id) }
             procIdx := FindProc('PXXIntfRelease');
             if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
             EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
+            EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
           else if Syms[i].TypeKind = tyAnsiString then
           begin
@@ -5339,8 +5343,9 @@ begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
-          EmitLoadVarAddrArm32(i);                     { r0 = fat pointer address }
+          EmitLoadVarAddrArm32(i);                     { r0 = interface slot address }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
+          EmitLoadImmArm32(1, Syms[i].RecName - REC_UCLASS_BASE);   { r1 = interface id }
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
@@ -5437,7 +5442,8 @@ begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = fat pointer address) }
+          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = interface slot address) }
+          EmitLoadImmA64(1, Syms[i].RecName - REC_UCLASS_BASE);   { x1 = interface id }
           procIdx := FindProc('PXXIntfRelease');
           if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
           EmitCallProc(procIdx);
