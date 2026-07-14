@@ -260,3 +260,4 @@ toperator94.pp	gap: objfpc `class operator :=` implicit conversion to shortstrin
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
 tstatic1.pp	gap: class var + static class methods (inline static) in delphi mode
 tstatic2.pp	gap: class var with static class property and inherited access
+tclass12b.pp	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced

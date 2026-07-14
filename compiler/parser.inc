@@ -1600,7 +1600,7 @@ end;
 procedure ParseOperatorDef;
 var
   opKind: TTokenKind;
-  opKey: Integer;
+  opKey, dupPi: Integer;
   scalarTk, scalarTk2: TTypeKind;
   synName: AnsiString;
   typeName: AnsiString;
@@ -1824,6 +1824,24 @@ begin
       record/class (toperator13..68 %fails: +,-,<,= on LongInt/AnsiString). }
     if recId = REC_NONE then
       Error('impossible operator overload: this operation is predefined for built-in operand types');
+  end;
+  { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }
+  { = / <> are predefined for CLASS operands (reference equality) and cannot
+    be overloaded (toperator71). Other operators on records/classes are the
+    normal overload surface and stay. }
+  if (opTypeKind = Ord(tyClass)) and
+     ((opKey = Ord(tkEq)) or (opKey = Ord(tkNeq))) then
+    Error('impossible operator overload: = and <> are predefined for class types (reference equality)');
+  { A SECOND := / Implicit / Explicit from the same source type to a result of
+    the same TYPE KIND is ambiguous at every use site — String[80] vs
+    String[90] targets are indistinguishable (toperator92; toperator95 splits
+    the same pair across a class operator and a global one). Distinct result
+    kinds (-> Integer vs -> String) remain legal. }
+  if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) then
+  begin
+    dupPi := FindOpOverload(opKey, opTypeKind, recId);
+    if (dupPi >= 0) and (Procs[dupPi].RetType = Procs[procIdx].RetType) then
+      Error('duplicate conversion operator: this source type already converts to this result type');
   end;
   RegisterOpOverload(opKey, opTypeKind, recId, procIdx);
   if scalarTk2 <> tyUnknown then
@@ -17368,6 +17386,7 @@ var
   mRetType, mTk: TTypeKind;
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
+  curPublishedExplicit: Boolean;  { the section was an EXPLICIT `published` marker (not the implicit default) — the class-property publish check keys on it }
   etid, propEnumId, propSetEnumId: Integer;
   propIsIndexed, propIsDefault, propRedecl, propHasIndex: Boolean;
   propIndexVal: Int64;   { indexed (array) property + `default;` + `property X;` redeclaration }
@@ -17838,6 +17857,7 @@ begin
           `published`. We don't track $M+, so this applies to every class; the
           only effect is extra RTTI, which is harmless. }
         curPublished := 1;
+        curPublishedExplicit := False;
         { FPC shorthand: `TFoo = class(TBase);` — semicolon closes the type
           declaration immediately with an empty body; no `end` needed. }
         if CurTok.Kind <> tkSemicolon then
@@ -17861,8 +17881,10 @@ begin
              (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
               CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
           begin
-            if CaseEqual(CurTok.SVal, 'published') then curPublished := 1
-            else curPublished := 0;
+            if CaseEqual(CurTok.SVal, 'published') then
+            begin curPublished := 1; curPublishedExplicit := True; end
+            else
+            begin curPublished := 0; curPublishedExplicit := False; end;
             Next;
             continue;
           end;
@@ -17933,6 +17955,18 @@ begin
               Eat(tkSemicolon);
             end;
             continue;
+          end;
+
+          { `class property` — parsed like a plain property below (its accessors
+            are static class methods; dispatch is b299). FPC forbids PUBLISHING
+            one — class properties are not streamable (tclass14b %FAIL). The
+            implicit default section stays lenient (pxx treats every class as
+            $M+, so erroring there would reject plain Delphi code). }
+          if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkProperty) then
+          begin
+            if curPublishedExplicit then
+              Error('a class property cannot be published');
+            Next;   { consume `class`; the property branch parses the rest }
           end;
 
           isClassMethod := False;
