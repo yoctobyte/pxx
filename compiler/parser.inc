@@ -1442,6 +1442,17 @@ begin
     if CaseEqual(GenericFuncs[i].Name, name) then begin Result := i; Exit; end;
 end;
 
+function IsGenericTemplateName(const name: AnsiString): Boolean;
+{ True when the name is a registered generic TEMPLATE (`TFoo<T>`), i.e. not a type on
+  its own — it has no size and no zero value until it is specialized. A specialization
+  is registered under its own concrete name, so this never fires for one. }
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to TemplateCount - 1 do
+    if CaseEqual(Templates[i].Name, name) then begin Result := True; Exit; end;
+end;
+
 { Parses: generic function Max<T>(A, B: T): T; begin...end;
   Called when CurTok = tkIdent('generic') }
 procedure ParseGenericFunctionDef;
@@ -6484,6 +6495,13 @@ begin
           i := IsRecordType(CurTok.SVal);
           if (i <> REC_NONE) and RecContainsTextRec(i) then
             Error('Default: the record type contains a file field');
+          { An UNSPECIALIZED generic template is not a type — it has no size and no zero
+            value, so Default(TTest) is undefined (tdefault11/12). `Default(TTest<Integer>)`
+            (delphi) is fine, hence the '<' lookahead; the objfpc form starts with
+            `specialize`, so CurTok is not the template name there. }
+          if IsGenericTemplateName(CurTok.SVal) and
+             not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkLt)) then
+            Error('Default: the generic type ' + CurTok.SVal + ' must be specialized');
         end;
         node := AllocNode(AN_INT_LIT);
         ASTIVal[node] := 0;

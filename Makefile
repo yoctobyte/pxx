@@ -822,6 +822,9 @@ test-core: $(COMPILER)
 	grep -q "cannot assign a value of enum type" /tmp/test_enumid.log
 	./$(COMPILER) test/test_enum_identity_ok.pas /tmp/test_enumid_ok26
 	test "$$(/tmp/test_enumid_ok26 | tail -1)" = "PASS"
+	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
+	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas /tmp/test_defgen26 > /tmp/test_defgen.log 2>&1
+	grep -q "must be specialized" /tmp/test_defgen.log
 	./$(COMPILER) test/test_forward_ptr_record_field.pas /tmp/test_fwd_ptr_rec26
 	test "$$(/tmp/test_fwd_ptr_rec26 | tail -1)" = "PASS"
 	! ./$(COMPILER) test/test_pointer_member_fail.pas /tmp/test_ptr_member_fail26 > /tmp/test_ptr_member_fail.log 2>&1

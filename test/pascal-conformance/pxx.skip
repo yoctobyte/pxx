@@ -51,7 +51,6 @@ tclass15.pp	gap: nested class type + Classes TCustomMemoryStream/SetPointer
 tclass5.pp	gap: class constructor `fail` + range-check error 210 semantics
 tclass9.pp	gap: `class var` / `var` sections in class, class property with static method
 tclassinfo1.pp	wontfix: TObject.ClassInfo = TypeInfo(TObject) — FPC RTTI/typeinfo internals
-tdefault12.pp	gap: accepts-invalid — Default(unspecialized template): undefined type, real gap (template-registry check)
 tdefault1.pp	wontfix: needs FPC `variants` unit as shipped (Default() over Variant types)
 tdefault5.pp	gap: Default() on record/object containing TextFile field (delphi mode)
 tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
@@ -74,7 +73,6 @@ tgeneric15.pp	gap: class inheriting from `specialize TStack<Integer>` as parent 
 tgeneric16.pp	gap: generic class inheriting from specialize of another generic
 tgeneric23.pp	wontfix: requires FPC `fgl` unit as shipped (TFPGList)
 tgeneric27.pp	gap: enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
-tgeneric56.pp	gap: accepts-invalid — bare unspecialized template as var type: undefined type (template-registry check)
 tgeneric59.pp	gap: same generic name with different arity (TTest<T> vs TTest<T,S>) in delphi mode
 tgeneric79.pp	gap: inline `class(specialize IGenericIntf<T>)` parent-list specialize (interface templates capture now)
 tgeneric26.pp	gap: accepts-invalid — type parameter in a variant part must be rejected (substitution model has no pre-specialization check)
@@ -130,7 +128,6 @@ tforin27.pp	gap: user function named `Write` (builtin name shadowing) + for-in o
 tgeneric1.pp	gap: objfpc `generic TList<_T> = class` / `specialize` syntax not parsed
 tgeneric10.pp	gap: objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization
 tgeneric11.pp	gap: objfpc generic/specialize syntax; `specialize TList<_T>` as a param type
-tgeneric13.pp	gap: accepts-invalid — unspecialized generic as type argument — real gap (template-registry check; see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
 tgeneric14.pp	wontfix: dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
 tgeneric20.pp	wontfix: dialect-pass — generic method impl without <T> marker — PXX's generics surface deliberately accepts the stripped form (3d71edcf); not a bug
 tgeneric21.pp	gap: accepts-invalid — nested generic-in-generic declaration — semantics unverified, real gap (see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
@@ -185,7 +182,6 @@ tclass12a.pp	gap: `strict private const` section inside class + static class pro
 tclass12c.pp	gap: class-local const/type/var sections, `type Integer` distinct type, property default
 tclass13.pp	wontfix: needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 tclass16.pp	gap: `class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
-tdefault11.pp	gap: accepts-invalid — Default(unspecialized template), mode-delphi variant of tdefault12 (template-registry check)
 terecs10.pp	gap: default indexed property on a record (advanced records)
 terecs11.pp	gap: nested type section inside a record (private type: class/record/object/interface/range)
 terecs14.pp	gap: `class operator` set on records (Explicit, :=, =, In, comparison operators)
@@ -219,7 +215,6 @@ tgeneric46.pp	gap: generic array-type overloading, generic declared first
 tgeneric47.pp	gap: generic `procedure of object` overloading, generic declared first
 tgeneric48.pp	gap: mixed generic overloads by arity (class/record/interface/procvar/array)
 tgeneric50.pp	gap: hint directives (deprecated/platform/experimental) on generics and specializations
-tgeneric55.pp	gap: accepts-invalid — bare unspecialized template as var type, mode-delphi variant of tgeneric56 (template-registry check)
 tgeneric60.pp	gap: nested non-generic record inside generic class, incl. out-of-line static method
 tgeneric61.pp	gap: nested class inside generic class + out-of-line TTest<T>.TTestSub.Test impl
 tgeneric62.pp	gap: nested `object` type inside generic class
