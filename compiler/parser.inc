@@ -40,6 +40,7 @@ begin
   ASTRight[ASTNodeCount]   := -1;
   ASTTk[ASTNodeCount]      := 0;
   ASTLiftedVar[ASTNodeCount] := -1;
+  ASTEnumId[ASTNodeCount]  := -1;
   { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
     appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
     contribute no rows — the Tier 1 line table describes one file. }
@@ -9276,7 +9277,11 @@ begin
           node := AllocNode(AN_FLOAT_LIT)
         else
           node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
+        ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind);
+        { An enum MEMBER const folds to its ordinal here, which is where the enum
+          identity would be lost — carry it on the literal (see ASTEnumId). }
+        ASTEnumId[node] := SymEnumId[idx];
+        CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind <> tkLParen) and
@@ -9805,8 +9810,13 @@ end;
 function NodeEnumIdOf(node: Integer): Integer;
 begin
   Result := -1;
-  if (node >= 0) and (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
-    Result := SymEnumId[ASTIVal[node]];
+  if node < 0 then Exit;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
+    Result := SymEnumId[ASTIVal[node]]
+  else
+    { An enum MEMBER reached here as a folded ordinal literal; ASTEnumId is the only
+      thing that still remembers which enum minted it. }
+    Result := ASTEnumId[node];
 end;
 
 procedure ParseExpr;
@@ -9916,6 +9926,15 @@ begin
     if (NodeEnumIdOf(left) >= 0) and (IntToTypeKind(ASTTk[right]) = tyPointer) or
        (NodeEnumIdOf(right) >= 0) and (IntToTypeKind(ASTTk[left]) = tyPointer) then
       Error('cannot compare an enum with a pointer');
+    { ...and two DIFFERENT enum types have no common ordering either: `aColor = apple`
+      compared TColor against TFruit's ordinal and quietly answered yes/no. Same
+      identity, same ident-level limits as the assignment check. }
+    if (NodeEnumIdOf(left) >= 0) and (NodeEnumIdOf(right) >= 0) and
+       (NodeEnumIdOf(left) <> NodeEnumIdOf(right)) then
+      Error('cannot compare enum type ' +
+            GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(left)], EnumTypeNLen[NodeEnumIdOf(left)]) +
+            ' with enum type ' +
+            GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(right)], EnumTypeNLen[NodeEnumIdOf(right)]));
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
   end;
@@ -17319,7 +17338,11 @@ begin
           end;
           AddEnumVal(enumNOff, enumNLen, ordinal);
           if not EnumTypeScoped[etid] then
-            AddConst(enumNm, tyInteger, ordinal);
+            { An unscoped member is reachable as a bare name, and it used to become a
+              plain Integer const — so it arrived at an assignment carrying nothing but
+              its ordinal, and `aColor := banana` silently stored TFruit's 1 as green
+              (tenum4). Tag the const with its enum so the identity survives the lookup. }
+            SymEnumId[AddConst(enumNm, tyInteger, ordinal)] := etid;
           Inc(ordinal);
           if not Eat(tkComma) then done := True;
         end;

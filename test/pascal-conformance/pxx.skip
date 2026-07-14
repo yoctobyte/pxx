@@ -55,7 +55,6 @@ tdefault12.pp	gap: accepts-invalid — Default(unspecialized template): undefine
 tdefault1.pp	wontfix: needs FPC `variants` unit as shipped (Default() over Variant types)
 tdefault5.pp	gap: Default() on record/object containing TextFile field (delphi mode)
 tenum3.pp	gap: {$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
-tenum4.pp	gap: accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEnum.member works); residual: the En1 := first assign needs the enum-identity type check (tenum2 cluster) to reject
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes
 terecs6.pp	gap: Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)

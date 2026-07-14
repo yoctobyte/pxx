@@ -2347,6 +2347,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
+  SymEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);

@@ -4457,6 +4457,25 @@ begin
 
     AN_ASSIGN:
     begin
+      { FPC-parity: two enum TYPES are distinct types with no implicit conversion, so
+        `aColor := banana` is an error, not a reinterpretation of the ordinal. It used to
+        compile and store TFruit's 1 into a TColor, which reads back as green — a wrong
+        VALUE, silently (tenum4; the same hole let a {$SCOPEDENUMS} program pick the
+        shadowed member of the other enum). Checked here because every syntactic form of
+        assignment funnels through this node.
+
+        Identity is ident-level (SymEnumId, tagged at var decls and now at enum-member
+        consts): both sides must actually KNOW their enum for this to fire, so an integer,
+        a cast or a call result is left alone. A diagnostic, not a type system. }
+      if (NodeEnumIdOf(ASTLeft[node]) >= 0) and (NodeEnumIdOf(ASTRight[node]) >= 0) and
+         (NodeEnumIdOf(ASTLeft[node]) <> NodeEnumIdOf(ASTRight[node])) then
+        ErrorAt(ASTLine[node], 'cannot assign a value of enum type ' +
+              GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTRight[node])],
+                                 EnumTypeNLen[NodeEnumIdOf(ASTRight[node])]) +
+              ' to a variable of enum type ' +
+              GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTLeft[node])],
+                                 EnumTypeNLen[NodeEnumIdOf(ASTLeft[node])]));
+
       { `x = (a, b)` -- a comma on the right-hand side. Its value IS b, so evaluate a
         for its side effects and then assign FROM b. Rewriting the node here (rather
         than letting IRLowerAST return the comma's value) is what makes a STRUCT survive:

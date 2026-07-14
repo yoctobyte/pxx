@@ -11,6 +11,16 @@ begin
   Halt(1);
 end;
 
+{ Fatal error for a site the CURRENT TOKEN is nowhere near — an IR-lowering check,
+  which runs long after the parser reached EOF, so Error's CurTok.Line and its
+  `near:` token window would both point at the end of the program and actively
+  mislead. Takes the line from the AST node instead, and prints no window. }
+procedure ErrorAt(line: Integer; const msg: AnsiString);
+begin
+  writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')');
+  Halt(1);
+end;
+
 { Non-fatal diagnostic for accepted-but-suspect constructs (a case-insensitive
   C-import match, a narrowing, an ignored attribute). Prints
   `pascal26:<line>: warning: ...` to stdout, in the same shape as Error, and
