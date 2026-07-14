@@ -59,3 +59,26 @@ Whether this matters depends on whether frozen strings reach these targets in
 practice — the RTL's TypInfo does use them (interned RTTI names are frozen), so any
 riscv32/xtensa program touching RTTI/streaming or TypInfo's enum surface is exposed,
 and would fail SILENTLY (empty names, zero lengths) rather than loudly.
+
+## 2026-07-14 — RECON (no code changed; returned to backlog)
+
+**The ticket's premise is wrong for riscv32, and that makes it much cheaper than filed.**
+riscv32 does NOT lack frozen-string branches — it has them, keyed on the pre-b305 predicate
+`= tyString`, which misses `tyFixedString` / `tyShortString`. So it IS the b305 widening:
+
+- `compiler/ir_codegen_riscv32.inc:136` — `EmitStrOperandRISCV32`: `operandTk = tyString`
+- `:718` and `:1046` — frozen buffer -> managed handle (`PXXStrFromLit(len, buf+8)`)
+- `:1641` — external C call passes `buf+8` as `const char*`
+- `:1205` — the "frozen concat unsupported" error is also gated on `= tyString`, so a
+  fixedstring concat currently slips PAST the error and miscompiles instead of erroring
+
+`PXXWriteFrozenW` (the writeln arm) is already there and already uses
+`TypeIsFrozenString` (`:1830`) — which is why `writeln(f)` reaches the right helper while
+the assignment that should have filled the buffer did nothing. Widen the four sites above,
+then check `Length` (`procIdx = -Ord(tkLength)`, `:1402`) and the frozen arm of IR_STORE_SYM.
+
+Confirmed repro (unchanged): `test/test_frozen_string_cross_b305.pas` on riscv32 prints
+`len=0`, an empty string, then SEGFAULTS; x86-64 prints the full expected output.
+
+**xtensa is the one that genuinely has nothing** — 0 `TypeIsFrozenString` sites. That half
+is still missing-feature work.
