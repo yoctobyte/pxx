@@ -315,6 +315,82 @@ end;
 
 procedure IREmitNodeXtensa(node: Integer); forward;
 
+procedure EmitAnsiStringFromNodeXtensa(valNode: Integer);
+{ Materialise a MANAGED string handle in a2 from a value that is NOT one — a
+  char, or a frozen inline buffer. Needed at a call ARGUMENT: handing a
+  `string[N]` straight to a `const s: string` parameter passed the raw BUFFER
+  address as if it were a heap handle, and the callee then read the 8 bytes
+  BEFORE the buffer as its length. Mirrors riscv32's b345 port. }
+begin
+  if IntToTypeKind(IRTk[valNode]) = tyChar then
+  begin
+    IREmitNodeXtensa(valNode);                  { a2 = char code }
+    XtensaPushA2;                               { spill char to the frame }
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
+    else
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
+    EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
+    EmitStrFromLitXtensa;                       { a2 = handle }
+    if XtensaABI = XTENSA_ABI_WINDOWED then Dec(XtSpillDepth, 4)
+    else xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+  end
+  else
+  begin
+    IREmitNodeXtensa(valNode);                  { a2 = frozen buffer }
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0);  { len = [buf] }
+    xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8);  { src = buf+8 }
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
+    EmitStrFromLitXtensa;                       { a2 = handle }
+  end;
+end;
+
+procedure EmitFrozenStoreXtensa(si, valNode: Integer);
+{ Store a string value into a FROZEN inline buffer (`string[N]` / shortstring):
+  the slot holds [len:8][chars]. Xtensa had no frozen store at all, so
+  `f := 'hello'` left the buffer untouched and every later read saw length 0
+  (bug-frozen-string-unsupported-riscv32-xtensa). Mirrors riscv32's b345 port:
+  three source shapes — a char ordinal, a MANAGED handle (length at [h-8],
+  chars at h, nil = empty), or another frozen/literal buffer (length at [b],
+  chars at b+8). Like the other backends, the length is not capped to N. }
+var srcTk: TTypeKind;
+begin
+  IREmitNodeXtensa(valNode);                    { a2 = source }
+  xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);     { a5 = src }
+  EmitSlotAddrXtensa(reg_xtensa_a4, si);        { a4 = dst buffer }
+  srcTk := IntToTypeKind(IRTk[valNode]);
+
+  if srcTk = tyChar then
+  begin
+    xtensa_movi(reg_xtensa_a8, 1);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 0);   { len = 1 }
+    xtensa_movi(reg_xtensa_a8, 0);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 4);   { high half of the length }
+    xtensa_s8i(reg_xtensa_a5, reg_xtensa_a4, 8);    { the char }
+    Exit;
+  end;
+
+  if srcTk = tyAnsiString then
+    { nil handle -> empty, else len := [src-8] and chars start AT src. }
+    EmitAsmXtensa(['movi a6, 0', 'movi a8, 0', 'beq a5, a8, .fs',
+                   'addi a8, a5, -8', 'l32i a6, a8, 0', '.fs:'])
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a6, reg_xtensa_a5, 0);   { frozen/literal: len = [src] }
+    xtensa_addi(reg_xtensa_a5, reg_xtensa_a5, 8);   { chars = src+8 }
+  end;
+
+  xtensa_s32i(reg_xtensa_a6, reg_xtensa_a4, 0);     { publish the length }
+  xtensa_movi(reg_xtensa_a8, 0);
+  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 4);
+  xtensa_addi(reg_xtensa_a4, reg_xtensa_a4, 8);     { dst chars }
+  { byte-copy loop: a4=dst, a5=src, a6=cnt, a8 scratch }
+  EmitAsmXtensa(['.fc:', 'movi a8, 0', 'beq a6, a8, .fd',
+                 'l8ui a8, a5, 0', 's8i a8, a4, 0',
+                 'addi a5, a5, 1', 'addi a4, a4, 1', 'addi a6, a6, -1',
+                 'j .fc', '.fd:']);
+end;
+
 { ===== 64-bit (Int64/UInt64) value model: a2:a3 = lo:hi register pair =====
   True 8-byte values live in a2(low):a3(high) in flight, are loaded/stored as two
   words, and have their own arithmetic/shift/compare sequences. Xtensa has no
@@ -847,6 +923,13 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
+        begin
+          { `f := 'hello'` where f is string[N]: xtensa had NO frozen store, so
+            the buffer was never written and every later read saw length 0. }
+          EmitFrozenStoreXtensa(si, IRB[node]);
+          Exit;
+        end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
           { Managed-string assignment: build the new handle in a2, then publish
@@ -875,7 +958,7 @@ begin
             if XtensaABI = XTENSA_ABI_WINDOWED then Dec(XtSpillDepth, 4)
             else xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
           end
-          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNodeXtensa(valNode);                  { a2 = inline buffer addr }
             xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0); { len = [buf] }
@@ -1119,7 +1202,7 @@ begin
             EmitAsmXtensa(['movi a7, 0', 'movi a9, 0', 'beq a8, a9, .cb',
                            'addi a9, a8, -8', 'l32i a7, a9, 0', '.cb:']);
           end
-          else if IntToTypeKind(IRTk[right]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
             xtensa_l32i(reg_xtensa_a7, reg_xtensa_a8, 0);
             xtensa_addi(reg_xtensa_a6, reg_xtensa_a8, 8);
@@ -1137,7 +1220,7 @@ begin
             EmitAsmXtensa(['movi a4, 0', 'movi a9, 0', 'beq a8, a9, .ca',
                            'addi a9, a8, -8', 'l32i a4, a9, 0', '.ca:']);
           end
-          else if IntToTypeKind(IRTk[left]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
             xtensa_l32i(reg_xtensa_a4, reg_xtensa_a8, 0);
             xtensa_addi(reg_xtensa_a5, reg_xtensa_a8, 8);
@@ -1202,7 +1285,7 @@ begin
             EmitAsmXtensa(['movi a6, 0', 'movi a9, 0', 'beq a8, a9, .cb',
                            'addi a9, a8, -8', 'l32i a6, a9, 0', '.cb:']);
           end
-          else if IntToTypeKind(IRTk[right]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
             xtensa_l32i(reg_xtensa_a6, reg_xtensa_a8, 0);
             xtensa_addi(reg_xtensa_a7, reg_xtensa_a8, 8);
@@ -1220,7 +1303,7 @@ begin
             EmitAsmXtensa(['movi a4, 0', 'movi a9, 0', 'beq a8, a9, .ca',
                            'addi a9, a8, -8', 'l32i a4, a9, 0', '.ca:']);
           end
-          else if IntToTypeKind(IRTk[left]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
             xtensa_l32i(reg_xtensa_a4, reg_xtensa_a8, 0);
             xtensa_addi(reg_xtensa_a5, reg_xtensa_a8, 8);
@@ -1293,7 +1376,7 @@ begin
           Exit;
         end;
 
-        if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
+        if (op = Ord(tkPlus)) and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
           Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
         IREmitNodeXtensa(left);
@@ -1503,9 +1586,28 @@ begin
         end;
         if procIdx = -Ord(tkLength) then
         begin
-          { Length(arr): a2 = handle; count at [handle-8], nil handle -> 0.
-            (l32i has no negative offset, so address via addi first.) }
           argNode := IRB[node];
+          valNode := IRA[argNode];
+          { A FROZEN inline string keeps its length in the buffer's own prefix
+            ([buf+0]), not in a heap header at [handle-8]. Reading it the
+            managed way gave whatever sat 8 bytes before the buffer — in
+            practice 0, so Length(f) was always 0. The frozen operand does not
+            arrive tagged: `f` lowers to an IR_LEA of its symbol (the buffer
+            ADDRESS), `pf^` to a bare pointer load whose value IS the buffer.
+            Same structural predicate as aarch64/riscv32 (b345). }
+          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+             ((IRKind[valNode] = IR_LEA) and
+              TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
+              not Syms[IRA[valNode]].IsArray) or
+             (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
+              (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
+          begin
+            IREmitNodeXtensa(valNode);          { a2 = frozen buffer addr }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+            Exit;
+          end;
+          { Length(arr) / Length(managed): a2 = handle; count at [handle-8],
+            nil handle -> 0. (l32i has no negative offset, so addi first.) }
           IREmitNodeXtensa(IRA[argNode]);       { a2 = handle (or 0) }
           EmitAsmXtensa(['movi a4, 0', 'beq a2, a4, .lzero',
                          'addi a2, a2, -8', 'l32i a2, a2, 0', '.lzero:']);
@@ -1617,10 +1719,23 @@ begin
           end
           else
           begin
-            IREmitNodeXtensa(IRA[argNode]);
+            { A frozen buffer (or a char) handed to a MANAGED string parameter
+              has to be materialised into a real heap handle first — otherwise
+              the callee takes the buffer address for a handle and reads its
+              "length" from the 8 bytes before it. Args already converted by
+              IRLowerCallArg are tagged tyAnsiString, so they do not match here
+              and cannot double-convert. Mirrors riscv32/aarch64 (b345). }
+            if (procIdx >= 0) and (i < Procs[procIdx].ParamCount) and
+               (Procs[procIdx].Params[i].TypeKind = tyAnsiString) and
+               (not Procs[procIdx].Params[i].IsRef) and
+               ((IntToTypeKind(IRTk[argNode]) = tyChar) or
+                TypeIsFrozenString(IntToTypeKind(IRTk[argNode]))) then
+              EmitAnsiStringFromNodeXtensa(IRA[argNode])
+            else
+              IREmitNodeXtensa(IRA[argNode]);
             { External C call: skip the 8-byte length prefix of a Pascal string
               literal so the callee sees a const char* (as on x86-64/riscv32). }
-            if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
             XtensaPushA2;
             Inc(nArgs, 1);
