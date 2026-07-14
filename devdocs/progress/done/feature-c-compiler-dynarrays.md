@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** feature (compiler infrastructure) — **Track A** (core: `defs.inc` globals + the
   code that indexes them).
-- **Status:** working
+- **Status:** done
   we are (by design) an all-in-RAM compiler, and real-world corpora are now large enough
   to sit near the fixed ceilings.
 
@@ -70,3 +70,6 @@ silent adjacent-global corruption is a bug class, independent of the port.
 TokChars got stopgap guards at its two CLex sites (9aef018d); the remaining ~38
 TokChars write sites across 21 lexers/parsers, LoadFileBuf, and the other 8 MB
 pools have not been audited.
+
+## Log
+- 2026-07-14 — resolved, commit e516f0bf.

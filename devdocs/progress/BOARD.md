@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (96)
+## backlog (95)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,7 +51,6 @@ _none_
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
 | feature-c-alloca-dynamic-stack | A | 55 | feature | alloca(): dynamic stack allocation for the C frontend | — |
-| feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -189,7 +188,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (716)
+## done (717)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -579,6 +578,7 @@ _none_
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
 | feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
+| feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
 | feature-c-corpus-chess | A | 60 | feature | C corpus: chess engine — perft as a compiler-independent oracle | — |
 | feature-c-corpus-tcc | C | 50 | feature | C corpus: bring up tcc (TinyCC) as a real-world multi-file C target | — |
@@ -938,7 +938,6 @@ _none_
 - [p 65] [T] feature-pasmith-widen-grammar
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
-- [p 60] [A] feature-c-compiler-dynarrays
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [A] feature-cdecl-indirect-cross-targets
 - [p 60] [A] feature-float-exception-mask-control
