@@ -1412,7 +1412,12 @@ COMPILER_SRC = "compiler/compiler.pas"
 # level in bench.tsv times the reference compiler on the same source so the
 # dashboard can show pxx-vs-FPC. Flags mirror the Makefile bootstrap.
 FPC_BIN = os.environ.get("FPC", "fpc")
-FPC_FLAGS = ["-O2", "-Tlinux", "-Px86_64"]
+# -Mobjfpc is load-bearing, not decoration: in FPC's DEFAULT mode `integer` is a
+# 16-bit smallint, so a source with a literal like 1000000 is rejected outright
+# ("range check error while evaluating constants") -- which silently dropped sieve
+# from the comparison. pxx implements the objfpc dialect, so anything else compares
+# against a language we do not claim to be.
+FPC_FLAGS = ["-Mobjfpc", "-O2", "-Tlinux", "-Px86_64"]
 FPC_LEVEL = "fpc"
 # (name, source, canary argv, timed argv, fpc_ok) — canary mode must be
 # deterministic; {tmp} expands to the bench scratch dir. fpc_ok marks sources
@@ -1423,7 +1428,7 @@ BENCH_SUITE = (
      [], ["--bench", "1600", "1200"], False),       # float compute (pxx units)
     ("raytracer", "examples/raytracer/raytracer.pas",
      [], ["--ppm", "{tmp}/rt.ppm", "480", "360"], False),  # call-heavy float
-    ("sieve", "examples/primes/sieve.pas", [], [], False),  # memory-bound int
+    ("sieve", "examples/primes/sieve.pas", [], [], True),   # memory-bound int, FPC-comparable
     ("nbody", "bench/portable/nbody.pas", [], [], True),   # float, FPC-comparable
     ("fib", "bench/portable/fib.pas", [], [], True),       # call-heavy int, FPC-comparable
 )
