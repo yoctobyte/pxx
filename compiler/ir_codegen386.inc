@@ -802,7 +802,8 @@ begin
   Code[doneOff] := Byte(CodeLen - (doneOff + 1));   { .done: }
 end;
 
-procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean);
+procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean;
+  qchk, qchkUns: Boolean);
 { Evaluate (left OP right) as a 64-bit operation. left is spilled to the stack
   ([esp]=lo, [esp+4]=hi); right is materialized into edx:eax. Arithmetic/bit
   ops leave the 64-bit result in edx:eax; comparisons leave 0/1 in eax. }
@@ -817,6 +818,9 @@ begin
   begin
     EmitB($03); EmitB($04); EmitB($24);            { add eax, [esp] }
     EmitB($13); EmitB($54); EmitB($24); EmitB($04);{ adc edx, [esp+4] }
+    { {$Q+}: the hi-word adc's flags carry the 64-bit verdict; check BEFORE
+      the flag-clobbering add esp (feature-overflow-checks-cross-and-intrinsics). }
+    if qchk then EmitOvfCheckX64(qchkUns);
     EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
   end
   else if op = Ord(tkMinus) then
@@ -825,6 +829,10 @@ begin
     EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
     EmitB($29); EmitB($C1);                        { sub ecx, eax }
     EmitB($19); EmitB($D3);                        { sbb ebx, edx }
+    { {$Q+}: hi-word sbb flags = 64-bit verdict (movs below preserve flags,
+      but check here before anything clobbers). Checked MUL is not ported to
+      the 32-bit pairs yet — add/sub only, like the ticket records. }
+    if qchk then EmitOvfCheckX64(qchkUns);
     EmitB($89); EmitB($C8);                        { mov eax, ecx }
     EmitB($89); EmitB($DA);                        { mov edx, ebx }
     EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
@@ -2121,7 +2129,9 @@ begin
         if Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk) then
         begin
           EmitBinop64_386(left, right, op,
-            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)));
+            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;
 

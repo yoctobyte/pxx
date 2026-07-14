@@ -19,3 +19,4 @@ function IRPointerStride(node: Integer): Integer; forward;
 function FindCTypedef(const name: AnsiString): Integer; forward;
 procedure EnableExceptionRuntime; forward;
 function IsASTLValue(node: Integer): Boolean; forward;
+procedure EmitOvfCheckX64(uns: Boolean); forward;

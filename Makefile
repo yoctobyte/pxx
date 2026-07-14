@@ -2842,6 +2842,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_u64_to_double.pas /tmp/test_i386_u64d
 	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_i386_u64d_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_u64d)" = "$$(/tmp/test_i386_u64d_x64)"
+	# {$$Q+} pair add/sub raise catchable EIntOverflow; checked MUL not yet
+	# ported to the 32-bit pairs (feature-overflow-checks-cross-and-intrinsics)
+	./$(COMPILER) --target=i386 test/test_overflow_checks_qplus.pas /tmp/test_i386_qplus
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_qplus)" = "$$(printf 'no-raise-mul 18446744073709551613\nwrapped 0\ncaught=3')"
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_managed_strlen)" = "$$(/tmp/test_i386_managed_strlen_x64)"
@@ -3820,6 +3824,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_u64_to_double.pas /tmp/test_arm32_u64d
 	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_arm32_u64d_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_u64d)" = "$$(/tmp/test_arm32_u64d_x64)"
+	# {$$Q+} pair add/sub raise catchable EIntOverflow; checked MUL not yet
+	# ported to the 32-bit pairs (feature-overflow-checks-cross-and-intrinsics)
+	./$(COMPILER) --target=arm32 test/test_overflow_checks_qplus.pas /tmp/test_arm32_qplus
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_qplus)" = "$$(printf 'no-raise-mul 18446744073709551613\nwrapped 0\ncaught=3')"
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_managed_strlen)" = "$$(/tmp/test_arm32_managed_strlen_x64)"

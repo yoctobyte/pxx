@@ -562,7 +562,24 @@ begin
   Patch32(doneOff, $0A000000 or ((((CodeLen - doneOff) div 4) - 2) and $00ffffff));  { .done: }
 end;
 
-procedure EmitBinop64Arm32(left, right, op: Integer; signedOp: Boolean);
+procedure EmitOvfCheckArm32(skipCondBranch: Integer);
+{ {$Q+} overflow trap, arm32 leg: emit the given conditional SKIP branch
+  (a b<cond> encoding, imm24 patched here) around a PXXOverflow call —
+  taken only when the just-set flags report a wrapped 64-bit result
+  (feature-overflow-checks-cross-and-intrinsics). }
+var pSkip, procIdx: Integer;
+begin
+  pSkip := CodeLen;
+  EmitI32(skipCondBranch);
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Patch32(pSkip, skipCondBranch or ((((CodeLen - pSkip - 8) div 4)) and $00FFFFFF));
+end;
+
+procedure EmitBinop64Arm32(left, right, op: Integer; signedOp: Boolean;
+  qchk, qchkUns: Boolean);
 { Evaluate (left OP right) as a 64-bit operation. left is spilled to the stack
   ([sp]=lo, [sp+4]=hi); right is materialised into r0:r1. Arithmetic/bit ops
   leave the 64-bit result in r0:r1; comparisons leave 0/1 in r0. }
@@ -645,12 +662,28 @@ begin
   if op = Ord(tkPlus) then
   begin
     EmitI32($E0920000);  { adds r0, r2, r0 }
-    EmitI32($E0A31001);  { adc  r1, r3, r1 }
+    if qchk then
+    begin
+      { {$Q+}: flag-setting hi-word adc; trap on V (signed) / C set (unsigned
+        wrap). Checked MUL is not ported to the 32-bit pairs yet. }
+      EmitI32($E0B31001);                        { adcs r1, r3, r1 }
+      if qchkUns then EmitOvfCheckArm32($3A000000)  { bcc skip }
+      else EmitOvfCheckArm32($7A000000);            { bvc skip }
+    end
+    else
+      EmitI32($E0A31001);  { adc  r1, r3, r1 }
   end
   else if op = Ord(tkMinus) then
   begin
     EmitI32($E0520000);  { subs r0, r2, r0 }
-    EmitI32($E0C31001);  { sbc  r1, r3, r1 }
+    if qchk then
+    begin
+      EmitI32($E0D31001);                        { sbcs r1, r3, r1 }
+      if qchkUns then EmitOvfCheckArm32($2A000000)  { bcs skip (CC = borrow) }
+      else EmitOvfCheckArm32($7A000000);            { bvc skip }
+    end
+    else
+      EmitI32($E0C31001);  { sbc  r1, r3, r1 }
   end
   else if op = Ord(tkStar) then
   begin
@@ -1693,7 +1726,9 @@ begin
         if Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk) then
         begin
           EmitBinop64Arm32(left, right, op,
-            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)));
+            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;
 
