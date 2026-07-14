@@ -6,7 +6,7 @@ prio: 30  # ESP parked (user 2026-07-12): Pascal has prio
 
 - **Type:** bug / gap (relocatable-object writer) — **Track A** (`elfwriter.inc`
   / emit-obj path)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11, hit by [[feature-esp-peripheral-callback-api]]
   slice 1 (esp_timer event surface).
 
@@ -62,3 +62,6 @@ esp_timer callback never fires under qemu. Identical with and without iram;,
 and the @proc reloc is proven good by the indirect-call probe, so it is the
 esptimer library ↔ qemu emulation interaction, not the .o writer. Belongs to
 feature-esp-peripheral-callback-api's validation, not this ticket.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
