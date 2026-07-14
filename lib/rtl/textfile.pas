@@ -26,12 +26,22 @@ procedure Rewrite(var f: Text);
 procedure Append(var f: Text);
 procedure Close(var f: Text);
 procedure CloseFile(var f: Text);
+procedure Erase(var f: Text);
 function Eof(var f: Text): Boolean;
 function IOResult: Integer;
 
 procedure TextWrite(var f: Text; const s: AnsiString);
 procedure TextWriteLn(var f: Text; const s: AnsiString);
 procedure TextReadLn(var f: Text; var s: AnsiString);
+
+{ FPC System surface: the standard Input/Output text files and Flush.
+  PXX text writes go straight to the fd (no RTL-side buffer), so Flush only
+  has to exist and accept the file — there is nothing to drain. }
+procedure Flush(var f: Text);
+
+var
+  Input: Text;
+  Output: Text;
 
 implementation
 
@@ -104,6 +114,19 @@ end;
 procedure CloseFile(var f: Text);
 begin
   Close(f);
+end;
+
+procedure Erase(var f: Text);
+var rc: Integer;
+begin
+  { Classic Erase: delete the assigned (closed) file by name. }
+  if f.Name = '' then
+  begin
+    SetIO(-1);
+    Exit;
+  end;
+  rc := PalDelete(PChar(f.Name));
+  if rc < 0 then SetIO(rc) else SetIO(TF_OK);
 end;
 
 function Eof(var f: Text): Boolean;
@@ -212,4 +235,18 @@ begin
   if LastIOResult = TF_OK then SetIO(TF_OK);
 end;
 
+procedure Flush(var f: Text);
+begin
+  { Writes are unbuffered (PAL writes hit the fd directly); nothing to drain. }
+end;
+
+initialization
+  Input.Handle := 0;
+  Input.Name := '';
+  Input.HitEof := False;
+  Input.HasPeek := False;
+  Output.Handle := 1;
+  Output.Name := '';
+  Output.HitEof := False;
+  Output.HasPeek := False;
 end.
