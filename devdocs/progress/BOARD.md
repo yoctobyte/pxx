@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-pascal-overflow-checks-q-plus | A | 45 | feature | {$Q+} overflow-checked integer arithmetic (Runtime error 215 / EIntOverflow) — the sole tint642 residual, also gates tint643 | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -29,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (99)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -87,6 +86,7 @@ _none_
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (741)
+## done (742)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -781,6 +781,7 @@ _none_
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |
+| feature-pascal-overflow-checks-q-plus | A | 45 | feature | {$Q+} overflow-checked integer arithmetic (Runtime error 215 / EIntOverflow) — the sole tint642 residual, also gates tint643 | — |
 | feature-pascal-record-constructors | P | 50 | feature | Advanced records: constructors + `class operator` — DONE | — |
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
@@ -1047,6 +1048,7 @@ _none_
 - [p 35] [T] bug-testmgr-aarch64-conformance-shard3-timeout-flake
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
+- [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear

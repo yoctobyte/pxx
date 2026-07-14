@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** feature (FPC-parity runtime checks). **Track A** (lexer directive,
   parser tagging, per-backend check emission, RTL hook).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14 night session, out of the tint642 burn-down: after
   record-cast offsets, bitwise not, u64→double and qword-literal domain all
   landed, `testreqword` ({$Q+} qword wrap must raise) is tint642's ONLY
@@ -57,3 +57,6 @@ OPERATION SITE, lexically scoped by the directive.
 - New test: {$Q+} add/sub/mul overflow raises catchable EIntOverflow; {$Q-}
   wraps; subword (byte/word) widths check correctly.
 - Conformance sweep stays 293+/0.
+
+## Log
+- 2026-07-15 — resolved, commit 17562666.
