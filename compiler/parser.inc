@@ -17728,13 +17728,18 @@ begin
               every `class(TObject)` VMT and break the implicit-root model
               (and the COM/ARC synthesis for TInterfacedObject). }
             if CaseEqual(CurTok.SVal, 'TObject') then tmpCi := -1;
-            if (tmpCi < 0) and
-               (CaseEqual(CurTok.SVal, 'TObject') or CaseEqual(CurTok.SVal, 'TInterfacedObject')) then
+            if (tmpCi < 0) and CaseEqual(CurTok.SVal, 'TObject') then
             begin
-              { Explicit root base `class(TObject)` / `class(TInterfacedObject, IFoo)`
-                == the implicit root: leave parentCi = -1, same as a plain `class`.
-                These names are not registered as user classes (the root is
-                implicit), so accept them by name rather than erroring. }
+              { Explicit root base `class(TObject)` == the implicit root: leave
+                parentCi = -1, same as a plain `class`. TObject is excluded from
+                the parent lookup above, so accept it by name rather than
+                erroring. (TInterfacedObject used to be accepted-as-root here
+                too — silently DROPPING its refcount contract, so COM ARC
+                dispatched through a garbage IMT slot and crashed at scope
+                exit. It is a real builtinheap class now, so it resolves like
+                any other base; on targets without it (ESP) the name errors
+                like any unknown base. bug-pascal-tinterfacedobject-missing-
+                silent-segfault) }
             end
             else
             begin

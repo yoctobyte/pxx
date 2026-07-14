@@ -1,39 +1,26 @@
 program TestInterfaceArcExc;
 { COM/ARC interfaces — result transfer, reassignment, and exception-unwind
   release. The exception-unwind finalisation rides the x86-64 proc cleanup frame,
-  so this test is x86-64 only (wired into test-core, not the cross suites). }
+  so this test is x86-64 only (wired into test-core, not the cross suites).
+  Uses the builtinheap TInterfacedObject/IInterface pair; frees are counted in a
+  destructor override (see test_interface_arc.pas). }
 {$interfaces com}
 type
-  IInterface = interface
-    function QueryInterface(iid: Integer): Integer;
-    function _AddRef: Integer;
-    function _Release: Integer;
-  end;
   IFoo = interface
     procedure Hello;
   end;
-  TInterfacedObject = class
-    FRefCount: Integer;
-    function QueryInterface(iid: Integer): Integer;
-    function _AddRef: Integer;
-    function _Release: Integer;
-  end;
   TFoo = class(TInterfacedObject, IFoo)
+    destructor Destroy; override;
     procedure Hello;
   end;
 
 var
   Freed, Created: Integer;
 
-function TInterfacedObject.QueryInterface(iid: Integer): Integer;
-begin Result := -1; end;
-function TInterfacedObject._AddRef: Integer;
-begin Self.FRefCount := Self.FRefCount + 1; Result := Self.FRefCount; end;
-function TInterfacedObject._Release: Integer;
+destructor TFoo.Destroy;
 begin
-  Self.FRefCount := Self.FRefCount - 1;
-  Result := Self.FRefCount;
-  if Self.FRefCount = 0 then begin Freed := Freed + 1; FreeMem(Pointer(Self)); end;
+  Freed := Freed + 1;
+  inherited Destroy;
 end;
 procedure TFoo.Hello; begin end;
 

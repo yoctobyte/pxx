@@ -1815,6 +1815,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
 	./$(COMPILER) test/test_interface_arc_exc.pas /tmp/test_interface_arc_exc26
 	test "$$(/tmp/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
+	./$(COMPILER) test/test_tinterfacedobject_builtin.pas /tmp/test_tio_builtin26
+	test "$$(/tmp/test_tio_builtin26)" = "$$(printf 'go\ndestroyed=1\ndestroyed=2\nsurvived scope exit')"
 	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_uint64_ops26
 	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\nTRUE\nFALSE\n6')"
 	./$(COMPILER) test/test_case_io.pas /tmp/test_case_io26
@@ -2273,7 +2275,7 @@ test-core: $(COMPILER)
 	grep -q "prop Owner tk=6" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" /tmp/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_rtti_reg.pas /tmp/test_rtti_reg26
-	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 2\nClass 0: TBase\nClass 1: TChild')"
+	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 3\nClass 0: TInterfacedObject\nClass 1: TBase\nClass 2: TChild')"
 	./$(COMPILER) test/test_rtti.pas /tmp/test_rtti26
 	/tmp/test_rtti26 > /tmp/test_rtti26.log
 	grep -q "c.Caption: Antigravity" /tmp/test_rtti26.log

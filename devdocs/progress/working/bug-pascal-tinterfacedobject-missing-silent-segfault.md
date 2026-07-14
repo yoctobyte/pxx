@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** bug (missing diagnostic + RTL gap — silent runtime crash)
 - **Track:** A — core (unknown base class silently accepted) + B (the RTL type)
-- **Status:** backlog — opened 2026-07-14, found while verifying [[feature-interfaces]] for
+- **Status:** working
   closure.
 
 ## Reproduction

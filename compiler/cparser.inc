@@ -6966,6 +6966,12 @@ begin
   if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
      ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
   begin
+    { builtinheap declares TInterfacedObject/IInterface (Pascal classes), whose
+      signatures name TGuid and TObject — builtin rows the Pascal ParseProgram
+      registers up front. The C path reaches builtinheap through pxxcio's uses,
+      so mint the same rows here (both are idempotent no-ops if present). }
+    RegisterBuiltinTGuid;
+    RegisterBuiltinTObject;
     { Hosted riscv32 has no FPU: every float op lowers to the __pxx_* soft-float
       kernels, and pxxcio `uses math` (Sqrt etc.) pulls float bodies that compile
       against them. Pull softfloat FIRST, mirroring the Pascal ParseProgram

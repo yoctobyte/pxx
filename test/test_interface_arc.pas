@@ -1,53 +1,30 @@
 program TestInterfaceArc;
 { COM/ARC interfaces ({$interfaces com}): a TInterfacedObject-derived class
   managed purely through interface variables (no manual Free) must be freed
-  exactly once, at the last reference drop. }
+  exactly once, at the last reference drop.
+
+  TInterfacedObject/IInterface are the builtinheap RTL pair now (this test used
+  to declare its own copies — the reason the missing RTL type went unnoticed,
+  bug-pascal-tinterfacedobject-missing-silent-segfault). Frees are counted
+  through the virtual-destructor path _Release dispatches at refcount 0. }
 {$interfaces com}
 type
-  IInterface = interface
-    function QueryInterface(iid: Integer): Integer;
-    function _AddRef: Integer;
-    function _Release: Integer;
-  end;
-
   IFoo = interface
     procedure Hello;
   end;
 
-  TInterfacedObject = class
-    FRefCount: Integer;
-    function QueryInterface(iid: Integer): Integer;
-    function _AddRef: Integer;
-    function _Release: Integer;
-  end;
-
   TFoo = class(TInterfacedObject, IFoo)
+    destructor Destroy; override;
     procedure Hello;
   end;
 
 var
   Freed: Integer;
 
-function TInterfacedObject.QueryInterface(iid: Integer): Integer;
+destructor TFoo.Destroy;
 begin
-  Result := -1;
-end;
-
-function TInterfacedObject._AddRef: Integer;
-begin
-  Self.FRefCount := Self.FRefCount + 1;
-  Result := Self.FRefCount;
-end;
-
-function TInterfacedObject._Release: Integer;
-begin
-  Self.FRefCount := Self.FRefCount - 1;
-  Result := Self.FRefCount;
-  if Self.FRefCount = 0 then
-  begin
-    Freed := Freed + 1;
-    FreeMem(Pointer(Self));
-  end;
+  Freed := Freed + 1;
+  inherited Destroy;
 end;
 
 procedure TFoo.Hello;

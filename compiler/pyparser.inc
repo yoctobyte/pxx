@@ -1181,6 +1181,11 @@ begin
   i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
   CurrentUnitIdx := savedUnitIdx;
   EmitAnsiStringRuntime;
+  { builtinheap declares TInterfacedObject/IInterface, whose signatures name
+    TGuid and TObject — register the builtin rows first (idempotent), exactly
+    like the Pascal and C paths. }
+  RegisterBuiltinTGuid;
+  RegisterBuiltinTObject;
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   PySkipNewlines;

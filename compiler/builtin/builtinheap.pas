@@ -117,6 +117,40 @@ function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
 procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
+
+{ ---- IInterface / TInterfacedObject: the COM root pair (FPC declares them in
+  System) ----
+  Declared HERE because builtinheap is pulled for every class-using program and
+  is parsed before user declarations — so `TFoo = class(TInterfacedObject, IFoo)`,
+  the single most-written FPC/Delphi interface idiom, resolves out of the box
+  instead of silently building a parentless class whose ARC dispatch walks a
+  garbage IMT slot (bug-pascal-tinterfacedobject-missing-silent-segfault).
+  A COM-mode interface with no explicit parent implicitly derives IInterface
+  (parser.inc), which is what reserves IMT slots 0..2 for QueryInterface /
+  _AddRef / _Release — ARC releases through slot 2.
+  NOTE: a user declaration of either name lands on a LATER UCls row and is
+  shadowed by this one (FindUClass is first-match); the shapes are identical to
+  FPC's, so that only matters if the user's version diverges from the FPC ABI. }
+type
+  HResult = LongInt;
+
+  IInterface = interface
+    ['{00000000-0000-0000-C000-000000000046}']   { the canonical IUnknown GUID }
+    function QueryInterface(constref IID: TGuid; out Obj): HResult;
+    function _AddRef: Integer;
+    function _Release: Integer;
+  end;
+  IUnknown = IInterface;
+
+  TInterfacedObject = class(TObject, IInterface)
+    FRefCount: Integer;
+    function QueryInterface(constref IID: TGuid; out Obj): HResult;
+    function _AddRef: Integer;
+    function _Release: Integer;
+    { Virtual so a descendant's `destructor Destroy; override;` runs when the
+      last interface reference drops (_Release dispatches Free -> Destroy). }
+    destructor Destroy; virtual;
+  end;
 {$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
@@ -1113,6 +1147,76 @@ begin
   PXXIntfAddRef(src, ifaceId);
   PXXIntfRelease(dest, ifaceId);
   PWord(dest)^ := PWord(src)^;
+end;
+
+{ GUID-keyed interface lookup for TInterfacedObject.QueryInterface — the same
+  RTTI-blob walk as PXXIntfIMTOf, but matched on the 16-byte GUID at entry
+  offset 0 instead of the interface id (a duplicate of builtin's
+  __pxxGetInterface, which lives in a unit builtinheap must not depend on).
+  Writes the instance pointer (an interface value IS the instance — FPC ABI)
+  through objOut on a hit. }
+function PXXTIOGetInterface(inst: Pointer; iid: Pointer; objOut: Pointer): NativeInt;
+var
+  vmt, rtti, ifaces, e: Pointer;
+  cnt, i, j: NativeInt;
+  pa, pb: PByte;
+  same: Boolean;
+begin
+  Result := 0;
+  if (inst = nil) or (iid = nil) then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PWord(Pointer(Int64(vmt) - 8))^);
+  while rtti <> nil do
+  begin
+    cnt := NativeInt(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
+        same := True;
+        for j := 0 to 15 do
+        begin
+          pa := PByte(Int64(e) + j);
+          pb := PByte(Int64(iid) + j);
+          if pa^ <> pb^ then begin same := False; Break; end;
+        end;
+        if same then
+        begin
+          if objOut <> nil then PWord(objOut)^ := NativeInt(inst);
+          Result := 1;
+          Exit;
+        end;
+      end;
+    rtti := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+  end;
+end;
+
+function TInterfacedObject.QueryInterface(constref IID: TGuid; out Obj): HResult;
+begin
+  if PXXTIOGetInterface(Pointer(Self), @IID, @Obj) <> 0 then
+    Result := 0
+  else
+    Result := HResult($80004002);   { E_NOINTERFACE }
+end;
+
+function TInterfacedObject._AddRef: Integer;
+begin
+  Self.FRefCount := Self.FRefCount + 1;
+  Result := Self.FRefCount;
+end;
+
+function TInterfacedObject._Release: Integer;
+begin
+  Self.FRefCount := Self.FRefCount - 1;
+  Result := Self.FRefCount;
+  if Result = 0 then
+    Self.Free;   { nil-guarded [virtual Destroy;] FreeMem — the Free desugar }
+end;
+
+destructor TInterfacedObject.Destroy;
+begin
 end;
 {$endif}
 
