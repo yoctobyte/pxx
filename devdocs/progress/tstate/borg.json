@@ -1896,16 +1896,14 @@
    "src": "test/test_op_overload.pas"
   },
   {
-   "bad": "4e8369c38bd9eb4d0cc2aa4d58a5bfdc12ab7730",
+   "bad": "0b873006a9a165f6061caeb25e84c59baa9205b0",
    "good": "5befdfee89431e0680de2b95e0303f721cdefe20",
    "job": "test-core#src:test/test_op_overload.pas@2",
    "name": "test-core#768",
    "opened": "2026-07-14T16:14:53Z",
    "range": [
     "1d489ff4aee6ff438704d1b8dda2d56222fbe263",
-    "0b873006a9a165f6061caeb25e84c59baa9205b0",
-    "36688d89aba4d1ea19610eac29d9dda6b2561967",
-    "4e8369c38bd9eb4d0cc2aa4d58a5bfdc12ab7730"
+    "0b873006a9a165f6061caeb25e84c59baa9205b0"
    ],
    "src": "test/test_op_overload.pas"
   }
