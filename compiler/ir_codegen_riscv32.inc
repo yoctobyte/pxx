@@ -133,7 +133,7 @@ begin
     rv32_beq(srcReg, reg_zero, 8);           { nil -> len 0 }
     rv32_lw(lenReg, srcReg, -8);
   end
-  else if operandTk = tyString then
+  else if TypeIsFrozenString(operandTk) then
   begin
     rv32_lw(lenReg, srcReg, 0);              { len = [buf] }
     rv32_addi(srcReg, srcReg, 8);            { src = buf+8 }
@@ -142,6 +142,50 @@ begin
   begin
     rv32_addi(srcReg, reg_sp, slotOff);      { src = &slot (char) }
     rv32_addi(lenReg, reg_zero, 1);
+  end;
+end;
+
+procedure EmitCopyBytesRISCV32(dstReg, srcReg, cntReg: Integer);
+{ Copy cntReg bytes from srcReg to dstReg. No `rep movsb` here, so it is an explicit
+  byte loop; all three registers are ADVANCED/consumed, and t0 is the scratch byte.
+  Offsets are hard-coded because the body is a fixed 7 instructions — see the map. }
+begin
+  { +0  } rv32_beq(cntReg, reg_zero, 28);      { cnt = 0 -> done (past the jal) }
+  { +4  } rv32_lbu(reg_t0, srcReg, 0);
+  { +8  } rv32_sb(reg_t0, dstReg, 0);
+  { +12 } rv32_addi(srcReg, srcReg, 1);
+  { +16 } rv32_addi(dstReg, dstReg, 1);
+  { +20 } rv32_addi(cntReg, cntReg, -1);
+  { +24 } rv32_jal(reg_zero, -24);             { back to the beq }
+  { +28   done }
+end;
+
+procedure EmitAnsiStringFromNodeRISCV32(valNode: Integer);
+{ Materialise a MANAGED string handle in a0 from a value that is NOT one — a char, or a
+  frozen inline buffer. Needed at a call ARGUMENT: handing a `string[N]` straight to a
+  `const s: string` parameter passed the raw BUFFER address as if it were a heap handle,
+  and the callee then read the 8 bytes BEFORE the buffer as its length. Mirrors the
+  aarch64/arm32/i386 arg path; riscv32 never had one. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXStrFromLit');
+  if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+  if IntToTypeKind(IRTk[valNode]) = tyChar then
+  begin
+    IREmitNodeRISCV32(valNode);                  { a0 = char code }
+    rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0);
+    rv32_addi(reg_a1, reg_sp, 0);                { arg1 = &char }
+    rv32_addi(reg_a0, reg_zero, 1);              { arg0 = len 1 }
+    EmitCallProc(procIdx);
+    rv32_addi(reg_sp, reg_sp, 8);
+  end
+  else
+  begin
+    IREmitNodeRISCV32(valNode);                  { a0 = frozen buffer }
+    rv32_lw(reg_a2, reg_a0, 0);                  { len = [buf] }
+    rv32_addi(reg_a1, reg_a0, 8);                { arg1 = buf+8 }
+    rv32_addi(reg_a0, reg_a2, 0);                { arg0 = len }
+    EmitCallProc(procIdx);
   end;
 end;
 
@@ -177,6 +221,50 @@ begin
 end;
 
 procedure IREmitNodeRISCV32(node: Integer); forward;
+
+procedure EmitFrozenStoreRISCV32(si, valNode: Integer);
+{ Store a string value into a FROZEN inline buffer (`string[N]` / shortstring): the slot
+  holds [len:8][chars]. Ported from the x86-64 arm — riscv32 had no frozen store at all,
+  so `f := 'hello'` left the buffer untouched and every later read saw length 0.
+
+  Three source shapes, as everywhere else: a char ordinal, a MANAGED handle (length at
+  [h-8], chars at h, nil = empty), or another frozen/literal buffer (length at [b], chars
+  at b+8). Like x86-64, the length is not capped to N here. }
+var srcTk: TTypeKind;
+begin
+  IREmitNodeRISCV32(valNode);                  { a0 = source }
+  rv32_addi(reg_t2, reg_a0, 0);                { t2 = src }
+  EmitSlotAddrRISCV32(reg_t1, si);             { t1 = dst buffer }
+  srcTk := IntToTypeKind(IRTk[valNode]);
+
+  if srcTk = tyChar then
+  begin
+    rv32_addi(reg_t0, reg_zero, 1);
+    rv32_sw(reg_t0, reg_t1, 0);                { len = 1 }
+    rv32_sw(reg_zero, reg_t1, 4);              { high half of the 8-byte length word }
+    rv32_sb(reg_t2, reg_t1, 8);                { the char }
+    Exit;
+  end;
+
+  if srcTk = tyAnsiString then
+  begin
+    { nil handle -> empty string, else len := [src-8] and chars start AT src. }
+    rv32_addi(reg_t3, reg_zero, 0);            { t3 = len, default 0 }
+    rv32_beq(reg_t2, reg_zero, 8);             { nil -> keep len 0 }
+    rv32_lw(reg_t3, reg_t2, -8);
+  end
+  else
+  begin
+    rv32_lw(reg_t3, reg_t2, 0);                { frozen/literal: len = [src] }
+    rv32_addi(reg_t2, reg_t2, 8);              { chars = src+8 }
+  end;
+
+  rv32_sw(reg_t3, reg_t1, 0);                  { publish the length }
+  rv32_sw(reg_zero, reg_t1, 4);
+  rv32_addi(reg_t1, reg_t1, 8);                { dst chars }
+  EmitCopyBytesRISCV32(reg_t1, reg_t2, reg_t3);
+end;
+
 
 { ===== 64-bit (Int64/UInt64) value model: a0:a1 = lo:hi register pair =====
   True 8-byte values live in a0(low):a1(high) in flight, are loaded/stored as two
@@ -692,6 +780,13 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray then
+        begin
+          { `f := 'hello'` where f is string[N]: riscv32 had NO frozen store, so the
+            buffer was never written and every later read saw length 0. }
+          EmitFrozenStoreRISCV32(si, IRB[node]);
+          Exit;
+        end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
           { Managed-string assignment: build the new handle in a0, then publish
@@ -715,7 +810,7 @@ begin
             procIdx := FindProc('PXXStrFromLit'); EmitCallProc(procIdx);
             rv32_addi(reg_sp, reg_sp, 8);
           end
-          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNodeRISCV32(valNode);                       { a0 = inline buffer addr }
             rv32_lw(reg_a2, reg_a0, 0);                       { len = [buf] }
@@ -1043,7 +1138,7 @@ begin
             EmitCallProc(procIdx);
             rv32_addi(reg_sp, reg_sp, 8);
           end
-          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNodeRISCV32(valNode);                         { a0 = inline buffer addr }
             rv32_lw(reg_a2, reg_a0, 0);                         { len = [buf] }
@@ -1202,7 +1297,7 @@ begin
           Exit;
         end;
 
-        if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
+        if (op = Ord(tkPlus)) and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
           Error('target riscv32: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
         IREmitNodeRISCV32(left);
@@ -1401,8 +1496,27 @@ begin
         end;
         if procIdx = -Ord(tkLength) then
         begin
-          { Length(arr): a0 = handle; count at [handle-8], nil handle -> 0. }
           argNode := IRB[node];
+          valNode := IRA[argNode];
+          { A FROZEN inline string keeps its length in the buffer's own prefix ([buf+0]),
+            not in a heap header at [handle-8]. Reading it the managed way gave whatever
+            sat 8 bytes before the buffer — in practice 0, so Length(f) was always 0.
+
+            The frozen operand does not arrive tagged: `f` lowers to an IR_LEA of its
+            symbol (the buffer ADDRESS), and `pf^` to a bare pointer load whose value IS
+            the buffer. Same predicate aarch64 uses. }
+          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+             ((IRKind[valNode] = IR_LEA) and
+              TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
+              not Syms[IRA[valNode]].IsArray) or
+             (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
+              (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
+          begin
+            IREmitNodeRISCV32(valNode);       { a0 = frozen buffer addr }
+            rv32_lw(reg_a0, reg_a0, 0);
+            Exit;
+          end;
+          { Length(arr) / Length(managed): a0 = handle; count at [handle-8], nil -> 0. }
           IREmitNodeRISCV32(IRA[argNode]);    { a0 = handle (or 0) }
           rv32_beq(reg_a0, reg_zero, 8);      { if nil, skip the load (result 0) }
           rv32_lw(reg_a0, reg_a0, -8);
@@ -1634,11 +1748,23 @@ begin
           end
           else
           begin
-            IREmitNodeRISCV32(IRA[argNode]);
+            { A frozen buffer (or a char) handed to a MANAGED string parameter has to be
+              materialised into a real heap handle first — otherwise the callee takes the
+              buffer address for a handle and reads its "length" from the 8 bytes before
+              it. Args already converted by IRLowerCallArg are tagged tyAnsiString, so
+              they do not match here and cannot double-convert. Mirrors aarch64. }
+            if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+               (Procs[procIdx].Params[nArgs].TypeKind = tyAnsiString) and
+               (not Procs[procIdx].Params[nArgs].IsRef) and
+               ((IntToTypeKind(IRTk[argNode]) = tyChar) or
+                TypeIsFrozenString(IntToTypeKind(IRTk[argNode]))) then
+              EmitAnsiStringFromNodeRISCV32(IRA[argNode])
+            else
+              IREmitNodeRISCV32(IRA[argNode]);
             { External C call: a Pascal string literal is stored as an 8-byte
               length prefix + NUL-terminated chars; pass the char data so the
               callee sees a const char*. }
-            if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+            if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               rv32_addi(reg_a0, reg_a0, 8);
             rv32_addi(reg_sp, reg_sp, -4);
             rv32_sw(reg_a0, reg_sp, 0);
