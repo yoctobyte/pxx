@@ -40,6 +40,107 @@ begin
   rv32_lw(rd, rd, 8);
 end;
 
+procedure EmitSignalRuntimeRISCV32;
+{ Libc-free signal support, riscv32 Linux (feature-signal-handlers; x86-64 =
+  b336, aarch64 = b370). riscv follows the SAME contract as arm64, not x86-64:
+
+  - **No SA_RESTORER.** riscv does not define __ARCH_HAS_SA_RESTORER, so the
+    kernel struct sigaction is { handler, flags, mask } — no restorer field.
+    On ILP32 that means handler@0, flags@4, **mask@8** (16 bytes total). The
+    kernel points ra at its own vdso rt_sigreturn trampoline, so `ret` out of
+    the handler reaches it.
+  - **ra must be framed across the hook call** (jalr clobbers it), exactly as
+    aarch64 frames x30.
+
+  Clobbering callee-saved regs in the handler is safe: the kernel restores the
+  whole register file from the ucontext at rt_sigreturn.
+  Syscalls (generic table, same as arm64): rt_sigaction=134, getpid=172,
+  kill=129; sigsetsize = 8. Handler ABI: a0 = signal number. }
+var jmpOver, dispatchAt, bOut1, bDfl, jOut, outAt, adrDelta: Integer;
+begin
+  jmpOver := CodeLen; rv32_jal(reg_zero, 8);      { b .end (patched below) }
+
+  { --- dispatch (kernel handler ABI: a0 = signal number) --- }
+  SigDispatchAddr := CodeLen;
+  dispatchAt := CodeLen;
+  rv32_addi(reg_sp, reg_sp, -16);
+  rv32_sw(reg_ra, reg_sp, 12);                    { ra = kernel trampoline }
+  rv32_sw(reg_s0, reg_sp, 8);                     { s0 holds the sig across syscalls }
+  { bounds: (unsigned)(sig-1) < 64 }
+  rv32_addi(reg_t2, reg_a0, -1);
+  rv32_sltiu(reg_t0, reg_t2, 64);
+  bOut1 := CodeLen; rv32_beq(reg_t0, reg_zero, 0); { out of range -> .out (patched) }
+  rv32_slli(reg_t2, reg_t2, 3);                   { *8: slot stride (table is 64*8 on every target) }
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_HOOKS);
+  rv32_add(reg_t1, reg_t1, reg_t2);
+  rv32_lw(reg_t0, reg_t1, 0);                     { t0 = hook }
+  bDfl := CodeLen; rv32_beq(reg_t0, reg_zero, 0);  { no hook -> .dfl (patched) }
+  rv32_jalr(reg_ra, reg_t0, 0);                   { call the Pascal hook; returning resumes }
+  { .out }
+  outAt := CodeLen;
+  Patch32(bOut1, EncodeRISCVBEQ(reg_t0, reg_zero, outAt - bOut1));
+  rv32_lw(reg_ra, reg_sp, 12);
+  rv32_lw(reg_s0, reg_sp, 8);
+  rv32_addi(reg_sp, reg_sp, 16);
+  rv32_jalr(reg_zero, reg_ra, 0);                 { ret -> vdso trampoline -> rt_sigreturn }
+  { .dfl: no hook — revert to SIG_DFL and re-raise, so an unhandled signal
+    still terminates with proper killed-by-signal status. }
+  Patch32(bDfl, EncodeRISCVBEQ(reg_t0, reg_zero, CodeLen - bDfl));
+  rv32_addi(reg_s0, reg_a0, 0);                   { s0 = sig }
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_SCRATCH);
+  rv32_sw(reg_zero, reg_t1, 0);                   { handler = SIG_DFL }
+  rv32_sw(reg_zero, reg_t1, 4);                   { flags   = 0 }
+  rv32_sw(reg_zero, reg_t1, 8);                   { mask lo (NO restorer slot on riscv) }
+  rv32_sw(reg_zero, reg_t1, 12);                  { mask hi }
+  rv32_addi(reg_a0, reg_s0, 0);                   { a0 = sig }
+  rv32_addi(reg_a1, reg_t1, 0);                   { a1 = act }
+  rv32_addi(reg_a2, reg_zero, 0);                 { a2 = oldact }
+  rv32_addi(reg_a3, reg_zero, 8);                 { a3 = sigsetsize }
+  rv32_addi(reg_a7, reg_zero, 134);               { rt_sigaction }
+  EmitI32($00000073);                             { ecall }
+  rv32_addi(reg_a7, reg_zero, 172);               { getpid }
+  EmitI32($00000073);                             { ecall -> a0 = pid }
+  rv32_addi(reg_a1, reg_s0, 0);                   { a1 = sig }
+  rv32_addi(reg_a7, reg_zero, 129);               { kill }
+  EmitI32($00000073);                             { ecall }
+  jOut := CodeLen; rv32_jal(reg_zero, 0);
+  Patch32(jOut, EncodeRISCVJAL(reg_zero, outAt - jOut));   { .dfl tail -> the shared epilogue }
+
+  { --- sethook (a0 = sig, a1 = handler), falls through into install --- }
+  SigSetHookAddr := CodeLen;
+  rv32_addi(reg_t2, reg_a0, -1);
+  rv32_andi(reg_t2, reg_t2, 63);                  { keep the store in-table }
+  rv32_slli(reg_t2, reg_t2, 3);
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_HOOKS);
+  rv32_add(reg_t1, reg_t1, reg_t2);
+  rv32_sw(reg_a1, reg_t1, 0);
+
+  { --- install (a0 = sig): sigaction{dispatch, SA_RESTART, mask=0} --- }
+  SigInstallAddr := CodeLen;
+  rv32_addi(reg_t2, reg_a0, 0);                   { t2 = sig (syscalls clobber a0) }
+  EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_SCRATCH);
+  { t0 = absolute address of dispatch, PC-relative (auipc+addi) }
+  rv32_auipc(reg_t0, 0);
+  adrDelta := dispatchAt - (CodeLen - 4);         { auipc leaves t0 = its own PC }
+  if (adrDelta < -2048) or (adrDelta > 2047) then
+    Error('compiler error: signal dispatch stub out of addi range (riscv32)');
+  rv32_addi(reg_t0, reg_t0, adrDelta);
+  rv32_sw(reg_t0, reg_t1, 0);                     { handler = dispatch }
+  rv32_lui(reg_t0, $10000);                       { SA_RESTART = $10000000 (lui imm = val>>12) }
+  rv32_sw(reg_t0, reg_t1, 4);                     { flags }
+  rv32_sw(reg_zero, reg_t1, 8);                   { mask lo }
+  rv32_sw(reg_zero, reg_t1, 12);                  { mask hi }
+  rv32_addi(reg_a0, reg_t2, 0);                   { a0 = sig }
+  rv32_addi(reg_a1, reg_t1, 0);                   { a1 = act }
+  rv32_addi(reg_a2, reg_zero, 0);
+  rv32_addi(reg_a3, reg_zero, 8);
+  rv32_addi(reg_a7, reg_zero, 134);               { rt_sigaction }
+  EmitI32($00000073);                             { ecall }
+  rv32_jalr(reg_zero, reg_ra, 0);                 { ret }
+
+  Patch32(jmpOver, EncodeRISCVJAL(reg_zero, CodeLen - jmpOver));
+end;
+
 procedure IREmitLeaveExceptionFramesRISCV32(count: Integer);
 var i: Integer;
 begin
@@ -2088,6 +2189,19 @@ begin
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
+      end;
+
+    IR_SET_SIGNAL:
+      begin
+        { SetSignalHandler(sig, handler): a0 = sig, a1 = handler -> sethook stub
+          (stores the hook slot, falls through into the installer). }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        IREmitNodeRISCV32(IRB[node]);                { a0 = handler address }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRA[node]);                { a0 = signal number }
+        rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = handler }
+        rv32_jal(reg_ra, SigSetHookAddr - CodeLen);  { bl sethook }
       end;
 
     IR_SETLEN_DYN:

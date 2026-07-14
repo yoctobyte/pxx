@@ -2998,6 +2998,12 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_i386_asyncecho
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
+	# libc-free signal handlers on i386 (b371): hook fires + program RESUMES;
+	# no hook = revert to SIG_DFL + re-raise (dies 143).
+	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_handler_callback_b336.pas /tmp/test_i386_sigcb
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	./$(COMPILER) --target=i386 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_i386_sigdfl
+	tools/run_target.sh i386 /tmp/test_i386_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas /tmp/test_i386_cdeclind
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
@@ -3404,6 +3410,12 @@ test-riscv32: $(COMPILER)
 	# ifdef-guarded multi-arch asm source, riscv32 leg
 	./$(COMPILER) --target=riscv32 test/test_asm_ifdef_multiarch.pas /tmp/test_riscv32_asmifdef
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_asmifdef)" = "42"
+	# libc-free signal handlers on riscv32 (b371): hook fires + program RESUMES;
+	# no hook = revert to SIG_DFL + re-raise (dies 143).
+	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_handler_callback_b336.pas /tmp/test_riscv32_sigcb
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	./$(COMPILER) --target=riscv32 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_riscv32_sigdfl
+	tools/run_target.sh riscv32 /tmp/test_riscv32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas /tmp/test_riscv32_recwide
@@ -3963,6 +3975,12 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_arm32_asyncecho
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
+	# libc-free signal handlers on arm32 (b371): hook fires + program RESUMES;
+	# no hook = revert to SIG_DFL + re-raise (dies 143).
+	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_handler_callback_b336.pas /tmp/test_arm32_sigcb
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sigcb)" = "$$(printf 'hits=2\nresumed after handler')"
+	./$(COMPILER) --target=arm32 -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_arm32_sigdfl
+	tools/run_target.sh arm32 /tmp/test_arm32_sigdfl > /dev/null 2>&1; test "$$?" = "143"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas /tmp/test_arm32_cdeclind
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern

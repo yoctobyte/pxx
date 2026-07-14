@@ -5,8 +5,8 @@ prio: 65  # auto
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** backlog — not in progress; x86-64 (b336) and aarch64 (b370) slices landed, pinned and tested; remaining = i386/arm32 restorer stubs, riscv32 (vdso path, mirrors aarch64), SA_SIGINFO/ucontext, --threadsafe masks.
-- **Owner:** — (unclaimed; parked to backlog 2026-07-14)
+- **Status:** working
+- **Owner:** fable-a
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
   [[decide-int-div-zero-behavior-unification]]).
@@ -179,3 +179,53 @@ interruption point) and the default-revert path (no hook -> SIG_DFL + re-raise
 - SA_SIGINFO + ucontext (handler sees siginfo/register state) — the
   fault-to-catchable-raise consumer.
 - --threadsafe interaction (per-thread masks).
+
+## 2026-07-14 — ALL FIVE HOSTED TARGETS DONE (b371). Per-arch ports complete.
+
+i386, arm32 and riscv32 join x86-64 (b336) and aarch64 (b370). The "delicate
+per-arch part" this ticket warned about was real, and it was NOT the same
+delicacy on each arch — three genuinely different kernel contracts:
+
+**1. Does the arch have sa_restorer at all?**
+- x86-64 / i386 / arm32: YES. struct sigaction = { handler, flags, restorer,
+  mask } — restorer at +8, mask at +12 (32-bit) / +24 (x86-64). Must supply a
+  restorer stub and set SA_RESTORER.
+- aarch64 / riscv32: NO (`__ARCH_HAS_SA_RESTORER` undefined) — { handler,
+  flags, mask }, mask at +16 / +8, kernel supplies the trampoline. Setting
+  SA_RESTORER there would write the flag into the mask.
+
+**2. sigreturn vs rt_sigreturn — the trap that cost the most.** arm32 and i386
+have TWO signal-frame shapes and the kernel picks by **SA_SIGINFO**, not by
+which sigaction syscall installed the handler. With no SA_SIGINFO the frame is
+a plain `sigframe`, so the restorer must call **sigreturn (arm 119 / i386
+119)**, NOT rt_sigreturn (173). Getting this wrong makes the kernel restore a
+garbage context — observed on arm32 as pc=sp=lr=0 and an instant SIGSEGV,
+found under gdb after the emitted code disassembled perfectly. x86-64 gets away
+with rt_sigreturn only because it has no legacy frame; aarch64/riscv32 likewise.
+(If SA_SIGINFO is ever set — the ucontext slice — these MUST flip to 173.)
+
+**3. i386's restorer needs a leading `pop eax`.** setup_frame() wedges the
+signal number between the return address and the context, so after the
+handler's `ret` esp = frame+4, while sys_sigreturn recovers the frame as
+(sp - 8) and needs frame+8. glibc's i386 trampoline opens with the same pop.
+
+Other per-arch notes: arm32's r7 is callee-saved AND the syscall register, so
+install/sethook frame it; i386 takes the signal number ON THE STACK (cdecl
+`void h(int)`), every other target in a register; aarch64/riscv32/arm32 must
+frame the link register across the hook call (x86-64/i386 get it free from the
+stack).
+
+Every instruction was verified against the real assembler for its arch
+(aarch64-linux-gnu-as, arm-linux-gnueabi-as, GNU as --32) — that is also what
+caught three bad aarch64 branch offsets in b370.
+
+All five run both tests under qemu and are wired into their cross suites:
+hook fires ×2 + program RESUMES, and no-hook -> SIG_DFL + re-raise -> exit 143.
+ESP bare-metal is unaffected (signals gated off there).
+
+### What remains (ticket stays open)
+- SA_SIGINFO + ucontext (handler sees siginfo / register state) — the
+  fault-to-catchable-raise consumer; flips the arm32/i386 restorers to 173.
+- --threadsafe interaction (per-thread masks).
+- sigaltstack (a guard-page fault currently reuses the faulting stack).
+- FPC-compat Signal()/sigaction surface; the float-mask consumer.

@@ -110,6 +110,131 @@ procedure EmitReleaseHeapLock386;
 begin
 end;
 
+procedure EmitCodeAbsToEax386(targetOff: Integer);
+{ eax := absolute runtime address of code offset targetOff, via the call/pop
+  trick (position-independent; the delta from the pop's own offset to the
+  target is an emit-time constant). The i386 twin of EmitCodeAbsToRdx. }
+var popPos: Integer;
+begin
+  EmitB($E8); EmitI32(0);                  { call +0  (pushes the next insn's addr) }
+  popPos := CodeLen;
+  EmitB($58);                              { pop eax  (eax = popPos's runtime addr) }
+  EmitB($05); EmitI32(targetOff - popPos); { add eax, delta }
+end;
+
+procedure EmitSignalRuntime386;
+{ Libc-free signal support, i386 Linux. Shares arm32's two traps and adds one
+  of its own:
+
+  - **sigreturn (119), NOT rt_sigreturn (173).** Like arm32, i386 has TWO
+    signal-frame shapes and the kernel picks by SA_SIGINFO, not by which
+    sigaction syscall installed the handler. No SA_SIGINFO -> setup_frame() ->
+    a plain `struct sigframe` -> the restorer must call sys_sigreturn, or the
+    kernel restores a garbage context. (If SA_SIGINFO is ever set here, this
+    MUST become 173.)
+  - **sa_restorer exists**: struct sigaction = { handler(4), flags(4),
+    restorer(4), mask(8) } -> restorer at +8, mask at +12 (same as arm32;
+    aarch64/riscv32 have no restorer field at all).
+  - **The signal number arrives ON THE STACK**, not in a register: with
+    SA_RESTORER the kernel's frame puts the return address (the restorer) at
+    [esp] and the signal number at [esp+4], i.e. a plain cdecl `void h(int)`.
+
+  Syscalls (int $0x80): rt_sigaction=174, sigreturn=119, getpid=20, kill=37.
+  Hex verified against GNU as --32. }
+var jmpOver, dispatchAt, restorerAt, jOut1, jOut2, jDfl, outAt, jEnd: Integer;
+begin
+  EmitB($E9); jmpOver := CodeLen; EmitI32(0);     { jmp .end (patched below) }
+
+  { --- restorer (SA_RESTORER target): sigreturn --- }
+  restorerAt := CodeLen;
+  SigRestorerAddr := restorerAt;
+  { The leading `pop eax` is NOT optional. i386's setup_frame() wedges the
+    signal number between the return address and the rest of the frame:
+      [frame+0] = pretcode (restorer)   [frame+4] = sig   [frame+8] = context
+    The handler's `ret` pops pretcode, leaving esp = frame+4 — but
+    sys_sigreturn recovers the frame as (sp - 8), so it needs esp = frame+8.
+    Popping the signal word supplies exactly that. (glibc's i386 trampoline
+    opens with the same `popl %eax` for this reason; x86-64's rt frame has no
+    such word, which is why its restorer is just the bare syscall.) }
+  EmitB($58);                                     { pop eax   (discard sig; esp = frame+8) }
+  EmitB($B8); EmitI32(119);                       { mov eax, 119  (sigreturn) }
+  EmitB($CD); EmitB($80);                         { int 0x80 }
+
+  { --- dispatch (cdecl: signal number at [ebp+8]) --- }
+  SigDispatchAddr := CodeLen;
+  dispatchAt := CodeLen;
+  EmitB($55);                                     { push ebp }
+  EmitB($89); EmitB($E5);                         { mov ebp, esp }
+  EmitB($8B); EmitB($4D); EmitB($08);             { mov ecx, [ebp+8]  (sig) }
+  EmitB($83); EmitB($F9); EmitB($01);             { cmp ecx, 1 }
+  EmitB($0F); EmitB($8C); jOut1 := CodeLen; EmitI32(0);   { jl .out }
+  EmitB($83); EmitB($F9); EmitB($40);             { cmp ecx, 64 }
+  EmitB($0F); EmitB($8F); jOut2 := CodeLen; EmitI32(0);   { jg .out }
+  EmitB($8D); EmitB($51); EmitB($FF);             { lea edx, [ecx-1] }
+  EmitB($8B); EmitB($04); EmitB($D5); EmitGlobRef(BSS_SIG_HOOKS);  { mov eax, [hooks + edx*8] }
+  EmitB($85); EmitB($C0);                         { test eax, eax }
+  EmitB($0F); EmitB($84); jDfl := CodeLen; EmitI32(0);    { jz .dfl }
+  EmitB($FF); EmitB($D0);                         { call eax  (Pascal hook; returning resumes) }
+  { .out }
+  outAt := CodeLen;
+  EmitB($89); EmitB($EC);                         { mov esp, ebp }
+  EmitB($5D);                                     { pop ebp }
+  EmitB($C3);                                     { ret -> restorer -> sigreturn }
+  Patch32(jOut1, outAt - (jOut1 + 4));
+  Patch32(jOut2, outAt - (jOut2 + 4));
+  { .dfl: no hook — revert to SIG_DFL and re-raise. }
+  Patch32(jDfl, CodeLen - (jDfl + 4));
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 0);  EmitI32(0);  { handler  = SIG_DFL }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4);  EmitI32(0);  { flags    = 0 }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 8);  EmitI32(0);  { restorer = 0 }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo  (i386: mask at +12) }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 16); EmitI32(0);  { mask hi }
+  EmitB($8B); EmitB($5D); EmitB($08);             { mov ebx, [ebp+8]   sig }
+  EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch  act }
+  EmitB($31); EmitB($D2);                         { xor edx, edx       oldact }
+  EmitB($BE); EmitI32(8);                         { mov esi, 8         sigsetsize }
+  EmitB($B8); EmitI32(174);                       { mov eax, 174       rt_sigaction }
+  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitB($B8); EmitI32(20);                        { mov eax, 20        getpid }
+  EmitB($CD); EmitB($80);                         { int 0x80  -> eax = pid }
+  EmitB($89); EmitB($C3);                         { mov ebx, eax       pid }
+  EmitB($8B); EmitB($4D); EmitB($08);             { mov ecx, [ebp+8]   sig }
+  EmitB($B8); EmitI32(37);                        { mov eax, 37        kill }
+  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitB($E9); jEnd := CodeLen; EmitI32(0);
+  Patch32(jEnd, outAt - (jEnd + 4));              { -> shared epilogue }
+
+  { --- sethook (cdecl-ish: eax = sig, edx = handler), falls into install --- }
+  SigSetHookAddr := CodeLen;
+  EmitB($50);                                     { push eax  (keep sig for install) }
+  EmitB($48);                                     { dec eax }
+  EmitB($83); EmitB($E0); EmitB($3F);             { and eax, 63   keep the store in-table }
+  EmitB($92);                                     { xchg eax, edx  (edx = slot, eax = handler) }
+  EmitB($89); EmitB($04); EmitB($D5); EmitGlobRef(BSS_SIG_HOOKS);  { mov [hooks + edx*8], eax }
+  EmitB($58);                                     { pop eax   (sig back) }
+
+  { --- install (eax = sig) --- }
+  SigInstallAddr := CodeLen;
+  EmitB($53);                                     { push ebx }
+  EmitB($89); EmitB($C3);                         { mov ebx, eax        sig }
+  EmitCodeAbsToEax386(dispatchAt);                { eax = &dispatch (absolute) }
+  EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($14000000); { flags = SA_RESTORER|SA_RESTART }
+  EmitCodeAbsToEax386(restorerAt);                { eax = &restorer (absolute) }
+  EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 16); EmitI32(0);  { mask hi }
+  EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch   act }
+  EmitB($31); EmitB($D2);                         { xor edx, edx        oldact }
+  EmitB($BE); EmitI32(8);                         { mov esi, 8          sigsetsize }
+  EmitB($B8); EmitI32(174);                       { mov eax, 174        rt_sigaction }
+  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitB($5B);                                     { pop ebx }
+  EmitB($C3);                                     { ret }
+
+  Patch32(jmpOver, CodeLen - (jmpOver + 4));
+end;
+
 procedure EmitIoLockStubs386;
 { --threadsafe statement-atomic console I/O, the i386 port of EmitIoLockStubs:
   a reentrant owner-tid spinlock (BSS_IO_OWNER = owning tid or 0, BSS_IO_DEPTH
@@ -2921,6 +3046,18 @@ begin
         begin
           EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
         end;
+      end;
+
+    IR_SET_SIGNAL:
+      begin
+        { SetSignalHandler(sig, handler): eax = sig, edx = handler -> sethook. }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        IREmitNode386(IRB[node]);                    { eax = handler address }
+        EmitB($50);                                  { push eax }
+        IREmitNode386(IRA[node]);                    { eax = signal number }
+        EmitB($5A);                                  { pop edx   (handler) }
+        EmitB($E8); EmitI32(SigSetHookAddr - (CodeLen + 4));   { call sethook }
       end;
 
     IR_PROCADDR:
