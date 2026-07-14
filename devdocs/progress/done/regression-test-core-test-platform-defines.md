@@ -24,3 +24,4 @@ ok: /tmp/testmgr-scratch-1217226/test_platform_defines_esp26  [code=32877B  data
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-14 — resolved, commit d1ccab4c.

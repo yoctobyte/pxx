@@ -25,3 +25,4 @@ test-sqlite-threads: FAIL i386 (output mismatch)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-14 — resolved, commit df8c10de.

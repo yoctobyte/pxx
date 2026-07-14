@@ -26,3 +26,4 @@ test-sqlite-threads: FAIL arm32 (build error)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-14 — resolved, commit df8c10de.
