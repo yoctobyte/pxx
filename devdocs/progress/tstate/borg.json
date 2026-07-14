@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T10:54:35Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "5649c74950c1520ac053fad2e51bb073bff2ec57",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T11:45:39Z",
    "fixed": [],
    "new_red": [],
@@ -432,6 +424,14 @@
    "new_red": [],
    "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c",
    "tier": "opt",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-14T15:55:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ad499170ace429f905f6aef6519f52867549a84c",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -869,6 +869,7 @@
   "test-core#src:test/cpaste_empty_arg_b183.c": "pass",
   "test-core#src:test/cpaste_rescan_call_b182.c": "pass",
   "test-core#src:test/cpp_if_chain_b17.c": "pass",
+  "test-core#src:test/cpragma_pack_b366.c": "pass",
   "test-core#src:test/cpragma_push_pop_macro_b156.c": "pass",
   "test-core#src:test/cpreproc_defined_directive_join_b100.c": "pass",
   "test-core#src:test/cpreproc_hex_octal_if_b237.c": "pass",
@@ -1831,11 +1832,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T15:53:28Z",
-  "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c",
-  "tier": "opt",
+  "date": "2026-07-14T15:55:39Z",
+  "sha": "ad499170ace429f905f6aef6519f52867549a84c",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 121.6
+  "wall": 90.3
  },
  "last_bench": {
   "conf_rows": 550,
