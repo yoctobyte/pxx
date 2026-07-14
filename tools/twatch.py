@@ -690,6 +690,7 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     while proc.poll() is None:
         if STOP:            # a stop must not wait out a 10-minute fuzz slice
             kill_child(proc, grace=5)
+            clone_head_back(clone)   # never leave HEAD detached behind us
             print("twatch: stopping — fuzz slice discarded", flush=True)
             set_phase(clone, host, "idle")
             return "aborted"
@@ -701,6 +702,7 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
             except OSError:
                 pass
             proc.wait()
+            clone_head_back(clone)   # never leave HEAD detached behind us
             print("twatch: fuzz preempted by a push — slice discarded", flush=True)
             set_phase(clone, host, "idle")
             return "aborted"
@@ -714,6 +716,24 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     write_json_atomic(cursor, {"next_seed": seed0 + max(nprog, 1),
                                "last_sha": sha, "date": utcnow(),
                                "programs": nprog, "divergences": ndiv})
+    # BACK ONTO THE BRANCH BEFORE TOUCHING THE TREE. The slice ran with HEAD
+    # DETACHED at `sha`, and writing findings into the working tree there leaves
+    # UNTRACKED files under devdocs/progress/tstate/fuzz/. The next checkout then
+    # refuses to clobber them:
+    #
+    #   error: The following untracked working tree files would be overwritten
+    #   by checkout: devdocs/progress/tstate/fuzz/906038a93015-seed_617.txt ...
+    #   Aborting
+    #   twatch: 10 consecutive failures — giving up
+    #
+    # ...and the daemon shuts itself down. That is the "trackt stops by itself"
+    # regression, and it was entirely self-inflicted: run_bench_idle documents
+    # this exact hazard ("written to a temp file and appended AFTER checking the
+    # branch back out — mutating it under a detached HEAD would block the
+    # checkout back") and I wrote the bug it warns about. Findings live in a temp
+    # dir (PASMITH_FINDINGS_DIR) precisely so they can survive the checkout.
+    clone_head_back(clone)
+
     if not ndiv:
         # Clean slice: nothing to say, and nothing to commit. A fuzzer that
         # pushes "0 divergences" every 10 minutes is noise, and it would bury the
