@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** bug (cross target — arm32 backend)
 - **Track:** A — core (arm32 backend)
-- **Status:** working
+- **Status:** done
   [[bug-riscv32-p256field-coredump]] during a board triage sweep.
 
 ## Symptom
@@ -43,3 +43,6 @@ parameters (the Poly1305 state).
 
 ## Gate
 `make test-arm32` green + `lib_chacha20poly1305` runs and prints its 7 `=ok` lines on arm32.
+
+## Log
+- 2026-07-14 — resolved, commit 6794bcd7.

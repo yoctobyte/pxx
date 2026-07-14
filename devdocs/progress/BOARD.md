@@ -30,11 +30,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (99)
+## backlog (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-arm32-chacha20poly1305-segfault | A | 50 | bug | arm32: `lib_chacha20poly1305` segfaults — and it is NOT the riscv32 array-param bug | — |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
 | bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
@@ -192,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (710)
+## done (711)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -207,6 +206,7 @@ _none_
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
 | bug-argstr-managed-dest-cross | A | 50 | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
+| bug-arm32-chacha20poly1305-segfault | A | 50 | bug | arm32: `lib_chacha20poly1305` segfaults — and it is NOT the riscv32 array-param bug | — |
 | bug-arm32-record-byvalue-over-4-bytes-abi-gap | A | 50 | bug | arm32: by-value record params over 4 bytes drop their high word (ABI gap) | — |
 | bug-arm32-writeln-longword-high-bit | A | 50 | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
 | bug-array-assign-to-var-param | A | 75 | bug | Whole-array assignment TO a `var` array parameter segfaults | — |
@@ -961,7 +961,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 50] [A] bug-arm32-chacha20poly1305-segfault
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
