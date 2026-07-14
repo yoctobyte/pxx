@@ -82,23 +82,37 @@ read via GetTokenStr, the class-body property path already does), impl headers
 12. `class of` FORWARD references mint a forward class row.
 13. PVariant builtin pointer name.
 
-**The wall recon stops at: generics.defaults is built ON FPC-layout RTTI** —
-PTypeInfo/PTypeData reflection to select comparers per TypeInfo(T), incl.
-TypeInfo of GENERIC PARAMS. pxx's RTTI blobs are deliberately our own layout
-(TypeInfo() is enum-only for exactly this reason). Options: grow a real
-FPC-compatible TypInfo surface (big, cross-cutting — the same boundary as
-feature-embed-dwscript-rtti), or a pxx-native Generics.Defaults implementation
-(a FORK, which corpus rules resist). Decision needed before this rung
-continues; helpers unit itself now compiles.
+**The wall recon stops at: generics.defaults selects comparers through RTTI**
+— PTypeInfo/PTypeData over TypeInfo(T), incl. TypeInfo of GENERIC PARAMS.
+pxx's TypeInfo() is enum-only today. NOT a decision — see the plan below; no
+fork, no byte-layout cloning.
 
-## User call 2026-07-14: decisions DELAYED. Analysis of where RTTI layout matters
-Raw FPC TTypeData BYTE layout matters almost nowhere: consumers (generics.
-defaults, fpjsonrtti, LFM streaming, mORMot-style serializers, script embeds)
-read through the typinfo UNIT's record definitions + accessors (GetTypeData,
-GetPropInfo, GetEnumName) — and those definitions live IN typinfo. So the
-fork-free path when resumed: a FACADE lib/rtl/typinfo.pas declaring FPC's
-record/API shapes backed by OUR blobs. The real compiler gap underneath is
-TypeInfo(T) being enum-only — generics.defaults needs per-TYPE info blobs
-(scalars/strings/records/classes, incl. generic params). Layout parity itself:
-only needed for code doing pointer arithmetic past the published API (rare;
-punt until a corpus target actually does it).
+## 2026-07-14 — NO DECISION NEEDED. Settled approach: facade typinfo over our own blobs
+
+The apparent fork-or-clone dilemma dissolves on inspection. **Nothing real reads
+FPC's RTTI bytes directly.** Consumers — generics.defaults, fpjsonrtti,
+LFM/`TPersistent` streaming, mORMot-style serializers, the script embeds — reach
+RTTI through the `typinfo` UNIT's record declarations and accessors
+(`GetTypeData`, `GetPropInfo`, `GetEnumName`, `PropType`), and **those
+declarations live inside typinfo itself**. So we supply typinfo.
+
+Consequences:
+- **No byte-layout parity.** We are free to keep our own blob layout.
+- **No fork of Generics.Defaults.** The vendor source compiles unmodified
+  against our typinfo.
+- Layout only leaks if a library does pointer arithmetic PAST the published API.
+  Rare; deal with it if a corpus target actually does, not before.
+
+### The work (two items, both ordinary)
+1. **Widen `TypeInfo(T)`** beyond enums: emit a per-TYPE info blob for scalars,
+   strings, records, classes and (the one that matters here) GENERIC PARAMETERS
+   at specialization time. This is the real compiler gap and the only
+   interesting part. Track A/P.
+2. **`lib/rtl/typinfo.pas` facade**: declare FPC's `TTypeKind`/`PTypeInfo`/
+   `PTypeData`/`PPropInfo` API SHAPES and fill them from our blobs. Track B.
+   (The existing typinfo already does exactly this for enums — GetEnumName /
+   GetEnumValue / GetEnumNameCount — so this is growing a proven pattern, not a
+   new one.)
+
+Same facade unblocks [[feature-embed-dwscript-rtti]] and the RTTI->streaming->LFM
+line, which is why it is worth doing properly rather than shimming per corpus.
