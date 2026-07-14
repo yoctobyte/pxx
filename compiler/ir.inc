@@ -2555,6 +2555,7 @@ function IRSyntheticConstStr(const s: AnsiString): Integer;
 var k, off: Integer;
 begin
   off := TokCharLen;
+  if TokCharLen + Length(s) > STRING_CAP then Error('token char pool overflow');
   for k := 1 to Length(s) do
   begin
     TokChars[TokCharLen] := s[k];
@@ -4213,6 +4214,7 @@ begin
       begin
         foldStr := ConstStrLitValue(ASTLeft[node]) + ConstStrLitValue(ASTRight[node]);
         foldOff := TokCharLen;
+        if TokCharLen + Length(foldStr) > STRING_CAP then Error('token char pool overflow');
         for foldK := 1 to Length(foldStr) do
         begin
           TokChars[TokCharLen] := foldStr[foldK];

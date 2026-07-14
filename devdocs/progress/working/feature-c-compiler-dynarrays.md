@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** feature (compiler infrastructure) — **Track A** (core: `defs.inc` globals + the
   code that indexes them).
-- **Status:** backlog — filed 2026-07-09. Priority raised after the duktape bring-up:
+- **Status:** working
   we are (by design) an all-in-RAM compiler, and real-world corpora are now large enough
   to sit near the fixed ceilings.
 
@@ -55,3 +55,18 @@ but the sizes are hard-coded and over-provisioned "big enough" guesses. Two cost
   `CPrepOut`).
 
 [[feature-c-corpus-duktape]] · [[feature-c-corpus-expansion]]
+
+## 2026-07-14 — MERGED with [[feature-dynamic-compiler-tables]]; RESCOPED to the master-safe half
+
+These two tickets are the same work filed twice (2026-06-27 and 2026-07-09). The
+OLDER one is the canonical dynarray-port ticket and carries explicit user
+constraints this one must not override: **the overhaul happens on a dedicated dev
+branch, not master, and is explicitly LATER** (user decision 2026-06-27 — static
+arrays accepted for now). Do not start the port on master from this ticket.
+
+What remains HERE (master-safe, small, the "quick" half above): **audit the big
+fixed pools' write sites and make every one bounds-check and Error cleanly** —
+silent adjacent-global corruption is a bug class, independent of the port.
+TokChars got stopgap guards at its two CLex sites (9aef018d); the remaining ~38
+TokChars write sites across 21 lexers/parsers, LoadFileBuf, and the other 8 MB
+pools have not been audited.

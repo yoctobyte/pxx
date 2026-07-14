@@ -874,6 +874,7 @@ begin
       begin
         SpecializeTokens[subCount].SOffset := TokCharLen;
         SpecializeTokens[subCount].SLen := Length(specName);
+        if TokCharLen + Length(specName) > STRING_CAP then Error('token char pool overflow');
         j := 1;
         while j <= Length(specName) do
         begin
@@ -889,6 +890,7 @@ begin
             SpecializeTokens[subCount].Kind := SpecSubKinds[k];
             SpecializeTokens[subCount].SOffset := TokCharLen;
             SpecializeTokens[subCount].SLen := Length(SpecSubValues[k]);
+            if TokCharLen + Length(SpecSubValues[k]) > STRING_CAP then Error('token char pool overflow');
             j := 1;
             while j <= Length(SpecSubValues[k]) do
             begin
@@ -1497,6 +1499,7 @@ begin
   TemplateTokens[TemplateTokenCount].Line := 0;
   TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
   TemplateTokens[TemplateTokenCount].SLen := Length(funcName);
+  if TokCharLen + Length(funcName) > STRING_CAP then Error('token char pool overflow');
   for j := 1 to Length(funcName) do
   begin
     TokChars[TokCharLen] := funcName[j];
@@ -1777,6 +1780,7 @@ begin
 
   nameOff := TokCharLen;
   nameLen := Length(synName);
+  if TokCharLen + nameLen > STRING_CAP then Error('token char pool overflow');
   for j := 1 to nameLen do
   begin
     TokChars[TokCharLen] := synName[j];
@@ -19007,6 +19011,7 @@ function NestStrOff(const s: AnsiString): Integer;
 var j: Integer;
 begin
   Result := TokCharLen;
+  if TokCharLen + Length(s) > STRING_CAP then Error('token char pool overflow');
   for j := 1 to Length(s) do
   begin
     TokChars[TokCharLen] := s[j];

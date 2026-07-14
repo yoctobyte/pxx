@@ -2081,6 +2081,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
+    if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
     Tokens[TokCount].SOffset := TokCharLen;
     Tokens[TokCount].SLen    := len;
     i := 1;
@@ -2126,6 +2127,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
+    if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
     Tokens[TokCount].SOffset := TokCharLen;
     Tokens[TokCount].SLen    := len;
     i := 1;
