@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (2)
@@ -27,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (97)
+## backlog (96)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -105,7 +106,6 @@ _none_
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
-| feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-t-gcc-torture-runner | T | 55 | feature | Track T: gcc c-torture `execute/` runner — corpus rung above c-testsuite | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -187,7 +187,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (728)
+## done (729)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -815,6 +815,7 @@ _none_
 | feature-syscall-pthread-shim | B | 50 | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-system-stack-frame-intrinsics | A | 45 | feature | System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo | — |
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
+| feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | 50 | feature | Compile target: ESP32 / embedded | — |
@@ -946,7 +947,6 @@ _none_
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
-- [p 65] [A] feature-signal-handlers
 - [p 60] [A] bug-cross-pointer-store-record-with-shortstring-field
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
