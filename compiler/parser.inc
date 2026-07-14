@@ -22983,10 +22983,13 @@ begin
     usesTextfile := False;
     for i := 0 to TokCount - 1 do
       if (Tokens[i].Kind = tkIdent) and
-         ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 8)) then
+         ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 5) or (Tokens[i].SLen = 8)) then
       begin
         tnm := GetTokenStr(i);
-        if CaseEqual(tnm, 'text') or CaseEqual(tnm, 'textfile') or CaseEqual(tnm, 'ioresult') then
+        if CaseEqual(tnm, 'text') or CaseEqual(tnm, 'textfile') or CaseEqual(tnm, 'ioresult') or
+           { Flush(f)/Flush(output): FPC System surface, lives in textfile
+             (which also declares the standard Input/Output files). }
+           CaseEqual(tnm, 'flush') then
         begin usesTextfile := True; Break; end;
       end;
     if usesTextfile then
@@ -23228,6 +23231,21 @@ begin
         CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
         CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
         CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar')) and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { FPC System surface living in builtin as plain Pascal: the PRNG
+      (Random/Randomize/RandSeed) plus HexStr/RunError/UniqueString. Call-shaped
+      names require the '(' (a variable named random must not drag the unit
+      in); randseed/randomize are legitimately bare (RandSeed := 17;
+      Randomize;). A user declaration of the same name shadows at the use
+      site, leaving the unit's version unused. ESP can't compile builtin. }
+    if (Tokens[i].Kind = tkIdent) and
+       (((i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
+         (CaseEqual(GetTokenStr(i), 'random') or CaseEqual(GetTokenStr(i), 'hexstr') or
+          CaseEqual(GetTokenStr(i), 'runerror') or CaseEqual(GetTokenStr(i), 'uniquestring') or
+          CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
+          CaseEqual(GetTokenStr(i), 'swap'))) or
+        CaseEqual(GetTokenStr(i), 'randseed') or CaseEqual(GetTokenStr(i), 'randomize')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
