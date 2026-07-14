@@ -17,5 +17,14 @@ prio: 55
   class the skip-file header warns about. Cluster: likely one for-in
   variant-dispatch bug; minimize from the two tests before fixing.
 
+## Progress (2026-07-15 night)
+
+Two sub-bugs FIXED (see fix commit): non-0-based static-array bounds and
+N-D outer-dimension iteration (test_forin_bounds_nd). RESIDUALS:
+- tforin14: `for r in a` where a is an OPEN-ARRAY parameter of an array
+  type still prints ADDRESSES — the open-array desugar path.
+- tforin25: still prints nothing where FPC prints four 0 lines — shape
+  not yet minimized.
+
 ## Acceptance
 Byte-identical stdout to FPC for both; unskip both entries.
