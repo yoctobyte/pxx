@@ -1873,14 +1873,13 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "96147f570d29941719baef78f44cfcec515eed7e",
+   "bad": "cb41e80da75d5e00bd863f0c6563f62e260c210a",
    "good": "a5c40073f87d046df222b67bb3f8b5e8d9c95f80",
    "job": "test-core#src:test/test_platform_defines.pas@2",
    "name": "test-core#480",
    "opened": "2026-07-14T13:53:00Z",
    "range": [
-    "cb41e80da75d5e00bd863f0c6563f62e260c210a",
-    "96147f570d29941719baef78f44cfcec515eed7e"
+    "cb41e80da75d5e00bd863f0c6563f62e260c210a"
    ],
    "src": "test/test_platform_defines.pas"
   },
