@@ -582,6 +582,15 @@ begin
   begin
     { shift count in r0 (right.lo); value = left popped into r2:r3. }
     EmitI32($E8BD000C);  { pop {r2, r3} (value lo, hi) }
+    { A <8-byte LEFT operand reaches this pair path SIGN-EXTENDED by the
+      64-bit promotion, but Pascal `shr`/`shl` operate at the OPERAND's
+      width: `longint($80000000) shr 9` is a 32-bit LOGICAL shift, not a
+      64-bit shift of the sign-extended pair. Mirror the x86-64 fix
+      (bug-shl-signed-integer-width): zero the hi word before a logical shr;
+      re-derive the narrow result after a shl. Found by the first
+      --wide --cross pasmith run (seed 60). }
+    if (op = Ord(tkIdent)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+      EmitI32($E3A03000); { mov r3, #0 (32-bit operand: zero-extend) }
     EmitI32($E250C020);  { subs r12, r0, #32 (n-32) }
     if op = Ord(tkShl) then
     begin
@@ -593,6 +602,15 @@ begin
       EmitI32($41A01013);  { lslmi r1, r3, r0 }
       EmitI32($41811C32);  { orrmi r1, r1, r2, lsr r12 }
       EmitI32($41A00012);  { lslmi r0, r2, r0 }
+      if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+      begin
+        { narrow operand: result = low 32 bits, sign/zero-extended
+          (longint(1) shl 31 = -2147483648, matching FPC and x86-64). }
+        if TypeSigned(IntToTypeKind(IRTk[left])) then
+          EmitI32($E1A01FC0)  { asr r1, r0, #31 (sign-extend) }
+        else
+          EmitI32($E3A01000); { mov r1, #0 (zero-extend) }
+      end;
     end
     else if (op = Ord(tkShr)) and signedOp then
     begin

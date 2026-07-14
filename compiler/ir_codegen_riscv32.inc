@@ -623,10 +623,25 @@ begin
       'addi a1, t1, 0',
       '.end:'
     ]);
+    if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+    begin
+      { <8-byte operand: Pascal shl operates at the OPERAND's width — result
+        is the low 32 bits, sign/zero-extended (mirrors x86-64/arm32/i386,
+        bug-shl-signed-integer-width / pasmith --wide --cross seed 60). }
+      if TypeSigned(IntToTypeKind(IRTk[left])) then
+        rv32_srai(reg_a1, reg_a0, 31)
+      else
+        rv32_addi(reg_a1, reg_zero, 0);
+    end;
   end
   else if (op = Ord(tkIdent)) or ((op = Ord(tkShr)) and not signedOp) then
   { Pascal 'shr' (tkIdent) or C unsigned '>>' (tkShr): logical on Int64/UInt64 }
   begin
+    { <8-byte operand reaches here SIGN-EXTENDED by the 64-bit promotion, but
+      Pascal shr is a 32-bit LOGICAL shift at the operand's width: zero the
+      hi word first (longint($80000000) shr 9 = 4194304, not -4194304). }
+    if (op = Ord(tkIdent)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+      rv32_addi(reg_t1, reg_zero, 0);
     EmitAsmRv32([
       'andi t5, a0, 63',
       'addi t2, zero, 32',
