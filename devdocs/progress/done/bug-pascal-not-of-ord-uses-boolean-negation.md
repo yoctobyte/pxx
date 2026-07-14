@@ -8,7 +8,7 @@ prio: 72
 
 - **Type:** bug (silent wrong value). **Track P** (Pascal frontend — the type of an
   `ord()` result inside an expression).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** Track T — `tools/pasmith.py`, first run of the widened grammar
   ([[feature-pasmith-widen-grammar]]), seeds 2 and 13 of an `--enums 2` run. **T owns
@@ -86,3 +86,6 @@ Worth checking the neighbours while in there: `-ord(x)` is correct today, but `s
 - pasmith's enum rung then drops its `longint(...)` wrapper around bare `ord()` reads
   (one line, marked `NO_BARE_NOT_ORD` in `tools/pasmith.py`) and the shape gets fuzzed
   properly.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
