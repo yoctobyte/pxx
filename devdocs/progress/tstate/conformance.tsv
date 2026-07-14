@@ -112,8 +112,8 @@ auto	tclass8.pp	tclass	-	version
 skip	tclass9.pp	tclass	gap	`class var` / `var` sections in class, class property with static method
 skip	tclassinfo1.pp	tclass	wontfix	TObject.ClassInfo = TypeInfo(TObject) — FPC RTTI/typeinfo internals
 pass	tdefault10.pp	tdefault	-	
-skip	tdefault11.pp	tdefault	gap	accepts-invalid — Default(unspecialized template), mode-delphi variant of tdefault12 (template-registry check)
-skip	tdefault12.pp	tdefault	gap	accepts-invalid — Default(unspecialized template): undefined type, real gap (template-registry check)
+pass	tdefault11.pp	tdefault	-	
+pass	tdefault12.pp	tdefault	-	
 pass	tdefault13.pp	tdefault	-	
 pass	tdefault14.pp	tdefault	-	
 auto	tdefault15.pp	tdefault	-	target=darwin
@@ -254,7 +254,7 @@ skip	tgeneric107.pp	tgeneric	gap	inline specialize expression (specialize G<T>.C
 skip	tgeneric10.pp	tgeneric	gap	objfpc generic/specialize syntax + nested type (TCompareFunc) of a specialization
 skip	tgeneric11.pp	tgeneric	gap	objfpc generic/specialize syntax; `specialize TList<_T>` as a param type
 pass	tgeneric12.pp	tgeneric	-	
-skip	tgeneric13.pp	tgeneric	gap	accepts-invalid — unspecialized generic as type argument — real gap (template-registry check; see bug-pascal-missing-diagnostics-fail-tests triage 2026-07-11)
+pass	tgeneric13.pp	tgeneric	-	
 skip	tgeneric14.pp	tgeneric	wontfix	dialect-pass — test header says %fail is an FPC IMPLEMENTATION limitation ("assembler symbols not global"), not a language rule — PXX passing is correct
 skip	tgeneric15.pp	tgeneric	gap	class inheriting from `specialize TStack<Integer>` as parent type
 skip	tgeneric16.pp	tgeneric	gap	generic class inheriting from specialize of another generic
@@ -300,8 +300,8 @@ pass	tgeneric51.pp	tgeneric	-
 pass	tgeneric52.pp	tgeneric	-	
 pass	tgeneric53.pp	tgeneric	-	
 pass	tgeneric54.pp	tgeneric	-	
-skip	tgeneric55.pp	tgeneric	gap	accepts-invalid — bare unspecialized template as var type, mode-delphi variant of tgeneric56 (template-registry check)
-skip	tgeneric56.pp	tgeneric	gap	accepts-invalid — bare unspecialized template as var type: undefined type (template-registry check)
+pass	tgeneric55.pp	tgeneric	-	
+pass	tgeneric56.pp	tgeneric	-	
 pass	tgeneric57.pp	tgeneric	-	
 pass	tgeneric58.pp	tgeneric	-	
 skip	tgeneric59.pp	tgeneric	gap	same generic name with different arity (TTest<T> vs TTest<T,S>) in delphi mode
