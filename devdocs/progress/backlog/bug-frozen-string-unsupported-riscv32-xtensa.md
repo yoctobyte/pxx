@@ -82,3 +82,35 @@ Confirmed repro (unchanged): `test/test_frozen_string_cross_b305.pas` on riscv32
 
 **xtensa is the one that genuinely has nothing** — 0 `TypeIsFrozenString` sites. That half
 is still missing-feature work.
+
+## 2026-07-14 — riscv32 RESOLVED (778cfaed, b345). Ticket rescoped to XTENSA only.
+
+riscv32 output is now byte-identical to the x86-64 oracle, and
+`test_frozen_string_cross_b305.pas` is wired into `make test-riscv32` so it cannot regress
+silently again. It was BOTH of the things this ticket argued about:
+
+- **the b305 widening after all** — four dispatches still on `= tyString`
+  (`EmitStrOperandRISCV32`, the two frozen->managed materialisations, the external-C
+  `const char*` adjust, and the "frozen concat unsupported" error, which a fixedstring
+  slipped PAST — miscompiling instead of erroring);
+- **and genuinely missing paths**, as the ticket said: `IR_STORE_SYM` had no frozen arm at
+  all (which is why the buffer stayed empty), `Length` read a heap header at `[handle-8]`
+  instead of the buffer prefix at `[buf+0]`, and a frozen buffer passed to a MANAGED string
+  parameter went over as if it were a heap handle — the callee read the 8 bytes BEFORE the
+  buffer as a length, and that was the segfault.
+
+Ported from aarch64: `EmitFrozenStoreRISCV32` (with an explicit byte-copy loop — no `rep
+movsb`), `EmitAnsiStringFromNodeRISCV32`, and aarch64's STRUCTURAL Length predicate (a
+frozen operand is not tagged: `f` lowers to an IR_LEA of its symbol, `pf^` to a bare
+pointer load).
+
+## What remains: xtensa
+
+`ir_codegen_xtensa.inc` has **zero** `TypeIsFrozenString` sites — nothing to widen, all of
+it to write. Port the same three pieces (frozen store, frozen Length, frozen->managed at the
+call argument), mirroring the riscv32 shapes now in tree.
+
+Caveat before starting: the xtensa cross leg is currently giving NO signal —
+`make test-esp-bare`'s esp32s3 half is red and was already red at 51968776
+([[bug-esp32s3-bare-boot-no-uart-output]]). Fix or route around that first, or the work
+cannot be verified.
