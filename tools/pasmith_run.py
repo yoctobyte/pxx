@@ -45,7 +45,36 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PXX = os.environ.get("PXX_STABLE", os.path.join(ROOT, "stable_linux_amd64", "default", "pinned"))
+
+
+def _pick_compiler():
+    """Fuzz the compiler AT THIS COMMIT, not the pinned stable.
+
+    Defaulting to PXX_STABLE (the committed pinned binary) meant the fuzzer was
+    testing a compiler from potentially hundreds of commits ago, while stamping
+    every finding with the sha under test. Two consequences, both bad:
+
+      * findings are misattributed -- the bug is not in that sha, it is in
+        whatever the pin was built from;
+      * an ALREADY-FIXED bug keeps re-reporting forever, until someone happens to
+        re-pin. That is exactly what happened: all ~70 published divergences were
+        the `case`-selector bug (b346), which Track A had already fixed at HEAD --
+        the fuzzer kept finding it because the pinned binary still had it.
+
+    So prefer the locally built compiler/pascal26 (what testmgr built at this
+    sha); fall back to the pin only if there is no local build. PXX_STABLE still
+    overrides, for deliberately fuzzing the pin.
+    """
+    env = os.environ.get("PXX_STABLE")
+    if env:
+        return env
+    built = os.path.join(ROOT, "compiler", "pascal26")
+    if os.path.exists(built):
+        return built
+    return os.path.join(ROOT, "stable_linux_amd64", "default", "pinned")
+
+
+PXX = _pick_compiler()
 RTL = os.path.join(ROOT, "lib", "rtl")
 PASMITH = os.path.join(ROOT, "tools", "pasmith.py")
 RUN_TARGET = os.path.join(ROOT, "tools", "run_target.sh")
@@ -322,8 +351,8 @@ def main():
     else:
         seeds = None   # timed loop
 
-    print("pasmith_run: oracles=[%s] findings->%s" % (
-        ", ".join(o.name for o in oracles), FINDINGS))
+    print("pasmith_run: compiler=%s\n             oracles=[%s] findings->%s" % (
+        PXX, ", ".join(o.name for o in oracles), FINDINGS))
 
     deadline = time.time() + a.minutes * 60
     n = found = fpc_reject = 0
@@ -339,11 +368,19 @@ def main():
             n += 1
 
             src = os.path.join(workdir, "p%d.pas" % seed)
-            rc, out = run([sys.executable, PASMITH, "--seed", str(seed),
-                           "--vars", str(a.vars), "--funcs", str(a.funcs),
-                           "--stmts", str(a.stmts), "--depth", str(a.depth),
-                           "--classes", str(a.classes), "--objs", str(a.objs),
-                           "--strs", str(a.strs), "-o", src], 60)
+            # ONE list, used both to generate and to print the repro. The repro
+            # line used to be hand-written and omitted --classes/--objs/--strs,
+            # so pasting it produced a DIFFERENT program that did not diverge:
+            # every finding read as "cannot reproduce" and got discarded. A repro
+            # line that does not reproduce is worse than none
+            # (bug-t-pasmith-order-dependent-programs, defect 1). Never restate
+            # the arguments -- derive them.
+            gen_args = ["--seed", str(seed),
+                        "--vars", str(a.vars), "--funcs", str(a.funcs),
+                        "--stmts", str(a.stmts), "--depth", str(a.depth),
+                        "--classes", str(a.classes), "--objs", str(a.objs),
+                        "--strs", str(a.strs)]
+            rc, out = run([sys.executable, PASMITH] + gen_args + ["-o", src], 60)
             if rc != 0:
                 print("GENERATOR FAILED seed=%d: %s" % (seed, out))
                 seed += 1
@@ -371,13 +408,15 @@ def main():
                 if loc:
                     print("    %s" % loc.replace("\n", "\n    "))
             with open(stem + ".txt", "w") as f:
-                f.write("seed=%d\nnote=%s\n\n" % (seed, note))
+                # WHICH binary produced this. Without it a finding cannot be
+                # attributed: "diverges" is meaningless if you don't know what
+                # diverged.
+                f.write("seed=%d\ncompiler=%s\nnote=%s\n\n" % (seed, PXX, note))
                 for k, v in sorted(res.items()):
                     f.write("%-12s %s\n" % (k, v))
                 if loc:
                     f.write("\n%s\n" % loc)
-                f.write("\nrepro: tools/pasmith.py --seed %d --vars %d --funcs %d "
-                        "--stmts %d --depth %d\n" % (seed, a.vars, a.funcs, a.stmts, a.depth))
+                f.write("\nrepro: tools/pasmith.py %s\n" % " ".join(gen_args))
             seed += 1
     except KeyboardInterrupt:
         print("\ninterrupted")

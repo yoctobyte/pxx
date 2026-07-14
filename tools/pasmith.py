@@ -132,6 +132,10 @@ class Gen:
         # neither compiler owns -- exactly the false positive that makes a
         # fuzzer worthless. Per-body prefix keeps them distinct.
         self.lvprefix = "li"
+        # Side-effecting calls emitted in the CURRENT expression tree. Reset per
+        # statement: Pascal specifies statement order, not evaluation order
+        # within an expression. See expr().
+        self.calls_in_expr = 0
         self.tmpc = 0
 
     # -- expressions --------------------------------------------------------
@@ -195,9 +199,27 @@ class Gen:
 
         # --- integer types
         k = rnd.random()
-        f = self.callable_func(ty, scope, depth)
-        if f is not None and k < 0.12:
-            return f
+        # AT MOST ONE side-effecting call per expression tree. Generated functions
+        # fold into the checksum (they contain Mix statements), so they are NOT
+        # pure -- and Pascal leaves argument/operand evaluation order
+        # UNSPECIFIED. Two such calls in one operand pair, e.g.
+        #
+        #   SafeMod_qword(qword(not f1(g14)), qword(g7 and f0(g6, g6)))
+        #
+        # mix the same values in a DIFFERENT ORDER under pxx (left-to-right) and
+        # FPC (right-to-left). Both compilers are correct; the checksums differ.
+        # That is a divergence nobody owns -- the generator manufacturing false
+        # signal, which is the one thing that makes a fuzzer worthless. It cost
+        # ~3% of the corpus (bug-t-pasmith-order-dependent-programs).
+        #
+        # One call per expression keeps the sequence of Mix() calls determined by
+        # STATEMENT order, which Pascal does specify -- while still exercising
+        # side-effecting functions, which a blanket "make them pure" would lose.
+        if k < 0.12 and self.calls_in_expr == 0:
+            f = self.callable_func(ty, scope, depth)
+            if f is not None:
+                self.calls_in_expr += 1
+                return f
         if k < 0.55:
             op = rnd.choice(BIN_INT_OPS)
             a = self.expr(ty, scope, depth - 1)
@@ -246,6 +268,7 @@ class Gen:
         rnd = self.rnd
         pad = "  " * ind
         k = rnd.random()
+        self.calls_in_expr = 0      # a new statement: a fresh evaluation-order scope
 
         if depth <= 0 or k < 0.42:
             if not assignable:

@@ -6,7 +6,7 @@ prio: 60
 
 - **Type:** bug (fuzzer correctness — two defects, both found while clustering the corpus)
 - **Track:** T — tools & testing (T owns the TOOL; neither of these is a compiler bug)
-- **Status:** backlog — opened 2026-07-14 while attributing the 527-report fuzz pile to
+- **Status:** done
   [[bug-pascal-case-selector-multiple-evaluation]].
 
 ## Defect 1 — the `repro:` line in every report is INCOMPLETE, so it does not reproduce
@@ -62,3 +62,38 @@ by hand.
 ## Gate
 `tools/testmgr.py --tier full` green; a report's printed repro line, pasted verbatim,
 reproduces the divergence.
+
+## Defect 3 (found while fixing 1 and 2) — the fuzzer tested the PINNED binary, not the sha
+
+`pasmith_run.py` defaulted its compiler to `PXX_STABLE` = `stable_linux_amd64/default/pinned`
+— the committed pin, which lags HEAD by however many commits. So the idle fuzz slice ran
+against a compiler from long before the sha it stamped on every finding. Two consequences:
+
+- **Findings were misattributed.** The bug is not in the sha under test; it is in whatever
+  the pin was built from.
+- **An already-fixed bug re-reports forever**, until someone happens to re-pin. This is
+  exactly what happened: all ~70 published divergences were
+  [[bug-pascal-case-selector-multiple-evaluation]] (b346), which Track A had **already
+  fixed at HEAD** — the fuzzer kept re-finding it because the *pin* still had it.
+
+Proof: the 81 seeds that diverged against the pin give **0 divergences** against the
+compiler built at HEAD.
+
+Fix: prefer the locally built `compiler/pascal26` (what testmgr built at this sha); fall
+back to the pin only when there is no local build; `PXX_STABLE` still overrides for
+deliberately fuzzing the pin. Every report now records `compiler=<path>` — a finding that
+does not say which binary produced it cannot be attributed at all.
+
+## Resolution (2026-07-14)
+All three defects fixed.
+- **1 (repro line):** `pasmith_run` now derives the repro string from the SAME argv list it
+  generates with, so the two cannot drift. Verified: a published finding's line, pasted
+  verbatim, reproduces the divergence.
+- **2 (order dependence):** at most ONE side-effecting call per expression tree (the
+  counter resets per statement — Pascal specifies statement order, not evaluation order
+  within an expression). Keeps side-effecting functions in the corpus, which "make them
+  pure" would have thrown away. Verified: 0 statements with >1 call across a sample.
+- **3 (stale compiler):** fuzz the compiler at this commit; record it in every report.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
