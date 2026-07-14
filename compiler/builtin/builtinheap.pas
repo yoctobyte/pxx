@@ -1901,6 +1901,23 @@ begin
   Halt(200);
 end;
 
+var
+  { Installed by sysutils' initialization to convert a {$Q+} arithmetic
+    overflow into a raised, catchable EIntOverflow — same design as
+    PXXDivZeroHook above. Default nil = FPC-without-sysutils behavior. }
+  PXXOverflowHook: TPXXDivZeroProc;
+
+{ {$Q+} overflow trap target: the checked add/sub/mul codegen branches here
+  when the operation wrapped. FPC behavior: "Runtime error 215" + exit code
+  215. Never returns unless a hook raises past it.
+  feature-pascal-overflow-checks-q-plus. }
+procedure PXXOverflow;
+begin
+  if PXXOverflowHook <> nil then PXXOverflowHook();
+  writeln('Runtime error 215 (arithmetic overflow)');
+  Halt(215);
+end;
+
 {$ifdef CPU_XTENSA}
 { Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;

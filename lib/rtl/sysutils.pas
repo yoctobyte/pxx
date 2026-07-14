@@ -1939,9 +1939,27 @@ begin
   Result := __pxxExceptAddr;
 end;
 
+procedure SysRaiseOverflow;
+begin
+  { {$Q+} overflow trap upgraded to a catchable exception — installed into
+    builtinheap's PXXOverflowHook below, mirroring FPC's ErrorProc design
+    (feature-pascal-overflow-checks-q-plus). }
+  raise EIntOverflow.Create('Arithmetic overflow');
+end;
+
+procedure SysRaiseDivByZero;
+begin
+  { Integer div/mod by zero upgraded from Runtime error 200 to a catchable
+    EDivByZero when sysutils is in — the PXXDivZeroHook slot existed for
+    exactly this and was never wired (tint642's testreqword catches it). }
+  raise EDivByZero.Create('Division by zero');
+end;
+
 initialization
   DefaultSystemCodePage := CP_UTF8;   { byte-transparent -- see the declaration }
   BackTraceStrFunc := @SysBackTraceStr;
+  PXXOverflowHook := @SysRaiseOverflow;
+  PXXDivZeroHook := @SysRaiseDivByZero;
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';

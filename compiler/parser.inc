@@ -45,6 +45,7 @@ begin
   ASTTk[ASTNodeCount]      := 0;
   ASTLiftedVar[ASTNodeCount] := -1;
   ASTEnumId[ASTNodeCount]  := -1;
+  ASTQChk[ASTNodeCount]    := False;
   { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
     appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
     contribute no rows — the Tier 1 line table describes one file. }
@@ -71,6 +72,7 @@ begin
   ASTTk[Result]       := ASTTk[node];
   ASTLiftedVar[Result] := ASTLiftedVar[node];
   ASTLine[Result]     := ASTLine[node];
+  ASTQChk[Result]     := ASTQChk[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
@@ -9786,6 +9788,8 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
+    { {$Q+} region: * is overflow-checked (feature-pascal-overflow-checks-q-plus) }
+    if (op = tkStar) and TokQChecks[TokPos - 1] then ASTQChk[node] := True;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
       opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));
@@ -9865,6 +9869,9 @@ begin
         (ASTTk[left] = Ord(tyChar))) then
       right := WrapWideCharToUTF8(right);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
+    { {$Q+} region: + and - are overflow-checked (feature-pascal-overflow-checks-q-plus) }
+    if ((op = tkPlus) or (op = tkMinus)) and TokQChecks[TokPos - 1] then
+      ASTQChk[node] := True;
     opci := -1;
     if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
       opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));

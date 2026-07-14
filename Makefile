@@ -1835,6 +1835,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_qword_lit26)" = "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
 	./$(COMPILER) test/test_shift_operand_width.pas /tmp/test_shift_ow26
 	test "$$(/tmp/test_shift_ow26)" = "$$(printf '%s\n' -2147483648 2147483648 4194304 0)"
+	./$(COMPILER) test/test_overflow_checks_qplus.pas /tmp/test_qplus26
+	test "$$(/tmp/test_qplus26)" = "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26
 	test "$$(/tmp/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
 	./$(COMPILER) test/test_managed_string_flip.pas /tmp/test_managed_string_flip26

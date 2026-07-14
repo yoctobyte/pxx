@@ -1634,6 +1634,7 @@ var
   CPExpandedArg32 : AnsiString;
   PackRecordsVal : Integer;
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
+  QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -1762,6 +1763,7 @@ var
   LoadFileBuf : array[0..STRING_CAP-1] of Byte;
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
+  TokQChecks : array[0..MAX_TOKENS-1] of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
   TokScopedEnums : array[0..MAX_TOKENS-1] of Boolean;  { {$SCOPEDENUMS} state at each token }
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
   CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
@@ -1835,6 +1837,7 @@ var
   ASTLiftedVar : array[0..MAX_AST-1] of Integer; { symbol index of compiler-lifted variable, or -1 }
   ASTEnumId : array[0..MAX_AST-1] of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
   ASTLine    : array[0..MAX_AST-1] of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
+  ASTQChk    : array[0..MAX_AST-1] of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
   ASTNodeCount : Integer;
 
   IRKind  : array[0..MAX_IR-1] of Integer;

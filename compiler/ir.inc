@@ -4470,7 +4470,13 @@ begin
                                 IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                                 Ord(tkPlus), 0, Ord(tyPointer));
           end;
-          Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
+          { {$Q+} arithmetic: ival=1 marks the op overflow-checked; codegen
+            traps a wrapped result into PXXOverflow (RE 215 / EIntOverflow).
+            Only ordinal +,-,* carry the tag (parser sets ASTQChk). }
+          if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
+            Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 1, ASTTk[node])
+          else
+            Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
         end;
       end;
     end;

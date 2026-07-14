@@ -847,6 +847,23 @@ begin
     ]);
 end;
 
+procedure EmitOvfCheckX64(uns: Boolean);
+{ {$Q+} overflow trap: branch to PXXOverflow when the flags of the JUST-emitted
+  add/sub/imul/mul report a wrapped result — CF for unsigned ops, OF for
+  signed. PXXOverflow prints Runtime error 215 / raises EIntOverflow via the
+  sysutils hook (feature-pascal-overflow-checks-q-plus). }
+var pSkip, procIdx: Integer;
+begin
+  if uns then EmitB($73)                 { jnc skip }
+  else EmitB($71);                       { jno skip }
+  pSkip := CodeLen; EmitB(0);
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Code[pSkip] := Byte(CodeLen - (pSkip + 1));
+end;
+
 procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
 { cvtsi2sd xmm<xmm>, r<reg> (reg: 0=rax, 1=rcx) — with the unsigned fixup when
   the SOURCE type is unsigned 64-bit: cvtsi2sd is a SIGNED conversion, so a
@@ -2875,6 +2892,7 @@ begin
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            not TypeIsFloat(IntToTypeKind(IRTk[node])) and
            (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
+           (IRIVal[node] = 0) and  { {$Q+}-checked ops take the general path below }
            ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or
             (op = tkAnd) or (op = tkOr) or (op = tkXor)) then
         begin
@@ -3200,9 +3218,40 @@ begin
             cmpUnsigned := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
 
           case op of
-          tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end; { add rax, rcx }
-          tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end; { sub rax, rcx }
-          tkStar:  begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end; { imul rax, rcx }
+          tkPlus:
+            begin
+              EmitB($48); EmitB($01); EmitB($C8);                    { add rax, rcx }
+              if IRIVal[node] = 1 then                               { {$Q+}: trap a wrapped result }
+                EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+            end;
+          tkMinus:
+            begin
+              EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
+              if IRIVal[node] = 1 then
+                EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
+            end;
+          tkStar:
+            begin
+              if IRIVal[node] = 1 then
+              begin
+                if TypeSigned(IntToTypeKind(IRTk[node])) then
+                begin
+                  EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);    { imul rax, rcx }
+                  EmitOvfCheckX64(False);                            { OF = signed overflow }
+                end
+                else
+                begin
+                  { unsigned checked mul: `mul rcx` sets CF/OF when the
+                    128-bit product's high half is non-zero. Clobbers rdx. }
+                  EmitB($48); EmitB($F7); EmitB($E1);                { mul rcx }
+                  EmitOvfCheckX64(True);
+                end;
+              end
+              else
+              begin
+                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);      { imul rax, rcx }
+              end;
+            end;
           
           tkDiv:
             begin

@@ -690,6 +690,7 @@ begin
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   ScopedEnumsVal := False;
+  QChecksVal := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
@@ -1384,6 +1385,14 @@ begin
   if CaseEqual(command, 'R') and PasDirectiveActive and
      not ((SrcPos <= Length(Source)) and ((Source[SrcPos] = '+') or (Source[SrcPos] = '-'))) then
     ReadPasDirectiveFile(fname);
+  { {$Q+} / {$Q-}: overflow-check switch, lexically scoped via TokQChecks
+    (feature-pascal-overflow-checks-q-plus). The long form
+    {$OVERFLOWCHECKS ON/OFF} is handled in the two-word dispatch below. }
+  if CaseEqual(command, 'Q') and PasDirectiveActive and (SrcPos <= Length(Source)) then
+  begin
+    if Source[SrcPos] = '+' then QChecksVal := True
+    else if Source[SrcPos] = '-' then QChecksVal := False;
+  end;
   messageText := '';
   if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
      CaseEqual(command, 'error') then
@@ -1445,6 +1454,12 @@ begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
+    end
+    else if CaseEqual(command, 'overflowchecks') then
+    begin
+      if CaseEqual(name, 'on') then QChecksVal := True
+      else if CaseEqual(name, 'off') then QChecksVal := False
+      else Error('overflowchecks requires on or off');
     end
     else if CaseEqual(command, 'strict_operator') then
     begin
@@ -2099,6 +2114,7 @@ begin
     Tokens[TokCount].Line    := CurTok.Line;
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
+    TokQChecks[TokCount] := QChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
@@ -2145,6 +2161,7 @@ begin
     Tokens[TokCount].Line    := CurTok.Line;
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
+    TokQChecks[TokCount] := QChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
