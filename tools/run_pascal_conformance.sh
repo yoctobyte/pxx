@@ -30,7 +30,7 @@ CC="$ROOT/compiler/pascal26"
 # FPC-parity flags: strict diagnostics that are opt-in in the PXX dialect
 # (lax first-match case labels are a deliberate divergence -- see pxx.skip
 # "dialect-pass" entries and devdocs ticket bug-pascal-missing-diagnostics-fail-tests).
-CCFLAGS="--strict-case"
+CCFLAGS="--strict-case --strict-operator"
 SUITE="$ROOT/library_candidates/fpc-testsuite/tests/test"
 SHARD_I=0; SHARD_N=1
 ALL=0; ONLY=""; REPORT=""

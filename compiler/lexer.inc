@@ -670,6 +670,7 @@ begin
   PasDefineCount := 0;
   PasCondCount := 0;
   StrictOverload := False;
+  StrictOperator := False;
   StrictCase := False;
   DelphiMode := False;
   ThreadSafeMode := False;
@@ -1444,6 +1445,12 @@ begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
+    end
+    else if CaseEqual(command, 'strict_operator') then
+    begin
+      if CaseEqual(name, 'on') then StrictOperator := True
+      else if CaseEqual(name, 'off') then StrictOperator := False
+      else Error('strict_operator requires on or off');
     end
     else if CaseEqual(command, 'strict_case') then
     begin

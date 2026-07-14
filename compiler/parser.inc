@@ -1831,9 +1831,10 @@ begin
   end;
   { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }
   { = / <> are predefined for CLASS operands (reference equality) and cannot
-    be overloaded (toperator71). Other operators on records/classes are the
-    normal overload surface and stay. }
-  if (opTypeKind = Ord(tyClass)) and
+    be overloaded (toperator71). The PXX dialect deliberately allows it (value
+    equality on classes, test_op_overload.pas), so the rejection is strict-only.
+    Other operators on records/classes are the normal overload surface and stay. }
+  if StrictOperator and (opTypeKind = Ord(tyClass)) and
      ((opKey = Ord(tkEq)) or (opKey = Ord(tkNeq))) then
     Error('impossible operator overload: = and <> are predefined for class types (reference equality)');
   { A SECOND := / Implicit / Explicit from the same source type to a result of
