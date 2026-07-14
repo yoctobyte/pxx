@@ -10967,19 +10967,26 @@ end;
   metadata table applies (Syms[...] vs UFld...). }
 function BuildForInArrayLoop(varIdx, ckind, csym, cselfSym, cfOff, cfLen, ctemplate: Integer;
   contTk: TTypeKind; isString, isStaticArr, isArr: Boolean;
-  staticLen, elemTk, bodyNode: Integer): Integer;
+  staticLen, elemTk, bodyNode: Integer; idxScale, staticLo: Integer): Integer;
 var
-  idxSym, loNode, hiNode, condNode, elemAccess: Integer;
+  idxSym, loNode, hiNode, condNode, elemAccess, idxNode: Integer;
   assignX, incNode, whileNode, innerSeq, initI: Integer;
 begin
   idxSym := AllocVar('', tyInteger);
   if isString then loNode := GenMakeIntLit(1)
+  else if isStaticArr then
+    { iterate the array's OWN index range: `for i in r` over array[1..3] /
+      array[5..7] used a hardwired 0..count-1 and read SHIFTED garbage,
+      silently (bug-pascal-forin-variants-wrong-output / tforin14). AN_INDEX
+      subtracts the low bound itself, so __i in [lo..hi] is the correct
+      domain. Dynamic/open arrays stay 0-based (staticLo = 0 there). }
+    loNode := GenMakeIntLit(staticLo)
   else if isArr then loNode := GenMakeIntLit(0)
   else begin Error('for-in: variable is not a string or array'); loNode := GenMakeIntLit(0); end;
   initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), loNode);
 
   if isStaticArr then
-    hiNode := GenMakeIntLit(staticLen - 1)
+    hiNode := GenMakeIntLit(staticLo + staticLen - 1)
   else if isString then
     hiNode := GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk))
   else
@@ -10991,7 +10998,17 @@ begin
 
   elemAccess := AllocNode(AN_INDEX);
   ASTLeft[elemAccess] := GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk);
-  ASTRight[elemAccess] := GenMakeIdent(idxSym, tyInteger);
+  { idxScale > 1: an N-D container iterated by ROW — the flat index of row
+    __i's first element is __i * rowElemCount (the container stays flattened,
+    the assign's dest size copies the whole row). }
+  if idxScale > 1 then
+    idxNode := GenMakeBinop(tkStar,
+                 GenMakeBinop(tkMinus, GenMakeIdent(idxSym, tyInteger),
+                              GenMakeIntLit(staticLo), tyInteger),
+                 GenMakeIntLit(idxScale), tyInteger)
+  else
+    idxNode := GenMakeIdent(idxSym, tyInteger);
+  ASTRight[elemAccess] := idxNode;
   ASTTk[elemAccess] := elemTk;
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
 
@@ -11079,9 +11096,22 @@ begin
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
-  Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, -1, contTk,
-    isString, isStaticArr, Syms[contSym].IsArray,
-    Syms[contSym].ArrLen, elemTk, bodyNode);
+  { An N-D static array iterates its OUTER dimension only — ArrLen is the
+    FLATTENED element count, so `for r in a` over array[0..1] of array[1..3]
+    ran SIX iterations of garbage rows instead of two
+    (bug-pascal-forin-variants-wrong-output / tforin14). Each element is a
+    row; `r := a[__i]` already row-copies. }
+  if isStaticArr and (SymArrNDims[contSym] >= 2) then
+    Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, -1, contTk,
+      isString, isStaticArr, Syms[contSym].IsArray,
+      SymArrDimSpan[contSym * MAX_ARR_DIMS + 0], elemTk, bodyNode,
+      Syms[contSym].ArrLen div SymArrDimSpan[contSym * MAX_ARR_DIMS + 0],
+      SymArrDimLo[contSym * MAX_ARR_DIMS + 0])
+  else
+    Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, -1, contTk,
+      isString, isStaticArr, Syms[contSym].IsArray,
+      Syms[contSym].ArrLen, elemTk, bodyNode, 1,
+      Integer(Syms[contSym].ConstVal));
 end;
 
 { for x in <implicit-Self array/string field> — same desugar as
@@ -11122,7 +11152,7 @@ begin
   bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 1, -1, selfSym, fOff, fLen, -1, contTk,
-    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
+    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode, 1, 0);
 end;
 
 { for x in <qualified member-access lvalue> — e.g. `for it in Player.Inventory`,
@@ -11242,7 +11272,7 @@ begin
   bodyNode := ParseStatementAST;
 
   Result := BuildForInArrayLoop(varIdx, 2, -1, -1, 0, 0, contNode, contTk,
-    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
+    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode, 1, 0);
 end;
 
 { for x in <EnumType> do BODY iterates ALL enum ordinals low..high. The loop
