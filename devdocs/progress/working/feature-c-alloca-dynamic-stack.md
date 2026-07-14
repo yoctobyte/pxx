@@ -7,7 +7,7 @@ prio: 55
 - **Type:** feature (IR/codegen — dynamic frame) — **Track A** (needs an IR-level
   dynamic-stack op the backends lower; the cfront call-site recognition is the
   trivial part)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, the third wall of the QuickJS bring-up
   ([[feature-c-corpus-quickjs]]).
 
