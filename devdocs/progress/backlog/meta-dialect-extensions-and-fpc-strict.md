@@ -49,6 +49,21 @@ strict does*.
 
 ## Index — dialect extensions (the lax aim)
 
+**Strict-flag family additions (2026-07-14/15 night):**
+- `--strict-operator` / `{$STRICT_OPERATOR ON}` — FPC-parity operator-overload
+  rejections (`=`/`<>` on class operands, toperator71). PXX's lax default
+  keeps value-equality operators on classes (test_op_overload.pas); the
+  conformance sweep runs the flag ON next to `--strict-case`. Landed 693b4da4
+  after b369 briefly made the rejection unconditional and broke the dialect.
+- `{$Q+}` / `{$OVERFLOWCHECKS ON}` — NOT a strict flag but the same
+  contract shape: default-off runtime semantics change, lexically scoped
+  per token (TokQChecks), FPC-faithful when on (RE 215 / catchable
+  EIntOverflow via the sysutils hook). x86-64 + aarch64 full; 32-bit pairs
+  add/sub (see feature-overflow-checks-cross-and-intrinsics).
+- Contract note reinforced by b369's lesson: an FPC-parity REJECTION added
+  for a %FAIL test must land behind its per-feature strict flag, never
+  unconditionally — the sweep runs with the flags on, the dialect stays lax.
+
 **Shipped:**
 - Type inference: inline `var x := expr` statement (`tyAuto`, default on,
   `--no-auto-var` off). The foundation; `var` without a type == `auto`.
