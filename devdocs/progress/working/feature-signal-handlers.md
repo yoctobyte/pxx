@@ -6,6 +6,7 @@ prio: 65  # auto
 
 - **Type:** feature (runtime / PAL) — Track A
 - **Status:** working
+- **Owner:** fable-nightA
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
   [[decide-int-div-zero-behavior-unification]]).
