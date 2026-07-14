@@ -30,12 +30,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (92)
+## backlog (91)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
-| bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
@@ -185,7 +184,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (723)
+## done (724)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -294,6 +293,7 @@ _none_
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
 | bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-c-preproc-macro-arg-string-literal-paren | C | 55 | bug | C preprocessor: macro-arg paren/comma scan ignores string & char literals | — |
 | bug-c-preproc-missing-stdc-version-predefine | C | 55 | bug | C frontend: missing `__STDC_VERSION__` predefine breaks C99 feature-detection | — |
 | bug-c-preproc-paste-rescan | C | 60 | bug | C preprocessor: ## paste result must be rescanned for further macro expansion | — |
@@ -952,7 +952,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
-- [p 55] [C] bug-c-pragma-pack-ignored
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape

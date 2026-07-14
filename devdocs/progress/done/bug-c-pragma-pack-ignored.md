@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (C frontend — record layout; silent ABI mismatch)
 - **Track:** C — C frontend (record layout) — file-lane A for `symtab.inc` layout code
-- **Status:** working
+- **Status:** done
   `bug-c-bitfield-packing-sizeof-vs-gcc` and blamed the bitfield storage-unit algorithm.
   **That diagnosis was wrong**, and anyone following it would have rewritten code that is
   already correct. See "What the old ticket got wrong" below.
@@ -51,3 +51,6 @@ bitfields in that struct were incidental.
 The four-struct program above must match gcc's `sizeof` for all four, plus a field-offset
 check (size alone can coincide). Then the C corpus: `tools/run_c_conformance.sh` green, and
 the real corpora (sqlite/zlib/lua/tcc) unchanged.
+
+## Log
+- 2026-07-14 — resolved, commit 56365087.
