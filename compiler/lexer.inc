@@ -725,8 +725,13 @@ begin
       PXXAlloc with the IDF heap (calloc/free externals resolved at IDF link
       time), not a linux mmap ecall (which panics under FreeRTOS,
       bug-esp-idf-heap-linux-mmap-ecall) and not the tiny bare-metal arena. }
-    if not EspBareBoot then
+    if (not EspBareBoot) and
+       ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) then
     begin
+      { ESP ISAs only: --platform=esp on a hosted target (e.g. x86-64, used by
+        test_platform_defines) must NOT switch the heap to IDF calloc/free
+        externals — a hosted ELF has no IDF to resolve them and dies with
+        "undefined symbol: calloc" (tstate test-core regression at b358). }
       name := 'PXX_ESP_IDF';
       PasDefine(name);
     end;
