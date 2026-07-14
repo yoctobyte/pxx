@@ -56,6 +56,12 @@ CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  "idle_bench": True,   # idle: tracked benchmark timings
                  "idle_fuzz": True,    # idle: pasmith/fuzz.sh (endless, lowest prio)
                  "fuzz_minutes": 10,   # time-box per idle fuzz slice
+                 # Rate limit. While a finding is OPEN (filed, not yet fixed), fuzz
+                 # slices are spaced this far apart instead of running every idle
+                 # tick: the lane that owns the bug gets room to fix it, and we stop
+                 # re-finding what we already reported. Zero open findings = no
+                 # throttle at all. See run_fuzz_idle.
+                 "fuzz_backoff_minutes": 90,
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
@@ -654,6 +660,23 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     generator's fault?) before it is a bug. tstate/ is also the watcher
     identity's entire write scope. A human or the Track T agent turns a finding
     into a ticket in the owning lane.
+
+    RATE LIMIT (the ledger). One `case`-selector defect once produced 639
+    published reports -- every one of them the same bug. A fuzzer that reports one
+    bug 639 times is not finding bugs; it is finding *a* bug, loudly, and the pile
+    buries the only number that matters (distinct causes per CPU-hour). So each
+    slice runs against tstate/fuzz/LEDGER.json:
+
+      * a known-open signature is COUNTED, never re-filed;
+      * a NEW signature stops the slice on the spot (--stop-on-new): file it, hand
+        it to the owning lane, do not spend the remaining minutes re-finding it;
+      * while anything is open, slices are spaced fuzz_backoff_minutes apart --
+        the lane that owns the bug gets room, and we stop burning the box
+        re-deriving a known answer;
+      * every tick first RECHECKS the open findings against the current sha, and
+        the ones that stopped reproducing are marked fixed. Full-speed fuzzing
+        then resumes BY ITSELF. Throttling on an open finding is only honest if
+        something notices the fix without being asked.
     """
     minutes = float(CONF.get("fuzz_minutes", 10))
     # The seed cursor lives in an UNTRACKED, clone-local file — deliberately NOT
@@ -665,24 +688,78 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     cursor = os.path.join(clone.path, ".testmgr", "fuzz.json")
     try:
         with open(cursor) as f:
-            seed0 = int(json.load(f).get("next_seed", 1))
+            cur = json.load(f)
     except (OSError, ValueError):
-        seed0 = 1
+        cur = {}
+    seed0 = int(cur.get("next_seed", 1))
     runner = os.path.join(clone.path, "tools/pasmith_run.py")
     if not os.path.exists(runner) or not shutil.which("fpc"):
         return False        # no generator at this sha, or no oracle: skip silently
-    print("twatch: fuzz %s (%.0fm from seed %d)" % (sha[:12], minutes, seed0),
+
+    # The ledger the SLICE writes is clone-local and untracked (.testmgr/): hit
+    # counters tick on every slice, and mirroring that churn into a tracked file
+    # would mean a commit+push every ten minutes, forever, on a clean run -- the
+    # exact commit-spam trap the seed cursor above already documents. Only a
+    # change in the finding SET or their STATUS is worth publishing, and that is
+    # what gets copied into tstate/ at the end.
+    ledger_pub = os.path.join(clone.path, TSTATE_REL, "fuzz", "LEDGER.json")
+    ledger_loc = os.path.join(clone.path, ".testmgr", "ledger.json")
+    if not os.path.exists(ledger_loc) and os.path.exists(ledger_pub):
+        os.makedirs(os.path.dirname(ledger_loc), exist_ok=True)
+        shutil.copy(ledger_pub, ledger_loc)
+    shape0 = ledger_shape(ledger_loc)
+    n_open = sum(1 for v in shape0.values() if v == "open")
+
+    findings = os.path.join(tempfile.gettempdir(), "twatch-fuzz-%d" % os.getpid())
+    env = dict(os.environ, PASMITH_FINDINGS_DIR=findings)
+
+    if n_open:
+        # A finding is open. Recheck it against THIS sha first -- if the lane that
+        # owns it has landed the fix, the tap reopens on the spot.
+        set_phase(clone, host, "fuzz-recheck", sha=sha)
+        clone.checkout(sha)
+        try:
+            r = subprocess.run(
+                [sys.executable, runner, "--recheck", "--ledger", ledger_loc,
+                 "--ledger-inplace", "--sha", sha[:12]],
+                cwd=clone.path, env=env, text=True, capture_output=True, timeout=1800)
+            tail = (r.stdout or "").strip().split("\n")[-1]
+        except subprocess.TimeoutExpired:
+            tail = "recheck timed out"
+        clone_head_back(clone)
+        print("twatch: fuzz recheck %s — %s" % (sha[:12], tail), flush=True)
+        shape1 = ledger_shape(ledger_loc)
+        n_open = sum(1 for v in shape1.values() if v == "open")
+        if shape1 != shape0:
+            publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha)
+            shape0 = shape1
+
+    if n_open:
+        # Still open: throttle. Slices are spaced fuzz_backoff_minutes apart so the
+        # owning lane has room to fix it, instead of the fuzzer spending every idle
+        # minute re-deriving a bug that is already on somebody's desk.
+        backoff = float(CONF.get("fuzz_backoff_minutes", 90)) * 60
+        since = time.time() - float(cur.get("last_slice_ts", 0))
+        if since < backoff:
+            print("twatch: fuzz throttled — %d finding(s) open, next slice in %.0fm "
+                  "(fuzz_backoff_minutes=%.0f)"
+                  % (n_open, (backoff - since) / 60.0, backoff / 60.0), flush=True)
+            set_phase(clone, host, "idle")
+            return False
+
+    print("twatch: fuzz %s (%.0fm from seed %d%s)"
+          % (sha[:12], minutes, seed0, ", %d open finding(s)" % n_open if n_open else ""),
           flush=True)
     set_phase(clone, host, "fuzz", sha=sha, seed=seed0)
     clone.checkout(sha)
 
-    findings = os.path.join(tempfile.gettempdir(), "twatch-fuzz-%d" % os.getpid())
-    env = dict(os.environ, PASMITH_FINDINGS_DIR=findings)
     # OOP + strings: the rungs Csmith cannot reach, and the reason this
     # generator exists. Big programs on purpose -- size is a feature here.
     proc = subprocess.Popen(
         [sys.executable, runner, "--minutes", str(minutes), "--start", str(seed0),
-         "--classes", "4", "--strs", "3", "--stmts", "20", "--vars", "10"],
+         "--classes", "4", "--strs", "3", "--stmts", "20", "--vars", "10",
+         "--ledger", ledger_loc, "--ledger-inplace", "--stop-on-new",
+         "--sha", sha[:12]],
         cwd=clone.path, env=env, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, start_new_session=True)
 
@@ -715,6 +792,7 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
         nprog, ndiv = int(m.group(1)), int(m.group(2))
     write_json_atomic(cursor, {"next_seed": seed0 + max(nprog, 1),
                                "last_sha": sha, "date": utcnow(),
+                               "last_slice_ts": time.time(),
                                "programs": nprog, "divergences": ndiv})
     # BACK ONTO THE BRANCH BEFORE TOUCHING THE TREE. The slice ran with HEAD
     # DETACHED at `sha`, and writing findings into the working tree there leaves
@@ -734,32 +812,69 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     # dir (PASMITH_FINDINGS_DIR) precisely so they can survive the checkout.
     clone_head_back(clone)
 
-    if not ndiv:
-        # Clean slice: nothing to say, and nothing to commit. A fuzzer that
-        # pushes "0 divergences" every 10 minutes is noise, and it would bury the
-        # signal tstate exists to carry.
-        print("twatch: fuzz %s — %d programs, clean" % (sha[:12], nprog), flush=True)
+    shape1 = ledger_shape(ledger_loc)
+    if shape1 == shape0:
+        # Nothing NEW. Either a clean slice, or every divergence it hit was a known
+        # signature the ledger already carries -- in which case the finding is
+        # already on somebody's desk and re-publishing it is precisely the noise
+        # this ledger exists to kill. Say it on stdout; commit nothing.
+        print("twatch: fuzz %s — %d programs, %d divergence(s), no NEW signature"
+              % (sha[:12], nprog, ndiv), flush=True)
         set_phase(clone, host, "idle")
         return True
 
-    # A finding: publish the reproducer stanzas into tstate/ for triage. The seed
-    # IS the reproducer (pasmith is deterministic), so a few hundred bytes of
-    # text is a complete, permanent bug report -- no source to attach.
-    dst = os.path.join(clone.path, TSTATE_REL, "fuzz")
-    os.makedirs(dst, exist_ok=True)
-    kept = 0
-    for f in sorted(os.listdir(findings)) if os.path.isdir(findings) else []:
-        if f.endswith(".txt"):
-            shutil.copy(os.path.join(findings, f),
-                        os.path.join(dst, "%s-%s" % (sha[:12], f)))
-            kept += 1
-    print("twatch: fuzz found %d divergence(s) in %d programs — published %d to "
-          "tstate/fuzz (NOT ticketed: needs triage, the generator is the first "
-          "suspect)" % (ndiv, nprog, kept), flush=True)
-    clone.publish("tstate(%s): fuzz %s — %d divergence(s) in %d programs"
-                  % (host, sha[:12], ndiv, nprog))
+    new = [s for s, v in shape1.items() if shape0.get(s) != v and v == "open"]
+    publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
+                   nprog=nprog, ndiv=ndiv, new=new)
     set_phase(clone, host, "idle")
     return True
+
+
+def ledger_shape(path):
+    """{signature: status} -- the part of the ledger worth PUBLISHING.
+
+    Hit counters change every slice; the finding set and its statuses do not. Only
+    the latter is a reason to commit, so this is what gets diffed.
+    """
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return {s: e.get("status") for s, e in d.get("findings", {}).items()}
+
+
+def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
+                   nprog=0, ndiv=0, new=None):
+    """Mirror the local ledger + its per-signature reports into tstate/ and push.
+
+    One report file per SIGNATURE, not per seed: the seed lives inside the report
+    and pasmith is deterministic, so the second instance of a bug adds nothing that
+    the hit counter has not already said. This is what turns "639 files, one bug"
+    into "one file, one bug, 639 hits".
+
+    Must run ON THE BRANCH (clone_head_back first) -- writing tracked files under a
+    detached HEAD blocks the checkout back and eventually shuts the daemon down.
+    """
+    dst = os.path.dirname(ledger_pub)
+    os.makedirs(dst, exist_ok=True)
+    shutil.copy(ledger_loc, ledger_pub)
+    kept = 0
+    for f in sorted(os.listdir(findings)) if os.path.isdir(findings) else []:
+        if f.endswith(".txt") and f != "LEDGER.json":
+            shutil.copy(os.path.join(findings, f), os.path.join(dst, f))
+            kept += 1
+    if new:
+        msg = ("tstate(%s): fuzz %s — NEW: %s (%d divergence(s) in %d programs)"
+               % (host, sha[:12], ", ".join(new), ndiv, nprog))
+        print("twatch: fuzz — NEW signature(s) %s; published to tstate/fuzz (NOT "
+              "ticketed: needs triage, the generator is the first suspect). Fuzzing "
+              "throttles until it is fixed." % ", ".join(new), flush=True)
+    else:
+        msg = "tstate(%s): fuzz %s — ledger update" % (host, sha[:12])
+        print("twatch: fuzz — ledger status changed; published", flush=True)
+    clone.publish(msg)
+    return kept
 
 
 def run_bench_idle(clone, host, st, sha):

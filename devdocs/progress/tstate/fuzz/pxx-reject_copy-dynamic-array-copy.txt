@@ -1,0 +1,13 @@
+sig=pxx-reject_copy-dynamic-array-copy
+seed=30014
+sha=5838466c
+compiler=/home/rene/frank2/compiler/pascal26
+note=pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)
+
+fpc-O0       279558138711937549
+fpc-O2       279558138711937549
+pxx-O0       <compile-fail>
+pxx-O2       <compile-fail>
+pxx-O3       <compile-fail>
+
+repro: tools/pasmith.py --seed 30014 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3

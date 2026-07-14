@@ -1,0 +1,162 @@
+{
+  "findings": {
+    "pxx-reject_copy-dynamic-array-copy": {
+      "class": "pxx-reject",
+      "examples": [
+        {
+          "args": [
+            "--seed",
+            "30014",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3",
+            "--classes",
+            "4",
+            "--objs",
+            "3",
+            "--strs",
+            "3"
+          ],
+          "seed": 30014,
+          "sha": "5838466c"
+        },
+        {
+          "args": [
+            "--seed",
+            "30017",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3",
+            "--classes",
+            "4",
+            "--objs",
+            "3",
+            "--strs",
+            "3"
+          ],
+          "seed": 30017,
+          "sha": "5838466c"
+        }
+      ],
+      "first_seed": 30014,
+      "first_sha": "5838466c",
+      "hits": 2,
+      "kind": "copy-dynamic-array-copy",
+      "last_seen": "2026-07-14T16:12:38Z",
+      "note": "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
+      "opened": "2026-07-14T16:12:37Z",
+      "reopened_from_fixed": false,
+      "sig": "pxx-reject_copy-dynamic-array-copy",
+      "status": "ticketed",
+      "ticket": "compat-pascal-copy-of-char-literal"
+    },
+    "pxx-vs-fpc_legacy-b346": {
+      "class": "pxx-vs-fpc",
+      "examples": [
+        {
+          "args": [
+            "--seed",
+            "2667",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3"
+          ],
+          "seed": 2667,
+          "sha": "7dc1ab65082c"
+        },
+        {
+          "args": [
+            "--seed",
+            "2675",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3"
+          ],
+          "seed": 2675,
+          "sha": "7dc1ab65082c"
+        },
+        {
+          "args": [
+            "--seed",
+            "2689",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3"
+          ],
+          "seed": 2689,
+          "sha": "7dc1ab65082c"
+        },
+        {
+          "args": [
+            "--seed",
+            "2719",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3"
+          ],
+          "seed": 2719,
+          "sha": "7dc1ab65082c"
+        },
+        {
+          "args": [
+            "--seed",
+            "2738",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3"
+          ],
+          "seed": 2738,
+          "sha": "7dc1ab65082c"
+        }
+      ],
+      "first_seed": 2667,
+      "first_sha": "7dc1ab65082c",
+      "fixed": "2026-07-14T00:00:00Z",
+      "fixed_sha": "b685def8",
+      "hits": 639,
+      "kind": "legacy-b346",
+      "note": "HISTORICAL, pre-ledger. 639 separate report files, all one defect: the case-selector multiple-evaluation bug (b346), re-found forever because the fuzzer was running the STALE pinned binary (fixed in b685def8). Folded into one entry when the ledger landed; the raw pile is in git history.",
+      "opened": "2026-07-13T00:00:00Z",
+      "reopened_from_fixed": false,
+      "sig": "pxx-vs-fpc_legacy-b346",
+      "status": "fixed",
+      "ticket": "bug-pascal-case-selector-multiple-evaluation"
+    }
+  },
+  "version": 1
+}

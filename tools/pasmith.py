@@ -115,6 +115,7 @@ class Gen:
         # tool has no shrinker. See localize() in pasmith_run.py.
         self.trace = trace
         self.ckpt = 0
+        self.kind = "?"        # kind of the statement stmt() last returned
         self.nvars = nvars
         self.nfuncs = nfuncs
         self.nstmts = stmts
@@ -272,9 +273,10 @@ class Gen:
 
         if depth <= 0 or k < 0.42:
             if not assignable:
-                return ["%sMix(0);" % pad]
+                return self.tagged("mix", ["%sMix(0);" % pad])
             name, ty = rnd.choice(assignable)
-            return ["%s%s := %s;" % (pad, name, self.expr(ty, scope, self.maxdepth))]
+            return self.tagged("assign", [
+                "%s%s := %s;" % (pad, name, self.expr(ty, scope, self.maxdepth))])
 
         if k < 0.58:
             cond = self.expr(BOOL, scope, 2)
@@ -286,7 +288,7 @@ class Gen:
                 out += self.block(scope, depth - 1, ind + 1, assignable)
                 out += ["%send" % pad]
             out[-1] += ";"
-            return out
+            return self.tagged("if", out)
 
         if k < 0.74:
             # for over CONSTANT bounds -- termination by construction. The
@@ -305,7 +307,7 @@ class Gen:
             out += self.block(inner, depth - 1, ind + 1, assignable)
             out += ["%send;" % pad]
             self.loopvars.pop()
-            return out
+            return self.tagged("for", out)
 
         if k < 0.88:
             sel = self.expr(INT_TYPES[4], scope, 2)
@@ -317,33 +319,54 @@ class Gen:
             out += ["%selse" % pad]
             out += self.block(scope, depth - 1, ind + 1, assignable)
             out += ["%send;" % pad]
-            return out
+            return self.tagged("case", out)
 
         if k < 0.94 and self.classes:
             o = self.pick_obj()
             kind = rnd.random()
             if kind < 0.5:
                 # virtual dispatch through a base-typed reference
-                return ["%sMix(%s.Calc(longint(%s)));"
-                        % (pad, o, self.expr(INT_TYPES[4], scope, 2))]
+                return self.tagged("virtcall", [
+                    "%sMix(%s.Calc(longint(%s)));"
+                    % (pad, o, self.expr(INT_TYPES[4], scope, 2))])
             if kind < 0.8:
-                return ["%sMixStr(%s.Name);" % (pad, o)]
+                return self.tagged("virtstr", ["%sMixStr(%s.Name);" % (pad, o)])
             # write through a field: mutating object state between virtual calls
             c = self.classes[0]
             fn, ft = c["fields"][0]
-            return ["%s%s.%s := %s(%s);"
-                    % (pad, o, fn, ft.name, self.expr(ft, scope, 2))]
+            return self.tagged("field", [
+                "%s%s.%s := %s(%s);"
+                % (pad, o, fn, ft.name, self.expr(ft, scope, 2))])
 
         if k < 0.97 and self.strs:
             name, _ = rnd.choice(self.strs)
             if rnd.random() < 0.6:
-                return ["%s%s := %s;" % (pad, name, self.str_expr(scope, 2))]
-            return ["%sMixStr(%s);" % (pad, self.str_expr(scope, 2))]
+                return self.tagged("strassign", [
+                    "%s%s := %s;" % (pad, name, self.str_expr(scope, 2))])
+            return self.tagged("strmix", [
+                "%sMixStr(%s);" % (pad, self.str_expr(scope, 2))])
 
         # fold a live value into the checksum mid-stream: makes the output
         # sensitive to control flow, not just to final state.
         ty = rnd.choice(INT_TYPES)
-        return ["%sMix(int64(%s));" % (pad, self.expr(ty, scope, 2))]
+        return self.tagged("mix", ["%sMix(int64(%s));" % (pad, self.expr(ty, scope, 2))])
+
+    def tagged(self, kind, lines):
+        """Record the kind of the statement being returned, and hand it back.
+
+        Set at RETURN, never at entry: a compound statement generates its nested
+        children first, and those call stmt() recursively -- tagging on the way in
+        would leave the innermost child's kind behind. The last write before the
+        top-level call returns is the top-level statement's own kind, which is what
+        a checkpoint names.
+
+        The kind is what makes a finding DEDUPLICABLE: it travels into the trace
+        checkpoint comment, so the driver can say "this divergence is at a `case`"
+        and recognise the 500th instance of it as the same signature rather than
+        as the 500th bug.
+        """
+        self.kind = kind
+        return lines
 
     def block(self, scope, depth, ind, assignable):
         out = []
@@ -609,7 +632,10 @@ class Gen:
             L += self.stmt(body_scope, self.maxdepth, 1, list(self.globals))
             if self.trace:
                 self.ckpt += 1
-                L.append("  Snap;   { checkpoint %d }" % self.ckpt)
+                # kind= is machine-read by pasmith_run's signature(): it names the
+                # construct a divergence sits on, which is how 500 reports of one
+                # bug collapse into one ledger entry instead of 500 tickets.
+                L.append("  Snap;   { checkpoint %d kind=%s }" % (self.ckpt, self.kind))
         L.append("")
         L.append("  { fold ALL live state into one number: the sole output }")
         for n, t in self.globals:
