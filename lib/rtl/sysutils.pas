@@ -8,6 +8,12 @@ unit sysutils;
 interface
 
 type
+  { FPC's SysUtils character set — the parameter type of the CharInSet / character
+    classification family, and what real code writes for `set of char` work
+    (`cset: TSysCharSet; Include(cset, c)`). It was simply missing, so any unit using it
+    failed to compile with "unknown type" (tset4). }
+  TSysCharSet = set of AnsiChar;
+
   TFileInfo = record
     Name: AnsiString;
     IsDir: Boolean;

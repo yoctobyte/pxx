@@ -829,6 +829,10 @@ test-core: $(COMPILER)
 	grep -q "at least one parameter without a default" /tmp/test_recctor.log
 	! ./$(COMPILER) test/test_record_local_advanced_fail.pas /tmp/test_recloc26 > /tmp/test_recloc.log 2>&1
 	grep -q "can only have fields" /tmp/test_recloc.log
+	# class-NESTED types by qualified name (TOuter.TInner) + SizeOf of one; TSysCharSet
+	# was missing from SysUtils entirely (b348; tdefault8 / tset4)
+	./$(COMPILER) test/test_nested_class_type_b348.pas /tmp/test_nested_class_type26
+	test "$$(/tmp/test_nested_class_type26 | tail -1)" = "PASS"
 	# `case` evaluates its selector EXACTLY once — it used to re-evaluate per label
 	# element, so `case F(x) of` ran F up to N times (b346; ~510 pasmith divergences)
 	./$(COMPILER) test/test_case_selector_single_eval.pas /tmp/test_case_single_eval26

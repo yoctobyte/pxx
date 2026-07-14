@@ -7392,6 +7392,19 @@ begin
         Expect(tkLParen, '(');
         { Peek at the type token to determine the kind }
         name := CurTok.SVal;
+        { SizeOf has its own hand-rolled type dispatch, so it needs the class-qualifier
+          strip too: `SizeOf(TOuter.TInner)` on a class-nested type. Without it the parse
+          died on the '.' while `var r: TOuter.TInner` already worked — a half-working
+          feature is worse than an absent one. Same rule as ParseTypeKind: pxx registers
+          nested types globally, so the qualifier only disambiguates the parse. }
+        if (CurTok.Kind = tkIdent) and (FindUClass(name) >= 0) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+           (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
+        begin
+          Next;               { past the class name — CurTok is now '.' }
+          Next;               { past '.'            — CurTok is now the nested type name }
+          name := CurTok.SVal;
+        end;
         if CurTok.Kind = tkInteger_T then
         begin
           { 'Integer', 'LongInt', 'ShortInt', 'Byte', 'Word', 'SmallInt', 'Cardinal', 'LongWord' }
@@ -14958,6 +14971,22 @@ begin
         table, so the qualifier only disambiguates the parse, not the lookup. }
       if (CurTok.Kind = tkIdent) and (ConsumeUnitQualifier(lo) <> -1) then
         ;   { lo is now the member name; CurTok sits on it }
+
+      { CLASS-qualified type reference — `TTest.TRecord`, a type nested inside a class
+        body (`TTest = class public type TRecord = record ... end; end;`). A nested type
+        section is already parsed and its members registered, but as GLOBAL aliases under
+        their BARE name (pxx does not scope class-local types — see the class-body `type`
+        branch), so `TRecord` resolved and the qualified spelling did not. Strip the class
+        qualifier and resolve the member name, exactly as the unit-qualified path above
+        does: the qualifier disambiguates the parse, not the lookup. (tdefault8) }
+      if (CurTok.Kind = tkIdent) and (FindUClass(lo) >= 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+         (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
+      begin
+        Next;                 { past the class name — CurTok is now '.' }
+        Next;                 { past '.'            — CurTok is now the nested type name }
+        lo := CurTok.SVal;
+      end;
       if CaseEqual(lo, 'set') then
       begin
         Next;

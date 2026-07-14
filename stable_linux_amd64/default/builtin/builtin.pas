@@ -25,6 +25,16 @@ procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): AnsiString;
 
+{ WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
+  lowering (`s := WideChar(u)`, `WideChar(u1)+WideChar(u2)`, a WideChar(x) passed
+  to a string parameter). pxx's one string model is UTF-8 bytes, so a UTF-16 code
+  unit converts at the boundary. The PAIR form is surrogate-aware: a high+low
+  surrogate pair combines into one 4-byte code point (FPC's UTF-16 -> UTF-8
+  conversion does the same); anything else encodes each unit independently.
+  A LONE surrogate yields the empty string, matching FPC's conversion. }
+function __pxxWideCharToUTF8(u: Integer): AnsiString;
+function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
+
 { Substring intrinsic backing bare `Copy(s, index[, count])` on a string with no
   user `Copy` in scope — so frozen/managed string Copy works with no `uses`
   (the lib `sysutils.Copy` is the same routine for the explicit-uses path). FPC
@@ -83,6 +93,14 @@ function __pxxSqrDbl(d: Double): Double;
 function __pxxUpCase(c: Char): Char;
 function __pxxPos(const sub, s: AnsiString): Integer;
 
+{ FPC System bit rotates (RolDWord/RorDWord/RolQWord/RorQWord), reached through
+  a parser soft-alias like UpCase/Pos so no real proc of those names exists to
+  shadow a user's own. n is masked to the width like FPC/x86 do. }
+function __pxxRolDWord(v: Cardinal; n: Integer): Cardinal;
+function __pxxRorDWord(v: Cardinal; n: Integer): Cardinal;
+function __pxxRolQWord(v: QWord; n: Integer): QWord;
+function __pxxRorQWord(v: QWord; n: Integer): QWord;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -115,6 +133,34 @@ begin
   else
     writeln('Assertion failed: ', msg);
   Halt(227);                       { FPC's assertion runtime error }
+end;
+
+function __pxxRolDWord(v: Cardinal; n: Integer): Cardinal;
+begin
+  n := n and 31;
+  if n = 0 then Result := v
+  else Result := (v shl n) or (v shr (32 - n));
+end;
+
+function __pxxRorDWord(v: Cardinal; n: Integer): Cardinal;
+begin
+  n := n and 31;
+  if n = 0 then Result := v
+  else Result := (v shr n) or (v shl (32 - n));
+end;
+
+function __pxxRolQWord(v: QWord; n: Integer): QWord;
+begin
+  n := n and 63;
+  if n = 0 then Result := v
+  else Result := (v shl n) or (v shr (64 - n));
+end;
+
+function __pxxRorQWord(v: QWord; n: Integer): QWord;
+begin
+  n := n and 63;
+  if n = 0 then Result := v
+  else Result := (v shr n) or (v shl (64 - n));
 end;
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
@@ -260,13 +306,54 @@ function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 { Format a Double like write(v:width:decimals). decimals < 0 -> natural form
   (FloatToStr); decimals >= 0 -> fixed, round-to-nearest, exactly `decimals`
   fractional digits (0 -> rounded integer, no point). Then right-justify to
-  width with spaces. Matches the writeln float formatter for normal-range values. }
+  width with spaces. Matches the writeln float formatter for normal-range values.
+
+  width < 0 (only the `Str(F, S)` statement's no-width default passes it):
+  FPC's default Str(Double) form — ` d.ddddddddddddddddE+eee`, 17 significant
+  digits, a LEADING SPACE for non-negative (where the '-' would go), 3-digit
+  signed exponent. fcl-json's float tests do `Str(F,S); Delete(S,1,1)` and
+  compare against the DOM's output, so both sides must produce FPC's text. }
 var
   neg: Boolean;
   pw, scaled, ip, fp: Int64;
   i: Integer;
   frac: string;
+  e: Integer;
+  m: Double;
+  digs: AnsiString;
 begin
+  if (width < 0) and (decimals < 0) then
+  begin
+    neg := v < 0;
+    if neg then v := -v;
+    e := 0;
+    if v = 0 then
+      digs := '00000000000000000'
+    else
+    begin
+      m := v;
+      while m >= 10.0 do begin m := m / 10.0; e := e + 1; end;
+      while m < 1.0 do begin m := m * 10.0; e := e - 1; end;
+      scaled := Round(m * 1e16);            { 17 significant digits }
+      if scaled >= 100000000000000000 then  { rounding carried into a new digit }
+      begin
+        scaled := scaled div 10;
+        e := e + 1;
+      end;
+      digs := StrInt(scaled, 0);
+      while Length(digs) < 17 do digs := '0' + digs;
+    end;
+    if neg then Result := '-' else Result := ' ';
+    Result := Result + digs[1] + '.';
+    for i := 2 to 17 do Result := Result + digs[i];
+    if e < 0 then begin Result := Result + 'E-'; e := -e; end
+    else Result := Result + 'E+';
+    frac := StrInt(e, 0);
+    while Length(frac) < 3 do frac := '0' + frac;
+    Result := Result + frac;
+    Exit;
+  end;
+  if width < 0 then width := 0;
   if decimals < 0 then
     Result := FloatToStr(v)
   else
@@ -439,6 +526,55 @@ begin
       c := p[i];
     end;
   end;
+end;
+
+function __pxxWideCharToUTF8(u: Integer): AnsiString;
+var c: Char;
+begin
+  u := u and $FFFF;
+  Result := '';
+  if u < $80 then
+  begin
+    c := Chr(u);
+    Result := Result + c;
+  end
+  else if u < $800 then
+  begin
+    c := Chr($C0 or (u shr 6));        Result := Result + c;
+    c := Chr($80 or (u and $3F));      Result := Result + c;
+  end
+  else if (u >= $D800) and (u <= $DFFF) then
+  begin
+    { a lone UTF-16 surrogate is not a code point; FPC's conversion DROPS it
+      (fpjson's MaybeAppendUnicode appends a stale high surrogate right after
+      the pair path already emitted the combined code point — FPC yields
+      nothing there, so must we) }
+    Result := '';
+  end
+  else
+  begin
+    c := Chr($E0 or (u shr 12));           Result := Result + c;
+    c := Chr($80 or ((u shr 6) and $3F));  Result := Result + c;
+    c := Chr($80 or (u and $3F));          Result := Result + c;
+  end;
+end;
+
+function __pxxWideCharPairToUTF8(u1, u2: Integer): AnsiString;
+var cp: Integer; c: Char;
+begin
+  u1 := u1 and $FFFF;
+  u2 := u2 and $FFFF;
+  if (u1 >= $D800) and (u1 <= $DBFF) and (u2 >= $DC00) and (u2 <= $DFFF) then
+  begin
+    cp := $10000 + ((u1 - $D800) shl 10) + (u2 - $DC00);
+    Result := '';
+    c := Chr($F0 or (cp shr 18));           Result := Result + c;
+    c := Chr($80 or ((cp shr 12) and $3F)); Result := Result + c;
+    c := Chr($80 or ((cp shr 6) and $3F));  Result := Result + c;
+    c := Chr($80 or (cp and $3F));          Result := Result + c;
+  end
+  else
+    Result := __pxxWideCharToUTF8(u1) + __pxxWideCharToUTF8(u2);
 end;
 
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
@@ -652,7 +788,9 @@ end;
 const
   PXX_RTTI_IFCOUNT   = 80;
   PXX_RTTI_IFACES    = 88;
-  PXX_RTTI_IFSIZE    = 24;   { {GUID:16, IMT ptr:8} }
+  PXX_RTTI_IFSIZE    = 32;   { {GUID:16, IMT ptr:8, interface id:8} }
+  PXX_RTTI_IF_IMT    = 16;
+  PXX_RTTI_IF_ID     = 24;
 
 function __pxxGuidEq(a, b: Pointer): Boolean;
 var pa, pb: PByte; i: Integer;
@@ -689,10 +827,10 @@ begin
         begin
           if Obj <> nil then
           begin
-            { a pxx interface value is the 16-byte fat pointer {IMT, instance} }
+            { a pxx interface value is ONE pointer: the instance (FPC's ABI).
+              The IMT is recovered per call via __pxxIntfIMT. }
             outp := PPxxPtr_(Obj);
-            outp^ := PPxxPtr_(PtrUInt(e) + 16)^;                  { IMT }
-            PPxxPtr_(PtrUInt(Obj) + 8)^ := Instance;              { instance }
+            outp^ := Instance;
           end;
           Result := True;
           Exit;
