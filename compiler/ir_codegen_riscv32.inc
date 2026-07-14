@@ -922,6 +922,16 @@ begin
           32-bit scalar path in line. Arrays/strings keep their handling above. }
         else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
                 not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
+          rv32_lw(reg_a0, reg_a0, 0)
+        { By-ref FIXED array or frozen-string param: the slot holds a pointer
+          the caller passed (the array data / buffer / forwarded slot), so load
+          the pointer itself, not the slot address. Mirrors the i386/x86-64
+          catch-all. Without it, `procedure W(var r: TI)` indexed WRITES landed
+          on the parameter slot itself — silently lost for 32-bit elements,
+          wild for 64-bit ones (bug-riscv32-p256field-coredump). }
+        else if (Syms[si].Kind = skParam) and
+                (Syms[si].IsRef or Syms[si].IsArray or
+                 TypeIsFrozenString(Syms[si].TypeKind)) then
           rv32_lw(reg_a0, reg_a0, 0);
       end;
 
@@ -1525,6 +1535,16 @@ begin
           end;
           { Length(arr) / Length(managed): a0 = handle; count at [handle-8], nil -> 0. }
           IREmitNodeRISCV32(IRA[argNode]);    { a0 = handle (or 0) }
+          { A record/class FIELD or array ELEMENT holding a managed handle
+            yields the SLOT ADDRESS, not the handle — deref once first, else
+            the count read [slotaddr-8] garbage (Length(rec.dynfield) was 0 or
+            wild on riscv32; aarch64 has the same step). Also a by-ref managed
+            string param (forwarded caller slot). }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
+             ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
+              Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
+              not Syms[IRA[valNode]].IsArray) then
+            rv32_lw(reg_a0, reg_a0, 0);
           rv32_beq(reg_a0, reg_zero, 8);      { if nil, skip the load (result 0) }
           rv32_lw(reg_a0, reg_a0, -8);
           Exit;
@@ -2029,6 +2049,74 @@ begin
         procIdx := FindProc('PXXMemMove');
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
+      end;
+
+    IR_SETLEN_DYN:
+      begin
+        { Nested / record-or-class-field SetLength via the portable
+          PXXDynSetLen(slotAddr, n, desc). IRA = slot-address node, IRB =
+          length; descriptor from the node metadata. Mirrors arm32; was an
+          "unsupported node" error on riscv32. }
+        savedLVW := InLValueWrite;
+        InLValueWrite := True;
+        IREmitNodeRISCV32(IRA[node]);          { a0 = slot addr }
+        InLValueWrite := savedLVW;
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRB[node]);          { a0 = n }
+        rv32_addi(reg_a1, reg_a0, 0);          { a1 = n }
+        rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = slotAddr }
+        EmitLoadDataRefRISCV32(reg_a2, GetOrAllocNodeDynDesc(node)); { a2 = desc }
+        procIdx := FindProc('PXXDynSetLen');
+        if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load
+          the level's data pointer; write: clone-if-shared via
+          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in a0.
+          Mirrors arm32; was an "unsupported node" error on riscv32. }
+        IREmitNodeRISCV32(IRA[node]);          { a0 = slot addr }
+        if InLValueWrite then
+        begin
+          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocDynUniqueDesc(node)); { a1 = desc }
+          procIdx := FindProc('PXXDynArrayUnique');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitCallProc(procIdx);               { a0 = unique data ptr }
+        end
+        else
+          rv32_lw(reg_a0, reg_a0, 0);
+      end;
+
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC record copy: retain src's managed fields, release dest's, then
+          move the bytes. Mirrors arm32; was an "unsupported node" error, which
+          blocked p256field (its operator-overload record copies) on hosted
+          riscv32 (bug-riscv32-p256field-coredump). }
+        IREmitNodeRISCV32(IRB[node]);            { a0 = src }
+        rv32_addi(reg_sp, reg_sp, -8);
+        rv32_sw(reg_a0, reg_sp, 4);              { [sp+4] = src }
+        IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
+        rv32_sw(reg_a0, reg_sp, 0);              { [sp]   = dest }
+        procIdx := FindProc('PXXRecordRetain');
+        if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
+        rv32_lw(reg_a0, reg_sp, 4);              { a0 = src }
+        EmitLoadDataRefRISCV32(reg_a1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXRecordRelease');
+        if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+        rv32_lw(reg_a0, reg_sp, 0);              { a0 = dest }
+        EmitLoadDataRefRISCV32(reg_a1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        rv32_lw(reg_a0, reg_sp, 0);              { a0 = dest }
+        rv32_lw(reg_a1, reg_sp, 4);              { a1 = src }
+        EmitLoadImmRISCV32(reg_a2, Integer(IRIVal[node]));   { a2 = count }
+        EmitCallProc(procIdx);
+        rv32_addi(reg_sp, reg_sp, 8);
       end;
 
     IR_NEG:

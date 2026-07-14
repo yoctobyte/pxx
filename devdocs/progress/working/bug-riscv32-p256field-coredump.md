@@ -5,7 +5,7 @@ prio: 45  # blocks ESP32 crypto eventually; not blocking any current target
 # riscv32: p256field core-dumps (and bignum will not compile there at all)
 
 - **Type:** bug / backend gap — **Track A** (riscv32 backend)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-12, found while taking `lib/rtl/p256field.pas` cross.
 
 ## Symptom
