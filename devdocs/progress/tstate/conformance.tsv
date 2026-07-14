@@ -124,7 +124,7 @@ pass	tdefault4.pp	tdefault	-
 skip	tdefault5.pp	tdefault	gap	Default() on record/object containing TextFile field (delphi mode)
 pass	tdefault6.pp	tdefault	-	
 pass	tdefault7.pp	tdefault	-	
-fail	tdefault8.pp	tdefault	-	compile error
+pass	tdefault8.pp	tdefault	-	
 pass	tdefault9.pp	tdefault	-	
 skip	tenum1.pp	tenum	gap	subrange type over an enum (`weekend = sat..sun`) not parsed
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
@@ -527,7 +527,7 @@ skip	tset2c.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 1} pac
 skip	tset2d.pp	tset	gap	explicit enum ordinal values (dA:=17) + {$packset 2} packed-set semantics
 pass	tset2.pp	tset	-	
 pass	tset3.pp	tset	-	
-fail	tset4.pp	tset	-	compile error
+pass	tset4.pp	tset	-	
 pass	tset5a.pp	tset	-	
 auto	tset5.pp	tset	-	opt
 auto	tset6.pp	tset	-	opt
