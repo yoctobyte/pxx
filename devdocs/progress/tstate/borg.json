@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T06:48:24Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4f77f07ef34ce4a5e44e60480ea317d51873faec",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T06:51:55Z",
    "fixed": [],
    "new_red": [],
@@ -423,6 +415,17 @@
    "sha": "857903930528f8783ce973c8ff60010024a25c20",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-14T13:53:00Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_platform_defines.pas@2",
+    "test-core#src:test/test_sqlite_crud_lazy.pas"
+   ],
+   "sha": "96147f570d29941719baef78f44cfcec515eed7e",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1384,7 +1387,7 @@
   "test-core#src:test/test_pascal_directives.pas@2": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
   "test-core#src:test/test_platform_defines.pas@1": "pass",
-  "test-core#src:test/test_platform_defines.pas@2": "pass",
+  "test-core#src:test/test_platform_defines.pas@2": "fail",
   "test-core#src:test/test_pointer_deref_depth.pas": "pass",
   "test-core#src:test/test_pointers.pas": "pass",
   "test-core#src:test/test_proc_const_record.pas": "pass",
@@ -1461,7 +1464,7 @@
   "test-core#src:test/test_soft_keyword_length.pas": "pass",
   "test-core#src:test/test_sqlite_crud.pas": "pass",
   "test-core#src:test/test_sqlite_crud_autotyped.pas": "pass",
-  "test-core#src:test/test_sqlite_crud_lazy.pas": "pass",
+  "test-core#src:test/test_sqlite_crud_lazy.pas": "fail",
   "test-core#src:test/test_stack_frame_intrinsics_b270.pas": "pass",
   "test-core#src:test/test_stackless_gen.pas": "pass",
   "test-core#src:test/test_static_array_ansistring_field.pas": "pass",
@@ -1743,11 +1746,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T13:42:40Z",
-  "sha": "857903930528f8783ce973c8ff60010024a25c20",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 126.5
+  "date": "2026-07-14T13:53:00Z",
+  "sha": "96147f570d29941719baef78f44cfcec515eed7e",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 84.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1796,6 +1799,40 @@
    "opened": "2026-07-14T13:39:29Z",
    "range": [],
    "src": "tools/run_c_conformance.sh"
+  },
+  {
+   "bad": "96147f570d29941719baef78f44cfcec515eed7e",
+   "good": "857903930528f8783ce973c8ff60010024a25c20",
+   "job": "test-core#src:test/test_platform_defines.pas@2",
+   "name": "test-core#480",
+   "opened": "2026-07-14T13:53:00Z",
+   "range": [
+    "40f92092b917477a5b013e9f5da95658264d7275",
+    "9f682a219b7e4e81e51749c01d53a0675b35bf57",
+    "d2c2cc3583eb14ae4d76a6c5d425696405c9a9ad",
+    "d25726bfe4ebc25e193902d725a037f7cc6b1f83",
+    "a5c40073f87d046df222b67bb3f8b5e8d9c95f80",
+    "cb41e80da75d5e00bd863f0c6563f62e260c210a",
+    "96147f570d29941719baef78f44cfcec515eed7e"
+   ],
+   "src": "test/test_platform_defines.pas"
+  },
+  {
+   "bad": "96147f570d29941719baef78f44cfcec515eed7e",
+   "good": "857903930528f8783ce973c8ff60010024a25c20",
+   "job": "test-core#src:test/test_sqlite_crud_lazy.pas",
+   "name": "test-core#678",
+   "opened": "2026-07-14T13:53:00Z",
+   "range": [
+    "40f92092b917477a5b013e9f5da95658264d7275",
+    "9f682a219b7e4e81e51749c01d53a0675b35bf57",
+    "d2c2cc3583eb14ae4d76a6c5d425696405c9a9ad",
+    "d25726bfe4ebc25e193902d725a037f7cc6b1f83",
+    "a5c40073f87d046df222b67bb3f8b5e8d9c95f80",
+    "cb41e80da75d5e00bd863f0c6563f62e260c210a",
+    "96147f570d29941719baef78f44cfcec515eed7e"
+   ],
+   "src": "test/test_sqlite_crud_lazy.pas test/test_lazy_var_scope_fail.pas"
   }
  ]
 }
