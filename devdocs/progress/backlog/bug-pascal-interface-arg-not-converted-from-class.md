@@ -4,7 +4,16 @@ prio: 50
 
 # passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data
 
-- **Track:** A/P (interface VALUE MODEL — COM single-pointer ABI)
+- **Track:** A/P (interface VALUE MODEL — single-pointer ABI)
+
+> **Naming note (2026-07-14, after a user question):** FPC's "COM" and "CORBA"
+> interface modes have NOTHING to do with Microsoft COM or OMG CORBA. They are
+> FPC's names for two in-process Pascal interface flavours: COM mode = descends
+> from IUnknown, refcounted (ARC); CORBA mode = no IUnknown, no refcounting.
+> Both are platform-neutral and both are used heavily by FPC/Lazarus code ON
+> LINUX (TInterfacedObject, the whole fcl). **This ticket is NOT a Windows-compat
+> item.** We implement both modes already; what diverges is the VALUE MODEL
+> below, and it breaks Linux code exactly as it would break Windows code.
 - **Found:** 2026-07-13 while building an ITestListener tracer for the fcl-json
   suite run (rung 2). Sidestepped there; unfixed.
 
