@@ -5,7 +5,7 @@ prio: 65  # auto
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** partial — the **SIG_IGN slice landed** (`PalIgnoreSignal`, commit 3f5aa914: restorer-free, per-arch rt_sigaction, posix+esp, `test_pal_signal`). Full handler-with-callback (SA_RESTORER trampoline, SA_SIGINFO, graceful SIGINT/SIGTERM cleanup) remains open.
+- **Status:** working
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
   [[decide-int-div-zero-behavior-unification]]).
@@ -120,3 +120,28 @@ closed stdout; revisit with the net library), sigaltstack (hook on a guard-
 page fault reuses the faulting stack today), thread interaction beyond
 "handler table is process-wide", FPC-compat `Signal()`/sigaction surface,
 and the float-mask consumer ([[feature-float-exception-mask-control]]).
+
+
+## 2026-07-14 — the x86-64 handler slice is DONE and now PINNED (b336)
+Auditing this ticket found the "remaining" work largely shipped already and
+DEFAULT-ON for x86-64 Linux (ir_codegen.inc's signal stubs: SA_RESTORER
+trampoline -> rt_sigreturn, a dispatch stub with a 64-slot BSS hook table,
+SetSignalHandler as a compiler intrinsic; --no-signals opts out). It had NO
+test. Verified and pinned tonight:
+
+- `SetSignalHandler(sig, @proc)` installs a parameterless Pascal hook; a
+  delivered SIGTERM/SIGINT calls it and the program RESUMES at the
+  interruption point (kernel restores the register file through our restorer).
+  -> test/test_signal_handler_callback_b336.pas
+- No hook for a managed signal: dispatch reverts to SIG_DFL and re-raises, so
+  an unhandled SIGTERM still dies with status 143.
+  -> test/test_signal_default_revert_b336.pas (asserted by exit status)
+
+`PalGetpid` surfaced in platform.pas (the backend always had it).
+
+### What actually remains
+- The SAME slice on i386/arm32 (need their own restorer stubs; aarch64/riscv
+  use the kernel vdso path) — the delicate per-arch part.
+- SA_SIGINFO + ucontext (handler sees siginfo/register state) — needed to turn
+  a fault into a catchable raise; the div-zero unification consumer.
+- Interaction with --threadsafe (per-thread masks).

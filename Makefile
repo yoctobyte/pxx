@@ -471,6 +471,13 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas /tmp/test_frozen_string_cross_b30526
 	test "$$(/tmp/test_frozen_string_cross_b30526)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# libc-free signal HANDLERS with a Pascal callback: hook fires, program
+	# RESUMES (SA_RESTORER + rt_sigreturn); no-hook reverts to default and
+	# re-raises, so an unhandled SIGTERM still exits 143 killed-by-signal
+	./$(COMPILER) -Fulib/rtl test/test_signal_handler_callback_b336.pas /tmp/test_sig_cb_b33626
+	test "$$(/tmp/test_sig_cb_b33626)" = "$$(printf 'hits=2\nresumed after handler')"
+	./$(COMPILER) -Fulib/rtl test/test_signal_default_revert_b336.pas /tmp/test_sig_dfl_b33626
+	/tmp/test_sig_dfl_b33626 >/dev/null 2>&1; test "$$?" = "143"
 	# initialised STRING vars, global (kind-1 pending init) and local
 	./$(COMPILER) test/test_var_string_initializer_b335.pas /tmp/test_var_strinit_b33526
 	test "$$(/tmp/test_var_strinit_b33526)" = "$$(printf 'global/local 42\nmut/local 42')"
