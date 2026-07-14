@@ -194,7 +194,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (729)
+## done (730)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -864,6 +864,7 @@ _none_
 | perf-compiler-hotspots-algorithmic | A | 50 | perf | Compiler self-compile hotspots — algorithmic wins (hash lookups, alloc, string append) | — |
 | perf-gtk-system-header-parse | A | 45 | perf | perf: real GTK2 system-header import is ~20s / 13619 procs — flaky-timeout candidate | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
+| regression-fpc-bootstrap-canary-forwards-b310 | A | 40 | regression | advisory: fpc-bootstrap canary red at 603cf2bd — forwards drift + enum-arg from b310 | — |
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
