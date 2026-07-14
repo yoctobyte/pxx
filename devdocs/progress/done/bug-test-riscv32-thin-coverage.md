@@ -6,7 +6,7 @@ prio: 35
 
 - **Type:** bug (test coverage gap) — **Track A** (backend / cross-target gate).
   Filed by Track T from the tier-coverage dashboard; hand off to whoever holds A.
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-11 (surfaced by the new dashboard tier-coverage panel,
   [[feature-testmgr-fpc-compare-and-web-dashboard]])
 - **Owner:** fable-a
@@ -71,3 +71,4 @@ feature, measured today:
 
 Each family is future Track A backend work; when a feature lands, delete its
 SKIP line and the battery picks it up (drift is visible, not silent).
+- 2026-07-14 — resolved, commit d97d8da0.

@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (96)
+## backlog (95)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -40,7 +40,6 @@ _none_
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
-| bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -189,7 +188,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (714)
+## done (715)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -524,6 +523,7 @@ _none_
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-t-pasmith-order-dependent-programs | T | 60 | bug | pasmith emits order-dependent programs, and its printed repro line does not reproduce | — |
+| bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
 | bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
@@ -1011,7 +1011,6 @@ _none_
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
-- [p 35] [A] bug-test-riscv32-thin-coverage
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 30] [A] bug-esp-emit-obj-proc-fixup-non-iram
