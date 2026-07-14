@@ -15,9 +15,11 @@ prio: 35
 
 - **aarch64: DONE** (see the aarch64-leg commit) — adds/subs + b.vs/carry,
   smulh/umulh checked muls, cross Makefile check green under qemu.
-- **Remaining cross:** i386/arm32/riscv32/xtensa still ignore ival=1 —
-  32-bit pairs need the carry-chain out of the hi-word add/sub; mul via
-  the existing widening sequences' high half.
+- **i386 + arm32: add/sub DONE** (hi-word adc/sbb / adcs/sbcs flags; see
+  the pair-legs commit) — checked MUL still wraps there (needs the widening
+  cores' high half; Makefile pins caught=3 until it lands).
+- **Remaining cross:** riscv32/xtensa ignore ival=1 entirely (no flags —
+  sltu-chain detection); 32-bit pair checked MUL.
 - **Succ/Pred/Abs/Sqr** inside {$Q+} (FPC checks them; we only tag +,-,*).
 - **Subword widths:** checks currently fire at the promoted 64-bit width;
   FPC checks byte/word/longint ops at their own range. Needs the result
