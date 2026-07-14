@@ -6,10 +6,10 @@ prio: 18  # RAINY-DAY (user call 2026-07-11): conformance-driven diagnostics dep
 
 - **Type:** bug umbrella (Pascal frontend, missing diagnostics)
 - **Track:** P — tag: compat (FPC-parity diagnostics; see parallel-tracks.md)
-- **Status:** backlog, RAINY-DAY — triaged 2026-07-11 (see below): dialect-pass
+- **Status:** working
   entries closed as not-bugs; remaining real gaps parked as reminder tests
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** —
+- **Owner:** trackAP-b342
 
 ## Symptom
 13 curated `{ %FAIL }` tests — programs the reference compiler must REJECT —
@@ -108,3 +108,53 @@ matches) and gated the FPC-parity errors behind the new `--strict-case` /
 unconditional (the string/ordinal lowering depends on them). The conformance
 sweep now passes --strict-case, so the burned tcase {%FAIL} tests stay green;
 test_cross_case_range got its deliberate 'y'/'x'..'z' overlap back.
+
+## 2026-07-14 — the "real gaps" from the triage are BURNED (b342, b343)
+
+User call: take it even though it was flagged rainy-day. Both of the clusters the
+2026-07-11 triage kept as *real* gaps are done, and neither was what the ticket thought.
+
+### tenum4 — the directive was fine; the missing TYPE CHECK was the bug (b342, 4e55e07d)
+`{$SCOPEDENUMS}` is **honoured** (landed since the triage): a scoped member is not
+reachable unqualified. That is precisely what made tenum4 dangerous — `En1 := first`
+resolves `first` to the OTHER, unscoped enum, and pxx then **silently took its ordinal**.
+
+The real hole was general and had nothing to do with the directive: **two enum types were
+not distinct**. `c := banana` (TFruit into a TColor) stored the RHS's ordinal, so the
+TColor read back as `green`. `c = apple` compared across enums and answered. Fixed both.
+
+Two sub-findings worth keeping:
+- `AddConst` never reset `SymEnumId` — a const inherited whatever the recycled symbol slot
+  last held. The parallel-array landmine, again ([[project_symtab_alloc_parallel_array_landmine]]).
+- An unscoped enum member folds to a bare ordinal literal at use, which drops the symbol and
+  with it the only evidence of which enum minted it — so the identity had to be carried on
+  the NODE (`ASTEnumId`) for the check to be possible at all.
+
+The check sits at the IR lowering of AN_ASSIGN (every syntactic assignment funnels through
+it), which needed a new `ErrorAt(line, msg)`: at that point the parser is long past EOF, so
+`Error`'s line and `near:` window both pointed at the end of the program.
+
+### The template cluster — 5 entries, ONE of them needed code (b343, 9cd57ddf)
+`Default(<bare template>)` was the only live gap (tdefault11/12): a template has no size and
+no zero value, so the expression is undefined. Rejected via the template registry, with
+`Default(TBox<Integer>)` / `Default(specialize TBox<Integer>)` still legal.
+
+**tgeneric55, tgeneric56 and tgeneric13 were already rejected** — their skip notes were
+stale. Burned them from the skip-list rather than leaving them claiming a gap that no longer
+exists.
+
+### Conformance now
+265 -> **270 pass**, 20 fail, 226 skip. `make test` green, self-host byte-identical.
+
+## What is actually left
+
+- **tgeneric21** — nested generic-in-generic declaration; semantics unverified (from the
+  triage; not touched).
+- **The sweep is RED by 20**, and this ticket never listed them: `terecs2/5/12a/12b/13a/13b/
+  13d/17/17a/19`, `tsealed1/2/3`, `toperator71/92/95`, `tclass12b/14b` (all accepted-invalid)
+  plus `tdefault8` / `tset4` (compile: `unknown type: TSysCharSet`, and an unknown type in a
+  record — unrelated to diagnostics). These are NOT in the skip-list, so they fail the sweep
+  today. The `tsealed` and `terecs` visibility/sealed clusters look like the next coherent
+  batch if this is picked up again.
+- Everything the user triaged as `dialect-pass` (tgenconstraint38/39, tover3, tenum2,
+  tgeneric14/20/30) stays closed by design — strictness belongs behind `--strict-*`.
