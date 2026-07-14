@@ -5,7 +5,7 @@ prio: 65
 # pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens.
 
 - **Type:** feature (fuzzer coverage — Track T)
-- **Status:** backlog — opened 2026-07-14, user call, after the whole 527-report pile
+- **Status:** working
   attributed to a single defect ([[bug-pascal-case-selector-multiple-evaluation]]).
 
 ## The observation
