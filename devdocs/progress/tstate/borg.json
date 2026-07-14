@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-13T22:06:21Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f6bcbe6c123765dbedd03a869faf0cd8181b7a1f",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-13T22:13:10Z",
    "fixed": [],
    "new_red": [],
@@ -422,6 +414,14 @@
    "sha": "e54f3e4cd550ad78839cc85ade52d4e9fe81b028",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-14T12:10:58Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -793,6 +793,7 @@
   "test-core#src:test/cgeneric_long_rank_b250.c@1": "pass",
   "test-core#src:test/cgeneric_long_rank_b250.c@2": "pass",
   "test-core#src:test/cgeneric_selection_b209.c": "pass",
+  "test-core#src:test/cglobal_1d_ptr_array_addr_init_b350.c": "pass",
   "test-core#src:test/cglobal_addr_multidim_elem_b312.c": "pass",
   "test-core#src:test/cglobal_array_elem_addr_b133.c": "pass",
   "test-core#src:test/cglobal_array_init_b28.c": "pass",
@@ -807,6 +808,7 @@
   "test-core#src:test/cglobal_nested_struct_init_b69.c": "pass",
   "test-core#src:test/cglobal_reg_array_init_b72.c": "pass",
   "test-core#src:test/cglobal_scalar_init_b47.c": "pass",
+  "test-core#src:test/cglobal_scalar_ptr_init_defer_b351.c": "pass",
   "test-core#src:test/cglobal_scalar_strptr_b75.c": "pass",
   "test-core#src:test/cglobal_strptr_array_decay_b73.c": "pass",
   "test-core#src:test/cglobal_struct_array_fnptr_cast_b98.c": "pass",
@@ -946,6 +948,7 @@
   "test-core#src:test/ctypedef_sys_ssize_b92.c": "pass",
   "test-core#src:test/cuchar_struct_field_load_b70.c": "pass",
   "test-core#src:test/cunary_minus_promote_b253.c": "pass",
+  "test-core#src:test/cunion_bitfield_overlap_b352.c": "pass",
   "test-core#src:test/cunion_field_offsets_b57.c": "pass",
   "test-core#src:test/cunion_global_init_b46.c": "pass",
   "test-core#src:test/cunion_ptr_chain_b53.c": "pass",
@@ -1737,11 +1740,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T11:51:38Z",
-  "sha": "e54f3e4cd550ad78839cc85ade52d4e9fe81b028",
-  "tier": "opt",
+  "date": "2026-07-14T12:10:58Z",
+  "sha": "50fc083e25d01caa9dfa89dcf99886a323f7ddd0",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 120.1
+  "wall": 86.0
  },
  "last_bench": {
   "conf_rows": 550,
