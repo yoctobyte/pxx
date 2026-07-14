@@ -1939,6 +1939,8 @@ var
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsPCount : array[0..MAX_UCLASS-1] of Integer;
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
+  UClsSealed : array[0..MAX_UCLASS-1] of Boolean;   { `class sealed`: no descendants, and no abstract methods (there could never be an override to supply them) }
+  UClsAbstractCls : array[0..MAX_UCLASS-1] of Boolean; { `class abstract`: cannot be instantiated. Distinct from a method's `abstract`. }
   UClsForward : array[0..MAX_UCLASS-1] of Boolean; { forward stub `TFoo = class;` — the full decl reuses this entry (else its base/fields land on a shadowed duplicate; FindUClass returns the first match) }
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
   UClsHelperTk : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER: Ord(target TTypeKind), -1 = not a helper }

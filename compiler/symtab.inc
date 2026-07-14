@@ -566,6 +566,8 @@ begin
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
+  UClsSealed[UClsCount] := False;
+  UClsAbstractCls[UClsCount] := False;
   UClsIsInterface[UClsCount] := False;
   UClsHelperTk[UClsCount] := -1;
   UClsHelperRec[UClsCount] := REC_NONE;

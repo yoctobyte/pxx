@@ -17252,6 +17252,7 @@ var
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   hadParens: Boolean;
+  clsSealed, clsAbstract: Boolean;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -17592,13 +17593,27 @@ begin
       begin
         Next;
         { `class sealed` / `class abstract` — Delphi class modifiers, sitting between
-          `class` and the heritage list. pxx enforces neither (sealed forbids
-          descendants, abstract forbids instantiation; nothing else here is enforced
-          either), so they are parse-and-ignore. Unconsumed, `sealed` was read as the
-          heritage/first member and the whole declaration desynced. }
+          `class` and the heritage list. Unconsumed, `sealed` was read as the
+          heritage/first member and the whole declaration desynced.
+
+          `sealed` IS enforced now (no descendants; and no abstract methods, since a
+          sealed class can never have a descendant to supply them — tsealed1/tsealed2).
+          The two modifiers are also mutually exclusive: `abstract` means "must be
+          derived from", `sealed` means "cannot be" (tsealed3).
+
+          `abstract` alone is still only recorded, not enforced — forbidding
+          instantiation of an abstract class is a separate check. }
+        clsSealed := False;
+        clsAbstract := False;
         while (CurTok.Kind = tkIdent) and
               (CaseEqual(CurTok.SVal, 'sealed') or CaseEqual(CurTok.SVal, 'abstract')) do
+        begin
+          if CaseEqual(CurTok.SVal, 'sealed') then clsSealed := True
+          else clsAbstract := True;
           Next;
+        end;
+        if clsSealed and clsAbstract then
+          Error('a class cannot be both abstract and sealed');
         parentCi := -1;
         implCnt := 0;
         hadParens := CurTok.Kind = tkLParen;
@@ -17679,6 +17694,13 @@ begin
         end
         else
           ci := AddUClass(tnOff, tnLen);
+        UClsSealed[ci] := clsSealed;
+        UClsAbstractCls[ci] := clsAbstract;
+        { `sealed` is a promise that the class has no descendants — so deriving from one
+          is an error, not a silently-accepted hierarchy (tsealed1). }
+        if (parentCi >= 0) and UClsSealed[parentCi] then
+          Error('cannot derive from the sealed class ' +
+                GetTokenStrFromRaw(UClsNOff[parentCi], UClsNLen[parentCi]));
         UClsParent[ci] := parentCi;
         { bare `class;` with no heritage = a forward declaration (FPC).
           `class(TBase);` stays the empty-body shorthand. }
@@ -18070,6 +18092,11 @@ begin
               begin
                 isVirtual := True;   { abstract implies virtual }
                 isAbstract := True;
+                { An abstract method has no body and relies on a descendant to supply one.
+                  A sealed class can never HAVE a descendant, so the method could never be
+                  implemented and any call would dispatch into nothing (tsealed2). }
+                if (ci >= 0) and UClsSealed[ci] then
+                  Error('a sealed class cannot have an abstract method');
               end;
               if CaseEqual(CurTok.SVal, 'deprecated') and (TokPos < TokCount) and
                  (Tokens[TokPos].Kind = tkString) then

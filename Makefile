@@ -825,6 +825,16 @@ test-core: $(COMPILER)
 	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
 	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas /tmp/test_defgen26 > /tmp/test_defgen.log 2>&1
 	grep -q "must be specialized" /tmp/test_defgen.log
+	# `sealed` is enforced: no descendants, no abstract methods, not also `abstract`
+	# (tsealed1/2/3) — while a sealed LEAF and a plain abstract class stay legal
+	! ./$(COMPILER) test/test_sealed_class_fail.pas /tmp/test_sealed26 > /tmp/test_sealed.log 2>&1
+	grep -q "cannot derive from the sealed class" /tmp/test_sealed.log
+	! ./$(COMPILER) test/test_sealed_abstract_method_fail.pas /tmp/test_sealedam26 > /tmp/test_sealedam.log 2>&1
+	grep -q "sealed class cannot have an abstract method" /tmp/test_sealedam.log
+	! ./$(COMPILER) test/test_sealed_abstract_class_fail.pas /tmp/test_sealedac26 > /tmp/test_sealedac.log 2>&1
+	grep -q "cannot be both abstract and sealed" /tmp/test_sealedac.log
+	./$(COMPILER) test/test_sealed_ok.pas /tmp/test_sealed_ok26
+	test "$$(/tmp/test_sealed_ok26 | tail -1)" = "PASS"
 	./$(COMPILER) test/test_forward_ptr_record_field.pas /tmp/test_fwd_ptr_rec26
 	test "$$(/tmp/test_fwd_ptr_rec26 | tail -1)" = "PASS"
 	! ./$(COMPILER) test/test_pointer_member_fail.pas /tmp/test_ptr_member_fail26 > /tmp/test_ptr_member_fail.log 2>&1
