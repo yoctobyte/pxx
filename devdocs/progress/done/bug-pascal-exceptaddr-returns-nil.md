@@ -6,7 +6,7 @@ prio: 35
 
 - **Type:** bug (stubbed feature — declared, not implemented)
 - **Track:** A — core (IR_RAISE codegen, per-backend) + B (the RTL declaration)
-- **Status:** backlog — opened 2026-07-13 while landing fpcunit's chain.
+- **Status:** done
 
 ## What it is now
 `lib/rtl/sysutils.pas` declares `function ExceptAddr: Pointer` and **returns nil**. It
@@ -40,3 +40,35 @@ nearly free.
 
 ## Gate
 `make test` + self-host byte-identical + cross (it touches per-backend raise codegen).
+
+## 2026-07-14 — RESOLVED (commit eaf511e0, b340)
+
+Done as the ticket described: each backend's raise stub records its own return address —
+which IS the raise site, since the `call` to the stub pushed it — into a new
+`BSS_EXC_ADDR` slot. From `[rsp]` on x86-64/i386, from the link register on arm32 (lr) /
+aarch64 (x30) / riscv32 (ra), and from a0 on xtensa (call0).
+
+The READ needed no new backend op, which is what kept this cheap: `IR_EXC_STORE` already
+loads an exception BSS slot into a variable, so `IRC` just selects WHICH slot (0 = the
+exception object, as `on E:` has always used; 1 = the raise address). The intrinsic
+`__pxxExceptAddr` (reserved prefix — cannot collide with a user routine) emits it, and
+`sysutils.ExceptAddr` is now a one-line wrapper.
+
+Beyond the ticket: `IR_EXC_CLEAR` clears the address slot with the object and class slots.
+Without that the address outlives its exception and `ExceptAddr` outside a handler returns
+a stale but entirely plausible code pointer — the same silent-wrong-value shape this
+codebase keeps getting caught by. nil outside a handler, as before.
+
+`ExceptObject` / `ExceptClass` now fall out nearly free (same slots, same load); not wired
+up here.
+
+Test `test/test_exceptaddr_b340.pas`: nil before any raise; a real code address INSIDE the
+routine that raised; two raise sites give two addresses; nil again after the handler.
+
+Gate: `make test` green, self-host byte-identical, `test-i386` / `test-aarch64` /
+`test-arm32` / `test-riscv32` green. The xtensa leg could not be confirmed: `test-esp-bare`'s
+esp32s3 half is RED at 51968776 (before this session) too — pre-existing, filed as
+[[bug-esp32s3-bare-boot-no-uart-output]].
+
+## Log
+- 2026-07-14 — resolved, commit eaf511e0.

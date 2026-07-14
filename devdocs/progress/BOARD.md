@@ -42,8 +42,8 @@ _none_
 | bug-c-struct-byval-varargs-32bit | A | 50 | bug | bug: struct-by-value / varargs args truncated on 32-bit targets (00204.c) | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
+| bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
-| bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
@@ -199,7 +199,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (695)
+## done (696)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -460,6 +460,7 @@ _none_
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
+| bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
 | bug-pascal-forward-pointer-field-loses-pointee-record | A | 70 | bug | `PNode = ^TNode` — the forward pointer's record FIELDS never got their pointee patched | — |
 | bug-pascal-fpc-tpoint-methods-not-registered | P | 45 | bug | FPC's own TPoint parses, but its METHODS do not resolve | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
@@ -1001,13 +1002,13 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [A] bug-esp32s3-bare-boot-no-uart-output
 - [p 40] [C] bug-test-hardcoded-tmp-so-path
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [A] bug-esp-idf-heap-linux-mmap-ecall
-- [p 35] [A] bug-pascal-exceptaddr-returns-nil
 - [p 35] [A] bug-test-riscv32-thin-coverage
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
