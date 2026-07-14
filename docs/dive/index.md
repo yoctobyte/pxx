@@ -10,7 +10,7 @@ rest of the documentation, linked at the end, covers each topic in depth.
 
 ## Overview
 
-PXX (dialect name pascal26) is a from-scratch, self-hosting Pascal compiler.
+PXX is a from-scratch, self-hosting Pascal compiler.
 It emits Linux ELF executables directly: no external assembler, no external
 linker, and no libc dependency in the default build path. The lexer, parser,
 intermediate representation, all six backends, the runtime library, and the
