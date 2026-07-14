@@ -951,6 +951,52 @@ begin
     Error('target i386: 64-bit binop operator not yet supported');
 end;
 
+procedure EmitIntToXmm386(dst: Integer; srcTk: TTypeKind);
+{ integer value -> xmm<dst> as double, by source type. A 64-BIT source lives in
+  the eax(lo):edx(hi) pair; the plain cvtsi2sd consumed only eax, so
+  `d := int64var` silently dropped the high word
+  (bug-cross-32bit-int64-to-double-low-word). Computed as
+  double(hi)*2^32 + double(unsigned lo) — hi signed for Int64, unsigned for
+  QWord — with the 2^32 constant materialised on the stack ([esp] while the
+  sequence runs). Unsigned 32-bit sources get the +2^32 fixup (cvtsi2sd is
+  signed). xmm7 is scratch (unused elsewhere in this backend). }
+begin
+  if (srcTk = tyInt64) or (srcTk = tyUInt64) then
+  begin
+    EmitB($68); EmitI32($41F00000);                    { push 0x41F00000 (2^32 hi) }
+    EmitB($6A); EmitB($00);                            { push 0 (2^32 lo) }
+    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax (lo, signed) }
+    EmitB($85); EmitB($C0);                            { test eax, eax }
+    EmitB($79); EmitB($05);                            { jns +5 (lo >= 0) }
+    EmitB($F2); EmitB($0F); EmitB($58); EmitB($04 or (dst shl 3)); EmitB($24); { addsd dst, [esp] (+2^32) }
+    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($FA);    { cvtsi2sd xmm7, edx (hi, signed) }
+    if srcTk = tyUInt64 then
+    begin
+      EmitB($85); EmitB($D2);                          { test edx, edx }
+      EmitB($79); EmitB($05);                          { jns +5 }
+      EmitB($F2); EmitB($0F); EmitB($58); EmitB($3C); EmitB($24); { addsd xmm7, [esp] }
+    end;
+    EmitB($F2); EmitB($0F); EmitB($59); EmitB($3C); EmitB($24);   { mulsd xmm7, [esp] (*2^32) }
+    EmitB($F2); EmitB($0F); EmitB($58); EmitB($C7 or (dst shl 3)); { addsd dst, xmm7 }
+    EmitB($83); EmitB($C4); EmitB($08);                { add esp, 8 }
+  end
+  else if (srcTk = tyUInt32) or (srcTk = tyNativeUInt) then
+  begin
+    { unsigned 32-bit: the signed cvtsi2sd read cardinal >= 2^31 negative. }
+    EmitB($68); EmitI32($41F00000);                    { push 0x41F00000 (2^32 hi) }
+    EmitB($6A); EmitB($00);                            { push 0 (2^32 lo) }
+    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax }
+    EmitB($85); EmitB($C0);                            { test eax, eax }
+    EmitB($79); EmitB($05);                            { jns +5 }
+    EmitB($F2); EmitB($0F); EmitB($58); EmitB($04 or (dst shl 3)); EmitB($24); { addsd dst, [esp] (+2^32) }
+    EmitB($83); EmitB($C4); EmitB($08);                { add esp, 8 }
+  end
+  else
+  begin
+    EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0 or (dst shl 3)); { cvtsi2sd dst, eax }
+  end;
+end;
+
 procedure EmitClampEcxToStrCap386(cap: Integer);
 { ecx = source string length about to be copied into a frozen inline buffer.
   Clamp to the destination capacity — truncating `string[N]` assignment
@@ -1351,7 +1397,7 @@ begin
         begin
           IREmitNode386(IRB[node]);
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
-            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+            EmitIntToXmm386(0, IntToTypeKind(IRTk[IRB[node]]));   { int -> xmm0 (64-bit/unsigned aware) }
           if tk = tySingle then
             begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0); end;   { cvtsd2ss xmm0, xmm0 }
           if Syms[si].Kind = skGlobal then
@@ -2017,13 +2063,13 @@ begin
         begin
           IREmitNode386(left);
           if not TypeIsFloat(lhsTk) then
-            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+            EmitIntToXmm386(0, lhsTk);   { int -> xmm0 (64-bit/unsigned aware) }
           EmitFloatSpill386;
           IREmitNode386(right);
           if TypeIsFloat(rhsTk) then
             begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($C8); end    { movsd xmm1, xmm0 }
           else
-            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C8); end;   { cvtsi2sd xmm1, eax }
+            EmitIntToXmm386(1, rhsTk);   { int -> xmm1 (64-bit/unsigned aware) }
           EmitFloatUnspill386;                                           { left -> xmm0 }
 
           if op = Ord(tkPlus) then
@@ -2654,7 +2700,7 @@ begin
             begin
               IREmitNode386(IRA[argNode]);               { float -> xmm0 (double) }
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }
               EmitB($F2); EmitB($0F); EmitB($11); EmitB($84); EmitB($24); EmitI32(sz); { movsd [esp+off], xmm0 }
               Inc(sz, 8);
             end
@@ -2662,7 +2708,7 @@ begin
             begin
               IREmitNode386(IRA[argNode]);               { -> xmm0 (double) }
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }
               EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
               EmitB($F3); EmitB($0F); EmitB($11); EmitB($84); EmitB($24); EmitI32(sz); { movss [esp+off], xmm0 }
               Inc(sz, 4);
@@ -2805,9 +2851,7 @@ begin
             if TypeIsFloat(Procs[procIdx].Params[nArgs].TypeKind) then
             begin
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-              begin
-                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); { cvtsi2sd xmm0, eax }
-              end;
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }
               if Procs[procIdx].Params[nArgs].TypeKind = tySingle then
               begin
                 { xmm0 holds the value as DOUBLE bits; narrow to single before
@@ -2959,7 +3003,7 @@ begin
           begin
             { double by-value param: value in xmm0 -> 8-byte stack slot. }
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-              begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, eax }
+              EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));  { int -> xmm0 (64-bit/unsigned aware) }
             EmitB($83); EmitB($EC); EmitB($08);                          { sub esp, 8 }
             EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movsd [esp], xmm0 }
             Inc(argBytes, 8);
@@ -2969,7 +3013,7 @@ begin
                   (not Procs[procIdx].Params[nArgs].IsRef) then
           begin
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-              begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, eax }
+              EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));  { int -> xmm0 (64-bit/unsigned aware) }
             EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
             EmitB($83); EmitB($EC); EmitB($04);                          { sub esp, 4 }
             EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);  { movss [esp], xmm0 }
@@ -3444,7 +3488,7 @@ begin
         begin
           IREmitNode386(IRB[node]);                  { value -> xmm0 }
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
-            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+            EmitIntToXmm386(0, IntToTypeKind(IRTk[IRB[node]]));   { int -> xmm0 (64-bit/unsigned aware) }
           EmitFloatSpill386;
           IREmitNode386(IRA[node]);                  { address -> eax }
           EmitFloatUnspill386;

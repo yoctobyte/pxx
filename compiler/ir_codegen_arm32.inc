@@ -819,11 +819,42 @@ end;
   value in d0 (a second channel besides r0); spills use vpush/vpop. Float ->
   text goes through the portable builtinheap helpers (PXXWriteFloat*). ---- }
 
+procedure EmitIntToD0Arm32Tk(srcTk: TTypeKind);
+{ integer value -> d0, by source type. 32-bit signed via VFP vcvt.f64.s32;
+  unsigned 32-bit via vcvt.f64.u32; a 64-BIT source (r0:r1 pair) routes
+  through the softfloat __pxx_l2d / __pxx_ul2d kernels — the 32-bit vcvt
+  consumed only r0, so `d := int64var` silently dropped the high word
+  (bug-cross-32bit-int64-to-double-low-word). Falls back to the 32-bit
+  signed path when softfloat is absent (minimal no-builtin programs). }
+var procIdx: Integer;
+begin
+  if (srcTk = tyInt64) or (srcTk = tyUInt64) then
+  begin
+    if srcTk = tyUInt64 then procIdx := FindProc('__pxx_ul2d')
+    else procIdx := FindProc('__pxx_l2d');
+    if procIdx >= 0 then
+    begin
+      EmitCallProc(procIdx);            { r0:r1 = Int64 arg -> r0:r1 = double bits }
+      EmitI32($EC410B10);               { vmov d0, r0, r1 }
+      Exit;
+    end;
+  end;
+  if (srcTk = tyUInt32) or (srcTk = tyNativeUInt) then
+  begin
+    { unsigned 32-bit: vcvt.f64.u32 — the signed form read cardinal >= 2^31
+      as negative. }
+    EmitI32($EE000A10);  { vmov s0, r0 }
+    EmitI32($EEB80B40);  { vcvt.f64.u32 d0, s0 }
+    Exit;
+  end;
+  EmitI32($EE000A10);  { vmov s0, r0 }
+  EmitI32($EEB80BC0);  { vcvt.f64.s32 d0, s0 }
+end;
+
 procedure EmitIntToD0Arm32;
 { signed r0 -> d0 }
 begin
-  EmitI32($EE000A10);  { vmov s0, r0 }
-  EmitI32($EEB80BC0);  { vcvt.f64.s32 d0, s0 }
+  EmitIntToD0Arm32Tk(tyInteger);
 end;
 
 procedure EmitWriteCStrArm32;
@@ -1231,7 +1262,7 @@ begin
         begin
           IREmitNodeArm32(IRB[node]);                 { value -> d0 (or r0) }
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
-            EmitIntToD0Arm32;
+            EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRB[node]]));
           if tk = tySingle then
             EmitI32($EEB70BC0);                       { vcvt.f32.f64 s0, d0 }
           if Syms[si].Kind = skGlobal then
@@ -1616,10 +1647,10 @@ begin
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
         begin
           IREmitNodeArm32(left);
-          if not TypeIsFloat(lhsTk) then EmitIntToD0Arm32;
+          if not TypeIsFloat(lhsTk) then EmitIntToD0Arm32Tk(lhsTk);
           EmitI32($ED2D0B02);                    { vpush {d0} }
           IREmitNodeArm32(right);
-          if not TypeIsFloat(rhsTk) then EmitIntToD0Arm32;
+          if not TypeIsFloat(rhsTk) then EmitIntToD0Arm32Tk(rhsTk);
           EmitI32($EEB01B40);                    { vmov.f64 d1, d0 }
           EmitI32($ECBD0B02);                    { vpop {d0} (left) }
 
@@ -2361,7 +2392,7 @@ begin
               Single narrows to s0 -> r0, one word. See feature-cross-float-returns. }
             IREmitNodeArm32(IRA[argNode]);
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
-              EmitIntToD0Arm32;
+              EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
             if Procs[procIdx].Params[nArgs].TypeKind = tySingle then
             begin
               EmitI32($EEB70BC0);  { vcvt.f32.f64 s0, d0 }
@@ -2594,7 +2625,7 @@ begin
                   (not Procs[procIdx].Params[nArgs].IsRef) then
           begin
             IREmitNodeArm32(IRA[argNode]);             { d0 }
-            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then EmitIntToD0Arm32;
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
             EmitI32($EC510B10);                        { vmov r0, r1, d0 }
             EmitI32($E92D0001); EmitI32($E92D0002);    { push lo, hi }
             Inc(j, 2);
@@ -2935,7 +2966,7 @@ begin
         begin
           IREmitNodeArm32(IRB[node]);               { value -> d0 (or r0) }
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
-            EmitIntToD0Arm32;
+            EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRB[node]]));
           EmitI32($ED2D0B02);                       { vpush {d0} }
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;

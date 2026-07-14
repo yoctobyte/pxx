@@ -2829,6 +2829,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas /tmp/test_i386_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_i386_sstrunc_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_sstrunc)" = "$$(/tmp/test_i386_sstrunc_x64)"
+	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
+	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
+	./$(COMPILER) --target=i386 test/test_u64_to_double.pas /tmp/test_i386_u64d
+	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_i386_u64d_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_u64d)" = "$$(/tmp/test_i386_u64d_x64)"
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_managed_strlen)" = "$$(/tmp/test_i386_managed_strlen_x64)"
@@ -3130,6 +3135,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas /tmp/test_aarch64_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_aarch64_sstrunc_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sstrunc)" = "$$(/tmp/test_aarch64_sstrunc_x64)"
+	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
+	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
+	./$(COMPILER) --target=aarch64 test/test_u64_to_double.pas /tmp/test_aarch64_u64d
+	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_aarch64_u64d_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_u64d)" = "$$(/tmp/test_aarch64_u64d_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rec_arr_store)" = "$$(/tmp/test_aarch64_rec_arr_store_x64)"
@@ -3384,6 +3394,11 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas /tmp/test_riscv32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_riscv32_sstrunc_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_sstrunc)" = "$$(/tmp/test_riscv32_sstrunc_x64)"
+	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
+	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
+	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas /tmp/test_riscv32_u64d
+	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_riscv32_u64d_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_u64d)" = "$$(/tmp/test_riscv32_u64d_x64)"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_riscv32_centry
 	tools/run_target.sh riscv32 /tmp/test_riscv32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_riscv32_cargs
@@ -3789,6 +3804,11 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_shortstring_trunc.pas /tmp/test_arm32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_arm32_sstrunc_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sstrunc)" = "$$(/tmp/test_arm32_sstrunc_x64)"
+	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
+	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
+	./$(COMPILER) --target=arm32 test/test_u64_to_double.pas /tmp/test_arm32_u64d
+	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_arm32_u64d_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_u64d)" = "$$(/tmp/test_arm32_u64d_x64)"
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_managed_strlen)" = "$$(/tmp/test_arm32_managed_strlen_x64)"
