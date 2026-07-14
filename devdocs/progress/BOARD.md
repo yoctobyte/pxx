@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
@@ -30,7 +31,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (101)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,8 +40,6 @@ _none_
 | bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
-| bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
-| bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
@@ -194,7 +193,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (708)
+## done (709)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -384,6 +383,7 @@ _none_
 | bug-emitasmx64-no-sib-index-silent-misparse | A | 50 | bug | `EmitAsmX64` has no `[base+index-register]` (SIB) form — fails safely, but with an unhelpful error | — |
 | bug-esp-bare-riscv32-xtensa-cannot-compile-trivial-program | A | 50 | bug | riscv32 / xtensa (`--esp-profile=bare`) reject even a trivial program — unsupported `call_ind` node | — |
 | bug-esp-not-always-boolean | A | 50 | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
+| bug-esp32s3-bare-boot-no-uart-output | A | 40 | bug | `make test-esp-bare` — the esp32s3 (xtensa) leg emits NO UART output | — |
 | bug-except-base-handler-misses-derived | A | 50 | bug | `except on E: BaseClass` does not catch a derived exception | — |
 | bug-explicit-tobject-base | A | 50 | bug | bug: explicit `class(TObject)` base "type not found" | — |
 | bug-fixed-array-assignment-no-copy | A | 50 | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
@@ -950,7 +950,6 @@ _none_
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [C] bug-c-pragma-pack-ignored
-- [p 55] [A] bug-frozen-string-unsupported-riscv32-xtensa
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape
@@ -1008,7 +1007,6 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [A] bug-esp32s3-bare-boot-no-uart-output
 - [p 40] [C] bug-test-hardcoded-tmp-so-path
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection

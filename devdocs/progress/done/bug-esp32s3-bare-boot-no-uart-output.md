@@ -6,7 +6,7 @@ prio: 40
 
 - **Type:** bug (cross target — xtensa/ESP32-S3)
 - **Track:** A — core (xtensa backend / ESP boot path)
-- **Status:** working
+- **Status:** done
 - **Found by:** running `make test-esp-bare` as the cross gate for
   [[bug-pascal-exceptaddr-returns-nil]] (b340), which touches every backend's raise stub.
 
@@ -46,3 +46,6 @@ gate has been giving no signal, which is worth more than the test itself.
 
 ## Gate
 `make test-esp-bare` green on BOTH legs (esp32c3 + esp32s3).
+
+## Log
+- 2026-07-14 — resolved, commit 5dc8f5e8.
