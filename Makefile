@@ -1823,6 +1823,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
 	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_shortstring_trunc26
 	test "$$(/tmp/test_shortstring_trunc26)" = "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok')"
+	./$(COMPILER) test/test_not_ord_bitwise.pas /tmp/test_not_ord_bitwise26
+	test "$$(/tmp/test_not_ord_bitwise26)" = "$$(printf '%s\n' -2 -2 158 254 254 254 -2)"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26
 	test "$$(/tmp/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
 	./$(COMPILER) test/test_managed_string_flip.pas /tmp/test_managed_string_flip26

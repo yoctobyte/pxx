@@ -4197,6 +4197,26 @@ begin
     begin
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_NOT, left, -1, -1, 0, ASTTk[node]);
+      { A bitwise complement of an UNSIGNED subword type truncates to its width
+        (FPC: `not byte(1)` = 254, `not ord('a')` = 158). Every backend emits a
+        full-register complement, so mask here in the shared IR — portable to
+        all six targets. Signed subwords need nothing: their inputs are already
+        sign-extended, so the full-width complement IS the sign-extension of
+        the subword result. bug-pascal-not-of-ord-uses-boolean-negation. }
+      case IntToTypeKind(ASTTk[node]) of
+        tyUInt8:
+          Result := IRAppend(IR_BINOP, Result,
+                      IRAppend(IR_CONST_INT, -1, -1, -1, $FF, Ord(tyInteger)),
+                      Ord(tkAnd), 0, ASTTk[node]);
+        tyUInt16:
+          Result := IRAppend(IR_BINOP, Result,
+                      IRAppend(IR_CONST_INT, -1, -1, -1, $FFFF, Ord(tyInteger)),
+                      Ord(tkAnd), 0, ASTTk[node]);
+        tyUInt32:
+          Result := IRAppend(IR_BINOP, Result,
+                      IRAppend(IR_CONST_INT, -1, -1, -1, $FFFFFFFF, Ord(tyInt64)),
+                      Ord(tkAnd), 0, ASTTk[node]);
+      end;
     end;
 
     AN_BINOP:

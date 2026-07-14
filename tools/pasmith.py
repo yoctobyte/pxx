@@ -95,9 +95,9 @@ BOOL_OPS = ["and", "or", "xor"]
 #       the wrong number. Found by this generator's very first widened run. Bare
 #       ord() reads are therefore wrapped in an explicit longint() cast, which is
 #       where `not` behaves; drop the wrapper when the ticket lands (enum_reads).
-NO_SHORTSTRING_TRUNCATION = True     # bug-pascal-shortstring-no-truncation-*
+NO_SHORTSTRING_TRUNCATION = False    # FIXED: fec98091 + 7716bd2a (truncating string[N] stores, all targets)
 NO_ONE_CHAR_STRING_LITERAL = True    # compat-pascal-copy-of-char-literal
-NO_BARE_NOT_ORD = True               # bug-pascal-not-of-ord-uses-boolean-negation
+NO_BARE_NOT_ORD = False              # FIXED: not-ord bitwise + operand-width (bug-pascal-not-of-ord-uses-boolean-negation)
 
 
 def lit_for(ty, rnd):

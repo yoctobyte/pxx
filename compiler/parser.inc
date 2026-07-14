@@ -6447,7 +6447,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
-    bitNot, opIsArith: Boolean; notOp: Integer;
+    bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
 begin
@@ -7052,7 +7052,12 @@ begin
           ((Integer(ASTIVal[left]) = -1) or (Integer(ASTIVal[left]) = -3))) or
          ((ASTKind[left] = AN_CALL) and
           ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
-           (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)))) or
+           (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)) or
+           { Ord(x) is an integer by definition — it was missing here, so
+             `not ord(e)` lowered as a BOOLEAN not (xor 1): silently wrong
+             integers in any hash/mask over an ordinal
+             (bug-pascal-not-of-ord-uses-boolean-negation). }
+           (Integer(ASTIVal[left]) = -Ord(tkOrd)))) or
          { A user function call whose DECLARED return type is a non-boolean
            ordinal is authoritative (unlike the node's ASTTk, which PXX sometimes
            mistags). This trusts `not f()` for an Int64/Integer-returning f
@@ -7067,7 +7072,18 @@ begin
       if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
-        LastExprTk := IntToTypeKind(ASTTk[left]);
+        { FPC complements `ord(x)` at the OPERAND's width: ord(char/boolean) is
+          byte-sized (`not ord('a')` = 158, not -98); a subword/64-bit integer
+          operand keeps its own width; an enum stays the 4-byte default. }
+        if (ASTKind[left] = AN_CALL) and (Integer(ASTIVal[left]) = -Ord(tkOrd)) then
+        begin
+          notOrdTk := IntToTypeKind(ASTTk[ASTLeft[ASTLeft[left]]]);
+          if (notOrdTk = tyChar) or (notOrdTk = tyBoolean) then
+            ASTTk[node] := Ord(tyUInt8)
+          else if (Ord(notOrdTk) >= 7) and (Ord(notOrdTk) <= 16) then
+            ASTTk[node] := Ord(notOrdTk);
+        end;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
       end
       else
       begin
