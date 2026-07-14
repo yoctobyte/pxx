@@ -2,12 +2,11 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `df8c10de5f7d` | 2026-07-14T15:40:24Z | RED (native) | 107.4s | `8f80bf00f65e` RED |
+| borg | `cf78f1f2a920` | 2026-07-14T15:44:11Z | GREEN (native) | 95.7s | `8f80bf00f65e` RED |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `603cf2bda859`, last good `9ae7a3617ccb`, 1 commit(s) in range
-- **test-core#src:test/test_platform_defines.pas@2** — test/test_platform_defines.pas (borg): bad `cb41e80da75d`, last good `a5c40073f87d`, 1 commit(s) in range
 - **test-lua-cross#src:test/lua/runner.c** — test/lua/runner.c tools/run_target.sh (borg): bad `940b261f8678`, last good `940b261f8678`, 0 commit(s) in range
 - **test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh** — tools/run_sqlite_thread_test.sh (borg): bad `940b261f8678`, last good `940b261f8678`, 0 commit(s) in range
 - **test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh** — tools/run_sqlite_thread_test.sh (borg): bad `940b261f8678`, last good `940b261f8678`, 0 commit(s) in range
