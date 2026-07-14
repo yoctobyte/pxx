@@ -606,3 +606,4 @@
 {"date": "2026-07-14T13:39:29Z", "fixed": [], "full": true, "new_red": ["test-c-conformance-arm32#shard3/6"], "sha": "857903930528f8783ce973c8ff60010024a25c20", "tier": "full", "verdict": "RED", "wall": 213.9}
 {"date": "2026-07-14T13:42:40Z", "fixed": [], "full": false, "new_red": [], "sha": "857903930528f8783ce973c8ff60010024a25c20", "tier": "opt", "verdict": "GREEN", "wall": 126.5}
 {"date": "2026-07-14T13:53:00Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_platform_defines.pas@2", "test-core#src:test/test_sqlite_crud_lazy.pas"], "sha": "96147f570d29941719baef78f44cfcec515eed7e", "tier": "native", "verdict": "RED", "wall": 84.0}
+{"date": "2026-07-14T13:59:30Z", "fixed": ["test-core#src:test/test_sqlite_crud_lazy.pas"], "full": false, "new_red": [], "sha": "fb3bd69339fbc266ec72b42c2439dcd8844d7ae2", "tier": "native", "verdict": "RED", "wall": 137.8}
