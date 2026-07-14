@@ -334,6 +334,22 @@ begin
   Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitOvfCheckA64(skipBranchEnc: Integer);
+{ {$Q+} overflow trap, aarch64 leg: emit the given SKIP branch (a b.cond /
+  cbz encoding whose imm19 is patched here), then a call to PXXOverflow —
+  taken only when the just-emitted flags/register report a wrapped result
+  (feature-overflow-checks-cross-and-intrinsics). }
+var pSkip, procIdx: Integer;
+begin
+  pSkip := CodeLen;
+  EmitI32(skipBranchEnc);
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Patch32(pSkip, skipBranchEnc or ((((CodeLen - pSkip) div 4) and $7FFFF) shl 5));
+end;
+
 procedure EmitCvtIntToF64A64(dReg, xReg: Integer; srcTk: TTypeKind);
 { int -> double: scvtf for signed sources, ucvtf for unsigned 64-bit ones —
   scvtf converted a qword >= 2^63 to a negative double
@@ -1494,9 +1510,58 @@ begin
         EmitI32($AA0003E1); { mov x1, x0 }
         EmitI32($F84107E0); { ldr x0, [sp], #16 }
 
-        if op = Ord(tkPlus) then EmitI32($8B010000)        { add x0, x0, x1 }
-        else if op = Ord(tkMinus) then EmitI32($CB010000)  { sub x0, x0, x1 }
-        else if op = Ord(tkStar) then EmitI32($9B017C00)   { mul x0, x0, x1 }
+        if op = Ord(tkPlus) then
+        begin
+          if IRIVal[node] = 1 then
+          begin
+            { {$Q+}: flag-setting add, trap a wrapped result — b.vs signed,
+              b.cs (carry = wrap) unsigned. Skip branches are the inverse. }
+            EmitI32($AB010000);                            { adds x0, x0, x1 }
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+              EmitOvfCheckA64($54000007)                   { b.vc skip }
+            else
+              EmitOvfCheckA64($54000003);                  { b.cc skip }
+          end
+          else
+            EmitI32($8B010000);                            { add x0, x0, x1 }
+        end
+        else if op = Ord(tkMinus) then
+        begin
+          if IRIVal[node] = 1 then
+          begin
+            EmitI32($EB010000);                            { subs x0, x0, x1 }
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+              EmitOvfCheckA64($54000007)                   { b.vc skip }
+            else
+              EmitOvfCheckA64($54000002);                  { b.cs skip (CC = borrow) }
+          end
+          else
+            EmitI32($CB010000);                            { sub x0, x0, x1 }
+        end
+        else if op = Ord(tkStar) then
+        begin
+          if IRIVal[node] = 1 then
+          begin
+            if TypeSigned(IntToTypeKind(IRTk[node])) then
+            begin
+              { signed checked mul: high half must equal the sign-extension
+                of the low half. }
+              EmitI32($9B417C02);                          { smulh x2, x0, x1 }
+              EmitI32($9B017C00);                          { mul x0, x0, x1 }
+              EmitI32($EB80FC5F);                          { cmp x2, x0, asr #63 }
+              EmitOvfCheckA64($54000000);                  { b.eq skip }
+            end
+            else
+            begin
+              { unsigned checked mul: any high-half bit = overflow. }
+              EmitI32($9BC17C02);                          { umulh x2, x0, x1 }
+              EmitI32($9B017C00);                          { mul x0, x0, x1 }
+              EmitOvfCheckA64($B4000002);                  { cbz x2, skip }
+            end;
+          end
+          else
+            EmitI32($9B017C00);                            { mul x0, x0, x1 }
+        end
         else if op = Ord(tkDiv) then
         begin
           { UDIV for an unsigned dividend, SDIV otherwise (matches the arm32 /

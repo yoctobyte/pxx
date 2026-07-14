@@ -3148,6 +3148,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_u64_to_double.pas /tmp/test_aarch64_u64d
 	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_aarch64_u64d_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_u64d)" = "$$(/tmp/test_aarch64_u64d_x64)"
+	# {$$Q+} overflow-checked arithmetic raises catchable EIntOverflow (aarch64 leg)
+	./$(COMPILER) --target=aarch64 test/test_overflow_checks_qplus.pas /tmp/test_aarch64_qplus
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rec_arr_store)" = "$$(/tmp/test_aarch64_rec_arr_store_x64)"
