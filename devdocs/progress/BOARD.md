@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (101)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -127,7 +127,6 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
-| task-conformance-retriage-33-newly-passing-skips | A | 40 | task | 33 skip-listed pascal-conformance tests now exit-code-pass after the 2026-07-14/15 night arcs — per-test re-triage to unskip the genuinely green ones | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -192,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (742)
+## done (743)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -926,6 +925,7 @@ _none_
 | regression-test-sqlite-threads-i386-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh red at 940b261f8678 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| task-conformance-retriage-33-newly-passing-skips | A | 40 | task | 33 skip-listed pascal-conformance tests now exit-code-pass after the 2026-07-14/15 night arcs — per-test re-triage to unskip the genuinely green ones | — |
 | task-fpc-skip-triage-wontfix-vs-gap | T | 20 | task | FPC conformance: triage the ~237 untriaged skips into gap: / wontfix: | — |
 | task-license-mpl2-rollout | A | 50 | task | Adopt MPL 2.0 (compiler) + zlib (runtime/libs) — licensing rollout | — |
 | task-remove-sysutils-move-fillchar-copies | B | 50 | task | Remove the sysutils Move/FillChar copies (now shadowed by builtin) | — |
@@ -1045,7 +1045,6 @@ _none_
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [T] feature-t-bench-portable-variants
 - [p 40] [A] feature-unicodestring-model
-- [p 40] [A] task-conformance-retriage-33-newly-passing-skips
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [T] bug-testmgr-aarch64-conformance-shard3-timeout-flake
 - [p 35] [C] feature-c-esp-conformance-coverage

@@ -35,3 +35,6 @@ For each: compile + run under pxx AND FPC, diff stdout byte-for-byte
 (the tint642 method); a {%FAIL} test must be REJECTED with the sweep's
 strict flags. Unskip only on a clean diff; else update the reason with the
 real residual. Expect several tgeneric* to be one shared fix — cluster.
+
+## Log
+- 2026-07-15 — resolved, commit 7b54288c.
