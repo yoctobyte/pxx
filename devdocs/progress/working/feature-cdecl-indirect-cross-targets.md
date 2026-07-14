@@ -6,8 +6,8 @@ prio: 60  # auto
 
 - **Type:** feature (Track A — cross codegen / call ABI)
 - **Track:** A — `compiler/**`
-- **Status:** backlog
-- **Owner:** — (Track A)
+- **Status:** working
+- **Owner:** fable-a
 - **Opened:** 2026-06-25
 - **Relation:** follow-up to [[feature-real-dynlib-loader]] (route A landed,
   x86-64). Consumed by any cross-target use of `dynlibs` / `-dPXX_DYNLIB_LIBC`
@@ -64,3 +64,22 @@ good: OpenSSL loads on x86-64.
 - Stack spill / by-value structs / varargs through indirect cdecl (also still
   open on x86-64 — track in [[feature-real-dynlib-loader]]).
 - PAL `PalDlOpen` primitive abstraction (Track B / dynlib-loader ticket).
+
+## 2026-07-14 — RESOLVED for i386 / aarch64 / arm32 (b362)
+
+- **aarch64:** new cdecl arm in IR_CALL_IND mirroring the external-direct AAPCS64
+  marshalling (int/ptr x0..x7, floats d0..d7 independent classes, single
+  narrow/widen, float result bridged d0->x0); callee popped into x16, blr.
+- **arm32 (armel):** new cdecl arm building the same contiguous AAPCS core-reg
+  block as the external-direct path (doubles/Int64 8-byte aligned), callee via
+  r12, blx; float results bridged r0(:r1)->d0. Variadic tail classified by IR
+  type. Method-pointer Self unsupported (C fnptrs have none).
+- **i386:** the existing CALL_IND marshalling was already C-shaped; two deltas —
+  cdecl signatures now get the variadic-style ARG REVERSAL (C wants arg0 at the
+  lowest address; pow(2,10) came back as 100.0 before), and float/double results
+  bridge st0 -> xmm0 like the external-direct path.
+
+`test_cdecl_indirect.pas` (dlsym'd sqrt/pow/ldexp through cdecl proc types) runs
+byte-identical to x86-64 on all three, and is wired into test-i386 /
+test-aarch64 / test-arm32. riscv32/xtensa remain out (no dynamic-linking leg
+there yet) — reopen a target-specific slice when a consumer appears.

@@ -2763,7 +2763,11 @@ begin
           if vaNvw > 127 then Error('target i386: too many call arguments');
           vaOrder[vaNvw] := argNode; Inc(vaNvw); argNode := IRB[argNode];
         end;
-        vaFwd := (procIdx >= 0) and ProcVariadic[procIdx];
+        { A cdecl signature needs the same reversal as a variadic one: C expects
+          arg0 at the LOWEST stack address, i.e. pushed LAST. The internal
+          convention pushes leftmost-first, which handed a dlsym'd pow(2,10) its
+          args swapped (= 100.0, not 1024.0). }
+        vaFwd := (procIdx >= 0) and (ProcVariadic[procIdx] or ProcCdecl[procIdx]);
         if vaFwd then
         begin
           vaO1 := 0; vaO2 := vaNvw - 1;
@@ -2858,6 +2862,29 @@ begin
         if argBytes > 0 then
         begin
           EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
+        end;
+        { cdecl signature (a dlsym'd C function): the arg marshalling above is
+          already the C convention on i386 (natural widths on the stack, caller
+          cleans up), but a C float/double result comes back in st0 — bridge it
+          to xmm0, the i386 float value model, exactly like the external-direct
+          path (feature-cdecl-indirect-cross-targets). }
+        if (procIdx >= 0) and ProcCdecl[procIdx] then
+        begin
+          if Procs[procIdx].RetType = tySingle then
+          begin
+            EmitB($83); EmitB($EC); EmitB($04);          { sub esp, 4 }
+            EmitB($D9); EmitB($5C); EmitB($24); EmitB($00); { fstp dword [esp] }
+            EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movss xmm0, [esp] }
+            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
+            EmitB($83); EmitB($C4); EmitB($04);          { add esp, 4 }
+          end
+          else if TypeIsFloat(Procs[procIdx].RetType) then
+          begin
+            EmitB($83); EmitB($EC); EmitB($08);          { sub esp, 8 }
+            EmitB($DD); EmitB($5C); EmitB($24); EmitB($00); { fstp qword [esp] }
+            EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
+            EmitB($83); EmitB($C4); EmitB($08);          { add esp, 8 }
+          end;
         end;
       end;
 

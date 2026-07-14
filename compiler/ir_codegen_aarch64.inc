@@ -2046,13 +2046,69 @@ begin
 
     IR_CALL_IND:
       begin
+        procIdx := Integer(IRIVal[node]);                 { signature proc index }
+        if (procIdx >= 0) and ProcCdecl[procIdx] then
+        begin
+          { AAPCS64 (cdecl) indirect call through a `cdecl` proc-type value — a
+            dlsym'd C function. Mirrors the external-direct marshalling (int/ptr
+            -> x0..x7, floats -> d0..d7, classes counted independently; single
+            params narrowed, a single result widened; float result bridged back
+            d0 -> x0 for the GPR value model), except the callee comes from a
+            runtime value: pushed deepest, popped into x16, blr x16. Injected
+            Self (i < IRC) and a variadic tail go in GP regs, mirroring the
+            x86-64 cdecl shape (feature-cdecl-indirect-cross-targets). }
+          IREmitNodeAarch64(IRA[node]);              { x0 = callee address }
+          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! (callee, deepest) }
+          argNode := IRB[node];
+          nArgs := 0;
+          while argNode <> -1 do
+          begin
+            IREmitNodeAarch64(IRA[argNode]);
+            EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs > 8 then
+            Error('target aarch64: cdecl indirect call with more than 8 arguments not supported');
+          { Pop reverse (top = last arg) into the target class register. }
+          for i := nArgs - 1 downto 0 do
+          begin
+            lo := 0; hi := 0;
+            for j := 0 to i - 1 do
+              if (j >= Integer(IRC[node])) and
+                 ((j - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
+                 TypeIsFloat(Procs[procIdx].Params[j - Integer(IRC[node])].TypeKind) then
+                Inc(hi)
+              else
+                Inc(lo);
+            EmitI32($F84107E9);                      { ldr x9, [sp], #16 }
+            if (i >= Integer(IRC[node])) and
+               ((i - Integer(IRC[node])) < Procs[procIdx].ParamCount) and
+               TypeIsFloat(Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind) then
+            begin
+              EmitI32($9E670120 + hi);               { fmov d[hi], x9 }
+              if Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind = tySingle then
+                EmitI32($1E624000 + (hi shl 5) + hi); { fcvt s[hi], d[hi] }
+            end
+            else
+              EmitI32($AA0903E0 + lo);               { mov x[lo], x9 }
+          end;
+          EmitI32($F84107F0);                        { ldr x16, [sp], #16 (callee) }
+          EmitI32($D63F0200);                        { blr x16 }
+          if TypeIsFloat(Procs[procIdx].RetType) then
+          begin
+            if Procs[procIdx].RetType = tySingle then
+              EmitI32($1E22C000);                    { fcvt d0, s0 (widen single) }
+            EmitI32($9E660000);                      { fmov x0, d0 (bridge to GPR) }
+          end;
+          Exit;
+        end;
         { Indirect call through a proc-typed value. Push the callee address first
           (deepest temp slot) so arg evaluation can't disturb it, push args, pop
           args into x0..x7, pop the callee into x16, and `blr x16`. An
           aggregate / frozen-string result pushes its hidden caller-destination
           deeper still and pops it into x8 (the AAPCS indirect-result register)
           last, after the arg and callee pops. }
-        procIdx := Integer(IRIVal[node]);                 { signature proc index }
         if Procs[procIdx].ParamCount + Integer(IRC[node]) > 8 then
           Error('target aarch64: indirect call with more than 8 parameters not supported');
         if IRCallDest[node] >= 0 then

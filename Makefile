@@ -2983,6 +2983,9 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_i386_asyncecho
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
+	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas /tmp/test_i386_cdeclind
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_i386_extern_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_extern)" = "$$(/tmp/test_i386_extern_x64)"
@@ -3284,6 +3287,9 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=aarch64 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_aarch64_asyncecho
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
+	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas /tmp/test_aarch64_cdeclind
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=aarch64 test/test_extern_c.pas /tmp/test_aarch64_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_aarch64_extern_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_extern)" = "$$(/tmp/test_aarch64_extern_x64)"
@@ -3935,6 +3941,9 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_arm32_asyncecho
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
+	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas /tmp/test_arm32_cdeclind
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_arm32_extern_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_extern)" = "$$(/tmp/test_arm32_extern_x64)"

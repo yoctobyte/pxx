@@ -2333,6 +2333,85 @@ begin
 
     IR_CALL_IND:
       begin
+        procIdx := Integer(IRIVal[node]);                 { signature proc index }
+        if (procIdx >= 0) and ProcCdecl[procIdx] then
+        begin
+          { armel (cdecl) indirect call through a `cdecl` proc-type value — a
+            dlsym'd C function. Mirrors the external-direct marshalling: build a
+            contiguous AAPCS argument block in a 16-byte stack temp (4 bytes for
+            int/single/pointer, 8-byte-aligned 8 bytes for double/Int64), load
+            words 0..3 into r0..r3. The callee is a runtime value: pushed below
+            the block, popped into r12, blx r12. A variadic tail is classified
+            by the arg's own IR type (floats promoted to double). Injected
+            method-pointer Self is not supported here (C fnptrs have none).
+            (feature-cdecl-indirect-cross-targets; x86-64 shape c461fce.) }
+          if Integer(IRC[node]) > 0 then
+            Error('target arm32: cdecl method pointer not supported');
+          IREmitNodeArm32(IRA[node]);               { r0 = callee address }
+          EmitI32($E92D0001);                       { push {r0} (callee) }
+          EmitI32($E24DD010);                       { sub sp, sp, #16 }
+          argNode := IRB[node];
+          nArgs := 0;
+          j := 0;   { running block offset }
+          while argNode <> -1 do
+          begin
+            if nArgs < Procs[procIdx].ParamCount then
+              tk := Procs[procIdx].Params[nArgs].TypeKind
+            else if TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              tk := tyDouble                        { variadic float -> double }
+            else
+              tk := tyInteger;
+            if (tk = tyDouble) or (tk = tyExtended) then
+            begin
+              if (j and 4) <> 0 then Inc(j, 4);
+              IREmitNodeArm32(IRA[argNode]);        { d0 = double }
+              EmitI32($ED8D0B00 or (j shr 2));      { vstr d0, [sp, #j] }
+              Inc(j, 8);
+            end
+            else if (tk = tyInt64) or (tk = tyUInt64) then
+            begin
+              if (j and 4) <> 0 then Inc(j, 4);
+              EmitNode64Arm32(IRA[argNode]);        { r0=lo, r1=hi }
+              EmitI32($E58D0000 or j);              { str r0, [sp, #j] }
+              EmitI32($E58D1000 or (j + 4));        { str r1, [sp, #j+4] }
+              Inc(j, 8);
+            end
+            else if tk = tySingle then
+            begin
+              IREmitNodeArm32(IRA[argNode]);        { d0 = double }
+              EmitI32($EEB70BC0);                   { vcvt.f32.f64 s0, d0 }
+              EmitI32($ED8D0A00 or (j shr 2));      { vstr s0, [sp, #j] }
+              Inc(j, 4);
+            end
+            else
+            begin
+              IREmitNodeArm32(IRA[argNode]);        { r0 = arg }
+              EmitI32($E58D0000 or j);              { str r0, [sp, #j] }
+              Inc(j, 4);
+            end;
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if j > 16 then
+            Error('target arm32: cdecl indirect call argument block exceeds 4 core registers (stack args not supported yet)');
+          i := 0;
+          while (i * 4) < j do
+          begin
+            EmitI32($E59D0000 or (i shl 12) or (i * 4)); { ldr r[i], [sp, #i*4] }
+            Inc(i);
+          end;
+          EmitI32($E28DD010);                       { add sp, sp, #16 }
+          EmitI32($E8BD1000);                       { pop {r12} (callee) }
+          EmitI32($E12FFF3C);                       { blx r12 }
+          if Procs[procIdx].RetType = tySingle then
+          begin
+            EmitI32($EE000A10);                     { vmov s0, r0 }
+            EmitI32($EEB70AC0);                     { vcvt.f64.f32 d0, s0 }
+          end
+          else if TypeIsFloat(Procs[procIdx].RetType) then
+            EmitI32($EC410B10);                     { vmov d0, r0, r1 (double result) }
+          Exit;
+        end;
         { Indirect call through a proc-typed value. Word-based args (<=4 words,
           one per scalar/pointer arg). Push the callee first (deepest), push args,
           load r0..r3 from the arg slots, load the callee into r9, drop the whole
@@ -2340,7 +2419,6 @@ begin
           are not handled in v1.) An aggregate / frozen-string result pushes its
           hidden caller-destination deeper still (below the callee) and loads it
           into r12 just before the call, like the direct-call path. }
-        procIdx := Integer(IRIVal[node]);                 { signature proc index }
         if IRCallDest[node] >= 0 then
         begin
           IREmitNodeArm32(IRCallDest[node]);         { r0 = hidden destination }
