@@ -1829,6 +1829,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_record_cast_fo26)" = "$$(printf '%s\n' 305419896 2596069104 1311768467463790320 5 5 not-ok notor-ok)"
 	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_u64_to_double26
 	test "$$(/tmp/test_u64_to_double26)" = "$$(printf '%s\n' assign-ok field-ok cmp-ok round-ok small-ok signed-ok)"
+	./$(COMPILER) test/test_qword_literal_binop.pas /tmp/test_qword_lit26
+	test "$$(/tmp/test_qword_lit26)" = "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26
 	test "$$(/tmp/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
 	./$(COMPILER) test/test_managed_string_flip.pas /tmp/test_managed_string_flip26

@@ -9909,7 +9909,21 @@ begin
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
-      ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]), op))
+    begin
+      { FPC range-based constants: a NON-NEGATIVE integer literal paired with a
+        QWord operand joins the UNSIGNED domain. The literal $f0000000 widens to
+        tyInt64 at parse (> maxint), and the equal-width signed-wins rule then
+        demoted `q + $f0000000` to Int64 — correct bits, but printed/compared
+        SIGNED (tint642's lo/hi section). A negative literal keeps the old rule. }
+      if (ASTTk[left] = Ord(tyUInt64)) and (ASTKind[right] = AN_INT_LIT) and
+         (ASTIVal[right] >= 0) then
+        ASTTk[node] := Ord(TypeArithmeticResultOp(tyUInt64, tyUInt64, op))
+      else if (ASTTk[right] = Ord(tyUInt64)) and (ASTKind[left] = AN_INT_LIT) and
+              (ASTIVal[left] >= 0) then
+        ASTTk[node] := Ord(TypeArithmeticResultOp(tyUInt64, tyUInt64, op))
+      else
+        ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]), op));
+    end
     else
       ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
@@ -10046,6 +10060,17 @@ begin
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(left)], EnumTypeNLen[NodeEnumIdOf(left)]) +
             ' with enum type ' +
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(right)], EnumTypeNLen[NodeEnumIdOf(right)]));
+    { FPC range-based constants: a NON-NEGATIVE literal compared against a
+      QWord compares UNSIGNED — retag the literal so codegen's
+      TypeCompareUnsigned sees two unsigned operands. Without this
+      `q > $f0000000` (literal widened to tyInt64 at parse) compared signed
+      and a qword >= 2^63 answered wrong (tint642 family). }
+    if (ASTTk[left] = Ord(tyUInt64)) and (ASTKind[right] = AN_INT_LIT) and
+       (ASTIVal[right] >= 0) then
+      ASTTk[right] := Ord(tyUInt64)
+    else if (ASTTk[right] = Ord(tyUInt64)) and (ASTKind[left] = AN_INT_LIT) and
+            (ASTIVal[left] >= 0) then
+      ASTTk[left] := Ord(tyUInt64);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
   end;
