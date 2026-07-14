@@ -665,6 +665,7 @@ begin
       UFldBitShift[dst+k] := UFldBitShift[src];
       UFldBitBytes[dst+k] := UFldBitBytes[src];
       UFldPub[dst+k] := UFldPub[src];
+      UFldStrCap[dst+k] := UFldStrCap[src];
       for fi := 0 to MAX_ARR_DIMS - 1 do
       begin
         UFldArrDimLo[(dst+k) * MAX_ARR_DIMS + fi]   := UFldArrDimLo[src * MAX_ARR_DIMS + fi];
@@ -714,6 +715,7 @@ begin
   UFldBitShift[fi] := 0;
   UFldBitBytes[fi] := 0;
   UFldPub[fi] := 0;
+  UFldStrCap[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
 end;
@@ -1074,6 +1076,20 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := IntToTypeKind(UFldTk[fi]);
+  end;
+end;
+
+function RecFieldStrCap(rec: Integer; const field: AnsiString): Integer;
+{ Frozen fixed-string field capacity: N for a `string[N]` field, 0 for a plain
+  `string` field / non-string field / builtin record. Drives the truncating
+  store clamp on assignment into the field's inline buffer. }
+var fi: Integer;
+begin
+  Result := 0;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field);
+    if fi >= 0 then Result := UFldStrCap[fi];
   end;
 end;
 

@@ -847,6 +847,19 @@ begin
     ]);
 end;
 
+procedure EmitClampRcxToStrCap(cap: Integer);
+{ rcx = source string length about to be copied into a frozen inline buffer.
+  Clamp it to the destination's capacity — a `string[N]` (or plain frozen
+  `string`, cap DEFAULT_STR_CAP) TRUNCATES an oversized source; without the
+  clamp the copy runs past the slot and corrupts the neighbouring variable
+  (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  EmitB($48); EmitB($81); EmitB($F9); EmitI32(cap);  { cmp rcx, cap }
+  EmitB($7E); EmitB($07);                            { jle +7 (len <= cap: keep) }
+  EmitB($48); EmitB($C7); EmitB($C1); EmitI32(cap);  { mov rcx, cap }
+end;
+
 procedure IREmitStoreCharAsString;
 { rdi = destination string buffer, rsi = char ordinal. Writes a 1-char string
   ([len:8=1][char]) directly into the destination, so a tyChar value can be
@@ -2198,6 +2211,7 @@ begin
               EmitB($48); EmitB($85); EmitB($F6);              { test rsi, rsi }
               EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
               EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
+              EmitClampRcxToStrCap(SymStrCap[symIdx]);          { truncate to string[N] capacity }
               EmitB($48); EmitB($89); EmitB($0F);              { mov [rdi], rcx (length word) }
               EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
               EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
@@ -2209,6 +2223,7 @@ begin
             else
             begin
               EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+              EmitClampRcxToStrCap(SymStrCap[symIdx]); { truncate to string[N] capacity }
               EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
               EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
               EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
@@ -2666,9 +2681,27 @@ begin
           EmitB($5E);                         { pop rsi }
           if IntToTypeKind(IRTk[valueNode]) = tyChar then
             IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+          else if IntToTypeKind(IRTk[valueNode]) = tyAnsiString then
+          begin
+            { Managed source -> frozen field/deref dest (r.s := managedStr):
+              rsi = handle (char pointer), length at [rsi-8]. Mirrors the
+              IR_STORE_SYM managed->frozen path. nil handle -> empty string. }
+            EmitB($48); EmitB($85); EmitB($F6);              { test rsi, rsi }
+            EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
+            EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
+            EmitClampRcxToStrCap(Integer(IRIVal[node]));      { truncate to string[N] capacity }
+            EmitB($48); EmitB($89); EmitB($0F);              { mov [rdi], rcx (length word) }
+            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
+            EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
+            EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
+            Code[pNil] := Byte(CodeLen - (pNil + 1));         { empty: }
+            EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
+            Code[pDone] := Byte(CodeLen - (pDone + 1));       { done: }
+          end
           else
           begin
             EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+            EmitClampRcxToStrCap(Integer(IRIVal[node])); { truncate to string[N] capacity }
             EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
             EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
             EmitB($48); EmitB($83); EmitB($C7); EmitB($08);

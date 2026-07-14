@@ -2824,6 +2824,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
     helperPi, wrapperArg, wrapperCall: Integer;
     lhsTk, lhsStoreTk, castTk: TTypeKind;
+    lhsStrCap: Integer;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
@@ -4520,12 +4521,19 @@ begin
         end;
       end;
       lhsStoreTk := lhsTk;
+      lhsStrCap := 0;
       if ASTKind[ASTLeft[node]] = AN_FIELD then
       begin
         slFldRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
         slFldName := GetASTIdentName(ASTLeft[node]);
         if slFldRec <> REC_NONE then
+        begin
           lhsStoreTk := RecFieldType(slFldRec, slFldName);
+          { `string[N]` field: capacity rides the store node's IVal so codegen
+            clamps the copy to N (truncating shortstring assignment). }
+          if lhsStoreTk = tyString then
+            lhsStrCap := RecFieldStrCap(slFldRec, slFldName);
+        end;
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
           lhsTk := lhsStoreTk;
       end;
@@ -4878,7 +4886,7 @@ begin
         else
         begin
           leftAddr := IRLowerAddress(ASTLeft[node]);
-          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(lhsStoreTk));
+          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, lhsStrCap, Ord(lhsStoreTk));
           if CProgramMode then
             Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, Ord(lhsStoreTk));
         end;

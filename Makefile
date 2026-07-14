@@ -1821,6 +1821,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_string_sized26)" = "$$(printf 'Apple\nBanana\nCherry-and-then-some\n5\n6\n20\na-ok\nb-ok\nApple')"
 	./$(COMPILER) test/test_shortstring.pas /tmp/test_shortstring26
 	test "$$(/tmp/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
+	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_shortstring_trunc26
+	test "$$(/tmp/test_shortstring_trunc26)" = "$$(printf 'aaaa 4\nb-ok\nabcdefgh 8\nabcdefgh 8\nxxxx 4\nguard-ok\nyyyy 4\npguard-ok\nzzzz 4\nmguard-ok')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26
 	test "$$(/tmp/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
 	./$(COMPILER) test/test_managed_string_flip.pas /tmp/test_managed_string_flip26

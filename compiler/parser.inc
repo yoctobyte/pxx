@@ -17035,7 +17035,7 @@ end;
 
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean);
 var
-  arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize: Integer;
+  arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
   isArr, fIsDyn: Boolean;
@@ -17305,6 +17305,16 @@ begin
         fSize := LOCAL_STR_CAP + 8;
         fAlign := TARGET_PTR_SIZE;
       end
+      else if fTk = tyFixedString then
+      begin
+        { `string[N]` field: inline [len:8][chars:N] slot, same layout as a
+          tyString field but capacity N. Stored as tyString (identical read/
+          write codegen) with UFldStrCap = N driving the truncating store. }
+        fStrCap := LastTypeStrCap;
+        if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
+        fSize := FrozenStrSlotSize(fTk, fStrCap);
+        fAlign := TARGET_PTR_SIZE;
+      end
       else if fTk = tyRecord then
       begin
         fSize := RecSize(fRec);
@@ -17334,7 +17344,13 @@ begin
       for fni := 0 to nFldNames - 1 do
       begin
         curFieldOff := AlignTo(curFieldOff, fAlign);
-        AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+        if fTk = tyFixedString then
+        begin
+          AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec);
+          UFldStrCap[UFldCount-1] := fStrCap;
+        end
+        else
+          AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
         UFldIsArray[UFldCount-1] := isArr or fIsDyn;
         if fIsDyn then UFldArrLen[UFldCount-1] := -1
         else UFldArrLen[UFldCount-1] := arrLen;
@@ -17374,7 +17390,7 @@ var
   tname: AnsiString;
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
   fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer; tMoreDims: Boolean;
-  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
+  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fStrCap, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   variantBaseOff, variantMax, branchFieldOff: Integer;
   enumNOff, enumNLen: Integer; enumNm: AnsiString;
   fTk: TTypeKind;
@@ -18602,6 +18618,15 @@ begin
               fSize := LOCAL_STR_CAP + 8;
               fAlign := TARGET_PTR_SIZE;
             end
+            else if fTk = tyFixedString then
+            begin
+              { `string[N]` field: see ParseRecordFields — tyString layout,
+                capacity N via UFldStrCap. }
+              fStrCap := LastTypeStrCap;
+              if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
+              fSize := FrozenStrSlotSize(fTk, fStrCap);
+              fAlign := TARGET_PTR_SIZE;
+            end
             else if fTk = tyRecord then
             begin
               fSize := RecSize(fRec);
@@ -18617,7 +18642,13 @@ begin
             for fni := 0 to nFldNames - 1 do
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
-              AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              if fTk = tyFixedString then
+              begin
+                AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec);
+                UFldStrCap[UFldCount-1] := fStrCap;
+              end
+              else
+                AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
               UFldIsArray[UFldCount-1] := isArr or fIsDyn;
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
