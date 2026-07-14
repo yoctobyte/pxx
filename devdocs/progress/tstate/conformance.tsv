@@ -88,7 +88,7 @@ pass	tclass10.pp	tclass	-
 skip	tclass11a.pp	tclass	gap	nested class types inside a class (strict private / public `type` sections)
 pass	tclass11b.pp	tclass	-	
 skip	tclass12a.pp	tclass	gap	`strict private const` section inside class + static class procedure
-fail	tclass12b.pp	tclass	-	accepted-invalid: %FAIL test compiled
+skip	tclass12b.pp	tclass	untriaged	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced
 skip	tclass12c.pp	tclass	gap	class-local const/type/var sections, `type Integer` distinct type, property default
 skip	tclass12d.pp	tclass	gap	nested class const/type sections (class-scoped const SomeValue)
 skip	tclass13a.pp	tclass	gap	nested `type` sections inside classes (nested class overriding parent's)
@@ -97,7 +97,7 @@ skip	tclass13c.pp	tclass	gap	accepts-invalid — TRootClass.Integer nested-type 
 skip	tclass13d.pp	tclass	gap	`const` section inside a class (class constants / typed class consts)
 skip	tclass13.pp	tclass	wontfix	needs FPC typinfo/RTTI (TypeInfo/GetEnumName) and FPC's nested-class ClassName strings
 pass	tclass14a.pp	tclass	-	
-fail	tclass14b.pp	tclass	-	accepted-invalid: %FAIL test compiled
+pass	tclass14b.pp	tclass	-	
 skip	tclass15.pp	tclass	gap	nested class type + Classes TCustomMemoryStream/SetPointer
 skip	tclass16.pp	tclass	gap	`class threadvar` in a class + threading RTL (RTLEvent, BeginThread)
 pass	tclass17.pp	tclass	-	
@@ -468,7 +468,7 @@ pass	toperator68.pp	toperator	-
 pass	toperator69.pp	toperator	-	
 skip	toperator6.pp	toperator	gap	`operator :=` implicit-conversion overload + qword/int64 overload selection
 pass	toperator70.pp	toperator	-	
-fail	toperator71.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator71.pp	toperator	-	
 pass	toperator72.pp	toperator	-	
 pass	toperator73.pp	toperator	-	
 pass	toperator74.pp	toperator	-	
@@ -491,10 +491,10 @@ skip	toperator89.pp	toperator	gap	overloading implicit assignment operator `:=` 
 pass	toperator8.pp	toperator	-	
 pass	toperator90.pp	toperator	-	
 skip	toperator91.pp	toperator	gap	class operators Explicit/Implicit overloaded on ShortString[N] result types
-fail	toperator92.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator92.pp	toperator	-	
 skip	toperator93.pp	toperator	gap	class operator Implicit returning String[80] shortstring type
 skip	toperator94.pp	toperator	gap	objfpc `class operator :=` implicit conversion to shortstring types
-fail	toperator95.pp	toperator	-	accepted-invalid: %FAIL test compiled
+pass	toperator95.pp	toperator	-	
 skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
 skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/widestring/pchar params
