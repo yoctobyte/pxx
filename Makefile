@@ -3387,7 +3387,255 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/lib_bignum_ops.pas /tmp/test_riscv32_bignum_x64
 	/tmp/test_riscv32_bignum_x64 > /tmp/test_riscv32_bignum_x64.out
 	diff /tmp/test_riscv32_bignum_x64.out /tmp/test_riscv32_bignum.out
-	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops ok"
+	# ---- shared Pascal cross battery (mirrors test-arm32; bug-test-riscv32-thin-coverage).
+	#      SKIP lines are explicit feature gaps, not silent omissions.
+	./$(COMPILER) --target=riscv32 test/hello.pas /tmp/test_rv32x_hello
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_hello)" = "Hello, World!"
+	# inline expansion (feature-inline-routines): -O2 == -O0 on this cross target.
+	./$(COMPILER) --target=riscv32 test/test_inline_expand.pas /tmp/test_rv32x_inl_o0
+	./$(COMPILER) --target=riscv32 -O2 test/test_inline_expand.pas /tmp/test_rv32x_inl_o2
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_inl_o0)" = "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_inl_o2)"
+	./$(COMPILER) --target=riscv32 test/test_record_temp_byval_arg.pas /tmp/test_rv32x_rectemp
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_rectemp)" = "$$(printf '18\n46')"
+	./$(COMPILER) --target=riscv32 test/test_ctor_string_literal_arg.pas /tmp/test_rv32x_ctorstrlit
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_ctorstrlit)" = "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
+	# SKIP test/test_arm32_virtual_wide.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_single_in_aggregate.pas /tmp/test_rv32x_singleagg
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_singleagg)" = "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
+	./$(COMPILER) --target=riscv32 test/test_i386_arith.pas /tmp/test_rv32x_arith
+	./$(COMPILER) test/test_i386_arith.pas /tmp/test_rv32x_arith_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_arith)" = "$$(/tmp/test_rv32x_arith_x64)"
+	./$(COMPILER) --target=riscv32 test/test_i386_procs.pas /tmp/test_rv32x_procs
+	./$(COMPILER) test/test_i386_procs.pas /tmp/test_rv32x_procs_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_procs)" = "$$(/tmp/test_rv32x_procs_x64)"
+	./$(COMPILER) --target=riscv32 test/test_i386_loops.pas /tmp/test_rv32x_loops
+	./$(COMPILER) test/test_i386_loops.pas /tmp/test_rv32x_loops_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_loops)" = "$$(/tmp/test_rv32x_loops_x64)"
+	./$(COMPILER) --target=riscv32 test/test_i386_write.pas /tmp/test_rv32x_write
+	./$(COMPILER) test/test_i386_write.pas /tmp/test_rv32x_write_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_write)" = "$$(/tmp/test_rv32x_write_x64)"
+	./$(COMPILER) --target=riscv32 test/test_i386_varparam.pas /tmp/test_rv32x_varparam
+	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_rv32x_varparam_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_varparam)" = "$$(/tmp/test_rv32x_varparam_x64)"
+	# SKIP test/test_cross_syscall.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_cross_heap.pas /tmp/test_rv32x_heap
+	./$(COMPILER) test/test_cross_heap.pas /tmp/test_rv32x_heap_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_heap)" = "$$(/tmp/test_rv32x_heap_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_string.pas /tmp/test_rv32x_string
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas /tmp/test_rv32x_string_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_string)" = "$$(/tmp/test_rv32x_string_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_record.pas /tmp/test_rv32x_record
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas /tmp/test_rv32x_record_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_record)" = "$$(/tmp/test_rv32x_record_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_dynarray.pas /tmp/test_rv32x_dynarray
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_rv32x_dynarray_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dynarray)" = "$$(/tmp/test_rv32x_dynarray_x64)"
+	# SKIP test/test_nested_dynarray_setlen.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas /tmp/test_rv32x_exception
+	./$(COMPILER) test/test_cross_exception.pas /tmp/test_rv32x_exception_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_exception)" = "$$(/tmp/test_rv32x_exception_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_float.pas /tmp/test_rv32x_float
+	./$(COMPILER) test/test_cross_float.pas /tmp/test_rv32x_float_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_float)" = "$$(/tmp/test_rv32x_float_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_float_return.pas /tmp/test_rv32x_fret
+	./$(COMPILER) test/test_cross_float_return.pas /tmp/test_rv32x_fret_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_fret)" = "$$(/tmp/test_rv32x_fret_x64)"
+	./$(COMPILER) --target=riscv32 test/test_arm32_arg_runtime.pas /tmp/test_rv32x_args
+	./$(COMPILER) test/test_arm32_arg_runtime.pas /tmp/test_rv32x_args_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_args alpha beta)" = "$$(/tmp/test_rv32x_args_x64 alpha beta)"
+	# SKIP test/test_cross_variant.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_variant_single.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_cross_strresult.pas /tmp/test_rv32x_strresult
+	./$(COMPILER) test/test_cross_strresult.pas /tmp/test_rv32x_strresult_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_strresult)" = "$$(/tmp/test_rv32x_strresult_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_setlen_str.pas /tmp/test_rv32x_setlen_str
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas /tmp/test_rv32x_setlen_str_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_setlen_str)" = "$$(/tmp/test_rv32x_setlen_str_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_setlen_varparam.pas /tmp/test_rv32x_setlen_vp
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas /tmp/test_rv32x_setlen_vp_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_setlen_vp)" = "$$(/tmp/test_rv32x_setlen_vp_x64)"
+	# SKIP test/test_cross_frozen_strlen_deref.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_managed_strlen_deref.pas /tmp/test_rv32x_managed_strlen
+	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_rv32x_managed_strlen_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_managed_strlen)" = "$$(/tmp/test_rv32x_managed_strlen_x64)"
+	./$(COMPILER) --target=riscv32 test/test_not_int64_expr.pas /tmp/test_rv32x_not64
+	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_rv32x_not64_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_not64)" = "$$(/tmp/test_rv32x_not64_x64)"
+	./$(COMPILER) --target=riscv32 test/test_uint32_write.pas /tmp/test_rv32x_u32w
+	./$(COMPILER) test/test_uint32_write.pas /tmp/test_rv32x_u32w_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_u32w)" = "$$(/tmp/test_rv32x_u32w_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_record_array_store.pas /tmp/test_rv32x_rec_arr_store
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_rv32x_rec_arr_store_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_rec_arr_store)" = "$$(/tmp/test_rv32x_rec_arr_store_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_str_length_index.pas /tmp/test_rv32x_str_li
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas /tmp/test_rv32x_str_li_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_str_li)" = "$$(/tmp/test_rv32x_str_li_x64)"
+	# SKIP test/test_cross_in_operator.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_managed_aggregate_locals.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_loadfile.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_sysopen_family.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_string_cow.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_cross_var_string_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_openarray_string.pas /tmp/test_rv32x_openarray_string
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas /tmp/test_rv32x_openarray_string_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_openarray_string)" = "$$(/tmp/test_rv32x_openarray_string_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_stack_params.pas /tmp/test_rv32x_stack_params
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas /tmp/test_rv32x_stack_params_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_stack_params)" = "$$(/tmp/test_rv32x_stack_params_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_int64.pas /tmp/test_rv32x_int64
+	./$(COMPILER) test/test_cross_int64.pas /tmp/test_rv32x_int64_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_int64)" = "$$(/tmp/test_rv32x_int64_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_int64_byref.pas /tmp/test_rv32x_int64_byref
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas /tmp/test_rv32x_int64_byref_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_int64_byref)" = "$$(/tmp/test_rv32x_int64_byref_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_array_of_const_types.pas /tmp/test_rv32x_aoc_types
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_rv32x_aoc_types_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_aoc_types)" = "$$(/tmp/test_rv32x_aoc_types_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_write_pchar.pas /tmp/test_rv32x_write_pchar
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas /tmp/test_rv32x_write_pchar_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_write_pchar)" = "$$(/tmp/test_rv32x_write_pchar_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_static_open_array.pas /tmp/test_rv32x_static_open
+	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_rv32x_static_open_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_static_open)" = "$$(/tmp/test_rv32x_static_open_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_many_params.pas /tmp/test_rv32x_many_params
+	./$(COMPILER) test/test_cross_many_params.pas /tmp/test_rv32x_many_params_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_many_params)" = "$$(/tmp/test_rv32x_many_params_x64)"
+	./$(COMPILER) --target=riscv32 test/test_conformance_2.pas /tmp/test_rv32x_conf2
+	./$(COMPILER) test/test_conformance_2.pas /tmp/test_rv32x_conf2_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_conf2)" = "$$(/tmp/test_rv32x_conf2_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_shortcircuit.pas /tmp/test_rv32x_scx
+	./$(COMPILER) test/test_cross_shortcircuit.pas /tmp/test_rv32x_scx_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_scx)" = "$$(/tmp/test_rv32x_scx_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_ptr_arith.pas /tmp/test_rv32x_pa
+	./$(COMPILER) test/test_cross_ptr_arith.pas /tmp/test_rv32x_pa_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_pa)" = "$$(/tmp/test_rv32x_pa_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_case_range.pas /tmp/test_rv32x_cr
+	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_rv32x_cr_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_cr)" = "$$(/tmp/test_rv32x_cr_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_global_init.pas /tmp/test_rv32x_gi
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_rv32x_gi_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_gi)" = "$$(/tmp/test_rv32x_gi_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_typed_const.pas /tmp/test_rv32x_tc
+	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_rv32x_tc_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_tc)" = "$$(/tmp/test_rv32x_tc_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_multidim.pas /tmp/test_rv32x_md
+	./$(COMPILER) test/test_cross_multidim.pas /tmp/test_rv32x_md_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_md)" = "$$(/tmp/test_rv32x_md_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_named_array.pas /tmp/test_rv32x_na
+	./$(COMPILER) test/test_cross_named_array.pas /tmp/test_rv32x_na_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_na)" = "$$(/tmp/test_rv32x_na_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_record_2darray.pas /tmp/test_rv32x_r2
+	./$(COMPILER) test/test_cross_record_2darray.pas /tmp/test_rv32x_r2_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_r2)" = "$$(/tmp/test_rv32x_r2_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_param_2darray.pas /tmp/test_rv32x_pa2
+	./$(COMPILER) test/test_cross_param_2darray.pas /tmp/test_rv32x_pa2_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_pa2)" = "$$(/tmp/test_rv32x_pa2_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_multidim3d.pas /tmp/test_rv32x_d3
+	./$(COMPILER) test/test_cross_multidim3d.pas /tmp/test_rv32x_d3_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_d3)" = "$$(/tmp/test_rv32x_d3_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_const_alias.pas /tmp/test_rv32x_ca
+	./$(COMPILER) test/test_cross_const_alias.pas /tmp/test_rv32x_ca_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_ca)" = "$$(/tmp/test_rv32x_ca_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_float_const.pas /tmp/test_rv32x_fc
+	./$(COMPILER) test/test_cross_float_const.pas /tmp/test_rv32x_fc_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_fc)" = "$$(/tmp/test_rv32x_fc_x64)"
+	# SKIP test/test_scheduler.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_scheduler_exc.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_async_sl.pas /tmp/test_rv32x_asl
+	./$(COMPILER) test/test_async_sl.pas /tmp/test_rv32x_asl_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_asl)" = "$$(/tmp/test_rv32x_asl_x64)"
+	# SKIP test/test_channel.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_methodptr.pas /tmp/test_rv32x_mptr
+	./$(COMPILER) test/test_methodptr.pas /tmp/test_rv32x_mptr_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_mptr)" = "$$(/tmp/test_rv32x_mptr_x64)"
+	./$(COMPILER) --target=riscv32 test/test_methcall.pas /tmp/test_rv32x_mcall
+	./$(COMPILER) test/test_methcall.pas /tmp/test_rv32x_mcall_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_mcall)" = "$$(/tmp/test_rv32x_mcall_x64)"
+	./$(COMPILER) --target=riscv32 test/test_cross_sets.pas /tmp/test_rv32x_sets
+	./$(COMPILER) test/test_cross_sets.pas /tmp/test_rv32x_sets_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_sets)" = "$$(/tmp/test_rv32x_sets_x64)"
+	# SKIP test/test_classref.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_class_of.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_rtti.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_streaming.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_streaming_enumset.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_lfm.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_interfaces.pas /tmp/test_rv32x_iface
+	./$(COMPILER) test/test_interfaces.pas /tmp/test_rv32x_iface_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_iface)" = "$$(/tmp/test_rv32x_iface_x64)"
+	# SKIP test/test_interface_arc.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_uint64_ops.pas /tmp/test_rv32x_u64
+	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_rv32x_u64_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_u64)" = "$$(/tmp/test_rv32x_u64_x64)"
+	# SKIP test/test_interfaces_is.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_interfaces_as.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_interfaces_param.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_interfaces_inherit.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_interfaces_multi_secondary.pas /tmp/test_rv32x_iface_multi
+	./$(COMPILER) test/test_interfaces_multi_secondary.pas /tmp/test_rv32x_iface_multi_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_iface_multi)" = "$$(/tmp/test_rv32x_iface_multi_x64)"
+	# SKIP test/test_cross_aggregate_return.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/test_cross_aggregate_stackargs.pas /tmp/test_rv32x_aggstk
+	./$(COMPILER) test/test_cross_aggregate_stackargs.pas /tmp/test_rv32x_aggstk_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_aggstk)" = "$$(/tmp/test_rv32x_aggstk_x64)"
+	./$(COMPILER) --target=riscv32 test/test_inheritance_dispatch.pas /tmp/test_rv32x_cls
+	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_rv32x_cls_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_cls)" = "$$(/tmp/test_rv32x_cls_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_field.pas /tmp/test_rv32x_dynfield
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_rv32x_dynfield_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dynfield)" = "$$(/tmp/test_rv32x_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_method_implicit_field.pas /tmp/test_rv32x_mif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas /tmp/test_rv32x_mif_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_mif)" = "$$(/tmp/test_rv32x_mif_x64)"
+	# SKIP test/test_forin_implicit_field.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_global_after_method.pas /tmp/test_rv32x_dgam
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_global_after_method.pas /tmp/test_rv32x_dgam_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dgam)" = "$$(/tmp/test_rv32x_dgam_x64)"
+	# SKIP test/test_forin_member_access.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_call_result_member.pas /tmp/test_rv32x_crm
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas /tmp/test_rv32x_crm_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_crm)" = "$$(/tmp/test_rv32x_crm_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_collections.pas /tmp/test_rv32x_collections
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_rv32x_collections_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_collections)" = "$$(/tmp/test_rv32x_collections_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_const_record_temp.pas /tmp/test_rv32x_constrectemp
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_rv32x_constrectemp_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_constrectemp)" = "$$(/tmp/test_rv32x_constrectemp_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_const_record_temp_managed.pas /tmp/test_rv32x_constrectemp_managed
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas /tmp/test_rv32x_constrectemp_managed_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_constrectemp_managed)" = "$$(/tmp/test_rv32x_constrectemp_managed_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_set_runtime.pas /tmp/test_rv32x_setrt
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_rv32x_setrt_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_setrt)" = "$$(/tmp/test_rv32x_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_managed_record_temp_init.pas /tmp/test_rv32x_mrti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas /tmp/test_rv32x_mrti_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_mrti)" = "$$(/tmp/test_rv32x_mrti_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_dynarray_copy.pas /tmp/test_rv32x_dyncopy
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_rv32x_dyncopy_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_rv32x_dyncopy)" = "$$(/tmp/test_rv32x_dyncopy_x64)"
+	# SKIP test/test_timer.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_reactor.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_asyncecho.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_extern_c.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	# SKIP test/test_extern_c_float.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_rv32x_centry
+	tools/run_target.sh riscv32 /tmp/test_rv32x_centry; test "$$?" = "42"
+	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_rv32x_cargs
+	tools/run_target.sh riscv32 /tmp/test_rv32x_cargs; test "$$?" = "42"
+	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c /tmp/test_rv32x_cd2i
+	tools/run_target.sh riscv32 /tmp/test_rv32x_cd2i; test "$$?" = "42"
+	./$(COMPILER) --target=riscv32 test/test_readln.pas /tmp/test_rv32x_readln
+	./$(COMPILER) test/test_readln.pas /tmp/test_rv32x_readln_x64
+	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh riscv32 /tmp/test_rv32x_readln)" = "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | /tmp/test_rv32x_readln_x64)"
+	./$(COMPILER) --target=riscv32 test/test_eof_stdin.pas /tmp/test_rv32x_eof
+	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_rv32x_eof_x64
+	test "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh riscv32 /tmp/test_rv32x_eof)" = "$$(printf 'alpha\nbeta\ngamma' | /tmp/test_rv32x_eof_x64)"
+	./$(COMPILER) --target=riscv32 test/cunsigned_int_arith_b121.c /tmp/test_rv32x_cuarith
+	tools/run_target.sh riscv32 /tmp/test_rv32x_cuarith; test "$$?" = "42"
+	./$(COMPILER) --target=riscv32 test/cunsigned_semantics_sweep_b138.c /tmp/test_rv32x_cusweep
+	tools/run_target.sh riscv32 /tmp/test_rv32x_cusweep; test "$$?" = "42"
+	# SKIP test/cunsigned_div_mod_b123.c on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
+	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
