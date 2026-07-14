@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T10:26:33Z",
-   "fixed": [
-    "test-core#src:test/test_sqlite_crud.pas"
-   ],
-   "new_red": [],
-   "sha": "20e1232ca866cd2f36678ce652034bfc0c1cab26",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T10:30:56Z",
    "fixed": [],
    "new_red": [],
@@ -429,6 +419,14 @@
    "sha": "8f80bf00f65e4e97878e80ce1790588b0ee333eb",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-14T15:40:24Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "df8c10de5f7d1bd230edb71bddd592c8765a28db",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1827,11 +1825,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T15:20:36Z",
-  "sha": "8f80bf00f65e4e97878e80ce1790588b0ee333eb",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 120.6
+  "date": "2026-07-14T15:40:24Z",
+  "sha": "df8c10de5f7d1bd230edb71bddd592c8765a28db",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 107.4
  },
  "last_bench": {
   "conf_rows": 550,
