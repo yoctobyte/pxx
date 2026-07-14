@@ -816,6 +816,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_symslot_stale_ndims26)" = "136"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
+	# `case` evaluates its selector EXACTLY once — it used to re-evaluate per label
+	# element, so `case F(x) of` ran F up to N times (b346; ~510 pasmith divergences)
+	./$(COMPILER) test/test_case_selector_single_eval.pas /tmp/test_case_single_eval26
+	test "$$(/tmp/test_case_single_eval26 | tail -1)" = "PASS"
 	# two enum TYPES are distinct: `c := banana` used to store TFruit's ordinal into a
 	# TColor (silently green). Rejected now — without breaking casts/Ord/call results
 	! ./$(COMPILER) test/test_enum_identity_fail.pas /tmp/test_enumid26 > /tmp/test_enumid.log 2>&1

@@ -2804,7 +2804,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
-    clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
+    clauseBodyLabel, nextClauseLabel, selectorValNode, selTmpSym: Integer;
     ternTmp: Integer;
     swSelTmp, swDefault, swSeq, swMarker, swSelTk: Integer;
     rhsIsLValue: Boolean;
@@ -5921,6 +5921,31 @@ begin
         lexicographic (s >= lo) and (s <= hi). Char selectors keep the
         ordinal path. (bug-case-of-string-segfault-and-label-validation) }
       caseIsStr := IntToTypeKind(IRTk[selectorValNode]) in [tyString, tyAnsiString];
+
+      { EVALUATE THE SELECTOR EXACTLY ONCE (Pascal requires it; FPC does it).
+
+        This lowers to a COMPARE-CHAIN, and the selector value node is used as an
+        operand of EVERY label test — but a value node is not a register, it is a
+        subtree, and each backend re-EMITS it per use. So `case F(x) of` ran F once
+        per label ELEMENT (a range costs two), stopping at the first match. It looked
+        fine whenever the first label matched, which is exactly what hid it: pasmith's
+        differential fuzzer filed ~510 divergences against FPC, and they were all this.
+
+        Materialise into a temp and compare the temp. Skipped for a node that is
+        already pure and free to re-emit (a symbol load or a constant), so the common
+        `case i of` keeps byte-identical codegen. IR_LOAD_MEM is NOT in that set: its
+        address subtree can contain a call. }
+      if not ((IRKind[selectorValNode] = IR_LOAD_SYM) or
+              (IRKind[selectorValNode] = IR_CONST_INT) or
+              (IRKind[selectorValNode] = IR_CONST_STR)) then
+      begin
+        if caseIsStr then
+          selTmpSym := AllocVar('', tyAnsiString)
+        else
+          selTmpSym := AllocVar('', IntToTypeKind(IRTk[selectorValNode]));
+        IRAppend(IR_STORE_SYM, selTmpSym, selectorValNode, -1, 0, IRTk[selectorValNode]);
+        selectorValNode := IRAppend(IR_LOAD_SYM, selTmpSym, -1, -1, 0, IRTk[selectorValNode]);
+      end;
       IRValidateCaseLabels(ASTRight[node], caseIsStr);
       endLabel := IRNewLabel;
 
