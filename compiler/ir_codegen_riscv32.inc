@@ -330,8 +330,8 @@ procedure EmitFrozenStoreRISCV32(si, valNode: Integer);
 
   Three source shapes, as everywhere else: a char ordinal, a MANAGED handle (length at
   [h-8], chars at h, nil = empty), or another frozen/literal buffer (length at [b], chars
-  at b+8). Like x86-64, the length is not capped to N here. }
-var srcTk: TTypeKind;
+  at b+8). The length is clamped to the slot capacity (truncating string[N] semantics). }
+var srcTk: TTypeKind; cap: Integer;
 begin
   IREmitNodeRISCV32(valNode);                  { a0 = source }
   rv32_addi(reg_t2, reg_a0, 0);                { t2 = src }
@@ -359,6 +359,16 @@ begin
     rv32_lw(reg_t3, reg_t2, 0);                { frozen/literal: len = [src] }
     rv32_addi(reg_t2, reg_t2, 8);              { chars = src+8 }
   end;
+
+  { Truncating `string[N]` assignment: clamp the length to the slot capacity
+    before publishing/copying — without this the copy overruns the buffer
+    (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+  cap := SymStrCap[si];
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  rv32_addi(reg_t0, reg_zero, cap);            { t0 = cap }
+  rv32_slt(reg_t4, reg_t0, reg_t3);            { t4 = cap < len }
+  rv32_beq(reg_t4, reg_zero, 8);               { cap >= len -> keep }
+  rv32_addi(reg_t3, reg_t0, 0);                { len = cap }
 
   rv32_sw(reg_t3, reg_t1, 0);                  { publish the length }
   rv32_sw(reg_zero, reg_t1, 4);
@@ -1156,6 +1166,57 @@ begin
       begin
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
+        if tk = tyString then
+        begin
+          { Frozen inline-string store through an address (string[N] record
+            field / deref): copy [len][chars] with the length clamped to the
+            destination capacity (IR ival; truncating string[N] semantics).
+            Mirrors EmitFrozenStoreRISCV32's three source shapes. Without this
+            the generic word store below dropped the source ADDRESS into the
+            field (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+          valNode := IRB[node];
+          IREmitNodeRISCV32(valNode);                { a0 = source (or char) }
+          rv32_addi(reg_sp, reg_sp, -4);
+          rv32_sw(reg_a0, reg_sp, 0);                { spill source }
+          savedLVW := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeRISCV32(IRA[node]);              { a0 = dest addr }
+          InLValueWrite := savedLVW;
+          rv32_lw(reg_t2, reg_sp, 0);                { t2 = src }
+          rv32_addi(reg_sp, reg_sp, 4);
+          rv32_addi(reg_t1, reg_a0, 0);              { t1 = dst buffer }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            rv32_addi(reg_t0, reg_zero, 1);
+            rv32_sw(reg_t0, reg_t1, 0);              { len = 1 }
+            rv32_sw(reg_zero, reg_t1, 4);
+            rv32_sb(reg_t2, reg_t1, 8);              { the char }
+            Exit;
+          end;
+          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+          begin
+            { nil handle -> empty, else len := [src-8], chars AT src }
+            rv32_addi(reg_t3, reg_zero, 0);          { t3 = len, default 0 }
+            rv32_beq(reg_t2, reg_zero, 8);           { nil -> keep len 0 }
+            rv32_lw(reg_t3, reg_t2, -8)
+          end
+          else
+          begin
+            rv32_lw(reg_t3, reg_t2, 0);              { frozen/literal: len = [src] }
+            rv32_addi(reg_t2, reg_t2, 8);            { chars = src+8 }
+          end;
+          i := Integer(IRIVal[node]);                { dest capacity }
+          if i <= 0 then i := DEFAULT_STR_CAP;
+          rv32_addi(reg_t0, reg_zero, i);            { t0 = cap }
+          rv32_slt(reg_t4, reg_t0, reg_t3);          { t4 = cap < len }
+          rv32_beq(reg_t4, reg_zero, 8);             { cap >= len -> keep }
+          rv32_addi(reg_t3, reg_t0, 0);              { len = cap }
+          rv32_sw(reg_t3, reg_t1, 0);                { publish the length }
+          rv32_sw(reg_zero, reg_t1, 4);
+          rv32_addi(reg_t1, reg_t1, 8);              { dst chars }
+          EmitCopyBytesRISCV32(reg_t1, reg_t2, reg_t3);
+          Exit;
+        end;
         { Float destination: coerce the RHS to the target float width (i2d/l2d/
           i2s/s2d/d2s) before storing. Must precede the Is64Bit branch — a Double
           target is Is64Bit but an integer RHS needs int->double conversion, not a

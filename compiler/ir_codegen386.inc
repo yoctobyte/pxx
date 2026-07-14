@@ -951,10 +951,21 @@ begin
     Error('target i386: 64-bit binop operator not yet supported');
 end;
 
+procedure EmitClampEcxToStrCap386(cap: Integer);
+{ ecx = source string length about to be copied into a frozen inline buffer.
+  Clamp to the destination capacity — truncating `string[N]` assignment
+  (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  EmitB($81); EmitB($F9); EmitI32(cap);   { cmp ecx, cap }
+  EmitB($7E); EmitB($05);                 { jle +5 (keep) }
+  EmitB($B9); EmitI32(cap);               { mov ecx, cap }
+end;
+
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
-  classIdx, elemSize, lo, hi, itemNode, p1, p2: Integer;
+  classIdx, elemSize, lo, hi, itemNode, p1, p2, pNil386, pDone386: Integer;
   vaNvw, vaK, vaO1, vaO2: Integer;
   vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
                        enum/int boundary is satisfied (pxx erases it; FPC does not). }
@@ -1291,11 +1302,29 @@ begin
             EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
             Exit;
           end;
+          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+          begin
+            { Managed source -> frozen sym (s := managedStr): esi = handle
+              (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
+            EmitB($85); EmitB($F6);                   { test esi, esi }
+            EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
+            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+            EmitClampEcxToStrCap386(SymStrCap[si]);   { truncate to string[N] capacity }
+            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+            EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
+            EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
+            Code[pNil386] := Byte(CodeLen - (pNil386 + 1));  { empty: }
+            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            Code[pDone386] := Byte(CodeLen - (pDone386 + 1)); { done: }
+            Exit;
+          end;
           EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
-          EmitB($89); EmitB($0F);                     { mov [edi], ecx }
-          EmitB($8B); EmitB($4E); EmitB($04);         { mov ecx, [esi+4] (len hi) }
-          EmitB($89); EmitB($4F); EmitB($04);         { mov [edi+4], ecx }
-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (count) }
+          EmitClampEcxToStrCap386(SymStrCap[si]);     { truncate to string[N] capacity }
+          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
+          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
           EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
           EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
           EmitB($F3); EmitB($A4);                     { rep movsb }
@@ -3304,11 +3333,29 @@ begin
           EmitB($5E);                                 { pop esi }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
             Error('target i386: char-to-inline-string store through pointer not yet supported');
+          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+          begin
+            { Managed source -> frozen dest (r.s := managedStr): esi = handle
+              (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
+            EmitB($85); EmitB($F6);                   { test esi, esi }
+            EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
+            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+            EmitClampEcxToStrCap386(Integer(IRIVal[node]));
+            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+            EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
+            EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
+            Code[pNil386] := Byte(CodeLen - (pNil386 + 1));  { empty: }
+            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            Code[pDone386] := Byte(CodeLen - (pDone386 + 1)); { done: }
+            Exit;
+          end;
           EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
-          EmitB($89); EmitB($0F);                     { mov [edi], ecx }
-          EmitB($8B); EmitB($4E); EmitB($04);         { mov ecx, [esi+4] (len hi) }
-          EmitB($89); EmitB($4F); EmitB($04);         { mov [edi+4], ecx }
-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (count) }
+          EmitClampEcxToStrCap386(Integer(IRIVal[node])); { truncate to string[N] capacity }
+          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
+          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
           EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
           EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
           EmitB($F3); EmitB($A4);                     { rep movsb }

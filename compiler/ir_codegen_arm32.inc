@@ -998,6 +998,17 @@ begin
   end;
 end;
 
+procedure EmitClampLenToStrCapArm32(lenReg, cap: Integer);
+{ Clamp r[lenReg] (source string length about to be copied into a frozen
+  inline buffer) to the destination capacity — truncating `string[N]`
+  assignment (bug-pascal-shortstring-no-truncation-buffer-overrun). r9 scratch. }
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  EmitLoadImmArm32(9, cap);
+  EmitI32($E1500009 or (lenReg shl 16));  { cmp len, r9 }
+  EmitI32($C1A00009 or (lenReg shl 12));  { movgt len, r9 }
+end;
+
 procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer);
 var donePos, loopStart: Integer;
 begin
@@ -1203,12 +1214,14 @@ begin
             EmitI32($E5C65008);                       { strb r5, [r6,#8] }
             Exit;
           end;
-          EmitI32($E5959000);                         { ldr r9, [r5] (len lo) }
-          EmitI32($E5869000);                         { str r9, [r6] }
-          EmitI32($E5959004);                         { ldr r9, [r5,#4] (len hi) }
-          EmitI32($E5869004);                         { str r9, [r6,#4] }
-          EmitI32($E5954000);                         { ldr r4, [r5] (count) }
-          EmitI32($E2855008);                         { add r5, r5, #8 }
+          { (src,len) via the nil-safe normalizer: frozen source -> len=[r5],
+            src=r5+8; managed source -> len=[r5,#-8], src=r5 (nil -> len 0).
+            Previously a managed source misread its char data as the length. }
+          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+          EmitClampLenToStrCapArm32(4, SymStrCap[si]); { truncate to string[N] capacity }
+          EmitI32($E5864000);                         { str r4, [r6] (len lo = clamped) }
+          EmitLoadImmArm32(9, 0);
+          EmitI32($E5869004);                         { str r9, [r6,#4] (len hi = 0) }
           EmitI32($E2866008);                         { add r6, r6, #8 }
           EmitArm32CopyBytes(4, 5, 6);
           Exit;
@@ -2890,12 +2903,13 @@ begin
           EmitI32($E8BD0020);                      { pop {r5} (src) }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
             Error('target arm32: char-to-inline-string store through pointer not yet supported');
-          EmitI32($E5959000);                      { ldr r9, [r5] (len lo) }
-          EmitI32($E5869000);                      { str r9, [r6] }
-          EmitI32($E5959004);                      { ldr r9, [r5,#4] (len hi) }
-          EmitI32($E5869004);                      { str r9, [r6,#4] }
-          EmitI32($E5954000);                      { ldr r4, [r5] (count) }
-          EmitI32($E2855008);                      { add r5, r5, #8 }
+          { (src,len) via the nil-safe normalizer: frozen or managed source
+            (managed previously misread its char data as the length). }
+          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+          EmitClampLenToStrCapArm32(4, Integer(IRIVal[node])); { truncate to string[N] capacity }
+          EmitI32($E5864000);                      { str r4, [r6] (len lo = clamped) }
+          EmitLoadImmArm32(9, 0);
+          EmitI32($E5869004);                      { str r9, [r6,#4] (len hi = 0) }
           EmitI32($E2866008);                      { add r6, r6, #8 }
           EmitArm32CopyBytes(4, 5, 6);
           Exit;

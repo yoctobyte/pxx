@@ -334,6 +334,19 @@ begin
   Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitClampLenToStrCapA64(lenReg, cap: Integer);
+{ Clamp x[lenReg] (a source string length about to be copied into a frozen
+  inline buffer) to the destination capacity — truncating `string[N]`
+  assignment; without it the copy overruns the slot
+  (bug-pascal-shortstring-no-truncation-buffer-overrun). x10 scratch. }
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  EmitLoadImmA64(10, cap);
+  EmitI32($EB0A001F or (lenReg shl 5));   { cmp x[len], x10 }
+  EmitI32($5400004D);                     { b.le +2 (keep) }
+  EmitI32($AA0A03E0 or lenReg);           { mov x[len], x10 }
+end;
+
 procedure EmitWriteCStrA64;
 { x0 = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors x86-64
   EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
@@ -954,6 +967,7 @@ procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2: Integer;
+  pNilPos, pDonePos: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
   sgn, isComp, savedLValueWrite: Boolean;
@@ -1042,9 +1056,28 @@ begin
             EmitI32($F90000C9);                    { str x9, [x6] (len=1) }
             EmitI32($390020C5);                    { strb w5, [x6,#8] }
           end
+          else if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+          begin
+            { Managed source -> frozen sym (s := managedStr): x5 = handle
+              (char pointer), length at [x5,#-8]; nil handle -> empty. }
+            pNilPos := CodeLen;
+            EmitI32($B4000005);                    { cbz x5, empty (patched) }
+            EmitI32($F85F80A9);                    { ldur x9, [x5,#-8] (len) }
+            EmitClampLenToStrCapA64(9, SymStrCap[si]);
+            EmitI32($F90000C9);                    { str x9, [x6] (length word) }
+            EmitI32($AA0903E4);                    { mov x4, x9 (count) }
+            EmitI32($910020C6);                    { add x6, x6, #8 }
+            EmitA64CopyBytes(4, 5, 6);
+            pDonePos := CodeLen;
+            EmitI32($14000000);                    { b done (patched) }
+            Patch32(pNilPos, $B4000005 or ((((CodeLen - pNilPos) div 4) and $7FFFF) shl 5));
+            EmitI32($F90000DF);                    { empty: str xzr, [x6] (len=0) }
+            Patch32(pDonePos, $14000000 or (((CodeLen - pDonePos) div 4) and $3FFFFFF));
+          end
           else
           begin
             EmitI32($F94000A9);                    { ldr x9, [x5] (len prefix) }
+            EmitClampLenToStrCapA64(9, SymStrCap[si]); { truncate to string[N] capacity }
             EmitI32($F90000C9);                    { str x9, [x6] }
             EmitI32($AA0903E4);                    { mov x4, x9 (count) }
             EmitI32($910020A5);                    { add x5, x5, #8 }
@@ -2464,7 +2497,27 @@ begin
           EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
             Error('target aarch64: char-to-inline-string store through pointer not yet supported');
+          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+          begin
+            { Managed source -> frozen dest (r.s := managedStr): x5 = handle
+              (char pointer), length at [x5,#-8]; nil handle -> empty. }
+            pNilPos := CodeLen;
+            EmitI32($B4000005);                    { cbz x5, empty (patched) }
+            EmitI32($F85F80A9);                    { ldur x9, [x5,#-8] (len) }
+            EmitClampLenToStrCapA64(9, Integer(IRIVal[node]));
+            EmitI32($F90000C9);                    { str x9, [x6] (length word) }
+            EmitI32($AA0903E4);                    { mov x4, x9 (count) }
+            EmitI32($910020C6);                    { add x6, x6, #8 }
+            EmitA64CopyBytes(4, 5, 6);
+            pDonePos := CodeLen;
+            EmitI32($14000000);                    { b done (patched) }
+            Patch32(pNilPos, $B4000005 or ((((CodeLen - pNilPos) div 4) and $7FFFF) shl 5));
+            EmitI32($F90000DF);                    { empty: str xzr, [x6] (len=0) }
+            Patch32(pDonePos, $14000000 or (((CodeLen - pDonePos) div 4) and $3FFFFFF));
+            Exit;
+          end;
           EmitI32($F94000A9);                      { ldr x9, [x5] (len prefix) }
+          EmitClampLenToStrCapA64(9, Integer(IRIVal[node])); { truncate to string[N] capacity }
           EmitI32($F90000C9);                      { str x9, [x6] }
           EmitI32($AA0903E4);                      { mov x4, x9 (count) }
           EmitI32($910020A5);                      { add x5, x5, #8 }

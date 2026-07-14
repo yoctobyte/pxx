@@ -352,8 +352,9 @@ procedure EmitFrozenStoreXtensa(si, valNode: Integer);
   (bug-frozen-string-unsupported-riscv32-xtensa). Mirrors riscv32's b345 port:
   three source shapes — a char ordinal, a MANAGED handle (length at [h-8],
   chars at h, nil = empty), or another frozen/literal buffer (length at [b],
-  chars at b+8). Like the other backends, the length is not capped to N. }
-var srcTk: TTypeKind;
+  chars at b+8). The length is clamped to the slot capacity (truncating
+  string[N] semantics). }
+var srcTk: TTypeKind; cap: Integer;
 begin
   IREmitNodeXtensa(valNode);                    { a2 = source }
   xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);     { a5 = src }
@@ -379,6 +380,14 @@ begin
     xtensa_l32i(reg_xtensa_a6, reg_xtensa_a5, 0);   { frozen/literal: len = [src] }
     xtensa_addi(reg_xtensa_a5, reg_xtensa_a5, 8);   { chars = src+8 }
   end;
+
+  { Truncating `string[N]` assignment: clamp the length to the slot capacity
+    before publishing/copying — without this the copy overruns the buffer
+    (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+  cap := SymStrCap[si];
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  xtensa_movi(reg_xtensa_a8, cap);
+  EmitAsmXtensa(['bge a8, a6, .tk', 'mov a6, a8', '.tk:']);
 
   xtensa_s32i(reg_xtensa_a6, reg_xtensa_a4, 0);     { publish the length }
   xtensa_movi(reg_xtensa_a8, 0);
