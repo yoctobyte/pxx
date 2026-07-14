@@ -54,3 +54,6 @@ tools/csmith_fuzz.py --iters 20 --csmith-args '--no-packed-struct'
 tools/csmith_fuzz.py --iters 20 --csmith-args '--no-unions'
 tools/csmith_fuzz.py --iters 20 --csmith-args '--no-volatiles'
 ```
+
+## Log
+- 2026-07-14 — resolved, commit a1b327c1.

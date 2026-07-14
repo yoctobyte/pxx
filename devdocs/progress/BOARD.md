@@ -30,12 +30,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (102)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-arm32-chacha20poly1305-segfault | A | 50 | bug | arm32: `lib_chacha20poly1305` segfaults — and it is NOT the riscv32 array-param bug | — |
-| bug-c-csmith-seed2-segfault | A+C | 60 | bug | bug: pxx-built csmith program segfaults (csmith seed 2), -O0 | — |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
 | bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
@@ -195,7 +194,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (705)
+## done (708)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -249,6 +248,7 @@ _none_
 | bug-c-crtl-missing-unistd-syscalls | C | 50 | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-crtl-pulled-fn-inline-signed-compare | A | 30 | bug | C: a crtl auto-pulled int function used inline in a signed compare reads unsigned | — |
 | bug-c-crtl-rmdir-access-constants-register | A | 58 | bug | crtl gaps surfaced by the undeclared-identifier warning: rmdir, F_OK/W_OK/R_OK, register | — |
+| bug-c-csmith-seed2-segfault | A+C | 60 | bug | bug: pxx-built csmith program segfaults (csmith seed 2), -O0 | — |
 | bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
@@ -309,6 +309,7 @@ _none_
 | bug-c-printf-without-stdio-include-varargs | C | 70 | bug | C: printf without #include <stdio.h> silently drops output / formatting | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
+| bug-c-scalar-ptr-global-init-silently-skipped | C | 60 | bug | bug: scalar pointer-global initializers silently skipped (null pointer at runtime) | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |
 | bug-c-signed-arith-shift-right | A | 50 | bug | C signed `>>` is a logical (not arithmetic) shift | — |
 | bug-c-sizeof-array-yields-element-size | C | 50 | bug | C: `sizeof(array)` yields element size, not total array size | — |
@@ -337,6 +338,7 @@ _none_
 | bug-c-typedef-record-alias-loses-rec-id | A | 50 | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | 50 | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-unary-minus-no-integer-promotion | C | 65 | bug | Unary minus did not apply the integer promotions (silent unsigned compare) | — |
+| bug-c-union-bitfields-packed-sequentially | C | 60 | bug | bug: UNION bitfields packed sequentially like struct bitfields (silent wrong bits) | — |
 | bug-c-unixfile-mmap-field-offset-zero | A | 56 | bug | C: struct field resolves to offset 0 in the full sqlite unixFile (context-dependent) | — |
 | bug-c-unsigned-div-mod-32bit-backends | A | 50 | bug | C `unsigned int` / Pascal Cardinal division+mod use signed div on 32-bit backends | — |
 | bug-c-unsigned-int-32bit-arithmetic-semantics | A | 50 | bug | C `unsigned int` (32-bit) arithmetic computed in 64-bit — no wraparound, signed compares | — |
@@ -930,7 +932,6 @@ _none_
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [T] feature-pasmith-widen-grammar
-- [p 60] [A+C] bug-c-csmith-seed2-segfault
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [A] feature-c-compiler-dynarrays
