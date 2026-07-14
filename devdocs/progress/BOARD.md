@@ -32,7 +32,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -45,7 +45,6 @@ _none_
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
-| bug-pascal-interface-arg-not-converted-from-class | A+P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
 | bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
@@ -202,7 +201,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (691)
+## done (692)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -466,6 +465,7 @@ _none_
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |
 | bug-pascal-high-low-in-const-expr | A | 55 | bug | High(Type)/Low(Type) not accepted in constant expressions / array bounds | — |
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
+| bug-pascal-interface-arg-not-converted-from-class | A+P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
 | bug-pascal-method-default-param-self-shift | P | 70 | bug | Method default parameters land on the WRONG slot (silent wrong values) | — |
 | bug-pascal-nested-variant-record-tagged | A | 55 | bug | Nested variant parts with a tagged discriminant (`case f: T of` inside a variant arm) | — |
@@ -956,7 +956,6 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
 - [p 50] [A] bug-c-struct-byval-varargs-32bit
-- [p 50] [A+P] bug-pascal-interface-arg-not-converted-from-class
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro

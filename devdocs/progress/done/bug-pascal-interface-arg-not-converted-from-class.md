@@ -70,3 +70,33 @@ callback registration does. Currently silent memory corruption.
 ## Gate
 `make test` + self-host byte-identical; a b-test with a unit-declared interface
 + program-declared implementor, registered through a call argument.
+
+
+## RESOLVED 2026-07-14 (b337) — interface values are now ONE pointer, FPC's ABI
+
+Root cause was the VALUE MODEL, as analysed above, and it is fixed: an interface
+value is the INSTANCE pointer (8 bytes), not a fat {IMT, instance} pair. The IMT
+is recovered from the instance's class RTTI blob by interface id at the call
+(PXXIntfIMTOf) — a short table walk, deliberately trading a few ns for
+correctness; optimisable later to hidden per-interface vtable fields WITHOUT
+changing semantics, since the value model is now right.
+
+Verified: fcl-fpcunit's real ITestListener attaches to a TTestResult and
+receives all 203 StartTest callbacks while the fcl-json suite stays 203/203 —
+that is the exact code that segfaulted. Also pinned in
+test/test_interface_single_pointer_abi_b337.pas: Pointer(intf) roundtrip (via a
+variable, inline, and out of a pointer-shaped container), cast-and-call on a
+getter result, identity as a plain pointer compare, SizeOf(intf) = SizeOf(Pointer).
+
+Fixed on the way (both silent):
+- ParseClassRecordSelectors dispatched a CHAINED interface receiver
+  (`IFoo(List[i]).M`) as a plain call to the body-less signature proc — literally
+  `call 0`. It now goes through the IMT like ParseLValueAST already did.
+- IRLowerAddress had no class/interface-cast case (a non-lvalue operand now
+  materialises into a temp).
+
+Gate: full tier GREEN + self-host fixedpoint; ARC refcounts still exact
+(test_interface_arc); CORBA/multi-interface tests green.
+
+## Log
+- 2026-07-14 — resolved, commit HEAD.
