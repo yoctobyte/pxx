@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (99)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ _none_
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
+| feature-pascal-overflow-checks-q-plus | A | 45 | feature | {$Q+} overflow-checked integer arithmetic (Runtime error 215 / EIntOverflow) — the sole tint642 residual, also gates tint643 | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
@@ -1022,6 +1023,7 @@ _none_
 - [p 45] [A] feature-parallel-processing
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
+- [p 45] [A] feature-pascal-overflow-checks-q-plus
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
