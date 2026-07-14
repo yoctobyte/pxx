@@ -449,6 +449,17 @@ begin
     else if option = '--mimic-fpc' then
     begin
       MimicFpc := True;
+      { mimic == "behave like FPC", and FPC is strict about routine ordering. }
+      RequireForward := True;
+      Inc(i);
+    end
+    else if (option = '--strict') or (option = '--require-forward') then
+    begin
+      { FPC-parity routine visibility: no pre-scan auto-forward — a routine must
+        be defined above the call, be `forward;`-declared, sit in an interface
+        section, or be a class method (feature-require-forward-strict-mode).
+        `--strict` is the umbrella name; require-forward is its first check. }
+      RequireForward := True;
       Inc(i);
     end
     else if option = '--permissive-overload' then

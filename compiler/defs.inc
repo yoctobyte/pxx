@@ -1178,6 +1178,7 @@ var
   ProcNamedGP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
+  ProcHdrTok  : array[0..MAX_PROCS-1] of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
@@ -1699,6 +1700,7 @@ var
   CurBodyHdrTok    : Integer;    { token index of the routine body being compiled; high = see all (outside a body) }
   DeclOrderStrict  : Boolean;    { hide a global var declared after the current body's header }
   LaxDeclOrder     : Boolean;    { user opt-out (--lax-decl-order / {$DECLORDER OFF}): when True, ParseProgram sets DeclOrderStrict := False — restores the old lenient forward-visible-global behavior }
+  RequireForward   : Boolean;    { --strict / --require-forward / {$REQUIRE FORWARD ON}: enforce FPC's routine visibility (header above the call: full def / forward; / interface / method) instead of the pre-scan's auto-forward. Default off; --mimic-fpc implies. The FPC-free seed-ordering proxy (feature-require-forward-strict-mode). }
   NoDivCheck       : Boolean;    { user opt-out (--no-div-check): skip the pre-divide zero check on integer div/mod (FPC-style runtime error 200 is the default; without the check x86 raw-SIGFPEs and ARM silently yields 0). x86-64 only for now. }
   NoSignals        : Boolean;    { user opt-out (--no-signals): skip the default signal runtime (SIGINT/SIGTERM dispatch + SetSignalHandler support). Default ON, no auto-detection — user decision, see feature-signal-handlers. x86-64 Linux only for now. }
   StrictIR         : Boolean;    { DEFAULT ON (--no-strict-ir opts out): IRVerify hard-errors on any IR_UNSUPPORTED node (a frontend could not lower an AST node). Turns "frontend gap -> silent nondeterministic self-host miscompile" into an immediate compile error naming the AST kind. All frontends incl. Rust measured 0 before the flip. See feature-selfhost-guard-ir-unsupported / bug-selfhost-multifn-ifelse-miscompile. }

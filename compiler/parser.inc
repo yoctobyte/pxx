@@ -3548,6 +3548,8 @@ begin
           ErrorIdent := fieldName;
           if HiddenByDeclOrder(fieldName) then
             Error('undefined variable — it is a global declared later, declare it before use')
+          else if HiddenByForwardOrder(fieldName) then
+            Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
           else
             Error('undefined variable');
         end;
@@ -5098,6 +5100,8 @@ begin
     ErrorIdent := name;
     if HiddenByDeclOrder(name) then
       Error('undefined variable — it is a global declared later, declare it before use')
+    else if HiddenByForwardOrder(name) then
+      Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
     else
       Error('undefined variable');
   end;
@@ -5119,6 +5123,8 @@ begin
     ErrorIdent := name;
     if HiddenByDeclOrder(name) then
       Error('undefined variable — it is a global declared later, declare it before use')
+    else if HiddenByForwardOrder(name) then
+      Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
     else
       Error('undefined variable');
   end;
@@ -19807,7 +19813,16 @@ var
   extLib: AnsiString;
   extSym: AnsiString;
   liftIdx, lcb: Integer;   { lambda-lift descriptor index / captured-param base }
+  hdrStartSOff: Integer;   { require-forward: this header's source position }
 begin
+  { require-forward: the header's SOffset (stable under pass-2 token edits,
+    like CurBodyHdrTok) becomes the routine's visibility boundary when the
+    strict flag gates lookups. Captured at entry, at the procedure/function
+    keyword itself. }
+  if (TokPos - 1 >= 0) and (TokPos - 1 < TokCount) then
+    hdrStartSOff := Tokens[TokPos - 1].SOffset
+  else
+    hdrStartSOff := 0;
   isClassKeyword := False;
   isAsmFunc := False;
   isGenerator := False;
@@ -20428,6 +20443,14 @@ begin
           if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
         end;
         procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+        { require-forward visibility stamp: only MAIN-program top-level headers
+          registered by the pre-scan (or an explicit `forward;`) get a source
+          position. Interface sections, units, methods, builtins and nested
+          routines keep 0 = always visible — FPC's four visibility rules.
+          Appended-unit tokens sit at HIGHER SOffsets than the program's, so
+          stamping them would wrongly hide uses-imported routines. }
+        if (not InInterface) and (CurrentUnitIdx < 0) then
+          ProcHdrTok[procIdx] := hdrStartSOff;
         ProcRetRecId[procIdx] := retRecId;
         ProcOverloadDirective[procIdx] := declOverload;
         Procs[procIdx].BodyAddr := -1;

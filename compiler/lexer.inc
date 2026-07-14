@@ -1529,6 +1529,14 @@ begin
       else if CaseEqual(name, 'off') then LaxDeclOrder := True
       else Error('declorder requires on or off');
     end
+    else if CaseEqual(command, 'strict') then
+    begin
+      { {$STRICT ON|OFF} — the FPC-parity strictness umbrella; currently =
+        require-forward (routine visibility). See --strict. }
+      if CaseEqual(name, 'on') then RequireForward := True
+      else if CaseEqual(name, 'off') then RequireForward := False
+      else Error('strict requires on or off');
+    end
     else if CaseEqual(command, 'implicitvars') then
     begin
       { {$IMPLICITVARS ON|OFF} — opt-in sloppy locals: assignment to an

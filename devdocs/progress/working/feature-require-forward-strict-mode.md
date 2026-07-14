@@ -5,8 +5,8 @@ prio: 60  # auto
 # `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella)
 
 - **Type:** feature (parser architecture / FPC-compat) — Track A
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** working
+- **Owner:** fable-a
 - **Opened:** 2026-06-27
 - **Relation:** the enforcement counterpart to
   [[feature-declaration-prescan]] (which made PXX order-independent) and the
@@ -168,3 +168,25 @@ ordering signal without that.)
   after forwards.inc + two missing `;` in `CompilePendingGlobalInits`
   (parser.inc). So the umbrella's job narrows to *guarding* that cleanliness,
   not first achieving it.
+
+## 2026-07-14 — RESOLVED (b363): option B (position check), routines-first
+
+- Flags: `--strict` (umbrella) and `--require-forward` (alias today — one check
+  so far) + `{$STRICT ON|OFF}` directive; `--mimic-fpc` implies. Default off.
+- Mechanism: exactly the DeclOrderStrict global-var pattern — the pre-scan (and
+  an explicit `forward;`) stamps each MAIN-program top-level header's SOffset
+  into `ProcHdrTok[]`; under the flag, `FindProc`/`ProcNameMatches` (the
+  MatchProcCall walks) hide any proc whose header sits below `CurBodyHdrTok`.
+  0-stamp = always visible: builtins, unit routines (their appended tokens sit
+  at HIGHER SOffsets — stamping them would hide uses-imports), interface
+  sections, methods, nested routines. FPC's four visibility rules fall out.
+- Error is a real hint: "routine used before its declaration — define it above,
+  or add a forward; declaration (--strict/require-forward)", at the call line.
+- Tests: test_require_forward_strict.pas (positive: forward + mutual recursion
+  + unit/builtin calls under {$STRICT ON}) and _fail.pas (compiles by default,
+  `--strict` rejects) wired into test-core.
+- Not built in this slice (still open, folded into [[feature-mimic-fpc]]):
+  require-separator; types/consts ordering (DeclOrderStrict already covers
+  global vars); the PXX_REQUIRE_FORWARD source define + forwards.inc gate and
+  the strict self-compile gate (needs the define plumbing; the flag
+  infrastructure this ticket adds is where it slots in).

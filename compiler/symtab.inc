@@ -1783,6 +1783,23 @@ end;
   hiding ONLY because of decl-order gating (declared textually later than the
   routine being compiled). Lets undefined-name error sites give a clearer hint.
   Cost is irrelevant — only called on an error path that aborts the compile. }
+{ True if `nm` would resolve to a main-program ROUTINE that the require-forward
+  gate is hiding (header below the body being compiled). Error-path hint only. }
+function HiddenByForwardOrder(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if not RequireForward then Exit;
+  for i := 0 to ProcCount-1 do
+    if (ProcHdrTok[i] > CurBodyHdrTok) and
+       (StrEqual(Procs[i].Name, nm) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, nm))) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function HiddenByDeclOrder(const nm: AnsiString): Boolean;
 var i: Integer;
 begin
@@ -3528,7 +3545,12 @@ begin
   i := ProcChainHead(lo);
   while i >= 0 do
   begin
-    if Procs[i].Name = lo then begin Result := i; Exit; end;
+    { require-forward: a main-program routine whose header sits below the body
+      being compiled is invisible, like the DeclOrderStrict global-var gate.
+      ProcHdrTok = 0 (builtins/units/interface/methods/nested) always passes. }
+    if (Procs[i].Name = lo) and
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
+      begin Result := i; Exit; end;
     i := ProcHashNext[i];
   end;
   { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
@@ -3541,7 +3563,8 @@ begin
   while i >= 0 do
   begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
-       CaseEqual(Procs[i].Name, lo) then
+       CaseEqual(Procs[i].Name, lo) and
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) then
     begin Result := i; Exit; end;
     i := ProcHashNext[i];
   end;
@@ -3885,6 +3908,16 @@ end;
   resolve mixed-case spellings (inttostr -> IntToStr) like variable names do. }
 function ProcNameMatches(idx: Integer; const name: AnsiString): Boolean;
 begin
+  { require-forward: a main-program routine whose header sits below the body
+    being compiled is invisible at call resolution (the MatchProcCall walks
+    come through here). ProcHdrTok = 0 (builtins/units/interface/methods/
+    nested) always passes; outside a body CurBodyHdrTok is the see-all
+    sentinel. }
+  if RequireForward and (ProcHdrTok[idx] > CurBodyHdrTok) then
+  begin
+    Result := False;
+    Exit;
+  end;
   Result := (Procs[idx].Name = name) or
             ((not (CProgramMode and HasExactCaseSensitiveProc(name))) and
              (not ProcCaseSensitive[idx]) and (not ProcExternal[idx]) and
@@ -4282,6 +4315,7 @@ begin
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
+  ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
   ProcRetIsDynArray[ProcCount] := False;

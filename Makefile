@@ -846,6 +846,14 @@ test-core: $(COMPILER)
 	# an unspecialized generic template is not a type: it has no zero value (tdefault11/12)
 	! ./$(COMPILER) test/test_default_unspecialized_generic_fail.pas /tmp/test_defgen26 > /tmp/test_defgen.log 2>&1
 	grep -q "must be specialized" /tmp/test_defgen.log
+	# --strict / {$STRICT ON}: FPC-parity routine visibility (require-forward, b363).
+	# Positive: forward + mutual recursion + unit/builtin calls bind under strict.
+	./$(COMPILER) -Fulib/rtl test/test_require_forward_strict.pas /tmp/test_reqfwd26
+	test "$$(/tmp/test_reqfwd26)" = "$$(printf 'TRUE\nTRUE\nabove\n42\n2')"
+	# Negative: call-before-define without forward compiles by DEFAULT, errors under --strict.
+	./$(COMPILER) test/test_require_forward_strict_fail.pas /tmp/test_reqfwdneg26 > /dev/null
+	! ./$(COMPILER) --strict test/test_require_forward_strict_fail.pas /tmp/test_reqfwdneg26 > /tmp/test_reqfwd.log 2>&1
+	grep -q "routine used before its declaration" /tmp/test_reqfwd.log
 	# `sealed` is enforced: no descendants, no abstract methods, not also `abstract`
 	# (tsealed1/2/3) — while a sealed LEAF and a plain abstract class stay legal
 	! ./$(COMPILER) test/test_sealed_class_fail.pas /tmp/test_sealed26 > /tmp/test_sealed.log 2>&1
