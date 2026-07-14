@@ -129,7 +129,7 @@ pass	tdefault9.pp	tdefault	-
 skip	tenum1.pp	tenum	gap	subrange type over an enum (`weekend = sat..sun`) not parsed
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
 skip	tenum3.pp	tenum	gap	{$SCOPEDENUMS} + Enum.Element syntax and subrange-of-enum
-skip	tenum4.pp	tenum	gap	accepts-invalid — $SCOPEDENUMS now HONORED (members scoped, TEnum.member works); residual: the En1 := first assign needs the enum-identity type check (tenum2 cluster) to reject
+pass	tenum4.pp	tenum	-	
 pass	tenum5.pp	tenum	-	
 skip	tenum6.pp	tenum	gap	`Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool ('FALSE')
 skip	tenumerators1.pp	tenum	gap	Classes TList/TFPList GetEnumerator + custom enumerator classes
