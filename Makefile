@@ -2818,6 +2818,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=i386 test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_frozen_strlen)" = "$$(/tmp/test_i386_frozen_strlen_x64)"
+	# string[N] truncation incl. a heap record holding a shortstring field reached
+	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
+	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas /tmp/test_i386_sstrunc
+	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_i386_sstrunc_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_sstrunc)" = "$$(/tmp/test_i386_sstrunc_x64)"
 	./$(COMPILER) --target=i386 test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_managed_strlen)" = "$$(/tmp/test_i386_managed_strlen_x64)"
@@ -3114,6 +3119,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_frozen_strlen)" = "$$(/tmp/test_aarch64_frozen_strlen_x64)"
+	# string[N] truncation incl. a heap record holding a shortstring field reached
+	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
+	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas /tmp/test_aarch64_sstrunc
+	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_aarch64_sstrunc_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sstrunc)" = "$$(/tmp/test_aarch64_sstrunc_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rec_arr_store)" = "$$(/tmp/test_aarch64_rec_arr_store_x64)"
@@ -3363,6 +3373,11 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_frozen_string_cross_b305.pas /tmp/test_riscv32_frozen
 	tools/run_target.sh riscv32 /tmp/test_riscv32_frozen > /tmp/test_riscv32_frozen.out
 	test "$$(cat /tmp/test_riscv32_frozen.out)" = "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# string[N] truncation incl. a heap record holding a shortstring field reached
+	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
+	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas /tmp/test_riscv32_sstrunc
+	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_riscv32_sstrunc_x64
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_sstrunc)" = "$$(/tmp/test_riscv32_sstrunc_x64)"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_riscv32_centry
 	tools/run_target.sh riscv32 /tmp/test_riscv32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_riscv32_cargs
@@ -3763,6 +3778,11 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=arm32 test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_frozen_strlen)" = "$$(/tmp/test_arm32_frozen_strlen_x64)"
+	# string[N] truncation incl. a heap record holding a shortstring field reached
+	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
+	./$(COMPILER) --target=arm32 test/test_shortstring_trunc.pas /tmp/test_arm32_sstrunc
+	./$(COMPILER) test/test_shortstring_trunc.pas /tmp/test_arm32_sstrunc_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sstrunc)" = "$$(/tmp/test_arm32_sstrunc_x64)"
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_managed_strlen)" = "$$(/tmp/test_arm32_managed_strlen_x64)"

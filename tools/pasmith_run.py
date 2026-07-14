@@ -558,9 +558,10 @@ def add_gen_flags(ap):
     for f in WIDE_DEFAULTS:
         # default None, NOT 0: --wide has to tell "not given" apart from "given as
         # 0", or `--wide --shorts 0` silently turns shortstrings back on. Switching
-        # a single rung off is exactly what you need when one is blocked -- e.g.
-        # --cross needs --shorts 0, because the cross backends reject a record that
-        # holds a string[N] (bug-cross-pointer-store-record-with-shortstring-field).
+        # a single rung off is exactly what you need when one is blocked. (The
+        # historic example -- --cross needed --shorts 0 while the cross backends
+        # rejected records holding a string[N] -- is FIXED: string[N] fields and
+        # truncating stores work on all six targets since fec98091/7716bd2a.)
         ap.add_argument("--%s" % f, type=int, default=None)
     ap.add_argument("--wide", action="store_true",
                     help="turn on every widened rung (records + forward pointers, "
