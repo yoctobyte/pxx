@@ -7,7 +7,7 @@ prio: 55
 # Record-cast field access resolves every field at offset 0 (SILENT wrong values)
 
 - **Type:** bug (Track P — Pascal frontend / shared parser lowering)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** Track B FPC-conformance burn-down (tint642.pp), filed per
   "T/B owns the finding, the owning lane owns the bug".
@@ -55,3 +55,6 @@ address of `q` reinterpreted as the record, so the field address must be
 `@q + field offset`. Sweep sibling dispatch branches: rvalue read, lvalue
 store, `@trec(q).field`, nested `trec(q).field.sub`, and the cast-of-cast
 form — per [[feedback_sweep_sibling_dispatch_branches]].
+
+## Log
+- 2026-07-14 — resolved, commit baaee15f.
