@@ -7,7 +7,7 @@ prio: 75
 # testmgr "hangs": it is STARVATION, and the cause is orphans pstree cannot show
 
 - **Type:** bug (Track T — tools & testing)
-- **Status:** working
+- **Status:** done
 - **Owner:** claude (frank2 session, 2026-07-13)
 - **Found:** 2026-07-13, user report: "trackt/testmgr does not run as expected, it seems
   to be able to hang. re-running does not properly kill or check running daemons.
@@ -106,8 +106,55 @@ from a shell, no setsid), that group is the *shell's* — so it would kill the s
 agent session, and every sibling. The first run of the lock test SIGKILLed itself proving
 it. Now: group-kill only a process that leads its own group; otherwise kill the single pid.
 
+## Follow-on findings (same session, all fixed)
+The original three were only the top of the stack. Chasing them on the live box turned
+up three more, each bigger than the last:
+
+4. **The swap floor was a permanent lockout, not a safety gate** (d94db8d6). borg had
+   8 GB MemAvailable and memory PSI **flat 0.00** — a completely healthy box — yet every
+   job was held because free swap was 965 MB against a hardcoded **1000 MB** floor. A 35 MB
+   miss. And it never recovers: the used swap is stale anon pages from long-lived desktop
+   processes (a leaking browser) that are never handed back. So the gate stayed shut
+   *forever* and every run crawled in degraded serial mode — the self-heal (#1) was
+   holding a chronic misconfiguration upright. A flat 1000 MB is a quarter of a 4 GB swap
+   and a rounding error on a 32 GB one; the floor is now `min(1000 MB, 10% of SwapTotal)`.
+   With it fixed, the watcher went from 1 job serial to 7 concurrent, 0% CPU idle.
+   **Open:** the user's call is that the swap floor should go away entirely — PSI reads
+   the stall directly and a free-swap *level* cannot distinguish leaked browser pages from
+   a real refault storm. Not yet done.
+
+5. **"Stop" stopped nothing** (a409c695). twatch's SIGTERM handler only set `STOP=True`,
+   and the flag was read *between cycles* — but the daemon spends nearly all its life
+   blocked in the wait-loop of a testmgr child with minutes of work left. So `trackt stop`
+   waited out the entire gate and then told the user to `kill -9` by hand; its own message
+   ("aborts any running gate") was false. The wait-loop now checks `STOP` every second and
+   tears the gate down (SIGINT, then SIGKILL); trackt escalates rather than handing the
+   user homework, and reaps the orphaned testmgr a SIGKILLed daemon leaves behind.
+
+6. **The watcher was failing to BUILD, not failing to test** (0a3657e1, 0348fae0) — the big
+   one. `differ: byte 97` → `make Error 1` → `testmgr: building failed` → `twatch: no report
+   (rc=1) — infra problem, not recording a verdict`. **1445 times** in the borg log, long
+   predating any of this session's changes. Each one killed testmgr before it ran a single
+   job, so the sha stayed untested and nothing went red. *That* is why Track T kept falling
+   behind and never reached bench/fuzz.
+   Root cause: the `make` rule demands a **one-pass** fixedpoint (seed → stage2 → stage3,
+   `cmp`), which only holds if the seed already matches the sources. A watcher hops across
+   SHAs with a persistent `compiler/pascal26`, so its seed is stale constantly — making
+   this the watcher's *normal* case. Bootstraps have always needed the extra round.
+   Fix, and the architectural point the user forced: **"can we get a compiler" and "do these
+   sources reproduce themselves" are different questions**, and the Makefile welded them
+   together — so the project's most important gate could only fail as an *infra crash*.
+   Now: build = infrastructure (converge the bootstrap, no gate semantics); the gate is a
+   **job** (`tools/selfhost_fixedpoint.sh`, native/limited/full) that seeds from the
+   committed **pinned** stable — hermetic, same answer on every box — and asserts both
+   convergence *and* agreement with the binary the suite tests with (the anti-Thompson
+   check: a compiler can converge to a *different* self-reproducing fixedpoint depending on
+   its seed; both green, one carrying whatever the local binary carried). An unbuildable
+   compiler now emits a **RED, bisectable report** instead of vanishing.
+
 ## Log
 - 2026-07-13 — filed and fixed in the same session (Track T owns testmgr). Diagnosis came
   from the live box, not from reading code: the user's *"i don't see testmgr in pstree"*
   was the decisive clue — it is what exposed the systemd-scope reparenting, which turned
   "why does it hang" into "why do orphans accumulate", which is the real bug.
+- 2026-07-14 — resolved, commit 0348fae0.

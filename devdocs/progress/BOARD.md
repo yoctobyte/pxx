@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
@@ -201,7 +200,7 @@ _none_
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (690)
+## done (691)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -518,6 +517,7 @@ _none_
 | bug-string-type-size-mismatch | A | 50 | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | bug-subclass-field-offset-calculation | A | 50 | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | A | 50 | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
+| bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
