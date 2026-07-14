@@ -1,6 +1,6 @@
 # Licensing
 
-frankonpiler (PXX / pascal26) is licensed per directory. Every source file
+pxx is licensed per directory. Every source file
 carries a one-line `SPDX-License-Identifier` header; this table is the map.
 
 | Path | License | Text |
@@ -13,7 +13,7 @@ carries a one-line `SPDX-License-Identifier` header; this table is the map.
 | everything else (tests, devdocs, build files) | MPL 2.0 | [LICENSE](LICENSE) |
 
 Why the split: the runtime and libraries under zlib are **embedded into every
-binary the compiler produces** — programs you compile with pascal26 are
+binary the compiler produces** — programs you compile with pxx are
 entirely yours, with no license obligations from the toolchain. The compiler
 itself is MPL 2.0: use it anywhere, link it with anything, but published
 modifications to its files stay open.
