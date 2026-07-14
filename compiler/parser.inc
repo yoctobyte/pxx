@@ -7062,6 +7062,10 @@ begin
            right. The tyBoolean guard above still keeps a genuine Boolean element logical. }
          (ASTKind[left] = AN_INDEX) or (ASTKind[left] = AN_FIELD) or
          (ASTKind[left] = AN_DEREF) or
+         { a nested BITWISE not: its integer tag (checked above) is ours to
+           trust — `not(not(q))` flipped the outer one to boolean (tint642
+           error 2701). An inner LOGICAL not is tyBoolean and never gets here. }
+         (ASTKind[left] = AN_NOT) or
          ((ASTKind[left] = AN_PTR_CAST) and
           ((Integer(ASTIVal[left]) = -1) or (Integer(ASTIVal[left]) = -3))) or
          ((ASTKind[left] = AN_CALL) and
@@ -12485,7 +12489,10 @@ begin
   end
   else if TypeIsOrdinal(tk) and (tk <> tyChar) then
   begin
-    pi := FindProc('StrInt');
+    { A QWord goes through the UNSIGNED formatter — StrInt printed values
+      >= 2^63 with a minus sign (tint642's testioqword). }
+    if tk = tyUInt64 then pi := FindProc('StrQWord')
+    else pi := FindProc('StrInt');
     if pi < 0 then Error('write(Text): StrInt not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
                 widthNode, -1, -1, -1, -1);
@@ -12559,7 +12566,9 @@ end;
   calls (one per destination). v1 is line-oriented; read and readln map to the
   same line read. }
 function ParseTextReadRest(fileSym: Integer): Integer;
-var procRead, callNode, destNode, headSeq, tailSeq, newSeq: Integer;
+var procRead, procVal, callNode, destNode, headSeq, tailSeq, newSeq: Integer;
+    trTmpSym, trCodeSym, trValTmp, trIdent, trAsn: Integer;
+    trTk: TTypeKind;
 begin
   Next;  { consume the Text file identifier }
   procRead := FindProc('TextReadLn');
@@ -12568,11 +12577,59 @@ begin
   while Eat(tkComma) do
   begin
     ParseExpr; destNode := CurASTNode;
-    callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
-                             destNode, -1, -1, -1, -1);
-    newSeq := GenMakeSeq(callNode, -1);
-    if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
-    tailSeq := newSeq;
+    trTk := IntToTypeKind(ASTTk[destNode]);
+    if TypeIsFloat(trTk) or (TypeIsOrdinal(trTk) and (trTk <> tyChar)) then
+    begin
+      { readln(f, number): TextReadLn only reads STRINGS — the dest slot used
+        to be handed over AS an AnsiString handle, silently corrupting it
+        (tint642's testioqword). Read the line into a hidden string, then
+        Val it into the destination with the same dispatch as a Val statement
+        (ValQWord for a QWord dest; Int64 temp for a narrow ordinal so the
+        8-byte var write cannot overrun). }
+      if TypeIsFloat(trTk) then procVal := FindProc('ValFloat')
+      else if trTk = tyUInt64 then procVal := FindProc('ValQWord')
+      else procVal := FindProc('Val');
+      if procVal < 0 then Error('read(Text): Val builtin not loaded');
+      trTmpSym := AllocVar('', tyAnsiString);
+      trCodeSym := AllocVar('', tyInteger);
+      callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                               GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
+      newSeq := GenMakeSeq(callNode, -1);
+      if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+      tailSeq := newSeq;
+      trValTmp := -1;
+      if TypeIsOrdinal(trTk) and (trTk <> tyUInt64) and (TypeSize(trTk) < 8) then
+        trValTmp := AllocVar('', tyInt64);
+      if trValTmp >= 0 then
+        callNode := GenMakeCall6(procVal, Procs[procVal].RetType,
+                                 GenMakeIdent(trTmpSym, tyAnsiString),
+                                 GenMakeIdent(trValTmp, tyInt64),
+                                 GenMakeIdent(trCodeSym, tyInteger), -1, -1, -1)
+      else
+        callNode := GenMakeCall6(procVal, Procs[procVal].RetType,
+                                 GenMakeIdent(trTmpSym, tyAnsiString),
+                                 destNode,
+                                 GenMakeIdent(trCodeSym, tyInteger), -1, -1, -1);
+      newSeq := GenMakeSeq(callNode, -1);
+      ASTRight[tailSeq] := newSeq; tailSeq := newSeq;
+      if trValTmp >= 0 then
+      begin
+        trIdent := AllocNode(AN_IDENT);
+        ASTIVal[trIdent] := trValTmp; ASTTk[trIdent] := Ord(tyInt64);
+        trAsn := AllocNode(AN_ASSIGN);
+        ASTLeft[trAsn] := destNode; ASTRight[trAsn] := trIdent;
+        newSeq := GenMakeSeq(trAsn, -1);
+        ASTRight[tailSeq] := newSeq; tailSeq := newSeq;
+      end;
+    end
+    else
+    begin
+      callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                               destNode, -1, -1, -1, -1);
+      newSeq := GenMakeSeq(callNode, -1);
+      if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+      tailSeq := newSeq;
+    end;
   end;
   Expect(tkRParen, ')');
   if headSeq = -1 then headSeq := GenMakeSeq(-1, -1);
@@ -14163,6 +14220,10 @@ begin
         Expect(tkRParen, ')');
 
         if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then procIdx := FindProc('ValFloat')
+        else if (idx >= 0) and (Syms[idx].TypeKind = tyUInt64) then
+          { QWord destination: the unsigned, RANGE-CHECKED variant — the Int64
+            Val cannot know its caller's signedness (tint642 testqwordstr). }
+          procIdx := FindProc('ValQWord')
         else procIdx := FindProc('Val');
         if procIdx < 0 then Error('Val: builtin unit not loaded');
         { A 1-char source literal (e.g. `Val('5', ...)`) parses as a Char; the

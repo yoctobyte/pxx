@@ -18,9 +18,11 @@ unit builtin;
 interface
 
 function StrInt(v: Int64; width: Integer): AnsiString;
+function StrQWord(v: QWord; width: Integer): AnsiString;
 function FloatToStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
+procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): AnsiString;
@@ -393,6 +395,33 @@ begin
 end;
 
 
+function StrQWord(v: QWord; width: Integer): AnsiString;
+{ StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
+  (write(Text, q) routes here; the console writeln path has its own unsigned
+  emitter). }
+var
+  digits: string;
+  n: QWord;
+  d: Integer;
+begin
+  digits := '';
+  if v = 0 then
+    digits := '0'
+  else
+  begin
+    n := v;
+    while n > 0 do
+    begin
+      d := Integer(n mod 10);
+      digits := Chr(Ord('0') + d) + digits;
+      n := n div 10;
+    end;
+  end;
+  Result := digits;
+  while Length(Result) < width do
+    Result := ' ' + Result;
+end;
+
 function StrInt(v: Int64; width: Integer): AnsiString;
 var
   neg: Boolean;
@@ -575,6 +604,58 @@ begin
     Exit;
   end;
   if neg then n := -n;
+  v := n;
+  code := 0;
+end;
+
+procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
+{ Val() with a QWord destination: unsigned accumulation with RANGE DETECTION —
+  '18446744073709551616' (High(QWord)+1) must set code<>0, and the plain Int64
+  Val cannot know its caller's signedness (tint642's testqwordstr). The parser
+  routes Val(s, q, code) here when the destination is tyUInt64. }
+var
+  i, len, d: Integer;
+  started: Boolean;
+  n: QWord;
+  c: Char;
+begin
+  v := 0;
+  code := 0;
+  n := 0;
+  started := False;
+  len := Length(s);
+  i := 1;
+  while (i <= len) and (s[i] = ' ') do
+    Inc(i);
+  if (i <= len) and (s[i] = '+') then
+    Inc(i);
+  while i <= len do
+  begin
+    c := s[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      d := Ord(c) - Ord('0');
+      { n*10 + d must fit: High(QWord) = 18446744073709551615 }
+      if (n > QWord(1844674407370955161)) or
+         ((n = QWord(1844674407370955161)) and (d > 5)) then
+      begin
+        code := i;
+        v := 0;
+        Exit;
+      end;
+      n := n * 10 + QWord(d);
+      started := True;
+      Inc(i);
+    end
+    else
+      break;
+  end;
+  if (not started) or (i <= len) then
+  begin
+    code := i;
+    v := 0;
+    Exit;
+  end;
   v := n;
   code := 0;
 end;
