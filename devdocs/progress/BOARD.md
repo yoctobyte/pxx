@@ -8,12 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
+| feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -35,6 +36,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
+| bug-pascal-shortstring-no-truncation-buffer-overrun | A | 78 | bug | string[N] assignment does not truncate: pxx writes past the buffer and clobbers the next variable | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -95,7 +97,6 @@ _none_
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
-| feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
 | feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -936,10 +937,10 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 78] [A] bug-pascal-shortstring-no-truncation-buffer-overrun
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
-- [p 65] [T] feature-pasmith-widen-grammar
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing
