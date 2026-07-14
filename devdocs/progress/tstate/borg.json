@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T07:48:25Z",
-   "fixed": [
-    "test-c-conformance-aarch64#shard3/6",
-    "test-c-conformance-arm32#shard3/6"
-   ],
-   "new_red": [],
-   "sha": "2eb254c6c670a53ccf3bbd32bd60d8c576591375",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T07:51:07Z",
    "fixed": [],
    "new_red": [],
@@ -430,18 +419,24 @@
    "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-14T15:02:16Z",
+   "fixed": [],
+   "new_red": [
+    "test-lua-cross#src:test/lua/runner.c",
+    "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh",
+    "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh"
+   ],
+   "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -459,6 +454,7 @@
   "test-aarch64#src:test/test_async_sl.pas": "pass",
   "test-aarch64#src:test/test_asyncecho.pas": "pass",
   "test-aarch64#src:test/test_call_result_member.pas": "pass",
+  "test-aarch64#src:test/test_cdecl_indirect.pas": "pass",
   "test-aarch64#src:test/test_channel.pas": "pass",
   "test-aarch64#src:test/test_class_of.pas": "pass",
   "test-aarch64#src:test/test_classref.pas": "pass",
@@ -563,6 +559,7 @@
   "test-arm32#src:test/test_async_sl.pas": "pass",
   "test-arm32#src:test/test_asyncecho.pas": "pass",
   "test-arm32#src:test/test_call_result_member.pas": "pass",
+  "test-arm32#src:test/test_cdecl_indirect.pas": "pass",
   "test-arm32#src:test/test_channel.pas": "pass",
   "test-arm32#src:test/test_class_of.pas": "pass",
   "test-arm32#src:test/test_classref.pas": "pass",
@@ -1588,6 +1585,7 @@
   "test-i386#src:test/test_atomic_counter.pas": "pass",
   "test-i386#src:test/test_atomic_i386.pas": "pass",
   "test-i386#src:test/test_call_result_member.pas": "pass",
+  "test-i386#src:test/test_cdecl_indirect.pas": "pass",
   "test-i386#src:test/test_channel.pas": "pass",
   "test-i386#src:test/test_class_of.pas": "pass",
   "test-i386#src:test/test_classref.pas": "pass",
@@ -1684,12 +1682,7 @@
   "test-i386#src:test/test_tthread_sync.pas": "pass",
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
-  "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
+  "test-lua-cross#src:test/lua/runner.c": "fail",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -1799,8 +1792,8 @@
   "test-smoke#src:test/test_record_temp_byval_arg.pas": "pass",
   "test-smoke#src:test/test_tthread_sync.pas": "pass",
   "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh": "pass",
-  "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh": "pass",
-  "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh": "pass",
+  "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh": "fail",
+  "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh": "fail",
   "test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-threads#src:test/test_array_var_param_assign.pas": "pass",
   "test-threads#src:test/test_atomic64.pas": "pass",
@@ -1823,11 +1816,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-14T14:57:47Z",
+  "date": "2026-07-14T15:02:16Z",
   "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
-  "tier": "native",
+  "tier": "full",
   "verdict": "RED",
-  "wall": 86.0
+  "wall": 195.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1837,11 +1830,11 @@
   "sha": "811b20fb702f804751552692784a09e8578f7816"
  },
  "last_full": {
-  "date": "2026-07-14T14:43:40Z",
-  "sha": "811b20fb702f804751552692784a09e8578f7816",
+  "date": "2026-07-14T15:02:16Z",
+  "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
   "tier": "full",
   "verdict": "RED",
-  "wall": 200.2
+  "wall": 195.2
  },
  "last_opt": {
   "date": "2026-07-14T14:48:54Z",
@@ -1879,6 +1872,33 @@
     "96147f570d29941719baef78f44cfcec515eed7e"
    ],
    "src": "test/test_platform_defines.pas"
+  },
+  {
+   "bad": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "good": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "job": "test-lua-cross#src:test/lua/runner.c",
+   "name": "test-lua-cross#00",
+   "opened": "2026-07-14T15:02:16Z",
+   "range": [],
+   "src": "test/lua/runner.c tools/run_target.sh"
+  },
+  {
+   "bad": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "good": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "job": "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh",
+   "name": "test-sqlite-threads-arm32#00",
+   "opened": "2026-07-14T15:02:16Z",
+   "range": [],
+   "src": "tools/run_sqlite_thread_test.sh"
+  },
+  {
+   "bad": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "good": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f",
+   "job": "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh",
+   "name": "test-sqlite-threads-i386#00",
+   "opened": "2026-07-14T15:02:16Z",
+   "range": [],
+   "src": "tools/run_sqlite_thread_test.sh"
   }
  ]
 }
