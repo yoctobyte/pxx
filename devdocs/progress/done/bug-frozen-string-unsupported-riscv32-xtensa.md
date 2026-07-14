@@ -114,3 +114,6 @@ Caveat before starting: the xtensa cross leg is currently giving NO signal —
 `make test-esp-bare`'s esp32s3 half is red and was already red at 51968776
 ([[bug-esp32s3-bare-boot-no-uart-output]]). Fix or route around that first, or the work
 cannot be verified.
+
+## Log
+- 2026-07-14 — resolved, commit 13704303.

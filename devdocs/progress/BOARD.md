@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
@@ -193,7 +192,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (709)
+## done (710)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -400,6 +399,7 @@ _none_
 | bug-fpc-seeded-binary-runtime-segfault | A | 50 | bug | FPC-seeded pascal26 binary segfaults at runtime | — |
 | bug-frozen-string-length-pointer-deref-cross | A | 50 | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-frozen-string-result-global-not-reentrant | A | 50 | bug | Frozen-string function Result is a shared global → not reentrant / thread-unsafe | — |
+| bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-generator-yield-call-expression | A | 50 | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | bug-generic-class-methods-in-program | A | 50 | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-hard-keyword-intrinsics-block-identifier-use | A | 50 | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
