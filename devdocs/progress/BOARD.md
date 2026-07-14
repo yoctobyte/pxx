@@ -30,7 +30,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (94)
+## backlog (93)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -103,7 +103,6 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
-| feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-t-gcc-torture-runner | T | 55 | feature | Track T: gcc c-torture `execute/` runner — corpus rung above c-testsuite | — |
@@ -187,7 +186,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (718)
+## done (719)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -778,6 +777,7 @@ _none_
 | feature-real-cross-target-consistency | A | 50 | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-relative-path-units | A | 50 | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-release-packaging | B | 50 | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
+| feature-require-forward-strict-mode | A | 60 | feature | `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella) | — |
 | feature-result-in-loop | A | 50 | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-riscv32-hosted-exceptions | A | 50 | feature | riscv32 hosted: exception machinery (raise/try) — last wall before chess | — |
 | feature-riscv32-record-function-results | A | 50 | feature | riscv32: support record (by-value struct) function results | — |
@@ -947,7 +947,6 @@ _none_
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [A] feature-pxx-basic
-- [p 60] [A] feature-require-forward-strict-mode
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)

@@ -5,7 +5,7 @@ prio: 60  # auto
 # `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella)
 
 - **Type:** feature (parser architecture / FPC-compat) — Track A
-- **Status:** working
+- **Status:** done
 - **Owner:** fable-a
 - **Opened:** 2026-06-27
 - **Relation:** the enforcement counterpart to
@@ -190,3 +190,4 @@ ordering signal without that.)
   global vars); the PXX_REQUIRE_FORWARD source define + forwards.inc gate and
   the strict self-compile gate (needs the define plumbing; the flag
   infrastructure this ticket adds is where it slots in).
+- 2026-07-14 — resolved, commit cf3bf51d.
