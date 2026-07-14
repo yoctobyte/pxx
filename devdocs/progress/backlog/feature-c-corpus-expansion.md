@@ -5,7 +5,7 @@ prio: 65  # auto
 # C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness)
 
 - **Type:** feature (C frontend validation) — Track A/C.
-- **Status:** backlog — planned 2026-07-06, order agreed with user ("variation is good").
+- **Status:** working
 - **Step 1 DONE 2026-07-06:** c-testsuite vendored (install_lib_candidates.sh
   c-testsuite), runner `tools/run_c_conformance.sh` + `make test-c-conformance`.
   **Baseline 172/220 pass on pristine master**; all 48 fails are recorded
