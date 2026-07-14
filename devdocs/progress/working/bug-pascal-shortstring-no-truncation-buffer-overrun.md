@@ -9,7 +9,7 @@ prio: 78
 - **Type:** bug (silent memory corruption). **Track P** (Pascal frontend — shortstring
   assignment semantics); may land in Track A if the fix belongs in the assign helper
   rather than the frontend's type lowering.
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14
 - **Found by:** Track T, probing candidate constructs for
   [[feature-pasmith-widen-grammar]] before generating them. **T owns the tool, never
