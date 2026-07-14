@@ -5,7 +5,7 @@ prio: 45  # blocks ESP32 crypto eventually; not blocking any current target
 # riscv32: p256field core-dumps (and bignum will not compile there at all)
 
 - **Type:** bug / backend gap — **Track A** (riscv32 backend)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, found while taking `lib/rtl/p256field.pas` cross.
 
 ## Symptom
@@ -148,3 +148,6 @@ Two corrections to what this ticket says:
 
 Scope of this ticket is now **riscv32 only**: the by-ref array-param write path, plus the
 `copy_rec_managed` codegen gap it exposed.
+
+## Log
+- 2026-07-14 — resolved, commit d4a59db2.

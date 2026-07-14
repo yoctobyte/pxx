@@ -39,7 +39,7 @@ _none_
 | bug-esp-emit-obj-proc-fixup-non-iram | A | 30 | bug | --emit-obj: @proc fixups require an iram/interrupt routine — plain callbacks can't be registered | — |
 | bug-esp-idf-heap-linux-mmap-ecall | A | 35 | bug | ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes | — |
 | bug-pascal-missing-diagnostics-fail-tests | P | 18 | bug | pxx accepts invalid programs the FPC suite's %FAIL tests reject | — |
-| bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
+| bug-riscv32-byval-record-param-one-word | A | 50 | bug | riscv32: a BY-VALUE record parameter wider than 4 bytes passes only its first word — SILENTLY | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-test-hardcoded-tmp-so-path | C | 40 | bug | bug: test_c_lazycasing.pas hardcodes /tmp/liblazycasing.so (non-hermetic test) | — |
 | bug-test-riscv32-thin-coverage | A | 35 | bug | riscv32 cross-target test coverage is thin vs i386/arm32/aarch64 | — |
@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (711)
+## done (712)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -500,6 +500,7 @@ _none_
 | bug-record-fn-codegen-crash | A | 50 | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
 | bug-riscv32-chess-perft-runtime-corruption | A | 50 | bug | riscv32 hosted: chess perft miscounts (164 vs 20) then segfaults — post-InitZobrist corruption | — |
 | bug-riscv32-hosted-writeln-hello-hangs | A | 50 | bug | riscv32 hosted: plain `writeln` hello hangs under qemu-user (pre-existing) | — |
+| bug-riscv32-p256field-coredump | A | 45 | bug | riscv32: p256field core-dumps (and bignum will not compile there at all) | — |
 | bug-riscv32-string-literal-to-class-field | A | 55 | bug | riscv32: storing a string LITERAL into a class field gives an empty string | — |
 | bug-rtti-offset-static-array | A | 50 | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-selfhost-multifn-ifelse-miscompile | R | 50 | bug | Self-host miscompilation: 3-function program with `if`/`else if` gives wrong result | — |
@@ -962,6 +963,7 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [C] bug-c-multidim-brace-elision-flattens-rows
+- [p 50] [A] bug-riscv32-byval-record-param-one-word
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro
@@ -969,7 +971,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-riscv32-p256field-coredump
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
