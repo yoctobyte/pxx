@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
@@ -191,7 +190,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (734)
+## done (735)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -372,6 +371,7 @@ _none_
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-cross-metaclass-new-with-args | A | 55 | bug | Metaclass construction WITH ARGUMENTS segfaults on every non-x86-64 target | — |
+| bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
 | bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
 | bug-crtl-printf-ll-ilp32 | B | 65 | bug | crtl printf counted `ll` but never honoured it (arg truncation + shift on ILP32) | — |
 | bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
@@ -954,7 +954,6 @@ _none_
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
-- [p 60] [A] bug-cross-pointer-store-record-with-shortstring-field
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing

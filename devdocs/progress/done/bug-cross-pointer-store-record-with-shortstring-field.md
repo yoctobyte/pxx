@@ -8,7 +8,7 @@ prio: 60
 
 - **Type:** bug (backend gap — loud, compile-time). **Track A** (codegen:
   `ir_codegen386.inc`, `ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc`).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** Track T — `tools/pasmith_run.py --cross` on the widened grammar
   ([[feature-pasmith-widen-grammar]]); every generated program with the record rung was
@@ -73,3 +73,6 @@ pointer, which is an ordinary shape (a node in a list, a record on the heap).
 - A cross-target regression test covers a heap record with a `string[N]` field.
 - `tools/pasmith_run.py --cross --wide` then runs with `--shorts` on (it currently has
   to drop the shortstring rung for cross runs).
+
+## Log
+- 2026-07-14 — resolved, commit 7716bd2a.
