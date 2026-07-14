@@ -17,13 +17,20 @@ programs can use these units without passing extra `-Fu` flags.
 | --- | --- |
 | [`sysutils`](./sysutils.md) | Standard utilities, including string conversions, formatting, file paths, and memory helpers. |
 | [`classes` & `streams`](./core.md) | Object, list, and stream infrastructure (lists, string lists, memory streams) for FPC-style code. |
-| `textfile` | Pascal text-file support. |
+| `textfile` | Pascal text-file support, including the standard `Input`/`Output` files, `Flush`, and `Erase`. |
+| `strings` | Classic NUL-terminated `PChar` routines (`StrLen`, `StrPos`, `StrComp`, …). |
 | `math` | Numeric helpers. |
 | `typinfo` | RTTI inspection helpers. |
 
 Several language features also have runtime support in the default environment:
 managed strings, dynamic arrays, exceptions, interfaces, classes, RTTI, and file
 I/O are available without importing a unit just to initialize the runtime.
+
+Common FPC `System` routines are likewise available with no `uses` clause,
+including `Move`, `FillChar`, `CompareByte`, `UpCase`, `Pos`, `Copy`, `Insert`,
+`Delete`, `Str`, `Val`, `Abs`, `Sqr`, `Random`, `Randomize`, `RandSeed`,
+`HexStr`, `Lo`, `Hi`, `Swap`, `RunError`, and `UniqueString`. A declaration of
+the same name in your program shadows the built-in version.
 
 ## Data and formats
 
