@@ -334,6 +334,17 @@ begin
   Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitCvtIntToF64A64(dReg, xReg: Integer; srcTk: TTypeKind);
+{ int -> double: scvtf for signed sources, ucvtf for unsigned 64-bit ones —
+  scvtf converted a qword >= 2^63 to a negative double
+  (bug-pascal-qword-to-double-signed). }
+begin
+  if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
+    EmitI32($9E630000 or (xReg shl 5) or dReg)   { ucvtf d<d>, x<n> }
+  else
+    EmitI32($9E620000 or (xReg shl 5) or dReg);  { scvtf d<d>, x<n> }
+end;
+
 procedure EmitClampLenToStrCapA64(lenReg, cap: Integer);
 { Clamp x[lenReg] (a source string length about to be copied into a frozen
   inline buffer) to the destination capacity — truncating `string[N]`
@@ -1091,7 +1102,7 @@ begin
            not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
         begin
           { int value into a float slot: convert (bits stay in x0) }
-          EmitI32($9E620000);                     { scvtf d0, x0 }
+          EmitCvtIntToF64A64(0, 0, IntToTypeKind(IRTk[IRB[node]])); { s/ucvtf d0, x0 }
           EmitI32($9E660000);                     { fmov x0, d0 }
         end
         else if CProgramMode and (not TypeIsFloat(Syms[IRA[node]].TypeKind)) and
@@ -1445,12 +1456,12 @@ begin
           EmitI32($F84107E0); { ldr x0, [sp], #16 }
 
           if not TypeIsFloat(lhsTk) then
-            EmitI32($9E620000)  { scvtf d0, x0 }
+            EmitCvtIntToF64A64(0, 0, lhsTk)  { s/ucvtf d0, x0 }
           else
             EmitI32($9E670000); { fmov d0, x0 }
 
           if not TypeIsFloat(rhsTk) then
-            EmitI32($9E620021)  { scvtf d1, x1 }
+            EmitCvtIntToF64A64(1, 1, rhsTk)  { s/ucvtf d1, x1 }
           else
             EmitI32($9E670021); { fmov d1, x1 }
 
@@ -2560,7 +2571,7 @@ begin
           if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
             EmitI32($9E670020)          { fmov d0, x1 }
           else
-            EmitI32($9E620020);         { scvtf d0, x1 (int -> double) }
+            EmitCvtIntToF64A64(0, 1, IntToTypeKind(IRTk[IRB[node]])); { s/ucvtf d0, x1 }
           EmitI32($1E624000);           { fcvt s0, d0 }
           EmitI32($1E260001);           { fmov w1, s0 }
           EmitI32($B9000001);           { str w1, [x0] }
@@ -2580,7 +2591,7 @@ begin
             stored the raw integer (bug-single-field-element-in-aggregate). }
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
           begin
-            EmitI32($9E620020);         { scvtf d0, x1 (int -> double) }
+            EmitCvtIntToF64A64(0, 1, IntToTypeKind(IRTk[IRB[node]])); { s/ucvtf d0, x1 }
             EmitI32($9E660001);         { fmov x1, d0 }
           end;
           EmitI32($F9000001);           { str x1, [x0] }

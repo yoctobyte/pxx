@@ -847,6 +847,37 @@ begin
     ]);
 end;
 
+procedure EmitCvtSi2SdOrU64(xmm, reg: Integer; srcTk: TTypeKind);
+{ cvtsi2sd xmm<xmm>, r<reg> (reg: 0=rax, 1=rcx) — with the unsigned fixup when
+  the SOURCE type is unsigned 64-bit: cvtsi2sd is a SIGNED conversion, so a
+  qword >= 2^63 converted to a negative double (tint642's testqwordtypecast,
+  bug-pascal-qword-to-double-signed). Fixup = round-to-odd halve, convert,
+  double: shr 1 or'd with bit0 keeps correct IEEE rounding. The unsigned-big
+  path destroys the source register and r11 — the source is consumed by the
+  conversion at every call site, and r11 is free in this backend. }
+var pBig, pDone: Integer;
+begin
+  if (srcTk = tyUInt64) or (srcTk = tyNativeUInt) then
+  begin
+    EmitB($48); EmitB($85); EmitB($C0 or (reg shl 3) or reg);  { test reg, reg }
+    EmitB($79); pBig := CodeLen; EmitB(0);                     { jns small }
+    EmitB($49); EmitB($89); EmitB($C3 or (reg shl 3));         { mov r11, reg }
+    EmitB($49); EmitB($83); EmitB($E3); EmitB($01);            { and r11, 1 }
+    EmitB($48); EmitB($D1); EmitB($E8 or reg);                 { shr reg, 1 }
+    EmitB($4C); EmitB($09); EmitB($D8 or reg);                 { or reg, r11 }
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
+    EmitB($F2); EmitB($0F); EmitB($58); EmitB($C0 or (xmm shl 3) or xmm);             { addsd xmm, xmm }
+    EmitB($EB); pDone := CodeLen; EmitB(0);                    { jmp done }
+    Code[pBig] := Byte(CodeLen - (pBig + 1));                  { small: }
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd }
+    Code[pDone] := Byte(CodeLen - (pDone + 1));                { done: }
+  end
+  else
+  begin
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0 or (xmm shl 3) or reg); { cvtsi2sd xmm, reg }
+  end;
+end;
+
 procedure EmitClampRcxToStrCap(cap: Integer);
 { rcx = source string length about to be copied into a frozen inline buffer.
   Clamp it to the destination's capacity — a `string[N]` (or plain frozen
@@ -2245,7 +2276,7 @@ begin
             if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
               begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); end  { movq xmm0, rax }
             else
-              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, rax }
+              EmitCvtSi2SdOrU64(0, 0, IntToTypeKind(IRTk[IRB[node]])); { cvtsi2sd xmm0, rax (u64-aware) }
           end
           else if CProgramMode and TypeIsFloat(IntToTypeKind(IRTk[IRB[node]]))
                   and (IRKind[IRB[node]] <> IR_LEA) then
@@ -2782,7 +2813,7 @@ begin
             feature-int-to-float-assign. }
           if TypeIsFloat(tk) and not TypeIsFloat(IntToTypeKind(IRTk[valueNode])) then
           begin
-            EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9); { cvtsi2sd xmm1, rcx }
+            EmitCvtSi2SdOrU64(1, 1, IntToTypeKind(IRTk[valueNode])); { cvtsi2sd xmm1, rcx (u64-aware) }
             EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C9); { movq rcx, xmm1 }
           end;
 
@@ -3096,12 +3127,12 @@ begin
              (op = tkSlash) then
           begin
             if not TypeIsFloat(lhsTk) then
-              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); end  { cvtsi2sd xmm1, rax }
+              EmitCvtSi2SdOrU64(1, 0, lhsTk)  { cvtsi2sd xmm1, rax (u64-aware) }
             else
               begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8); end; { movq xmm1, rax }
 
             if not TypeIsFloat(rhsTk) then
-              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C1); end  { cvtsi2sd xmm0, rcx }
+              EmitCvtSi2SdOrU64(0, 1, rhsTk)  { cvtsi2sd xmm0, rcx (u64-aware) }
             else
               begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C1); end; { movq xmm0, rcx }
 
