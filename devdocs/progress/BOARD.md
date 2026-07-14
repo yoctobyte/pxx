@@ -28,12 +28,14 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
+| bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
+| bug-pascal-toperator93-runtime-segfault | A | 50 | bug | toperator93.pp compiles but the pxx binary SEGFAULTS (exit 139) — class-operator shape crashes at runtime | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-testmgr-aarch64-conformance-shard3-timeout-flake | T | 35 | bug | test-c-conformance-aarch64#shard3 00040.c times out (exit 124) under full parallel load; passes standalone — recurring flake | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -979,6 +981,7 @@ _none_
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
+- [p 55] [A] bug-pascal-forin-variants-wrong-output
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [T] compat-pascal-copy-of-char-literal
 - [p 55] [A] feature-c-corpus-duktape
@@ -994,6 +997,7 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [B] bug-crtl-stdint-constant-macros
+- [p 50] [A] bug-pascal-toperator93-runtime-segfault
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-fpjson-fpcunit-suite-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
