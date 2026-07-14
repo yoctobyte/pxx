@@ -1316,6 +1316,7 @@ var
                            type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
+  LastTypePointerAlias : Integer;  { set by ParseTypeKind when a pointer type resolves through a NAMED alias: that alias index, else -1 (see UFldPtrAlias) }
   LastTypePointerDepth : Integer;
   LastTypePointerBaseTk : Integer;
   LastTypePointerBaseRec : Integer;
@@ -1969,6 +1970,7 @@ var
   UFldAnonRec : array[0..MAX_UFIELD-1] of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
   UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
+  UFldPtrAlias : array[0..MAX_UFIELD-1] of Integer; { pointer field declared via a named pointer alias: that alias index, else -1. A field of type `PNode` inside `TNode` captures PtrElemRec BEFORE ResolvePendingPointerAliases fixes the forward `PNode = ^TNode` up, so it would keep REC_NONE forever and every `p^.next^.f` resolved at offset 0. Keeping the alias lets the same pass re-read it. }
   UFldProcSig : array[0..MAX_UFIELD-1] of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }
   UFldElemProcSig : array[0..MAX_UFIELD-1] of Integer; { POINTER-to-fn-ptr field (`ft *pf`): sig of the pointee fn-pointer, so `(*s.pf)(args)` finds the callee sig UFldProcSig drops; -1 = field not ptr-to-fn-ptr }
   UFldIsArray : array[0..MAX_UFIELD-1] of Boolean;

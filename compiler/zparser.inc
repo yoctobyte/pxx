@@ -153,6 +153,7 @@ procedure ZSetPtrType(elemTk: TTypeKind);
 begin
   LastTypePointerElemTk := elemTk;
   LastTypePointerElemRec := REC_NONE;
+  LastTypePointerAlias := -1;
   LastTypePointerDepth := 1;
   LastTypePointerBaseTk := Ord(elemTk);
   LastTypePointerBaseRec := REC_NONE;

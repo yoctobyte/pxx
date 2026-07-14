@@ -9105,6 +9105,7 @@ begin
     if UFldCount >= MAX_UFIELD - 1 then Break;   { pool nearly full: drop the rest }
     LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
     LastTypePointerElemRec := bfElemRec[k];
+    LastTypePointerAlias := -1;   { C struct fields carry their pointee directly; never re-read from the Pascal alias table }
     AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
     UFldAnonRec[UFldCount-1] := bfAnonRec[k];
     UFldIsArray[UFldCount-1] := bfIsArr[k];

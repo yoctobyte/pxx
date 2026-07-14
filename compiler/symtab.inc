@@ -653,6 +653,7 @@ begin
       UFldAnonRec[dst+k] := UFldAnonRec[src];
       UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
+      UFldPtrAlias[dst+k] := UFldPtrAlias[src];
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
       UFldSetElemTk[dst+k] := UFldSetElemTk[src];
       UFldIsArray[dst+k] := UFldIsArray[src];  UFldArrLen[dst+k] := UFldArrLen[src];
@@ -685,11 +686,13 @@ begin
   begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
     UFldPtrElemRec[fi] := LastTypePointerElemRec;
+    UFldPtrAlias[fi] := LastTypePointerAlias;
   end
   else
   begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemRec[fi] := REC_NONE;
+    UFldPtrAlias[fi] := -1;
   end;
   if tk = Ord(tySet) then
   begin
@@ -6340,7 +6343,7 @@ end;
 
 procedure ResolvePendingPointerAliases;
 var
-  i, ci, targetAlias: Integer;
+  i, ci, targetAlias, a: Integer;
   targetName: AnsiString;
 begin
   for i := 0 to AliasCount - 1 do
@@ -6372,6 +6375,27 @@ begin
           AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
         end;
       end;
+    end;
+  end;
+
+  { Now the record FIELDS declared through one of those aliases. A field's pointee
+    was copied out of the alias at AddUField time, which for the classic self-
+    referential idiom
+
+      type PNode = ^TNode;  TNode = record v: Integer; next: PNode; end;
+
+    is BEFORE the loop above learns what TNode is — so `next` kept REC_NONE, the
+    deref `p^.next^` lost the record identity, and every field after it resolved at
+    offset 0. `p^.next^.v` still "worked" (v IS at offset 0), which is what hid this:
+    only a second field, `p^.next^.next`, read back the wrong slot. }
+  for i := 0 to UFldCount - 1 do
+  begin
+    a := UFldPtrAlias[i];
+    if (UFldTk[i] = Ord(tyPointer)) and (UFldPtrElemRec[i] = REC_NONE) and
+       (a >= 0) and (a < AliasCount) and (AliasElemRec[a] <> REC_NONE) then
+    begin
+      UFldPtrElemTk[i] := AliasElemTk[a];
+      UFldPtrElemRec[i] := AliasElemRec[a];
     end;
   end;
 end;

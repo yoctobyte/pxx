@@ -2769,6 +2769,7 @@ var
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
+  autoDeref, peRec: Integer;
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -3918,6 +3919,29 @@ begin
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
 
+      { IMPLICIT DEREF: `p.field` where p is a pointer to a RECORD means `p^.field`
+        (FPC/Delphi). Without this the AN_FIELD was built straight over the pointer,
+        so the field resolved at an offset into the POINTER VALUE itself and read
+        back garbage — silently, with no error. Only fires when the pointee is a
+        record that really has this member, so nothing that resolves today changes:
+        a metaclass (`class of T`) pointee is a CLASS, not a record, and keeps its
+        own dispatch below. }
+      if tk = tyPointer then
+      begin
+        autoDeref := AllocNode(AN_DEREF);
+        ASTLeft[autoDeref] := node;
+        peRec := ResolveNodeRec(autoDeref);
+        if (peRec >= REC_UCLASS_BASE) and UClsIsRecord[peRec - REC_UCLASS_BASE] and
+           ((FindUField(peRec - REC_UCLASS_BASE, fieldName) >= 0) or
+            (FindUMeth(peRec - REC_UCLASS_BASE, fieldName) >= 0)) then
+        begin
+          ASTTk[autoDeref] := Ord(tyRecord);
+          node := autoDeref;
+          tk := tyRecord;
+          recName := peRec;
+        end;
+      end;
+
       { Metaclass-dispatched construction `classRef.Create(args)`: the base is a
         metaclass value — either a `class of T` variable (AN_IDENT, a tyPointer
         whose element is a class) or an inline metaclass cast `TFooClass(expr)`
@@ -4473,6 +4497,15 @@ begin
           Continue;
         end;
       end;
+      { A pointer with NO pointee record has no member namespace to search: a plain
+        `Pointer`, or a typed pointer to a non-record. The old fall-through built an
+        AN_FIELD over it anyway, which lowered to "the pointer, at offset 0" — so
+        `q.NoSuchThing` compiled and yielded the pointer itself, turning a typo into
+        a silent no-op. A pointer TO a record has already been auto-dereffed above,
+        and a metaclass has taken its own branch, so neither reaches here. }
+      if (tk = tyPointer) and (recName = REC_NONE) then
+        Error('"' + fieldName + '": a pointer has no members (dereference it with ^, or the pointee type is unknown here)');
+
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := propFOff;
@@ -14753,6 +14786,7 @@ begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
+  LastTypePointerAlias := -1;
   LastTypePointerDepth := 0;
   LastTypePointerBaseTk := Ord(tyUnknown);
   LastTypePointerBaseRec := REC_NONE;
@@ -15087,6 +15121,11 @@ begin
               begin
                 LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 LastTypePointerElemRec := AliasElemRec[aliasIdx];
+                { The alias may still be an unresolved FORWARD (`PNode = ^TNode` ahead
+                  of TNode): its element is REC_NONE right now and only
+                  ResolvePendingPointerAliases fills it in. Record which alias this was
+                  so a field declared here can be re-read then. }
+                LastTypePointerAlias := aliasIdx;
                 LastTypePointerDepth := AliasPtrDepth[aliasIdx];
                 LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
                 LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];

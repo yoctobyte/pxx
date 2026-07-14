@@ -808,6 +808,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_symslot_stale_ndims26)" = "136"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
+	./$(COMPILER) test/test_forward_ptr_record_field.pas /tmp/test_fwd_ptr_rec26
+	test "$$(/tmp/test_fwd_ptr_rec26 | tail -1)" = "PASS"
+	! ./$(COMPILER) test/test_pointer_member_fail.pas /tmp/test_ptr_member_fail26 > /tmp/test_ptr_member_fail.log 2>&1
+	grep -q "a pointer has no members" /tmp/test_ptr_member_fail.log
 	! ./$(COMPILER) test/test_overload_record_identity_fail.pas /tmp/test_overload_record_identity_fail26 > /tmp/test_overload_record_identity_fail.log 2>&1
 	grep -q "no overload of Dot matches" /tmp/test_overload_record_identity_fail.log
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
