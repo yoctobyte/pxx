@@ -1115,6 +1115,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/cglobal_addr_multidim_b31226)" = "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
 	# a 1-D GLOBAL pointer array with an element the flat pre-scan can't fold (&g,
 	# (void*)0, &a[i][j], a cast) was zero-skipped WHOLE; now defers to the walker
+	# LOCAL multidim brace elision: short rows zero-fill, never bleed (b367)
+	./$(COMPILER) test/clocal_multidim_brace_elision_b367.c /tmp/clocal_mdbe_b36726
+	test "$$(/tmp/clocal_mdbe_b36726)" = "$$(printf 'a=1 0 2 0\nb=3 4 6\nc=3 4 6\nd=9 0 8 7\ne=1 0 2 3 0\nf=1.5 0.0 2.5')"
 	# pragma pack(N)/push/pop must cap member alignment (was parsed away; b366)
 	./$(COMPILER) test/cpragma_pack_b366.c /tmp/cpragma_pack_b36626
 	test "$$(/tmp/cpragma_pack_b36626)" = "$$(printf 'A=5 offA=1\nB=8 offB=4\nC=6 offC=2\nD=8 offD=4')"

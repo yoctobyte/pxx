@@ -3320,6 +3320,8 @@ var baseTk, declTk, scalarTk: TTypeKind;
     hadStar: Boolean;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
+    beFlat, beBelow: Integer;
+    beStack: array[0..MAX_ARR_DIMS-1] of Integer;
     recBase, fldI, fTk, fieldNode, recArrInitCount: Integer;
     dimCount, dimVal, flatLen, di, tdArrLen: Integer;
     wcp, wb0, wb1, wb2, wnb, wsoff, wslen: Integer;
@@ -3591,16 +3593,36 @@ begin
       begin
         Next; Next;   { consume the assign then the open brace }
         brDepth := 1;
+        beFlat := 0;
         while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
         begin
           if CurTok.Kind = tkBegin then
           begin
+            { C99 6.7.8p21: a nested brace opens the NEXT sub-aggregate of the
+              enclosing dimension. Round the flat cursor UP to that dimension's
+              element boundary — a SHORT previous row is zero-filled by
+              skipping, not bled into (`{{1},{2}}` used to flatten to 1,2 in
+              row 0; bug-c-multidim-brace-elision-flattens-rows). }
+            beBelow := 1;
+            for di := brDepth to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+            if beBelow < 1 then beBelow := 1;
+            if (beFlat mod beBelow) <> 0 then
+              beFlat := ((beFlat div beBelow) + 1) * beBelow;
+            if brDepth < MAX_ARR_DIMS then beStack[brDepth] := beFlat;
             Inc(brDepth);
             Next;
           end
           else if CurTok.Kind = tkEnd then
           begin
             Dec(brDepth);
+            if (brDepth >= 1) and (brDepth < MAX_ARR_DIMS) then
+            begin
+              { closing a sub-aggregate: jump to its end (tail stays zero) }
+              beBelow := 1;
+              for di := brDepth to dimCount - 1 do beBelow := beBelow * dimSpan[di];
+              if beBelow < 1 then beBelow := 1;
+              beFlat := beStack[brDepth] + beBelow;
+            end;
             Next;
           end
           else if CurTok.Kind = tkComma then
@@ -3609,10 +3631,15 @@ begin
           begin
             if nArrElems > 255 then Error('too many C array initializer elements');
             arrElems[nArrElems] := ParseCExpr;
-            arrElemIdx[nArrElems] := nArrElems;   { row-major flat position }
+            arrElemIdx[nArrElems] := beFlat;   { row-major flat position }
             Inc(nArrElems);
+            Inc(beFlat);
           end;
         end;
+        { the store loop honours arrElemIdx only under this flag; the sizing
+          arms it feeds are all dimCount<=1-guarded, so multi-dim sizing
+          (flatLen from the declared dims) is unaffected }
+        hadArrDesig := True;
       end
       else if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
          (Tokens[TokPos].Kind = tkBegin) and (dimCount <= 1) then
