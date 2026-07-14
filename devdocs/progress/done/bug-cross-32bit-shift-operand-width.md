@@ -8,7 +8,7 @@ prio: 60
 
 - **Type:** bug (silent wrong values on all three 32-bit targets). **Track A**
   (EmitBinop64_386 / EmitBinop64Arm32 / EmitBinop64RISCV32 shift arms).
-- **Status:** working (fable-nightA) — fixed same session.
+- **Status:** done
 - **Opened:** 2026-07-15, found by the FIRST `pasmith_run --wide --cross`
   sweep (enabled tonight by the shortstring-truncation fix): 15/60 seeds
   diverged, ALL fifteen signatures collapsed to this one bug (seed 60
@@ -38,3 +38,6 @@ In all three pair-shift arms:
 - test_shift_operand_width.pas: shr/shl on longint + cardinal, byte-identical
   to FPC on x86-64, arm32, i386, riscv32 (aarch64 shares x86-64's model).
 - pasmith --seeds 1-60 --wide --cross: 15 divergences -> 0.
+
+## Log
+- 2026-07-15 — resolved, commit 6fec1e61.

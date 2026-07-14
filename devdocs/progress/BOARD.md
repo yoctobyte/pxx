@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (740)
+## done (741)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -371,6 +371,7 @@ _none_
 | bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
 | bug-cross-32bit-int64-to-double-low-word | A | 55 | bug | arm32/i386: Int64/QWord -> Double conversion converts only the LOW word — d := int64(1) shl 40 gives 0, silently | — |
+| bug-cross-32bit-shift-operand-width | A | 60 | bug | arm32/i386/riscv32: shr/shl on a 32-bit operand ran at 64-bit pair width on the sign-extended value — longint($80000000) shr 9 gave -4194304 | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-cross-metaclass-new-with-args | A | 55 | bug | Metaclass construction WITH ARGUMENTS segfaults on every non-x86-64 target | — |
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
