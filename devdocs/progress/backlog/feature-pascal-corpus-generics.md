@@ -90,3 +90,15 @@ FPC-compatible TypInfo surface (big, cross-cutting — the same boundary as
 feature-embed-dwscript-rtti), or a pxx-native Generics.Defaults implementation
 (a FORK, which corpus rules resist). Decision needed before this rung
 continues; helpers unit itself now compiles.
+
+## User call 2026-07-14: decisions DELAYED. Analysis of where RTTI layout matters
+Raw FPC TTypeData BYTE layout matters almost nowhere: consumers (generics.
+defaults, fpjsonrtti, LFM streaming, mORMot-style serializers, script embeds)
+read through the typinfo UNIT's record definitions + accessors (GetTypeData,
+GetPropInfo, GetEnumName) — and those definitions live IN typinfo. So the
+fork-free path when resumed: a FACADE lib/rtl/typinfo.pas declaring FPC's
+record/API shapes backed by OUR blobs. The real compiler gap underneath is
+TypeInfo(T) being enum-only — generics.defaults needs per-TYPE info blobs
+(scalars/strings/records/classes, incl. generic params). Layout parity itself:
+only needed for code doing pointer arithmetic past the published API (rare;
+punt until a corpus target actually does it).
