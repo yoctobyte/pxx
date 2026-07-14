@@ -13,11 +13,11 @@ prio: 35
 
 ## Remaining scope
 
-- **Cross backends:** IR_BINOP ival=1 is currently IGNORED on
-  i386/arm32/riscv32/aarch64/xtensa — {$Q+} programs run unchecked there.
-  aarch64: adds/subs + b.vs (signed) / b.cs–b.cc (unsigned), mul via
-  umulh/smulh compare. 32-bit pairs: carry-chain out of the hi-word
-  add/sub; mul via the existing widening sequences' high half.
+- **aarch64: DONE** (see the aarch64-leg commit) — adds/subs + b.vs/carry,
+  smulh/umulh checked muls, cross Makefile check green under qemu.
+- **Remaining cross:** i386/arm32/riscv32/xtensa still ignore ival=1 —
+  32-bit pairs need the carry-chain out of the hi-word add/sub; mul via
+  the existing widening sequences' high half.
 - **Succ/Pred/Abs/Sqr** inside {$Q+} (FPC checks them; we only tag +,-,*).
 - **Subword widths:** checks currently fire at the promoted 64-bit width;
   FPC checks byte/word/longint ops at their own range. Needs the result
