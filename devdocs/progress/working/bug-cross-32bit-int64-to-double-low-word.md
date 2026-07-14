@@ -8,7 +8,7 @@ prio: 55
 
 - **Type:** bug (silent wrong value, both 32-bit hosted targets). **Track A**
   (ir_codegen_arm32.inc, ir_codegen386.inc int→float conversion paths).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14 (night session), found while fixing
   [[bug-pascal-qword-to-double-signed]].
 
