@@ -538,7 +538,24 @@ begin
   ]);
 end;
 
-procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean);
+procedure EmitOvfTrapRISCV32;
+{ {$Q+} overflow trap, riscv32 leg: t3 = 1 means the just-computed pair op
+  wrapped — branch around a PXXOverflow call otherwise (the branch is
+  re-encoded once the call length is known;
+  feature-overflow-checks-cross-and-intrinsics). }
+var pSkip, procIdx: Integer;
+begin
+  pSkip := CodeLen;
+  rv32_beq(reg_t3, reg_zero, 0);           { patched below }
+  procIdx := FindProc('PXXOverflow');
+  if procIdx < 0 then
+    Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+  EmitCallProc(procIdx);
+  Patch32(pSkip, EncodeRISCVBEQ(reg_t3, reg_zero, CodeLen - pSkip));
+end;
+
+procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean;
+  qchk, qchkUns: Boolean);
 { (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
   popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
 begin
@@ -559,19 +576,71 @@ begin
   end
   else if op = Ord(tkPlus) then
   begin
+    if qchk then rv32_addi(reg_t6, reg_a1, 0);  { save b_hi (clobbered below) }
     rv32_add(reg_t2, reg_t0, reg_a0);   { lo = t0 + a0 }
     rv32_sltu(reg_t3, reg_t2, reg_t0);  { carry }
     rv32_add(reg_a1, reg_t1, reg_a1);   { hi = t1 + a1 }
     rv32_add(reg_a1, reg_a1, reg_t3);   { hi += carry }
     rv32_addi(reg_a0, reg_t2, 0);
+    if qchk then
+    begin
+      { {$Q+}: no flags on RISC-V — derive the 64-bit verdict into t3.
+        Unsigned: wrapped iff result < left. Signed: operand signs equal
+        and result sign differs. Checked MUL is not ported here yet. }
+      if qchkUns then
+      begin
+        rv32_sltu(reg_t3, reg_a1, reg_t1);   { r_hi < a_hi }
+        rv32_xor(reg_t4, reg_a1, reg_t1);
+        rv32_sltiu(reg_t4, reg_t4, 1);       { hi equal }
+        rv32_sltu(reg_t5, reg_a0, reg_t0);   { r_lo < a_lo }
+        rv32_and(reg_t4, reg_t4, reg_t5);
+        rv32_or(reg_t3, reg_t3, reg_t4);
+      end
+      else
+      begin
+        rv32_xor(reg_t3, reg_t1, reg_a1);    { a_hi ^ r_hi }
+        rv32_xor(reg_t4, reg_t6, reg_a1);    { b_hi ^ r_hi }
+        rv32_and(reg_t3, reg_t3, reg_t4);
+        rv32_srli(reg_t3, reg_t3, 31);
+      end;
+      EmitOvfTrapRISCV32;
+    end;
   end
   else if op = Ord(tkMinus) then
   begin
+    if qchk then
+    begin
+      if qchkUns then
+      begin
+        { unsigned borrow iff left < right, computed before anything moves }
+        rv32_sltu(reg_t6, reg_t1, reg_a1);   { a_hi < b_hi }
+        rv32_xor(reg_t4, reg_t1, reg_a1);
+        rv32_sltiu(reg_t4, reg_t4, 1);
+        rv32_sltu(reg_t5, reg_t0, reg_a0);
+        rv32_and(reg_t4, reg_t4, reg_t5);
+        rv32_or(reg_t6, reg_t6, reg_t4);     { t6 = borrow verdict }
+      end
+      else
+        rv32_addi(reg_t6, reg_a1, 0);        { save b_hi }
+    end;
     rv32_sltu(reg_t3, reg_t0, reg_a0);  { borrow }
     rv32_sub(reg_t2, reg_t0, reg_a0);   { lo }
     rv32_sub(reg_a1, reg_t1, reg_a1);   { hi }
     rv32_sub(reg_a1, reg_a1, reg_t3);   { hi -= borrow }
     rv32_addi(reg_a0, reg_t2, 0);
+    if qchk then
+    begin
+      if qchkUns then
+        rv32_addi(reg_t3, reg_t6, 0)
+      else
+      begin
+        rv32_xor(reg_t3, reg_t1, reg_t6);    { a_hi ^ b_hi }
+        rv32_xor(reg_t4, reg_t1, reg_a1);    { a_hi ^ r_hi }
+        rv32_and(reg_t3, reg_t3, reg_t4);
+        rv32_srli(reg_t3, reg_t3, 31);
+      end;
+      EmitOvfTrapRISCV32;
+    end;
   end
   else if op = Ord(tkStar) then
   begin
@@ -1507,7 +1576,9 @@ begin
            Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
         begin
           EmitBinop64RISCV32(left, right, op,
-            not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)));
+            not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;
 
