@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** bug (silent wrong value). **Track A** (IR float-conversion lowering,
   all backends).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** tint642.pp burn-down (testqwordtypecast, `do_error(20)`) while
   resolving [[bug-pascal-record-cast-field-offset]].
@@ -46,3 +46,6 @@ so they inherit the bug.
 - tint642.pp passes and drops from `test/pascal-conformance/pxx.skip`
   (check the rest of the test runs green past error 20 — it is a torture test,
   more walls may hide behind this one).
+
+## Log
+- 2026-07-14 — resolved, commit 30eb98f0.
