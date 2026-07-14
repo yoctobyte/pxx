@@ -1115,6 +1115,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/cglobal_addr_multidim_b31226)" = "$$(printf '3d=77 off=200 want=200\n2d=66 off=17 want=17\n1d=55 off=5 want=5\n0 =44 off=0 want=0\nstored=11 22')"
 	# a 1-D GLOBAL pointer array with an element the flat pre-scan can't fold (&g,
 	# (void*)0, &a[i][j], a cast) was zero-skipped WHOLE; now defers to the walker
+	# pragma pack(N)/push/pop must cap member alignment (was parsed away; b366)
+	./$(COMPILER) test/cpragma_pack_b366.c /tmp/cpragma_pack_b36626
+	test "$$(/tmp/cpragma_pack_b36626)" = "$$(printf 'A=5 offA=1\nB=8 offB=4\nC=6 offC=2\nD=8 offD=4')"
 	./$(COMPILER) test/cglobal_1d_ptr_array_addr_init_b350.c /tmp/cglobal_1d_ptr_array_b35026
 	test "$$(/tmp/cglobal_1d_ptr_array_b35026)" = "$$(printf 'g474=7 7\nholes=-1 7 -1 7\nmix=null hi zz\ndeep=6 2\nunsized=7 -1 7 n=3\ndblderef=7')"
 	# a SCALAR pointer global init the fast paths can't fold ((char*)&g, &st.f,

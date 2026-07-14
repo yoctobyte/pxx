@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (C frontend — record layout; silent ABI mismatch)
 - **Track:** C — C frontend (record layout) — file-lane A for `symtab.inc` layout code
-- **Status:** backlog. **REWRITTEN 2026-07-14** — this ticket used to be
+- **Status:** working
   `bug-c-bitfield-packing-sizeof-vs-gcc` and blamed the bitfield storage-unit algorithm.
   **That diagnosis was wrong**, and anyone following it would have rewritten code that is
   already correct. See "What the old ticket got wrong" below.

@@ -4683,6 +4683,43 @@ begin
   Result := maxSeen + 1;
 end;
 
+var
+  CPackAlign: Integer;                     { #pragma pack cap in effect; 0 = default }
+  CPackSP: Integer;
+  CPackStack: array[0..31] of Integer;
+
+function CIsPackMarker: Boolean;
+{ `__PXX_PACK(op,n);` — the marker cpreproc substitutes for `#pragma pack` so
+  the pack state changes at the exact source position during PARSE (both
+  passes walk the same tokens, so both apply it; the pass loops reset the
+  stack). See bug-c-pragma-pack-ignored. }
+begin
+  Result := (CurTok.Kind = tkIdent) and (CurTok.SVal = '__PXX_PACK');
+end;
+
+procedure CApplyPackMarker;
+var op, n: Integer;
+begin
+  Next;                                    { __PXX_PACK }
+  Expect(tkLParen, '(');
+  op := Integer(CurTok.IVal); Next;
+  Expect(tkComma, ',');
+  n := Integer(CurTok.IVal); Next;
+  Expect(tkRParen, ')');
+  Eat(tkSemicolon);
+  case op of
+    0: CPackAlign := n;                    { pack(N) / pack() -> N / default }
+    1: begin                               { pack(push[,N]) }
+         if CPackSP <= High(CPackStack) then
+         begin CPackStack[CPackSP] := CPackAlign; Inc(CPackSP); end;
+         if n > 0 then CPackAlign := n;
+       end;
+    2: if CPackSP > 0 then                 { pack(pop) }
+       begin Dec(CPackSP); CPackAlign := CPackStack[CPackSP]; end
+       else CPackAlign := 0;
+  end;
+end;
+
 function CBraceIsFlatIntInit: Boolean;
 begin
   Result := CBraceFlatIntInitCountAt(TokPos - 1, False) >= 0;
@@ -7100,9 +7137,11 @@ begin
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
+  CPackAlign := 0; CPackSP := 0;
   while CurTok.Kind <> tkEOF do
   begin
-    if CIsTopLevelTypeDecl then
+    if CIsPackMarker then CApplyPackMarker
+    else if CIsTopLevelTypeDecl then
     begin
       if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
       else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
@@ -7134,9 +7173,11 @@ begin
   begin
     TokPos := crtlStart; Next;
     CHeaderMode := True;
+    CPackAlign := 0; CPackSP := 0;
     while CurTok.Kind <> tkEOF do
     begin
-      if CIsTopLevelTypeDecl then
+      if CIsPackMarker then CApplyPackMarker
+      else if CIsTopLevelTypeDecl then
       begin
         if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
         else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
@@ -7155,9 +7196,11 @@ begin
 
   { pass 2: compile function bodies; types/globals already done in pass 1 }
   TokPos := firstIdx; Next;
+  CPackAlign := 0; CPackSP := 0;
   while CurTok.Kind <> tkEOF do
   begin
-    if CIsTopLevelTypeDecl then
+    if CIsPackMarker then CApplyPackMarker
+    else if CIsTopLevelTypeDecl then
       SkipCDeclToSemi
     else if IsCTypeTok then
     begin
@@ -7172,9 +7215,11 @@ begin
   if crtlStart >= 0 then
   begin
     TokPos := crtlStart; Next;
+    CPackAlign := 0; CPackSP := 0;
     while CurTok.Kind <> tkEOF do
     begin
-      if CIsTopLevelTypeDecl then
+      if CIsPackMarker then CApplyPackMarker
+      else if CIsTopLevelTypeDecl then
         SkipCDeclToSemi
       else if IsCTypeTok then
       begin
@@ -8829,6 +8874,9 @@ begin
         fieldPacked := structPacked or CAttrPackedInRange(attrEndIdx, attrEndIdx);
         fieldAlign := CAttrAlignInRange(attrEndIdx, attrEndIdx);
         if fieldPacked then al := 1;
+        { #pragma pack(N) in effect: cap the member's alignment at N (an
+          explicit aligned attribute below still raises, matching gcc). }
+        if (CPackAlign > 0) and (al > CPackAlign) then al := CPackAlign;
         if fieldAlign > al then al := fieldAlign;
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, al);
         if (subci >= 0) and (bfCount < MAX_BF) then
@@ -9092,6 +9140,9 @@ begin
         fieldPacked := structPacked or CAttrPackedInRange(declStartIdx, attrEndIdx);
         fieldAlign := CAttrAlignInRange(declStartIdx, attrEndIdx);
         if fieldPacked then al := 1;
+        { #pragma pack(N) in effect: cap the member's alignment at N (an
+          explicit aligned attribute below still raises, matching gcc). }
+        if (CPackAlign > 0) and (al > CPackAlign) then al := CPackAlign;
         if fieldAlign > al then al := fieldAlign;
 
         if isBitField then

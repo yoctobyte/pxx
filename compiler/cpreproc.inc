@@ -308,6 +308,21 @@ end;
   macro entry cloning mi's value/params (newest-wins, so it becomes active), or
   tombstone the name when the snapshot was "undefined" (mi < 0). mi's value
   fields survive an intervening #undef (which only sets NameLen := -1). }
+function CPSmallIntStr(n: Integer): AnsiString;
+{ Decimal text of a small non-negative int (pack ops/values) — the self-build
+  has no IntToStr in this unit's dialect surface. }
+var r: AnsiString;
+begin
+  if n <= 0 then begin Result := '0'; Exit; end;
+  r := '';
+  while n > 0 do
+  begin
+    r := Chr(Ord('0') + (n mod 10)) + r;
+    n := n div 10;
+  end;
+  Result := r;
+end;
+
 procedure CPPragmaRestore(mi: Integer; const line: AnsiString; nameA, nameB: Integer);
 var ni, cur: Integer;
 begin
@@ -335,7 +350,7 @@ end;
   macro also named push_macro/pop_macro — c-testsuite 00206 defines both — does
   not interfere. }
 procedure CPPragma(const line: AnsiString; p, last: Integer);
-var a, b, nameA, nameB, mi, k, kk: Integer; isPush, isPop: Boolean;
+var a, b, nameA, nameB, mi, k, kk, packOp, packN: Integer; isPush, isPop: Boolean;
 begin
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   a := p;
@@ -343,6 +358,47 @@ begin
   b := p - 1;
   isPush := CPRangeIsLiteral(line, a, b, 'push_macro');
   isPop  := CPRangeIsLiteral(line, a, b, 'pop_macro');
+  { #pragma pack(N) / pack() / pack(push[,N]) / pack(pop): layout happens at
+    PARSE time, so rewrite the directive into a `__PXX_PACK(op,n);` marker at
+    this exact source position; the C parser maintains the pack stack and
+    ParseCStructInto caps member alignment (bug-c-pragma-pack-ignored).
+    op: 0 = set (n=0 -> default), 1 = push (n=0 -> keep current), 2 = pop. }
+  if CPRangeIsLiteral(line, a, b, 'pack') then
+  begin
+    packOp := 0; packN := 0;
+    while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
+    if (p <= last) and (line[p] = '(') then
+    begin
+      Inc(p);
+      while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
+      { push/pop keyword only when the argument does not START with a digit —
+        digits are identifier chars, so an ident scan would swallow a bare
+        `pack(1)`'s number and leave n = 0. }
+      if (p <= last) and not (line[p] in ['0'..'9']) then
+      begin
+        a := p;
+        while (p <= last) and CPIsIdentChar(line[p]) do Inc(p);
+        b := p - 1;
+        if b >= a then
+        begin
+          if CPRangeIsLiteral(line, a, b, 'push') then packOp := 1
+          else if CPRangeIsLiteral(line, a, b, 'pop') then packOp := 2;
+        end;
+      end;
+      while (p <= last) and (line[p] in [' ', #9, ',']) do Inc(p);
+      while (p <= last) and (line[p] in ['0'..'9']) do
+      begin
+        packN := packN * 10 + (Ord(line[p]) - Ord('0'));
+        Inc(p);
+      end;
+    end;
+    CPrepOutAppendStr(' __PXX_PACK(');
+    CPrepOutAppendStr(CPSmallIntStr(packOp));
+    CPrepOutAppendStr(',');
+    CPrepOutAppendStr(CPSmallIntStr(packN));
+    CPrepOutAppendStr('); ');
+    Exit;
+  end;
   if not (isPush or isPop) then Exit;
   while (p <= last) and (line[p] <> '"') do Inc(p);
   if p > last then Exit;
