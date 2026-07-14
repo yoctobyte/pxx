@@ -7,7 +7,7 @@ prio: 55
 - **Type:** feature (IR/codegen — dynamic frame) — **Track A** (needs an IR-level
   dynamic-stack op the backends lower; the cfront call-site recognition is the
   trivial part)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-12, the third wall of the QuickJS bring-up
   ([[feature-c-corpus-quickjs]]).
 
@@ -45,3 +45,6 @@ malloc-backed shim is NOT acceptable here: every JS call would leak its frame.
 - QuickJS compiles past its alloca sites (the bring-up's next wall becomes
   visible).
 - Self-host byte-identical + cross gates green (op unused by Pascal paths).
+
+## Log
+- 2026-07-15 — resolved, commit 09ca395c.

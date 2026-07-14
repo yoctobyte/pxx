@@ -32,6 +32,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-testmgr-aarch64-conformance-shard3-timeout-flake | T | 35 | bug | test-c-conformance-aarch64#shard3 00040.c times out (exit 124) under full parallel load; passes standalone — recurring flake | — |
@@ -47,7 +48,6 @@ _none_
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
-| feature-c-alloca-dynamic-stack | A | 55 | feature | alloca(): dynamic stack allocation for the C frontend | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
 | feature-c-csmith-differential-fuzzing | C | 60 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (739)
+## done (740)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -592,6 +592,7 @@ _none_
 | feature-binary-integer-literals | A | 50 | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | 50 | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-c-alignment-attributes | C | 50 | feature | Support parsing and enforcing struct alignment and packed attributes in C header import | — |
+| feature-c-alloca-dynamic-stack | A | 55 | feature | alloca(): dynamic stack allocation for the C frontend | — |
 | feature-c-cmdline-define-flag | C | 40 | feature | C frontend: support `-D<name>[=<value>]` command-line macro defines | — |
 | feature-c-compiler-dynarrays | A | 60 | feature | Compiler: port fixed-size in-RAM tables to dynarrays / source-size allocation | — |
 | feature-c-compound-literals | C | 53 | feature | C compound literals `(struct S){...}` — file scope SIGSEGVs, init battery fails | — |
@@ -977,7 +978,6 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [T] compat-pascal-copy-of-char-literal
-- [p 55] [A] feature-c-alloca-dynamic-stack
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
@@ -990,6 +990,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [B] bug-crtl-stdint-constant-macros
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-fpjson-fpcunit-suite-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
