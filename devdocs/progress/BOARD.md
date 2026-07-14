@@ -28,13 +28,14 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (96)
+## backlog (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-not-of-ord-uses-boolean-negation | A | 72 | bug | not ord(x) computes a BOOLEAN not (xor 1) instead of a bitwise complement — silently wrong integer | — |
+| bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
 | bug-pascal-shortstring-no-truncation-buffer-overrun | A | 78 | bug | string[N] assignment does not truncate: pxx writes past the buffer and clobbers the next variable | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -96,6 +97,7 @@ _none_
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
+| feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
@@ -964,6 +966,7 @@ _none_
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
+- [p 55] [A] bug-pascal-record-cast-field-offset
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [T] compat-pascal-copy-of-char-literal
 - [p 55] [A] feature-c-alloca-dynamic-stack
@@ -1010,6 +1013,7 @@ _none_
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [A] feature-parallel-processing
 - [p 45] [P] feature-pascal-corpus-passrc
+- [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl

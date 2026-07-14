@@ -94,10 +94,9 @@ toperator78.pp	gap: global operator overloads on primitive/set types (**, ><, di
 toperator89.pp	gap: overloading implicit assignment operator `:=` (global operator)
 toperator9.pp	gap: operator overload for `in` on a record type not supported by the parser
 tover1.pp	gap: overload resolution across shortstring/ansistring/widestring/pchar params
-tset1.pp	gap: RTL `RandSeed` variable missing (Random seeding); rest is plain set ops
 tsetsize.pp	wontfix: asserts FPC's exact set-size/packing layout (SizeOf(set of subrange))
 tstatic5.pp	gap: `class var` blocks and class properties in classes not implemented
-tstring10.pp	gap: RTL `Flush(output)` missing; also punicodechar/unicodestring conversions
+tstring10.pp	gap: punicodechar/pwidechar value casts + unicodestring/widestring conversions (Flush/Output landed)
 tstring11.pp	gap: overload resolution RawByteString vs UnicodeString (char/array/pchar args)
 tstring1.pp	gap: shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
 tstring3.pp	gap: typed-const array of short/ansistring initialized from char & resourcestring consts
@@ -106,7 +105,6 @@ tstring9.pp	gap: pchar / array-of-char assignment to string and widestring conve
 tarray1.pp	gap: open-array constructor of class-of (metaclass) values `p([tc2])`
 tarray3.pp	gap: typed-const array-of-char from string literal, openstring {$P+}, char-array/string compare
 tarray6.pp	gap: local var-section initializers (`var S: AnsiString = 'abcd'`) + wide/ansi conversions
-tarray8.pp	gap: RTL `UniqueString` missing; also `out` open-array-of-string implicit init
 tclass13a.pp	gap: nested `type` sections inside classes (nested class overriding parent's)
 tclass13d.pp	gap: `const` section inside a class (class constants / typed class consts)
 tclass3.pp	gap: bare `inherited;` forwarding the caller's arguments to the ancestor constructor
@@ -138,7 +136,7 @@ tgeneric7.pp	gap: generics across units + $R range-check state per unit (expects
 tgeneric8.pp	gap: objfpc generic syntax + inline methods over nested generic types
 tgeneric9.pp	gap: two-parameter generic `TMap<TK,TD>` specialization produces wrong result
 tgeneric92.pp	gap: objfpc generic syntax + `with` over a generic type parameter record
-tint642.pp	gap: RTL `HexStr` missing; qword arithmetic torture test
+tint642.pp	gap: record-cast lvalue field offset bug — tqwordrec(q).high reads/writes offset 0 (bug-pascal-record-cast-field-offset); HexStr/Lo/Hi/Swap/Erase landed
 tint643.pp	gap: `on eintoverflow do` handler without a var name; qword overflow ($Q+) detection
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
@@ -164,8 +162,6 @@ tset2c.pp	gap: explicit enum ordinal values (dA:=17) + {$packset 1} packed-set s
 tset2d.pp	gap: explicit enum ordinal values (dA:=17) + {$packset 2} packed-set semantics
 tstring2.pp	gap: RTL `ExitCode` variable missing (needed by erroru unit); char-array to shortstring assign
 tstring5.pp	gap: RTL `ExitCode` variable missing (needed by testsuite erroru unit); ansistring compares
-tstring7.pp	gap: RTL `RunError` procedure missing
-tstring8.pp	gap: RTL `strings` unit StrPos (PChar routines)
 tcase2.pp	gap: subrange-of-enum type (workdays = mon..fri) and case over it
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	gap: advanced records in units — nested type/const/var/class var sections, static class methods

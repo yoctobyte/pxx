@@ -17,10 +17,16 @@ The four big clusters have their own tickets ([[bug-pascal-headerless-program]]
 [[bug-pascal-missing-diagnostics-fail-tests]] 13). This ticket tracks the rest
 (reasons verbatim in `test/pascal-conformance/pxx.skip`):
 
-- **RTL gaps (B):** `ExitCode` writable var (blocks every erroru-using test —
-  cheap, high value), `RandSeed`, `LowerCase`, `flush`, `DynArraySize`,
-  `IInterface`/`IEnumerator` base interfaces, `variants` unit, `fgl` unit,
-  `TAB` const.
+- **RTL gaps (B):** ~~`RandSeed`~~, ~~`flush`~~, ~~`strings` unit~~,
+  ~~`RunError`~~, ~~`UniqueString`~~, ~~`HexStr`/`Lo`/`Hi`/`Swap`/`Erase`~~ —
+  DONE 2026-07-14 (Track B burn: tset1/tstring7/tstring8/tarray8 greened,
+  293 pass / 0 fail). Remaining: `ExitCode` (NOT a plain var — needs
+  finalization execution + Halt semantics, split to
+  [[feature-pascal-exitcode-finalization-halt]], Track A), `LowerCase`,
+  `DynArraySize`/`DynArrayIndex`/`DynArraySetLength` (need dynarray TypeInfo
+  RTTI), `IInterface`/`IEnumerator` base interfaces, `variants` unit, `fgl`
+  unit, `TAB` const. tint642 re-triaged: blocked by
+  [[bug-pascal-record-cast-field-offset]], not RTL.
 - **Runtime faults (P/A, investigate first):** tforin3 + tstring1 segfault
   (139), tstring9 exit 2, tcase45_2/tcase46_2 exit 1, tarray11 exit 30,
   tover1 exit 1.
