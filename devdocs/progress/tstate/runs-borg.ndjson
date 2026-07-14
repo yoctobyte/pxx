@@ -621,3 +621,4 @@
 {"date": "2026-07-14T15:02:16Z", "fixed": [], "full": true, "new_red": ["test-lua-cross#src:test/lua/runner.c", "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh", "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh"], "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f", "tier": "full", "verdict": "RED", "wall": 195.2}
 {"date": "2026-07-14T15:05:01Z", "fixed": [], "full": false, "new_red": [], "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f", "tier": "opt", "verdict": "GREEN", "wall": 144.7}
 {"date": "2026-07-14T15:07:58Z", "fixed": [], "full": false, "new_red": [], "sha": "940b261f8678c2d8faa70035fe60e91f9f0c7a3f", "tier": "opt", "verdict": "GREEN", "wall": 113.0}
+{"date": "2026-07-14T15:14:53Z", "fixed": [], "full": false, "new_red": [], "sha": "8f80bf00f65e4e97878e80ce1790588b0ee333eb", "tier": "native", "verdict": "RED", "wall": 88.1}
