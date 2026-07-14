@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (737)
+## done (738)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -483,6 +483,7 @@ _none_
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
 | bug-pascal-overload-impl-decl-signature-match | P | 50 | bug | bug: an overloaded method's IMPLEMENTATION does not always match back to its DECLARATION | — |
 | bug-pascal-paren-expr-loses-class-id | P | 50 | bug | A parenthesised expression loses its class id: `(b as T)[i]` and `(b as T).ClassName` | — |
+| bug-pascal-qword-literal-binop-signed-demote | A | 50 | bug | qword + non-negative literal demoted to Int64: correct bits, but writeln/hi()/comparisons treated the result as SIGNED | — |
 | bug-pascal-qword-to-double-signed | A | 45 | bug | qword -> double conversion treats the value as SIGNED: q >= 2^63 converts to a negative double | — |
 | bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
 | bug-pascal-scopedenums-ignored | P | 50 | bug | {$SCOPEDENUMS} silently ignored — duplicate enum member resolves to the WRONG enum | — |

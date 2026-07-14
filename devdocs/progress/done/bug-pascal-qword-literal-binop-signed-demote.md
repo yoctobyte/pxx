@@ -9,7 +9,7 @@ prio: 50
 - **Type:** bug (silent wrong values — signed print, wrong hi() width, wrong
   ordering). **Track P** (shared parser typing) — filed per "board = the
   record"; fixed in the same night session that found it.
-- **Status:** working (fable-nightA)
+- **Status:** done
 - **Opened:** 2026-07-14, found in the tint642 burn-down right behind
   [[bug-pascal-qword-to-double-signed]].
 
@@ -40,3 +40,6 @@ Negative literals keep the signed domain (`q + (-1) = q - 1` verified).
 test_qword_literal_binop.pas (Makefile-registered) — all rows byte-identical
 to FPC 3.2.2 output. tint642 now runs through lo/hi and typecasts; its sole
 residual is {$Q+} overflow-checked arithmetic (skip entry updated).
+
+## Log
+- 2026-07-14 — resolved, commit 6590369e.
