@@ -5,7 +5,7 @@ prio: 45
 # `on E: T` descendant matching is closed-world per UNIT — later units' classes escape
 
 - **Type:** bug (exception semantics — Track A, found via Track P fpjson suite)
-- **Status:** backlog — opened 2026-07-13. Root-Exception catch-alls FIXED (b322);
+- **Status:** done
   this ticket is the general case.
 
 ## The defect
@@ -47,3 +47,34 @@ cross.
 ## Gate
 `make test` + self-host byte-identical + cross (exception paths exist on all
 targets).
+
+## 2026-07-14 — RESOLVED (commit 639525af, b339)
+
+Fixed with the runtime parent-chain walk this ticket proposed — but it needed **no new
+data table and no backend change**, because two pieces already existed:
+
+- `IR_EXC_STORE` already materializes the in-flight exception OBJECT from `BSS_EXC_OBJ`
+  into a symbol, so the handler can get at the object before deciding to match.
+- `__pxxInheritsFrom` already walks the RTTI blobs' parent chain, and `is` / `as`
+  (IRLowerClassMatch) were **already** moved onto it. The ticket's claim that they still
+  enumerate is stale — only the `except` path did.
+
+So the fix is: materialize the exception object, walk its parent chain, jump to the handler
+body on a hit. Pure IR over existing ops. The walk is factored out as
+`IRClassMatchRuntime(instSym, targetCi)` and shared with `IRLowerClassMatch`.
+`IR_EXC_MATCH` still follows it unchanged — that op is what jumps to the NEXT handler when
+nothing matched. Where the walk is unavailable (no builtin unit — ESP), the enumeration
+stays as the fallback.
+
+The b322 root-`Exception` shortcut is now subsumed by the general path but left in place: it
+is one unconditional jump versus a call, and it is the hot catch-all.
+
+Test `test/test_except_open_world_descendant_b339.pas` (+ two helper units): EDeep sits two
+levels below the handler's target, so the walk must really WALK; ENotMine descends from a
+SIBLING base and must still not be caught, which is what shows the walk discriminates rather
+than matching everything. Confirmed failing ("Unhandled exception") on a pre-fix build.
+
+Gate: `make test` green, self-host byte-identical, `make test-aarch64` green.
+
+## Log
+- 2026-07-14 — resolved, commit 639525af.
