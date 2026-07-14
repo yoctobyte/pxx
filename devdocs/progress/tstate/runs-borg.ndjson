@@ -628,3 +628,4 @@
 {"date": "2026-07-14T15:44:11Z", "fixed": ["test-core#src:test/test_platform_defines.pas@2"], "full": false, "new_red": [], "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c", "tier": "native", "verdict": "GREEN", "wall": 95.7}
 {"date": "2026-07-14T15:48:07Z", "fixed": ["test-lua-cross#src:test/lua/runner.c", "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh", "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh"], "full": true, "new_red": [], "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c", "tier": "full", "verdict": "GREEN", "wall": 217.6}
 {"date": "2026-07-14T15:50:18Z", "fixed": [], "full": false, "new_red": [], "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c", "tier": "opt", "verdict": "GREEN", "wall": 124.4}
+{"date": "2026-07-14T15:53:28Z", "fixed": [], "full": false, "new_red": [], "sha": "cf78f1f2a9201d6ab8ddbfde78e32b7b812e6a4c", "tier": "opt", "verdict": "GREEN", "wall": 121.6}
