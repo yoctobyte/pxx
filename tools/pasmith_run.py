@@ -359,10 +359,25 @@ def save_ledger(led, path):
 
 
 def ledger_open(led):
-    """The UNFIXED findings -- `open` (found, not yet triaged) and `ticketed` (filed
-    into the owning lane, still not fixed). Both throttle fuzzing, because both mean
-    "we already know about this and re-finding it teaches nobody anything". Only
-    `fixed` lets the tap open, and only a recheck can set that."""
+    """The findings that THROTTLE fuzzing.
+
+    Four statuses, and the distinction that matters is not "fixed or not", it is
+    "can the fuzzer still trip over it":
+
+      open      found, not yet triaged            -> throttles
+      ticketed  filed into the owning lane, unfixed, and the generator can STILL
+                emit the shape                    -> throttles
+      dodged    filed, unfixed, but the generator AVOIDS the shape by construction
+                (a NO_* constant in pasmith.py)   -> does NOT throttle
+      fixed     its example seeds no longer reproduce -> does not throttle
+
+    `dodged` is the honest answer to "why are we slowing down?". Throttling exists so
+    the fuzzer stops re-deriving a bug that is already on somebody's desk. Once the
+    generator refuses to emit the shape at all, it CANNOT re-derive it -- so slowing
+    down buys nothing and costs every other bug we would have found meanwhile. The
+    ticket, not the throttle, is what tracks the fix; when it lands, flip the NO_*
+    constant back and the entry with it.
+    """
     return {s: e for s, e in led["findings"].items()
             if e.get("status") in ("open", "ticketed")}
 
@@ -487,11 +502,8 @@ def check(nseeds, args):
     t0 = time.time()
     for seed in range(1, nseeds + 1):
         src = os.path.join(workdir, "c%d.pas" % seed)
-        rc, out = run([sys.executable, PASMITH, "--seed", str(seed),
-                       "--vars", str(args.vars), "--funcs", str(args.funcs),
-                       "--stmts", str(args.stmts), "--depth", str(args.depth),
-                       "--classes", str(args.classes), "--objs", str(args.objs),
-                       "--strs", str(args.strs), "-o", src], 60)
+        rc, out = run([sys.executable, PASMITH] + gen_args_for(args, seed)
+                      + ["-o", src], 60)
         if rc != 0:
             bad.append((seed, "generator crashed: %s" % out.strip()[:120]))
             continue
@@ -514,6 +526,53 @@ def check(nseeds, args):
         print("Rejected sources saved to %s/reject_seed_*.pas" % FINDINGS)
         return 1
     return 0
+
+
+GEN_FLAGS = ["vars", "funcs", "stmts", "depth", "classes", "objs", "strs",
+             "recs", "arrs", "enums", "shorts", "excepts", "modeprocs"]
+
+
+def gen_args_for(a, seed):
+    """The generation arguments for one seed -- ONE list, used to generate the
+    program AND printed as the repro line AND stored in the ledger.
+
+    Never restate them. A hand-written repro line once omitted --classes/--strs, so
+    pasting it produced a DIFFERENT program that did not diverge: every finding read
+    as "cannot reproduce" and got discarded. A repro line that does not reproduce is
+    worse than no repro line at all (bug-t-pasmith-order-dependent-programs).
+    """
+    args = ["--seed", str(seed)]
+    for f in GEN_FLAGS:
+        args += ["--%s" % f, str(getattr(a, f))]
+    return args
+
+
+WIDE_DEFAULTS = {"recs": 2, "arrs": 2, "enums": 2, "shorts": 2, "excepts": 3,
+                 "modeprocs": 2, "strs": 3, "classes": 3}
+
+
+def add_gen_flags(ap):
+    for f, d in (("vars", 8), ("funcs", 3), ("stmts", 12), ("depth", 3),
+                 ("objs", 3)):
+        ap.add_argument("--%s" % f, type=int, default=d)
+    for f in WIDE_DEFAULTS:
+        # default None, NOT 0: --wide has to tell "not given" apart from "given as
+        # 0", or `--wide --shorts 0` silently turns shortstrings back on. Switching
+        # a single rung off is exactly what you need when one is blocked -- e.g.
+        # --cross needs --shorts 0, because the cross backends reject a record that
+        # holds a string[N] (bug-cross-pointer-store-record-with-shortstring-field).
+        ap.add_argument("--%s" % f, type=int, default=None)
+    ap.add_argument("--wide", action="store_true",
+                    help="turn on every widened rung (records + forward pointers, "
+                         "enums/sets, arrays, string[N], exceptions, var/const/out "
+                         "params) at a sensible size -- see feature-pasmith-widen-grammar")
+
+
+def apply_wide(a):
+    for f, v in WIDE_DEFAULTS.items():
+        if getattr(a, f) is None:
+            setattr(a, f, v if getattr(a, "wide", False) else 0)
+    return a
 
 
 def parse_seeds(spec):
@@ -560,14 +619,8 @@ def main():
                          "(status open -> ticketed). Still throttles fuzzing -- it is "
                          "not fixed yet -- but says triage is done and who has it.")
     ap.add_argument("--sha", default="", help="commit under test (stamped into findings)")
-    ap.add_argument("--vars", type=int, default=8)
-    ap.add_argument("--funcs", type=int, default=3)
-    ap.add_argument("--stmts", type=int, default=12)
-    ap.add_argument("--depth", type=int, default=3)
-    ap.add_argument("--classes", type=int, default=0)
-    ap.add_argument("--objs", type=int, default=3)
-    ap.add_argument("--strs", type=int, default=0)
-    a = ap.parse_args()
+    add_gen_flags(ap)
+    a = apply_wide(ap.parse_args())
 
     if not os.path.exists(PXX):
         print("no stable compiler at %s" % PXX, file=sys.stderr)
@@ -642,18 +695,7 @@ def main():
             n += 1
 
             src = os.path.join(workdir, "p%d.pas" % seed)
-            # ONE list, used both to generate and to print the repro. The repro
-            # line used to be hand-written and omitted --classes/--objs/--strs,
-            # so pasting it produced a DIFFERENT program that did not diverge:
-            # every finding read as "cannot reproduce" and got discarded. A repro
-            # line that does not reproduce is worse than none
-            # (bug-t-pasmith-order-dependent-programs, defect 1). Never restate
-            # the arguments -- derive them.
-            gen_args = ["--seed", str(seed),
-                        "--vars", str(a.vars), "--funcs", str(a.funcs),
-                        "--stmts", str(a.stmts), "--depth", str(a.depth),
-                        "--classes", str(a.classes), "--objs", str(a.objs),
-                        "--strs", str(a.strs)]
+            gen_args = gen_args_for(a, seed)
             rc, out = run([sys.executable, PASMITH] + gen_args + ["-o", src], 60)
             if rc != 0:
                 print("GENERATOR FAILED seed=%d: %s" % (seed, out))

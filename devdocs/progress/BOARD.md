@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (2)
@@ -28,11 +27,13 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (93)
+## backlog (96)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
+| bug-pascal-not-of-ord-uses-boolean-negation | A | 72 | bug | not ord(x) computes a BOOLEAN not (xor 1) instead of a bitwise complement — silently wrong integer | — |
 | bug-pascal-shortstring-no-truncation-buffer-overrun | A | 78 | bug | string[N] assignment does not truncate: pxx writes past the buffer and clobbers the next variable | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
@@ -95,6 +96,7 @@ _none_
 | feature-pascal-corpus-oop | P | 60 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
+| feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
 | feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
@@ -184,7 +186,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (727)
+## done (728)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -768,6 +770,7 @@ _none_
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pascal-typed-metaclass | P | 45 | feature | Typed metaclasses: `class of TFoo`, so a TClass variable can call the class's methods | — |
+| feature-pasmith-widen-grammar | T | 65 | feature | pasmith is too NARROW: 527 divergences, one bug. Csmith found dozens. | — |
 | feature-pcl-component-ctor-owner | B | 50 | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | 50 | feature | PCL: mouse-coordinate + keyboard input events | — |
 | feature-pcl-opengl-glarea-demo | B | 50 | feature | PCL OpenGL GLArea demo | — |
@@ -938,10 +941,12 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 78] [A] bug-pascal-shortstring-no-truncation-buffer-overrun
+- [p 72] [A] bug-pascal-not-of-ord-uses-boolean-negation
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 65] [A] feature-signal-handlers
+- [p 60] [A] bug-cross-pointer-store-record-with-shortstring-field
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -964,6 +969,7 @@ _none_
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
+- [p 55] [T] feature-pasmith-multi-unit-programs
 - [p 55] [T] feature-t-gcc-torture-runner
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen

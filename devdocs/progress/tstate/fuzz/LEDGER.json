@@ -57,8 +57,57 @@
       "opened": "2026-07-14T16:12:37Z",
       "reopened_from_fixed": false,
       "sig": "pxx-reject_copy-dynamic-array-copy",
-      "status": "ticketed",
+      "status": "dodged",
       "ticket": "compat-pascal-copy-of-char-literal"
+    },
+    "pxx-reject_store-through-pointer-cross": {
+      "class": "pxx-reject",
+      "examples": [
+        {
+          "args": [
+            "--seed",
+            "1",
+            "--vars",
+            "10",
+            "--funcs",
+            "3",
+            "--stmts",
+            "20",
+            "--depth",
+            "3",
+            "--classes",
+            "3",
+            "--objs",
+            "3",
+            "--strs",
+            "3",
+            "--recs",
+            "2",
+            "--arrs",
+            "2",
+            "--enums",
+            "2",
+            "--shorts",
+            "2",
+            "--excepts",
+            "3",
+            "--modeprocs",
+            "2"
+          ],
+          "seed": 1,
+          "sha": "49728c23"
+        }
+      ],
+      "first_seed": 1,
+      "first_sha": "49728c23",
+      "hits": 1,
+      "kind": "store-through-pointer",
+      "note": "i386/aarch64/arm32 reject EVERY store through a pointer to a record that has a string[N] field. Only bites --cross runs; dodge with --shorts 0.",
+      "opened": "2026-07-14T16:42:14Z",
+      "reopened_from_fixed": false,
+      "sig": "pxx-reject_store-through-pointer-cross",
+      "status": "dodged",
+      "ticket": "bug-cross-pointer-store-record-with-shortstring-field"
     },
     "pxx-vs-fpc_legacy-b346": {
       "class": "pxx-vs-fpc",
@@ -156,6 +205,35 @@
       "sig": "pxx-vs-fpc_legacy-b346",
       "status": "fixed",
       "ticket": "bug-pascal-case-selector-multiple-evaluation"
+    },
+    "pxx-vs-fpc_not-ord": {
+      "class": "pxx-vs-fpc",
+      "examples": [
+        {
+          "args": [
+            "--seed",
+            "13",
+            "--stmts",
+            "20",
+            "--vars",
+            "10",
+            "--enums",
+            "2"
+          ],
+          "seed": 13,
+          "sha": "49728c23"
+        }
+      ],
+      "first_seed": 13,
+      "first_sha": "49728c23",
+      "hits": 1,
+      "kind": "not-ord",
+      "note": "not ord(x) computes a boolean not (xor 1) instead of a bitwise complement. Dodged in the generator (NO_BARE_NOT_ORD) so it is not re-found every slice.",
+      "opened": "2026-07-14T16:42:14Z",
+      "reopened_from_fixed": false,
+      "sig": "pxx-vs-fpc_not-ord",
+      "status": "dodged",
+      "ticket": "bug-pascal-not-of-ord-uses-boolean-negation"
     }
   },
   "version": 1

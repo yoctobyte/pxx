@@ -33,8 +33,16 @@ the first bug is fixed.
 | status | meaning | fuzzing |
 | --- | --- | --- |
 | `open` | found, not yet triaged | **throttled** (`fuzz_backoff_minutes`, default 90) |
-| `ticketed` | filed into the owning lane, not fixed yet | **throttled** — still unfixed |
-| `fixed` | its example seeds no longer reproduce | **full speed** |
+| `ticketed` | filed into the owning lane, unfixed, generator can still emit the shape | **throttled** |
+| `dodged` | filed, unfixed, but the generator AVOIDS the shape by construction (a `NO_*` constant in `pasmith.py`) | full speed |
+| `fixed` | its example seeds no longer reproduce | full speed |
+
+The distinction that matters is not "fixed or not" — it is **can the fuzzer still trip
+over it**. Throttling exists so we stop re-deriving a bug that is already on somebody's
+desk. Once the generator refuses to emit the shape, it *cannot* re-derive it, so slowing
+down buys nothing and costs every other bug we would have found meanwhile. The ticket,
+not the throttle, tracks the fix; when it lands, flip the `NO_*` constant back and the
+ledger entry with it.
 
 A **new** signature stops the running slice on the spot (`--stop-on-new`): file it, hand
 it to the owning lane, don't spend the remaining minutes re-finding it. A **known** one

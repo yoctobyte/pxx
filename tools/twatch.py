@@ -753,11 +753,15 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
     set_phase(clone, host, "fuzz", sha=sha, seed=seed0)
     clone.checkout(sha)
 
-    # OOP + strings: the rungs Csmith cannot reach, and the reason this
-    # generator exists. Big programs on purpose -- size is a feature here.
+    # --wide: every rung the grammar has -- records + forward pointers, enums/sets,
+    # arrays, string[N], exception hierarchies, var/const/out params, on top of the
+    # OOP and ansistring ones. Csmith can reach none of it, which is the reason a
+    # Pascal smith exists at all; and a narrow grammar is what made the old fuzzer
+    # re-find one `case` bug 639 times. Big programs on purpose -- size is a feature
+    # here, not a cost (localisation is a trace diff, so it does not degrade).
     proc = subprocess.Popen(
         [sys.executable, runner, "--minutes", str(minutes), "--start", str(seed0),
-         "--classes", "4", "--strs", "3", "--stmts", "20", "--vars", "10",
+         "--wide", "--classes", "4", "--stmts", "20", "--vars", "10",
          "--ledger", ledger_loc, "--ledger-inplace", "--stop-on-new",
          "--sha", sha[:12]],
         cwd=clone.path, env=env, stdout=subprocess.PIPE,
