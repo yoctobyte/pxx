@@ -8,7 +8,7 @@ prio: 72
 
 - **Type:** bug (silent wrong value). **Track P** (Pascal frontend — the type of an
   `ord()` result inside an expression).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14
 - **Found by:** Track T — `tools/pasmith.py`, first run of the widened grammar
   ([[feature-pasmith-widen-grammar]]), seeds 2 and 13 of an `--enums 2` run. **T owns
