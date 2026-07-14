@@ -816,6 +816,19 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_symslot_stale_ndims26)" = "136"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
+	# what a RECORD may legally contain (b347): no published, no protected (records don't
+	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
+	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.
+	./$(COMPILER) test/test_record_rules_ok.pas /tmp/test_record_rules_ok26
+	test "$$(/tmp/test_record_rules_ok26 | tail -1)" = "PASS"
+	! ./$(COMPILER) test/test_record_published_fail.pas /tmp/test_recpub26 > /tmp/test_recpub.log 2>&1
+	grep -q "cannot have a published section" /tmp/test_recpub.log
+	! ./$(COMPILER) test/test_record_protected_fail.pas /tmp/test_recprot26 > /tmp/test_recprot.log 2>&1
+	grep -q "cannot have protected members" /tmp/test_recprot.log
+	! ./$(COMPILER) test/test_record_ctor_noparam_fail.pas /tmp/test_recctor26 > /tmp/test_recctor.log 2>&1
+	grep -q "at least one parameter without a default" /tmp/test_recctor.log
+	! ./$(COMPILER) test/test_record_local_advanced_fail.pas /tmp/test_recloc26 > /tmp/test_recloc.log 2>&1
+	grep -q "can only have fields" /tmp/test_recloc.log
 	# `case` evaluates its selector EXACTLY once — it used to re-evaluate per label
 	# element, so `case F(x) of` ran F up to N times (b346; ~510 pasmith divergences)
 	./$(COMPILER) test/test_case_selector_single_eval.pas /tmp/test_case_single_eval26

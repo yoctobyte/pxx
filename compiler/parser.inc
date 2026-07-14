@@ -16784,6 +16784,8 @@ var
   rmDefSOff, rmDefSLen: Integer;
   rmDefIsStr: Boolean;
   curTk, retTk: TTypeKind;
+  rmSawStatic: Boolean;
+  rmMandatory: Integer;
 begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
   begin
@@ -16906,14 +16908,39 @@ begin
   Eat(tkSemicolon);
 
   { parse-and-ignore directives: records have no VMT, so none of the dispatch ones mean
-    anything here. }
+    anything here. `static` is the exception — it is REQUIRED on a record's class method
+    (below), so its presence has to be observed rather than skipped. }
+  rmSawStatic := False;
   while (CurTok.Kind = tkOverload) or
         ((CurTok.Kind = tkIdent) and
          (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'static') or
           CaseEqual(CurTok.SVal, 'deprecated'))) do
   begin
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'static') then rmSawStatic := True;
     Next;
     Eat(tkSemicolon);
+  end;
+
+  { A record's `class procedure` / `class function` must be `static` (terecs5). A
+    non-static class method dispatches on the runtime metaclass, and a record has none —
+    no VMT, no class reference. FPC rejects it; pxx used to consume `class` and treat the
+    method as an ordinary one, so the declaration compiled and meant something else. }
+  if RecordMethodClassPrefix and not rmSawStatic then
+    Error('a class method of a record must be declared static');
+
+  { A record CONSTRUCTOR needs at least one MANDATORY parameter (terecs17 / terecs17a).
+    A record always exists — it is a value, not an allocation — so a parameterless ctor
+    would be indistinguishable from the record's own default state and would collide with
+    the implicit initialisation. FPC rejects both the no-parameter form and the form whose
+    only parameter has a DEFAULT, since that one is still callable with none: terecs17a's
+    `constructor Create(I: integer = 0)` is the same hole spelled differently. }
+  if isCtor then
+  begin
+    rmMandatory := 0;
+    for k := 1 to nP - 1 do    { param 0 is the implicit Self — not a user parameter }
+      if not rmHasDef[k] then rmMandatory := rmMandatory + 1;
+    if rmMandatory = 0 then
+      Error('a record constructor must have at least one parameter without a default value');
   end;
 
   recNm := GetTokenStrFromRaw(UClsNOff[ci], UClsNLen[ci]);
@@ -16980,18 +17007,61 @@ begin
       continue;
     end;
 
-    { ADVANCED RECORDS: visibility sections and methods. pxx does not enforce access
-      anywhere, so the visibility words are consumed and dropped; a method registers a
-      `TRec.Method` proc with Self (the record, by reference) at param 0. }
+    { ADVANCED members (visibility sections, consts, methods, properties) are only legal
+      on a record type declared with a NAME in a type section at unit/program level.
+      They are rejected on:
+        - an ANONYMOUS inline record type (`var R: record ... end`) — it has no name, so
+          a method could never be given an implementation (terecs13a/13b/13d);
+        - a record type declared LOCALLY inside a routine — same problem: the
+          implementation would have nowhere to live (terecs12a/12b).
+      Plain FIELDS remain legal in both, which is the only thing either form is for.
+      pxx used to accept the whole advanced surface here and silently register methods
+      that could never be defined. }
+    if (UClsNLen[ci] = 0) or (CurProc >= 0) then
+    begin
+      if (CurTok.Kind = tkProperty) or (CurTok.Kind = tkProcedure) or
+         (CurTok.Kind = tkFunction) or (CurTok.Kind = tkConst) or
+         (CurTok.Kind = tkClass) or
+         ((CurTok.Kind = tkIdent) and
+          (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'strict') or
+           CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
+           CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published'))) then
+      begin
+        if UClsNLen[ci] = 0 then
+          Error('an anonymous record type can only have fields (no methods, properties, consts or visibility sections)')
+        else
+          Error('a record type declared inside a routine can only have fields (no methods, properties, consts or visibility sections)');
+      end;
+    end;
+
+    { ADVANCED RECORDS: visibility sections and methods. Access is still not ENFORCED
+      (that is a separate job), but the sections a record may legally OPEN are checked —
+      a record is not a class, and two of the four are meaningless on it:
+
+        - `protected` / `strict protected` presuppose inheritance, and records do not
+          inherit (terecs19);
+        - `published` presupposes RTTI-driven streaming of an object, which a record has
+          no place in (terecs2).
+
+      Both used to be consumed and dropped, so the declaration compiled and the modifier
+      silently meant nothing. }
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(TokPos), 'private') or
         CaseEqual(GetTokenStr(TokPos), 'protected')) then
+    begin
+      if CaseEqual(GetTokenStr(TokPos), 'protected') then
+        Error('a record cannot have protected members (records do not inherit)');
       Next;
+    end;
     if (CurTok.Kind = tkIdent) and
        (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
         CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
     begin
+      if CaseEqual(CurTok.SVal, 'protected') then
+        Error('a record cannot have protected members (records do not inherit)');
+      if CaseEqual(CurTok.SVal, 'published') then
+        Error('a record cannot have a published section');
       Next;
       continue;
     end;

@@ -2804,7 +2804,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     hiddenArgSym: Integer; argIsManagedTemp: Boolean;
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
-    clauseBodyLabel, nextClauseLabel, selectorValNode, selTmpSym: Integer;
+    clauseBodyLabel, nextClauseLabel, selectorValNode, selTmpSym, selTmpTk: Integer;
     ternTmp: Integer;
     swSelTmp, swDefault, swSeq, swMarker, swSelTk: Integer;
     rhsIsLValue: Boolean;
@@ -5939,12 +5939,23 @@ begin
               (IRKind[selectorValNode] = IR_CONST_INT) or
               (IRKind[selectorValNode] = IR_CONST_STR)) then
       begin
+        { A string selector is materialised into a MANAGED temp — including a FROZEN one
+          (`case ss of` where ss: shortstring). The store converts frozen -> handle, so the
+          temp's type, and therefore the tag on the load, is tyAnsiString. Tagging the load
+          with the SOURCE's frozen kind instead made every later comparison read the heap
+          handle as if it were an inline [len][chars] buffer (tcase0). }
         if caseIsStr then
-          selTmpSym := AllocVar('', tyAnsiString)
+        begin
+          selTmpSym := AllocVar('', tyAnsiString);
+          selTmpTk := Ord(tyAnsiString);
+        end
         else
+        begin
           selTmpSym := AllocVar('', IntToTypeKind(IRTk[selectorValNode]));
+          selTmpTk := IRTk[selectorValNode];
+        end;
         IRAppend(IR_STORE_SYM, selTmpSym, selectorValNode, -1, 0, IRTk[selectorValNode]);
-        selectorValNode := IRAppend(IR_LOAD_SYM, selTmpSym, -1, -1, 0, IRTk[selectorValNode]);
+        selectorValNode := IRAppend(IR_LOAD_SYM, selTmpSym, -1, -1, 0, selTmpTk);
       end;
       IRValidateCaseLabels(ASTRight[node], caseIsStr);
       endLabel := IRNewLabel;
