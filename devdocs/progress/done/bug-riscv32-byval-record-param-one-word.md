@@ -53,3 +53,6 @@ by-value params miscompile.
 
 Acceptance: bg10 prints 7009 on riscv32; `lib_bignum_ops` runs green on
 riscv32 with output identical to x86-64 (it is green on x86-64/aarch64/arm32).
+
+## Log
+- 2026-07-14 — resolved, commit f6c6780e.
