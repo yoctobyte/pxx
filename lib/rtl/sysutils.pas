@@ -1927,8 +1927,10 @@ end;
 
 function ExceptAddr: Pointer;
 begin
-  { stub -- see the declaration. We do not record the raise site yet. }
-  Result := nil;
+  { The raise stub records the raise site (the return address its `call` pushed) in
+    the exception-address BSS slot; __pxxExceptAddr is the compiler intrinsic that
+    reads it. nil when no exception is in flight. }
+  Result := __pxxExceptAddr;
 end;
 
 initialization

@@ -2055,7 +2055,7 @@ begin
       IR_EXC_STORE:
         begin
           { `on E: EFoo do`: store the raised object into E's slot. }
-          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_OBJ);
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, IRExcStoreSlot(i));
           xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
           EmitSlotAddrXtensa(reg_xtensa_a8, IRA[i]);
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 0);
@@ -2107,6 +2107,8 @@ begin
           EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_OBJ);
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
           EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
+          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_ADDR);
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
         end;
 

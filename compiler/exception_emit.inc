@@ -33,6 +33,11 @@ begin
     EmitB($FF); EmitB($67); EmitB($38);                         { jmp qword [rdi+56] }
 
     ExcRaiseAddr := CodeLen;
+    { RAISE SITE: the `call` that got us here pushed its own return address, so
+      [rsp] IS the instruction after the `raise`. Record it for ExceptAddr before
+      anything else runs. rax is reloaded right below, so clobbering it is free. }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($24);             { mov rax, [rsp] }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_ADDR);
     EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
     EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
@@ -77,6 +82,9 @@ begin
     EmitB($FF); EmitB($E1);                                     { jmp ecx }
 
     ExcRaiseAddr := CodeLen;
+    { raise site = the return address the `call` pushed (see the x86-64 note) }
+    EmitB($8B); EmitB($04); EmitB($24);                         { mov eax, [esp] }
+    EmitB($A3); EmitGlobRef(BSS_EXC_ADDR);                      { mov [BSS_EXC_ADDR], eax }
     EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                        { mov eax, [BSS_EXC_TOP] }
     EmitB($85); EmitB($C0);                                     { test eax, eax }
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
@@ -134,6 +142,11 @@ begin
     EmitI32($E12FFF1E);                                         { bx lr }
 
     ExcRaiseAddr := CodeLen;
+    { raise site: `bl` put it in lr. Same idea as x86-64's [rsp], different ABI. }
+    EmitI32($E59F1000);                                         { ldr r1, [pc] }
+    EmitI32($EA000000);                                         { b .+8 }
+    EmitGlobRef(BSS_EXC_ADDR);
+    EmitI32($E581E000);                                         { str lr, [r1] }
     EmitI32($E59F1000);                                         { ldr r1, [pc] }
     EmitI32($EA000000);                                         { b .+8 }
     EmitGlobRef(BSS_EXC_TOP);
@@ -205,6 +218,11 @@ begin
     EmitI32($D65F03C0);                                         { ret }
 
     ExcRaiseAddr := CodeLen;
+    { raise site: `bl` put it in x30 (lr) }
+    EmitI32($18000041);                                         { ldr w1, [pc+8] }
+    EmitI32($14000002);                                         { b [pc+8] }
+    EmitGlobRef(BSS_EXC_ADDR);
+    EmitI32($F900003E);                                         { str x30, [x1] }
     EmitI32($18000041);                                         { ldr w1, [pc+8] }
     EmitI32($14000002);                                         { b [pc+8] }
     EmitGlobRef(BSS_EXC_TOP);
@@ -262,6 +280,12 @@ begin
     rv32_jalr(reg_zero, reg_t0, 0);                             { resume at try, a0=1 }
 
     ExcRaiseAddr := CodeLen;
+    { raise site: `jal ra` put it in ra }
+    rv32_auipc(reg_t1, 0);                                      { &EXC_ADDR literal }
+    rv32_jal(reg_zero, 8);
+    EmitGlobRef(BSS_EXC_ADDR);
+    rv32_lw(reg_t1, reg_t1, 8);
+    rv32_sw(reg_ra, reg_t1, 0);                                 { [EXC_ADDR] := ra }
     rv32_auipc(reg_t1, 0);                                      { &EXC_TOP literal }
     rv32_jal(reg_zero, 8);
     EmitGlobRef(BSS_EXC_TOP);
@@ -323,6 +347,11 @@ begin
 
     while (CodeLen mod 4) <> 0 do xtensa_nop;
     ExcRaiseAddr := CodeLen;
+    { raise site: call0 put it in a0 }
+    XtensaEmitLitHeader;                                        { a3 = &EXC_ADDR }
+    EmitGlobRef(BSS_EXC_ADDR);
+    xtensa_l32r(reg_xtensa_a3, $FFFF);
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a3, 0);               { [EXC_ADDR] := a0 }
     XtensaEmitLitHeader;                                        { a3 = &EXC_TOP }
     EmitGlobRef(BSS_EXC_TOP);
     xtensa_l32r(reg_xtensa_a3, $FFFF);

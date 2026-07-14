@@ -550,6 +550,10 @@ test-core: $(COMPILER)
 	# unit. Matched by a runtime RTTI parent-chain walk, not an enumeration (b339)
 	./$(COMPILER) test/test_except_open_world_descendant_b339.pas /tmp/test_exc_openworld_b33926
 	test "$$(/tmp/test_exc_openworld_b33926 | tail -1)" = "PASS"
+	# ExceptAddr = the RAISE SITE (the return address the call to the raise stub
+	# pushed), not the nil stub it used to be (b340)
+	./$(COMPILER) test/test_exceptaddr_b340.pas /tmp/test_exceptaddr_b34026
+	test "$$(/tmp/test_exceptaddr_b34026 | tail -1)" = "PASS"
 	# WideChar values in STRING contexts (assign, +concat, string param) convert to
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
 	# was silently retained as a string POINTER -> memory corruption + crash

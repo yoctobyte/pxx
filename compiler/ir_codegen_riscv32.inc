@@ -2309,7 +2309,7 @@ begin
         begin
           { `on E: EFoo do`: store the raised object into E's slot. }
           si := IRA[i];
-          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_OBJ);
+          EmitLoadGlobAddrRISCV32(reg_t1, IRExcStoreSlot(i));
           rv32_lw(reg_t2, reg_t1, 0);
           EmitSlotAddrRISCV32(reg_t0, si);
           rv32_sw(reg_t2, reg_t0, 0);
@@ -2365,6 +2365,8 @@ begin
           EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_OBJ);
           rv32_sw(reg_zero, reg_t1, 0);
           EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_CLS);
+          rv32_sw(reg_zero, reg_t1, 0);
+          EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_ADDR);
           rv32_sw(reg_zero, reg_t1, 0);
         end;
 

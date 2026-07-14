@@ -3476,7 +3476,7 @@ begin
           sz := TypeSize(tk);
           EmitI32($E59F1000);                                         { ldr r1, [pc] }
           EmitI32($EA000000);                                         { b .+8 }
-          EmitGlobRef(BSS_EXC_OBJ);
+          EmitGlobRef(IRExcStoreSlot(i));
           EmitI32($E5910000);                                         { ldr r0, [r1] }
           EmitStoreVarArm32(si);
         end;
@@ -3533,6 +3533,10 @@ begin
           EmitI32($E59F1000);                                         { ldr r1, [pc] }
           EmitI32($EA000000);                                         { b .+8 }
           EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($E5810000);                                         { str r0, [r1] }
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_ADDR);
           EmitI32($E5810000);                                         { str r0, [r1] }
         end;
 

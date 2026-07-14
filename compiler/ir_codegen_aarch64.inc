@@ -3119,7 +3119,7 @@ begin
           si := IRA[i];
           EmitI32($18000041);                                         { ldr w1, [pc+8] }
           EmitI32($14000002);                                         { b [pc+8] }
-          EmitGlobRef(BSS_EXC_OBJ);
+          EmitGlobRef(IRExcStoreSlot(i));
           EmitI32($F9400020);                                         { ldr x0, [x1] }
           EmitStoreVarA64(si);
         end;
@@ -3176,6 +3176,10 @@ begin
           EmitI32($18000041);                                         { ldr w1, [pc+8] }
           EmitI32($14000002);                                         { b [pc+8] }
           EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($F9000020);                                         { str x0, [x1] }
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_ADDR);
           EmitI32($F9000020);                                         { str x0, [x1] }
         end;
 

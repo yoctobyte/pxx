@@ -2215,6 +2215,15 @@ begin
   end;
 end;
 
+function IRExcStoreSlot(n: Integer): Integer;
+{ Which exception BSS slot an IR_EXC_STORE reads. IRC selects it: 0 (the default,
+  `on E: T do`) = the exception OBJECT; 1 (__pxxExceptAddr) = the RAISE SITE the
+  raise stub recorded. Same load, different slot — which is why ExceptAddr needs
+  no backend op of its own. }
+begin
+  if IRC[n] = 1 then Result := BSS_EXC_ADDR else Result := BSS_EXC_OBJ;
+end;
+
 { OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
   emit IR computing a Boolean temp = inst is a `targetCi` (or any descendant),
   by walking the RTTI blobs' PARENT CHAIN — the same __pxxInheritsFrom machinery
@@ -2807,6 +2816,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
     excObjSym, excMatched, excSkipLabel: Integer;
+    eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
@@ -3940,6 +3950,16 @@ begin
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
       if (cpi >= 0) and RetViaHiddenDest(Procs[cpi].RetType) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
+    end;
+
+    AN_EXCEPTADDR:
+    begin
+      { The raise stub already parked the raise site in BSS_EXC_ADDR. Reading it is the
+        same load IR_EXC_STORE does for the exception object — IRC=1 picks the slot — so
+        no backend gets a new op. }
+      eaSym := AllocVar('', tyPointer);
+      IRAppend(IR_EXC_STORE, eaSym, -1, 1, 0, 0);
+      Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, Ord(tyPointer));
     end;
 
     AN_TYPEINFO:

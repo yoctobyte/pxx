@@ -4997,7 +4997,7 @@ begin
 
     IR_EXC_STORE:
       begin
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(IRExcStoreSlot(node));
         EmitStoreVar(IRA[node]);
       end;
 
@@ -5006,6 +5006,7 @@ begin
         MovRaxImm(0);
         EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
         EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_ADDR);
       end;
 
     IR_TERMINATE:

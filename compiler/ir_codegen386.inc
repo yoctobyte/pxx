@@ -3999,7 +3999,7 @@ begin
           si := IRA[i];
           tk := Syms[si].TypeKind;
           sz := TypeSize(tk);
-          EmitB($A1); EmitGlobRef(BSS_EXC_OBJ); { mov eax, [BSS_EXC_OBJ] }
+          EmitB($A1); EmitGlobRef(IRExcStoreSlot(i)); { mov eax, [exc slot] }
           if Syms[si].Kind = skGlobal then
           begin
             if sz = 1 then
@@ -4065,6 +4065,7 @@ begin
           EmitB($31); EmitB($C0); { xor eax, eax }
           EmitB($A3); EmitGlobRef(BSS_EXC_OBJ);
           EmitB($A3); EmitGlobRef(BSS_EXC_CLS);
+          EmitB($A3); EmitGlobRef(BSS_EXC_ADDR);
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:

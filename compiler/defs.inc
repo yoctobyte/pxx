@@ -327,6 +327,12 @@ const
                            loads -- no backend op, because a class method's Self is the BLOB,
                            not an instance, so IR_VIRTUAL_CALL (which loads the VMT from
                            [Self + 0]) cannot be reused. }
+  AN_EXCEPTADDR    = 89; { __pxxExceptAddr: the code address of the RAISE SITE of the exception
+                           currently in flight. The raise stub records it (the return address the
+                           `call` to the stub pushed) in BSS_EXC_ADDR; this node just loads that
+                           slot, exactly as IR_EXC_STORE loads BSS_EXC_OBJ. Reserved-prefix name,
+                           so it cannot collide with a user routine; sysutils.ExceptAddr is a thin
+                           wrapper over it. }
   AN_TYPEINFO      = 87; { TypeInfo(TEnum): ASTIVal = enum type id. Yields the address of the
                            enum's RTTI blob {name, count, names[]} -- the same blob EmitRTTI
                            already writes for enum-typed published properties. Lowers to
@@ -1660,6 +1666,7 @@ var
   BSS_EXC_TOP     : Integer;
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;
+  BSS_EXC_ADDR    : Integer;  { code address of the RAISE SITE of the exception in flight — the return address the `call` to the raise stub pushed. Read by System/SysUtils ExceptAddr. }
   BSS_LINE_BUF    : Integer;  { readln line buffer }
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }

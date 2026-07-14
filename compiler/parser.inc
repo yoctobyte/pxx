@@ -7797,6 +7797,25 @@ begin
         address. Enum types only for now: a class/record TypeInfo would hand back a blob
         whose LAYOUT is ours, not FPC's, and code reading it as FPC's TTypeData would be
         silently wrong -- so those are refused rather than guessed at. }
+      { __pxxExceptAddr: the raise site of the exception in flight. Zero-arg, and the
+        reserved prefix keeps it out of the user's namespace — sysutils.ExceptAddr is a
+        one-line wrapper over it. Parens optional, like any zero-arg Pascal function. }
+      if CaseEqual(name, '__pxxExceptAddr') and (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        Next;
+        if (TokPos <= TokCount) and (CurTok.Kind = tkLParen) then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        EnableExceptionRuntime;   { a program may read the raise site without raising itself }
+        node := AllocNode(AN_EXCEPTADDR);
+        ASTTk[node] := Ord(tyPointer);
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, 'TypeInfo') and (FindProc(name) < 0) and (FindSym(name) < 0) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -21494,6 +21513,7 @@ begin
     BSS_EXC_TOP := BSSSize; Inc(BSSSize, 8);
     BSS_EXC_OBJ := BSSSize; Inc(BSSSize, 8);
     BSS_EXC_CLS := BSSSize; Inc(BSSSize, 8);
+    BSS_EXC_ADDR := BSSSize; Inc(BSSSize, 8);
     EmitExceptionRuntime;
   end;
 end;
