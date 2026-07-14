@@ -772,7 +772,15 @@ begin
       end;
 
     IR_LOAD_SYM:
-      if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
+      if Is64BitRISCV32(Syms[IRA[node]].TypeKind) or
+         ((Syms[IRA[node]].TypeKind = tyRecord) and not Syms[IRA[node]].IsArray and
+          (RecSize(Syms[IRA[node]].RecName) > 4) and
+          (RecSize(Syms[IRA[node]].RecName) <= 8)) then
+        { A 5-8 byte record VALUE (a by-value call argument load) needs both
+          words — EmitLoadVar64RISCV32 is type-agnostic (raw 8-byte load), so
+          it works for a record the same way it does for Int64. Without this,
+          tyRecord fell to the 1-word load and silently dropped the high 4
+          bytes (bug-riscv32-byval-record-param-one-word; mirrors arm32 v137). }
         EmitLoadVar64RISCV32(IRA[node])
       else
         EmitLoadVarRISCV32(IRA[node]);
@@ -1024,6 +1032,18 @@ begin
         begin
           { 64-bit load through memory (Int64/Double array element / field):
             two words into a0:a1. Was a single lw — the high word was stale. }
+          rv32_lw(reg_a1, reg_a0, 4);
+          rv32_lw(reg_a0, reg_a0, 0);
+        end
+        else if tk = tyRecord then
+        begin
+          { A record VALUE loaded through memory only ever means a <=8-byte
+            by-value record (IRLowerCallArg wraps a record-returning call /
+            operator result in IR_LOAD_MEM; >8-byte records go by pointer).
+            Load both words — one word passed the temp's first 4 bytes only,
+            so a bignum operator chain (`a * b + a`) handed `+` a TBigInt
+            whose dynarray handle word was stale garbage
+            (bug-riscv32-byval-record-param-one-word). }
           rv32_lw(reg_a1, reg_a0, 4);
           rv32_lw(reg_a0, reg_a0, 0);
         end
@@ -1756,6 +1776,25 @@ begin
              (not Procs[procIdx].Params[i].IsArray) then
           begin
             EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo, word nArgs }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }
+            Inc(nArgs, 2);
+          end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and (i < MAX_PROC_PARAMS) and
+             (Procs[procIdx].Params[i].TypeKind = tyRecord) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) and
+             (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) > 4) and
+             (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) <= 8) then
+          begin
+            { By-value record over 4 bytes (up to 8): pass both words, mirroring
+              Int64 above (IR_LOAD_SYM is widened to yield a0:a1 for a 5-8 byte
+              record). Fell to the generic 1-word case before, silently
+              truncating the record to its first word — an 8-byte TBigInt-style
+              managed record lost its dynarray handle and the callee crashed
+              (bug-riscv32-byval-record-param-one-word). Mirrors arm32 v137. }
+            IREmitNodeRISCV32(IRA[argNode]);        { a0=lo, a1=hi }
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo, word nArgs }
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }
             Inc(nArgs, 2);

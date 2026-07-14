@@ -3377,7 +3377,17 @@ test-riscv32: $(COMPILER)
 	# ifdef-guarded multi-arch asm source, riscv32 leg
 	./$(COMPILER) --target=riscv32 test/test_asm_ifdef_multiarch.pas /tmp/test_riscv32_asmifdef
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_asmifdef)" = "42"
-	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm ok"
+	# by-value record params over 4 bytes (up to 8): both words must cross
+	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
+	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas /tmp/test_riscv32_recwide
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_recwide)" = "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
+	# managed-record operator chain (TBigInt: Boolean + dynarray = 8 bytes byval)
+	./$(COMPILER) --target=riscv32 -Fulib/rtl test/lib_bignum_ops.pas /tmp/test_riscv32_bignum
+	tools/run_target.sh riscv32 /tmp/test_riscv32_bignum > /tmp/test_riscv32_bignum.out
+	./$(COMPILER) -Fulib/rtl test/lib_bignum_ops.pas /tmp/test_riscv32_bignum_x64
+	/tmp/test_riscv32_bignum_x64 > /tmp/test_riscv32_bignum_x64.out
+	diff /tmp/test_riscv32_bignum_x64.out /tmp/test_riscv32_bignum.out
+	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops ok"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

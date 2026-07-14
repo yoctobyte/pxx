@@ -21007,6 +21007,17 @@ begin
           (Procs[procIdx].Params[i].TypeKind = tyDouble)) and
          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
         Inc(pnWords, 2)
+      { A by-value 5-8 byte record is two words, matching the caller's arg
+        push (ir_codegen_riscv32.inc) — without this the spill counted one
+        word and every later param's stack offset desynced. Mirrors arm32
+        v137 (bug-riscv32-byval-record-param-one-word). }
+      else if (Procs[procIdx].Params[i].TypeKind = tyRecord) and
+              (not Procs[procIdx].Params[i].IsRef) and
+              (not Procs[procIdx].Params[i].IsArray) and
+              (i < MAX_PROC_PARAMS) and
+              (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) > 4) and
+              (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) <= 8) then
+        Inc(pnWords, 2)
       else if (Procs[procIdx].Params[i].TypeKind = tySet) and
          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
         Inc(pnWords, 8)   { by-value 32-byte set: 8 words inline (mirrors i386) }
@@ -21037,9 +21048,15 @@ begin
         end;
         Inc(pw, 8);
       end
-      else if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+      else if (((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble)) and
-         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray)) or
+         { by-value 5-8 byte record: two words inline in the slot, same as
+           Int64 — the slot is sized to hold the whole record (parser's
+           ParamSize) and the caller pushes both words. Mirrors arm32 v137. }
+         ((Syms[idx].TypeKind = tyRecord) and
+          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+          (RecSize(Syms[idx].RecName) > 4) and (RecSize(Syms[idx].RecName) <= 8)) then
       begin
         if pw < 8 then
           rv32_sw(reg_a0 + pw, reg_t0, 0)                       { lo (word pw) }

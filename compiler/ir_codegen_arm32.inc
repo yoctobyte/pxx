@@ -2633,17 +2633,21 @@ begin
         begin
           if sgn then EmitI32($E1D000F0) else EmitI32($E1D000B0); { ldrsh/ldrh r0, [r0] }
         end
-        else if Is64BitArm32(tk) then
+        else if Is64BitArm32(tk) or (tk = tyRecord) then
         begin
+          { A record VALUE loaded through memory only ever means a <=8-byte
+            by-value record (IRLowerCallArg wraps a record-returning call /
+            operator result in IR_LOAD_MEM; >8-byte records go by pointer).
+            Load both words like Int64 — the old 1-word record load handed a
+            bignum operator chain (`a * b + a`) a TBigInt whose dynarray handle
+            word was stale garbage and lib_bignum_ops crashed on arm32 too
+            (bug-riscv32-byval-record-param-one-word; completes the v137
+            record-param widening). Harmless for a <=4-byte record: r1 is
+            scratch. }
           EmitI32($E5901004);  { ldr r1, [r0, #4] (hi first, r0 is the addr) }
           EmitI32($E5900000);  { ldr r0, [r0]     (lo) }
         end
         else
-          { tyRecord (<=4-byte by-value record) loads its packed bytes into r0,
-            letting a record temp cross as a by-value arg
-            (bug-aarch64-arm32-record-temp-byvalue-arg). Records >4 bytes need the
-            arm32 record-param marshalling widened (a separate, pre-existing gap —
-            even a named 8-byte record arg drops its high word here). }
           EmitI32($E5900000); { ldr r0, [r0] (4-byte) }
       end;
 
