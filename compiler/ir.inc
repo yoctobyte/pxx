@@ -2215,6 +2215,74 @@ begin
   end;
 end;
 
+{ OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
+  emit IR computing a Boolean temp = inst is a `targetCi` (or any descendant),
+  by walking the RTTI blobs' PARENT CHAIN — the same __pxxInheritsFrom machinery
+  x.InheritsFrom(C) uses, and reflexive like FPC's.
+
+  This is what makes the check correct for classes the lowering site has never
+  seen. Enumerating the descendant set instead only works when every descendant
+  is already known, and units compile in dependency order — so a subclass declared
+  in a LATER unit silently falls out of the set.
+
+  Returns the Boolean temp's sym, or -1 when the walk is unavailable (no builtin
+  unit — ESP) so the caller can fall back to its enumeration. Only meaningful for
+  a CLASS target: interface membership (IMT) is not on the blob's parent chain. }
+function IRClassMatchRuntime(instSym, targetCi: Integer): Integer;
+var rvar, endLbl, znode, notnil, vmtSym, lv, blob: Integer;
+    cmPi, cmArg1, cmArg2, cmCall: Integer;
+begin
+  Result := -1;
+  if UClsIsInterface[targetCi] then Exit;
+  cmPi := FindProc('__pxxInheritsFrom');
+  if cmPi < 0 then Exit;
+
+  rvar := AllocVar('', tyBoolean);
+  vmtSym := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, rvar, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyBoolean)), -1, 0, Ord(tyBoolean));
+  endLbl := IRNewLabel;
+
+  { nil instance -> false }
+  lv := IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer));
+  znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+  notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+
+  { vmt := [inst + 0]. A VMT-less instance (the implicit root TObject stores no
+    table) stays false rather than dereferencing garbage. }
+  IRAppend(IR_STORE_SYM, vmtSym,
+           IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyPointer)),
+           -1, 0, Ord(tyPointer));
+  lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+  znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+  notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+
+  { blob := [vmt - 8] — the RTTI backlink; hard 8 on every target (see AN_RTTIOF). }
+  blob := IRAppend(IR_LOAD_MEM,
+            IRAppend(IR_BINOP,
+              IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyPointer)),
+              Ord(tkMinus), 0, Ord(tyPointer)),
+            -1, -1, 0, Ord(tyPointer));
+  IRAppend(IR_STORE_SYM, vmtSym, blob, -1, 0, Ord(tyPointer));
+  lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+  znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+  notnil := IRAppend(IR_BINOP, lv, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+
+  cmArg1 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+  cmArg2 := IRAppend(IR_ARG, IRAppend(IR_CLASSREF, targetCi, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+  IRB[cmArg1] := cmArg2;
+  cmCall := IRAppendCall(cmPi, cmArg1, -1, Ord(tyBoolean));
+  IRAppend(IR_STORE_SYM, rvar, cmCall, -1, 0, Ord(tyBoolean));
+  IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+  Result := rvar;
+end;
+
 { Emit IR that evaluates `instExpr` once into a hidden pointer temp (returned in
   instSym) and computes a Boolean temp = (inst <> nil) and (VMT(inst) is the VMT
   of `targetCi` or any descendant). Returns the Boolean temp's sym index. The
@@ -2738,6 +2806,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
+    excObjSym, excMatched, excSkipLabel: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
@@ -5969,25 +6038,37 @@ begin
             its existing fall-through-on-match still lands on the body. }
           excTargetCi := ASTIVal[handlerNode] - REC_UCLASS_BASE;
           excBodyLabel := IRNewLabel;
-          { OPEN-WORLD GAP: this enumeration runs when the handler's OWN unit
-            lowers, so an exception class declared in a unit compiled LATER is
-            not in the set — fpcunit's `on E: Exception do` silently failed to
-            catch fpjson's EJSON purely because of unit order. The dominant
-            catch-all — a ROOT exception class (no parent, named Exception) —
-            can match unconditionally: everything raisable descends from it.
-            Non-root targets keep the enumeration (their descendant sets are
-            almost always same-unit); the general fix is a runtime parent-chain
-            walk, filed as bug-pascal-except-on-class-open-world. }
-          if (UClsParent[excTargetCi] < 0) and
-             CaseEqual(GetTokenStrFromRaw(UClsNOff[excTargetCi], UClsNLen[excTargetCi]),
-                       'Exception') then
-            last := IRAppend(IR_JUMP, excBodyLabel, -1, -1, 0, 0)
-          else
+          { `on E: T` must catch T and every DESCENDANT of T (Delphi/FPC is-a
+            semantics). Descendants used to be ENUMERATED here — which runs when
+            the handler's own unit lowers, so an exception class declared in a
+            unit compiled LATER was not in the set and silently escaped the
+            handler (fpcunit's `on E: Exception do` missed fpjson's EJSON purely
+            because of unit order; flipping `uses` flipped the behaviour).
+
+            Ask the RUNTIME instead: materialize the in-flight exception object
+            and walk its RTTI parent chain, exactly as `is`/`as` do. Correct for
+            classes this site has never seen, so unit order stops mattering.
+
+            IR_EXC_MATCH still follows, unchanged: it is what jumps to the NEXT
+            handler when nothing matched (and its own exact-class test is simply
+            subsumed by the reflexive walk). Falls back to the old enumeration
+            where the walk is unavailable (no builtin unit — ESP). }
+          excObjSym := AllocVar('', tyPointer);
+          last := IRAppend(IR_EXC_STORE, excObjSym, -1, -1, 0, 0);
+          excMatched := IRClassMatchRuntime(excObjSym, excTargetCi);
+          if excMatched >= 0 then
           begin
+            excSkipLabel := IRNewLabel;
+            last := IRAppend(IR_JUMP_IF_FALSE, excSkipLabel,
+                             IRAppend(IR_LOAD_SYM, excMatched, -1, -1, 0, Ord(tyBoolean)),
+                             -1, 0, 0);
+            last := IRAppend(IR_JUMP, excBodyLabel, -1, -1, 0, 0);
+            last := IRAppend(IR_LABEL, -1, -1, -1, excSkipLabel, 0);
+          end
+          else
             for excDescCi := 0 to UClsCount - 1 do
               if (excDescCi <> excTargetCi) and IsClassDescOrSelf(excDescCi, excTargetCi) then
                 last := IRAppend(IR_EXC_MATCH_HIT, excBodyLabel, -1, -1, REC_UCLASS_BASE + excDescCi, 0);
-          end;
           last := IRAppend(IR_EXC_MATCH, handlerNextLabel, -1, -1, ASTIVal[handlerNode], 0);
           last := IRAppend(IR_LABEL, -1, -1, -1, excBodyLabel, 0);
         end;

@@ -546,6 +546,10 @@ test-core: $(COMPILER)
 	# the descendant enumeration is per-unit; root Exception now matches all
 	./$(COMPILER) test/test_except_cross_unit_class_b322.pas /tmp/test_exc_openworld_b32226
 	test "$$(/tmp/test_exc_openworld_b32226)" = "$$(printf 'caught ELate: late class\nafter')"
+	# ...and the general case: a NON-root target whose descendants live in a later
+	# unit. Matched by a runtime RTTI parent-chain walk, not an enumeration (b339)
+	./$(COMPILER) test/test_except_open_world_descendant_b339.pas /tmp/test_exc_openworld_b33926
+	test "$$(/tmp/test_exc_openworld_b33926 | tail -1)" = "PASS"
 	# WideChar values in STRING contexts (assign, +concat, string param) convert to
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
 	# was silently retained as a string POINTER -> memory corruption + crash
