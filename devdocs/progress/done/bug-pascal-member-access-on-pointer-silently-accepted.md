@@ -6,7 +6,7 @@ prio: 45
 
 - **Type:** bug (diagnostics / silent wrong value)
 - **Track:** A — core (member-access resolution)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** the class-reference-array work for fpjson — `ClassTable[k].Tag` (a class
   method through a metaclass array element) printed the blob ADDRESS instead of erroring,
   which led to the general case below.
@@ -74,3 +74,35 @@ information the deref chain already uses.
 
 Do NOT retry this by tightening the same predicate; it will keep hitting valid typed-pointer
 chains. Start by finding where `p^.next^` resolves its record and use that.
+
+## 2026-07-14 — RESOLVED (commit d5785451, b338)
+
+The previous attempt failed because it asked the question at the wrong time, not because the
+question was wrong. `recName` at the field site was empty for a valid typed-pointer chain —
+but the reason it was empty turned out to be **a real bug of its own**: a pointer field
+declared through a FORWARD alias (`PNode = ^TNode` before TNode — the linked-list idiom)
+never had its pointee record patched, so `p^.next^` genuinely lost the record identity and
+every field after it resolved at offset 0. See
+[[bug-pascal-forward-pointer-field-loses-pointee-record]].
+
+So the order was: fix the pointee resolution first, and the guard the ticket asked for then
+becomes both correct and safe.
+
+Landed:
+- plain `Pointer` + any member → error naming the member ("a pointer has no members").
+- pointer to a RECORD + a member it has → implicit deref (`p.v` = `p^.v`, FPC/Delphi). This
+  previously read an offset into the pointer VALUE and printed garbage — a second silent
+  bug the ticket had not seen.
+- metaclass (`class of T`) receivers keep their own dispatch: their pointee is a class, not
+  a record, so the auto-deref does not fire.
+
+The C-corpus hazard the ticket flagged does **not** apply: `ParseLValueAST` is Pascal-only
+(the C frontend has its own selector parser), and C struct fields are excluded from the
+alias patch pass. `make test` green, self-host byte-identical.
+
+Still open, as the ticket noted: a class METHOD called through an untyped metaclass value
+needs a compile-time class id — that remains [[feature-pascal-typed-metaclass]]. The array
+element case was fixed separately (b328).
+
+## Log
+- 2026-07-14 — resolved, commit d5785451.
