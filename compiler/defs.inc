@@ -327,6 +327,11 @@ const
                            loads -- no backend op, because a class method's Self is the BLOB,
                            not an instance, so IR_VIRTUAL_CALL (which loads the VMT from
                            [Self + 0]) cannot be reused. }
+  AN_ALLOCA        = 90; { C alloca(n) / __builtin_alloca(n): Left = the byte-count expression.
+                           Allocates n bytes (16-aligned) of DYNAMIC stack in the current
+                           function's frame, freed by the epilogue's frame-pointer restore
+                           (`leave` on x86-64). Value = the allocation's address.
+                           feature-c-alloca-dynamic-stack (QuickJS JS_CallInternal). }
   AN_EXCEPTADDR    = 89; { __pxxExceptAddr: the code address of the RAISE SITE of the exception
                            currently in flight. The raise stub records it (the return address the
                            `call` to the stub pushed) in BSS_EXC_ADDR; this node just loads that
@@ -458,6 +463,13 @@ const
   IR_CONST_DATA    = 68; { generic data-reference constant: IRIVal = Data[] offset OR a negative dataref sentinel (RECORD_RTTI/CLASSREF/SYM_RTTI bases, resolved by the pre-link fixup pass). Value = absolute data address in the accumulator. Lets IR-level CALLS pass descriptor addresses (e.g. a record layout descriptor to PXXDynArrayRetainImmediate) instead of needing a bespoke per-backend op. }
   IR_MULHI         = 69; { __pxxmulhi_u64(a, b): IRA = a, IRB = b. UNSIGNED widening 64x64->128 multiply, yielding the HIGH 64 bits in the accumulator (the low half is an ordinary tkStar multiply). x86-64 = `mul r64` (RDX:RAX), aarch64 = `umulh`. 64-BIT TARGETS ONLY -- IRLowerAST rejects it on the 32-bit targets, which have no such instruction, so the 32-bit backends never see this op and need no case. Callers get a portable path via lib/rtl's MulHiU64 wrapper ({$IFDEF CPU64} intrinsic {$ELSE} Pascal fallback). Exists so bignum/field arithmetic can use saturated 64-bit limbs instead of a reduced radix. }
   IR_FRAME         = 70; { get_frame: the current function's FRAME POINTER, into the accumulator. No operands. One move per backend: x86-64 `mov rax, rbp` / i386 `mov eax, ebp` / aarch64 `mov x0, x29` / arm32 `mov r0, fp` / riscv32 `mv a0, s0`. Every pxx prologue pushes a real frame pointer and links it, so the saved-fp chain IS walkable: [fp] = the caller's fp, [fp + PtrSize] = the return address into the caller. get_pc_addr and get_caller_stackinfo are built from this op plus ordinary loads, so this is the ONLY op the backends need. xtensa uses windowed registers with no such linked chain and Errors at lowering instead of lying with a plausible-looking pointer. }
+
+  IR_ALLOCA        = 71; { alloca(n): IRA = size value node. Grows the DYNAMIC stack area of
+                           the current frame by n bytes rounded up to 16 and yields the hole's
+                           address in the accumulator. Only legal in bodies whose epilogue
+                           restores the stack pointer from the frame pointer (x86-64 `leave`);
+                           the other backends Error at codegen until ported
+                           (feature-c-alloca-dynamic-stack). }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

@@ -83,8 +83,13 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   Regression: `test/cquickjs_prereq.c` in test-core (exit 42; gcc parity
   checked). Gate: 2-step self-host byte-identical, testmgr quick GREEN,
   ctcc/inet C smokes 42.
-  **NEXT WALL: `alloca`** (quickjs.c:15175; JS_CallInternal arg frames +
-  libregexp capture stack) — needs a real dynamic-stack IR op, filed
-  [[feature-c-alloca-dynamic-stack]] (Track A, prio 55). A malloc shim is not
-  acceptable (every JS call would leak). Parked here until that lands; then
-  `make test-quickjs` (oracle diff) gets wired.
+  ~~**NEXT WALL: `alloca`**~~ — LANDED 2026-07-14 night
+  ([[feature-c-alloca-dynamic-stack]]): AN_ALLOCA/IR_ALLOCA, x86-64 grows the
+  dynamic frame (16-aligned sub rsp; `leave` epilogue unwinds it), loop-called
+  variable-size allocations gcc-parity (test/test_alloca.c). Other backends
+  error cleanly until ported (QuickJS runs hosted x86-64).
+  **NEXT WALL: `UINT64_C`** (libbf, quickjs unity build line ~18884):
+  `call to undeclared function: UINT64_C` — the stdint.h constant macros
+  (UINT64_C/INT64_C/UINT32_C/...) are missing from crtl's stdint.h. Track C/B
+  (crtl header) — a few `#define UINT64_C(c) c##ULL` lines, needs cpreproc
+  token-paste in that position.

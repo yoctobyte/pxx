@@ -1025,6 +1025,19 @@ begin
           Result := ASTLeft[argHead];
           Exit;
         end;
+        { alloca(n) / __builtin_alloca(n): dynamic stack allocation in the
+          current frame, freed at function return — a malloc shim would leak
+          per call (QuickJS allocates every JS call frame with it). A USER
+          definition of alloca still wins (FindProc guard).
+          feature-c-alloca-dynamic-stack. }
+        if ((name = 'alloca') or (name = '__builtin_alloca')) and
+           (argHead >= 0) and (FindProc(name) < 0) then
+        begin
+          Result := AllocNode(AN_ALLOCA);
+          ASTLeft[Result] := ASTLeft[argHead];
+          ASTTk[Result] := Ord(tyPointer);
+          Exit;
+        end;
         { gcc bit-scan builtins -> plain crtl helpers (prototypes in crtl
           stdlib.h, bodies auto-pulled from crtl/src/stdlib.c). No intrinsic
           lowering yet; first consumer: QuickJS cutils.h clz/ctz wrappers

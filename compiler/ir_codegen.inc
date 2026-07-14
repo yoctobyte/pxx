@@ -3450,6 +3450,19 @@ begin
           begin EmitB($48); EmitB($F7); EmitB($D8); end; { neg rax }
       end;
       
+    IR_ALLOCA:
+      begin
+        { rax = size -> 16-align -> grow the dynamic stack area -> rax = hole.
+          The epilogue's `leave` restores rsp from rbp, so nothing to unwind;
+          call sequences align rsp dynamically and address args relative to
+          the moved rsp, so they are unaffected. }
+        IREmitNode(IRA[node]);
+        EmitB($48); EmitB($83); EmitB($C0); EmitB($0F);  { add rax, 15 }
+        EmitB($48); EmitB($83); EmitB($E0); EmitB($F0);  { and rax, -16 }
+        EmitB($48); EmitB($29); EmitB($C4);              { sub rsp, rax }
+        EmitB($48); EmitB($89); EmitB($E0);              { mov rax, rsp }
+      end;
+
     IR_NOT:
       begin
         IREmitNode(IRA[node]);

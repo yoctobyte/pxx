@@ -104,6 +104,7 @@ begin
     IR_CONST_DATA: Result := 'const_data';
     IR_MULHI: Result := 'mulhi';
     IR_FRAME: Result := 'frame';
+    IR_ALLOCA: Result := 'alloca';
   else
     Result := 'unknown';
   end;
@@ -467,6 +468,9 @@ begin
           IRRequireNode(IRA[i], 'mulhi a');
           IRRequireNode(IRB[i], 'mulhi b');
         end;
+
+      IR_ALLOCA:
+        IRRequireNode(IRA[i], 'alloca size');
 
     else
       Error('unknown IR opcode');
@@ -4191,6 +4195,12 @@ begin
     begin
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_NEG, left, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_ALLOCA:
+    begin
+      left := IRLowerAST(ASTLeft[node]);
+      Result := IRAppend(IR_ALLOCA, left, -1, -1, 0, Ord(tyPointer));
     end;
 
     AN_NOT:

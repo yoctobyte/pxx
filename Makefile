@@ -1152,6 +1152,8 @@ test-core: $(COMPILER)
 	# to be REJECTED and fell back to opaque: sizeof 0, every field garbage, silently
 	./$(COMPILER) test/canon_bitfield_b310.c /tmp/canon_bitfield_b31026
 	test "$$(/tmp/canon_bitfield_b31026)" = "$$(printf 'A size=4 a=5 b=6\nB size=16 x=11 y=22\nC size=4 a=5 b=6\nD size=8 a=5 b=6\nU size=8 f0=18446744073709551612\nA written a=7 b=1\nD written a=2 b=7')"
+	./$(COMPILER) test/test_alloca.c /tmp/test_alloca26
+	test "$$(/tmp/test_alloca26)" = "7088718"
 	# signed bitfields must sign-extend on read (they came back zero-extended on EVERY
 	# backend; the C corpora all use unsigned bitfields, so csmith found it, not them)
 	./$(COMPILER) test/csigned_bitfield_b306.c /tmp/csigned_bitfield_b30626
