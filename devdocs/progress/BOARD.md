@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-cross-32bit-int64-to-double-low-word | A | 55 | bug | arm32/i386: Int64/QWord -> Double conversion converts only the LOW word — d := int64(1) shl 40 gives 0, silently | — |
 | bug-pascal-member-visibility-unenforced | P | 20 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-testmgr-aarch64-conformance-shard3-timeout-flake | T | 35 | bug | test-c-conformance-aarch64#shard3 00040.c times out (exit 124) under full parallel load; passes standalone — recurring flake | — |
@@ -191,7 +190,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (738)
+## done (739)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -370,6 +369,7 @@ _none_
 | bug-consteval-named-type-cast | A | 50 | bug | Bug: named-type cast in constant expression fails ConstEval | — |
 | bug-consteval-precedence | A | 50 | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-cpp-include-not-found-diagnostic-path | A | 30 | bug | cpreproc: "C include file not found" reports the last search dir, not the requested name | — |
+| bug-cross-32bit-int64-to-double-low-word | A | 55 | bug | arm32/i386: Int64/QWord -> Double conversion converts only the LOW word — d := int64(1) shl 40 gives 0, silently | — |
 | bug-cross-gate-masked-failures | A | 50 | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-cross-metaclass-new-with-args | A | 55 | bug | Metaclass construction WITH ARGUMENTS segfaults on every non-x86-64 target | — |
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
@@ -974,7 +974,6 @@ _none_
 - [p 60] [T] regression-testmgr-conformance-shard-timeout-under-load
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
-- [p 55] [A] bug-cross-32bit-int64-to-double-low-word
 - [p 55] [T] bug-t-qemu-conformance-false-timeout-under-load
 - [p 55] [T] compat-pascal-copy-of-char-literal
 - [p 55] [A] feature-c-alloca-dynamic-stack

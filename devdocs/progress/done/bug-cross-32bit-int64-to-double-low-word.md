@@ -8,7 +8,7 @@ prio: 55
 
 - **Type:** bug (silent wrong value, both 32-bit hosted targets). **Track A**
   (ir_codegen_arm32.inc, ir_codegen386.inc int→float conversion paths).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14 (night session), found while fixing
   [[bug-pascal-qword-to-double-signed]].
 
@@ -46,3 +46,6 @@ with hi signed for Int64 / unsigned for QWord.
 - test_u64_to_double.pas (added by the qword ticket) extends to arm32/i386
   in the Makefile cross sections.
 - tint642.pp's float sections then run correctly on the 32-bit targets too.
+
+## Log
+- 2026-07-14 — resolved, commit 6253e281.
