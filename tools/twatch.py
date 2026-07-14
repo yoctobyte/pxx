@@ -923,13 +923,27 @@ def debounce(clone, secs, cap=300):
 
 
 # ---------------------------------------------------------------- status ---
-def status(repo, grace_min):
+def status(repo, grace_min, tdir=None, ref="HEAD"):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
     some host (a quiet watcher on a quiet repo is indistinguishable from a
     dead one — and it doesn't matter).  Exit 0 = offload to T; 1 = T is
-    down/absent, run your own full gate."""
-    tdir = os.path.join(repo, TSTATE_REL)
+    down/absent, run your own full gate.
+
+    `tdir`/`ref` exist because BOTH default sources go stale and produce a false
+    DOWN:
+
+      * the tstate files in a WORKTREE are only as fresh as the last `git pull` —
+        in a dev checkout that can be hours old, and in the watcher's own clone
+        the worktree is DETACHED at the sha under test for most of every cycle;
+      * `git log` on HEAD has the same problem, and during a bisect HEAD is an
+        old commit entirely.
+
+    So the caller can point this at data read from `origin/master` instead, which
+    is what the daemon actually publishes to. Reported DOWN while the daemon was
+    demonstrably mid-run (2026-07-14).
+    """
+    tdir = tdir or os.path.join(repo, TSTATE_REL)
     tested = set()
     hosts = []
     if os.path.isdir(tdir):
@@ -946,7 +960,7 @@ def status(repo, grace_min):
         print("tstate: DOWN — no watcher state in %s (run your own full gate)"
               % TSTATE_REL)
         return 1
-    out = sh(["git", "log", "--format=%H %ct", "-n", "200"], cwd=repo)
+    out = sh(["git", "log", "--format=%H %ct", "-n", "200", ref], cwd=repo)
     now = time.time()
     untested_old = None
     newest_tested = None

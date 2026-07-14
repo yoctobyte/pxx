@@ -34,6 +34,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -152,16 +153,46 @@ def cmd_up(clone, a):
 
 
 def print_tstate(clone):
-    """The tstate summary (verdicts, open regressions, UP/DOWN).
+    """The tstate summary (verdicts, open regressions, UP/DOWN), from ORIGIN.
 
-    Shared by `trackt status` and the live view, which re-renders it whenever a
-    gate completes — it used to be printed once at startup and then left to rot,
-    so a "DOWN — untested for 47 min" line could sit on screen long after the
-    watcher had caught up.
+    Both obvious sources lie:
+
+      * the DEV CHECKOUT's tstate files are only as fresh as your last `git pull`
+        — so trackt cheerfully reported "DOWN — untested for 151 min" while the
+        daemon was visibly finishing runs two lines above, because the checkout
+        had not pulled since;
+      * the CLONE's worktree is DETACHED at the sha under test for most of every
+        cycle (and at an ancient one during a bisect), so its tstate files are
+        whatever that commit happened to contain.
+
+    The daemon publishes to origin/master, so that is the only honest source. Read
+    the tstate blobs straight out of it, and date the commits from it too. Falls
+    back to the worktree when there is no network / no origin.
     """
-    # from the dev checkout if it has tstate, else from the clone
-    repo = CHECKOUT if os.path.isdir(os.path.join(CHECKOUT, "devdocs")) else clone
-    twatch.status(repo, grace_min=45)
+    repo = clone if os.path.isdir(os.path.join(clone, ".git")) else CHECKOUT
+    try:
+        subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=repo,
+                       timeout=30, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tmp = tempfile.mkdtemp(prefix="trackt-tstate.")
+        dst = os.path.join(tmp, twatch.TSTATE_REL)
+        os.makedirs(dst, exist_ok=True)
+        names = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "origin/master",
+             twatch.TSTATE_REL + "/"], cwd=repo, capture_output=True, text=True,
+            timeout=30).stdout.split()
+        for n in names:
+            if not n.endswith(".json") or "/" in n[len(twatch.TSTATE_REL) + 1:]:
+                continue        # host state files only; reports/ etc not needed
+            blob = subprocess.run(["git", "show", "origin/master:" + n], cwd=repo,
+                                  capture_output=True, timeout=30).stdout
+            with open(os.path.join(dst, os.path.basename(n)), "wb") as f:
+                f.write(blob)
+        return twatch.status(repo, grace_min=45, tdir=dst, ref="origin/master")
+    except (subprocess.SubprocessError, OSError):
+        # offline or no origin: the worktree is all we have. Stale beats silent.
+        fallback = CHECKOUT if os.path.isdir(os.path.join(CHECKOUT, "devdocs")) else clone
+        return twatch.status(fallback, grace_min=45)
 
 
 def cmd_status(clone, attach_ok=True):
