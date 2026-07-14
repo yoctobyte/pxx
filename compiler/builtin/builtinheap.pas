@@ -307,6 +307,48 @@ begin
 {$endif}
 end;
 
+{$ifdef PXX_ESP_IDF}
+{ ESP-IDF profile (relocatable .o linked by idf.py): the pxx heap is backed by
+  the IDF heap — calloc/free externals resolve to newlib/heap_caps at IDF link
+  time. The hosted branch's linux mmap is an ecall that panics FreeRTOS
+  (bug-esp-idf-heap-linux-mmap-ecall: any string literal passed to a `string`
+  parameter allocates and died in HeapMmap); the bare-metal static arena is
+  both tiny and redundant next to the SoC's real heap. calloc keeps PXXAlloc's
+  zero-init contract; the same 8-byte size header as the native allocator
+  preserves PXXRealloc's copy length. }
+function calloc(n: NativeUInt; size: NativeUInt): Pointer; external;
+procedure free(p: Pointer); external;
+
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
+var p: Int64;
+begin
+  if size <= 0 then size := 8;
+  size := ((size + 7) div 8) * 8;
+  p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
+  PWord(p)^ := size;                             { 8-byte size header }
+  Result := Pointer(p + 8);                      { payload }
+end;
+
+procedure PXXFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  free(Pointer(Int64(p) - 8));
+end;
+
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+var np: Pointer; oldSize: NativeInt;
+begin
+  np := PXXAlloc(newSize, align);
+  if p <> nil then
+  begin
+    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    if oldSize > newSize then oldSize := newSize;
+    PXXMemMove(np, p, oldSize);
+    PXXFree(p);
+  end;
+  Result := np;
+end;
+{$else}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -479,6 +521,7 @@ begin
   PXXFree(p);
   Result := np;
 end;
+{$endif}  { PXX_ESP_IDF else: native allocator bodies }
 
 {$ifdef PXX_ESP}
 { ESP lean dynamic array: unmanaged elements only (no per-element retain/release

@@ -38,11 +38,11 @@ PXX="$REPO_ROOT/compiler/pascal26"
 case "$CHIP" in
   esp32s3)
     PROJ="$REPO_ROOT/examples/esp32/hello-s3"
-    PXXFLAGS="--target=xtensa --xtensa-abi=windowed"
+    PXXFLAGS="--target=xtensa --xtensa-abi=windowed --platform=esp"
     QEMU="$(ls "$HOME"/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1)" ;;
   esp32c3)
     PROJ="$REPO_ROOT/examples/esp32/hello-c3"
-    PXXFLAGS="--target=riscv32"
+    PXXFLAGS="--target=riscv32 --platform=esp"
     QEMU="$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1)" ;;
   *) echo "esp_run: unknown chip '$CHIP' (esp32s3|esp32c3)" >&2; exit 2 ;;
 esac

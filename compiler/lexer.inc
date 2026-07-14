@@ -720,6 +720,16 @@ begin
   begin
     name := 'PXX_PLATFORM_ESP';
     PasDefine(name);
+    { ESP-IDF profile (relocatable .o linked by idf.py — platform=esp WITHOUT
+      bare boot): the runtime lives inside FreeRTOS, so builtinheap must back
+      PXXAlloc with the IDF heap (calloc/free externals resolved at IDF link
+      time), not a linux mmap ecall (which panics under FreeRTOS,
+      bug-esp-idf-heap-linux-mmap-ecall) and not the tiny bare-metal arena. }
+    if not EspBareBoot then
+    begin
+      name := 'PXX_ESP_IDF';
+      PasDefine(name);
+    end;
     { esp: minimal capability set — backends fill these in as drivers land. }
   end
   else

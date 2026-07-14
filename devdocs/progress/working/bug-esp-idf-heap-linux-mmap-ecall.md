@@ -5,7 +5,7 @@ prio: 35  # ESP parked (user 2026-07-12): Pascal has prio; still the top ESP tic
 # ESP-IDF (.o) profile: builtin heap still uses Linux mmap — any string literal crashes
 
 - **Type:** bug (runtime / builtin heap) — **Track A** (`compiler/builtin/builtinheap.pas`)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-11, hit by [[feature-esp-peripheral-callback-api]] slice 1
   (examples/esp32/timer-c3) under qemu esp32c3.
 
@@ -57,3 +57,23 @@ its README's qemu validation predates the current heap/alloc behavior.
 - hello-c3 rebuilt with the current compiler still runs.
 - Hosted riscv32 (qemu-user) keeps mmap; ESP bare keeps the static arena;
   self-host + cross gates green.
+
+## 2026-07-14 — RESOLVED (b358)
+
+- `PXX_ESP_IDF` define: `--platform=esp` without bare boot (any ISA).
+- builtinheap: under PXX_ESP_IDF, PXXAlloc/PXXFree/PXXRealloc are backed by the
+  IDF heap (`calloc`/`free` externals, resolved at IDF link time) with the same
+  8-byte size header as the native allocator; calloc keeps the zero-init
+  contract. Hosted riscv32 keeps mmap; bare keeps the static arena.
+- `tools/esp_run.sh` now passes `--platform=esp` (it compiled the c3 leg as
+  POSIX, which is how the linux-mmap heap got into IDF images at all).
+
+Verified: string literal -> `string` param, AnsiString concat and Length all
+run on BOTH IDF legs (esp32c3 and esp32s3) under qemu; test-esp-bare fully
+green; quick + selfcheck green.
+
+**Honest residual on the acceptance list:** timer-c3 now BOOTS and prints
+`PXX timer: started` / `PXX timer: done ...` (the panic is gone), but its
+callback never fires (`ticks=0 status=2`) — that is the pre-existing
+[[bug-esp-emit-obj-proc-fixup-non-iram]] territory (the example's header wart
+documents the same area), not the heap.
