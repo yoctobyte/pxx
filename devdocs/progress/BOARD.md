@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,10 +39,11 @@ _none_
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-openarray-of-array-param-marshal | A | 55 | bug | open-array parameter whose ELEMENT is a static array is marshalled wrong: Length(a) is huge, a[i] yields addresses/garbage — silent | — |
 | bug-pascal-toperator93-runtime-segfault | A | 50 | bug | toperator93.pp compiles but the pxx binary SEGFAULTS (exit 139) — class-operator shape crashes at runtime | — |
+| bug-t-progress-track-detection-prose-mention | T | 40 | bug | progress.py track() matches a prose 'Track T' mention in the Type/Track bullet before the authoritative frontmatter track: field — mis-tags tickets (3 hit in one session) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
-| compat-pascal-copy-of-char-literal | T | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
+| compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
@@ -991,7 +992,7 @@ _none_
 - [p 55] [A] bug-pascal-forin-variants-wrong-output
 - [p 55] [P] bug-pascal-member-visibility-unenforced
 - [p 55] [A] bug-pascal-openarray-of-array-param-marshal
-- [p 55] [T] compat-pascal-copy-of-char-literal
+- [p 55] [P] compat-pascal-copy-of-char-literal
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
@@ -1055,6 +1056,7 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-interface-release-on-last-ref-not-destroyed
+- [p 40] [T] bug-t-progress-track-detection-prose-mention
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [T] feature-t-bench-portable-variants

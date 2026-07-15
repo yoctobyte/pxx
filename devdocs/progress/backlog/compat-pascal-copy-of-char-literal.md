@@ -1,13 +1,14 @@
 ---
 summary: "Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program"
 type: compat
+track: P
 prio: 55
 ---
 
 # `Copy` on a char: FPC promotes char → string, pxx rejects
 
-- **Type:** compat (Track P — Pascal frontend). Found by Track T (pasmith); **T owns
-  the tool, never the bug** — filed here, not fixed there.
+- **Type:** compat (Track P — Pascal frontend). The fuzzer owns the tool, never the
+  bug — filed here, not fixed there.
 - **Status:** backlog
 - **Opened:** 2026-07-14
 - **Found by:** `tools/pasmith_run.py`, seed 30014, the first run after the driver
