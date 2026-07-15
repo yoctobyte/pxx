@@ -6489,6 +6489,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
+    lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -8407,12 +8408,33 @@ begin
           which only a dyn array / open-array param has — a bare static array
           has none. Params (incl. open arrays) and multi-dim keep the runtime
           path. }
+        lenFieldRec := -1; lenFieldIdx := -1;
+        if ASTKind[valNode] = AN_FIELD then
+        begin
+          lenFieldRec := ResolveNodeRec(ASTLeft[valNode]);
+          if lenFieldRec >= REC_UCLASS_BASE then
+            lenFieldIdx := FindUField(lenFieldRec - REC_UCLASS_BASE, GetASTIdentName(valNode));
+        end;
         if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
            Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
            (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] <= 1) then
         begin
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := Syms[ASTIVal[valNode]].ArrLen; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if (lenFieldIdx >= 0) and UFldIsArray[lenFieldIdx] and
+                (UFldArrLen[lenFieldIdx] >= 0) and (UFldDynDepth[lenFieldIdx] = 0) and
+                (UFldArrNDims[lenFieldIdx] <= 1) then
+        begin
+          { Length of a whole 1-D static-array FIELD (`Length(rec.arr)`, or a bare
+            `Length(arr)` reaching an implicit-Self field) — like the AN_IDENT case,
+            a static array carries no runtime [data-8] header, so fold to the field's
+            declared count. Without this the runtime -tkLength path read a nonexistent
+            header and returned 0 (tforin25: a record enumerator's `FIndex < Length(FArr)`
+            was `< 0`, so the for-in ran zero times). }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := UFldArrLen[lenFieldIdx]; ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
         else
@@ -10752,8 +10774,12 @@ end;
 { Read `__e.Current`: a property (getter method OR backing field) or a plain
   public field. Returns the value node. }
 function GenMakeCurrentRead(eSym, enumIdx, enumRec: Integer): Integer;
-var pri, fIdx, i, fnode: Integer; mname: AnsiString;
+var pri, fIdx, i, fnode: Integer; mname: AnsiString; eTk: TTypeKind;
 begin
+  { The enumerator var is a record VALUE (advancedrecords enumerator) or a class
+    pointer — read its Current field/getter through the matching receiver kind so
+    an AN_FIELD over a record takes @eSym+off rather than dereferencing a pointer. }
+  eTk := Syms[eSym].TypeKind;
   pri := FindUProp(enumIdx, 'Current');
   if pri >= 0 then
   begin
@@ -10761,13 +10787,13 @@ begin
     begin
       mname := '';
       for i := 0 to UPropReadMLen[pri] - 1 do AppendChar(mname, TokChars[UPropReadMOff[pri] + i]);
-      Result := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, mname);
+      Result := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, mname);
       Exit;
     end
     else if UPropReadFLen[pri] > 0 then
     begin
       fnode := AllocNode(AN_FIELD);
-      ASTLeft[fnode] := GenMakeIdent(eSym, tyClass);
+      ASTLeft[fnode] := GenMakeIdent(eSym, eTk);
       ASTSOffset[fnode] := UPropReadFOff[pri];
       ASTSLen[fnode] := UPropReadFLen[pri];
       ASTTk[fnode] := Ord(UPropTk[pri]);
@@ -10778,7 +10804,7 @@ begin
   fIdx := FindUField(enumIdx, 'Current');
   if fIdx < 0 then Error('for-in: enumerator has no readable Current');
   fnode := AllocNode(AN_FIELD);
-  ASTLeft[fnode] := GenMakeIdent(eSym, tyClass);
+  ASTLeft[fnode] := GenMakeIdent(eSym, eTk);
   ASTSOffset[fnode] := UFldNOff[fIdx];
   ASTSLen[fnode] := UFldNLen[fIdx];
   ASTTk[fnode] := Ord(RecFieldType(enumRec, 'Current'));
@@ -10795,7 +10821,7 @@ var
   bodyNode, gepi, enumRec, enumIdx, eSym: Integer;
   geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
   freeCall, tryNode: Integer;
-  contTk: TTypeKind;
+  contTk, eTk: TTypeKind;
 begin
   if Syms[varIdx].TypeKind = tyAuto then
     Error('for var .. in <GetEnumerator>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
@@ -10808,13 +10834,21 @@ begin
   if enumRec < REC_UCLASS_BASE then Error('for-in: GetEnumerator must return a class/record');
   enumIdx := enumRec - REC_UCLASS_BASE;
 
-  eSym := AllocVar('', tyClass);
+  { A record enumerator (FPC advancedrecords: GetEnumerator returns a record by
+    value) is held as an embedded record VALUE — `__e := C.GetEnumerator` is a
+    record-copy and `__e.MoveNext` / `__e.Current` take @__e as Self. Modelling it
+    as tyClass (a pointer) made MoveNext mutate/read through a stale temp pointer,
+    so the loop ran zero times (tforin25). A real class enumerator stays tyClass. }
+  if UClsIsRecord[enumIdx] then eTk := tyRecord else eTk := tyClass;
+
+  if eTk = tyRecord then LastTypeRecId := enumRec;   { AllocVar sizes tyRecord by RecSize(LastTypeRecId) }
+  eSym := AllocVar('', eTk);
   Syms[eSym].RecName := enumRec;
 
   geCall := GenMakeMethodCall0(GenMakeIdent(contSym, contTk), contClassIdx, 'GetEnumerator');
-  assignE := GenMakeAssign(GenMakeIdent(eSym, tyClass), geCall);
+  assignE := GenMakeAssign(GenMakeIdent(eSym, eTk), geCall);
 
-  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'MoveNext');
+  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, eTk), enumIdx, 'MoveNext');
 
   curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);

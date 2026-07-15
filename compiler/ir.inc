@@ -2942,6 +2942,18 @@ begin
   Result := IRWrapChkBounds(value, lo, hi);
 end;
 
+{ Resolve an AN_FIELD node to (record id, field index). Returns True and sets the
+  out params when the base resolves to a user record and the named field exists.
+  Used by the whole static-array FIELD assignment path. }
+function faFldRecIdxHelper(fieldNode: Integer; var outRec, outIdx: Integer): Boolean;
+begin
+  outRec := ResolveNodeRec(ASTLeft[fieldNode]);
+  outIdx := -1;
+  if outRec >= REC_UCLASS_BASE then
+    outIdx := FindUField(outRec - REC_UCLASS_BASE, GetASTIdentName(fieldNode));
+  faFldRecIdxHelper := outIdx >= 0;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
@@ -2976,6 +2988,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
+    faFldRec, faFldIdx: Integer;   { whole static-array FIELD assignment }
+
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
     helperPi, wrapperArg, wrapperCall: Integer;
@@ -4966,6 +4980,30 @@ begin
         right := IRLowerAddress(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            Syms[i].ArrLen * elemSize, Ord(tyRecord));
+      end
+      else if (ASTKind[ASTLeft[node]] = AN_FIELD) and rhsIsLValue and
+              (faFldRecIdxHelper(ASTLeft[node], faFldRec, faFldIdx)) and
+              UFldIsArray[faFldIdx] and (UFldArrLen[faFldIdx] >= 0) and
+              (UFldDynDepth[faFldIdx] = 0) and
+              (UFldTk[faFldIdx] <> Ord(tyAnsiString)) and
+              (UFldTk[faFldIdx] <> Ord(tyString)) and
+              not ((UFldTk[faFldIdx] = Ord(tyRecord)) and
+                   RecordHasManagedFields(UFldRec_[faFldIdx])) then
+      begin
+        { Whole static-array FIELD assignment (`rec.a := other.a`, or `Result.FArr
+          := F` inside a record method). The AN_IDENT whole-array branch above only
+          fires for a plain array VARIABLE; a static-array FIELD target fell through
+          to the scalar store, which moved a single element's width and left the
+          rest of the destination array untouched (tforin25: a record enumerator's
+          `Result.FArr := F` copied only element 0). Copy the full
+          ArrLen*elemSize via IR_COPY_REC, mirroring the variable path. Managed-
+          element arrays keep the per-element ARC scalar path. }
+        if UFldTk[faFldIdx] = Ord(tyRecord) then elemSize := RecSize(UFldRec_[faFldIdx])
+        else elemSize := TypeSize(IntToTypeKind(UFldTk[faFldIdx]));
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAddress(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
       end
       else if CProgramMode and (ASTKind[ASTLeft[node]] = AN_FIELD) and
               (RecFieldBitWidth(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
