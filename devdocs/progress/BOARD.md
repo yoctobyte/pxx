@@ -29,12 +29,11 @@ _none_
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
-| bug-c-int-mod-unsigned-uses-signed-conversion | C | 50 | bug | C `int op unsigned` does SIGNED arithmetic — the usual arithmetic conversions don't convert the signed operand to unsigned, so `-13 % 61u` yields -13 (should be 3); silent wrong values for %, /, and comparisons | — |
 | bug-c-long-long-bitfield-promotion | C | 45 | bug | C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort | — |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
@@ -197,7 +196,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (757)
+## done (758)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -292,6 +291,7 @@ _none_
 | bug-c-init-designated-and-nested | C | 90 | bug | C initializers: designated + nested/brace-elided initializers (EPIC) | bug-c-init-array-designators, bug-c-init-brace-elision-nested, bug-c-init-struct-designators |
 | bug-c-init-struct-designators | C | 50 | bug | C struct field designators `.field = v` in braced initializers | — |
 | bug-c-inline-fnptr-param-call | C | 55 | bug | C: calling through an INLINE fn-pointer parameter — "call to undeclared function" | — |
+| bug-c-int-mod-unsigned-uses-signed-conversion | C | 50 | bug | C `int op unsigned` does SIGNED arithmetic — the usual arithmetic conversions don't convert the signed operand to unsigned, so `-13 % 61u` yields -13 (should be 3); silent wrong values for %, /, and comparisons | — |
 | bug-c-large-record-byval-param | C | 50 | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | C | 50 | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
@@ -1012,7 +1012,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 50] [C] bug-c-int-mod-unsigned-uses-signed-conversion
 - [p 50] [B] bug-crtl-stdint-constant-macros
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-fpjson-fpcunit-suite-target

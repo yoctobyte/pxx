@@ -74,3 +74,6 @@ done purely in the frontend.
 The repro prints `3 3`; unsigned/signed `%` `/` `>>` and comparisons match gcc
 across mixed-sign operands; a `test/` regression pins the conversion rule; the
 bitfield-cluster member `bitfld-1.c` (whose residual is this bug) passes.
+
+## Log
+- 2026-07-15 — resolved, commit 2453057b.
