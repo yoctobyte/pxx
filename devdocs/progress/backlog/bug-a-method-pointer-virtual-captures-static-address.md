@@ -9,9 +9,9 @@ track: A
 
 - **Type:** bug (correctness — `procedure of object` / method-pointer lowering of a
   virtual method address). **Silent.**
-- **Track:** A (codegen of `@obj.VirtualMethod`). Found by Track T's pasmith fuzzer
-  (`--mptrs` rung, [[feature-pasmith-deep-oop]]); T owns the tool, files into the
-  owning lane.
+- **Track:** A (codegen of `@obj.VirtualMethod`).
+- **Found by:** the pasmith fuzzer's `--mptrs` rung ([[feature-pasmith-deep-oop]]);
+  the tool is owned by testing infra, which files findings into the owning lane.
 - **Found:** 2026-07-15.
 
 ## Symptom — airtight minimal repro

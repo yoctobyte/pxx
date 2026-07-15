@@ -8,8 +8,9 @@ track: A
 # COM interface refcount: last-reference release does not destroy the object
 
 - **Type:** bug (correctness — interface lifetime / RTL Release lowering). **Silent.**
-- **Track:** A (IR / RTL lowering of interface `_Release`). Found by Track T's
-  fuzzer; T owns the tool, files the finding into the owning lane.
+- **Track:** A (IR / RTL lowering of interface `_Release`).
+- **Found by:** the pasmith fuzzer's `--intfs` rung; the tool is owned by testing
+  infra, which files findings into the owning lane.
 - **Found:** 2026-07-15 by the pasmith interface rung ([[feature-pasmith-deep-oop]])
   on its first run — every interface seed diverges pxx-vs-FPC with both compilers
   self-consistent across `-O` levels (the single-real-bug signature).
