@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-15T06:54:58Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e703f6dcdd8e240a46c25221ff80f88a0dae1652",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-15T06:59:01Z",
    "fixed": [],
    "new_red": [],
@@ -405,6 +397,14 @@
    "sha": "b909ba987bf6e8117d0f22f5b27dcffc98314e94",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-15T15:35:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "50271d5d3cd43dd5a696faf68fbbc593552dd6f6",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -717,6 +717,7 @@
   "test-core#src:test/carrow_on_array_call_rhs_b136.c": "pass",
   "test-core#src:test/cassign_value_b43.c": "pass",
   "test-core#src:test/cauto_pull_crtl_math_b111.c": "pass",
+  "test-core#src:test/cbitfield_arith_precision.c": "pass",
   "test-core#src:test/cbitnot_b11.c": "pass",
   "test-core#src:test/cblock_scope_b186.c": "pass",
   "test-core#src:test/cblock_scope_func_decl_b155.c": "pass",
@@ -1857,11 +1858,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-15T15:05:06Z",
-  "sha": "b909ba987bf6e8117d0f22f5b27dcffc98314e94",
-  "tier": "opt",
+  "date": "2026-07-15T15:35:49Z",
+  "sha": "50271d5d3cd43dd5a696faf68fbbc593552dd6f6",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 121.7
+  "wall": 112.5
  },
  "last_bench": {
   "conf_rows": 550,
