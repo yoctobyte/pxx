@@ -27,8 +27,15 @@ prio: 35
   SILENTLY there (caught=0) — the ticket's original scope note was wrong,
   an implemented-and-reverted checked variant is in git history if Delphi
   parity ever wants it.
-- **Remaining:** SIGNED checked mul on the 32-bit pairs; xtensa ignores
-  ival=1 entirely; subword widths.
+- **Subword widths: NOTHING TO DO — matching FPC.** Oracle-verified
+  (2026-07-15): byte/word/cardinal ops under {$Q+} do NOT raise in FPC
+  3.2.2 (b:=255; b:=b+1 wraps to 0, caught=0 — the arithmetic happens in
+  the promoted width without overflowing; assignment truncation is
+  range-check {$R+} territory, a separate unimplemented feature). pxx
+  already behaves identically.
+- **Remaining (both niche, deliberately deferred):** SIGNED checked mul on
+  the 32-bit pairs; xtensa (ESP bare-metal — no exception runtime there
+  anyway). {$Q+} is otherwise at FPC parity on all hosted targets.
 - **Succ/Pred/Abs/Sqr** inside {$Q+} (FPC checks them; we only tag +,-,*).
 - **Subword widths:** checks currently fire at the promoted 64-bit width;
   FPC checks byte/word/longint ops at their own range. Needs the result
