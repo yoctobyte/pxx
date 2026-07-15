@@ -28,13 +28,13 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (101)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
 | bug-lib-test-console-solitaire-flaky | B | 45 | bug | lib-test flaky: console_solitaire 'aq' smoke prints moves=0/1/2 across runs despite fixed seed NewGame(1) — input-read timing, fails the moves=2 expectation intermittently | — |
-| bug-pascal-class-const-visibility | P | 20 | bug | class CONSTS are unscoped globals, so visibility (tclass12b: strict private const reached from a descendant) cannot be enforced on them; needs a class-const registry + name-resolution gate | — |
+| bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -43,6 +43,7 @@ _none_
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
+| docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
@@ -989,6 +990,7 @@ _none_
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
+- [p 60] [P] bug-pascal-class-const-visibility
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -1073,12 +1075,12 @@ _none_
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [A] chore-sqlite-static-capacity-bumps
+- [p 30] [D] docs-fpc-compatibility-overstates-subset
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
-- [p 20] [P] bug-pascal-class-const-visibility
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [C] bug-c-long-long-bitfield-promotion
 - [p 15] [P] feature-pascal-corpus-expansion
