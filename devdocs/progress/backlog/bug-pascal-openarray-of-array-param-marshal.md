@@ -50,6 +50,36 @@ AND the callee's Length/stride metadata for array-typed elements.
   array-typed elements (it keys on TypeKind <> tyRecord, so tyInteger base
   passes it today, which is how the wrong path is reached).
 
+## Recon 2 (2026-07-15, agent-A — root confirmed, feature-sized)
+
+Confirmed this is NOT open-array-param-specific: a plain `d: array of T` (T a
+static-array type) in main body already mis-indexes. `Length(d)` is now correct
+(2), but `d[i]` yields addresses/garbage — the dynarray uses a SCALAR element
+stride (base-type size, e.g. 4) instead of the element ROW size (e.g. 12).
+
+Root: `parser.inc` dynamic `array of <element>` parse (~15680–15713) handles a
+named DYN-array-alias element (`array of TA`, TA dyn) but has NO case for a named
+FIXED-array element (`array of T`, T = `array[1..3] of Integer`) — the element
+collapses to its base scalar via ParseTypeKind, dropping T's dimension. This is
+the exact mirror of the handled FIXED-outer case at ~15732 ("Without this
+ParseTypeKind drops TG's dimension and the element stride collapses to the base
+type's size"). The inline form `array of array[1..N] of Integer` is *explicitly
+rejected* (parser.inc:15690 "mixed static/dynamic nested arrays not supported"),
+so aggregate-element dynamic arrays are currently an UNSUPPORTED FEATURE, not a
+small metadata miss.
+
+A proper fix is multi-layer and cross-sensitive:
+1. Decl: record the element's fixed-array shape (row byte-size + inner dims) on
+   the dynarray symbol so index/SetLength/copy can size a row.
+2. SetLength: allocate count × rowSize (not count × baseSize).
+3. Index `d[i]`: stride = rowSize; return the row as an aggregate lvalue so
+   `d[i][j]` sub-indexes and `r := d[i]` row-copies.
+4. Open-array param marshalling: element = row.
+5. Cross backends (shared dyn-array header layout).
+
+Parked as feature-sized. tforin14.pp depends on this (its residual after the
+tforin25 fix). Byte-identical parity for both awaits this feature.
+
 ## Acceptance
 
 - Repro prints 2 / 3; tforin14.pp goes byte-identical to FPC and both it and

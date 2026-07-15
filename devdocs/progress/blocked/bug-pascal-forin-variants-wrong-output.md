@@ -26,5 +26,23 @@ N-D outer-dimension iteration (test_forin_bounds_nd). RESIDUALS:
 - tforin25: still prints nothing where FPC prints four 0 lines — shape
   not yet minimized.
 
+## Progress 2 (2026-07-15, agent-A)
+
+**tforin25 FIXED** (commit c16db957) — three distinct silent bugs, each isolated:
+1. Record enumerator was modelled as a tyClass pointer, not an embedded record
+   value (advancedrecords GetEnumerator returns a record by value) → MoveNext
+   mutated a stale temp, loop ran zero times.
+2. `Length` of a static-array FIELD folded to 0 (the fold only handled AN_IDENT
+   arrays) → `FIndex < Length(FArr)` was `< 0`.
+3. Whole static-array FIELD-to-FIELD copy (`Result.FArr := F`) truncated to one
+   element (the whole-array IR_COPY_REC path only fired for AN_IDENT arrays).
+Regression: test/test_forin_record_enumerator_b355.pas.
+
+**tforin14 STILL OPEN** — its residual is the aggregate-element dynamic-array
+gap, a feature-sized multi-layer fix now fully reconned under
+[[bug-pascal-openarray-of-array-param-marshal]] (see its "Recon 2"). This ticket
+is blocked on that feature for byte-identical parity.
+
 ## Acceptance
 Byte-identical stdout to FPC for both; unskip both entries.
+(tforin25 done; tforin14 blocked on the aggregate-element dynarray feature.)
