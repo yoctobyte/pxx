@@ -1867,12 +1867,37 @@ end;
   it feeds the ordinary 1-D AN_INDEX (no codegen change). Reads the dims from
   NDInfoLo/Span and the parsed index exprs from NDIdxNode; nd dimensions.
   Horner form: acc = (i0-lo0); acc = acc*span_d + (i_d - lo_d) for d = 1..nd-1. }
+function NDChkIdx(idxNode: Integer; lo, hi: Int64): Integer;
+{ {$R+}: wrap ONE N-D subscript in PXXRangeChkI64(i, lo, hi) — the flattened
+  Horner index reaches IR as a single expression, so per-dimension bounds can
+  only be applied here at composition time (statement-anchored, like every
+  other {$R+} site). Passthrough when checks are off / builtinheap absent
+  (feature-range-checks-nd-bases). }
+var pi, a1, a2, a3, litN: Integer;
+begin
+  Result := idxNode;
+  if not StmtRChecks then Exit;
+  pi := FindProc('PXXRangeChkI64');
+  if pi < 0 then Exit;
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := idxNode; ASTTk[a1] := Ord(tyInt64);
+  litN := AllocNode(AN_INT_LIT); ASTIVal[litN] := lo; ASTTk[litN] := Ord(tyInt64);
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := litN; ASTTk[a2] := Ord(tyInt64);
+  ASTRight[a1] := a2;
+  litN := AllocNode(AN_INT_LIT); ASTIVal[litN] := hi; ASTTk[litN] := Ord(tyInt64);
+  a3 := AllocNode(AN_ARG); ASTLeft[a3] := litN; ASTTk[a3] := Ord(tyInt64);
+  ASTRight[a2] := a3;
+  Result := AllocNode(AN_CALL); ASTIVal[Result] := pi;
+  ASTLeft[Result] := a1; ASTRight[Result] := -1; ASTTk[Result] := Ord(tyInt64);
+end;
+
 function BuildFlatNDIndex(nd: Integer): Integer;
 var d, loLit, spanLit, diff, scaled, acc: Integer;
 begin
   loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[0]; ASTTk[loLit] := Ord(tyInteger);
   acc := AllocNode(AN_BINOP); ASTIVal[acc] := Ord(tkMinus);
-  ASTLeft[acc] := NDIdxNode[0]; ASTRight[acc] := loLit; ASTTk[acc] := Ord(tyInteger);
+  ASTLeft[acc] := NDChkIdx(NDIdxNode[0], NDInfoLo[0],
+                           NDInfoLo[0] + NDInfoSpan[0] - 1);
+  ASTRight[acc] := loLit; ASTTk[acc] := Ord(tyInteger);
   for d := 1 to nd - 1 do
   begin
     spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := NDInfoSpan[d]; ASTTk[spanLit] := Ord(tyInteger);
@@ -1880,7 +1905,9 @@ begin
     ASTLeft[scaled] := acc; ASTRight[scaled] := spanLit; ASTTk[scaled] := Ord(tyInteger);
     loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[d]; ASTTk[loLit] := Ord(tyInteger);
     diff := AllocNode(AN_BINOP); ASTIVal[diff] := Ord(tkMinus);    { i_d - lo_d }
-    ASTLeft[diff] := NDIdxNode[d]; ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
+    ASTLeft[diff] := NDChkIdx(NDIdxNode[d], NDInfoLo[d],
+                              NDInfoLo[d] + NDInfoSpan[d] - 1);
+    ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
     acc := AllocNode(AN_BINOP); ASTIVal[acc] := Ord(tkPlus);       { scaled + diff }
     ASTLeft[acc] := scaled; ASTRight[acc] := diff; ASTTk[acc] := Ord(tyInteger);
   end;
