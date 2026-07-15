@@ -192,10 +192,18 @@ class Ticket:
         )
         if re.search(r"\bTrack[ -]?R\b", decl, re.I):
             return "R"
-        # Track T (testing infra: testmgr/twatch/tstate) — same decl-line-only
-        # rule as R: prose mentions of Track T don't retag a ticket.
-        if re.search(r"\bTrack[ -]?T\b", decl, re.I) or \
-                self.slug.startswith("feature-track-t-"):
+        # Track T (testing infra: testmgr/twatch/tstate). feature-track-t-* slugs
+        # are real T tickets and always win. But a "Track T" that appears in the
+        # decl line as PROSE — "Found by Track T's fuzzer" on a bug the fuzzer
+        # filed FOR another track — must NOT override an explicit, contradicting
+        # frontmatter `track:` field. That stranded three fuzzer-filed A/P bugs
+        # under T on 2026-07-15 (bug-t-progress-track-detection-prose-mention):
+        # the decl-line regex can't tell a declaration from a mention, so the
+        # authoritative field breaks the tie.
+        if self.slug.startswith("feature-track-t-"):
+            return "T"
+        if re.search(r"\bTrack[ -]?T\b", decl, re.I) and \
+                normalize_track(self.fm.get("track", "")) in ("", "T"):
             return "T"
         # Track O (Optimization: register allocation, opt passes, codegen/heap
         # perf) — a cross-cutting lane surfaced on its own, same decl-line rule as
