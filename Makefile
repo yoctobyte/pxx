@@ -1843,6 +1843,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_rplus26)" = "$$(printf 'lax-b 44\ncaught=3')"
 	./$(COMPILER) test/test_range_checks_reads.pas /tmp/test_rplus_r26
 	test "$$(/tmp/test_rplus_r26)" = "caught=4"
+	./$(COMPILER) test/test_range_checks_enum_field.pas /tmp/test_rplus_ef26
+	test "$$(/tmp/test_rplus_ef26)" = "$$(printf 'e 9\nok 7 caught=2')"
 	./$(COMPILER) test/test_forin_bounds_nd.pas /tmp/test_forin_bnd26
 	test "$$(/tmp/test_forin_bnd26)" = "$$(printf '%s \n%s \n%s \n%s \n' '10 20 30' '50 60 70' '1 2 9' '3 4 5')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26

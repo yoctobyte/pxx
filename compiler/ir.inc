@@ -1040,6 +1040,22 @@ begin
           indexNode := IRAppendCall(rcPi, rcArg, -1, Ord(tyInt64));
         end;
       end;
+    end
+    else if ASTRChk[node] and (ASTKind[baseNode] = AN_FIELD) then
+    begin
+      { record/class FIELD static array: the parser already normalised the
+        index to 0-based, and this path's IR lo stays 0 — so the check is
+        [0, count-1] on the normalised index (r.arr[5] on array[1..3]
+        raises in FPC). Dyn-array fields and N-D fields stay unchecked for
+        now. }
+      rcSym := ResolveNodeRec(ASTLeft[baseNode]);
+      if (rcSym >= REC_UCLASS_BASE) then
+      begin
+        rcPi := FindUField(rcSym - REC_UCLASS_BASE, GetASTIdentName(baseNode));
+        if (rcPi >= 0) and UFldIsArray[rcPi] and (UFldArrLen[rcPi] >= 0) and
+           (UFldDynDepth[rcPi] = 0) and (UFldArrNDims[rcPi] <= 1) then
+          indexNode := IRWrapChkBounds(indexNode, 0, UFldArrLen[rcPi] - 1);
+      end;
     end;
 
     isArr := IsNodeArray(baseNode);
@@ -2856,6 +2872,7 @@ begin
     tyUInt16:  begin lo := 0; hi := 65535; end;
     tyInteger, tyInt32: begin lo := -2147483648; hi := 2147483647; end;
     tyUInt32:  begin lo := 0; hi := 4294967295; end;
+    tyChar:    begin lo := 0; hi := 255; end;  { chr(300) := ch raises in FPC }
   else
     Exit;
   end;
