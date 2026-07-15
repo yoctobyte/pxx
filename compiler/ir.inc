@@ -777,6 +777,7 @@ end;
 
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
+    rcSym, rcPi, rcArg, rcArg2: Integer;
     fieldName: AnsiString;
     isArr: Boolean;
     tk: TTypeKind;
@@ -1010,6 +1011,36 @@ begin
     end;
     baseAddr := IRLowerAddress(baseNode);
     indexNode := IRLowerAST(ASTRight[node]);
+
+    { {$R+}: bound the index — covers READS and WRITES alike, since every
+      element access lowers its address here. Static 1-D arrays use the
+      compile-time bounds; a depth-1 dynamic array asks the runtime count at
+      [data-8] via PXXDynIdxChkI64 (the base is re-lowered as the arg — an
+      AN_IDENT base has no side effects, so the duplicate emission is just a
+      reload; other base shapes are left unchecked for now)
+      (feature-pascal-range-checks-r-plus). }
+    if ASTRChk[node] and (ASTKind[baseNode] = AN_IDENT) and
+       (ASTIVal[baseNode] >= 0) then
+    begin
+      rcSym := ASTIVal[baseNode];
+      if Syms[rcSym].IsArray and (Syms[rcSym].ArrLen >= 0) and
+         (SymArrNDims[rcSym] <= 1) and (SymElemDynDepth[rcSym] = 0) then
+        indexNode := IRWrapChkBounds(indexNode,
+                       Syms[rcSym].ConstVal,
+                       Syms[rcSym].ConstVal + Syms[rcSym].ArrLen - 1)
+      else if Syms[rcSym].IsArray and (Syms[rcSym].ArrLen = -1) and
+              (SymElemDynDepth[rcSym] = 0) then
+      begin
+        rcPi := FindProc('PXXDynIdxChkI64');
+        if rcPi >= 0 then
+        begin
+          rcArg := IRAppend(IR_ARG, IRLowerAddress(baseNode), -1, -1, 0, Ord(tyPointer));
+          rcArg2 := IRAppend(IR_ARG, indexNode, -1, -1, 0, Ord(tyInt64));
+          IRB[rcArg] := rcArg2;
+          indexNode := IRAppendCall(rcPi, rcArg, -1, Ord(tyInt64));
+        end;
+      end;
+    end;
 
     isArr := IsNodeArray(baseNode);
     if ASTKind[baseNode] = AN_IDENT then
@@ -2790,6 +2821,24 @@ begin
   else Result := TypeSize(tyPointer);
 end;
 
+function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer;
+{ Wrap an IR value in PXXRangeChkI64(v, lo, hi) — shared by the narrowing-
+  store guard and the static-array index guard
+  (feature-pascal-range-checks-r-plus). Passthrough without builtinheap. }
+var pi, a1, a2, a3: Integer;
+begin
+  Result := value;
+  pi := FindProc('PXXRangeChkI64');
+  if pi < 0 then Exit;
+  a1 := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyInt64));
+  a2 := IRAppend(IR_ARG,
+          IRAppend(IR_CONST_INT, -1, -1, -1, lo, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
+  a3 := IRAppend(IR_ARG,
+          IRAppend(IR_CONST_INT, -1, -1, -1, hi, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
+  IRB[a1] := a2; IRB[a2] := a3;
+  Result := IRAppendCall(pi, a1, -1, Ord(tyInt64));
+end;
+
 function IRWrapRangeChk(value: Integer; destTk: TTypeKind): Integer;
 { {$R+} narrowing-assignment guard: wrap the assigned value in a
   PXXRangeChkI64(v, lo, hi) call when the DEST's ordinal range is narrower
@@ -2810,15 +2859,7 @@ begin
   else
     Exit;
   end;
-  pi := FindProc('PXXRangeChkI64');
-  if pi < 0 then Exit;
-  a1 := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyInt64));
-  a2 := IRAppend(IR_ARG,
-          IRAppend(IR_CONST_INT, -1, -1, -1, lo, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
-  a3 := IRAppend(IR_ARG,
-          IRAppend(IR_CONST_INT, -1, -1, -1, hi, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
-  IRB[a1] := a2; IRB[a2] := a3;
-  Result := IRAppendCall(pi, a1, -1, Ord(tyInt64));
+  Result := IRWrapChkBounds(value, lo, hi);
 end;
 
 function IRLowerAST(node: Integer): Integer;
@@ -4941,8 +4982,8 @@ begin
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
-        { {$R+}: guard a narrowing store with the range-check helper, and a
-          static-array INDEX write with a bounds check on the index
+        { {$R+}: guard a narrowing store with the range-check helper — index
+          bounds (reads AND writes) are handled centrally in IRLowerAddress
           (feature-pascal-range-checks-r-plus). }
         if ASTRChk[node] then
         begin
@@ -4950,38 +4991,6 @@ begin
             value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]))
           else
             value := IRWrapRangeChk(value, lhsStoreTk);
-          if (ASTKind[ASTLeft[node]] = AN_INDEX) and
-             (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) then
-          begin
-            varIdx := ASTIVal[ASTLeft[ASTLeft[node]]];
-            if (varIdx >= 0) and Syms[varIdx].IsArray and
-               (Syms[varIdx].ArrLen >= 0) and (SymArrNDims[varIdx] <= 1) and
-               (SymElemDynDepth[varIdx] = 0) then
-            begin
-              procIdx := FindProc('PXXRangeChkI64');
-              if procIdx >= 0 then
-              begin
-                { a[i] := v  ->  a[PXXRangeChkI64(i, lo, hi)] := v }
-                wrapperArg := AllocNode(AN_ARG);
-                ASTLeft[wrapperArg] := ASTRight[ASTLeft[node]];
-                ASTTk[wrapperArg] := Ord(tyInt64);
-                left := AllocNode(AN_INT_LIT);
-                ASTIVal[left] := Syms[varIdx].ConstVal; ASTTk[left] := Ord(tyInt64);
-                right := AllocNode(AN_ARG); ASTLeft[right] := left; ASTTk[right] := Ord(tyInt64);
-                ASTRight[wrapperArg] := right;
-                left := AllocNode(AN_INT_LIT);
-                ASTIVal[left] := Syms[varIdx].ConstVal + Syms[varIdx].ArrLen - 1;
-                ASTTk[left] := Ord(tyInt64);
-                item := AllocNode(AN_ARG); ASTLeft[item] := left; ASTTk[item] := Ord(tyInt64);
-                ASTRight[right] := item;
-                wrapperCall := AllocNode(AN_CALL);
-                ASTIVal[wrapperCall] := procIdx;
-                ASTTk[wrapperCall] := Ord(tyInt64);
-                ASTLeft[wrapperCall] := wrapperArg; ASTRight[wrapperCall] := -1;
-                ASTRight[ASTLeft[node]] := wrapperCall;
-              end;
-            end;
-          end;
         end;
         if ASTKind[ASTLeft[node]] = AN_IDENT then
         begin

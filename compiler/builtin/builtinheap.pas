@@ -190,6 +190,7 @@ type
                          not be ^Int64 — on i386 that writes 8 bytes into a
                          4-byte handle/pointer slot and corrupts its neighbour. }
   PByte = ^Byte;    { byte access at an arbitrary address }
+  PInt64 = ^Int64;  { qword access (dyn-array count header at [data-8]) }
   PInt32 = ^Integer; { 32-bit integer access }
   TPXXIntfMethod = function(AInst: Pointer): NativeInt;  { COM/ARC interface IMT
                        slot signature: _AddRef/_Release take only the implicit
@@ -1939,6 +1940,17 @@ function PXXRangeChkI64(v, lo, hi: Int64): Int64;
 begin
   if (v < lo) or (v > hi) then PXXRangeError;
   Result := v;
+end;
+
+{ {$R+} dynamic-array index guard: count lives at [data-8] (the dyn-array
+  header), nil = length 0. Returns the index unchanged when in range. }
+function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;
+var cnt: Int64;
+begin
+  if dataPtr = nil then cnt := 0
+  else cnt := PInt64(Int64(dataPtr) - 8)^;
+  if (idx < 0) or (idx >= cnt) then PXXRangeError;
+  Result := idx;
 end;
 
 {$ifdef CPU_XTENSA}
