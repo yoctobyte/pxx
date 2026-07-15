@@ -49,6 +49,7 @@ documentation first.
 - [Standard library](./library/) — the RTL and PCL units.
 - [Examples](./examples/) — demo programs included in the checkout.
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
+- [Blog](./blog/) — stories and interviews from the project.
 
 > These docs are published directly from the project's git repository. Found a
 > mistake? The source lives in `docs/` — edits there flow to the site.
