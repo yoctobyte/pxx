@@ -18,11 +18,11 @@ prio: 35
 - **i386 + arm32: add/sub DONE** (hi-word adc/sbb / adcs/sbcs flags; see
   the pair-legs commit) — checked MUL still wraps there (needs the widening
   cores' high half; Makefile pins caught=3 until it lands).
-- **riscv32: add/sub DONE** (sltu-chain verdicts, see the riscv32-leg
-  commit; caught=3 Makefile-pinned like i386/arm32).
-- **Remaining:** xtensa ignores ival=1 entirely; 32-bit pair checked MUL
-  (widening cores' high half) on i386/arm32/riscv32; Succ/Pred/Abs/Sqr;
-  subword widths.
+- **riscv32/i386/arm32: add/sub + UNSIGNED mul DONE** (sltu chains /
+  umull high halves / pushed-operand mul probes; caught=4 Makefile-pinned
+  on all five hosted targets).
+- **Remaining:** SIGNED checked mul on the 32-bit pairs; xtensa ignores
+  ival=1 entirely; Succ/Pred/Abs/Sqr; subword widths.
 - **Succ/Pred/Abs/Sqr** inside {$Q+} (FPC checks them; we only tag +,-,*).
 - **Subword widths:** checks currently fire at the promoted 64-bit width;
   FPC checks byte/word/longint ops at their own range. Needs the result
