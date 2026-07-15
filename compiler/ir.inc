@@ -738,9 +738,35 @@ begin
     generated program was wrong. The C corpora (lua/sqlite/tcc) never caught it
     because their bitfields are unsigned -- the bug was invisible to a decade of
     real-world C. }
-  if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
-      (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
+  { C integer promotion: a bitfield NARROWER than int reads as a SIGNED int —
+    every value of a sub-int field fits, so both signed and unsigned sub-int fields
+    promote to `int`, and downstream signed-vs-unsigned arithmetic (subtraction,
+    modulo, division, comparison) is chosen from THIS node's type. The prior code
+    sign-extended in the (unsigned) storage type and left the result tagged
+    unsigned, so `bit.i % bit.u` did an UNSIGNED modulo (bf-sign-2.c, bitfld-1.c,
+    the gcc-torture bitfield cluster). Do the whole extension in the 32-bit
+    tyInteger domain: first re-mask to a clean zero-extended value (clears garbage
+    above `width` left by a sub-int storage-width op), then sign-extend if the field
+    is signed. Full-width (:32) and long-long bitfields can't fit in int, so they
+    keep the storage-type extension path below. }
+  if width < 32 then
   begin
+    maskNode := IRAppend(IR_CONST_INT, -1, -1, -1, IRBitMask(width), Ord(tyInteger));
+    Result := IRAppend(IR_BINOP, Result, maskNode, Ord(tkAnd), 0, Ord(tyInteger));
+    if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
+        (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
+    begin
+      signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
+      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
+      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(tyInteger));
+      sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(tyInteger));
+      Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkMinus), 0, Ord(tyInteger));
+    end;
+  end
+  else if ((fieldTk = tyInt8) or (fieldTk = tyInt16) or (fieldTk = tyInt32) or
+           (fieldTk = tyInt64) or (fieldTk = tyInteger) or (fieldTk = tyNativeInt)) then
+  begin
+    { Full-width / long-long signed bitfield: sign-extend in the storage type. }
     signBit := IRBitMask(width) - (IRBitMask(width) div 2);   { = 1 shl (width-1) }
     sbNode := IRAppend(IR_CONST_INT, -1, -1, -1, signBit, Ord(storageTk));
     Result := IRAppend(IR_BINOP, Result, sbNode, Ord(tkXor), 0, Ord(storageTk));

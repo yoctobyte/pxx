@@ -2409,7 +2409,19 @@ begin
       ASTSOffset[fnode] := fldOff;
       ASTSLen[fnode] := fldLen;
       if recId <> REC_NONE then
-        ASTTk[fnode] := Ord(RecFieldType(recId, fieldName))
+      begin
+        ASTTk[fnode] := Ord(RecFieldType(recId, fieldName));
+        { C integer promotion: a bitfield narrower than int reads as a SIGNED int
+          (every value of a sub-int field fits), so `x.u3 - 2` is signed arithmetic
+          even when u3 is `unsigned:3` — otherwise the subtraction wraps to a huge
+          unsigned and `>= 0` is always true (bf-sign-2.c, gcc-torture bitfield
+          cluster). The bitfield READ still uses the field's true type/width for
+          zero/sign extension; only the promoted expression type changes here. A
+          full-width `:32` field can't fit in int and keeps its declared type. }
+        if (RecFieldBitWidth(recId, fieldName) > 0) and
+           (RecFieldBitWidth(recId, fieldName) < 32) then
+          ASTTk[fnode] := Ord(tyInteger);
+      end
       else
         ASTTk[fnode] := Ord(tyInteger);
       Next;   { consume field name }
