@@ -265,6 +265,14 @@ def render_bench(tdir, links):
         if r["workload"] not in order:
             order.append(r["workload"])
         latest[(r["workload"], r["level"])] = r
+    # Hide a workload if its FPC-comparable portable twin exists: `mandelbrot`
+    # and `raytracer` depend on pxx-only units (ansiterm / image / png) so FPC
+    # cannot build them and they carry no `fpc` column — a bare blank a reader
+    # can't tell from missing data. `mandelbrot-p` / `raytracer-p` are the same
+    # kernel with no units and DO carry the FPC comparison, so show those
+    # instead. Data-driven: drop X whenever X-p is also present.
+    names = set(order)
+    order = [w for w in order if (w + "-p") not in names]
     levels = ["-O0", "-O2", "-O3", "fpc"]
     head = "<tr><th>workload" + "".join("<th>%s" % l for l in levels)
     head += "<th>-O3 vs -O0<th>pxx-O2 vs fpc</tr>"
