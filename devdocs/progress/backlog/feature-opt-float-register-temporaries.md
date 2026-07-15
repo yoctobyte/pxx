@@ -24,6 +24,19 @@ operands from stack slots, computes in xmm0/xmm1, and spills the result back
 (zr*zr - zi*zi + cr etc.) round-trips every temporary through memory; FPC
 keeps the whole escape iteration in registers.
 
+## Recon (2026-07-15 morning — root confirmed)
+
+The x86-64 VALUE MODEL carries a Double as raw bits in RAX. A float
+IR_BINOP therefore emits: eval left -> rax, push rax; eval right -> rax,
+mov rcx<-pop; movq xmm1, rax; movq xmm0, rcx; <op>; movq rax, xmm0. Three
+GPR<->XMM transfers plus a stack round-trip PER OPERATION — the whole 4.2x
+against FPC's xmm-resident code. The narrow "fuse within one tree" idea
+still pays, but the honest fix is an xmm-resident float accumulator
+(xmm0 = the float accumulator; nested left operands spill to the stack as
+today, but as MOVSD spills, no GPR transit), which touches every float
+consumer: binops, compares, call args/returns, stores, writeln. Sized as
+a MULTI-SESSION Track O arc — do not start it as a night-tail.
+
 ## Shape (per the regcall/residency precedents)
 
 - xmm residency for float LOCALS mirrors the -O2 regcall integer residency
