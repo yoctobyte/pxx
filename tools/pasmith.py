@@ -128,7 +128,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0, nmptrs=0, nprops=0, nexdtor=0):
+                 nhier=0, nmptrs=0, nprops=0, nexdtor=0, nclsm=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -213,6 +213,15 @@ class Gen:
         # once (the UB-free invariant under unwind), and its destructor folds so a
         # skipped or doubled cleanup during unwinding changes the checksum.
         self.nexdtor = nexdtor  # length of the EXd exception/handler chain
+        # Class-method rung (feature-pasmith-deep-oop): class vars (shared state),
+        # class methods (implicit Self = the metaclass, a hidden arg -- a static Self
+        # is silently wrong, see project_fpcunit_green_metaclass_self), VIRTUAL class
+        # methods dispatched through an instance, a `class of` metaclass var, AND a
+        # static class ref (three dispatch paths that must agree), and abstract
+        # methods reached only through an override (never called on the abstract
+        # base). N derived siblings each override the virtual class method and the
+        # abstract method with a distinct value.
+        self.nclsm = nclsm
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -492,6 +501,31 @@ class Gen:
             return self.tagged("methptr", [
                 "%smp := @%s.Mm%d;" % (pad, om, j),
                 "%sMix(mp(longint(%s)));" % (pad, self.expr(INT_TYPES[4], scope, 2))])
+
+        if k < 0.958 and self.nclsm:
+            # Class-method dispatch. Virtual class method reached three ways -- via
+            # an instance, via a `class of` metaclass var, and via a static class
+            # ref -- which must agree with the instance's runtime type (or the
+            # static base for TCmB). Abstract method reached only through UseAM's
+            # virtual dispatch. Class var read reflects the shared count.
+            oc = rnd.choice(self.cmobjs)
+            r = rnd.random()
+            if r < 0.25:
+                return self.tagged("clsmeth", [
+                    "%sMix(int64(%s.CM(longint(%s))));"
+                    % (pad, oc, self.expr(INT_TYPES[4], scope, 2))])
+            if r < 0.5:
+                return self.tagged("vclsmeth", ["%sMix(int64(%s.VCM));" % (pad, oc)])
+            if r < 0.7:
+                i = rnd.randrange(self.nclsm)
+                return self.tagged("metaclass", [
+                    "%smcm := TCm%d;" % (pad, i),
+                    "%sMix(int64(mcm.VCM));" % pad])
+            if r < 0.9:
+                return self.tagged("abstractcall", [
+                    "%sMix(int64(%s.UseAM(longint(%s))));"
+                    % (pad, oc, self.expr(INT_TYPES[4], scope, 2))])
+            return self.tagged("classvar", ["%sMix(int64(TCmB.cv));" % pad])
 
         if k < 0.96 and self.nprops:
             # Property access: scalar getter/setter and the indexed default property.
@@ -1094,6 +1128,48 @@ class Gen:
             L.append("")
         return L
 
+    def gen_clsm(self):
+        """A base with a class var, class methods (one virtual), and an abstract
+        method, plus N derived siblings overriding the virtual class method and the
+        abstract one. Objects are instantiated as derived (the base is abstract), so
+        every virtual-class-method / abstract dispatch resolves at runtime."""
+        L = ["type"]
+        L.append("  TCmB = class")
+        L.append("    class var cv: longint;")
+        L.append("    iv: longint;")
+        L.append("    constructor Create(v: longint);")
+        L.append("    class function CM(a: longint): longint;")
+        L.append("    class function VCM: longint; virtual;")
+        L.append("    procedure AM; virtual; abstract;")
+        L.append("    function UseAM(a: longint): longint; virtual;")
+        L.append("  end;")
+        for i in range(self.nclsm):
+            L.append("  TCm%d = class(TCmB)" % i)
+            L.append("    class function VCM: longint; override;")
+            L.append("    procedure AM; override;")
+            L.append("  end;")
+        L.append("  TMetaCm = class of TCmB;")
+        L.append("")
+        return L
+
+    def gen_clsm_bodies(self):
+        L = []
+        L.append("constructor TCmB.Create(v: longint); begin iv := v; Inc(cv); end;")
+        # Class method: implicit Self is the metaclass; reads the shared class var.
+        L.append("class function TCmB.CM(a: longint): longint; "
+                 "begin CM := longint(a + cv); end;")
+        L.append("class function TCmB.VCM: longint; begin VCM := 10; end;")
+        # UseAM calls the abstract method through virtual dispatch -- only ever on a
+        # derived instance that overrides it, so no abstract call is ever executed.
+        L.append("function TCmB.UseAM(a: longint): longint; "
+                 "begin AM; UseAM := longint(a + iv); end;")
+        for i in range(self.nclsm):
+            L.append("class function TCm%d.VCM: longint; begin VCM := %d; end;"
+                     % (i, 100 + i))
+            L.append("procedure TCm%d.AM; begin Mix(5500 + %d); end;" % (i, i))
+        L.append("")
+        return L
+
     def gen_exdtor(self):
         """An exception chain EXd0<EXd1<... (from Exception) and a class TXo whose
         virtual method raises a derived EXd while an object is live. Emitted in
@@ -1475,6 +1551,8 @@ class Gen:
             L += self.gen_props()
         if self.nexdtor:
             L += self.gen_exdtor()
+        if self.nclsm:
+            L += self.gen_clsm()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1552,6 +1630,11 @@ class Gen:
                 L.append("  %s: TPr;" % op)
         if self.nexdtor:
             L.append("  xo: TXo;")
+        if self.nclsm:
+            self.cmobjs = ["ocm%d" % j for j in range(3)]
+            for oc in self.cmobjs:
+                L.append("  %s: TCmB;" % oc)
+            L.append("  mcm: TMetaCm;")
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1608,6 +1691,8 @@ class Gen:
             L += self.gen_prop_bodies()
         if self.nexdtor:
             L += self.gen_exdtor_bodies()
+        if self.nclsm:
+            L += self.gen_clsm_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1677,6 +1762,11 @@ class Gen:
             L.append("      xo.Free;")
             L.append("    end;")
             L.append("  end;")
+        if self.nclsm:
+            L.append("  TCmB.cv := 0;")   # reset the shared class var deterministically
+            for oc in self.cmobjs:
+                L.append("  %s := TCm%d.Create(%d);"
+                         % (oc, rnd.randrange(self.nclsm), rnd.randint(1, 50)))
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1736,6 +1826,9 @@ class Gen:
         if self.nprops:
             for op in self.probjs:
                 L.append("  %s.Free;" % op)
+        if self.nclsm:
+            for oc in self.cmobjs:
+                L.append("  %s.Free;" % oc)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -1858,6 +1951,11 @@ def main():
                          "derived EXd (chain length N) while an object is live; it is "
                          "Freed in `finally` on both the normal and unwinding path, "
                          "its destructor folding -- the b339-shaped intersection.")
+    ap.add_argument("--clsm", type=int, default=None,
+                    help="class vars + class methods + N derived siblings overriding a "
+                         "VIRTUAL class method (dispatched via instance, `class of` "
+                         "metaclass var, and static ref) + abstract methods reached "
+                         "only through an override.")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1896,17 +1994,18 @@ def main():
         # rungs. Opt in explicitly (--intfs N / --mptrs N) until those bugs are fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
-                     ("hier", 4), ("props", 3), ("exdtor", 3)):
+                     ("hier", 4), ("props", 3), ("exdtor", 3), ("clsm", 3)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes", "intfs", "hier", "mptrs", "props", "exdtor"):
+              "strs", "classes", "intfs", "hier", "mptrs", "props", "exdtor",
+              "clsm"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
               a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs,
-              a.props, a.exdtor).gen()
+              a.props, a.exdtor, a.clsm).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)

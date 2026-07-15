@@ -183,3 +183,17 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   pointers (bug), properties (clean), polymorphic containers (clean), exceptions×dtor
   (clean) all done. Only remaining ranked hole: class methods / class vars / abstract
   methods (#6) — lower yield, left for a follow-up.
+- 2026-07-15 (opus-trackT) — **Class-method rung landed (`--clsm N`); CLEAN. Last
+  ranked hole — ticket complete.** Class vars (shared state), class methods (implicit
+  Self = metaclass), a VIRTUAL class method dispatched three ways (instance, `class
+  of` metaclass var, static ref -- all must agree with the runtime type), and abstract
+  methods reached only through an override (never called on the abstract base). N
+  derived siblings each override the virtual class method + abstract method. In
+  `--wide`. Gate: `--check 50 --clsm 3` and `--check 40 --wide`, 0 rejects; 25 seeds,
+  0 divergences -- pxx handles metaclass dispatch (the known-landmine path,
+  project_fpcunit_green_metaclass_self), class vars, and abstract methods correctly.
+
+  **All ranked deep-oop holes now covered** (interfaces, is/as + branching hierarchy,
+  method pointers, properties, polymorphic containers, exceptions × destructor, class
+  methods/vars/abstract). Two silent pxx bugs found and filed to Track A (interface
+  release; virtual method pointer). Ticket resolved.
