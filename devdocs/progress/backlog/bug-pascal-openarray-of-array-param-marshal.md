@@ -85,3 +85,40 @@ tforin25 fix). Byte-identical parity for both awaits this feature.
 - Repro prints 2 / 3; tforin14.pp goes byte-identical to FPC and both it and
   the direct-index shape get a regression test.
 - Cross parity (the open-array header layout is shared).
+
+## Recon 3 (2026-07-15, agent-A — exact gap + representation options)
+
+Pinned the precise parser gap and the representation choice for a future session:
+
+- **Exact gap:** `parser.inc` ~15776-15807 (the `isDyn` `array of T` branch) handles
+  a nested-dyn element and a named-DYN-alias element, but has NO case for a named
+  FIXED-array element. It falls through to `ParseTypeKind` (~15863) which resolves
+  `T` to its BASE scalar, dropping the row dimension → scalar element stride. The
+  mirror FIXED-outer case is already handled at ~15814-15860 (merges the element's
+  dims into the outer N-D list); the dyn-outer branch needs the analogous handling.
+
+- **Aggregate-element infra already exists:** `array of TRec` (record element)
+  works today with correct stride/copy (SetLength count×RecSize, d[i] aggregate
+  lvalue, r:=d[i] row-copy). A fixed-array element is structurally identical.
+
+- **Precedent for "element is a fixed array of N":** `SymPtrElemArrLen` (defs.inc
+  ~1148) already models exactly this for C pointer-to-array — "row length N, elem
+  stride = base size, drives p[i][j] flatten (i*N+j)". The Pascal dynarray needs
+  the same concept as a new `Sym` field (e.g. `SymDynElemRowLen`), which per the
+  Alloc* parallel-array landmine must be reset in EVERY `Alloc*` (symtab.inc).
+
+- **Why the record-element shortcut is INSUFFICIENT:** synthesising a record type
+  for the element makes `r := d[i]` work (byte-compatible copy) but NOT the direct
+  `d[i][j]` form the repro's `d[0][1] := 5` needs — a record indexes by `.field`,
+  not `[j]`. So the full row-length model (2-level index flatten) is required, not
+  a record alias.
+
+- **Layers to land (all must be green together — no partial Track A commit):**
+  (1) new `SymDynElemRowLen` field + Alloc* resets; (2) parse `array of <fixed T>`
+  → record row length + base elem type/rec + inner dims; (3) SetLength stride =
+  rowLen×baseSize; (4) index: `d[i]` = row lvalue, `d[i][j]` flatten i*rowLen+j;
+  (5) `r := d[i]` row-copy; (6) open-array-param marshal (element = row); cross
+  backends ride the shared header if stride is right. Inner element may itself be
+  multi-dim (`array[1..2,1..3]`), so store inner dims, not just a length.
+
+Still feature-sized; the above is the executable plan for a dedicated session.
