@@ -7,7 +7,7 @@ prio: 55
 # {$R+} / {$RANGECHECKS ON}: runtime range checking
 
 - **Type:** feature (FPC-parity runtime checks). **Track A.**
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-15 night, straight out of the {$Q+} arc
   ([[feature-pascal-overflow-checks-q-plus]] — subword probing showed
   truncation is {$R+} territory, then the oracle probe found pxx's gap
