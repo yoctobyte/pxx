@@ -46,6 +46,43 @@ end.
 | **FPC 3.2.2** (`-O2` and `-O-`) | `before nil` / **`DTOR ran`** / `after nil` |
 | **pxx** (`-O0`/`-O2`/`-O3`) | `before nil` / `after nil` — **destructor never runs** |
 
+## Recon (2026-07-15, agent-A — root found; fix is a dialect-default decision, parked)
+
+Root: the ARC assign paths in `ir.inc` (retain-new / release-old around an
+interface store, and the `_Release` on `it := nil`) are all gated on `isComIntf`
+= `UClsIsComInterface[iface]`. That flag is set at the interface declaration
+(`parser.inc` ~17837) from the global `InterfacesComMode`, which **defaults to
+CORBA (off)** (`lexer.inc:679`) and only flips under `{$interfaces com}`. So a
+plain objfpc interface is CORBA → no refcount → no `_Release` → destructor never
+fires. The IR *emits* the release for `it := nil`, but only inside `if isComIntf`,
+which is False. Confirmed by `--dump-ir`: `it := TThing.Create` is a plain
+store (no `PXXIntfAddRefRaw`), `it := nil` is a bare `default_mem` (no
+`PXXIntfRelease`).
+
+**FPC defaults interfaces to COM**; pxx's CORBA default is the divergence.
+
+Measured two candidate fixes (both built + self-host byte-identical):
+1. **Flip the global default to COM** (FPC-faithful). Fixes the repro, but breaks
+   the 7 GUID-less CORBA-style interface tests (`test_interfaces`,
+   `_as`/`_is`/`_inherit`/`_param`/`_multi_secondary`) — they implement GUID-less
+   interfaces on non-refcounted classes, which under COM require the reserved
+   QI/_AddRef/_Release slots. Under real FPC those tests would themselves need
+   `{$interfaces corba}`, so the "fix" is: flip default + add `{$interfaces corba}`
+   to the CORBA-lenient tests.
+2. **GUID ⇒ COM heuristic** (rejected). Fixed the repro and kept the 6 GUID-less
+   tests, but broke `test_getinterface_guid_b257`: it uses `class(TObject, IFoo)`
+   — a GUID interface implemented by a NON-refcounted TObject (a valid pxx
+   CORBA-lenient pattern). A GUID appears on both COM and CORBA interfaces, so it
+   is not the distinguishing signal; the `{$interfaces}` mode is.
+
+Recommendation: this is a **dialect-default decision** (COM vs CORBA), which the
+user has flagged as delayed ([[feedback_rtti_layout_mostly_irrelevant_facade]]).
+The FPC-faithful move is option 1 (default COM + `{$interfaces corba}` on the
+lenient tests). Needs the user's call before flipping, plus the full interface +
+OOP corpus gate. Left broken until that decision.
+
+---
+
 Dropping the last reference to a COM (refcounted) interface must call `_Release`,
 which at refcount 0 destroys the object **synchronously**, before the next
 statement. pxx does not: the destructor's side effect (`writeln`) never appears, so
