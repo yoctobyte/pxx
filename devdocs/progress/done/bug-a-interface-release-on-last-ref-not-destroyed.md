@@ -129,3 +129,6 @@ The minimal repro above prints `DTOR ran` between the two lines under pxx at eve
 `-O` level; a `test/test_*.pas` regression that folds an interface destructor into a
 checksum matches FPC; the pasmith `--intfs` rung stops diverging (its ledger
 signature clears on `--recheck`).
+
+## Log
+- 2026-07-15 — resolved, commit 3cd9f25a.

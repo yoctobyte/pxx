@@ -87,3 +87,43 @@ machinery, which already exists per-backend, e.g. `EmitAnsiStrReleaseLocked` /
   (fpcunit's TNoRefCountObject shape, fgl, etc.) compile and run.
 - self-host byte-identical; cross targets green (per-backend epilogue release, like
   ansistring already has).
+
+## Log
+- 2026-07-15 — resolved, commit 3cd9f25a.
+
+## Resolution (2026-07-15, agent-A)
+
+Landed the COM managed-lifetime arc:
+
+- **Item 1 (scope-exit release)** — already in tree from the prior session
+  (bb286dfb): a COM interface local `_Release`s at the proc epilogue
+  (`EmitManagedLocalCleanup`, `SymIsComInterface` case). Verified: scope-exit
+  destructor + multi-ref timing (last ref frees, earlier drops don't).
+- **Item 2 (param/result)** — commit 8a499a68. A by-value COM interface arg is
+  marshalled through a private temp copy (anti-aliasing path) released at the
+  caller's scope exit; it lacked a matching retain, so it double-dropped the
+  caller's single reference (silent use-after-free once the value escaped to a
+  global). Fixed: `PXXIntfAddRef` the temp after the `copy_rec`. `const` params
+  stay by-ref aliases (no copy, no refcount); function results already AddRef.
+  Regression: `test_interface_com_value_param`.
+- **Item 3 (record fields)** — commit cb2ed843. COM interface fields of a value
+  record are now managed: `RecordHasManagedFields`/`FieldIsManaged` recognise
+  them, `EmitLayoutRTTI` emits descriptor member kind 4 (Interface, ifaceId in
+  typeRef), `PXXRecordRetain`/`PXXRecordRelease` handle kind 4. Zero-init +
+  copy-retain + scope-release. Regression: `test_interface_com_record_field`.
+- **Item 4 (default flip)** — commit 3cd9f25a. Default is now `{$interfaces com}`
+  (FPC parity); CORBA is `{$interfaces corba}`. Resolves the anchor bug in
+  default mode. GUID-less CORBA-style tests carry the directive explicitly.
+  Self-host byte-identical; native tier green (939/940, 1 unrelated skip).
+
+### Remaining (filed separately — NOT part of this arc's acceptance)
+
+- **Class-field finalization** — a COM interface field of a *class* (not a value
+  record) is not released on `Free`, because pxx classes finalize NO managed
+  fields at all (even an ansistring class field leaks on destruction). This is a
+  broader pre-existing gap, not interface-specific → filed as
+  [[bug-a-class-managed-fields-not-finalized-on-destroy]].
+- **Item 5 (`as`/`Supports` via strict QI protocol)** — deferred as the ticket
+  planned. `as`/`is`/`GetInterface` (GUID lookup via RTTI) already work; the
+  strict COM QueryInterface protocol path is a separate optional enhancement, not
+  needed for lifetime. Pick up only if a corpus requires it.

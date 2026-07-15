@@ -29,11 +29,11 @@ _none_
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (103)
+## backlog (102)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
+| bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | a class's managed fields (ansistring / dynarray / COM interface) are NOT released when the object is destroyed — pxx finalizes managed fields only for VALUE records, so every managed class field leaks on Free (silent) | — |
 | bug-c-long-long-bitfield-promotion | C | 45 | bug | C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-openarray-of-array-param-marshal | A | 55 | bug | open-array parameter whose ELEMENT is a static array is marshalled wrong: Length(a) is huge, a[i] yields addresses/garbage — silent | — |
@@ -56,7 +56,6 @@ _none_
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-callconv-register-args | O | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
-| feature-com-interface-managed-lifetime | A | 50 | feature | finish COM interface managed lifetime (refcount like ansistring): scope-exit / param / result / field release, then default {$interfaces com} (FPC parity); CORBA stays the lightweight opt-out | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
 | feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -195,7 +194,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (760)
+## done (762)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -205,6 +204,7 @@ _none_
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
+| bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
@@ -641,6 +641,7 @@ _none_
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
 | feature-class-variables | A | 50 | feature | feature: class variables (`class var`) | — |
 | feature-classes-tlist-notify-hook | B | 50 | feature | `TList.Notify` virtual hook + `TListNotification` — FPC Classes surface gap | — |
+| feature-com-interface-managed-lifetime | A | 50 | feature | finish COM interface managed lifetime (refcount like ansistring): scope-exit / param / result / field release, then default {$interfaces com} (FPC parity); CORBA stays the lightweight opt-out | — |
 | feature-comment-diagnostics-standards | C | 45 | feature | Comment diagnostics to de-facto standard: unterminated-comment error (Pascal) + -Wcomment (C) | — |
 | feature-compiler-search-path-pcl | A | 50 | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | A | 50 | feature | Compiler warning diagnostics facility | — |
@@ -1014,7 +1015,6 @@ _none_
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [D] docs-devnotes-ai-assisted-build
-- [p 50] [A] feature-com-interface-managed-lifetime
 - [p 50] [B] feature-fpjson-fpcunit-suite-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro
@@ -1062,7 +1062,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [A] bug-a-interface-release-on-last-ref-not-destroyed
+- [p 40] [A] bug-a-class-managed-fields-not-finalized-on-destroy
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [A] feature-unicodestring-model
