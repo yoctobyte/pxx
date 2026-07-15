@@ -1,0 +1,15 @@
+sig=fpc-self_trace-length
+seed=27432
+sha=35b8d3305dbc
+compiler=/home/rene/trackt-watch/compiler/pascal26
+note=FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved
+
+fpc-O0       6203749778026324892
+fpc-O2       <crash>(rc=217)
+pxx-O0       6203749778026324892
+pxx-O2       6203749778026324892
+pxx-O3       6203749778026324892
+
+traces agree up to the shorter one (21 vs 21 checkpoints)
+
+repro: tools/pasmith.py --seed 27432 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3
