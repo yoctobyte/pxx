@@ -8875,6 +8875,7 @@ var
   bfNDims: array[0..MAX_BF-1] of Integer;
   bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
+  bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
   startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
   isBitField, structPacked, fieldPacked: Boolean;
 begin
@@ -9305,22 +9306,31 @@ begin
               them sequentially: `union { unsigned f1:14; unsigned f2:14; }`
               read/wrote f2 at bits 14..27 instead of 0..13 — a silent wrong
               value gcc disagrees with (csmith seed 3 checksum divergence). }
-            bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+            bitUnitOff := 0; bitUnitUsed := 0; bitUnitSize := sz; bitUnitAlign := 1;
             thisOff := 0;
           end
           else
           begin
-            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > 32) then
+            { The storage unit width is the field's declared-type size (`sz`): 4
+              bytes for int bitfields, 8 for `long long` bitfields. Start a fresh
+              unit when there is none, when the field won't fit the current unit, or
+              when the field's type is WIDER than the current unit (a long-long
+              bitfield after a run of int bitfields needs its own 64-bit unit). The
+              old code hardwired a 32-bit unit and capped storage at 4 bytes, so a
+              `:40` field was read/written through only its low 32 bits
+              (bug-c-long-long-bitfield-promotion). }
+            if (bitUnitOff < 0) or (bitUnitUsed + bitWidth > bitUnitSize * 8) or
+               (sz > bitUnitSize) then
             begin
               thisOff := curOff;
-              bitUnitOff := thisOff; bitUnitUsed := 0; bitUnitSize := 4; bitUnitAlign := 1;
+              bitUnitOff := thisOff; bitUnitUsed := 0; bitUnitSize := sz; bitUnitAlign := 1;
             end
             else
               thisOff := bitUnitOff;
           end;
           bitBytes := (bitUnitUsed + bitWidth + 7) div 8;
           if bitBytes < 1 then bitBytes := 1;
-          if bitBytes > 4 then bitBytes := 4;
+          if bitBytes > sz then bitBytes := sz;
         end
         else
         begin
@@ -9368,13 +9378,19 @@ begin
           bitUnitUsed := bitUnitUsed + bitWidth;
           bitBytes := (bitUnitUsed + 7) div 8;
           if bitBytes < 1 then bitBytes := 1;
-          if bitBytes > 4 then bitBytes := 4;
+          if bitBytes > sz then bitBytes := sz;   { was 4; identical for int (sz=4) }
+          { A long-long bitfield unit is LOADED/STORED as 8 bytes (IRBitStorageTk),
+            so it occupies a full 8-byte unit — reserve that much or the next field's
+            unit overlaps it and an 8-byte store clobbers this one
+            (bug-c-long-long-bitfield-promotion). int/short units keep their exact
+            byte span (sz<=4), preserving existing struct layouts. }
+          if sz >= 8 then bitUnitBytes := 8 else bitUnitBytes := bitBytes;
           if isUnion then
           begin
-            if bitBytes > curOff then curOff := bitBytes;
+            if bitUnitBytes > curOff then curOff := bitUnitBytes;
           end
           else
-            curOff := bitUnitOff + bitBytes;
+            curOff := bitUnitOff + bitUnitBytes;
         end
         else
         begin
