@@ -48,3 +48,6 @@ match-time gap: accept an AN_METHODREF argument for a method-pointer-typed
 The repro compiles and prints 5; a `test/` regression covers `@obj.Method`
 passed as an argument (both virtual and non-virtual); the event-handler idiom
 (`Register(@Self.Handler)`) is exercised.
+
+## Log
+- 2026-07-15 — resolved, commit c74f63f6.
