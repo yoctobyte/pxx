@@ -49,9 +49,21 @@ if [ -n "$TARGET" ]; then
   LABEL="test-c-conformance-$TARGET"
 fi
 WORK="${TMPDIR:-/tmp}/pxx_c_conformance.$$"
-# per-program run budget; stretched by testmgr's calibration factor so weak
-# hardware doesn't false-timeout (TESTMGR_TIME_SCALE, default 1)
-TIMEOUT_S="$(awk -v s="${TESTMGR_TIME_SCALE:-1}" 'BEGIN { t=10*s; printf "%d", (t<10 ? 10 : t) }')"
+# per-program run budget. Native programs finish in milliseconds so 10s is
+# ample; QEMU user-mode targets are far slower (00040.c alone: 2.5-15s standalone
+# on aarch64) and starve further under the full 16-way matrix — the inner
+# `timeout` then fires on ONE slow program and false-REDs the whole shard with
+# exit 124 (regression-testmgr-conformance-shard-timeout-under-load and dups).
+# So qemu targets get a much larger base, and BOTH bases stretch by the hardware
+# calibration (TESTMGR_TIME_SCALE) and the live concurrency factor
+# (TESTMGR_LOAD_SCALE = cap/cores) that testmgr exports. A genuinely hung
+# program is still caught by the OUTER per-shard job timeout (testmgr's
+# conformance class, 1200s) — the inner budget only needs to clear the slowest
+# honest program under load, not police hangs.
+if [ -n "$TARGET" ]; then base=60; else base=10; fi
+TIMEOUT_S="$(awk -v b="$base" -v s="${TESTMGR_TIME_SCALE:-1}" \
+  -v l="${TESTMGR_LOAD_SCALE:-1}" \
+  'BEGIN { t=b*s*l; printf "%d", (t<10 ? 10 : t) }')"
 
 if [ ! -f "$SUITE/00001.c" ]; then
   echo "$LABEL: SKIP — no suite at $SUITE (run tools/install_lib_candidates.sh c-testsuite)"

@@ -1861,6 +1861,15 @@ def main():
     logdir = tempfile.mkdtemp(prefix="testmgr-")
     run_jobs = [j for j in jobs if j.status != "skip"]
     mgr = Manager(run_jobs, args, scale, logdir)
+    # Live-concurrency factor for scripts whose INNER per-item timeouts starve
+    # under the full parallel matrix (qemu-user conformance shards especially:
+    # a single slow program crosses its per-program budget and false-REDs the
+    # whole shard with exit 124 — regression-testmgr-conformance-shard-timeout-
+    # under-load). TESTMGR_TIME_SCALE is an idle hardware probe and stays ~1 on
+    # a fast box, so it never captures this; cap/cores does. Never below 1 (only
+    # ever extends a budget, never shortens it).
+    os.environ["TESTMGR_LOAD_SCALE"] = "%.2f" % max(
+        1.0, mgr.hard_cap / float(os.cpu_count() or 1))
     nskip = len(jobs) - len(run_jobs)
     print("testmgr: tier=%s jobs=%d%s cap=%d scale=%.2f logs=%s"
           % (args.tier, len(run_jobs),
