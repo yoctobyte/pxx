@@ -218,3 +218,4 @@
 2026-07-13T05:32:31Z  v218  0f853408b3a1e47d34eaff88bf12a57f82222f667a5524275c189be1bc00b501  35aba06067ba4b5233f984884ef6c3825671a580  feat(pfront): advanced records — methods inside a record
 2026-07-13T13:15:31Z  v219  703cdd59348479b2a78e7f6acc4967c33c34f4e89948bff74844760d2e03c786  7e874039d50af1959a9762f973d27f12f2fc9bfb  pfront: built-in POINTER type names (PInteger, PByte, PDouble, ...) — and the shadowing trap they exposed
 2026-07-14T10:45:30Z  v220  b11842a48dae21630a7586d0c73172b7df592f76ec65cf43003a0e5c46e38828  b3072f7c4d12c2bb2b6d0a2a352da0f27cbedb1d  board: triage sweep cleanup — close 3 stale, rewrite 2 misdiagnosed, unpark 2, file 3 new
+2026-07-15T13:41:49Z  v221  6e1dcca09010f021f0449bf0b70aaa39352a6dda7b6e9f1aa75e700fa0e3cba2  c3c4dc59bafb2fdb9427ab759002e7ceba72b42f  tickets(A): resolve class managed-field finalization (56e8261b)

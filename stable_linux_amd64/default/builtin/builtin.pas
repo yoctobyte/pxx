@@ -18,9 +18,11 @@ unit builtin;
 interface
 
 function StrInt(v: Int64; width: Integer): AnsiString;
+function StrQWord(v: QWord; width: Integer): AnsiString;
 function FloatToStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
+procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): AnsiString;
@@ -123,7 +125,163 @@ procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
 procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
 function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
 
+{ FPC System PRNG surface (Random/Randomize/RandSeed), pulled via the bare-name
+  token pre-scan like Str/Val. RandSeed IS the generator state (TP-style:
+  writing it restarts the sequence, each call advances it); the generator is a
+  xorshift32 — conformance tests seed it for reproducibility of their OWN run
+  and never depend on FPC's exact sequence. A user declaration of any of these
+  names shadows, like the other System names in this unit. }
+var
+  RandSeed: Cardinal;
+
+function Random(range: Int64): Int64;
+procedure Randomize;
+
+{ FPC System.HexStr(Val, cnt): Val as cnt hex digits, truncating on the left
+  (HexStr($1234, 2) = '34'), zero-padding on the right ('0012'). }
+function HexStr(Val: Int64; cnt: Integer): AnsiString;
+
+{ FPC System.RunError(n): report a runtime error and terminate with exit code
+  n. FPC also prints the faulting address; there is no portable way to get a
+  meaningful one here, so just the number. }
+procedure RunError(errnum: Integer);
+
+{ FPC System.Lo/Hi: low/high half of the value. FPC dispatches on the argument
+  type (Word->Byte, DWord->Word, QWord->DWord); the Word->Byte form is omitted
+  until something needs it (an untyped 16-bit argument would widen into the
+  Cardinal overload and take its DWord semantics, matching FPC's default for
+  integer expressions). }
+function Lo(v: Cardinal): Word;
+function Lo(v: QWord): Cardinal;
+function Hi(v: Cardinal): Word;
+function Hi(v: QWord): Cardinal;
+
+{ FPC System.Swap: exchange the two halves (DWord: word halves, QWord: dword
+  halves). The Word->byte-swap form is omitted like Lo/Hi's. }
+function Swap(v: Cardinal): Cardinal;
+function Swap(v: QWord): QWord;
+
+{ FPC System.UniqueString(s): make the string's payload uniquely referenced so
+  in-place writes (e.g. through a PChar into it) cannot alias another string. }
+procedure UniqueString(var s: AnsiString);
+
 implementation
+
+{ Advance the xorshift32 state living in RandSeed. State 0 is a fixed point of
+  xorshift, so it maps to an arbitrary nonzero constant (RandSeed = 0 and
+  RandSeed = that constant give the same sequence — harmless). }
+function __pxxRandNext32: Cardinal;
+var x: Cardinal;
+begin
+  x := RandSeed;
+  if x = 0 then x := 2463534242;
+  x := x xor (x shl 13);
+  x := x xor (x shr 17);
+  x := x xor (x shl 5);
+  RandSeed := x;
+  Result := x;
+end;
+
+function Random(range: Int64): Int64;
+var v: Int64;
+begin
+  if range <= 0 then
+  begin
+    Result := 0;
+    Exit;
+  end;
+  v := ((Int64(__pxxRandNext32) shl 32) or Int64(__pxxRandNext32)) and
+       $7FFFFFFFFFFFFFFF;
+  Result := v mod range;
+end;
+
+procedure Randomize;
+var
+  ts: array[0..1] of Int64;
+  r: Int64;
+begin
+  ts[0] := 0; ts[1] := 0; r := 0;
+  { clock_gettime(CLOCK_MONOTONIC=1, @ts) via the raw-syscall intrinsic; the
+    buffer is large enough for both the 64-bit and legacy 32-bit timespec
+    layouts, and the raw bytes are only entropy — layout does not matter. }
+{$ifdef CPUX86_64}
+  r := __pxxrawsyscall(228, 1, Int64(@ts[0]), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  r := __pxxrawsyscall(113, 1, Int64(@ts[0]), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  r := __pxxrawsyscall(263, 1, Int64(@ts[0]), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_I386}
+  r := __pxxrawsyscall(265, 1, Int64(@ts[0]), 0, 0, 0, 0);
+{$endif}
+{$ifdef CPU_RISCV32}
+{$ifndef PXX_ESP}
+  r := __pxxrawsyscall(403, 1, Int64(@ts[0]), 0, 0, 0, 0);  { clock_gettime64 }
+{$endif}
+{$endif}
+  { No clock on a bare target (PXX_ESP): ts stays zero and the stack address
+    below is the only entropy — Randomize is still callable, just weak there. }
+  RandSeed := Cardinal(ts[0] xor ts[1] xor r xor Int64(@ts[0]));
+end;
+
+function HexStr(Val: Int64; cnt: Integer): AnsiString;
+const
+  digits = '0123456789ABCDEF';
+var
+  i: Integer;
+begin
+  if cnt < 0 then cnt := 0;
+  SetLength(Result, cnt);
+  for i := cnt downto 1 do
+  begin
+    Result[i] := digits[Integer(Val and $F) + 1];
+    Val := Val shr 4;
+  end;
+end;
+
+procedure RunError(errnum: Integer);
+begin
+  writeln('Runtime error ', errnum);
+  Halt(errnum);
+end;
+
+function Lo(v: Cardinal): Word;
+begin
+  Result := Word(v and $FFFF);
+end;
+
+function Lo(v: QWord): Cardinal;
+begin
+  Result := Cardinal(v and $FFFFFFFF);
+end;
+
+function Hi(v: Cardinal): Word;
+begin
+  Result := Word((v shr 16) and $FFFF);
+end;
+
+function Hi(v: QWord): Cardinal;
+begin
+  Result := Cardinal((v shr 32) and $FFFFFFFF);
+end;
+
+function Swap(v: Cardinal): Cardinal;
+begin
+  Result := ((v and $FFFF) shl 16) or ((v shr 16) and $FFFF);
+end;
+
+function Swap(v: QWord): QWord;
+begin
+  Result := ((v and $FFFFFFFF) shl 32) or ((v shr 32) and $FFFFFFFF);
+end;
+
+procedure UniqueString(var s: AnsiString);
+begin
+  if s <> '' then
+    s := __pxxStrCopy(s, 1, Length(s));
+end;
 
 procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
 begin
@@ -236,6 +394,33 @@ begin
     Result := '';
 end;
 
+
+function StrQWord(v: QWord; width: Integer): AnsiString;
+{ StrInt's UNSIGNED sibling: a QWord >= 2^63 must not print with a minus sign
+  (write(Text, q) routes here; the console writeln path has its own unsigned
+  emitter). }
+var
+  digits: string;
+  n: QWord;
+  d: Integer;
+begin
+  digits := '';
+  if v = 0 then
+    digits := '0'
+  else
+  begin
+    n := v;
+    while n > 0 do
+    begin
+      d := Integer(n mod 10);
+      digits := Chr(Ord('0') + d) + digits;
+      n := n div 10;
+    end;
+  end;
+  Result := digits;
+  while Length(Result) < width do
+    Result := ' ' + Result;
+end;
 
 function StrInt(v: Int64; width: Integer): AnsiString;
 var
@@ -419,6 +604,58 @@ begin
     Exit;
   end;
   if neg then n := -n;
+  v := n;
+  code := 0;
+end;
+
+procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
+{ Val() with a QWord destination: unsigned accumulation with RANGE DETECTION —
+  '18446744073709551616' (High(QWord)+1) must set code<>0, and the plain Int64
+  Val cannot know its caller's signedness (tint642's testqwordstr). The parser
+  routes Val(s, q, code) here when the destination is tyUInt64. }
+var
+  i, len, d: Integer;
+  started: Boolean;
+  n: QWord;
+  c: Char;
+begin
+  v := 0;
+  code := 0;
+  n := 0;
+  started := False;
+  len := Length(s);
+  i := 1;
+  while (i <= len) and (s[i] = ' ') do
+    Inc(i);
+  if (i <= len) and (s[i] = '+') then
+    Inc(i);
+  while i <= len do
+  begin
+    c := s[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      d := Ord(c) - Ord('0');
+      { n*10 + d must fit: High(QWord) = 18446744073709551615 }
+      if (n > QWord(1844674407370955161)) or
+         ((n = QWord(1844674407370955161)) and (d > 5)) then
+      begin
+        code := i;
+        v := 0;
+        Exit;
+      end;
+      n := n * 10 + QWord(d);
+      started := True;
+      Inc(i);
+    end
+    else
+      break;
+  end;
+  if (not started) or (i <= len) then
+  begin
+    code := i;
+    v := 0;
+    Exit;
+  end;
   v := n;
   code := 0;
 end;

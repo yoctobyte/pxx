@@ -117,6 +117,40 @@ function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
 procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
+
+{ ---- IInterface / TInterfacedObject: the COM root pair (FPC declares them in
+  System) ----
+  Declared HERE because builtinheap is pulled for every class-using program and
+  is parsed before user declarations — so `TFoo = class(TInterfacedObject, IFoo)`,
+  the single most-written FPC/Delphi interface idiom, resolves out of the box
+  instead of silently building a parentless class whose ARC dispatch walks a
+  garbage IMT slot (bug-pascal-tinterfacedobject-missing-silent-segfault).
+  A COM-mode interface with no explicit parent implicitly derives IInterface
+  (parser.inc), which is what reserves IMT slots 0..2 for QueryInterface /
+  _AddRef / _Release — ARC releases through slot 2.
+  NOTE: a user declaration of either name lands on a LATER UCls row and is
+  shadowed by this one (FindUClass is first-match); the shapes are identical to
+  FPC's, so that only matters if the user's version diverges from the FPC ABI. }
+type
+  HResult = LongInt;
+
+  IInterface = interface
+    ['{00000000-0000-0000-C000-000000000046}']   { the canonical IUnknown GUID }
+    function QueryInterface(constref IID: TGuid; out Obj): HResult;
+    function _AddRef: Integer;
+    function _Release: Integer;
+  end;
+  IUnknown = IInterface;
+
+  TInterfacedObject = class(TObject, IInterface)
+    FRefCount: Integer;
+    function QueryInterface(constref IID: TGuid; out Obj): HResult;
+    function _AddRef: Integer;
+    function _Release: Integer;
+    { Virtual so a descendant's `destructor Destroy; override;` runs when the
+      last interface reference drops (_Release dispatches Free -> Destroy). }
+    destructor Destroy; virtual;
+  end;
 {$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
@@ -156,6 +190,7 @@ type
                          not be ^Int64 — on i386 that writes 8 bytes into a
                          4-byte handle/pointer slot and corrupts its neighbour. }
   PByte = ^Byte;    { byte access at an arbitrary address }
+  PInt64 = ^Int64;  { qword access (dyn-array count header at [data-8]) }
   PInt32 = ^Integer; { 32-bit integer access }
   TPXXIntfMethod = function(AInst: Pointer): NativeInt;  { COM/ARC interface IMT
                        slot signature: _AddRef/_Release take only the implicit
@@ -273,6 +308,48 @@ begin
 {$endif}
 end;
 
+{$ifdef PXX_ESP_IDF}
+{ ESP-IDF profile (relocatable .o linked by idf.py): the pxx heap is backed by
+  the IDF heap — calloc/free externals resolve to newlib/heap_caps at IDF link
+  time. The hosted branch's linux mmap is an ecall that panics FreeRTOS
+  (bug-esp-idf-heap-linux-mmap-ecall: any string literal passed to a `string`
+  parameter allocates and died in HeapMmap); the bare-metal static arena is
+  both tiny and redundant next to the SoC's real heap. calloc keeps PXXAlloc's
+  zero-init contract; the same 8-byte size header as the native allocator
+  preserves PXXRealloc's copy length. }
+function calloc(n: NativeUInt; size: NativeUInt): Pointer; external;
+procedure free(p: Pointer); external;
+
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
+var p: Int64;
+begin
+  if size <= 0 then size := 8;
+  size := ((size + 7) div 8) * 8;
+  p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
+  PWord(p)^ := size;                             { 8-byte size header }
+  Result := Pointer(p + 8);                      { payload }
+end;
+
+procedure PXXFree(p: Pointer);
+begin
+  if p = nil then Exit;
+  free(Pointer(Int64(p) - 8));
+end;
+
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+var np: Pointer; oldSize: NativeInt;
+begin
+  np := PXXAlloc(newSize, align);
+  if p <> nil then
+  begin
+    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    if oldSize > newSize then oldSize := newSize;
+    PXXMemMove(np, p, oldSize);
+    PXXFree(p);
+  end;
+  Result := np;
+end;
+{$else}
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -445,6 +522,7 @@ begin
   PXXFree(p);
   Result := np;
 end;
+{$endif}  { PXX_ESP_IDF else: native allocator bodies }
 
 {$ifdef PXX_ESP}
 { ESP lean dynamic array: unmanaged elements only (no per-element retain/release
@@ -1114,6 +1192,76 @@ begin
   PXXIntfRelease(dest, ifaceId);
   PWord(dest)^ := PWord(src)^;
 end;
+
+{ GUID-keyed interface lookup for TInterfacedObject.QueryInterface — the same
+  RTTI-blob walk as PXXIntfIMTOf, but matched on the 16-byte GUID at entry
+  offset 0 instead of the interface id (a duplicate of builtin's
+  __pxxGetInterface, which lives in a unit builtinheap must not depend on).
+  Writes the instance pointer (an interface value IS the instance — FPC ABI)
+  through objOut on a hit. }
+function PXXTIOGetInterface(inst: Pointer; iid: Pointer; objOut: Pointer): NativeInt;
+var
+  vmt, rtti, ifaces, e: Pointer;
+  cnt, i, j: NativeInt;
+  pa, pb: PByte;
+  same: Boolean;
+begin
+  Result := 0;
+  if (inst = nil) or (iid = nil) then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PWord(Pointer(Int64(vmt) - 8))^);
+  while rtti <> nil do
+  begin
+    cnt := NativeInt(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
+        same := True;
+        for j := 0 to 15 do
+        begin
+          pa := PByte(Int64(e) + j);
+          pb := PByte(Int64(iid) + j);
+          if pa^ <> pb^ then begin same := False; Break; end;
+        end;
+        if same then
+        begin
+          if objOut <> nil then PWord(objOut)^ := NativeInt(inst);
+          Result := 1;
+          Exit;
+        end;
+      end;
+    rtti := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+  end;
+end;
+
+function TInterfacedObject.QueryInterface(constref IID: TGuid; out Obj): HResult;
+begin
+  if PXXTIOGetInterface(Pointer(Self), @IID, @Obj) <> 0 then
+    Result := 0
+  else
+    Result := HResult($80004002);   { E_NOINTERFACE }
+end;
+
+function TInterfacedObject._AddRef: Integer;
+begin
+  Self.FRefCount := Self.FRefCount + 1;
+  Result := Self.FRefCount;
+end;
+
+function TInterfacedObject._Release: Integer;
+begin
+  Self.FRefCount := Self.FRefCount - 1;
+  Result := Self.FRefCount;
+  if Result = 0 then
+    Self.Free;   { nil-guarded [virtual Destroy;] FreeMem — the Free desugar }
+end;
+
+destructor TInterfacedObject.Destroy;
+begin
+end;
 {$endif}
 
 { Ensure the managed AnsiString handle stored at strSlot is uniquely owned.
@@ -1402,6 +1550,57 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+end;
+
+procedure PXXClassFinalize(inst: Pointer);
+{ Release a CLASS instance's managed fields on destruction, by its RUNTIME
+  class: [inst] = VMT, [VMT-16] = the layout descriptor EmitLayoutRTTI emitted
+  (nil = nothing to finalize). Runs between the user Destroy chain and FreeMem
+  (the Free desugar inserts the call), matching FPC's FreeInstance timing.
+
+  Two passes, split by lock discipline
+  (bug-a-class-managed-fields-not-finalized-on-destroy):
+  - kind 4 (COM interface): released FIRST, with NO heap lock held — the release
+    runs the referenced object's destructor chain and self-locking FreeMem, so
+    doing it under a lock would deadlock (the reverted cb2ed843 hit exactly
+    that on the record path).
+  - kinds 1-3 (string/dynarray/record): PXXRecordRelease, whose inner frees are
+    self-locking on softlock targets and lock-free single-threaded. On x86-64
+    --threadsafe the heap lock is the codegen BSS spinlock, unreachable from
+    Pascal — skip the pass there (pre-existing benign leak) rather than race
+    the allocator. PXXRecordRelease has no kind-4 case, so interfaces are not
+    double-released. }
+var
+  vmt, desc: Pointer;
+  memberCount, i, offset, kind, typeRef: Integer;
+  memberPtr: Int64;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    kind := PInt32(memberPtr + 4)^;
+    if kind = 4 then
+    begin
+      offset := PInt32(memberPtr)^;
+      typeRef := PInt32(memberPtr + 12)^;
+      PXXIntfRelease(Pointer(Int64(inst) + offset), typeRef);
+      PWord(Pointer(Int64(inst) + offset))^ := 0;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+
+{$ifndef PXX_TS_HARDLOCK}
+  PXXRecordRelease(inst, desc);
+{$endif}
 end;
 
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
@@ -1752,6 +1951,60 @@ begin
   if PXXDivZeroHook <> nil then PXXDivZeroHook();
   writeln('Runtime error 200 (division by zero)');
   Halt(200);
+end;
+
+var
+  { Installed by sysutils' initialization to convert a {$Q+} arithmetic
+    overflow into a raised, catchable EIntOverflow — same design as
+    PXXDivZeroHook above. Default nil = FPC-without-sysutils behavior. }
+  PXXOverflowHook: TPXXDivZeroProc;
+
+{ {$Q+} overflow trap target: the checked add/sub/mul codegen branches here
+  when the operation wrapped. FPC behavior: "Runtime error 215" + exit code
+  215. Never returns unless a hook raises past it.
+  feature-pascal-overflow-checks-q-plus. }
+procedure PXXOverflow;
+begin
+  if PXXOverflowHook <> nil then PXXOverflowHook();
+  writeln('Runtime error 215 (arithmetic overflow)');
+  Halt(215);
+end;
+
+var
+  { Installed by sysutils' initialization to convert a {$R+} range violation
+    into a raised, catchable ERangeError — third of the hook family. }
+  PXXRangeErrorHook: TPXXDivZeroProc;
+  { 4th of the family: installed by sysutils to convert a {$I+} Text-I/O
+    failure into a raised EInOutError (feature-pascal-io-checks-i-plus). }
+  PXXIoErrorHook: TPXXDivZeroProc;
+
+{ {$R+} range trap: FPC behavior 'Runtime error 201' + exit code 201.
+  feature-pascal-range-checks-r-plus. }
+procedure PXXRangeError;
+begin
+  if PXXRangeErrorHook <> nil then PXXRangeErrorHook();
+  writeln('Runtime error 201 (range check error)');
+  Halt(201);
+end;
+
+{ {$R+} narrowing-assignment guard: the parser wraps the assigned value in
+  this call when the destination's ordinal range is narrower than the
+  computed width. Pure Pascal, so every target gets range checks for free. }
+function PXXRangeChkI64(v, lo, hi: Int64): Int64;
+begin
+  if (v < lo) or (v > hi) then PXXRangeError;
+  Result := v;
+end;
+
+{ {$R+} dynamic-array index guard: count lives at [data-8] (the dyn-array
+  header), nil = length 0. Returns the index unchanged when in range. }
+function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;
+var cnt: Int64;
+begin
+  if dataPtr = nil then cnt := 0
+  else cnt := PInt64(Int64(dataPtr) - 8)^;
+  if (idx < 0) or (idx >= cnt) then PXXRangeError;
+  Result := idx;
 end;
 
 {$ifdef CPU_XTENSA}
