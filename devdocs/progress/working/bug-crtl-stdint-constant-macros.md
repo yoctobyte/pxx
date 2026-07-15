@@ -9,7 +9,7 @@ prio: 50
 - **Type:** bug (crtl header gap). **Track B** (lib/crtl) — filed from Track A's
   night session per lane rules; C-frontend token-paste in this position may
   need a Track C look if the obvious define fails.
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14 night, the wall AFTER alloca in the QuickJS bring-up
   ([[feature-c-corpus-quickjs]]).
 

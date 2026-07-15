@@ -52,4 +52,18 @@ typedef unsigned long long uint_fast64_t;
 #define INTMAX_MAX INT64_MAX
 #define UINTMAX_MAX UINT64_MAX
 
+/* C99 7.18.4 integer constant macros: expand an integer constant to one of the
+   corresponding type. The narrow ones are no-ops (the value already has at least
+   int rank); the 64-bit / max ones append the width+signedness suffix via `##`. */
+#define INT8_C(c)    c
+#define INT16_C(c)   c
+#define INT32_C(c)   c
+#define INT64_C(c)   c ## LL
+#define UINT8_C(c)   c
+#define UINT16_C(c)  c
+#define UINT32_C(c)  c ## U
+#define UINT64_C(c)  c ## ULL
+#define INTMAX_C(c)  c ## LL
+#define UINTMAX_C(c) c ## ULL
+
 #endif
