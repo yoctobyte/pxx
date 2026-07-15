@@ -9,6 +9,7 @@ Reference pages collect exact command-line and operational details.
 
 ## Pages
 
+- [Compatibility status](./status.md)
 - [Command line](./cli.md)
 - [Compiler modes and strictness](./modes.md)
 - [Compiler directives](./directives.md)

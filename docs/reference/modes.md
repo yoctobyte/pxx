@@ -38,13 +38,23 @@ model as a whole; the individual switches are listed on the
   `{$STRICT_CASE ON}`, `{$DECLORDER OFF}`, …) so a source file can carry its own
   strictness need — see [directives](./directives.md).
 
-- **`--mimic-fpc` — the compatibility preset.** For compiling FPC-oriented
-  code. It installs the curated FPC define set **and** turns on the subset of
-  strictness that FPC enforces in practice: `--require-forward`, IO checking
-  (`{$I+}`), and `--strict-visibility`. It is a preset built *on top of* the
-  strict family, not a separate mode. The in-source equivalent is `{$MIMIC FPC}`.
-  For the FPC-specific details of what ports and what does not, see
-  [FPC compatibility](../language/fpc-compatibility.md).
+- **`--strict-fpc` — the FPC-parity umbrella.** Turns on the strict checks that
+  match FPC's behaviour *and* are proven to compile the real FPC corpora at once:
+  `--strict-case`, `--strict-operator`, `--strict-visibility`, and
+  `--require-forward`. In-source form: `{$STRICT_FPC ON}`.
+
+  `--strict-overload` is **not** part of the umbrella. PXX's own libraries
+  overload freely without the `overload;` marker — that is the intended lax
+  dialect — so requiring the marker would reject the very libraries FPC-oriented
+  code links against. It remains available as a standalone switch for
+  marker-clean code.
+
+- **`--mimic-fpc` — the compatibility preset.** For compiling FPC-oriented code.
+  It is `--strict-fpc` **plus** what makes PXX present *as* FPC: the curated FPC
+  define set (so identity-probing headers pick their FPC path) and IO checking
+  (`{$I+}`). A preset built on top of the strict family, not a separate mode. The
+  in-source equivalent is `{$MIMIC FPC}`. For the FPC-specific details of what
+  ports and what does not, see [FPC compatibility](../language/fpc-compatibility.md).
 
 ## Why lax is the default
 

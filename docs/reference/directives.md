@@ -63,9 +63,10 @@ Each takes `ON` / `OFF` and has a matching command-line flag — see
 | `{$STRICT_OPERATOR ON\|OFF}` | Reject `=` / `<>` on class operands. | Off | `--strict-operator` |
 | `{$STRICT_CASE ON\|OFF}` | Inverted-range / duplicate `case`-label diagnostics. | Off | `--strict-case` |
 | `{$STRICT_VISIBILITY ON\|OFF}` | Enforce member visibility. | Off | `--strict-visibility` |
+| `{$STRICT_FPC ON\|OFF}` | FPC-parity umbrella: case + operator + visibility + require-forward (not overload). | Off | `--strict-fpc` |
 | `{$DECLORDER ON\|OFF}` | Declare-before-use for forward-visible globals. `OFF` = lax. | On | `--lax-decl-order` (opt-out) |
 | `{$IMPLICITVARS ON\|OFF}` | Undeclared assignment declares an inferred-type local. | Off | `--auto-locals` |
-| `{$MIMIC FPC}` | FPC-compatibility preset (defines + require-forward + `{$I+}` + visibility). | — | `--mimic-fpc` |
+| `{$MIMIC FPC}` | FPC-compatibility preset: `{$STRICT_FPC}` + FPC defines + `{$I+}`. | — | `--mimic-fpc` |
 
 ## Layout, comments, and dialect
 
