@@ -800,6 +800,8 @@ test-core: $(COMPILER)
 	grep -q "record type contains a file field" /tmp/test_dff.log
 	! ./$(COMPILER) test/test_forin_string_char_fail.pas /tmp/test_fsc26 > /tmp/test_fsc.log 2>&1
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
+	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
+	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_member_visibility.pas /tmp/test_member_visibility26
 	test "$$(/tmp/test_member_visibility26)" = "$$(printf '7\n30\n3')"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas /tmp/test_member_visibility_strict26

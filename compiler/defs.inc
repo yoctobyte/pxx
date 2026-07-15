@@ -1142,6 +1142,8 @@ var
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   SymElemDynDepth : array[0..MAX_SYMS-1] of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
+  SymDynElemRowLen : array[0..MAX_SYMS-1] of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
+  SymDynElemRowLo  : array[0..MAX_SYMS-1] of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }
   SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
   SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymElemProcSig : array[0..MAX_SYMS-1] of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
@@ -1232,6 +1234,8 @@ var
   ProcParamExplicitByRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param was EXPLICITLY declared by-ref (`var`/`out`/`const`) at the source level, before the >8-byte record ABI forces IsRef. Lets a call site tell a genuine `var`/`out` record param (needs a real lvalue for write-back) from a plain by-value record passed by-ref only for ABI (a temporary is fine — the callee copies). const records carry their own ProcParamIsConst flag. }
   ProcParamUntyped : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
   ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
+  ProcParamElemRowLen : array[0..MAX_PARAM_DEPTHS-1] of Integer; { open-array param whose element is a named FIXED array (`a: array of T`): the row's flattened element count; 0 = scalar element. Drives the call-site `[..]` ctor stride and static-array copy-in count. }
+  ProcParamElemRowLo  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { the row's low bound, paired with ProcParamElemRowLen }
   ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
   ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
   ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
@@ -1341,6 +1345,8 @@ var
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
   LastTypeElemDynDepth : Integer; { set when a fixed-array element type resolves to a dynamic-array alias; consumed by AllocArray to lay the element out pointer-sized and record SymElemDynDepth, then reset }
+  LastTypeDynElemRowLen : Integer; { set when a dynamic array's element resolves to a named FIXED-array alias (`array of T`): the row's flattened element count; consumed by AllocDynArray into SymDynElemRowLen, then reset }
+  LastTypeDynElemRowLo : Integer;  { the row's low bound, paired with LastTypeDynElemRowLen; consumed by AllocDynArray into SymDynElemRowLo }
   LastTypeStrCap : Integer; { see decl below }
   LastTypeIsSub : Boolean; { ParseTypeKind resolved a named subrange alias — Alloc* stamps SymIsSub/Lo/Hi from the pair below; reset at ParseTypeKind entry like LastTypeStrCap }
   LastTypeSubLo : Int64;
@@ -2136,6 +2142,8 @@ var
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeIsDyn  : array[0..MAX_TYPEALIAS-1] of Boolean;   { `array of T` alias }
   ArrTypeDynDepth: array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeElemRowLen: array[0..MAX_TYPEALIAS-1] of Integer; { dyn alias whose element is a named FIXED array (`TDA = array of T`): the row's flattened element count; 0 = scalar element }
+  ArrTypeElemRowLo : array[0..MAX_TYPEALIAS-1] of Integer; { the row's low bound, paired with ArrTypeElemRowLen }
   ArrTypeCount  : Integer;
 
   { Untyped string constants `const Name = 'literal'`. Stored as the literal's

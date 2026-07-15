@@ -212,6 +212,11 @@ begin
       elSize := RecSize(Syms[symIdx].ElemRecName)
     else
       elSize := TypeSize(Syms[symIdx].ElemType);
+    { fixed-array ROW element (`array of T`, T a named fixed array): stride =
+      whole row (bug-pascal-openarray-of-array-param-marshal). baseKind 0 only —
+      managed row elements are rejected at parse. }
+    if SymDynElemRowLen[symIdx] > 0 then
+      elSize := elSize * SymDynElemRowLen[symIdx];
   end;
   AnonDynArrayElSize[anonIdx] := elSize;
 
@@ -4276,6 +4281,9 @@ begin
               elemSize := RecSize(Syms[symIdx].ElemRecName)
             else
               elemSize := TypeSize(Syms[symIdx].ElemType);
+            { fixed-array ROW element (`array of T`): stride = whole row }
+            if SymDynElemRowLen[symIdx] > 0 then
+              elemSize := elemSize * SymDynElemRowLen[symIdx];
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
               elemSize := 1;
 

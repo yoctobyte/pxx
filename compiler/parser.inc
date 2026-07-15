@@ -813,7 +813,7 @@ function GenMakeFreeObjectExpr(objNode, ci: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
-function ParseArrayCtorAST(elemTk: TTypeKind): Integer; forward;
+function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer; forward;
 function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 procedure EnableCoroutineRuntime; forward;
@@ -2435,7 +2435,8 @@ begin
       if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(mpi, ai) then
         exprNode := ParseVarRecLiteralAST
       else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, ai) then
-        exprNode := ParseArrayCtorAST(Procs[mpi].Params[ai].TypeKind)
+        exprNode := ParseArrayCtorAST(Procs[mpi].Params[ai].TypeKind,
+          ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + ai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
         if ByRefArgStartsExpression then
@@ -4589,7 +4590,8 @@ begin
               else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, mai) then
                 { `[...]` open-array literal to an instance/record method
                   (r.SumAll([10,20])) — was parsed as a SET literal (b334) }
-                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind)
+                mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
+                  ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai])
               else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
               begin
                 if ByRefArgStartsExpression then
@@ -5032,16 +5034,21 @@ begin
             (Procs[procIdx].Params[argNo].TypeKind <> tyVariant);
 end;
 
-function ParseArrayCtorAST(elemTk: TTypeKind): Integer;
+function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer;
 { `[ e0, e1, ... ]` for an `array of T` (scalar/string) parameter. Builds an
   AN_ARRAY_CTOR whose Left is the element AN_ARG chain; ASTIVal/ASTTk carry the
   element type so overload matching binds it to the open-array param (whose
-  TypeKind is the element type). Lowering builds a heap dyn-array temp. }
+  TypeKind is the element type). Lowering builds a heap dyn-array temp.
+  rowLen/rowLo (ASTSOffset/ASTSLen): the param's fixed-array ROW element shape
+  (`array of T`, T a named fixed array) — 0 for a scalar element; drives the
+  temp's row stride and per-element row-copy in the lowering. }
 var node, argNode, lastArg: Integer; done: Boolean;
 begin
   node := AllocNode(AN_ARRAY_CTOR);
   ASTIVal[node] := Ord(elemTk);
   ASTTk[node]   := Ord(elemTk);
+  ASTSOffset[node] := rowLen;
+  ASTSLen[node]    := rowLo;
   ASTLeft[node] := -1;
   lastArg := -1;
   Expect(tkLBrack, '[');
@@ -5786,7 +5793,8 @@ begin
             begin
               { `[...]` open-array literal (r.SumAll([10,20]) on a record
                 method) — was parsed as a SET literal and crashed (b334) }
-              aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind);
+              aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
+                ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai]);
             end
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
@@ -9633,7 +9641,8 @@ begin
           if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
             CurASTNode := ParseVarRecLiteralAST
           else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
-            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind)
+            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind,
+              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + nArgs], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + nArgs])
           else
           begin
             node := TryDelphiBareProcArg;
@@ -11270,7 +11279,13 @@ begin
     (tyAnsiString), so the array check MUST win — otherwise it is mis-iterated
     char-by-char. }
   isString := (not Syms[contSym].IsArray) and ((contTk = tyString) or (contTk = tyAnsiString));
-  isStaticArr := Syms[contSym].IsArray and (Syms[contSym].ArrLen >= 0);
+  { An open-array param keeps AllocParam's ArrLen=1000 placeholder — its real
+    length lives at [data-8] like a dyn array's, so it must take the runtime
+    Length bound, not a fake static one (`for r in a` over a 2-element open
+    array ran 1000 iterations; tforin14). A NAMED fixed-array param has its
+    true ArrLen stamped and stays static. }
+  isStaticArr := Syms[contSym].IsArray and (Syms[contSym].ArrLen >= 0) and
+                 not ((Syms[contSym].Kind = skParam) and (Syms[contSym].ArrLen = 1000));
 
   if isString then elemTk := Ord(tyChar)
   else if Syms[contSym].IsArray then elemTk := Ord(Syms[contSym].ElemType)
@@ -14649,7 +14664,8 @@ begin
             if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
               CurASTNode := ParseVarRecLiteralAST
             else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
-              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind)
+              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind,
+              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + nArgs], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + nArgs])
             else
             begin
               node := TryDelphiBareProcArg;
@@ -15292,6 +15308,7 @@ begin
   LastTypeProcSig := -1;
   LastTypeEnumId := -1;
   LastTypeStrCap := 0;
+  LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
   LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
   case CurTok.Kind of
     tkRecord, tkPacked:
@@ -15735,6 +15752,7 @@ procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64; elemResolved: Boolean; elemDynDepth: Integer;
+    elemRowLen, elemRowLo: Integer;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
     moreDims: Boolean; elemProcSig: Integer;
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
@@ -15771,6 +15789,7 @@ begin
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
     elemResolved := False; elemDynDepth := 0;
+    elemRowLen := 0; elemRowLo := 0;
     elemProcSig := -1;
     isArrND := False; ndCnt := 0;
     ai := -1;
@@ -15785,6 +15804,10 @@ begin
       begin
         { dynamic-array alias -> AllocDynArray below }
         isDyn := True; dynDepth := ArrTypeDynDepth[ai];
+        { alias whose element is a named FIXED array: thread the row shape to
+          AllocDynArray below (via LastTypeDynElemRowLen at the call). }
+        elemRowLen := ArrTypeElemRowLen[ai];
+        elemRowLo  := ArrTypeElemRowLo[ai];
       end
       else
       begin
@@ -15872,6 +15895,29 @@ begin
             elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
             LastTypeRecId := ArrTypeElemRec[ai];
             dynDepth := dynDepth + ArrTypeDynDepth[ai];
+            Next;                 { consume the alias name }
+            tk := elemTk;
+            elemResolved := True;
+          end
+          else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
+          begin
+            { `array of T` where T is a named FIXED array: the element is a whole
+              ROW of ArrTypeHi-ArrTypeLo+1 base elements (flattened for N-D T).
+              Without this, ParseTypeKind resolves T to its bare base scalar and
+              the element stride collapses to the base type's size — d[i] lands on
+              the wrong row and r := d[i] copies one scalar
+              (bug-pascal-openarray-of-array-param-marshal). Row semantics are
+              modelled for depth 1 only; deeper nesting stays unsupported. }
+            if dynDepth > 1 then
+              Error('array of array of <fixed array type> not supported');
+            elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+            LastTypeRecId := ArrTypeElemRec[ai];
+            if (elemTk = tyAnsiString) or (elemTk = tyString) or
+               (elemTk = tyFixedString) or (elemTk = tyShortString) or
+               ((elemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
+              Error('array of <fixed array of managed elements> not supported');
+            elemRowLen := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            elemRowLo  := ArrTypeLo[ai];
             Next;                 { consume the alias name }
             tk := elemTk;
             elemResolved := True;
@@ -15994,7 +16040,11 @@ begin
 	      for i := 0 to n-1 do
 	      begin
 	        if isDyn then
-	          idx := AllocDynArray(names[i], elemTk, dynDepth)
+	        begin
+	          LastTypeDynElemRowLen := elemRowLen;  { fixed-array row element (consumed + reset by AllocDynArray) }
+	          LastTypeDynElemRowLo := elemRowLo;
+	          idx := AllocDynArray(names[i], elemTk, dynDepth);
+	        end
 	        else
 	        begin
 	          LastTypeElemDynDepth := elemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
@@ -19314,6 +19364,8 @@ begin
             ArrTypeDimSpan[ArrTypeCount * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
           end;
           ArrTypeIsDyn[ArrTypeCount] := False;
+          ArrTypeElemRowLen[ArrTypeCount] := 0;
+          ArrTypeElemRowLo[ArrTypeCount] := 0;
           Inc(ArrTypeCount);
         end
         else
@@ -19321,11 +19373,34 @@ begin
           { Dynamic-array type alias `TArr = array of T` (nested: array of array
             of T). Register it so `var a: TArr` becomes a real dynamic array. }
           Expect(tkOf, 'of');
+          if ArrTypeCount >= MAX_TYPEALIAS then Error('too many array types');
           tdCnt := 1; { reuse as dyn depth }
           while CurTok.Kind = tkArray do
           begin Next; Inc(tdCnt); Expect(tkOf, 'of'); end;
-          aElemTk := ParseTypeKind;
-          if ArrTypeCount >= MAX_TYPEALIAS then Error('too many array types');
+          { Element that is a named FIXED array (`TDA = array of T`): record the
+            row shape so vars of this alias get SymDynElemRowLen; ParseTypeKind
+            would collapse T to its base scalar and lose the row stride
+            (bug-pascal-openarray-of-array-param-marshal). Depth-1 only. }
+          ArrTypeElemRowLen[ArrTypeCount] := 0;
+          ArrTypeElemRowLo[ArrTypeCount] := 0;
+          fAi := -1;
+          if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+          if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+          begin
+            if tdCnt > 1 then
+              Error('array of array of <fixed array type> not supported');
+            aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            LastTypeRecId := ArrTypeElemRec[fAi];
+            if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
+               (aElemTk = tyFixedString) or (aElemTk = tyShortString) or
+               ((aElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
+              Error('array of <fixed array of managed elements> not supported');
+            ArrTypeElemRowLen[ArrTypeCount] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+            ArrTypeElemRowLo[ArrTypeCount]  := ArrTypeLo[fAi];
+            Next;               { consume the named array type }
+          end
+          else
+            aElemTk := ParseTypeKind;
           ArrTypeName[ArrTypeCount] := tname;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
@@ -20273,10 +20348,13 @@ var
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;
+  pElemRowLen : array[0..MAX_PROC_PARAMS-1] of Integer; { open-array param `array of T`, T a named FIXED array: elements per row (0 = scalar element) }
+  pElemRowLo  : array[0..MAX_PROC_PARAMS-1] of Integer; { the row's low bound }
   pFixedLo : array[0..MAX_PROC_PARAMS-1] of Integer; { named fixed-array param's LOW BOUND — dropped before, so a[1] on a var 1..3 param indexed off by lo (silent neighbour write; found by the {$R+} arc) }  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
   pDimLo    : array[0..95] of Integer;
   pDimSpan  : array[0..95] of Integer;
   paramNDims, paramDynDepth, paramAi, pdi, paramFixedLen, paramFixedLo: Integer;
+  paramElemRowLen, paramElemRowLo: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
@@ -20321,6 +20399,8 @@ begin
   begin
     pFixedLen[pzi] := 0;
     pFixedLo[pzi] := 0;
+    pElemRowLen[pzi] := 0;
+    pElemRowLo[pzi] := 0;
   end;
   { require-forward: the header's SOffset (stable under pass-2 token edits,
     like CurBodyHdrTok) becomes the routine's visibility boundary when the
@@ -20431,6 +20511,7 @@ begin
           Error('untyped parameter requires var, const, or out');
         isUntyped := True; isByRef := True;
         tk := tyPointer; isArr := False; paramNDims := 0; paramDynDepth := 0;
+        paramElemRowLen := 0; paramElemRowLo := 0;
         LastTypeRecId := REC_NONE; LastTypePointerElemTk := tyUnknown;
         LastTypePointerElemRec := REC_NONE; LastTypeProcSig := -1;
       end
@@ -20442,6 +20523,8 @@ begin
       paramDynDepth := 0;
       paramFixedLen := 0;
       paramFixedLo := 0;
+      paramElemRowLen := 0;
+      paramElemRowLo := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -20502,7 +20585,28 @@ begin
           LastTypeRecId := TVarRecId;
         end
         else
-          tk := ParseTypeKind;
+        begin
+          { open array whose element is a named FIXED array (`a: array of T`):
+            the element is a whole ROW; ParseTypeKind would collapse T to its
+            base scalar and the callee would index/copy with the base stride
+            (bug-pascal-openarray-of-array-param-marshal). }
+          paramAi := -1;
+          if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
+          if (paramAi >= 0) and (not ArrTypeIsDyn[paramAi]) then
+          begin
+            tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
+            LastTypeRecId := ArrTypeElemRec[paramAi];
+            if (tk = tyAnsiString) or (tk = tyString) or
+               (tk = tyFixedString) or (tk = tyShortString) or
+               ((tk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
+              Error('array of <fixed array of managed elements> not supported');
+            paramElemRowLen := ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1;
+            paramElemRowLo  := ArrTypeLo[paramAi];
+            Next;             { consume the named array type }
+          end
+          else
+            tk := ParseTypeKind;
+        end;
         isArr := True;
       end
       else
@@ -20561,6 +20665,8 @@ begin
         pDynDepth[i] := paramDynDepth;
         pFixedLen[i] := paramFixedLen;
         pFixedLo[i] := paramFixedLo;
+        pElemRowLen[i] := paramElemRowLen;
+        pElemRowLo[i] := paramElemRowLo;
         for pdi := 0 to paramNDims - 1 do
         begin
           pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
@@ -20690,6 +20796,7 @@ begin
       ptypesProcSig[nparams] := -1;
       parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
       pNDims[nparams] := 0; pDynDepth[nparams] := 0;
+      pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
       Inc(nparams);
     end;
     lcb := LiftCapStart[liftIdx];
@@ -20707,6 +20814,8 @@ begin
       pconst[nparams] := False;
       pNDims[nparams] := 0;
       pDynDepth[nparams] := LiftCapDyn[lcb + i];
+      pElemRowLen[nparams] := 0;
+      pElemRowLo[nparams] := 0;
       Inc(nparams);
     end;
   end;
@@ -20783,6 +20892,8 @@ begin
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
+      pElemRowLen[i] := pElemRowLen[i-1];
+      pElemRowLo[i] := pElemRowLo[i-1];
       { The default-value arrays shift with the params. Leaving them unshifted
         wrote each default onto the PREVIOUS param's slot, so a method impl that
         repeats its defaults silently gave `M(a: Integer = 1; b: Integer = 2)`
@@ -20854,6 +20965,8 @@ begin
     parr[0]   := False;
     pNDims[0] := 0;
     pDynDepth[0] := 0;
+    pElemRowLen[0] := 0;
+    pElemRowLo[0] := 0;
     pdefault[0] := False;
     pdefaultval[0] := 0;
     pdefaultisstr[0] := False;
@@ -20894,6 +21007,8 @@ begin
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
+      pElemRowLen[i] := pElemRowLen[i-1];
+      pElemRowLo[i] := pElemRowLo[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -20910,6 +21025,8 @@ begin
     pbyref[0] := False;
     pNDims[0] := 0;
     pDynDepth[0] := 0;
+    pElemRowLen[0] := 0;
+    pElemRowLo[0] := 0;
     nparams := nparams + 1;
     retType := tyBoolean;
   end;
@@ -21202,6 +21319,17 @@ begin
       garbage — test_record_method_open_array_b334 caught it). }
     if parr[i] and (pDynDepth[i] = 0) then
       Syms[idx].ConstVal := 0;
+    { open-array param with a fixed-array ROW element: stamp the row shape on
+      the param sym (drives callee-side indexing/copy strides) and persist it
+      on the proc (drives the call-site `[..]` ctor / static-array copy-in).
+      Param sym slots are reused across procs, so ALWAYS write (0 clears). }
+    SymDynElemRowLen[idx] := pElemRowLen[i];
+    SymDynElemRowLo[idx]  := pElemRowLo[i];
+    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+    begin
+      ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
+      ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+    end;
     if (pFixedLen[i] > 0) and (pDynDepth[i] = 0) then
     begin
       Syms[idx].ArrLen := pFixedLen[i];

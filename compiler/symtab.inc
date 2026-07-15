@@ -2084,6 +2084,8 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymDynElemRowLen[SymCount] := 0;
+  SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -2205,6 +2207,8 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymDynElemRowLen[SymCount] := 0;
+  SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -2322,6 +2326,8 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymDynElemRowLen[SymCount] := 0;
+  SymDynElemRowLo[SymCount] := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -2396,6 +2402,20 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  { `array of T` where T is a named FIXED array: the parser leaves the row
+    shape in LastTypeDynElemRowLen/Lo; stamp it (depth-1 only) and reset. }
+  if (depth = 1) and (LastTypeDynElemRowLen > 0) then
+  begin
+    SymDynElemRowLen[SymCount] := LastTypeDynElemRowLen;
+    SymDynElemRowLo[SymCount]  := LastTypeDynElemRowLo;
+  end
+  else
+  begin
+    SymDynElemRowLen[SymCount] := 0;
+    SymDynElemRowLo[SymCount] := 0;
+  end;
+  LastTypeDynElemRowLen := 0;   { consumed; caller re-sets per name in a multi-name decl }
+  LastTypeDynElemRowLo := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -4424,6 +4444,8 @@ begin
     ProcParamDefaultSLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamRecId[ProcCount * MAX_PROC_PARAMS + i] := REC_NONE;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamElemRowLo[ProcCount * MAX_PROC_PARAMS + i] := 0;
   end;
   for i := 0 to nParams-1 do
   begin

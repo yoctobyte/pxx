@@ -179,7 +179,7 @@ pass	tforin10.pp	tforin	-
 pass	tforin11.pp	tforin	-	
 skip	tforin12.pp	tforin	gap	initializing array-of-char elements from string literals in an array const
 skip	tforin13.pp	tforin	gap	for-in over a set constructor with ranges (`for ch in ['a'..'c', ...]`)
-skip	tforin14.pp	tforin	gap	for-in variant prints ADDRESSES not element values (silent wrong output, exit 0) — re-triaged 2026-07-15, needs its own minimal repro
+pass	tforin14.pp	tforin	-	
 skip	tforin15.pp	tforin	gap	`operator enumerator` (custom enumerator operator) not supported
 skip	tforin16.pp	tforin	gap	for-in over a string constant
 skip	tforin17.pp	tforin	gap	for-in over a string literal

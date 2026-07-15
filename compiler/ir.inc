@@ -1205,6 +1205,28 @@ begin
       end;
     end;
 
+    { A depth-1 DYNAMIC array / open-array param whose element is a fixed-array
+      ROW (`array of T`, T = array[lo..hi] of Base): d[i] must stride a whole
+      row, not one base element (bug-pascal-openarray-of-array-param-marshal).
+      The IR_INDEX result is the row's base address; a sub-index d[i][j] takes
+      the branch below. }
+    if isArr and (ASTKind[baseNode] = AN_IDENT) and (ASTIVal[baseNode] >= 0) and
+       Syms[ASTIVal[baseNode]].IsArray and
+       (SymDynElemRowLen[ASTIVal[baseNode]] > 0) then
+    begin
+      elemSize := elemSize * SymDynElemRowLen[ASTIVal[baseNode]];
+      lo := 0;
+    end;
+    { Sub-index into a row: base is d[i] (an AN_INDEX over a row-element dyn
+      array). Its address is the row base; index with the base element size and
+      the row's OWN low bound (`array[1..3]` -> j-1). }
+    if (ASTKind[baseNode] = AN_INDEX) and
+       (ASTKind[ASTLeft[baseNode]] = AN_IDENT) and
+       (ASTIVal[ASTLeft[baseNode]] >= 0) and
+       Syms[ASTIVal[ASTLeft[baseNode]]].IsArray and
+       (SymDynElemRowLen[ASTIVal[ASTLeft[baseNode]]] > 0) then
+      lo := SymDynElemRowLo[ASTIVal[ASTLeft[baseNode]]];
+
     { A FIXED array whose element is a dynamic array (`array[..] of TA`) stores a
       pointer-sized handle per slot, regardless of the element base type's own
       size — override the stride so a[i] addresses the right slot, and tag the
@@ -3120,6 +3142,12 @@ begin
       item := ASTLeft[node];
       while item <> -1 do begin Inc(vrCount); item := ASTRight[item]; end;
 
+      { fixed-array ROW element (`array of T`, T a named fixed array): the parse
+        stashed the row shape on the node (ASTSOffset = row length, ASTSLen =
+        row lo); hand it to AllocDynArray so the temp's stride and the element
+        row-copies below are row-sized. }
+      LastTypeDynElemRowLen := ASTSOffset[node];
+      LastTypeDynElemRowLo  := ASTSLen[node];
       vrTmp := AllocDynArray('', vrElemTk, 1);
       { Managed local synthesised after the prologue zero-init pass — flag it for
         the codegen prologue nil-init and zero the handle slot here so SetLength
@@ -5083,6 +5111,26 @@ begin
         right := IRLowerAddress(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
+      end
+      else if (ASTKind[ASTLeft[node]] = AN_INDEX) and
+              (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) and
+              (ASTIVal[ASTLeft[ASTLeft[node]]] >= 0) and
+              Syms[ASTIVal[ASTLeft[ASTLeft[node]]]].IsArray and
+              (SymDynElemRowLen[ASTIVal[ASTLeft[ASTLeft[node]]]] > 0) and
+              rhsIsLValue then
+      begin
+        { Whole-ROW store into a fixed-array-element dynamic array / open-array
+          param: `d[i] := r` (r a static array of the row type). The scalar
+          store path would move one base element; copy the full row
+          (bug-pascal-openarray-of-array-param-marshal). d[i][j] := v has an
+          AN_INDEX base, not AN_IDENT, so it keeps the scalar path. }
+        i := ASTIVal[ASTLeft[ASTLeft[node]]];
+        if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
+        else elemSize := TypeSize(Syms[i].ElemType);
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAddress(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           SymDynElemRowLen[i] * elemSize, Ord(tyRecord));
       end
       else if CProgramMode and (ASTKind[ASTLeft[node]] = AN_FIELD) and
               (RecFieldBitWidth(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
