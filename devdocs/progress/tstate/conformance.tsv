@@ -492,8 +492,8 @@ pass	toperator8.pp	toperator	-
 pass	toperator90.pp	toperator	-	
 skip	toperator91.pp	toperator	gap	class operators Explicit/Implicit overloaded on ShortString[N] result types
 pass	toperator92.pp	toperator	-	
-skip	toperator93.pp	toperator	gap	pxx-compiled binary SEGFAULTS (exit 139) though compile succeeds — re-triaged 2026-07-15, crash needs a minimal repro
-skip	toperator94.pp	toperator	gap	objfpc `class operator :=` implicit conversion to shortstring types
+pass	toperator93.pp	toperator	-	
+skip	toperator94.pp	toperator	gap	objfpc `class operator :=` implicit conversion to shortstring types — the duplicate-conversion check (parser.inc ~1860) falsely collides distinct frozen-string result kinds; root is the same String[N] tk inconsistency (tyString vs tyFixedString vs tyShortString) that toperator93 exposed at the use site
 pass	toperator95.pp	toperator	-	
 skip	toperator9.pp	toperator	gap	operator overload for `in` on a record type not supported by the parser
 pass	toperatorerror.pp	toperator	-	
