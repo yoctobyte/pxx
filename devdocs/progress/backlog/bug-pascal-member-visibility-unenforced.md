@@ -17,11 +17,13 @@ policy"). Only `published` has an effect (RTTI). tclass12b (`strict private`
 const reached from a DESCENDANT class) is the conformance reminder test; it is
 skip-listed as accepts-invalid pointing here.
 
-## Direction (user decision, 2026-07-15 morning): FULL ROUTE, in progress
+## Direction (user, 2026-07-15 morning): FULL ROUTE — DESIGN NOTE ONLY, NOT STARTED
 
 Per the user: no cheat-first strict-only slice — implement the real,
 unit-scoped semantics from the start (plain `private` is the one that
-matters in practice, because of name conflicts). Per-feature switch
+matters in practice, because of name conflicts). This is Track P, a
+compiler change with real prio — but the user has NOT authorized starting;
+this section is captured design direction only. Per-feature switch
 `--strict-visibility` / `{$STRICT_VISIBILITY ON}`, DEFAULT OFF (the lax
 dialect keeps its ergonomics — the locked-hierarchy annoyance is deliberate
 design here). Promotion into `--mimic-fpc` only after the flag stays green
