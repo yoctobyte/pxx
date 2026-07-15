@@ -6,8 +6,8 @@ order: 44
 # PXX dialect
 
 PXX is an Object Pascal dialect. It deliberately follows FPC behavior for many
-implemented features, but it is not a full FPC clone and it also has
-PXX-specific extensions.
+implemented features, but it does not aim for full FPC compatibility and it
+also has PXX-specific extensions.
 
 ## Common supported surface
 

@@ -19,7 +19,7 @@ before treating a successful compile as a production-ready result.
 
 ## Language and compatibility
 
-- PXX is not a full Free Pascal clone.
+- PXX does not implement the full Free Pascal language and RTL.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted as compatibility markers, not as
   a switch to a complete FPC semantic mode.
 - Some FPC directives are accepted only as comments or compatibility markers.
