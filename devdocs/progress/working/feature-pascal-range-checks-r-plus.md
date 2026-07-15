@@ -12,7 +12,7 @@ prio: 55
   centralized in IRLowerAddress: reads+writes, static + dyn-depth-1 via
   PXXDynIdxChkI64) LANDED, oracle-matched. Slice 3 landed: Char dests +
   FIELD static-array indexes; enum CAST verified UNCHECKED in FPC.
-  Slice 4: SUBRANGE dests DONE (AliasSub*/SymSub* retain lo..hi). REMAINING: subrange dests (needs subrange-bounds metadata — pxx maps
+  Slice 4: SUBRANGE dests DONE (AliasSub*/SymSub* retain lo..hi). Slices 3-6 landed (Char/field/subrange/open-array-param + the param-lo silent bug). REMAINING (thin): subrange dests (needs subrange-bounds metadata — pxx maps
   3..7 to the base int kind and drops the bounds), N-D/param-array bases,
   dyn-array FIELDS.
 - **Opened:** 2026-07-15 night, straight out of the {$Q+} arc
