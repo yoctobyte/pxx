@@ -5,7 +5,7 @@ prio: 45  # auto
 # Document the licensing split (MPL 2.0 compiler / Zlib RTL)
 
 - **Type:** doc (Track D — user/website licensing docs)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-07-04 (surfaced while adding `lib/rtl/types.pas`)
 
@@ -36,3 +36,6 @@ what each covers, and the practical takeaway ("code you compile links only the
 Zlib RTL; the MPL-2.0 terms apply to the compiler, not your program's output").
 Prose only — no code/license-file changes here (any actual license change is a
 separate decision, not this ticket).
+
+## Log
+- 2026-07-15 — resolved, commit a880142a.
