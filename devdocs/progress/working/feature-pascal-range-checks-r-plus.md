@@ -7,7 +7,11 @@ prio: 55
 # {$R+} / {$RANGECHECKS ON}: runtime range checking
 
 - **Type:** feature (FPC-parity runtime checks). **Track A.**
-- **Status:** working
+- **Status:** working (fable-nightA) — v1 e5cc5e06 (narrowing stores +
+  statement-anchored semantics per trange4) and v2 37475d8a (index bounds
+  centralized in IRLowerAddress: reads+writes, static + dyn-depth-1 via
+  PXXDynIdxChkI64) LANDED, oracle-matched. REMAINING: N-D/field/param-array
+  bases, enum/subrange/char dests — oracle-probe each first ({$Q+} lesson).
 - **Opened:** 2026-07-15 night, straight out of the {$Q+} arc
   ([[feature-pascal-overflow-checks-q-plus]] — subword probing showed
   truncation is {$R+} territory, then the oracle probe found pxx's gap
