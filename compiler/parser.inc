@@ -6154,7 +6154,12 @@ begin
   begin
     if i < MAX_PROC_PARAMS then
     begin
-      if argTypes[i] = tyRecord then MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
+      { An AN_METHODREF argument is reported as tyRecord (it fills a method-pointer
+        param) but ResolveNodeRec would yield the OBJECT's class, not the
+        method-pointer record — leave the record identity unconstrained so it binds
+        to the `of object` param (its {Code,Data} pair is built at IR lowering). }
+      if ASTKind[ASTLeft[currArg]] = AN_METHODREF then MatchArgRec[i] := REC_NONE
+      else if argTypes[i] = tyRecord then MatchArgRec[i] := ResolveNodeRec(ASTLeft[currArg])
       else MatchArgRec[i] := REC_NONE;
     end;
     currArg := ASTRight[currArg];
@@ -9550,6 +9555,13 @@ begin
         begin
           exprNode := ASTLeft[currArg];
           argTypes[i] := IntToTypeKind(ASTTk[exprNode]);
+          { `@obj.Method` (AN_METHODREF) surfaces as tyPointer in a value context,
+            but as a call argument it fills a method-pointer (`of object`, tyRecord)
+            parameter — the IR lowering materialises its {Code,Data} pair for a
+            tyRecord param. Report it as tyRecord so overload matching binds it to
+            the method-pointer param, mirroring the assignment path
+            (bug-pascal-methodref-arg-to-named-of-object-param-no-match). }
+          if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
           currArg := ASTRight[currArg];
         end;
 
@@ -9673,6 +9685,7 @@ begin
           begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
                     (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
+                    (ASTKind[exprNode] = AN_METHODREF) or
                     (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
               { A record param passed by-ref may bind a non-lvalue temporary (e.g.
@@ -9681,7 +9694,9 @@ begin
                 hidden-local temp is sound). Only a genuine `var`/`out` record
                 (explicitly declared by-ref) still needs a true lvalue for
                 write-back. An array-constructor literal ([...]) is itself the
-                open-array temp. }
+                open-array temp. `@obj.Method` is materialised into a method-pointer
+                record temp at IR lowering, so it too is a valid non-lvalue record
+                argument. }
               if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then
@@ -14556,6 +14571,10 @@ begin
           begin
             exprNode := ASTLeft[currArg];
             argTypes[i] := IntToTypeKind(ASTTk[exprNode]);
+            { `@obj.Method` fills a method-pointer (`of object`, tyRecord) param —
+              see the twin site above (bug-pascal-methodref-arg-to-named-of-object-
+              param-no-match). }
+            if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
             currArg := ASTRight[currArg];
           end;
 
@@ -14586,11 +14605,13 @@ begin
                (ASTKind[exprNode] <> AN_VARREC_ARRAY) and (ASTKind[exprNode] <> AN_ARRAY_CTOR) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
-                      (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode)) then
+                      (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
+                      (ASTKind[exprNode] = AN_METHODREF)) then
               begin
                 { A `const` OR plain by-value record param accepts a non-lvalue
                   temporary (>8-byte records are by-ref only for ABI; the callee
-                  copies). Only a genuine `var`/`out` record needs a true lvalue. }
+                  copies). Only a genuine `var`/`out` record needs a true lvalue.
+                  `@obj.Method` is materialised into a method-pointer record temp. }
                 if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
                         (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
                          not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) then

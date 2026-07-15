@@ -1809,6 +1809,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_operator_implicit_shortstring_b35626)" = "$$(printf 'seven\nconverted: len=10')"
 	./$(COMPILER) test/test_method_pointer_virtual_b357.pas /tmp/test_method_pointer_virtual_b35726
 	test "$$(/tmp/test_method_pointer_virtual_b35726)" = "$$(printf 'nonvirt=15\nvirt-base=6\nvirt-deriv=1005\ndirect=1005')"
+	./$(COMPILER) test/test_method_pointer_arg_b361.pas /tmp/test_method_pointer_arg_b36126
+	test "$$(/tmp/test_method_pointer_arg_b36126)" = "$$(printf 'cb=15\ncb=6\ncb=1005')"
 	./$(COMPILER) test/test_forin_aggr_elems.pas /tmp/test_forin_aggr_elems26
 	test "$$(/tmp/test_forin_aggr_elems26)" = "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
 	./$(COMPILER) test/test_enum_cast.pas /tmp/test_enum_cast26
