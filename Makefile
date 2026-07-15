@@ -1837,6 +1837,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_shift_ow26)" = "$$(printf '%s\n' -2147483648 2147483648 4194304 0)"
 	./$(COMPILER) test/test_overflow_checks_qplus.pas /tmp/test_qplus26
 	test "$$(/tmp/test_qplus26)" = "$$(printf 'wrapped 0\ncaught=4')"
+	./$(COMPILER) test/test_overflow_succ_pred.pas /tmp/test_qplus_sp26
+	test "$$(/tmp/test_qplus_sp26)" = "$$(printf 'wrapped-hi 4294967295\ncaught=3')"
 	./$(COMPILER) test/test_forin_bounds_nd.pas /tmp/test_forin_bnd26
 	test "$$(/tmp/test_forin_bnd26)" = "$$(printf '%s \n%s \n%s \n%s \n' '10 20 30' '50 60 70' '1 2 9' '3 4 5')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26

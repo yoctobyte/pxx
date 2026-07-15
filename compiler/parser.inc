@@ -8403,6 +8403,9 @@ begin
         op := AllocNode(AN_BINOP);
         if CaseEqual(name, 'Succ') then ASTIVal[op] := Ord(tkPlus) else ASTIVal[op] := Ord(tkMinus);
         ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := ASTTk[node];
+        { {$Q+}: FPC checks Succ/Pred too — the desugar IS a +/- binop, so
+          tag it like one (feature-overflow-checks-cross-and-intrinsics). }
+        if TokQChecks[TokPos - 1] then ASTQChk[op] := True;
         CurASTNode := op; LastExprTk := IntToTypeKind(ASTTk[node]);
         Exit;
       end;
