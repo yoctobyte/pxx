@@ -50,21 +50,23 @@ procedure LCGSeed(seed: LongWord);
 { Raw 32-bit LCG output; advances state. }
 function LCGNext: LongWord;
 
-{ --- Public surface (FPC-compatible + extensions) --- }
+{ --- Public surface (extensions beyond the System PRNG) --- }
 
-{ Re-seed from OS entropy (or HW when tier 1 is wired). Non-reproducible. }
-procedure Randomize;
+{ This unit deliberately does NOT redefine the System PRNG names
+  (Random / RandSeed / Randomize) — those are compiler built-ins (FPC's System
+  unit surface: `RandSeed := seed; Random(n)`), available with no `uses`, and a
+  unit shadowing them silently splits the generator state
+  (bug-lib-test-console-solitaire-flaky: `RandSeed(seed)` bound here while
+  `Random(n)` bound to the builtin). For an ordinary seeded PRNG use the builtin
+  (`RandSeed := s; Random(n)`); this unit adds the higher-quality xoshiro256**
+  generator, OS entropy, and an LCG under DISTINCT names.
 
-{ Seed from a fixed 32-bit value (FPC-compatible). Deterministic thereafter. }
-procedure RandSeed(seed: LongWord);
+  Seed xoshiro with XoshiroSeed (declared above); draw with Random64 / RandRange. }
 
-{ Seed from a full 64-bit fixed value. Deterministic thereafter. }
-procedure RandSeed64(seed: UInt64);
+{ Reseed xoshiro from OS entropy (or HW when tier 1 lands). Non-reproducible. }
+procedure XoshiroRandomize;
 
-{ 0..n-1  (FPC-compatible Random(n)). n<=0 yields 0. }
-function Random(n: Integer): Integer;
-
-{ Inclusive lo..hi. }
+{ Inclusive lo..hi, drawn from xoshiro. }
 function RandRange(lo, hi: Integer): Integer;
 
 { Raw 64-bit random value (xoshiro). }
@@ -179,7 +181,7 @@ end;
 
 { ===== Public surface ===== }
 
-procedure Randomize;
+procedure XoshiroRandomize;
 var seed: UInt64;
 begin
   seed := 0;
@@ -189,40 +191,25 @@ begin
   XoshiroSeed(seed);
 end;
 
-procedure RandSeed(seed: LongWord);
-begin
-  XoshiroSeed(UInt64(seed));
-end;
-
-procedure RandSeed64(seed: UInt64);
-begin
-  XoshiroSeed(seed);
-end;
-
 function Random64: UInt64;
 begin
   Random64 := XoshiroNext;
 end;
 
-function Random(n: Integer): Integer;
-var v: UInt64;
+function RandRange(lo, hi: Integer): Integer;
+var span: Integer; v: UInt64;
 begin
-  if n <= 0 then
+  if hi < lo then
   begin
-    Random := 0;
+    RandRange := lo;
     Exit;
   end;
+  span := hi - lo + 1;
   v := XoshiroNext shr 33;
-  Random := Integer(v mod UInt64(n));
-end;
-
-function RandRange(lo, hi: Integer): Integer;
-begin
-  if hi < lo then RandRange := lo
-  else RandRange := lo + Random(hi - lo + 1);
+  RandRange := lo + Integer(v mod UInt64(span));
 end;
 
 initialization
   lcg_state := 2463534242;
-  Randomize;   { seed xoshiro from OS entropy (or HW when tier 1 wired) }
+  XoshiroRandomize;   { seed xoshiro from OS entropy (or HW when tier 1 wired) }
 end.

@@ -12,7 +12,7 @@ unit dns_wire_blocking;
 
 interface
 
-uses platform, dns_wire_core, random;
+uses platform, dns_wire_core;
 
 const
   DNS_PORT = 53;
@@ -92,7 +92,7 @@ function NextQueryId: Integer;
 begin
   if not gSeeded then
   begin
-    RandSeed(LongWord(PalMonotonicMillis));
+    RandSeed := LongWord(PalMonotonicMillis);   { built-in System PRNG (writable seed var) }
     gSeeded := True;
   end;
   NextQueryId := Random(65536);

@@ -9,8 +9,6 @@ unit klondike;
 
 interface
 
-uses random;
-
 const
   P_STOCK = 0;
   P_WASTE = 1;
@@ -119,16 +117,14 @@ begin
     deck[i].rank := (i mod 13) + 1;
     deck[i].faceUp := False;
   end;
-  { Fisher-Yates shuffle, seeded. QUALIFY the calls to unit `random`: an
-    unqualified `Random` binds to the compiler's built-in System Random
-    (xorshift32, its own separate RandSeed state), NOT this unit's xoshiro — so
-    the `RandSeed(seed)` proc call seeded xoshiro while `Random` drew from the
-    unseeded builtin, making the deal non-reproducible despite a fixed seed
-    (bug-lib-test-console-solitaire-flaky). Qualifying pins both to `random`. }
-  random.RandSeed(LongWord(seed));
+  { Fisher-Yates shuffle, seeded via the built-in System PRNG (RandSeed is a
+    writable state variable, FPC/TP style — `RandSeed := seed`, then Random). No
+    `uses random`: that unit no longer redefines these names (it would split the
+    generator state — bug-lib-test-console-solitaire-flaky). }
+  RandSeed := LongWord(seed);
   for i := 51 downto 1 do
   begin
-    j := random.Random(i + 1);
+    j := Random(i + 1);
     tmp := deck[i]; deck[i] := deck[j]; deck[j] := tmp;
   end;
 

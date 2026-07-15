@@ -3,7 +3,7 @@ program life;
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, random, bitset, sysutils;
+uses gtk3, controls, stdctrls, forms, extctrls, graphics, bitset, sysutils;
 
 type
   TLifeHandler = class
@@ -358,8 +358,8 @@ var
   arg: string;
 
 begin
-  { Initialize PRNG seed }
-  RandSeed(12345);
+  { Initialize PRNG seed (built-in System PRNG; seed is a writable var) }
+  RandSeed := 12345;
 
   Application.Initialize;
   

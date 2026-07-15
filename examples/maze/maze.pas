@@ -2,7 +2,8 @@
 program Maze;
 { Seeded maze generator + BFS solver, ASCII over stdout/serial.
 
-  Track B demo. Exercises: the lib RNG (lib/rtl/random, seeded -> reproducible),
+  Track B demo. Exercises: the built-in System PRNG (RandSeed := s; Random(n),
+  seeded -> reproducible),
   2-D arrays, recursion (recursive-backtracker carve), an explicit BFS queue,
   and managed-string rendering (lib/rtl/sysutils IntToStr). Integer-deterministic:
   a fixed seed yields a fixed maze and a fixed solution path length.
@@ -11,7 +12,7 @@ program Maze;
   set-from-runtime gap (feature-language-gaps-from-demos Gap 1); the set lane is
   a separate exercise, not this demo's point. }
 
-uses random, sysutils;
+uses sysutils;
 
 const
   MW = 12;            { cells wide }
@@ -38,7 +39,7 @@ procedure Carve(cx, cy: Integer);
 var i, t, d, nx, ny: Integer; order: array[0..3] of Integer;
 begin
   visited[cy][cx] := True;
-  { random direction order (Fisher-Yates via the lib RNG) }
+  { random direction order (Fisher-Yates via the built-in PRNG) }
   for i := 0 to 3 do order[i] := i;
   for i := 3 downto 1 do
   begin
@@ -62,7 +63,7 @@ end;
 procedure Generate(seed: Integer);
 var r, c: Integer;
 begin
-  RandSeed(seed);
+  RandSeed := seed;   { built-in System PRNG (writable seed var); no `uses random` }
   for r := 0 to GH - 1 do
     for c := 0 to GW - 1 do grid[r][c] := '#';
   for r := 0 to MH - 1 do

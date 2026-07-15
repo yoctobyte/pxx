@@ -5028,7 +5028,11 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fuexamples/solitaire_gui test/lib_klondike.pas /tmp/lib_klondike
 	test "$$(/tmp/lib_klondike | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/solitaire_gui examples/solitaire/console_solitaire.pas /tmp/console_solitaire
-	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=2 won=FALSE"
+	# Deterministic now that klondike seeds the built-in System PRNG directly
+	# (was drawing from an unseeded generator via a name collision with unit
+	# random — bug-lib-test-console-solitaire-flaky). moves=0 = the fixed seed-1
+	# deal has no immediate auto-play; klondike move logic is covered by lib_klondike.
+	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=0 won=FALSE"
 	$(PXX_STABLE) -Fuexamples/g2048 test/lib_g2048.pas /tmp/lib_g2048
 	test "$$(/tmp/lib_g2048 | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/g2048 examples/g2048/console_2048.pas /tmp/console_2048

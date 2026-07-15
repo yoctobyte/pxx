@@ -7,8 +7,6 @@ unit g2048;
 
 interface
 
-uses random;
-
 const
   WIN_TILE = 2048;
 
@@ -142,7 +140,7 @@ end;
 
 procedure NewGame2048(seed: Integer);
 begin
-  RandSeed(LongWord(seed));
+  RandSeed := LongWord(seed);   { built-in System PRNG (writable seed var) }
   ClearBoard;
   score := 0;
   won := False;
