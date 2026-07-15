@@ -37,6 +37,26 @@ storage type and extension must be 64-bit, and the C promotion is to `long long`
 33-64 width band in the tyInt64/tyUInt64 domain with the correct signedness, and
 tag the result node accordingly.
 
+## Progress (2026-07-15, agent-A)
+
+**Storage / read / layout FIXED** (commit 307128d5). `IRBitStorageTk` now returns
+tyUInt64 for a >4-byte unit; the C bitfield packing sizes the storage unit by the
+field's declared-type size (`sz`) instead of a hardwired 32-bit/4-byte cap, and a
+long-long field reserves a full 8-byte unit so neighbours don't overlap (a signed
+store was clobbering an unsigned neighbour). `bf64-1.c` passes; 40/33/41-bit
+round-trip + 40-bit sign extension verified. Regression:
+`test/cbitfield_longlong_b359.c`. int/short bitfields unchanged (sz<=4 path is a
+no-op).
+
+**Residual — arithmetic promotion TYPE:** `bitfld-3.c` still aborts. It tests the
+promoted TYPE of arithmetic on a >32-bit bitfield (e.g. `a.u33 * a.u33` with
+`a.u33 == 0x100000` must equal 0 on gcc — the operation reduces mod 2^32, i.e. the
+33-bit field promotes to a 32-bit arithmetic domain in gcc's model, NOT to 64-bit
+unsigned long long as a naive "width>32 keeps declared type" reading would give).
+This is a distinct, subtle promotion-type semantic separate from storage; needs
+its own investigation of gcc's exact bitfield-arithmetic promotion rule before
+implementing.
+
 ## Acceptance
 
 `bf64-1.c` and `bitfld-3.c` compile and exit 0; a `test/` regression pins a
