@@ -154,3 +154,15 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   `--stop-on-new`. Restore to `--wide` once fixed.
   **Remaining deep-oop rungs:** properties (getters/setters, indexed/default), class
   methods/vars/abstract, polymorphic containers, exceptions crossing a destructor.
+- 2026-07-15 (opus-trackT) — **Property rung landed (`--props N`); CLEAN.** N scalar
+  read/write properties plus one indexed default property. Each getter is a
+  NON-IDENTITY pure transform (fp*k) so a getter bypass (raw-field read) shows in the
+  checksum; getters/setters are side-effect-free (a getter fires mid-expression where
+  Pascal fixes no operand order — a Mix inside would be an eval-order false positive).
+  Writes are statements, reads fold the getter result, `o[i]` uses the default
+  property. In `--wide` (clean rung).
+  Gate: `--check 60 --props 3` and `--check 40 --wide`, 0 FPC rejects. Differential:
+  25 props-only seeds, 0 divergences — pxx computes getters/setters, indexed and
+  default properties correctly.
+  **Remaining deep-oop rungs:** class methods/vars/abstract, polymorphic containers
+  (array of base-typed refs, mixed derived), exceptions crossing a destructor.

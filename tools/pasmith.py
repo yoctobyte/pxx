@@ -128,7 +128,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0, nmptrs=0):
+                 nhier=0, nmptrs=0, nprops=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -194,6 +194,15 @@ class Gen:
         # code or Self changes the number. Methods are VIRTUAL, so a method pointer
         # also has to carry the dispatch, not a statically-bound address.
         self.nmptrs = nmptrs   # number of methods on the method-pointer class
+        # Property rung (feature-pasmith-deep-oop): getters/setters, an indexed
+        # default property. The bug this targets is a property READ that bypasses
+        # its getter -- silently returning the raw field instead of the computed
+        # value. So every getter is a NON-IDENTITY value transform (fp*k), making a
+        # bypass observable in the folded checksum. Getters/setters are PURE (no Mix
+        # side effect): a getter fires mid-expression where Pascal fixes no operand
+        # order, so a side-effecting getter would be an eval-order false positive
+        # (the lesson bug-t-pasmith-order-dependent-programs already taught).
+        self.nprops = nprops
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -473,6 +482,30 @@ class Gen:
             return self.tagged("methptr", [
                 "%smp := @%s.Mm%d;" % (pad, om, j),
                 "%sMix(mp(longint(%s)));" % (pad, self.expr(INT_TYPES[4], scope, 2))])
+
+        if k < 0.96 and self.nprops:
+            # Property access: scalar getter/setter and the indexed default property.
+            # A write is its own statement (setter side effect is order-safe); a read
+            # folds the getter's transformed value, so a getter bypass (raw field)
+            # changes the number. `o[i]` uses the default property.
+            op = rnd.choice(self.probjs)
+            r = rnd.random()
+            if r < 0.3:
+                j = rnd.randrange(self.nprops)
+                return self.tagged("propset", [
+                    "%s%s.P%d := longint(%s);"
+                    % (pad, op, j, self.expr(INT_TYPES[4], scope, 2))])
+            if r < 0.6:
+                j = rnd.randrange(self.nprops)
+                return self.tagged("propget", ["%sMix(int64(%s.P%d));" % (pad, op, j)])
+            if r < 0.8:
+                return self.tagged("idxset", [
+                    "%s%s[longint(%s) and 3] := longint(%s);"
+                    % (pad, op, self.expr(INT_TYPES[4], scope, 2),
+                       self.expr(INT_TYPES[4], scope, 2))])
+            return self.tagged("idxget", [
+                "%sMix(int64(%s[longint(%s) and 3]));"
+                % (pad, op, self.expr(INT_TYPES[4], scope, 2))])
 
         if k < 0.97 and self.strs:
             name, _ = rnd.choice(self.strs)
@@ -1051,6 +1084,56 @@ class Gen:
             L.append("")
         return L
 
+    def gen_props(self):
+        """A class with N scalar read/write properties (each getter a non-identity
+        transform, so a getter bypass is observable) plus one indexed default
+        property over a small array."""
+        L = ["type"]
+        L.append("  TPr = class")
+        L.append("  private")
+        for j in range(self.nprops):
+            L.append("    fp%d: longint;" % j)
+        L.append("    fpa: array[0..3] of longint;")
+        for j in range(self.nprops):
+            L.append("    function GetP%d: longint;" % j)
+            L.append("    procedure SetP%d(v: longint);" % j)
+        L.append("    function GetPa(i: longint): longint;")
+        L.append("    procedure SetPa(i: longint; v: longint);")
+        L.append("  public")
+        L.append("    constructor Create(v: longint);")
+        for j in range(self.nprops):
+            L.append("    property P%d: longint read GetP%d write SetP%d;"
+                     % (j, j, j))
+        L.append("    property Items[i: longint]: longint "
+                 "read GetPa write SetPa; default;")
+        L.append("  end;")
+        L.append("")
+        return L
+
+    def gen_prop_bodies(self):
+        L = []
+        L.append("constructor TPr.Create(v: longint);")
+        L.append("var i: longint;")
+        L.append("begin")
+        for j in range(self.nprops):
+            L.append("  fp%d := longint(v + %d);" % (j, j))
+        L.append("  for i := 0 to 3 do fpa[i] := longint(v + i);")
+        L.append("end;")
+        L.append("")
+        for j in range(self.nprops):
+            # Non-identity, PURE getter: a raw-field bypass returns fp%d, the getter
+            # returns fp%d*(j+2) -- the checksum tells them apart.
+            L.append("function TPr.GetP%d: longint; begin GetP%d := longint(fp%d * %d); end;"
+                     % (j, j, j, j + 2))
+            L.append("procedure TPr.SetP%d(v: longint); begin fp%d := longint(v + %d); end;"
+                     % (j, j, j))
+        L.append("function TPr.GetPa(i: longint): longint; "
+                 "begin GetPa := longint(fpa[i] * 10); end;")
+        L.append("procedure TPr.SetPa(i: longint; v: longint); "
+                 "begin fpa[i] := v; end;")
+        L.append("")
+        return L
+
     def gen_mptrs(self):
         """A base + derived class with N virtual methods of a common signature, and
         a `function(a): longint of object` type. Objects are declared base and
@@ -1343,6 +1426,8 @@ class Gen:
             L += self.gen_hier()
         if self.nmptrs:
             L += self.gen_mptrs()
+        if self.nprops:
+            L += self.gen_props()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1409,6 +1494,10 @@ class Gen:
                 L.append("  %s: TMPC;" % om)
             L.append("  mp: TMethFn;")
             L.append("  amp: array[0..%d] of TMethFn;" % (len(self.mpobjs) - 1))
+        if self.nprops:
+            self.probjs = ["opr%d" % j for j in range(2)]
+            for op in self.probjs:
+                L.append("  %s: TPr;" % op)
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1461,6 +1550,8 @@ class Gen:
             L += self.gen_hier_bodies()
         if self.nmptrs:
             L += self.gen_mptr_bodies()
+        if self.nprops:
+            L += self.gen_prop_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1500,6 +1591,9 @@ class Gen:
                 L.append("  amp[%d] := @%s.Mm%d;" % (idx, om, j))
             L.append("  for li0 := 0 to %d do Mix(amp[li0](li0 + 1));"
                      % (len(self.mpobjs) - 1))
+        if self.nprops:
+            for op in self.probjs:
+                L.append("  %s := TPr.Create(%d);" % (op, rnd.randint(1, 50)))
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1556,6 +1650,9 @@ class Gen:
         if self.nmptrs:
             for om in self.mpobjs:
                 L.append("  %s.Free;" % om)
+        if self.nprops:
+            for op in self.probjs:
+                L.append("  %s.Free;" % op)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -1669,6 +1766,10 @@ def main():
                          "random (object, virtual-method) pairings called through a "
                          "var and an array -- exercises the two-word code+Self "
                          "closure and its ABI.")
+    ap.add_argument("--props", type=int, default=None,
+                    help="N scalar read/write properties (non-identity getters) plus "
+                         "an indexed default property: catches a getter bypass "
+                         "(raw-field read) via the folded value.")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1707,16 +1808,17 @@ def main():
         # rungs. Opt in explicitly (--intfs N / --mptrs N) until those bugs are fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
-                     ("hier", 4)):
+                     ("hier", 4), ("props", 3)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes", "intfs", "hier", "mptrs"):
+              "strs", "classes", "intfs", "hier", "mptrs", "props"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
-              a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs).gen()
+              a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs,
+              a.props).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)
