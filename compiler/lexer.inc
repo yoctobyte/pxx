@@ -693,7 +693,9 @@ begin
   QChecksVal := False;
   RChecksVal := False;
   StmtRChecks := False;
-  IChecksVal := False;
+  { DEFAULT ON per the user's dialect call (2026-07-15): code expects FPC's
+    {$I+} and can always turn it off — feature-pascal-io-checks-i-plus. }
+  IChecksVal := True;
   StmtIChecks := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;

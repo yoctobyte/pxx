@@ -1850,7 +1850,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_io_checks_iplus.pas /tmp/test_iplus26
 	test "$$(/tmp/test_iplus26)" = "ioresult=TRUE caught=1"
 	./$(COMPILER) test/test_io_checks_mimic.pas /tmp/test_iplus_lax26
-	test "$$(/tmp/test_iplus_lax26)" = "caught=0"
+	test "$$(/tmp/test_iplus_lax26)" = "caught=1"
 	./$(COMPILER) --mimic-fpc test/test_io_checks_mimic.pas /tmp/test_iplus_mim26
 	test "$$(/tmp/test_iplus_mim26)" = "caught=1"
 	./$(COMPILER) test/test_param_array_lowbound.pas /tmp/test_palb26
