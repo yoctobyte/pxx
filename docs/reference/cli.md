@@ -52,15 +52,64 @@ mode, the same as passing `--shared`.
 | `-FuDIR` | Add a Pascal unit search root. |
 | `-IDIR` | Add a C include directory and a Pascal unit search root. |
 | `-Mobjfpc` | Accept the Object Pascal compatibility mode marker. |
-| `--mimic-fpc` | Install the curated FPC compatibility define set for FPC-oriented libraries. |
-| `--strict-overload` | Require explicit `overload;` on overloaded routines. |
-| `--permissive-overload` | Relax overload marker requirements. |
-| `--threadsafe` | Use atomic refcounts for managed strings and arrays. |
+| `--threadsafe` | Use atomic refcounts for managed strings and arrays. On x86-64, i386, aarch64, and arm32 only. |
 | `--no-auto-var` | Disable auto-typed variable declarations. |
 | `--no-lazy-var` | Disable inline/lazy variable declarations. |
 | `--system-libs` | Disable the Magic Link auto-pull mechanism and link C dependencies dynamically. |
 | `--system-libs=stems` | Granular opt-out: dynamically link listed comma-separated C libraries (e.g. `m,pthread`), keeping the rest magic-linked. |
 | `-nostdinc` / `--nostdinc` | Disable adding default C header search directories. |
+
+## Strictness and dialect
+
+PXX is lax by default and turns FPC-parity checks on individually. See the
+[compiler modes](./modes.md) page for the whole lax → `--strict` → granular →
+`--mimic-fpc` model; each flag below is documented there in context. The
+directive column names the in-source [directive](./directives.md) with the same
+effect where one exists.
+
+| Option | Effect | Directive |
+| --- | --- | --- |
+| `--strict` | FPC-parity strictness umbrella (currently the routine-visibility check below). | `{$STRICT ON}` |
+| `--require-forward` | A routine must be defined above its call, `forward;`-declared, in an interface section, or be a class method — no whole-source pre-scan. First check under `--strict`. | `{$STRICT ON}` |
+| `--strict-overload` | Require explicit `overload;` on overloaded routines. | `{$STRICT_OVERLOAD ON}` |
+| `--permissive-overload` | Relax the overload marker requirement (the default). | `{$STRICT_OVERLOAD OFF}` |
+| `--strict-operator` | FPC-parity rejection of `=` / `<>` on class operands (lax default allows them). | `{$STRICT_OPERATOR ON}` |
+| `--strict-case` | FPC-parity `case`-label diagnostics: inverted ranges, duplicate/overlapping labels. | `{$STRICT_CASE ON}` |
+| `--strict-visibility` | Enforce `private` / `protected` / `strict` member access (lax default parses the markers but grants access anywhere). | `{$STRICT_VISIBILITY ON}` |
+| `--lax-decl-order` | Opt *out* of declare-before-use gating for forward-visible globals (strict/FPC-parity is the default). | `{$DECLORDER OFF}` |
+| `--auto-locals` | Assignment to an undeclared name declares a routine-local inferred-type var instead of erroring. Off by default (masks typos). | `{$IMPLICITVARS ON}` |
+| `--mimic-fpc` | FPC-compatibility preset: the curated FPC define set plus `--require-forward`, `{$I+}`, and `--strict-visibility`. See [FPC compatibility](../language/fpc-compatibility.md). | `{$MIMIC FPC}` |
+
+## Runtime and codegen
+
+| Option | Effect |
+| --- | --- |
+| `-O0` … `-O3` | Optimization level. `-O2` is the proven default; `-O3` carries newer, still-promoting passes. `-g` implies `-O0` unless an `-O` level is given explicitly. |
+| `--no-default-rtl` | Do not pull the default standard-unit surface (textfile + builtin). Used by the compiler self-build. |
+| `--no-div-check` | Opt out of the integer div/mod pre-divide zero check (default on: divide by zero raises a clean runtime error rather than a raw `SIGFPE`). |
+| `--no-signals` | Opt out of the default signal runtime (graceful `SIGINT`/`SIGTERM` dispatch + `SetSignalHandler`). PC targets only. |
+| `--no-unhandled-handler` | Do not install the default unhandled-exception handler. |
+| `--no-strict-ir` | Opt out of the self-host IR guard (the hard error on any unlowered IR node). For an in-development frontend only. |
+| `--max-stack-frame=N` | Set the oversized-stack-frame warning threshold in bytes (`=0` disables it). |
+| `--werror` / `-Werror` | Promote any warning to a fatal error. |
+| `--xtensa-soft-divide` / `--xtensa-cpu=lx6` | Route div/mod through software helpers (ESP32 classic LX6, no hardware divide). |
+
+`--experimental-ir-codegen` is accepted as a deprecated no-op (IR is the only
+backend).
+
+## Diagnostics and internal flags
+
+These serve compiler development and self-inspection, not normal builds. Use
+them only when directed.
+
+| Option | Effect |
+| --- | --- |
+| `--dump-cpp` | Dump the intermediate C++-ish form. |
+| `--proc-map` | Dump the procedure map. |
+| `--selftest` | Run the built-in self-test. |
+| `--measure-inline` / `--measure-regcall` | Emit inline / register-call instrumentation. |
+| `--warn-missed-fold` | Warn on constant-fold opportunities the optimizer missed. |
+| `--warn-self-result` | Warn when a parameterless function's bare own name is read as its `Result`. |
 
 ## Search paths
 
@@ -94,5 +143,7 @@ useful for generated bindings that sit next to the imported header:
 
 ## Next
 
+- [Compiler modes and strictness](./modes.md)
+- [Compiler directives](./directives.md)
 - [Install](../install/)
 - [Targets](../targets/)
