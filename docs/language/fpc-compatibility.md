@@ -69,7 +69,9 @@ Use this pattern for compiler-specific code:
 - The CLI is PXX-specific; it does not emulate the full FPC command line.
 - Unit/object/package binary compatibility with FPC is not provided.
 - Some FPC directives are accepted only as comments or compatibility markers.
-- Overflow, range checking, and many compile-switch states are not implemented.
+- Overflow (`{$Q+}`), range (`{$R+}`), and IO (`{$I+}`) checking are implemented
+  but opt-in per region and off in the lax default; several other compile-switch
+  states are still inert markers.
 - Only tested project units and examples should be treated as supported.
 
 ## Common fixes

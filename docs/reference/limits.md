@@ -23,8 +23,10 @@ before treating a successful compile as a production-ready result.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted as compatibility markers, not as
   a switch to a complete FPC semantic mode.
 - Some FPC directives are accepted only as comments or compatibility markers.
-- Range checking, overflow checking, and many compile-switch states are not yet
-  implemented.
+- Range (`{$R+}`), overflow (`{$Q+}`), and IO (`{$I+}`) checking are implemented
+  but **opt-in per region** — the lax default does not check. Many other
+  compile-switch states are still accepted only as inert markers. See
+  [directives](./directives.md).
 - The FPC package ecosystem is not bundled.
 
 ## Targets

@@ -20,8 +20,16 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
 
 ## Language
 
-- Object Pascal subset with classes, interfaces, generics, overloads,
-  operators, exceptions, RTTI, managed strings, dynamic arrays, and properties.
+- Object Pascal dialect with classes, interfaces, generics, overloads,
+  operators, exceptions, RTTI, managed strings, dynamic arrays, and properties
+  (including indexed and default).
+- Interfaces in both models: COM (reference-counted, the default) and CORBA
+  (unmanaged, `{$interfaces corba}`).
+- Advanced records (methods, constructors, `class operator` overloads),
+  metaclasses (`class of`), and class properties / class vars.
+- Opt-in FPC-parity runtime checks per region: range (`{$R+}`),
+  overflow (`{$Q+}`), and IO (`{$I+}`); plus opt-in strictness flags
+  (`--strict-visibility`, `--strict-case`, …). Lax by default.
 - Conditional compilation and a PXX identity symbol.
 - Inline assembly and experimental alternate frontends are available, but should
   be treated as advanced or unstable surfaces.
