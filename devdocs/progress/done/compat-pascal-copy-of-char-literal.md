@@ -9,7 +9,7 @@ prio: 55
 
 - **Type:** compat (Track P — Pascal frontend). The fuzzer owns the tool, never the
   bug — filed here, not fixed there.
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Found by:** `tools/pasmith_run.py`, seed 30014, the first run after the driver
   learned to score a **pxx compile failure as a finding** (it used to be filtered out
@@ -64,3 +64,6 @@ The repro above compiles under pxx and prints `[a]`; a `test/test_*.pas` regress
 covers char→string promotion for `Copy` (and, while in there, the other string
 intrinsics that take a string first argument — `Pos`, `Length`, `Delete`, `Insert` —
 which likely share the arm).
+
+## Log
+- 2026-07-15 — resolved, commit 85be5639.
