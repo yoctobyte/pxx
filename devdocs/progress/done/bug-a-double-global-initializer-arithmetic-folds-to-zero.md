@@ -63,3 +63,6 @@ const-eval path first; then whether the shared double const-folder is at fault.
 The snippet prints the gcc values under pxx at every `-O` level; `float-floor.c`
 exits 0; a `test/` regression pins double static-initializer arithmetic; confirm
 whether the Pascal/other frontends share the folder and fix once if so.
+
+## Log
+- 2026-07-15 — resolved, commit PENDING.

@@ -9,6 +9,7 @@ procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
+function CEvalConstFloatExpr: Double; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
 procedure CSkipCInitElement; forward;
 function CInitLocalAggregate(symIdx, elemTkOrd, elemRecId, arrLen,
@@ -6422,8 +6423,22 @@ begin
           Next;
         end
         else
-          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-                (CurTok.Kind <> tkEOF) do Next;
+        begin
+          { Not a bare literal — arithmetic on float leaves (`1.0/4.0`,
+            `1024.0 - 0.5`, `2.0 * 3.0`). Fold in Double; skipping it (the old
+            behaviour) silently left the global at 0.0. }
+          dvv := CEvalConstFloatExpr;
+          if negFloat then dvv := -dvv;
+          Move(dvv, initV, 8);
+          PendingInitSym[PendingInitCount]  := idx;
+          PendingInitElem[PendingInitCount] := -1;
+          PendingInitFOff[PendingInitCount] := -1;
+          PendingInitFLen[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := initV;
+          PendingInitTk[PendingInitCount]   := Ord(baseTk);
+          PendingInitKind[PendingInitCount] := 3;
+          Inc(PendingInitCount);
+        end;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
               (baseTk <> tyPointer) and (TypeIsOrdinal(baseTk) or TypeIsFloat(baseTk)) and
@@ -6435,12 +6450,13 @@ begin
           (`double x = 100;`). Fold with CEvalConstExpr; for a float target,
           reinterpret the integer value as its IEEE-754 double bits (the value
           lowering then narrows a tySingle slot). }
-        initV := CEvalConstExpr;
         if TypeIsFloat(baseTk) then
         begin
-          dvv := initV;              { Int64 -> Double value }
-          Move(dvv, initV, 8);       { reinterpret to IEEE-754 bits }
-        end;
+          dvv := CEvalConstFloatExpr;  { fold in Double (float leaves + arithmetic) }
+          Move(dvv, initV, 8);         { IEEE-754 bits of the folded value }
+        end
+        else
+          initV := CEvalConstExpr;
         PendingInitSym[PendingInitCount]  := idx;
         PendingInitElem[PendingInitCount] := -1;
         PendingInitFOff[PendingInitCount] := -1;
@@ -8301,6 +8317,68 @@ begin
     end
     else
       Next;
+  end;
+end;
+
+{ Double-typed constant folder for a scalar float global initializer with
+  arithmetic (`double b = 1.0/4.0;`, `double c = 1024.0 - 0.5;`). The Int64
+  CEvalConst* chain cannot represent float leaves (a tkFloat carries IEEE-754
+  bits in IVal, and the integer folder returns 0 for it), so float arithmetic
+  in a static initializer silently folded to 0.0. This parallel chain evaluates
+  in Double: float leaves reinterpret IVal as their double bits, integer leaves
+  convert numerically. Covers +,-,*,/, unary +/-, parens and a numeric cast. }
+function CEvalConstFloatPrimary: Double;
+var idx: Integer; iv: Int64; dv: Double;
+begin
+  Result := 0.0;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    if IsCTypeTok then
+    begin
+      { numeric cast `(double)expr` — the value is unchanged for folding; skip
+        the cast type tokens to the matching `)`, then fold the operand. }
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      if CurTok.Kind = tkRParen then Next;
+      Result := CEvalConstFloatPrimary();
+    end
+    else
+    begin
+      Result := CEvalConstFloatExpr;
+      if CurTok.Kind = tkRParen then Next;
+    end;
+  end
+  else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstFloatPrimary(); end
+  else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstFloatPrimary(); end
+  else if CurTok.Kind = tkFloat then
+    begin iv := CurTok.IVal; Move(iv, dv, 8); Result := dv; Next; end
+  else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkIdent then
+  begin
+    idx := FindSym(CurTok.SVal);
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal;
+    Next;
+  end;
+end;
+
+function CEvalConstFloatMul: Double;
+var rhs: Double;
+begin
+  Result := CEvalConstFloatPrimary;
+  while (CurTok.Kind = tkStar) or (CurTok.Kind = tkSlash) do
+  begin
+    if CurTok.Kind = tkStar then begin Next; Result := Result * CEvalConstFloatPrimary; end
+    else begin Next; rhs := CEvalConstFloatPrimary; if rhs <> 0.0 then Result := Result / rhs else Result := 0.0; end;
+  end;
+end;
+
+function CEvalConstFloatExpr: Double;
+begin
+  Result := CEvalConstFloatMul;
+  while (CurTok.Kind = tkPlus) or (CurTok.Kind = tkMinus) do
+  begin
+    if CurTok.Kind = tkPlus then begin Next; Result := Result + CEvalConstFloatMul; end
+    else begin Next; Result := Result - CEvalConstFloatMul; end;
   end;
 end;
 
