@@ -2168,6 +2168,25 @@ var
   SetConstEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { element enum type id, or -1 }
   SetConstCount: Integer;
 
+  { Class-scoped consts (`type TFoo = class const Max = 5; ...`). A class const is
+    NOT a global: two classes may each declare `Max`, and a class const must not
+    clobber a same-named unit global (bug-pascal-class-const-visibility). The
+    backing value still lives in the ordinary const tables (Syms skConst /
+    StrConst / SetConst) but under a MANGLED key (ClassConstMangle: '$cc$<ci>$<name>')
+    so the bare name never collides globally. This registry maps (owning class ci,
+    bare name) -> that entry, and carries visibility for --strict-visibility.
+    Resolution: a bare name in a method body, or a qualified `TFoo.Max`, walks the
+    class chain here (own -> ancestors) BEFORE unit globals, FPC scope order. }
+  ClassConstCi   : array[0..MAX_TYPEALIAS-1] of Integer;   { owning UClass index }
+  ClassConstName : array[0..MAX_TYPEALIAS-1] of AnsiString; { bare declared name }
+  ClassConstVis  : array[0..MAX_TYPEALIAS-1] of Integer;    { VIS_* for --strict-visibility }
+  ClassConstCount: Integer;
+  { Set >= 0 (to the class ci) only while ParseConstSection is parsing a class-body
+    `const` section, so sibling class consts resolve during decl and the section
+    tags each entry with its owner + visibility. -1 everywhere else. }
+  ParsingClassConstCi  : Integer;
+  ParsingClassConstVis : Integer;
+
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;
   NDInfoLo    : array[0..MAX_ARR_DIMS-1] of Integer;

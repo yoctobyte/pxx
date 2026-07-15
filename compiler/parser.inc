@@ -941,6 +941,76 @@ begin
   end;
 end;
 
+function ClassConstMangle(ownerCi: Integer; const nm: AnsiString): AnsiString;
+{ The mangled backing key a class const lives under in the ordinary const tables
+  (Syms skConst / StrConst / SetConst). Keyed by the OWNING class's NAME (unique
+  per program) so an inherited const resolves to the ancestor that declared it,
+  reconstructed identically from ClassConstCi at every access path. The '$cc$'
+  prefix cannot occur in a user identifier, so it never collides with a global of
+  the same bare name. }
+begin
+  ClassConstMangle := '$cc$' + GetTokenStrFromRaw(UClsNOff[ownerCi], UClsNLen[ownerCi]) + '.' + nm;
+end;
+
+function FindClassConst(ci: Integer; const nm: AnsiString): Integer;
+{ Registry lookup by (class ci, bare name), walking the parent chain (own ->
+  ancestors) so a subclass method sees an inherited class const. Returns the
+  ClassConst* registry index, or -1. Newest-first within a class so a later
+  redeclaration shadows an earlier one. }
+var i, cur: Integer;
+begin
+  Result := -1;
+  cur := ci;
+  while cur >= 0 do
+  begin
+    for i := ClassConstCount - 1 downto 0 do
+      if (ClassConstCi[i] = cur) and CaseEqual(ClassConstName[i], nm) then
+        begin Result := i; Exit; end;
+    cur := UClsParent[cur];
+  end;
+end;
+
+function EmitClassConstNode(const key: AnsiString; var outTk: TTypeKind): Integer;
+{ Build a literal AST node for a resolved class-const backing entry (its mangled
+  key). Scalar -> AN_INT_LIT/AN_FLOAT_LIT (carrying any enum identity), string ->
+  AN_STR_LIT, set -> AN_SET_CONST_REF — exactly the shapes an ordinary const use
+  builds. Does NOT consume the source token (the caller does). Returns the node,
+  or -1 if the key has no backing (should not happen once the registry hit). }
+var si, sti, seti, nd: Integer;
+begin
+  Result := -1; outTk := tyUnknown;
+  si := FindSym(key);
+  if (si >= 0) and (Syms[si].Kind = skConst) then
+  begin
+    if TypeIsFloat(Syms[si].TypeKind) then nd := AllocNode(AN_FLOAT_LIT)
+    else nd := AllocNode(AN_INT_LIT);
+    ASTIVal[nd] := Syms[si].ConstVal;
+    ASTTk[nd] := Ord(Syms[si].TypeKind);
+    ASTEnumId[nd] := SymEnumId[si];
+    outTk := Syms[si].TypeKind;
+    Result := nd; Exit;
+  end;
+  sti := FindStrConst(key);
+  if sti >= 0 then
+  begin
+    nd := AllocNode(AN_STR_LIT);
+    ASTSOffset[nd] := StrConstSOff[sti];
+    ASTSLen[nd] := StrConstSLen[sti];
+    ASTTk[nd] := Ord(tyString);
+    outTk := tyString;
+    Result := nd; Exit;
+  end;
+  seti := FindSetConst(key);
+  if seti >= 0 then
+  begin
+    nd := AllocNode(AN_SET_CONST_REF);
+    ASTIVal[nd] := SetConstOff[seti];
+    ASTTk[nd] := Ord(tySet);
+    outTk := tySet;
+    Result := nd; Exit;
+  end;
+end;
+
 procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
@@ -2927,6 +2997,7 @@ var
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
+  ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -3587,11 +3658,27 @@ begin
               Exit;
             end;
 
-            { `TFoo.MaxItems` — a class CONST, qualified by its class. Class-body const
-              sections are parsed as ordinary global constants (they have no storage, and
-              pxx does not scope class-local declarations), so the name resolves as a
-              plain skConst symbol; the class qualifier is just how FPC spells the
-              reference. }
+            { `TFoo.MaxItems` — a class CONST, qualified by its class. Scoped ones
+              (scalar/string/set) live under a mangled key in the class-const
+              registry, resolved by walking the class chain from `ci`; visibility
+              enforced under --strict-visibility. bug-pascal-class-const-visibility. }
+            ccReg := FindClassConst(ci, fieldName);
+            if ccReg >= 0 then
+            begin
+              if StrictVisibility then
+                EnforceMemberVis(ClassConstCi[ccReg], ClassConstVis[ccReg], fieldName);
+              ccKey := ClassConstMangle(ClassConstCi[ccReg], fieldName);
+              ccNode := EmitClassConstNode(ccKey, ccTk);
+              if ccNode >= 0 then
+              begin
+                tk := ccTk; recName := REC_NONE;
+                Result := ccNode;
+                Exit;
+              end;
+            end;
+
+            { Legacy/global fallback — a typed class const (real storage, still
+              global) or a plain unit const named through its class. }
             fldIdx := FindStrConst(fieldName);     { a STRING const lives in its own table }
             if fldIdx >= 0 then
             begin
@@ -6626,6 +6713,7 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
+    ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -8260,6 +8348,33 @@ begin
       begin
         idx := FindSym(name);
         procIdx := FindProc(name);
+      end;
+
+      { Bare class const inside a method body — `Result := Max` where TFoo declares
+        `const Max`. FPC scope order: a genuine local/param shadows it, but a class
+        const BEATS a unit global of the same name (repro 2: a method's `Size` is
+        the class const 777, not the unit const 10). So fire whenever the name did
+        not bind to a local/param. Walks own class then ancestors; qualified
+        `TFoo.Max` is handled separately in ParseLValueAST.
+        bug-pascal-class-const-visibility. }
+      if (qUnit < 0) and (CurProc >= 0) and (CurMethClass >= REC_UCLASS_BASE) and
+         (not ((idx >= 0) and (Syms[idx].Kind in [skLocal, skParam]))) then
+      begin
+        ccReg := FindClassConst(CurMethClass - REC_UCLASS_BASE, name);
+        if ccReg >= 0 then
+        begin
+          if StrictVisibility then
+            EnforceMemberVis(ClassConstCi[ccReg], ClassConstVis[ccReg], name);
+          ccKey := ClassConstMangle(ClassConstCi[ccReg], name);
+          ccNode := EmitClassConstNode(ccKey, ccTk);
+          if ccNode >= 0 then
+          begin
+            Next;
+            CurASTNode := ccNode;
+            LastExprTk := ccTk;
+            Exit;
+          end;
+        end;
       end;
 
       { A bare class-reference OPERATION inside a method body -- implicit Self:
@@ -10405,6 +10520,7 @@ function ConstEvalFactor: Int64;
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
     cName: AnsiString; cQUnit, ceOrd: Integer; hasConstCast, hlHigh: Boolean; sofTk: TTypeKind;
+    ccBaseCi, ccReg: Integer;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -10488,6 +10604,22 @@ begin
       idx := FindSymInUnit(cName, cQUnit)
     else
       idx := FindSym(cName);
+    { A bare scalar class const in a const context — a sibling reference while the
+      class body is still being parsed (`const B = A + 1`) or a class const used in
+      a method's const expression. The backing lives under a mangled key, so the
+      bare FindSym above misses it; recover it via the class-const registry.
+      bug-pascal-class-const-visibility. }
+    if (cQUnit < 0) and (idx < 0) then
+    begin
+      ccBaseCi := -1;
+      if ParsingClassConstCi >= 0 then ccBaseCi := ParsingClassConstCi
+      else if CurMethClass >= REC_UCLASS_BASE then ccBaseCi := CurMethClass - REC_UCLASS_BASE;
+      if ccBaseCi >= 0 then
+      begin
+        ccReg := FindClassConst(ccBaseCi, cName);
+        if ccReg >= 0 then idx := FindSym(ClassConstMangle(ClassConstCi[ccReg], cName));
+      end;
+    end;
     if (idx >= 0) and (Syms[idx].Kind = skConst) then
       r := Syms[idx].ConstVal
     else
@@ -16459,15 +16591,26 @@ begin
   end;
 end;
 
-procedure ParseConstSection;
+procedure ParseConstSection(clsCi, clsVis: Integer);
+{ clsCi >= 0 (the owning UClass) when this is a class-body `const` section, else
+  -1 for a unit/program/record const section. The class context is held in the
+  GLOBAL ParsingClassConstCi (so ConstEvalFactor can resolve a SIBLING class const
+  in a value expression) but with STACK discipline: saved on entry, restored on
+  exit. This is what keeps a class const section from tainting a UNIT const that
+  gets parsed by a NESTED on-demand unit compile fired mid-value — that nested
+  ParseConstSection(-1,..) sets the global to -1 for its own duration and restores
+  ours after (bug-pascal-class-const-visibility, C-frontend crtl-autopull leak). }
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
     scOff, scLen, si, sci2, cCi, cAi: Integer;
+    savedCCi, savedCVis: Integer;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
+  savedCCi := ParsingClassConstCi; savedCVis := ParsingClassConstVis;
+  ParsingClassConstCi := clsCi; ParsingClassConstVis := clsVis;
   Next;
   { `constructor`/`destructor`/`operator` and the unit section words are plain
     identifiers in this dialect (not keyword tokens like `procedure`/`function`,
@@ -16982,6 +17125,21 @@ begin
     else
     begin
       Expect(tkEq, '=');
+      { Class-body const (`type TFoo = class const Max = 5`): register a registry
+        row (owner + visibility) and mangle the backing NAME so this scalar/string/
+        set const does not collide with another class's `Max` or a unit global —
+        bug-pascal-class-const-visibility. Only the untyped forms below are scoped;
+        typed (`const X: T = ..`) class consts have real storage and stay global
+        (rare; tracked as a follow-up). The bare name is captured first. }
+      if ParsingClassConstCi >= 0 then
+      begin
+        if ClassConstCount >= MAX_TYPEALIAS then Error('too many class constants');
+        ClassConstCi[ClassConstCount]   := ParsingClassConstCi;
+        ClassConstName[ClassConstCount] := name;
+        ClassConstVis[ClassConstCount]  := ParsingClassConstVis;
+        Inc(ClassConstCount);
+        name := ClassConstMangle(ParsingClassConstCi, name);
+      end;
       if (CurTok.Kind = tkLBrack) or
          ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0)) then
       begin
@@ -17107,6 +17265,7 @@ begin
     SkipHintDirectives;   { const K = v deprecated; }
     Eat(tkSemicolon);
   end;
+  ParsingClassConstCi := savedCCi; ParsingClassConstVis := savedCVis;
 end;
 
 { Parse a variant part `case [tag:] T of c1,..: (fields); ...` into UCls
@@ -17556,7 +17715,7 @@ begin
       demanded a ':' after the name. }
     if CurTok.Kind = tkConst then
     begin
-      ParseConstSection;
+      ParseConstSection(-1, 0);
       continue;
     end;
 
@@ -18444,7 +18603,10 @@ begin
              ((CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkConst)) then
           begin
             if CurTok.Kind = tkClass then Next;   { consume `class`, leaving `const` }
-            ParseConstSection;
+            { Scope this const section to the class: each entry registers under a
+              mangled key + a ClassConst registry row (owner ci + visibility)
+              instead of the global tables — bug-pascal-class-const-visibility. }
+            ParseConstSection(ci, curVis);
             continue;
           end;
 
@@ -22006,7 +22168,7 @@ begin
   while CurTok.Kind in [tkVar, tkConst, tkType, tkProcedure, tkFunction] do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
-      tkConst: ParseConstSection;
+      tkConst: ParseConstSection(-1, 0);
       tkType:  ParseTypeSection;
       tkProcedure, tkFunction: ParseNestedRoutine;
     end;
@@ -23037,7 +23199,7 @@ begin
   while CurTok.Kind in [tkVar, tkConst, tkType] do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
-      tkConst: ParseConstSection;
+      tkConst: ParseConstSection(-1, 0);
       tkType:  ParseTypeSection;
     end;
   for j := savedSC to SymCount - 1 do
@@ -23120,7 +23282,7 @@ begin
         Eat(tkSemicolon);
       end;
       tkVar:      ParseVarSection;
-      tkConst:    ParseConstSection;
+      tkConst:    ParseConstSection(-1, 0);
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
@@ -23129,7 +23291,7 @@ begin
         { `resourcestring` sections (FPC rtlconsts et al) register as plain
           string constants — pxx has no resource tables; the format-arg
           machinery lives in whoever consumes the string. }
-        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection
+        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0)
         else Next;
       else
         Next;
@@ -23179,7 +23341,7 @@ begin
           Eat(tkSemicolon);
         end;
         tkVar:      ParseVarSection;
-        tkConst:    ParseConstSection;
+        tkConst:    ParseConstSection(-1, 0);
         tkType:     ParseTypeSection;
         tkClass,
         tkProcedure,
@@ -23230,7 +23392,7 @@ begin
             PreScanPass := True;
           end
           else if CaseEqual(CurTok.SVal, 'resourcestring') then
-            ParseConstSection           { registers as plain string constants }
+            ParseConstSection(-1, 0)    { registers as plain string constants }
           else
             Next;                       { 'finalization' + its body are skipped }
         else
@@ -23565,6 +23727,9 @@ begin
   ArrTypeCount := 0;
   StrConstCount := 0;
   SetConstCount := 0;
+  ClassConstCount := 0;
+  ParsingClassConstCi  := -1;
+  ParsingClassConstVis := 0;
   { Decl-order gating defaults: no body active (a high sentinel means "see all"
     outside a routine body — main body + pre-scan), strict by default. }
   CurBodyHdrTok    := $7FFFFFFF;
@@ -24103,7 +24268,7 @@ begin
         Eat(tkSemicolon);
       end;
       tkVar:      ParseVarSection;
-      tkConst:    ParseConstSection;
+      tkConst:    ParseConstSection(-1, 0);
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
@@ -24153,7 +24318,7 @@ begin
           end;
         end
         else if CaseEqual(CurTok.SVal, 'resourcestring') then
-          ParseConstSection             { registers as plain string constants }
+          ParseConstSection(-1, 0)      { registers as plain string constants }
         else if CaseEqual(CurTok.SVal, 'label') then
         begin
           Next;

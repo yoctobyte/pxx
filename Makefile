@@ -806,12 +806,21 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_class_managed_fields_finalize26)" = "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
 	./$(COMPILER) test/test_member_visibility.pas /tmp/test_member_visibility26
 	test "$$(/tmp/test_member_visibility26)" = "$$(printf '7\n30\n3\n1')"
+	# class consts are class-SCOPED, not unscoped globals: two classes' same-named
+	# private consts must not clobber, and a class const must not clobber a unit
+	# global (bug-pascal-class-const-visibility). FPC-differential identical.
+	./$(COMPILER) test/test_class_const_scope.pas /tmp/test_class_const_scope26
+	test "$$(/tmp/test_class_const_scope26 | tail -1)" = "CLASS CONST OK"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas /tmp/test_member_visibility_strict26
 	test "$$(/tmp/test_member_visibility_strict26)" = "$$(printf '7\n30\n3\n1')"
 	! ./$(COMPILER) --strict-visibility test/test_member_visibility_strict_fail.pas /tmp/test_mvsf26 > /tmp/test_mvsf.log 2>&1
 	grep -q "cannot access strict private" /tmp/test_mvsf.log
 	! ./$(COMPILER) --strict-visibility test/test_method_visibility_strict_fail.pas /tmp/test_methvsf26 > /tmp/test_methvsf.log 2>&1
 	grep -q "cannot access strict private" /tmp/test_methvsf.log
+	# strict-private CLASS CONST reached from a descendant method (tclass12b shape)
+	./$(COMPILER) test/test_class_const_visibility_strict_fail.pas /tmp/test_ccvsf_lax26 > /tmp/test_ccvsf_lax.log 2>&1
+	! ./$(COMPILER) --strict-visibility test/test_class_const_visibility_strict_fail.pas /tmp/test_ccvsf26 > /tmp/test_ccvsf.log 2>&1
+	grep -q "cannot access strict private" /tmp/test_ccvsf.log
 	! ./$(COMPILER) test/test_record_self_field_fail.pas /tmp/test_rsf26 > /tmp/test_rsf.log 2>&1
 	grep -q "record field cannot be of the enclosing record type" /tmp/test_rsf.log
 	! ./$(COMPILER) test/test_record_class_var_fail.pas /tmp/test_rcv26 > /tmp/test_rcv.log 2>&1
