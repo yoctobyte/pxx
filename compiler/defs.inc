@@ -1635,6 +1635,8 @@ var
   PackRecordsVal : Integer;
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
+  RChecksVal : Boolean;      { current {$R±} / {$RANGECHECKS} lexer state (default off) }
+  StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -1764,6 +1766,7 @@ var
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
   TokQChecks : array[0..MAX_TOKENS-1] of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
+  TokRChecks : array[0..MAX_TOKENS-1] of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
   TokScopedEnums : array[0..MAX_TOKENS-1] of Boolean;  { {$SCOPEDENUMS} state at each token }
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
   CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
@@ -1838,6 +1841,7 @@ var
   ASTEnumId : array[0..MAX_AST-1] of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
   ASTLine    : array[0..MAX_AST-1] of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTQChk    : array[0..MAX_AST-1] of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
+  ASTRChk    : array[0..MAX_AST-1] of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
   ASTNodeCount : Integer;
 
   IRKind  : array[0..MAX_IR-1] of Integer;

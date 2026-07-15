@@ -2790,6 +2790,37 @@ begin
   else Result := TypeSize(tyPointer);
 end;
 
+function IRWrapRangeChk(value: Integer; destTk: TTypeKind): Integer;
+{ {$R+} narrowing-assignment guard: wrap the assigned value in a
+  PXXRangeChkI64(v, lo, hi) call when the DEST's ordinal range is narrower
+  than the 64-bit compute width. Pure-Pascal helper = portable to every
+  target for free (feature-pascal-range-checks-r-plus). Non-narrow /
+  non-integer destinations pass through untouched; so does a build without
+  builtinheap (lax fallthrough). }
+var lo, hi: Int64; pi, a1, a2, a3: Integer;
+begin
+  Result := value;
+  case destTk of
+    tyInt8:    begin lo := -128; hi := 127; end;
+    tyUInt8:   begin lo := 0; hi := 255; end;
+    tyInt16:   begin lo := -32768; hi := 32767; end;
+    tyUInt16:  begin lo := 0; hi := 65535; end;
+    tyInteger, tyInt32: begin lo := -2147483648; hi := 2147483647; end;
+    tyUInt32:  begin lo := 0; hi := 4294967295; end;
+  else
+    Exit;
+  end;
+  pi := FindProc('PXXRangeChkI64');
+  if pi < 0 then Exit;
+  a1 := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyInt64));
+  a2 := IRAppend(IR_ARG,
+          IRAppend(IR_CONST_INT, -1, -1, -1, lo, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
+  a3 := IRAppend(IR_ARG,
+          IRAppend(IR_CONST_INT, -1, -1, -1, hi, Ord(tyInt64)), -1, -1, 0, Ord(tyInt64));
+  IRB[a1] := a2; IRB[a2] := a3;
+  Result := IRAppendCall(pi, a1, -1, Ord(tyInt64));
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
@@ -4910,6 +4941,48 @@ begin
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
+        { {$R+}: guard a narrowing store with the range-check helper, and a
+          static-array INDEX write with a bounds check on the index
+          (feature-pascal-range-checks-r-plus). }
+        if ASTRChk[node] then
+        begin
+          if ASTKind[ASTLeft[node]] = AN_IDENT then
+            value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]))
+          else
+            value := IRWrapRangeChk(value, lhsStoreTk);
+          if (ASTKind[ASTLeft[node]] = AN_INDEX) and
+             (ASTKind[ASTLeft[ASTLeft[node]]] = AN_IDENT) then
+          begin
+            varIdx := ASTIVal[ASTLeft[ASTLeft[node]]];
+            if (varIdx >= 0) and Syms[varIdx].IsArray and
+               (Syms[varIdx].ArrLen >= 0) and (SymArrNDims[varIdx] <= 1) and
+               (SymElemDynDepth[varIdx] = 0) then
+            begin
+              procIdx := FindProc('PXXRangeChkI64');
+              if procIdx >= 0 then
+              begin
+                { a[i] := v  ->  a[PXXRangeChkI64(i, lo, hi)] := v }
+                wrapperArg := AllocNode(AN_ARG);
+                ASTLeft[wrapperArg] := ASTRight[ASTLeft[node]];
+                ASTTk[wrapperArg] := Ord(tyInt64);
+                left := AllocNode(AN_INT_LIT);
+                ASTIVal[left] := Syms[varIdx].ConstVal; ASTTk[left] := Ord(tyInt64);
+                right := AllocNode(AN_ARG); ASTLeft[right] := left; ASTTk[right] := Ord(tyInt64);
+                ASTRight[wrapperArg] := right;
+                left := AllocNode(AN_INT_LIT);
+                ASTIVal[left] := Syms[varIdx].ConstVal + Syms[varIdx].ArrLen - 1;
+                ASTTk[left] := Ord(tyInt64);
+                item := AllocNode(AN_ARG); ASTLeft[item] := left; ASTTk[item] := Ord(tyInt64);
+                ASTRight[right] := item;
+                wrapperCall := AllocNode(AN_CALL);
+                ASTIVal[wrapperCall] := procIdx;
+                ASTTk[wrapperCall] := Ord(tyInt64);
+                ASTLeft[wrapperCall] := wrapperArg; ASTRight[wrapperCall] := -1;
+                ASTRight[ASTLeft[node]] := wrapperCall;
+              end;
+            end;
+          end;
+        end;
         if ASTKind[ASTLeft[node]] = AN_IDENT then
         begin
           Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]]);

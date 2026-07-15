@@ -1947,6 +1947,13 @@ begin
   raise EIntOverflow.Create('Arithmetic overflow');
 end;
 
+procedure SysRaiseRangeError;
+begin
+  { {$R+} range trap upgraded to a catchable exception
+    (feature-pascal-range-checks-r-plus). }
+  raise ERangeError.Create('Range check error');
+end;
+
 procedure SysRaiseDivByZero;
 begin
   { Integer div/mod by zero upgraded from Runtime error 200 to a catchable
@@ -1960,6 +1967,7 @@ initialization
   BackTraceStrFunc := @SysBackTraceStr;
   PXXOverflowHook := @SysRaiseOverflow;
   PXXDivZeroHook := @SysRaiseDivByZero;
+  PXXRangeErrorHook := @SysRaiseRangeError;
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';

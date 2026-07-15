@@ -1918,6 +1918,29 @@ begin
   Halt(215);
 end;
 
+var
+  { Installed by sysutils' initialization to convert a {$R+} range violation
+    into a raised, catchable ERangeError — third of the hook family. }
+  PXXRangeErrorHook: TPXXDivZeroProc;
+
+{ {$R+} range trap: FPC behavior 'Runtime error 201' + exit code 201.
+  feature-pascal-range-checks-r-plus. }
+procedure PXXRangeError;
+begin
+  if PXXRangeErrorHook <> nil then PXXRangeErrorHook();
+  writeln('Runtime error 201 (range check error)');
+  Halt(201);
+end;
+
+{ {$R+} narrowing-assignment guard: the parser wraps the assigned value in
+  this call when the destination's ordinal range is narrower than the
+  computed width. Pure Pascal, so every target gets range checks for free. }
+function PXXRangeChkI64(v, lo, hi: Int64): Int64;
+begin
+  if (v < lo) or (v > hi) then PXXRangeError;
+  Result := v;
+end;
+
 {$ifdef CPU_XTENSA}
 { Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;

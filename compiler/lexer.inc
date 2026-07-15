@@ -691,6 +691,8 @@ begin
   PackRecordsVal := 8;
   ScopedEnumsVal := False;
   QChecksVal := False;
+  RChecksVal := False;
+  StmtRChecks := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
@@ -1393,6 +1395,13 @@ begin
     if Source[SrcPos] = '+' then QChecksVal := True
     else if Source[SrcPos] = '-' then QChecksVal := False;
   end;
+  { {$R+} / {$R-}: range-check switch (the resource-include form was already
+    excluded above on the leading +/-) — feature-pascal-range-checks-r-plus. }
+  if CaseEqual(command, 'R') and PasDirectiveActive and (SrcPos <= Length(Source)) then
+  begin
+    if Source[SrcPos] = '+' then RChecksVal := True
+    else if Source[SrcPos] = '-' then RChecksVal := False;
+  end;
   messageText := '';
   if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
      CaseEqual(command, 'error') then
@@ -1460,6 +1469,12 @@ begin
       if CaseEqual(name, 'on') then QChecksVal := True
       else if CaseEqual(name, 'off') then QChecksVal := False
       else Error('overflowchecks requires on or off');
+    end
+    else if CaseEqual(command, 'rangechecks') then
+    begin
+      if CaseEqual(name, 'on') then RChecksVal := True
+      else if CaseEqual(name, 'off') then RChecksVal := False
+      else Error('rangechecks requires on or off');
     end
     else if CaseEqual(command, 'strict_operator') then
     begin
@@ -2115,6 +2130,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
+    TokRChecks[TokCount] := RChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
@@ -2162,6 +2178,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
+    TokRChecks[TokCount] := RChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');

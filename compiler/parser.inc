@@ -46,6 +46,12 @@ begin
   ASTLiftedVar[ASTNodeCount] := -1;
   ASTEnumId[ASTNodeCount]  := -1;
   ASTQChk[ASTNodeCount]    := False;
+  { AN_ASSIGN carries its {$R+} region state from birth — one central tag
+    instead of 27 build sites. Anchored at the enclosing STATEMENT's first
+    token (StmtRChecks), not the current token: a directive between the RHS
+    and the statement end must not retro-apply (trange4.pp)
+    (feature-pascal-range-checks-r-plus). }
+  ASTRChk[ASTNodeCount]    := (kind = AN_ASSIGN) and StmtRChecks;
   { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
     appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
     contribute no rows — the Tier 1 line table describes one file. }
@@ -73,6 +79,7 @@ begin
   ASTLiftedVar[Result] := ASTLiftedVar[node];
   ASTLine[Result]     := ASTLine[node];
   ASTQChk[Result]     := ASTQChk[node];
+  ASTRChk[Result]     := ASTRChk[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
@@ -13241,6 +13248,11 @@ var
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
 begin
+  { {$R} is governed by the mode at the STATEMENT's first token — a directive
+    between the RHS and the statement end must not retro-apply (trange4.pp:
+    `x:=y {$R+} end`). AllocNode(AN_ASSIGN) reads this anchor. }
+  if (TokPos > 0) and (TokPos <= TokCount) then
+    StmtRChecks := TokRChecks[TokPos - 1];
   node := -1;
   case CurTok.Kind of
     tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:
