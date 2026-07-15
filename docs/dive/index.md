@@ -76,8 +76,12 @@ Compilation proceeds through five stages, with no external tools invoked:
    `PT_DYNAMIC`/`DT_NEEDED`/GOT/PLT are added automatically when a C library
    is imported.
 
-There is no optimization pass: no constant folding, no register allocation,
-no dead-code elimination. Emitted code corresponds directly to the source.
+Optimization runs at `-O2` by default (peephole passes, procedure inlining,
+and dead-code elimination, tiered by `-O` level); `-O0` disables it and is the
+byte-identity reference used by the self-host gate. There is no whole-program or
+SSA-based optimizer — the passes are local and the emitted code stays close to
+the source. See the [command-line reference](../reference/cli.md#runtime-and-codegen)
+for the `-O` levels.
 
 See [Architecture](../reference/architecture.md) for the full pipeline.
 </details>
@@ -92,12 +96,16 @@ cleanly on x86-64, i386, aarch64, and arm32 while writing this page. The C
 and Nil Python frontends compile against real-world C headers and libraries.
 DWARF debug information (`-g`) is available on all four Linux targets.
 
-Known gaps: the two ESP32 targets (xtensa, riscv32) do not yet support
-classes and are emit-only, not self-host, targets. There is no optimizing
-pass. Integer arithmetic wraps without overflow checking. `private` and
-`protected` are parsed but not access-enforced. Nil Python is limited to
-four parameters per function and has no pointer syntax of its own. See
-[Limits](../reference/limits.md) for the complete list.
+Known gaps: the two ESP32 targets (xtensa, riscv32) are emit-only, not
+self-host, targets (though classes with virtual dispatch now work on both).
+Optimization is local only — there is no whole-program or SSA-based pass.
+Integer overflow, range, and IO checking exist but are opt-in per region
+(`{$Q+}`, `{$R+}`, `{$I+}`); the lax default wraps and does not range-check.
+Member visibility (`private`/`protected`/`strict`) is enforced only under
+`--strict-visibility`; the lax default parses the markers but grants access
+anywhere. Nil Python is limited to four parameters per function and has no
+pointer syntax of its own. See [Limits](../reference/limits.md) for the
+complete list.
 
 PXX is early, experimental software. It should not be used for
 security-sensitive, safety-sensitive, financial, legal, or medical work.
@@ -106,13 +114,14 @@ security-sensitive, safety-sensitive, financial, legal, or medical work.
 <details markdown="1">
 <summary>Licensing</summary>
 
-The repository currently grants no open-source or other license. Default
-copyright applies: the code may be read, built, and run locally, but public
-visibility on GitHub does not itself grant permission to copy, modify,
-redistribute, or otherwise rely on it. This position may change in the
-future. See
-[`LICENSE.md`](https://github.com/yoctobyte/pxx/blob/master/LICENSE.md) in
-the repository for the current terms.
+PXX is open source, licensed per directory: the compiler is MPL 2.0, the
+runtime and libraries (`lib/**`, `compiler/builtin/`) are zlib, examples are
+0BSD, and these docs are CC BY 4.0. Because the zlib-licensed runtime is what
+gets embedded into every binary, programs you compile with PXX carry no license
+obligations from the toolchain. See [Licensing](../reference/licensing.md) for
+the full table and rationale, or
+[`LICENSE.md`](https://github.com/yoctobyte/pxx/blob/master/LICENSE.md) for the
+binding terms.
 </details>
 
 ## Further reading
