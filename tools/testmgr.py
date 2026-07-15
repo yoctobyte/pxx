@@ -1434,6 +1434,13 @@ BENCH_SUITE = (
      ["200", "150"], ["1600", "1200"], True),       # float compute, FPC-comparable
     ("raytracer", "examples/raytracer/raytracer.pas",
      [], ["--ppm", "{tmp}/rt.ppm", "480", "360"], False),  # call-heavy float
+    # Same scene + Double kernel with only `math` (Sqrt), no image/png/hashing/
+    # platform, so FPC compiles it and the `fpc` level gets a call-dense float
+    # row. Canary = default 96x64 smoke (self-checks its checksum within a
+    # tolerance band and Halt(1)s outside it); timed = 480x360. The demo above
+    # stays as-is -- it exists to USE our image libraries; this is a fixture.
+    ("raytracer-p", "bench/portable/raytracer.pas",
+     [], ["480", "360"], True),                     # call-dense float, FPC-comparable
     ("sieve", "examples/primes/sieve.pas", [], [], True),   # memory-bound int, FPC-comparable
     ("nbody", "bench/portable/nbody.pas", [], [], True),   # float, FPC-comparable
     ("fib", "bench/portable/fib.pas", [], [], True),       # call-heavy int, FPC-comparable
