@@ -9,7 +9,7 @@ track: T
 
 - **Type:** bug (test infra — flaky timeout). **Track T** (testmgr tiers /
   timeout margins).
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-14 (night session).
 
 ## Evidence
@@ -39,3 +39,6 @@ wrong RESULT — a qemu-user process starved past the per-test timeout.
 
 Every full-tier run on a loaded box has ~⅓ chance of a spurious RED, which
 costs a manual standalone rerun to dismiss — tonight it did so twice.
+
+## Log
+- 2026-07-15 — resolved, commit ab3a5b2a.

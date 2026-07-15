@@ -6,7 +6,7 @@ prio: 55
 
 - **Type:** bug (test infra — false RED, wastes a bisect)
 - **Track:** T — testing infra (`tools/run_c_conformance.sh`)
-- **Status:** backlog — opened 2026-07-13.
+- **Status:** done
 - **Found by:** a Track A/C session whose own full-tier runs had just been GREEN four
   times in a row.
 
@@ -73,3 +73,4 @@ miscompile does not.
 ## Log
 - 2026-07-13 — opened by a Track A/C session; not fixed here (Track T owns
   `run_c_conformance.sh` and the report format).
+- 2026-07-15 — resolved, commit ab3a5b2a.

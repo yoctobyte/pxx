@@ -50,3 +50,6 @@ Three of four full runs went RED this way tonight.
   exactly like a wrong-output failure, and the log tail shows a successful build followed
   by nothing, which is genuinely ambiguous (that ambiguity already cost one bogus
   regression ticket: regression-test-aarch64-test-cross-sysopen-family).
+
+## Log
+- 2026-07-15 — resolved, commit ab3a5b2a.
