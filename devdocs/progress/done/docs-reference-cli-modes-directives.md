@@ -112,3 +112,6 @@ completeness value.
   CLI-equivalent cross-links.
 - Every flag/directive/snippet documented was verified by compiling against
   `$(PXX_STABLE)` — no invented behaviour.
+
+## Log
+- 2026-07-15 — resolved, commit 05b0cdcd.
