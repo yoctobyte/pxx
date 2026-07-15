@@ -7,7 +7,7 @@ prio: 40
 # Bench: give mandelbrot and raytracer an FPC-comparable variant
 
 - **Type:** feature (Track T — the bench suite in `tools/testmgr.py` + `bench/portable/`).
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-14, from the user's question: "not all benchmark tests are tested
   against FPC — would be nice to have this data, but likely we use compiler extensions
   FPC doesn't support?"
@@ -93,3 +93,6 @@ Three FPC-comparable rows, and all three say the same thing:
 
 nbody's 8.8x is the outlier and the obvious thing to explain — it is the only one using
 `math`, so part of that may be RTL rather than codegen. Track O has the material now.
+
+## Log
+- 2026-07-15 — resolved, commit baaf0931.

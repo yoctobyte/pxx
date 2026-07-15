@@ -114,7 +114,6 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
-| feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve | T | 25 | feature | Track T: bench.tsv has no `fpc` column for mandelbrot / raytracer / sieve | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -845,6 +844,7 @@ _none_
 | feature-syscall-pthread-shim | B | 50 | feature | Syscall-only pthread shim for libc-free C libraries | — |
 | feature-system-stack-frame-intrinsics | A | 45 | feature | System stack-frame intrinsics: get_frame / get_pc_addr / get_caller_stackinfo | — |
 | feature-sysutils-decodedate-missing | A | 50 | feature | SysUtils `DecodeDate` missing — next Synapse `synautil` wall | — |
+| feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-fuzz-findings-ledger | T | 70 | feature | Fuzz findings ledger: dedupe by signature, throttle fuzzing until the finding is fixed | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -1062,7 +1062,6 @@ _none_
 - [p 40] [A] bug-a-interface-release-on-last-ref-not-destroyed
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
-- [p 40] [T] feature-t-bench-portable-variants
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
