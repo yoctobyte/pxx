@@ -1403,9 +1403,21 @@ def converge_seed(priv, max_rounds=4):
 # row by >BENCH_SLOW_PCT is flagged. Serial on purpose — timing needs a
 # quiet box, so this never goes through the parallel Manager.
 BENCH_LEVELS = ("-O0", "-O2", "-O3")
-BENCH_RUNS = 5
+BENCH_RUNS = 5                 # target CLEAN runs; the number is min over them
 BENCH_SELF_RUNS = 3            # self-compile is ~10s a run: 3 is plenty
+BENCH_EXTRA_TRIES = 5          # spare attempts to replace runs lost to contention
 BENCH_SLOW_PCT = 10.0
+# Contention guard. A single-threaded CPU benchmark spends ~all its wall time ON
+# a cpu, so child cpu-time (user+sys, from rusage) ~= wall. When wall runs ahead
+# of cpu the process was descheduled -- another load spiked during the run -- and
+# that timing is contaminated: discard it and take another run (this is the
+# before/during/after cpu check, done per run from the child's own accounting
+# rather than by sampling the box). Kept runs' MIN is the reported number, so a
+# spike can only ever be thrown away, never averaged in. Tunable for noisy hosts.
+BENCH_CPU_WALL_MAX = float(os.environ.get("TESTMGR_BENCH_CPU_WALL_MAX", "1.06"))
+BENCH_CPU_MIN_S = 0.03        # below this, wall/cpu is startup jitter -- don't judge
+BENCH_QUIET_LOAD_FRAC = 0.60  # per-core load1 above this: box busy, wait to start
+BENCH_QUIET_WAIT_S = 10.0     # cap on that pre-run wait (no-op on a quiet host)
 BENCH_TSV_REL = "devdocs/progress/tstate/bench.tsv"
 COMPILER_SRC = "compiler/compiler.pas"
 # FPC comparison (feature-testmgr-fpc-compare-and-web-dashboard): the `fpc`
@@ -1447,20 +1459,74 @@ BENCH_SUITE = (
 )
 
 
-def bench_time(argv, runs, timeout):
-    best = None
-    for _ in range(runs):
+def _child_cpu():
+    """Cumulative cpu-time (user+sys, secs) of reaped child processes. Diffing
+    this around one subprocess.run (which waits) isolates that child's cpu --
+    the bench driver is serial, so nothing else is reaped in between. Returns
+    None where rusage is unavailable (non-POSIX)."""
+    try:
+        import resource
+        ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return ru.ru_utime + ru.ru_stime
+    except (ImportError, ValueError, OSError):
+        return None
+
+
+def _wait_quiet():
+    """Best-effort: if 1-min load per core is high, wait (up to
+    BENCH_QUIET_WAIT_S) so timing does not start mid-spike. loadavg is coarse and
+    averaged -- the real guard is the per-run cpu/wall check below; this just
+    avoids obviously-bad starts. No-op where getloadavg is unavailable."""
+    try:
+        ncpu = os.cpu_count() or 1
+        deadline = time.monotonic() + BENCH_QUIET_WAIT_S
+        while time.monotonic() < deadline:
+            if os.getloadavg()[0] / ncpu <= BENCH_QUIET_LOAD_FRAC:
+                return
+            time.sleep(1.0)
+    except (OSError, AttributeError):
+        pass
+
+
+def bench_time(argv, runs, timeout, label=""):
+    """Min wall time over `runs` CLEAN runs. A run is discarded (and replaced,
+    up to runs+BENCH_EXTRA_TRIES attempts) when the child was descheduled --
+    wall > cpu*BENCH_CPU_WALL_MAX -- so a load spike is thrown away rather than
+    recorded. If too few come back clean, the min over whatever did is returned
+    and a `noisy` line is printed. Returns secs, or None on failure/timeout."""
+    _wait_quiet()
+    max_tries = runs + BENCH_EXTRA_TRIES
+    best_clean = best_any = None
+    clean = tries = 0
+    while clean < runs and tries < max_tries:
+        tries += 1
+        c0 = _child_cpu()
         t0 = time.monotonic()
         try:
             r = subprocess.run(argv, cwd=REPO, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL, timeout=timeout)
         except subprocess.TimeoutExpired:
             return None
+        wall = time.monotonic() - t0
         if r.returncode != 0:
             return None
-        dt = time.monotonic() - t0
-        best = dt if best is None else min(best, dt)
-    return best
+        best_any = wall if best_any is None else min(best_any, wall)
+        cpu = None if c0 is None else _child_cpu() - c0
+        # descheduled? only judge once cpu is big enough that the ratio is signal
+        if cpu is not None and cpu >= BENCH_CPU_MIN_S and \
+           wall > cpu * BENCH_CPU_WALL_MAX:
+            continue                       # contaminated -- discard, retry
+        clean += 1
+        best_clean = wall if best_clean is None else min(best_clean, wall)
+    if best_clean is None:                 # never got a clean run
+        if label:
+            print("  bench %-17s NOISY 0/%d clean in %d tries (box busy?)"
+                  % (label, runs, tries))
+        return best_any
+    if clean < runs and label:
+        print("  bench %-17s noisy: kept %d/%d clean in %d tries"
+              % (label, clean, runs, tries))
+    return best_clean
 
 
 def fpc_build(src, out, tmp):
@@ -1541,7 +1607,7 @@ def run_bench():
                 red.append("%s %s canary" % (name, lvl))
                 continue
             dt = bench_time([b] + [a.format(tmp=tmp) for a in timed],
-                            BENCH_RUNS, timeout)
+                            BENCH_RUNS, timeout, label="%s %s" % (name, lvl))
             if dt is None:
                 red.append("%s %s run" % (name, lvl))
                 continue
@@ -1569,7 +1635,8 @@ def run_bench():
                           % (name, FPC_LEVEL))
                 else:
                     dt = bench_time([fb] + [a.format(tmp=tmp) for a in timed],
-                                    BENCH_RUNS, timeout)
+                                    BENCH_RUNS, timeout,
+                                    label="%s %s" % (name, FPC_LEVEL))
                     if dt is not None:
                         record(name, FPC_LEVEL, dt)
 
@@ -1600,7 +1667,8 @@ def run_bench():
             red.append("selfcompile %s canary" % lvl)
             continue
         dt = bench_time([stage, COMPILER_SRC, os.path.join(tmp, "selfout")],
-                        BENCH_SELF_RUNS, timeout * 5)
+                        BENCH_SELF_RUNS, timeout * 5,
+                        label="selfcompile %s" % lvl)
         if dt is None:
             red.append("selfcompile %s run" % lvl)
             continue
@@ -1618,7 +1686,8 @@ def run_bench():
             print("  bench %-12s %-4s FPC-COMPILE-FAIL" % ("selfcompile",
                                                            FPC_LEVEL))
         else:
-            dt = bench_time(argv, BENCH_SELF_RUNS, timeout * 5)
+            dt = bench_time(argv, BENCH_SELF_RUNS, timeout * 5,
+                            label="selfcompile %s" % FPC_LEVEL)
             if dt is not None:
                 record("selfcompile", FPC_LEVEL, dt)
 
