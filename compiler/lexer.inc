@@ -835,6 +835,16 @@ begin
     name := 'PXX_TS_SOFTLOCK';
     PasDefine(name);
   end;
+  { --threadsafe on x86-64: the heap lock is the codegen-emitted BSS spinlock,
+    which Pascal-level runtime code cannot take. Paths that would need it from
+    Pascal (PXXClassFinalize's string/dynarray pass) gate on this define and
+    keep the pre-existing benign leak instead of racing the allocator
+    (bug-a-class-managed-fields-not-finalized-on-destroy, heap-lock hazard). }
+  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+  begin
+    name := 'PXX_TS_HARDLOCK';
+    PasDefine(name);
+  end;
 end;
 
 procedure PasApplyMimicDefines;

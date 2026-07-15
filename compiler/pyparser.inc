@@ -1040,9 +1040,11 @@ begin
     Inc(i);
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
-  { RTTI backlink word before the VMT — same layout the Pascal path reserves, so an
-    instance can reach its class RTTI at [[instance+0] - 8]. Keep the two in step. }
-  for i := 0 to 7 do
+  { RTTI backlink word (VMT-8) + LAYOUT backlink word (VMT-16) before the VMT —
+    same layout the Pascal path reserves, so an instance can reach its class RTTI
+    at [[instance+0] - 8] and its managed-field layout at [[instance+0] - 16].
+    Keep the two in step. }
+  for i := 0 to 15 do
   begin
     Data[DataLen] := 0;
     Inc(DataLen);

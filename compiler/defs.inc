@@ -933,6 +933,7 @@ var
   DataPtrFixCount    : Integer;
   { RTTI emission state }
   UClsRTTIOff        : array[0..MAX_UCLASS-1] of Integer; { Data[] off of class RTTI hdr, -1 if none }
+  UClsLayoutOff      : array[0..MAX_UCLASS-1] of Integer; { Data[] off of a CLASS's managed-field layout descriptor (record-desc format + member kind 4 = COM interface), -1 if none; backlinked at [VMT-16] for PXXClassFinalize }
   RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
   RTTIRegistryCount  : Integer;
   DumpRTTI           : Boolean;

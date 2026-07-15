@@ -26,6 +26,31 @@ begin
   else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then FieldIsManaged := True;
 end;
 
+function FieldIsComInterface(fi: Integer): Boolean;
+{ A COM/ARC interface field (tyRecord whose rec is a COM interface): a
+  refcounted handle. Used only for CLASS layout descriptors (member kind 4),
+  where the release runs OUTSIDE the heap lock — the record path stays a benign
+  leak pending a reentrant heap lock
+  (bug-a-class-managed-fields-not-finalized-on-destroy). A CORBA interface
+  field is NOT managed (plain pointer, no lifetime coupling). }
+var fci: Integer;
+begin
+  FieldIsComInterface := False;
+  if UFldTk[fi] <> Ord(tyRecord) then Exit;
+  if UFldIsArray[fi] then Exit;
+  if UFldRec_[fi] < REC_UCLASS_BASE then Exit;
+  fci := UFldRec_[fi] - REC_UCLASS_BASE;
+  if (fci >= 0) and (fci < UClsCount) and UClsIsInterface[fci] and UClsIsComInterface[fci] then
+    FieldIsComInterface := True;
+end;
+
+function ClassFieldNeedsFinal(fi: Integer): Boolean;
+{ CLASS-descriptor member predicate: everything the record path manages, plus
+  COM interface fields (kind 4). }
+begin
+  ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi);
+end;
+
 function RecordManagedFieldCount(ci: Integer): Integer;
 var base, cnt, i, managed: Integer;
 begin
@@ -285,6 +310,7 @@ begin
   RTTIRegistryOff := -1;
   RTTIRegistryCount := 0;
   for ci := 0 to MAX_UCLASS - 1 do UClsRTTIOff[ci] := -1;
+  for ci := 0 to MAX_UCLASS - 1 do UClsLayoutOff[ci] := -1;
 
   { Enum type RTTI first, so prop typeRefs can point at it. }
   for etid := 0 to EnumTypeCount - 1 do
@@ -484,7 +510,7 @@ procedure EmitLayoutRTTI;
 var
   ci, i, fi, base, cnt, mCount, dCount, mHdr, dynDescOff: Integer;
   hdr, subCi, arrCount, mKind, typeRef: Integer;
-  depth, baseKind, elSize, baseTypeRef, k, dynIdx: Integer;
+  depth, baseKind, elSize, baseTypeRef, k, dynIdx, cCi: Integer;
   targetPtrSize: Integer;
 
 
@@ -516,7 +542,42 @@ begin
     end;
   end;
 
-
+  { Pass 1b: CLASS layout descriptors — same record-descriptor format (so
+    PXXRecordRelease consumes it for kinds 1-3) plus member kind 4 = COM
+    interface field. Fields are collected over the WHOLE parent chain (UFldOff_
+    is the absolute instance offset, so one flat descriptor covers inherited
+    members). Backlinked at [VMT-16]; PXXClassFinalize dispatches on the
+    instance's RUNTIME class (bug-a-class-managed-fields-not-finalized). }
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if (not UClsIsRecord[ci]) and (not UClsIsInterface[ci]) then
+    begin
+      mCount := 0;
+      dCount := 0;
+      cCi := ci;
+      while cCi >= 0 do
+      begin
+        base := UClsFBase[cCi];
+        cnt := UClsFCount[cCi];
+        for i := 0 to cnt - 1 do
+        begin
+          fi := base + i;
+          if ClassFieldNeedsFinal(fi) then
+          begin
+            Inc(mCount);
+            if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+              Inc(dCount);
+          end;
+        end;
+        cCi := UClsParent[cCi];
+      end;
+      if mCount > 0 then
+      begin
+        UClsLayoutOff[ci] := DataLen;
+        DataPutZeros(12 + mCount * 16 + dCount * 20);
+      end;
+    end;
+  end;
 
   { Pass 2: fill descriptors }
   for ci := 0 to UClsCount - 1 do
@@ -617,7 +678,129 @@ begin
     end;
   end;
 
+  { Pass 2b: fill CLASS layout descriptors and patch the [VMT-16] backlink. }
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsLayoutOff[ci] >= 0 then
+    begin
+      hdr := UClsLayoutOff[ci];
+      PatchDataI32(hdr + 0, 1); { Kind = 1 (Record-format layout) }
+      PatchDataI32(hdr + 4, UClsSize_[ci]); { Size }
 
+      { first count managed members over the chain (dyn sub-desc area base) }
+      mCount := 0;
+      cCi := ci;
+      while cCi >= 0 do
+      begin
+        base := UClsFBase[cCi];
+        cnt := UClsFCount[cCi];
+        for i := 0 to cnt - 1 do
+          if ClassFieldNeedsFinal(base + i) then Inc(mCount);
+        cCi := UClsParent[cCi];
+      end;
+
+      k := 0;
+      dynIdx := 0;
+      cCi := ci;
+      while cCi >= 0 do
+      begin
+        base := UClsFBase[cCi];
+        cnt := UClsFCount[cCi];
+        for i := 0 to cnt - 1 do
+        begin
+          fi := base + i;
+          if ClassFieldNeedsFinal(fi) then
+          begin
+            mHdr := hdr + 12 + k * 16;
+            PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset (absolute in instance) }
+
+            if UFldTk[fi] = Ord(tyAnsiString) then
+              mKind := 1
+            else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+              mKind := 2
+            else if FieldIsComInterface(fi) then
+              mKind := 4
+            else
+              mKind := 3;
+            PatchDataI32(mHdr + 4, mKind);
+
+            if UFldIsArray[fi] then
+            begin
+              if UFldArrLen[fi] = -1 then
+                arrCount := 1
+              else
+                arrCount := UFldArrLen[fi];
+            end
+            else
+              arrCount := 1;
+            PatchDataI32(mHdr + 8, arrCount);
+
+            typeRef := 0;
+            if mKind = 2 then
+            begin
+              dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
+              typeRef := dynDescOff - (mHdr + 12);
+
+              PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }
+
+              depth := UFldDynDepth[fi];
+              if UFldTk[fi] = Ord(tyAnsiString) then
+                baseKind := 1
+              else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then
+                baseKind := 3
+              else
+                baseKind := 0;
+
+              if depth > 1 then
+                elSize := targetPtrSize
+              else
+              begin
+                if baseKind = 1 then
+                  elSize := targetPtrSize
+                else if baseKind = 3 then
+                  elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
+                else
+                  elSize := TypeSize(IntToTypeKind(UFldTk[fi]));
+              end;
+              PatchDataI32(dynDescOff + 4, elSize);
+              PatchDataI32(dynDescOff + 8, depth);
+              PatchDataI32(dynDescOff + 12, baseKind);
+
+              baseTypeRef := 0;
+              if baseKind = 3 then
+              begin
+                subCi := UFldRec_[fi] - REC_UCLASS_BASE;
+                if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+                  baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
+              end;
+              PatchDataI32(dynDescOff + 16, baseTypeRef);
+
+              Inc(dynIdx);
+            end
+            else if mKind = 3 then
+            begin
+              subCi := UFldRec_[fi] - REC_UCLASS_BASE;
+              if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+                typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
+            end
+            else if mKind = 4 then
+              { COM interface member: typeRef carries the interface id (its UCls
+                index), the runtime key PXXIntfRelease dispatches on. }
+              typeRef := UFldRec_[fi] - REC_UCLASS_BASE;
+            PatchDataI32(mHdr + 12, typeRef);
+
+            Inc(k);
+          end;
+        end;
+        cCi := UClsParent[cCi];
+      end;
+      PatchDataI32(hdr + 8, k); { MemberCount }
+
+      { backlink: [VMT-16] -> this descriptor }
+      if UClsVMTOffset[ci] >= 16 then
+        AddDataPtrFix(UClsVMTOffset[ci] - 16, hdr);
+    end;
+  end;
 
   for i := 0 to AnonDynArrayCount - 1 do
   begin

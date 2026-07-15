@@ -802,6 +802,8 @@ test-core: $(COMPILER)
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
+	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26
+	test "$$(/tmp/test_class_managed_fields_finalize26)" = "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
 	./$(COMPILER) test/test_member_visibility.pas /tmp/test_member_visibility26
 	test "$$(/tmp/test_member_visibility26)" = "$$(printf '7\n30\n3\n1')"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas /tmp/test_member_visibility_strict26

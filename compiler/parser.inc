@@ -11712,6 +11712,10 @@ begin
   ASTLeft[freeCall] := freeArg;
   ASTTk[freeCall] := Ord(tyInteger);
 
+  { Managed-field finalization (PXXClassFinalize) is injected at the IR lowering
+    of the FreeMem intrinsic when its argument is class-typed — parse-time
+    FindProc cannot see builtin procs yet
+    (bug-a-class-managed-fields-not-finalized-on-destroy). }
   thenSeq := freeCall;
   if (ci >= 0) and (FindUMeth(ci, 'Destroy') >= 0) then
     thenSeq := chainSeq(GenMakeMethodCall0(CloneAST(objNode), ci, 'Destroy'), chainSeq(freeCall, -1));
@@ -19189,7 +19193,13 @@ begin
           VMT-8 keeps UClsVMTOffset on slot 0, so every virtual slot index is
           unchanged and is/as keep comparing VMT addresses exactly as before.
           Stays 0 for a class with no RTTI blob (no published members). }
-        for i := 0 to 7 do
+        { ...and the LAYOUT backlink one word before THAT (VMT-16): points at the
+          class's managed-field layout descriptor (EmitLayoutRTTI patches it), so
+          PXXClassFinalize can release string/dynarray/record/COM-interface fields
+          on Free by the instance's RUNTIME class. Stays 0 (nil = nothing to
+          finalize) for classes with no managed fields
+          (bug-a-class-managed-fields-not-finalized-on-destroy). }
+        for i := 0 to 15 do
         begin
           if DataLen >= MAX_DATA then Error('data overflow');
           Data[DataLen] := 0;
@@ -23521,13 +23531,14 @@ begin
   UClsIsRecord[ci] := False;
   UClsSize_[ci] := TARGET_PTR_SIZE;   { VMT pointer slot at offset 0 }
   UClsAlign[ci] := TARGET_PTR_SIZE;
-  { A real (empty) VMT + RTTI-backlink word, the same shape every DECLARED
-    class gets. Without it UClsVMTOffset stayed -1 and the ctor's VMT stamp
-    wrote a garbage data reference into [instance+0] — so anything reading an
-    instance's class identity (`o is T`'s runtime blob walk, ClassName) walked
-    wild memory for a plain TObject.Create instance. One padding slot, never
-    dispatched (the root has no virtuals until an override materialises one). }
-  for i := 0 to 7 do
+  { A real (empty) VMT + RTTI-backlink word + LAYOUT-backlink word, the same
+    shape every DECLARED class gets. Without it UClsVMTOffset stayed -1 and the
+    ctor's VMT stamp wrote a garbage data reference into [instance+0] — so
+    anything reading an instance's class identity (`o is T`'s runtime blob walk,
+    ClassName) walked wild memory for a plain TObject.Create instance. One
+    padding slot, never dispatched (the root has no virtuals until an override
+    materialises one). }
+  for i := 0 to 15 do
   begin
     if DataLen >= MAX_DATA then Error('data overflow');
     Data[DataLen] := 0;

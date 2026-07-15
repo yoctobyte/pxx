@@ -1552,6 +1552,57 @@ begin
   end;
 end;
 
+procedure PXXClassFinalize(inst: Pointer);
+{ Release a CLASS instance's managed fields on destruction, by its RUNTIME
+  class: [inst] = VMT, [VMT-16] = the layout descriptor EmitLayoutRTTI emitted
+  (nil = nothing to finalize). Runs between the user Destroy chain and FreeMem
+  (the Free desugar inserts the call), matching FPC's FreeInstance timing.
+
+  Two passes, split by lock discipline
+  (bug-a-class-managed-fields-not-finalized-on-destroy):
+  - kind 4 (COM interface): released FIRST, with NO heap lock held — the release
+    runs the referenced object's destructor chain and self-locking FreeMem, so
+    doing it under a lock would deadlock (the reverted cb2ed843 hit exactly
+    that on the record path).
+  - kinds 1-3 (string/dynarray/record): PXXRecordRelease, whose inner frees are
+    self-locking on softlock targets and lock-free single-threaded. On x86-64
+    --threadsafe the heap lock is the codegen BSS spinlock, unreachable from
+    Pascal — skip the pass there (pre-existing benign leak) rather than race
+    the allocator. PXXRecordRelease has no kind-4 case, so interfaces are not
+    double-released. }
+var
+  vmt, desc: Pointer;
+  memberCount, i, offset, kind, typeRef: Integer;
+  memberPtr: Int64;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    kind := PInt32(memberPtr + 4)^;
+    if kind = 4 then
+    begin
+      offset := PInt32(memberPtr)^;
+      typeRef := PInt32(memberPtr + 12)^;
+      PXXIntfRelease(Pointer(Int64(inst) + offset), typeRef);
+      PWord(Pointer(Int64(inst) + offset))^ := 0;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+
+{$ifndef PXX_TS_HARDLOCK}
+  PXXRecordRelease(inst, desc);
+{$endif}
+end;
+
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 var
   depth, baseKind, baseTypeRef: Integer;

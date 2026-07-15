@@ -3045,6 +3045,7 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
+    cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -5389,6 +5390,27 @@ begin
       begin
         outNode := IRInlineExpand(node, cpi);
         if outNode >= 0 then begin Result := outNode; Exit; end;
+      end;
+      { FreeMem on a CLASS instance (the tail of every Free/destroy desugar):
+        release the instance's managed fields FIRST, by its RUNTIME class —
+        PXXClassFinalize reads the layout descriptor at [[inst]-16] and no-ops
+        when there is none. Runs after the user Destroy chain (which the desugar
+        sequences before this call) and before the memory is freed, matching
+        FPC's FreeInstance timing
+        (bug-a-class-managed-fields-not-finalized-on-destroy). The call is NOT
+        under the heap lock — the codegen's lock wrap covers only the FreeMem
+        emission itself, which is exactly what the interface-release pass needs. }
+      if (cpi = -Ord(tkFreeMem)) and (ASTLeft[node] >= 0) and
+         (ASTLeft[ASTLeft[node]] >= 0) and
+         (IntToTypeKind(ASTTk[ASTLeft[ASTLeft[node]]]) = tyClass) then
+      begin
+        cfPi := FindProc('PXXClassFinalize');
+        if cfPi >= 0 then
+        begin
+          cfArg := IRAppend(IR_ARG, IRLowerAST(ASTLeft[ASTLeft[node]]), -1, -1, 0, Ord(tyPointer));
+          cfCall := IRAppendCall(cfPi, cfArg, -1, Ord(tyNativeInt));
+          IRIVal[cfCall] := 1;   { statement: emit for effect }
+        end;
       end;
       if cpi = -102 then
       begin
