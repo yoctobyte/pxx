@@ -5,8 +5,10 @@ order: 45
 
 # FPC compatibility
 
-PXX aims to compile a useful FPC/Object Pascal-like subset. It does not claim
-full FPC language, RTL, package, object-file, or command-line compatibility.
+PXX targets **full FPC-language compatibility** — the Object Pascal language as
+Free Pascal accepts it. It does **not** aim at parity with the rest of FPC's
+world: the FPC RTL and package ecosystem, the object-file format, and the
+command-line interface are out of scope by design.
 
 ## What usually ports well
 
