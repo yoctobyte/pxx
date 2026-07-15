@@ -982,6 +982,24 @@ begin
       baseAddr := IRAppend(IR_DYNUNIQUE, slotAddrNode, baseDynDepth, dynBaseRec,
                            elemSize, Ord(dynBaseTk));
       indexNode := IRLowerAST(ASTRight[node]);
+      { {$R+}: bound a depth-1 dyn FIELD's index against the runtime count at
+        [data-8] — the handle is re-read from the field slot for the arg
+        (pure for an ident.field base; deeper shapes stay unchecked)
+        (feature-pascal-range-checks-r-plus). }
+      if ASTRChk[node] and (baseDynDepth = 1) and
+         (ASTKind[baseNode] = AN_FIELD) and
+         (ASTKind[ASTLeft[baseNode]] = AN_IDENT) then
+      begin
+        rcPi := FindProc('PXXDynIdxChkI64');
+        if rcPi >= 0 then
+        begin
+          rcArg := IRAppend(IR_ARG,
+                     IRAppend(IR_LOAD_MEM, IRLowerAddress(baseNode), -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+          IRB[rcArg] := IRAppend(IR_ARG, indexNode, -1, -1, 0, Ord(tyInt64));
+          indexNode := IRAppendCall(rcPi, rcArg, -1, Ord(tyInt64));
+        end;
+      end;
       if baseDynDepth >= 2 then
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tyPointer))
       else
@@ -1060,7 +1078,23 @@ begin
         rcPi := FindUField(rcSym - REC_UCLASS_BASE, GetASTIdentName(baseNode));
         if (rcPi >= 0) and UFldIsArray[rcPi] and (UFldArrLen[rcPi] >= 0) and
            (UFldDynDepth[rcPi] = 0) and (UFldArrNDims[rcPi] <= 1) then
-          indexNode := IRWrapChkBounds(indexNode, 0, UFldArrLen[rcPi] - 1);
+          indexNode := IRWrapChkBounds(indexNode, 0, UFldArrLen[rcPi] - 1)
+        else if (rcPi >= 0) and UFldIsArray[rcPi] and (UFldDynDepth[rcPi] = 1) and
+                (ASTKind[ASTLeft[baseNode]] = AN_IDENT) then
+        begin
+          { depth-1 DYN-ARRAY field: the field slot holds the handle; check
+            against the runtime count at [data-8] (the slot address lowering
+            is duplicated for the arg — pure for an ident.field base). }
+          rcArg2 := FindProc('PXXDynIdxChkI64');
+          if rcArg2 >= 0 then
+          begin
+            rcArg := IRAppend(IR_ARG,
+                       IRAppend(IR_LOAD_MEM, IRLowerAddress(baseNode), -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+            IRB[rcArg] := IRAppend(IR_ARG, indexNode, -1, -1, 0, Ord(tyInt64));
+            indexNode := IRAppendCall(rcArg2, rcArg, -1, Ord(tyInt64));
+          end;
+        end;
       end;
     end;
 
