@@ -128,7 +128,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0, nmptrs=0, nprops=0):
+                 nhier=0, nmptrs=0, nprops=0, nexdtor=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -203,6 +203,16 @@ class Gen:
         # order, so a side-effecting getter would be an eval-order false positive
         # (the lesson bug-t-pasmith-order-dependent-programs already taught).
         self.nprops = nprops
+        # Exception-crossing-a-destructor rung (feature-pasmith-deep-oop): the
+        # exception rung and the class rung never interact today, but a `raise`
+        # inside a virtual method while an object is live -- unwinding through a
+        # `try/finally` that Frees it -- is exactly the b339-shaped intersection
+        # where lifetime bugs hide. Own exception chain (EXd0<EXd1<... from
+        # Exception) + a class whose virtual method raises a derived exception,
+        # caught on a base; the object is Freed in `finally` on BOTH paths, exactly
+        # once (the UB-free invariant under unwind), and its destructor folds so a
+        # skipped or doubled cleanup during unwinding changes the checksum.
+        self.nexdtor = nexdtor  # length of the EXd exception/handler chain
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -1084,6 +1094,41 @@ class Gen:
             L.append("")
         return L
 
+    def gen_exdtor(self):
+        """An exception chain EXd0<EXd1<... (from Exception) and a class TXo whose
+        virtual method raises a derived EXd while an object is live. Emitted in
+        main as a loop of try(try/except)/finally(Free) -- the object is Freed on
+        both the normal and the unwinding path, exactly once."""
+        n = self.nexdtor
+        L = ["type"]
+        for i in range(n):
+            base = "EXd%d" % (i - 1) if i > 0 else "Exception"
+            L.append("  EXd%d = class(%s);" % (i, base))
+        L.append("  TXo = class")
+        L.append("    fv: longint;")
+        L.append("    constructor Create(v: longint);")
+        L.append("    destructor Destroy; override;")
+        L.append("    function MayRaise(a: longint): longint; virtual;")
+        L.append("  end;")
+        L.append("")
+        return L
+
+    def gen_exdtor_bodies(self):
+        rnd = self.rnd
+        n = self.nexdtor
+        L = []
+        L.append("constructor TXo.Create(v: longint); begin fv := v; end;")
+        L.append("destructor TXo.Destroy; begin Mix(3000 + fv); inherited Destroy; end;")
+        L.append("function TXo.MayRaise(a: longint): longint;")
+        L.append("begin")
+        # Raise a DERIVED exception on a data-dependent condition; return a value
+        # otherwise. The raise crosses the method boundary and unwinds.
+        L.append("  if (a and 1) = 1 then raise EXd%d.Create('x');" % (n - 1))
+        L.append("  MayRaise := longint(a + fv);")
+        L.append("end;")
+        L.append("")
+        return L
+
     def gen_props(self):
         """A class with N scalar read/write properties (each getter a non-identity
         transform, so a getter bypass is observable) plus one indexed default
@@ -1408,7 +1453,7 @@ class Gen:
                     self.nclasses, self.nobjs, self.nstrs, self.nrecs, self.narrs,
                     self.nenums, self.nshorts, self.nexcepts, self.nmodeprocs))
         L.append("{$mode objfpc}")
-        if self.nexcepts:
+        if self.nexcepts or self.nexdtor:
             # Exception lives in sysutils in BOTH compilers -- verified: each
             # rejects `raise Exception.Create` without it, with the same complaint.
             L.append("uses sysutils;")
@@ -1428,6 +1473,8 @@ class Gen:
             L += self.gen_mptrs()
         if self.nprops:
             L += self.gen_props()
+        if self.nexdtor:
+            L += self.gen_exdtor()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1503,6 +1550,8 @@ class Gen:
             self.probjs = ["opr%d" % j for j in range(2)]
             for op in self.probjs:
                 L.append("  %s: TPr;" % op)
+        if self.nexdtor:
+            L.append("  xo: TXo;")
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1557,6 +1606,8 @@ class Gen:
             L += self.gen_mptr_bodies()
         if self.nprops:
             L += self.gen_prop_bodies()
+        if self.nexdtor:
+            L += self.gen_exdtor_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1606,6 +1657,26 @@ class Gen:
         if self.nprops:
             for op in self.probjs:
                 L.append("  %s := TPr.Create(%d);" % (op, rnd.randint(1, 50)))
+        if self.nexdtor:
+            # A live object across a raising virtual call: create it, call MayRaise
+            # inside try/except (a derived EXd caught on a random base EXd), and Free
+            # it in finally -- so the destructor folds on BOTH the normal and the
+            # unwinding path, exactly once. The catch-all Exception handler keeps the
+            # generated program exit-0 no matter what.
+            caught = rnd.randrange(self.nexdtor)
+            L.append("  for li0 := 0 to 5 do begin")
+            L.append("    xo := TXo.Create(li0);")
+            L.append("    try")
+            L.append("      try")
+            L.append("        Mix(int64(xo.MayRaise(li0)));")
+            L.append("      except")
+            L.append("        on E: EXd%d do Mix(400 + %d);" % (caught, caught))
+            L.append("        on E: Exception do Mix(499);")
+            L.append("      end;")
+            L.append("    finally")
+            L.append("      xo.Free;")
+            L.append("    end;")
+            L.append("  end;")
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1782,6 +1853,11 @@ def main():
                     help="N scalar read/write properties (non-identity getters) plus "
                          "an indexed default property: catches a getter bypass "
                          "(raw-field read) via the folded value.")
+    ap.add_argument("--exdtor", type=int, default=None,
+                    help="exceptions crossing a destructor: a virtual method raises a "
+                         "derived EXd (chain length N) while an object is live; it is "
+                         "Freed in `finally` on both the normal and unwinding path, "
+                         "its destructor folding -- the b339-shaped intersection.")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1820,17 +1896,17 @@ def main():
         # rungs. Opt in explicitly (--intfs N / --mptrs N) until those bugs are fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
-                     ("hier", 4), ("props", 3)):
+                     ("hier", 4), ("props", 3), ("exdtor", 3)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes", "intfs", "hier", "mptrs", "props"):
+              "strs", "classes", "intfs", "hier", "mptrs", "props", "exdtor"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
               a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs,
-              a.props).gen()
+              a.props, a.exdtor).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)

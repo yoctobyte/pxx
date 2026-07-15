@@ -166,3 +166,20 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   default properties correctly.
   **Remaining deep-oop rungs:** class methods/vars/abstract, polymorphic containers
   (array of base-typed refs, mixed derived), exceptions crossing a destructor.
+- 2026-07-15 (opus-trackT) — **Polymorphic-container + exceptions-crossing-destructor
+  rungs landed; both CLEAN.**
+  *Polymorphic container* (folded into `--hier`): an array of base-typed refs holding
+  the mixed derived instances, dispatched virtually in a loop; aliases the owned
+  objects (never freed through the array). 0 rejects / 0 divergences.
+  *Exceptions crossing a destructor* (`--exdtor N`): own EXd0<EXd1<... chain (from
+  Exception) + a class whose virtual method raises a derived EXd while an object is
+  live; the object is Freed in `finally` on BOTH the normal and unwinding path,
+  exactly once, its destructor folding — the b339-shaped intersection the exception
+  and class rungs never touched before. Catch-all Exception handler keeps every
+  program exit-0. In `--wide` (rides the existing `uses sysutils`). Gate: `--check 50
+  --exdtor 3` and `--check 40 --wide`, 0 rejects; 25 seeds, 0 divergences — pxx
+  unwinds through `try/finally` cleanup and base-catches-derived correctly.
+  **Deep-oop status:** interfaces (bug), is/as + branching hierarchy (clean), method
+  pointers (bug), properties (clean), polymorphic containers (clean), exceptions×dtor
+  (clean) all done. Only remaining ranked hole: class methods / class vars / abstract
+  methods (#6) — lower yield, left for a follow-up.
