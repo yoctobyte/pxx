@@ -46,6 +46,14 @@ end.
 | **FPC 3.2.2** (`-O2` and `-O-`) | `before nil` / **`DTOR ran`** / `after nil` |
 | **pxx** (`-O0`/`-O2`/`-O3`) | `before nil` / `after nil` — **destructor never runs** |
 
+## Superseded by the full COM-lifetime arc (2026-07-15)
+
+User authorized the full route: this bug (destructor not firing on last ref) is one
+symptom of incomplete COM managed lifetime. The fix lives in
+[[feature-com-interface-managed-lifetime]] — item 1 (scope-exit release) resolves
+this repro; the rest (param/result/field release + default flip) rounds it out.
+Keep this ticket as the correctness anchor; resolve it when item 1 lands.
+
 ## Recon (2026-07-15, agent-A — root found; fix is a dialect-default decision, parked)
 
 Root: the ARC assign paths in `ir.inc` (retain-new / release-old around an
