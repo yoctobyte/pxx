@@ -9,7 +9,7 @@ prio: 55
 
 - **Type:** compat (Track P — Pascal frontend). The fuzzer owns the tool, never the
   bug — filed here, not fixed there.
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14
 - **Found by:** `tools/pasmith_run.py`, seed 30014, the first run after the driver
   learned to score a **pxx compile failure as a finding** (it used to be filtered out

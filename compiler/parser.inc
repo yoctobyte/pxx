@@ -6018,6 +6018,31 @@ begin
   Result := wCall;
 end;
 
+{ Promote a Char-typed expression to a 1-char string VALUE, reusing the exact
+  `String(c)` desugar: assign the char into a hidden tyString temp, then read the
+  temp (AN_STR_FROM_CHAR: Left = the store side-effect, Right = the yielded read).
+  Works in both frozen and managed string modes with no backend code. Used where a
+  Char appears in a string context that expects a string value — e.g. `Copy('a',
+  1, 1)`, which FPC accepts by promoting the char (mirrors the promotion the `+`
+  concat and String() cast already do). }
+function WrapCharToStringExpr(charNode: Integer): Integer;
+var tmpSym, resNode, lhsIdent, assignNode, readIdent: Integer;
+begin
+  tmpSym := AllocVar('', tyString);
+  resNode := AllocNode(AN_STR_FROM_CHAR);
+  lhsIdent := AllocNode(AN_IDENT);
+  ASTIVal[lhsIdent] := tmpSym; ASTTk[lhsIdent] := Ord(Syms[tmpSym].TypeKind);
+  assignNode := AllocNode(AN_ASSIGN);
+  ASTLeft[assignNode] := lhsIdent; ASTRight[assignNode] := charNode;
+  ASTTk[assignNode] := Ord(Syms[tmpSym].TypeKind);
+  ASTLeft[resNode] := assignNode;
+  readIdent := AllocNode(AN_IDENT);
+  ASTIVal[readIdent] := tmpSym; ASTTk[readIdent] := Ord(Syms[tmpSym].TypeKind);
+  ASTRight[resNode] := readIdent;
+  ASTTk[resNode] := Ord(Syms[tmpSym].TypeKind);
+  Result := resNode;
+end;
+
 { A WIDECHAR value cast node — AN_PTR_CAST with the -3 sentinel (see the
   ordinal-cast site). String contexts convert it to UTF-8 instead of treating
   the 16-bit ordinal as a string pointer. }
@@ -8694,6 +8719,13 @@ begin
           CurASTNode := argSeq;
           Exit;
         end;
+        { A Char first argument (`Copy('a', 1, 1)`): FPC promotes char -> string,
+          so materialise a 1-char string and route through the string-Copy path
+          below — the same promotion `+` and String() already do. Without this a
+          char fell through to the dynamic-array error (a loud rejection of valid
+          Pascal). }
+        if IntToTypeKind(ASTTk[exprNode]) = tyChar then
+          exprNode := WrapCharToStringExpr(exprNode);
         { String first argument: bare `Copy(s, index[, count])` lowers to the
           __pxxStrCopy substring helper (builtin unit, pulled by the pre-scan), so
           string Copy needs no `uses sysutils`. 2-arg form -> count = rest (huge,
