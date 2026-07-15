@@ -61,6 +61,23 @@ A public ticket board describing a live site's internals is itself disclosure. S
   vuln reports, dependency CVEs, anything naming a host, a key, or a credential.
 - A public W ticket may reference `see private issue #N` and **nothing more**.
 
+## The deploy guard (never autodeploy)
+
+**Docs may be PULLED from git; deploy is NEVER automatic.** No CI job, webhook,
+or push-to-deploy hook may ship to the live server. Updates to production stay
+under **manual / agentic control** — a deliberate human or supervised-agent
+step.
+
+**Why:** blast-radius, same axis as the two-repo split. An autodeploy pipeline
+turns a repo compromise into a *server* compromise — the attacker's commit rides
+straight to production. Keeping deploy a separate deliberate action means a
+hacked repo is still not a hacked host. This holds for BOTH repos: the public
+one may feed content, but nothing it contains may trigger a deploy on its own.
+
+**Side note:** once the site is live, further development may run from a
+**server-side local agent** (dev-from-the-box), which is compatible with this
+guard — that agent's deploys are still deliberate, not repo-triggered.
+
 ## Steps
 1. **CLAUDE.md**: add the Track W section (one-liner + the disclosure rule + the gate below).
    Do this when the lane actually starts — a lane other agents can't see doesn't exist.
@@ -78,3 +95,6 @@ rule above; secrets and infra private.
 
 ## Log
 - 2026-07-12 — designed. Two-repo split + single board + disclosure rule agreed.
+- 2026-07-15 — deploy guard added (user, deploy nearing): never autodeploy from
+  either repo — docs pull ok, deploy stays manual/agentic. Server-side local
+  agent viable post-deploy.
