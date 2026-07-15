@@ -8,7 +8,7 @@ prio: 60
 
 - **Type:** feature (fuzzer coverage — Track T owns the tool; findings file into the
   owning lane as always: IR/codegen → A, dialect/frontend → P, RTL → B).
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14, user question after [[feature-pasmith-widen-grammar]] landed:
   "does our fuzzer test complex OOP?" It does not. It tests **one axis of OOP, deeply**.
 - **Related:** [[feature-pasmith-pascal-program-generator]] (the tool),
@@ -197,3 +197,4 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   method pointers, properties, polymorphic containers, exceptions × destructor, class
   methods/vars/abstract). Two silent pxx bugs found and filed to Track A (interface
   release; virtual method pointer). Ticket resolved.
+- 2026-07-15 — resolved, commit 591f57ef.
