@@ -2,8 +2,10 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `ba5b85d6122d` | 2026-07-15T07:15:47Z | GREEN (native) | 86.6s | `e703f6dcdd8e` GREEN |
+| borg | `ba5b85d6122d` | 2026-07-15T07:23:06Z | RED (full) | 214.1s | `ba5b85d6122d` RED |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `603cf2bda859`, last good `9ae7a3617ccb`, 1 commit(s) in range
+- **test-aarch64#src:test/test_cross_sysopen_family.pas** — test/test_cross_sysopen_family.pas tools/run_target.sh (borg): bad `ba5b85d6122d`, last good `ba5b85d6122d`, 0 commit(s) in range
+- **test-c-conformance-riscv32#shard0/6** — tools/run_c_conformance.sh (borg): bad `ba5b85d6122d`, last good `ba5b85d6122d`, 0 commit(s) in range

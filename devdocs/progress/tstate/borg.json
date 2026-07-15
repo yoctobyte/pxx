@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T16:10:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "5befdfee89431e0680de2b95e0303f721cdefe20",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T16:14:53Z",
    "fixed": [],
    "new_red": [
@@ -409,6 +401,17 @@
    "sha": "ba5b85d6122d674c1b76890b52135618f70ea630",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-15T07:23:06Z",
+   "fixed": [],
+   "new_red": [
+    "test-aarch64#src:test/test_cross_sysopen_family.pas",
+    "test-c-conformance-riscv32#shard0/6"
+   ],
+   "sha": "ba5b85d6122d674c1b76890b52135618f70ea630",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -471,7 +474,7 @@
   "test-aarch64#src:test/test_cross_str_length_index.pas": "pass",
   "test-aarch64#src:test/test_cross_string_cow.pas": "pass",
   "test-aarch64#src:test/test_cross_syscall.pas": "pass",
-  "test-aarch64#src:test/test_cross_sysopen_family.pas": "pass",
+  "test-aarch64#src:test/test_cross_sysopen_family.pas": "fail",
   "test-aarch64#src:test/test_cross_typed_const.pas": "pass",
   "test-aarch64#src:test/test_cross_variant.pas": "pass",
   "test-aarch64#src:test/test_cross_variant_single.pas": "pass",
@@ -683,7 +686,7 @@
   "test-c-conformance-i386#shard3/6": "pass",
   "test-c-conformance-i386#shard4/6": "pass",
   "test-c-conformance-i386#shard5/6": "pass",
-  "test-c-conformance-riscv32#shard0/6": "pass",
+  "test-c-conformance-riscv32#shard0/6": "fail",
   "test-c-conformance-riscv32#shard1/6": "pass",
   "test-c-conformance-riscv32#shard2/6": "pass",
   "test-c-conformance-riscv32#shard3/6": "pass",
@@ -1837,11 +1840,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-15T07:15:47Z",
+  "date": "2026-07-15T07:23:06Z",
   "sha": "ba5b85d6122d674c1b76890b52135618f70ea630",
-  "tier": "native",
-  "verdict": "GREEN",
-  "wall": 86.6
+  "tier": "full",
+  "verdict": "RED",
+  "wall": 214.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1851,11 +1854,11 @@
   "sha": "e703f6dcdd8e240a46c25221ff80f88a0dae1652"
  },
  "last_full": {
-  "date": "2026-07-15T06:59:01Z",
-  "sha": "e703f6dcdd8e240a46c25221ff80f88a0dae1652",
+  "date": "2026-07-15T07:23:06Z",
+  "sha": "ba5b85d6122d674c1b76890b52135618f70ea630",
   "tier": "full",
-  "verdict": "GREEN",
-  "wall": 225.4
+  "verdict": "RED",
+  "wall": 214.1
  },
  "last_opt": {
   "date": "2026-07-15T07:01:29Z",
@@ -1881,6 +1884,24 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "ba5b85d6122d674c1b76890b52135618f70ea630",
+   "good": "ba5b85d6122d674c1b76890b52135618f70ea630",
+   "job": "test-aarch64#src:test/test_cross_sysopen_family.pas",
+   "name": "test-aarch64#31",
+   "opened": "2026-07-15T07:23:06Z",
+   "range": [],
+   "src": "test/test_cross_sysopen_family.pas tools/run_target.sh"
+  },
+  {
+   "bad": "ba5b85d6122d674c1b76890b52135618f70ea630",
+   "good": "ba5b85d6122d674c1b76890b52135618f70ea630",
+   "job": "test-c-conformance-riscv32#shard0/6",
+   "name": "test-c-conformance-riscv32#shard0/6",
+   "opened": "2026-07-15T07:23:06Z",
+   "range": [],
+   "src": "tools/run_c_conformance.sh"
   }
  ]
 }
