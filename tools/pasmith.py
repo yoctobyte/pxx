@@ -1485,6 +1485,11 @@ class Gen:
             self.hobjs = ["ho%d" % j for j in range(min(self.nhier, 4) or 1)]
             for ho in self.hobjs:
                 L.append("  %s: TH0;" % ho)
+            # Polymorphic container: an array of base-typed refs holding the mixed
+            # derived instances, dispatched in a loop -- the ordinary real shape a
+            # fixed set of named slots can't express. It ALIASES the owned objects
+            # (never freed through the array), so no double-free.
+            L.append("  harr: array[0..%d] of TH0;" % (len(self.hobjs) - 1))
         if self.nmptrs:
             # Objects declared base (TMPC), some instantiated derived (TMPCd); a
             # method-pointer var and an ARRAY of them (the two-word store the ABI
@@ -1578,6 +1583,13 @@ class Gen:
             for ho in self.hobjs:
                 L.append("  %s := TH%d.Create(%d);"
                          % (ho, rnd.randrange(self.nhier), rnd.randint(1, 50)))
+            # Fill the polymorphic array with the (aliased) mixed instances, then
+            # dispatch virtually over it in a loop -- vtable dispatch through an
+            # array element, not a named var.
+            for idx, ho in enumerate(self.hobjs):
+                L.append("  harr[%d] := %s;" % (idx, ho))
+            L.append("  for li0 := 0 to %d do Mix(harr[li0].HCalc);"
+                     % (len(self.hobjs) - 1))
         if self.nmptrs:
             for om in self.mpobjs:
                 cls = rnd.choice(["TMPC", "TMPCd"])
