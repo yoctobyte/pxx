@@ -20035,6 +20035,7 @@ end;
 
 procedure ParseSubroutine;
 var
+  pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
   isFunc   : Boolean;
   name     : AnsiString;
   retType  : TTypeKind;
@@ -20060,10 +20061,11 @@ var
   defaultIsSet : Boolean; defaultSOff, defaultSLen : Integer;
   pNDims    : array[0..MAX_PROC_PARAMS-1] of Integer;
   pDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
-  pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
+  pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;
+  pFixedLo : array[0..MAX_PROC_PARAMS-1] of Integer; { named fixed-array param's LOW BOUND — dropped before, so a[1] on a var 1..3 param indexed off by lo (silent neighbour write; found by the {$R+} arc) }  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
   pDimLo    : array[0..95] of Integer;
   pDimSpan  : array[0..95] of Integer;
-  paramNDims, paramDynDepth, paramAi, pdi, paramFixedLen: Integer;
+  paramNDims, paramDynDepth, paramAi, pdi, paramFixedLen, paramFixedLo: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
@@ -20099,6 +20101,16 @@ var
   liftIdx, lcb: Integer;   { lambda-lift descriptor index / captured-param base }
   hdrStartSOff: Integer;   { require-forward: this header's source position }
 begin
+  { pFixedLen/pFixedLo are only written on the named-array param branch; the
+    other branches leave stack garbage in the untouched slots, and the
+    finalize loop reads them for EVERY param — a stale non-zero broke an
+    open-array-of-record method param's low bound
+    (test_record_method_open_array_b334). Zero them up front. }
+  for pzi := 0 to MAX_PROC_PARAMS - 1 do
+  begin
+    pFixedLen[pzi] := 0;
+    pFixedLo[pzi] := 0;
+  end;
   { require-forward: the header's SOffset (stable under pass-2 token edits,
     like CurBodyHdrTok) becomes the routine's visibility boundary when the
     strict flag gates lookups. Captured at entry, at the procedure/function
@@ -20218,6 +20230,7 @@ begin
       paramNDims := 0;
       paramDynDepth := 0;
       paramFixedLen := 0;
+      paramFixedLo := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -20256,7 +20269,10 @@ begin
           open array (`array of T`) has no named type here and keeps the
           placeholder, which is correct: its length genuinely is not known. }
         if not ArrTypeIsDyn[paramAi] then
+        begin
           paramFixedLen := ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1;
+          paramFixedLo := ArrTypeLo[paramAi];
+        end;
         Next;
       end
       else if CurTok.Kind = tkArray then
@@ -20333,6 +20349,7 @@ begin
         pNDims[i] := paramNDims;
         pDynDepth[i] := paramDynDepth;
         pFixedLen[i] := paramFixedLen;
+        pFixedLo[i] := paramFixedLo;
         for pdi := 0 to paramNDims - 1 do
         begin
           pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
@@ -20967,8 +20984,22 @@ begin
       `r := tmp` (r a var param) copy 1000 elements over a 4-element array
       (bug-array-assign-to-var-param). Dyn-array params set ArrLen := -1 above
       and must not be touched. }
+    { param sym SLOTS ARE REUSED across procs (see the RecName persistence
+      note below) — an unwritten field keeps the previous proc's value, so
+      the low bound must be RESET for every array param before the fixed
+      override (a stale lo made an open-array-of-record method param index
+      garbage — test_record_method_open_array_b334 caught it). }
+    if parr[i] and (pDynDepth[i] = 0) then
+      Syms[idx].ConstVal := 0;
     if (pFixedLen[i] > 0) and (pDynDepth[i] = 0) then
+    begin
       Syms[idx].ArrLen := pFixedLen[i];
+      { ...and its LOW BOUND: without it, IR_INDEX subtracted lo=0 and a[1]
+        on a `var a: array[1..3]` param silently wrote the NEXT element
+        (g[1] stayed 0, g[2] got the value — found by the {$R+} arc's probe;
+        FPC writes 7 8, pxx wrote 0 7). }
+      Syms[idx].ConstVal := pFixedLo[i];
+    end;
     if parr[i] and (ptypes[i] = tyRecord) then
     begin
       { Open array of records (e.g. `array of const`): the slot holds a dyn-array

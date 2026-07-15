@@ -1023,12 +1023,18 @@ begin
        (ASTIVal[baseNode] >= 0) then
     begin
       rcSym := ASTIVal[baseNode];
+      { an OPEN-ARRAY param keeps AllocParam's ArrLen=1000 placeholder — its
+        real length lives at [data-8] like a dyn array's, so it takes the
+        runtime-checked branch below, not fake static bounds. }
       if Syms[rcSym].IsArray and (Syms[rcSym].ArrLen >= 0) and
+         not ((Syms[rcSym].Kind = skParam) and (Syms[rcSym].ArrLen = 1000)) and
          (SymArrNDims[rcSym] <= 1) and (SymElemDynDepth[rcSym] = 0) then
         indexNode := IRWrapChkBounds(indexNode,
                        Syms[rcSym].ConstVal,
                        Syms[rcSym].ConstVal + Syms[rcSym].ArrLen - 1)
-      else if Syms[rcSym].IsArray and (Syms[rcSym].ArrLen = -1) and
+      else if Syms[rcSym].IsArray and
+              ((Syms[rcSym].ArrLen = -1) or
+               ((Syms[rcSym].Kind = skParam) and (Syms[rcSym].ArrLen = 1000))) and
               (SymElemDynDepth[rcSym] = 0) then
       begin
         rcPi := FindProc('PXXDynIdxChkI64');
