@@ -62,3 +62,35 @@ implementing.
 `bf64-1.c` and `bitfld-3.c` compile and exit 0; a `test/` regression pins a
 signed and an unsigned 40-bit bitfield round-trip and arithmetic; results match
 gcc.
+
+## gcc rule nailed (2026-07-15, agent-A) — the investigation the residual needed
+
+Empirically determined gcc's exact bitfield-arithmetic-promotion rule (gcc 13.3,
+`-O0`/`-O2` identical). The `-Wformat` diagnostic is explicit: the operand type of
+`a.u33` is **`long unsigned int:33`** — an integer type of the field's EXACT
+bit-PRECISION (33), carrying the base type's signedness. `a.u33 * a.u41` has type
+`:41` (the wider precision governs, per usual arithmetic conversions). Arithmetic
+WRAPS modulo 2^precision:
+
+- `a.u33 * a.u33` (2^20·2^20 = 2^40) ≡ 0 (mod 2^33) ✓
+- `a.u41 * a.u41` = 2^40 (mod 2^41 = no reduction) = 0x10000000000 ✓
+- `a.u33 * a.u41` reduced to :41 → 0x10000000000 ✓
+- `sizeof(a.u33 + 0)` = 8 (rounds up to the base type) but the PRECISION is 33.
+
+So a faithful implementation needs **arbitrary-precision integer types** (precision
+= field width, not 32/64) propagated through the C expression tree: every binary op
+converts both operands to the greater-precision bitfield type and masks the result
+to that precision (sign-extend for signed). pxx's IR models only tyInt32/tyInt64
+etc. — there is no per-node bit-precision, so this requires new node metadata
+(bitfield precision) threaded through arithmetic + a mask-to-precision at each op.
+
+## Disposition — compat conformance edge, deferred (near-zero real-world value)
+
+The valuable half (storage/read/layout, `bf64-1.c`) is DONE (307128d5). The residual
+(`bitfld-3.c`) is arithmetic that OVERFLOWS a non-power-of-8 bitfield width — a
+construct that appears only in conformance torture tests, never in real C. It is
+silent-wrong (pxx gives 2^40, not 0) but for an expression no real program writes.
+Implementing arbitrary-precision integer arithmetic in the IR is disproportionate
+to the value. Left in backlog at low prio as a **compat** item; pick up only if a
+real corpus (not gcc-torture) depends on sub-word bitfield arithmetic wrapping.
+Add `bitfld-3.c` to the C skip list with this reason rather than chasing it.
