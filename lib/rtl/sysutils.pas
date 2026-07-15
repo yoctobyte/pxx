@@ -1954,6 +1954,13 @@ begin
   raise ERangeError.Create('Range check error');
 end;
 
+procedure SysRaiseIoError;
+begin
+  { {$I+} Text-I/O failure upgraded to a catchable exception
+    (feature-pascal-io-checks-i-plus). }
+  raise EInOutError.Create('I/O error');
+end;
+
 procedure SysRaiseDivByZero;
 begin
   { Integer div/mod by zero upgraded from Runtime error 200 to a catchable
@@ -1968,6 +1975,7 @@ initialization
   PXXOverflowHook := @SysRaiseOverflow;
   PXXDivZeroHook := @SysRaiseDivByZero;
   PXXRangeErrorHook := @SysRaiseRangeError;
+  PXXIoErrorHook := @SysRaiseIoError;
   TimeSeparator := ':';
   DateSeparator := '-';
   DecimalSeparator := '.';

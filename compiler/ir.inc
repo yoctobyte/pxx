@@ -2877,6 +2877,32 @@ begin
   else Result := TypeSize(tyPointer);
 end;
 
+function IRIoCheckedCallee(pi: Integer): Boolean;
+{ {$I+}: true when pi is one of the textfile IO procs a PXXIoCheck must
+  follow. Indexes are lazily cached; a user proc SHADOWING one of the names
+  resolves to a different index and correctly stays unchecked
+  (feature-pascal-io-checks-i-plus). }
+var k: Integer;
+begin
+  if not IoChkInit then
+  begin
+    IoChkProc[0] := FindProc('Reset');
+    IoChkProc[1] := FindProc('Rewrite');
+    IoChkProc[2] := FindProc('Append');
+    IoChkProc[3] := FindProc('Close');
+    IoChkProc[4] := FindProc('CloseFile');
+    IoChkProc[5] := FindProc('Erase');
+    IoChkProc[6] := FindProc('TextWrite');
+    IoChkProc[7] := FindProc('TextWriteLn');
+    IoChkProc[8] := FindProc('TextReadLn');
+    IoChkInit := True;
+  end;
+  Result := False;
+  if pi < 0 then Exit;
+  for k := 0 to 8 do
+    if IoChkProc[k] = pi then begin Result := True; Exit; end;
+end;
+
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer;
 { Wrap an IR value in PXXRangeChkI64(v, lo, hi) — shared by the narrowing-
   store guard and the static-array index guard
@@ -5606,6 +5632,15 @@ begin
               PendOAWBSrcAddr(PendOAWBTemp[PendOAWBCount]),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
+      end;
+      { {$I+}: a Text-I/O call inside the region gets PXXIoCheck sequenced
+        right after it — raises EInOutError (sysutils hook) / halts with the
+        IO code when the operation failed (feature-pascal-io-checks-i-plus). }
+      if ASTIChk[node] and IRIoCheckedCallee(cpi) then
+      begin
+        item := FindProc('PXXIoCheck');
+        if item >= 0 then
+          IRIVal[IRAppendCall(item, -1, -1, Ord(tyUnknown))] := 1;
       end;
     end;
 

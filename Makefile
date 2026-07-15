@@ -1847,6 +1847,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_rplus_df26)" = "caught=2"
 	./$(COMPILER) test/test_range_checks_nd.pas /tmp/test_rplus_nd26
 	test "$$(/tmp/test_rplus_nd26)" = "ok 42 7 caught=2"
+	./$(COMPILER) test/test_io_checks_iplus.pas /tmp/test_iplus26
+	test "$$(/tmp/test_iplus26)" = "ioresult=TRUE caught=1"
 	./$(COMPILER) test/test_param_array_lowbound.pas /tmp/test_palb26
 	test "$$(/tmp/test_palb26)" = "7 8 caught=2"
 	./$(COMPILER) test/test_range_checks_enum_field.pas /tmp/test_rplus_ef26

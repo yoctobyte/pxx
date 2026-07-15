@@ -38,6 +38,7 @@ procedure TextReadLn(var f: Text; var s: AnsiString);
   PXX text writes go straight to the fd (no RTL-side buffer), so Flush only
   has to exist and accept the file — there is nothing to drain. }
 procedure Flush(var f: Text);
+procedure PXXIoCheck;
 
 var
   Input: Text;
@@ -50,6 +51,21 @@ const
 
 var
   LastIOResult: Integer;
+
+{ {$I+} call-site check: raise (via the sysutils hook) or halt with the IO
+  code when the LAST Text operation failed. The compiler sequences a call to
+  this after each Text-I/O statement inside a {$I+} region
+  (feature-pascal-io-checks-i-plus). Reading clears, like IOResult. }
+procedure PXXIoCheck;
+var code: Integer;
+begin
+  code := LastIOResult;
+  if code = 0 then Exit;
+  LastIOResult := 0;
+  if PXXIoErrorHook <> nil then PXXIoErrorHook();
+  writeln('Runtime error ', code, ' (I/O error)');
+  Halt(code);
+end;
 
 procedure SetIO(code: Integer);
 begin

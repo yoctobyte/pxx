@@ -53,6 +53,7 @@ begin
     (feature-pascal-range-checks-r-plus). }
   ASTRChk[ASTNodeCount]    := ((kind = AN_ASSIGN) or (kind = AN_INDEX)) and
                               StmtRChecks;
+  ASTIChk[ASTNodeCount]    := (kind = AN_CALL) and StmtIChecks;
   { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
     appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
     contribute no rows — the Tier 1 line table describes one file. }
@@ -81,6 +82,7 @@ begin
   ASTLine[Result]     := ASTLine[node];
   ASTQChk[Result]     := ASTQChk[node];
   ASTRChk[Result]     := ASTRChk[node];
+  ASTIChk[Result]     := ASTIChk[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
@@ -13281,6 +13283,8 @@ begin
     `x:=y {$R+} end`). AllocNode(AN_ASSIGN) reads this anchor. }
   if (TokPos > 0) and (TokPos <= TokCount) then
     StmtRChecks := TokRChecks[TokPos - 1];
+  if (TokPos > 0) and (TokPos <= TokCount) then
+    StmtIChecks := TokIChecks[TokPos - 1];
   node := -1;
   case CurTok.Kind of
     tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:

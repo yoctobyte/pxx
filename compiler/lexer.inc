@@ -693,6 +693,9 @@ begin
   QChecksVal := False;
   RChecksVal := False;
   StmtRChecks := False;
+  IChecksVal := False;
+  StmtIChecks := False;
+  IoChkInit := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
@@ -1402,6 +1405,14 @@ begin
     if Source[SrcPos] = '+' then RChecksVal := True
     else if Source[SrcPos] = '-' then RChecksVal := False;
   end;
+  { {$I+} / {$I-}: IO-check switch. Like {$R}, the leading +/- distinguishes
+    the switch from the {$I file} include form (which is handled by the
+    include machinery on a non-sign character). }
+  if CaseEqual(command, 'I') and PasDirectiveActive and (SrcPos <= Length(Source)) then
+  begin
+    if Source[SrcPos] = '+' then IChecksVal := True
+    else if Source[SrcPos] = '-' then IChecksVal := False;
+  end;
   messageText := '';
   if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
      CaseEqual(command, 'error') then
@@ -1475,6 +1486,12 @@ begin
       if CaseEqual(name, 'on') then RChecksVal := True
       else if CaseEqual(name, 'off') then RChecksVal := False
       else Error('rangechecks requires on or off');
+    end
+    else if CaseEqual(command, 'iochecks') then
+    begin
+      if CaseEqual(name, 'on') then IChecksVal := True
+      else if CaseEqual(name, 'off') then IChecksVal := False
+      else Error('iochecks requires on or off');
     end
     else if CaseEqual(command, 'strict_operator') then
     begin
@@ -2131,6 +2148,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
     TokRChecks[TokCount] := RChecksVal;
+    TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');
@@ -2179,6 +2197,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
     TokRChecks[TokCount] := RChecksVal;
+    TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     if TokCharLen + len > STRING_CAP then Error('token char pool overflow');

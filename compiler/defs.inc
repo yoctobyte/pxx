@@ -1642,7 +1642,11 @@ var
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
   RChecksVal : Boolean;      { current {$R±} / {$RANGECHECKS} lexer state (default off) }
+  IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state (default off — pxx-lax; FPC defaults ON, flip pending the user) }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
+  StmtIChecks : Boolean;     { {$I} state at the current statement's first token (same anchor rule as StmtRChecks) }
+  IoChkProc : array[0..8] of Integer; { lazy cache of the textfile IO proc indexes PXXIoCheck sequences after ({$I+}); resolved on first use }
+  IoChkInit : Boolean;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -1773,6 +1777,7 @@ var
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
   TokQChecks : array[0..MAX_TOKENS-1] of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
   TokRChecks : array[0..MAX_TOKENS-1] of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
+  TokIChecks : array[0..MAX_TOKENS-1] of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
   TokScopedEnums : array[0..MAX_TOKENS-1] of Boolean;  { {$SCOPEDENUMS} state at each token }
   CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
   CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
@@ -1848,6 +1853,7 @@ var
   ASTLine    : array[0..MAX_AST-1] of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTQChk    : array[0..MAX_AST-1] of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
   ASTRChk    : array[0..MAX_AST-1] of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
+  ASTIChk    : array[0..MAX_AST-1] of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
   ASTNodeCount : Integer;
 
   IRKind  : array[0..MAX_IR-1] of Integer;

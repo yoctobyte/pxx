@@ -1923,6 +1923,9 @@ var
   { Installed by sysutils' initialization to convert a {$R+} range violation
     into a raised, catchable ERangeError — third of the hook family. }
   PXXRangeErrorHook: TPXXDivZeroProc;
+  { 4th of the family: installed by sysutils to convert a {$I+} Text-I/O
+    failure into a raised EInOutError (feature-pascal-io-checks-i-plus). }
+  PXXIoErrorHook: TPXXDivZeroProc;
 
 { {$R+} range trap: FPC behavior 'Runtime error 201' + exit code 201.
   feature-pascal-range-checks-r-plus. }
