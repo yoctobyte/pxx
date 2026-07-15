@@ -529,7 +529,8 @@ def check(nseeds, args):
 
 
 GEN_FLAGS = ["vars", "funcs", "stmts", "depth", "classes", "objs", "strs",
-             "recs", "arrs", "enums", "shorts", "excepts", "modeprocs", "intfs"]
+             "recs", "arrs", "enums", "shorts", "excepts", "modeprocs", "intfs",
+             "hier"]
 
 
 def gen_args_for(a, seed):
@@ -553,7 +554,7 @@ def gen_args_for(a, seed):
 # (--stop-on-new) and mask every other rung's bugs. Keep it an explicit opt-in rung
 # (--intfs N) until that bug is fixed; then add it back here.
 WIDE_DEFAULTS = {"recs": 2, "arrs": 2, "enums": 2, "shorts": 2, "excepts": 3,
-                 "modeprocs": 2, "strs": 3, "classes": 3}
+                 "modeprocs": 2, "strs": 3, "classes": 3, "hier": 4}
 
 
 def add_gen_flags(ap):

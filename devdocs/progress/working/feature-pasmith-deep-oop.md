@@ -122,3 +122,17 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   is/as), `is`/`as` type tests + checked downcasts, method pointers (`procedure of
   object`), properties, class methods/vars, polymorphic containers, exceptions
   crossing a destructor.
+- 2026-07-15 (opus-trackT) — **Branching-hierarchy + is/as rung landed (`--hier N`);
+  CLEAN.** The `--classes` chain is linear (no siblings); `--hier` builds a TREE
+  (each node's parent a random earlier node), objects declared as the root and
+  instantiated as random nodes so no call site is statically resolvable. Statements:
+  `is` type tests (both branches reachable), `as` checked downcasts — every downcast
+  guarded by its `is` so none can raise (the checked-or-guaranteed invariant) — and
+  virtual dispatch through the root ref. Destructors fold (manual Free, no interface-
+  refcount interaction). In `--wide` (clean rung, unlike --intfs).
+  Gate: `--check 60 --hier 5` and `--check 40 --wide`, 0 FPC rejects. Differential:
+  25 hier-only seeds, **0 divergences** — FPC and pxx agree on sibling vtables, `is`,
+  and checked `as`. A clean run is a valid result: this shape is correct on pxx.
+  **Remaining deep-oop rungs:** method pointers (`procedure of object`), properties
+  (getters/setters, indexed/default), class methods/vars/abstract, polymorphic
+  containers (array of base-typed refs), exceptions crossing a destructor.

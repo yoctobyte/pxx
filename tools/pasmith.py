@@ -127,7 +127,8 @@ CHAIN = 3          # heap nodes in the linked list a ptrwalk walks
 class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
-                 nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0):
+                 nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
+                 nhier=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -174,6 +175,16 @@ class Gen:
         self.nintfs = nintfs
         self.intfs = []        # interface method indices (0..nintfs-1)
         self.intfvars = []     # (varname, iface_index) -- static interface type
+        # Branching-hierarchy rung (feature-pasmith-deep-oop): the --classes chain
+        # is LINEAR, so it never has sibling classes -- two subclasses of a common
+        # base that must get distinct vtables, and the case where `is`/`as` has to
+        # tell them apart. --hier builds a TREE (each node's parent is a random
+        # earlier node), objects are declared as the root and instantiated as a
+        # random node, and every downcast is guarded by its `is` test (so no `as`
+        # can raise -- the ticket's checked-or-guaranteed invariant). Manual Free
+        # like --classes: no interface-refcount interaction.
+        self.nhier = nhier
+        self.hier = []         # [{name, idx, base_idx}]
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -421,6 +432,27 @@ class Gen:
                     % (pad, var, m, m, arg)])
             return self.tagged("intfcall", [
                 "%sMix(%s.Ic%d(longint(%s)));" % (pad, var, kk, arg)])
+
+        if k < 0.965 and self.nhier:
+            # Branching-hierarchy dispatch: `is` type test, `as` checked downcast
+            # (always guarded by its `is`, so it can never raise), and virtual
+            # dispatch through the root-typed reference. Objects are random node
+            # types, so both `is` branches are reachable and no cast is statically
+            # resolvable.
+            ho = rnd.choice(self.hobjs)
+            kk = rnd.randrange(self.nhier)
+            r = rnd.random()
+            if r < 0.4:
+                return self.tagged("istest", [
+                    "%sif %s is TH%d then Mix(%d) else Mix(%d);"
+                    % (pad, ho, kk, 600 + kk, 650 + kk)])
+            if r < 0.75:
+                # Guarded checked downcast: the `is` guarantees the `as` succeeds,
+                # then read that subclass's OWN field through the narrowed ref.
+                return self.tagged("ascast", [
+                    "%sif %s is TH%d then Mix(int64((%s as TH%d).hf%d));"
+                    % (pad, ho, kk, ho, kk, kk)])
+            return self.tagged("hcalc", ["%sMix(%s.HCalc);" % (pad, ho)])
 
         if k < 0.97 and self.strs:
             name, _ = rnd.choice(self.strs)
@@ -950,6 +982,55 @@ class Gen:
         self.in_method = False
         return L
 
+    def gen_hier(self):
+        """A branching class TREE (siblings), the shape the linear --classes chain
+        can't reach. Each node's parent is a random earlier node, so subclasses of
+        a common base exist and their vtables must stay distinct."""
+        rnd = self.rnd
+        L = ["type"]
+        for i in range(self.nhier):
+            base_idx = None if i == 0 else rnd.randrange(i)
+            base = "TObject" if i == 0 else "TH%d" % base_idx
+            self.hier.append({"name": "TH%d" % i, "idx": i, "base_idx": base_idx})
+            L.append("  TH%d = class(%s)" % (i, base))
+            L.append("    hf%d: longint;" % i)
+            virt = "virtual" if i == 0 else "override"
+            L.append("    constructor Create(v: longint); %s;" % virt)
+            L.append("    destructor Destroy; override;")
+            L.append("    function HCalc: longint; %s;" % virt)
+            L.append("  end;")
+        L.append("")
+        return L
+
+    def gen_hier_bodies(self):
+        rnd = self.rnd
+        L = []
+        for h in self.hier:
+            i = h["idx"]
+            L.append("constructor TH%d.Create(v: longint);" % i)
+            L.append("begin")
+            if i > 0:
+                L.append("  inherited Create(v);")
+            L.append("  hf%d := longint(v + %d);" % (i, i))
+            L.append("end;")
+            L.append("")
+            L.append("destructor TH%d.Destroy;" % i)
+            L.append("begin")
+            L.append("  Mix(%d);" % (2000 + i))
+            L.append("  Mix(int64(hf%d));" % i)
+            L.append("  inherited Destroy;")
+            L.append("end;")
+            L.append("")
+            L.append("function TH%d.HCalc: longint;" % i)
+            L.append("begin")
+            if i > 0:
+                L.append("  HCalc := longint(inherited HCalc + hf%d);" % i)
+            else:
+                L.append("  HCalc := longint(hf%d);" % i)
+            L.append("end;")
+            L.append("")
+        return L
+
     def _guid(self, k):
         """A deterministic GUID for interface k. FPC requires one for `as` /
         QueryInterface (pxx is lax and accepts a GUID-less `as` -- noted as a
@@ -1201,6 +1282,8 @@ class Gen:
         L += clsdecl
         if self.nintfs:
             L += self.gen_interfaces()
+        if self.nhier:
+            L += self.gen_hier()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1252,6 +1335,12 @@ class Gen:
             for k in self.intfs:
                 L.append("  iw%d: IPas%d;" % (k, k))
                 self.intfvars.append(("iw%d" % k, k))
+        if self.nhier:
+            # Object slots declared as the ROOT, instantiated as random nodes -- so
+            # `is`/`as` at a call site is never statically resolvable.
+            self.hobjs = ["ho%d" % j for j in range(min(self.nhier, 4) or 1)]
+            for ho in self.hobjs:
+                L.append("  %s: TH0;" % ho)
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1300,6 +1389,8 @@ class Gen:
             L += self.gen_class_bodies()
         if self.nintfs:
             L += self.gen_intf_bodies()
+        if self.nhier:
+            L += self.gen_hier_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1322,6 +1413,10 @@ class Gen:
             # Fresh object per interface (implicit class->interface cast AddRefs).
             for k in self.intfs:
                 L.append("  iw%d := TIfc.Create(%d);" % (k, rnd.randint(1, 50)))
+        if self.nhier:
+            for ho in self.hobjs:
+                L.append("  %s := TH%d.Create(%d);"
+                         % (ho, rnd.randrange(self.nhier), rnd.randint(1, 50)))
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1372,6 +1467,9 @@ class Gen:
             # deterministic point.
             for k in self.intfs:
                 L.append("  iw%d := nil;" % k)
+        if self.nhier:
+            for ho in self.hobjs:
+                L.append("  %s.Free;" % ho)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -1475,6 +1573,11 @@ def main():
                          "offset-adjusting `as`/QueryInterface thunk). Objects are "
                          "held only through interface refs: refcount owns their "
                          "lifetime, the destructor folds into the checksum.")
+    ap.add_argument("--hier", type=int, default=None,
+                    help="branching class hierarchy of N nodes (a TREE, not the "
+                         "linear --classes chain): siblings + distinct vtables, with "
+                         "`is` type tests and `as` checked downcasts (every downcast "
+                         "guarded by its `is`, so none can raise).")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1510,16 +1613,17 @@ def main():
         # against a known filed pxx bug, so it would dominate --wide via
         # --stop-on-new. Opt in explicitly with --intfs N until that bug is fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
-                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3)):
+                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
+                     ("hier", 4)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes", "intfs"):
+              "strs", "classes", "intfs", "hier"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
-              a.excepts, a.modeprocs, a.wide_p, a.intfs).gen()
+              a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)
