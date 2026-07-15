@@ -807,7 +807,7 @@ procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean;
 { Evaluate (left OP right) as a 64-bit operation. left is spilled to the stack
   ([esp]=lo, [esp+4]=hi); right is materialized into edx:eax. Arithmetic/bit
   ops leave the 64-bit result in edx:eax; comparisons leave 0/1 in eax. }
-var skipOff: Integer;
+var skipOff, pMulSkip, pMulProc: Integer;
 begin
   EmitNode64_386(left);
   EmitB($52);                                      { push edx (left hi) }
@@ -857,6 +857,48 @@ begin
   end
   else if op = Ord(tkStar) then
   begin
+    if qchk and qchkUns then
+    begin
+      { {$Q+} unsigned checked mul: verdict in edi BEFORE the product (B is
+        pushed around the mul-clobbering detection, A stays at [esp+8..]).
+        Overflow iff both hi words non-zero, either cross product's high
+        half non-zero, or the result-hi sum carries out. Signed checked mul
+        stays deferred on the 32-bit pairs. }
+      EmitB($31); EmitB($FF);                      { xor edi, edi }
+      EmitB($8B); EmitB($4C); EmitB($24); EmitB($04); { mov ecx, [esp+4] (Ahi) }
+      EmitB($85); EmitB($C9);                      { test ecx, ecx }
+      EmitB($74); EmitB($07);                      { jz +7 (skip both-hi) }
+      EmitB($85); EmitB($D2);                      { test edx, edx (Bhi) }
+      EmitB($74); EmitB($03);                      { jz +3 }
+      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
+      EmitB($50);                                  { push eax (Blo) }
+      EmitB($52);                                  { push edx (Bhi) -- [esp]=Bhi [esp+4]=Blo [esp+8]=Alo [esp+12]=Ahi }
+      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
+      EmitB($F7); EmitB($24); EmitB($24);          { mul dword [esp] (Alo*Bhi) }
+      EmitB($85); EmitB($D2);                      { test edx, edx (high half) }
+      EmitB($74); EmitB($03);                      { jz +3 }
+      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
+      EmitB($8B); EmitB($44); EmitB($24); EmitB($0C); { mov eax, [esp+12] (Ahi) }
+      EmitB($F7); EmitB($64); EmitB($24); EmitB($04); { mul dword [esp+4] (Ahi*Blo) }
+      EmitB($85); EmitB($D2);                      { test edx, edx }
+      EmitB($74); EmitB($03);                      { jz +3 }
+      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
+      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
+      EmitB($F7); EmitB($64); EmitB($24); EmitB($04); { mul dword [esp+4] (Alo*Blo) }
+      EmitB($89); EmitB($D6);                      { mov esi, edx (mulhu(Alo,Blo)) }
+      EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (Alo) }
+      EmitB($0F); EmitB($AF); EmitB($04); EmitB($24); { imul eax, [esp] (lo(Alo*Bhi)) }
+      EmitB($01); EmitB($C6);                      { add esi, eax }
+      EmitB($73); EmitB($03);                      { jnc +3 }
+      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
+      EmitB($8B); EmitB($44); EmitB($24); EmitB($0C); { mov eax, [esp+12] (Ahi) }
+      EmitB($0F); EmitB($AF); EmitB($44); EmitB($24); EmitB($04); { imul eax, [esp+4] (lo(Ahi*Blo)) }
+      EmitB($01); EmitB($C6);                      { add esi, eax }
+      EmitB($73); EmitB($03);                      { jnc +3 }
+      EmitB($83); EmitB($CF); EmitB($01);          { or edi, 1 }
+      EmitB($5A);                                  { pop edx (Bhi restored) }
+      EmitB($58);                                  { pop eax (Blo restored) }
+    end;
     { A=left ([esp]=Alo,[esp+4]=Ahi), B=right (eax=Blo, edx=Bhi).
       result.lo:hi = Alo*Blo + ((Ahi*Blo + Alo*Bhi) << 32) (low 64). }
     EmitB($89); EmitB($D1);                        { mov ecx, edx (Bhi) }
@@ -868,6 +910,16 @@ begin
     EmitB($F7); EmitB($24); EmitB($24);            { mul dword [esp] (Blo*Alo -> edx:eax) }
     EmitB($01); EmitB($CA);                        { add edx, ecx }
     EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    if qchk and qchkUns then
+    begin
+      EmitB($85); EmitB($FF);                      { test edi, edi }
+      EmitB($74); pMulSkip := CodeLen; EmitB(0);   { jz skip (no overflow) }
+      pMulProc := FindProc('PXXOverflow');
+      if pMulProc < 0 then
+        Error('{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)');
+      EmitCallProc(pMulProc);
+      Code[pMulSkip] := Byte(CodeLen - (pMulSkip + 1));
+    end;
   end
   else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) or (op = Ord(tkShr)) then
   begin
@@ -2130,7 +2182,7 @@ begin
         begin
           EmitBinop64_386(left, right, op,
             not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
-            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;

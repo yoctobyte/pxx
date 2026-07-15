@@ -687,6 +687,30 @@ begin
   end
   else if op = Ord(tkStar) then
   begin
+    if qchk and qchkUns then
+    begin
+      { {$Q+} unsigned checked mul: verdict in r4 BEFORE the product (the
+        block below clobbers r1/r3) — both hi words non-zero, either cross
+        product's high half non-zero, or the result-hi sum carries. Signed
+        checked mul stays deferred on the 32-bit pairs. }
+      EmitI32($E3A04000);  { mov r4, #0 }
+      EmitI32($E3530000);  { cmp r3, #0 (a_hi) }
+      EmitI32($13510000);  { cmpne r1, #0 (b_hi) }
+      EmitI32($13A04001);  { movne r4, #1 (both non-zero) }
+      EmitI32($E08C5192);  { umull r5, r12, r2, r1 (Alo*Bhi) }
+      EmitI32($E35C0000);  { cmp r12, #0 }
+      EmitI32($13844001);  { orrne r4, r4, #1 }
+      EmitI32($E08C5093);  { umull r5, r12, r3, r0 (Ahi*Blo) }
+      EmitI32($E35C0000);  { cmp r12, #0 }
+      EmitI32($13844001);  { orrne r4, r4, #1 }
+      EmitI32($E08C5092);  { umull r5, r12, r2, r0 (Alo*Blo; r12 = high) }
+      EmitI32($E0050192);  { mul r5, r2, r1 (lo(Alo*Bhi)) }
+      EmitI32($E09CC005);  { adds r12, r12, r5 }
+      EmitI32($23844001);  { orrcs r4, r4, #1 (carry out of result-hi) }
+      EmitI32($E0050093);  { mul r5, r3, r0 (lo(Ahi*Blo)) }
+      EmitI32($E09CC005);  { adds r12, r12, r5 }
+      EmitI32($23844001);  { orrcs r4, r4, #1 }
+    end;
     { A=left(r2:r3), B=right(r0:r1). low 64 of A*B. }
     EmitI32($E0010192);  { mul r1, r2, r1  (Alo*Bhi) }
     EmitI32($E0030093);  { mul r3, r3, r0  (Ahi*Blo) }
@@ -694,6 +718,11 @@ begin
     EmitI32($E08C3092);  { umull r3, r12, r2, r0 (Alo*Blo) }
     EmitI32($E08C1001);  { add r1, r12, r1 (hi += high(Alo*Blo)) }
     EmitI32($E1A00003);  { mov r0, r3 (lo) }
+    if qchk and qchkUns then
+    begin
+      EmitI32($E3540000);  { cmp r4, #0 }
+      EmitOvfCheckArm32($0A000000);  { beq skip (no overflow) }
+    end;
   end
   else if op = Ord(tkAnd) then
   begin
@@ -1727,7 +1756,7 @@ begin
         begin
           EmitBinop64Arm32(left, right, op,
             not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
-            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;
