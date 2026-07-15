@@ -4712,7 +4712,17 @@ begin
       begin
         varIdx := FindOpOverload(Ord(tkAssign), ASTTk[ASTRight[node]],
                                  ResolveNodeRec(ASTRight[node]));
-        if (varIdx >= 0) and (Procs[varIdx].RetType = lhsTk) then
+        { The result-type match must treat the frozen-string kinds as equivalent:
+          the SAME `string[N]` type resolves to tyString in a var declaration but
+          to tyFixedString as an operator return type, so a strict `RetType = lhsTk`
+          missed a `class operator Implicit(...): string[N]` and left `s := t` as a
+          raw record→string store — the shortstring's length byte was garbage and
+          writeln(s) segfaulted (toperator93). A plain function returning string[N]
+          already stored fine, so once the rewrite fires the ordinary frozen-string
+          store handles the result. }
+        if (varIdx >= 0) and
+           ((Procs[varIdx].RetType = lhsTk) or
+            (TypeIsFrozenString(Procs[varIdx].RetType) and TypeIsFrozenString(lhsTk))) then
         begin
           leftAddr := AllocNode(AN_ARG);
           ASTLeft[leftAddr] := ASTRight[node];

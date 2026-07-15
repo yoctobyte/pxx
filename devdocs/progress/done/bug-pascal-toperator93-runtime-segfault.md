@@ -15,3 +15,6 @@ prio: 50
 
 ## Acceptance
 Runs to FPC-identical output; unskip.
+
+## Log
+- 2026-07-15 — resolved, commit PENDING.

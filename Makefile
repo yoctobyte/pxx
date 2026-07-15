@@ -1805,6 +1805,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
 	./$(COMPILER) test/test_forin_record_enumerator_b355.pas /tmp/test_forin_record_enumerator_b35526
 	test "$$(/tmp/test_forin_record_enumerator_b35526)" = "$$(printf 'i=10\ni=20\ni=30\ni=40\nsum=100')"
+	./$(COMPILER) test/test_operator_implicit_shortstring_b356.pas /tmp/test_operator_implicit_shortstring_b35626
+	test "$$(/tmp/test_operator_implicit_shortstring_b35626)" = "$$(printf 'seven\nconverted: len=10')"
 	./$(COMPILER) test/test_forin_aggr_elems.pas /tmp/test_forin_aggr_elems26
 	test "$$(/tmp/test_forin_aggr_elems26)" = "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
 	./$(COMPILER) test/test_enum_cast.pas /tmp/test_enum_cast26

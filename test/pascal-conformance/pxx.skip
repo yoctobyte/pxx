@@ -220,8 +220,7 @@ tmoperator9.pp	gap: record management operators Initialize/Finalize called for l
 tobject6.pp	gap: `object` type with nested type/class var/const sections and class property
 tobject7.pp	gap: `object` with private nested type, typed const and static class property
 toperator91.pp	gap: class operators Explicit/Implicit overloaded on ShortString[N] result types
-toperator93.pp	gap: pxx-compiled binary SEGFAULTS (exit 139) though compile succeeds — re-triaged 2026-07-15, crash needs a minimal repro
-toperator94.pp	gap: objfpc `class operator :=` implicit conversion to shortstring types
+toperator94.pp	gap: objfpc `class operator :=` implicit conversion to shortstring types — the duplicate-conversion check (parser.inc ~1860) falsely collides distinct frozen-string result kinds; root is the same String[N] tk inconsistency (tyString vs tyFixedString vs tyShortString) that toperator93 exposed at the use site
 tpropdef.pp	wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault)
 tstatic2.pp	gap: class var with static class property and inherited access
 tclass12b.pp	accepts-invalid: access control unenforced by project policy — see bug-pascal-member-visibility-unenforced
