@@ -7,7 +7,7 @@ prio: 40
 # {$I+} / {$IOCHECKS ON}: raise on Text I/O failure
 
 - **Type:** feature (FPC-parity runtime checks). **Track A** (+ textfile RTL).
-- **Status:** backlog
+- **Status:** backlog — OPT-IN SLICE LANDED (see the {$I+} commit): directive family, per-token/statement anchoring, AN_CALL ASTIChk -> PXXIoCheck sequencing, 4th hook (EInOutError). REMAINING = ONLY the dialect-default question below (user call) + possible --mimic-fpc wiring.
 - **Opened:** 2026-07-15 night, straight after {$R+} completed — the probe:
 
 ```pascal
