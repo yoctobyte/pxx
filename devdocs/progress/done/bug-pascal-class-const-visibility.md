@@ -69,3 +69,6 @@ Repro 1 prints 5/99 and repro 2 prints 10/777 (FPC-differential identical);
 inherited class consts resolve up the parent chain; tclass12b rejected under
 --strict-visibility; fpjson/Synapse/fgl + conformance pass-set stay green
 (regression sweep — the resolution-order change is the risky part).
+
+## Log
+- 2026-07-15 — resolved, commit 9122d8cc.
