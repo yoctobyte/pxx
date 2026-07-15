@@ -285,6 +285,19 @@ begin
     l := CTrunc32(l);
     r := CTrunc32(r);
   end;
+  { C usual arithmetic conversions for integer `/` and `%`: `int op unsigned int`
+    (equal rank, one unsigned) converts the signed operand to unsigned, so the
+    division/remainder is UNSIGNED — `-13 % 61u` is 3, not -13. The div/mod codegen
+    picks idiv vs div from the LEFT operand's type, so truncate BOTH operands to the
+    unsigned 32-bit domain (CTrunc32, same model as the comparison case above): the
+    signed operand becomes its non-negative unsigned value and the left tag becomes
+    tyUInt32 → unsigned div. Signed/signed stays signed (CCmpUnsigned32 false); this
+    does not touch the shared Pascal div/mod rule. }
+  if ((ivalOp = Ord(tkDiv)) or (cTok = Ord(tkMod))) and CCmpUnsigned32(l, r) then
+  begin
+    l := CTrunc32(l);
+    r := CTrunc32(r);
+  end;
   node := AllocNode(AN_BINOP);
   ASTIVal[node] := ivalOp;
   ASTLeft[node] := l;
