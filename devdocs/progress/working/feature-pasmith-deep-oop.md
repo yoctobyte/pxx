@@ -136,3 +136,21 @@ one lifetime system in the dialect that has zero fuzz coverage today.
   **Remaining deep-oop rungs:** method pointers (`procedure of object`), properties
   (getters/setters, indexed/default), class methods/vars/abstract, polymorphic
   containers (array of base-typed refs), exceptions crossing a destructor.
+- 2026-07-15 (opus-trackT) — **Method-pointer rung landed (`--mptrs N`); found a
+  second real, silent pxx bug.** A base + derived class with N virtual methods of a
+  common signature and a `function(a): longint of object` type; objects held through
+  the base type (some derived); random `@obj.Mm` pairings called through a var AND an
+  array (the two-word code+Self closure, plus the array/loop store the ABI can botch).
+  Non-virtual method pointers already worked (hand-checked); the rung targets the
+  virtual-through-base-ref case and found it broken.
+  Gate: `--check 50 --mptrs 3` and `--check 20 --wide --mptrs 2 --intfs 2`, 0 FPC
+  rejects. FPC self-consistent, pxx self-consistent, cross-diverge every seed.
+  **Finding filed:** [[bug-a-method-pointer-virtual-captures-static-address]] —
+  `@baseref.VirtualMethod` on a derived instance binds the STATIC base method address,
+  not the virtual override; pxx contradicts its own direct virtual dispatch (via ptr
+  6, direct 1005). Airtight repro in the ticket.
+  Kept `--mptrs` opt-in / out of `--wide` (like `--intfs`): both diverge on ~100% of
+  seeds against a known bug, so including them would mask other rungs via
+  `--stop-on-new`. Restore to `--wide` once fixed.
+  **Remaining deep-oop rungs:** properties (getters/setters, indexed/default), class
+  methods/vars/abstract, polymorphic containers, exceptions crossing a destructor.

@@ -128,7 +128,7 @@ class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
                  nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0,
-                 nhier=0):
+                 nhier=0, nmptrs=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -185,6 +185,15 @@ class Gen:
         # like --classes: no interface-refcount interaction.
         self.nhier = nhier
         self.hier = []         # [{name, idx, base_idx}]
+        # Method-pointer rung (feature-pasmith-deep-oop): `procedure of object` is a
+        # two-word closure -- a code pointer AND a Self pointer. Mispairing the two
+        # halves (right code, wrong Self, or vice versa) is a classic ABI bug that
+        # nothing else here reaches. The rung randomly pairs objects with methods,
+        # stores the pairs in a var AND in an array (the array/loop path is where a
+        # botched two-word store shows), and folds each call's result -- a wrong
+        # code or Self changes the number. Methods are VIRTUAL, so a method pointer
+        # also has to carry the dispatch, not a statically-bound address.
+        self.nmptrs = nmptrs   # number of methods on the method-pointer class
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -453,6 +462,17 @@ class Gen:
                     "%sif %s is TH%d then Mix(int64((%s as TH%d).hf%d));"
                     % (pad, ho, kk, ho, kk, kk)])
             return self.tagged("hcalc", ["%sMix(%s.HCalc);" % (pad, ho)])
+
+        if k < 0.963 and self.nmptrs:
+            # Method-pointer dispatch: bind a random (object, method) pair into the
+            # two-word closure and call through it. The object may be derived, so
+            # the pointer must carry the virtual override. A wrong code or Self
+            # half changes the folded result.
+            om = rnd.choice(self.mpobjs)
+            j = rnd.randrange(self.nmptrs)
+            return self.tagged("methptr", [
+                "%smp := @%s.Mm%d;" % (pad, om, j),
+                "%sMix(mp(longint(%s)));" % (pad, self.expr(INT_TYPES[4], scope, 2))])
 
         if k < 0.97 and self.strs:
             name, _ = rnd.choice(self.strs)
@@ -1031,6 +1051,43 @@ class Gen:
             L.append("")
         return L
 
+    def gen_mptrs(self):
+        """A base + derived class with N virtual methods of a common signature, and
+        a `function(a): longint of object` type. Objects are declared base and
+        instantiated as base OR derived, so a method pointer taken through the base
+        reference must still carry the override's dispatch, not a static address."""
+        L = ["type"]
+        L.append("  TMPC = class")
+        L.append("    fm: longint;")
+        L.append("    constructor Create(v: longint);")
+        for j in range(self.nmptrs):
+            L.append("    function Mm%d(a: longint): longint; virtual;" % j)
+        L.append("  end;")
+        L.append("  TMPCd = class(TMPC)")
+        L.append("    fmd: longint;")
+        L.append("    constructor Create(v: longint);")
+        for j in range(self.nmptrs):
+            L.append("    function Mm%d(a: longint): longint; override;" % j)
+        L.append("  end;")
+        L.append("  TMethFn = function(a: longint): longint of object;")
+        L.append("")
+        return L
+
+    def gen_mptr_bodies(self):
+        L = []
+        L.append("constructor TMPC.Create(v: longint); begin fm := v; end;")
+        L.append("constructor TMPCd.Create(v: longint); "
+                 "begin inherited Create(v); fmd := v * 3; end;")
+        L.append("")
+        for j in range(self.nmptrs):
+            L.append("function TMPC.Mm%d(a: longint): longint;" % j)
+            L.append("begin Mm%d := longint(a + fm + %d); end;" % (j, j))
+            L.append("function TMPCd.Mm%d(a: longint): longint;" % j)
+            L.append("begin Mm%d := longint(inherited Mm%d(a) + fmd + %d); end;"
+                     % (j, j, 100 * j))
+        L.append("")
+        return L
+
     def _guid(self, k):
         """A deterministic GUID for interface k. FPC requires one for `as` /
         QueryInterface (pxx is lax and accepts a GUID-less `as` -- noted as a
@@ -1284,6 +1341,8 @@ class Gen:
             L += self.gen_interfaces()
         if self.nhier:
             L += self.gen_hier()
+        if self.nmptrs:
+            L += self.gen_mptrs()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1341,6 +1400,15 @@ class Gen:
             self.hobjs = ["ho%d" % j for j in range(min(self.nhier, 4) or 1)]
             for ho in self.hobjs:
                 L.append("  %s: TH0;" % ho)
+        if self.nmptrs:
+            # Objects declared base (TMPC), some instantiated derived (TMPCd); a
+            # method-pointer var and an ARRAY of them (the two-word store the ABI
+            # can botch). self.mpobjs drives pairing, creation and Free.
+            self.mpobjs = ["om%d" % j for j in range(3)]
+            for om in self.mpobjs:
+                L.append("  %s: TMPC;" % om)
+            L.append("  mp: TMethFn;")
+            L.append("  amp: array[0..%d] of TMethFn;" % (len(self.mpobjs) - 1))
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1391,6 +1459,8 @@ class Gen:
             L += self.gen_intf_bodies()
         if self.nhier:
             L += self.gen_hier_bodies()
+        if self.nmptrs:
+            L += self.gen_mptr_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1417,6 +1487,19 @@ class Gen:
             for ho in self.hobjs:
                 L.append("  %s := TH%d.Create(%d);"
                          % (ho, rnd.randrange(self.nhier), rnd.randint(1, 50)))
+        if self.nmptrs:
+            for om in self.mpobjs:
+                cls = rnd.choice(["TMPC", "TMPCd"])
+                L.append("  %s := %s.Create(%d);" % (om, cls, rnd.randint(1, 50)))
+            # Array of method pointers: fill each slot with a random (object,method)
+            # pair, then call them all in a loop and fold. A botched two-word store
+            # (code/Self swapped or one half dropped) changes the result here.
+            for idx in range(len(self.mpobjs)):
+                om = rnd.choice(self.mpobjs)
+                j = rnd.randrange(self.nmptrs)
+                L.append("  amp[%d] := @%s.Mm%d;" % (idx, om, j))
+            L.append("  for li0 := 0 to %d do Mix(amp[li0](li0 + 1));"
+                     % (len(self.mpobjs) - 1))
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1470,6 +1553,9 @@ class Gen:
         if self.nhier:
             for ho in self.hobjs:
                 L.append("  %s.Free;" % ho)
+        if self.nmptrs:
+            for om in self.mpobjs:
+                L.append("  %s.Free;" % om)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -1578,6 +1664,11 @@ def main():
                          "linear --classes chain): siblings + distinct vtables, with "
                          "`is` type tests and `as` checked downcasts (every downcast "
                          "guarded by its `is`, so none can raise).")
+    ap.add_argument("--mptrs", type=int, default=None,
+                    help="`procedure of object` method pointers with N methods: "
+                         "random (object, virtual-method) pairings called through a "
+                         "var and an array -- exercises the two-word code+Self "
+                         "closure and its ABI.")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1609,21 +1700,23 @@ def main():
         # ON. Turning a single rung OFF is exactly what you need when one rung is
         # blocked (e.g. the cross targets reject records holding a string[N]), so
         # the defaults only fill in flags the user did not pass at all.
-        # --intfs is intentionally excluded: the rung diverges on ~100% of seeds
-        # against a known filed pxx bug, so it would dominate --wide via
-        # --stop-on-new. Opt in explicitly with --intfs N until that bug is fixed.
+        # --intfs and --mptrs are intentionally excluded: each diverges on ~100% of
+        # seeds against a known filed pxx bug (interface release; virtual method
+        # pointer captures static address), so folding either into --wide would make
+        # every slice stop on that one divergence (--stop-on-new) and mask other
+        # rungs. Opt in explicitly (--intfs N / --mptrs N) until those bugs are fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
                      ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
                      ("hier", 4)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes", "intfs", "hier"):
+              "strs", "classes", "intfs", "hier", "mptrs"):
         if getattr(a, f) is None:
             setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
-              a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier).gen()
+              a.excepts, a.modeprocs, a.wide_p, a.intfs, a.hier, a.mptrs).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)

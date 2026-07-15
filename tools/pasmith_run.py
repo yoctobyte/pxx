@@ -530,7 +530,7 @@ def check(nseeds, args):
 
 GEN_FLAGS = ["vars", "funcs", "stmts", "depth", "classes", "objs", "strs",
              "recs", "arrs", "enums", "shorts", "excepts", "modeprocs", "intfs",
-             "hier"]
+             "hier", "mptrs"]
 
 
 def gen_args_for(a, seed):
@@ -566,6 +566,10 @@ def add_gen_flags(ap):
     ap.add_argument("--intfs", type=int, default=0,
                     help="COM-refcounted interfaces (opt-in; NOT enabled by --wide "
                          "-- see bug-a-interface-release-on-last-ref-not-destroyed)")
+    ap.add_argument("--mptrs", type=int, default=0,
+                    help="method pointers / `procedure of object` (opt-in; NOT in "
+                         "--wide -- see "
+                         "bug-a-method-pointer-virtual-captures-static-address)")
     for f in WIDE_DEFAULTS:
         # default None, NOT 0: --wide has to tell "not given" apart from "given as
         # 0", or `--wide --shorts 0` silently turns shortstrings back on. Switching
