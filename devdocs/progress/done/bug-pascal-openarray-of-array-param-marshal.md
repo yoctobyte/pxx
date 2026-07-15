@@ -122,3 +122,22 @@ Pinned the precise parser gap and the representation choice for a future session
   multi-dim (`array[1..2,1..3]`), so store inner dims, not just a length.
 
 Still feature-sized; the above is the executable plan for a dedicated session.
+
+## Resolution (2026-07-15, agent-ACP — commit f6a843f0)
+
+Landed the full row model per Recon 3: SymDynElemRowLen/SymDynElemRowLo (+
+ArrTypeElemRowLen/Lo, ProcParamElemRowLen/Lo mirrors, all Alloc* resets), parse
+support at var-decl / type-alias / open-array-param sites (managed row elements
+rejected loudly), IR row stride + sub-index low bound + row-copy both
+directions, SetLength count*rowsize (x86-64 inline + shared PXXDynSetLen
+descriptor so cross rides), row-sized open-array ctor, and the for-in
+open-array-param Length fix (ArrLen=1000 placeholder no longer used as a
+static bound). tforin14 passes byte-identical to FPC; regression
+test/test_dynarray_of_fixed_array.pas (13 checks, FPC-differential identical,
+wired into make test). Deliberately NOT covered (still loud errors or parked):
+array of array of <fixed T> (depth>1), record/class FIELDS of this shape,
+static-outer P(garr) copy-in (NDims=2 guard), managed row elements.
+
+
+## Log
+- 2026-07-15 — resolved, commit f6a843f0.
