@@ -22,11 +22,10 @@ _none_
 | feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 
-## blocked (2)
+## blocked (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
 ## backlog (100)
@@ -192,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (764)
+## done (765)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -477,6 +476,7 @@ _none_
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
 | bug-pascal-exceptaddr-returns-nil | A | 35 | bug | ExceptAddr is a STUB returning nil — the raise site is never recorded | — |
+| bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | bug-pascal-forward-pointer-field-loses-pointee-record | A | 70 | bug | `PNode = ^TNode` — the forward pointer's record FIELDS never got their pointee patched | — |
 | bug-pascal-fpc-tpoint-methods-not-registered | P | 45 | bug | FPC's own TPoint parses, but its METHODS do not resolve | — |
 | bug-pascal-headerless-program | P | 58 | bug | Parser requires `program` header — FPC allows headerless programs | — |

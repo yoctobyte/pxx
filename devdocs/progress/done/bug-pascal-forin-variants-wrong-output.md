@@ -46,3 +46,17 @@ is blocked on that feature for byte-identical parity.
 ## Acceptance
 Byte-identical stdout to FPC for both; unskip both entries.
 (tforin25 done; tforin14 blocked on the aggregate-element dynarray feature.)
+
+## Resolution (2026-07-15, agent-ACP — with f6a843f0)
+
+tforin14's blocker landed: the aggregate-element dynamic-array / open-array row
+model ([[bug-pascal-openarray-of-array-param-marshal]], commit f6a843f0) plus
+the for-in open-array-param Length fix (the ArrLen=1000 placeholder was used as
+a static bound). Verified BOTH tests byte-identical to FPC (tforin14: '1 2 9 /
+3 4 5'; tforin25: four 0 lines); conformance.tsv entries flipped to pass.
+Regressions: test/test_forin_record_enumerator_b355.pas (tforin25),
+test/test_dynarray_of_fixed_array.pas check 13 (tforin14 shape).
+
+
+## Log
+- 2026-07-15 — resolved, commit f6a843f0.
