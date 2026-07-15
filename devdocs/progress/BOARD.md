@@ -28,10 +28,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
@@ -116,6 +117,7 @@ _none_
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
+| feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve | T | 25 | feature | Track T: bench.tsv has no `fpc` column for mandelbrot / raytracer / sieve | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -976,6 +978,7 @@ _none_
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
+- [p 60] [A] bug-a-compiler-hang-on-valid-c-programs
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -1071,6 +1074,7 @@ _none_
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
+- [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [P] feature-pascal-corpus-expansion
