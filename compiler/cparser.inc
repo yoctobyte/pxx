@@ -8866,6 +8866,24 @@ var
   startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
   isBitField, structPacked, fieldPacked: Boolean;
 begin
+  { Redefinition guard for the NESTED / inline / global-var struct-layout paths
+    (the bare `struct Tag {...};` path guards at its own call site). The C driver
+    runs the token stream MORE THAN ONCE — pass 1 (signatures), pass 2 (bodies),
+    and the crtl-prototype rerun — so a tagged struct definition is re-parsed each
+    time. FindOrForwardCTag returns the SAME record on every pass, and without this
+    guard each re-parse APPENDS the fields again: UClsFCount grows (1→2→3) and the
+    per-record field windows overlap. For a struct nested >=4 deep the overlap makes
+    a record's window include a field that points back into the record (a spurious
+    self-/mutual-reference), which sends RecordHasManagedFields and the whole-record
+    copy path into an unbounded walk — the compiler hangs on valid C
+    (bug-a-compiler-hang-on-valid-c-programs: gcc-torture pr44164 / pr23324). Keep
+    the first layout; skip the duplicate body. Fresh (anonymous / just-forwarded)
+    records have FCount=0 and lay out normally. }
+  if (ci >= 0) and UClsIsRecord[ci] and (UClsFCount[ci] > 0) and (CurTok.Kind = tkBegin) then
+  begin
+    SkipBraceBlock;
+    Exit;
+  end;
   startIdx := TokPos - 1;
   endIdx := CStructEndIndex(startIdx);
   declStartIdx := CStructDeclStart(startIdx);

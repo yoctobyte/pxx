@@ -54,3 +54,6 @@ non-termination should be fixed, not just timed out around.
 Both files compile in bounded time under pxx (match gcc's sub-second); a minimal
 reduced repro is added as a `test/` regression; if the two have distinct root causes,
 split into two fixes but keep this ticket until both terminate.
+
+## Log
+- 2026-07-15 — resolved, commit PENDING.
