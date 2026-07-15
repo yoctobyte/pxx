@@ -21,6 +21,16 @@ prio: 55
   demonstrating itself: under {$R+}, `a[4] := 1` on `array[1..3]` silently
   clobbered the NEXT VARIABLE while FPC raised ERangeError).
 
+## Subrange residual — implementation sketch (recon 2026-07-15)
+
+Named subranges drop their bounds at parse (parser.inc ~19211, "bounds are
+not retained"; RegisterGeneralAlias has no lo/hi). To check them:
+AliasSubLo/AliasSubHi Int64 parallel arrays (set at the `T = lo..hi` decl,
+default sentinel elsewhere — mind the parallel-array reset landmine),
+a LastTypeSubLo/Hi channel out of ParseTypeKind's alias resolution,
+SymSubLo/Hi stamped in AllocVar, and the AN_ASSIGN wrap keys on them ahead
+of the width table. Var-decl slice first; fields/params later.
+
 ## Oracle (FPC 3.2.2, probe kept in the ticket)
 
 ```pascal
