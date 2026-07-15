@@ -547,14 +547,24 @@ def gen_args_for(a, seed):
     return args
 
 
+# --intfs is deliberately NOT here: the interface rung diverges on ~100% of seeds
+# against a known, filed pxx bug (bug-a-interface-release-on-last-ref-not-destroyed),
+# so folding it into --wide would make every --wide slice stop on that one divergence
+# (--stop-on-new) and mask every other rung's bugs. Keep it an explicit opt-in rung
+# (--intfs N) until that bug is fixed; then add it back here.
 WIDE_DEFAULTS = {"recs": 2, "arrs": 2, "enums": 2, "shorts": 2, "excepts": 3,
-                 "modeprocs": 2, "strs": 3, "classes": 3, "intfs": 3}
+                 "modeprocs": 2, "strs": 3, "classes": 3}
 
 
 def add_gen_flags(ap):
     for f, d in (("vars", 8), ("funcs", 3), ("stmts", 12), ("depth", 3),
                  ("objs", 3)):
         ap.add_argument("--%s" % f, type=int, default=d)
+    # Opt-in rung, default OFF and deliberately excluded from --wide (see
+    # WIDE_DEFAULTS): diverges on ~100% of seeds against a known filed pxx bug.
+    ap.add_argument("--intfs", type=int, default=0,
+                    help="COM-refcounted interfaces (opt-in; NOT enabled by --wide "
+                         "-- see bug-a-interface-release-on-last-ref-not-destroyed)")
     for f in WIDE_DEFAULTS:
         # default None, NOT 0: --wide has to tell "not given" apart from "given as
         # 0", or `--wide --shorts 0` silently turns shortstrings back on. Switching

@@ -1506,9 +1506,11 @@ def main():
         # ON. Turning a single rung OFF is exactly what you need when one rung is
         # blocked (e.g. the cross targets reject records holding a string[N]), so
         # the defaults only fill in flags the user did not pass at all.
+        # --intfs is intentionally excluded: the rung diverges on ~100% of seeds
+        # against a known filed pxx bug, so it would dominate --wide via
+        # --stop-on-new. Opt in explicitly with --intfs N until that bug is fixed.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
-                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
-                     ("intfs", 3)):
+                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
