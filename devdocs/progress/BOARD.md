@@ -28,13 +28,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
 | bug-lib-test-console-solitaire-flaky | B | 45 | bug | lib-test flaky: console_solitaire 'aq' smoke prints moves=0/1/2 across runs despite fixed seed NewGame(1) — input-read timing, fails the moves=2 expectation intermittently | — |
-| bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -191,7 +189,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (769)
+## done (771)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -294,6 +292,7 @@ _none_
 | bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | C | 50 | bug | C: local static const multidimensional array initializer in sqlite | — |
 | bug-c-local-static-record-array-vfs-sqlite | C | 50 | bug | C: block-scope static record arrays in sqlite VFS init | — |
+| bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-lua-tests-regressed-segfault | C | 50 | bug | C: lua runner tests regressed (segfault on most scripts) | — |
 | bug-c-main-argc-argv-not-wired | C | 50 | bug | C `main(argc, argv)` gets real argc/argv | — |
@@ -473,6 +472,7 @@ _none_
 | bug-pascal-builtin-pointer-type-cast | P | 45 | bug | `PInteger(p)^` does not compile, though `var p: PInteger` does | — |
 | bug-pascal-builtin-typename-shadows-source-alias | P | 50 | bug | ParseTypeKind's builtin-name chain runs BEFORE the alias table — every builtin name shadows a source declaration | — |
 | bug-pascal-case-selector-multiple-evaluation | A | 75 | bug | `case` evaluated its selector expression ONCE PER LABEL, not once | — |
+| bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
 | bug-pascal-directive-inside-paren-star-comment | A | 65 | bug | {$...} directives are processed inside (* ... *) comments | — |
 | bug-pascal-except-on-class-open-world | A | 45 | bug | `on E: T` descendant matching is closed-world per UNIT — later units' classes escape | — |
@@ -990,7 +990,6 @@ _none_
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
-- [p 60] [P] bug-pascal-class-const-visibility
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-asm-source-frontend
 - [p 60] [C] feature-c-csmith-differential-fuzzing
@@ -1080,7 +1079,6 @@ _none_
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [T] feature-t-gcc-torture-runner
-- [p 15] [C] bug-c-long-long-bitfield-promotion
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
 

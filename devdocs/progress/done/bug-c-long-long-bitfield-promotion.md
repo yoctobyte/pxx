@@ -121,3 +121,6 @@ Moderate cfront work + a differential test vs gcc, not an IR feature. Value
 still low (in-expression overflow of a 33-63-bit field without an intervening
 store — real code masks explicitly), hence prio stays 15; but if picked up,
 THIS is the plan, not the IR one.
+
+## Log
+- 2026-07-15 — resolved, commit f2a707f2.
