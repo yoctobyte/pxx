@@ -84,17 +84,24 @@ reached when nothing else declares the name. Core resolution change (touches
 every call): gate = make test + self-host byte-identical + conformance/fpjson/
 Synapse. Test against the k2 repro above, FPC-differential.
 
-## Status (2026-07-15)
+## Disposition (2026-07-15) — DEFAULT IS INTENDED, not a bug to fix
 
-Root cause NAILED (above). The real-world impact was removed by
-[[bug-lib-test-console-solitaire-flaky]]'s Part B: `lib/rtl/random.pas` no longer
-redefines the System names (`Random`/`RandSeed`/`Randomize`), so nothing in-tree
-triggers this now. The frontend defect remains latent — any future unit that
-redefines a System routine name (Round, Copy, Random, …) hits it — so this stays
-open as the general correctness fix. Not attempted inline: it is core overload-
-resolution surgery and warrants a dedicated pass with the full gate.
+After discussion with the user (the repo owner): the lax overload-compete is
+**intended, first-class pxx behaviour**, not a defect. builtin / RTL / libraries
+overriding by name is how the whole architecture selects implementations (e.g.
+platform softfloat-in-builtin). FPC just chose a different rule (a same-name decl
+HIDES System); that difference belongs behind the compatibility switch, NOT in a
+default-resolution change. So: **no default change, no resolution surgery.**
 
-## Acceptance
+- Real-world impact removed by [[bug-lib-test-console-solitaire-flaky]] Part B
+  (rtl/random no longer shadows the System names).
+- FPC-parity strictness delivered as [[feature-strict-fpc-umbrella]]: `--strict-fpc`
+  bundles case/operator/visibility/require-forward. `StrictOverload` (which would
+  ERROR on a System-name shadow) is a **standalone** flag, kept out of the umbrella
+  because our RTL uses undirectived overloads by design and bundling it would fail
+  to compile the corpora — and directive boilerplate across the RTL is refused.
 
-The k2 repro binds `Random(i+1)` to the used unit's routine (FPC-differential
-identical); make test + self-host + conformance stay green.
+Left in backlog only as a reference (minimal repro + root cause above). The one
+remaining "could do": make `StrictOverload` usable against the lax RTL (scope it
+so it polices user code without choking on pulled units) — low value, no owner.
+Not a default correctness bug.
