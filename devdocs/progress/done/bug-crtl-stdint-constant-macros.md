@@ -9,7 +9,7 @@ prio: 50
 - **Type:** bug (crtl header gap). **Track B** (lib/crtl) — filed from Track A's
   night session per lane rules; C-frontend token-paste in this position may
   need a Track C look if the obvious define fails.
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-14 night, the wall AFTER alloca in the QuickJS bring-up
   ([[feature-c-corpus-quickjs]]).
 
@@ -48,3 +48,6 @@ handles `c ## ULL` where c is a hex literal.
 
 - `UINT64_C(0x123)` in a pxx-compiled C file equals `0x123ULL` (gcc parity).
 - QuickJS unity build compiles past line ~18884 (next wall surfaces).
+
+## Log
+- 2026-07-15 — resolved, commit 25a0499c.

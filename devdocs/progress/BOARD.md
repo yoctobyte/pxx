@@ -29,13 +29,12 @@ _none_
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-c-long-long-bitfield-promotion | C | 45 | bug | C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort | — |
-| bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-methodref-arg-to-named-of-object-param-no-match | P | 40 | bug | passing @obj.Method directly as an argument to a named `of object` parameter type fails overload matching ('no overload matches') — assignment to the same type works | — |
 | bug-pascal-openarray-of-array-param-marshal | A | 55 | bug | open-array parameter whose ELEMENT is a static array is marshalled wrong: Length(a) is huge, a[i] yields addresses/garbage — silent | — |
@@ -196,7 +195,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (758)
+## done (759)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -387,6 +386,7 @@ _none_
 | bug-cross-pointer-store-record-with-shortstring-field | A | 60 | bug | i386/aarch64/arm32: any store through a pointer to a record that HAS a string[N] field is rejected | — |
 | bug-crtl-printf-g-double-roundtrip | B | 60 | bug | crtl: %g double formatting (or %lg parse) loses exactness — cJSON floats fail | — |
 | bug-crtl-printf-ll-ilp32 | B | 65 | bug | crtl printf counted `ll` but never honoured it (arg truncation + shift on ILP32) | — |
+| bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
 | bug-downcast-inherited-property-wrong-offset | A | 50 | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | bug-dynarray-concat-silent-miscompile | A | 50 | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
@@ -1012,7 +1012,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 50] [B] bug-crtl-stdint-constant-macros
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-fpjson-fpcunit-suite-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
