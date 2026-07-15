@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (103)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -105,6 +105,7 @@ _none_
 | feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
+| feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
 | feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
@@ -1059,6 +1060,7 @@ _none_
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
+- [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] bug-pascal-member-visibility-unenforced
