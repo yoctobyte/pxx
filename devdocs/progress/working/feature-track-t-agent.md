@@ -108,3 +108,14 @@ replacing the dev-side quick gate.
     scratch bare repo reproducing the exact human-reformat-vs-watcher-append
     conflict (scratchpad/test_publish_conflict.py): conflict → clean at
     origin, human reformat intact, next cycle republishes cleanly.
+  - **Publish-health visibility (b8f74a58).** The incident was invisible:
+    `trackt status` showed "daemon RUNNING" above a vague "tstate DOWN" with
+    no hint publishing itself was failing (DOWN is a COVERAGE verdict, not
+    liveness). Added a publish-health channel: the daemon records each publish
+    outcome to `.testmgr/pubhealth.json` (consecutive drops, last reason,
+    commits-behind, last push); `trackt status` prints a `publish:` line
+    (`⚠ BLOCKED — N drops (reason); M behind` vs `ok — last push Xago`); the
+    web `/api/live` serves it and the live page shows a red banner. A daemon
+    alive-but-livelocked on a conflict now shows a rising drop streak instead
+    of silence. Restarted the borg watcher on the new build; the drop-fix had
+    already unjammed prod (fd5b5326 published GREEN, tstate back to UP).
