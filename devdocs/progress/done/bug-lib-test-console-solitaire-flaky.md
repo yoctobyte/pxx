@@ -40,3 +40,6 @@ PROGRAM's input loop or the TEST harness — not the expectation.
 
 `for i in $(seq 20); do printf 'aq' | ...; done` prints `moves=2 won=FALSE`
 20/20; `make lib-test` green repeatedly.
+
+## Log
+- 2026-07-15 — resolved, commit c80ec4e7.

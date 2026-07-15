@@ -32,7 +32,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-lib-test-console-solitaire-flaky | B | 45 | bug | lib-test flaky: console_solitaire 'aq' smoke prints moves=0/1/2 across runs despite fixed seed NewGame(1) — input-read timing, fails the moves=2 expectation intermittently | — |
+| bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: an unqualified routine call can bind to a System BUILTIN (e.g. Random) instead of a same-named routine from an explicitly-used unit — klondike's `Random` drew from the unseeded builtin, not `uses random`'s xoshiro, so a fixed-seed shuffle was non-reproducible | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -189,7 +189,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (771)
+## done (772)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -436,6 +436,7 @@ _none_
 | bug-length-of-dynarray-call-result | A | 50 | bug | bug: `Length()` of a dynamic-array function-call result is wrong/crashes | — |
 | bug-length-rejects-non-variable | A | 50 | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-lfm-streaming-skips-constructors | B | 50 | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
+| bug-lib-test-console-solitaire-flaky | B | 45 | bug | lib-test flaky: console_solitaire 'aq' smoke prints moves=0/1/2 across runs despite fixed seed NewGame(1) — input-read timing, fails the moves=2 expectation intermittently | — |
 | bug-low-missing-high-wrong-nonzero-array | A | 50 | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | 50 | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-length-via-pointer-deref | A | 50 | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
@@ -1023,7 +1024,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [B] bug-lib-test-console-solitaire-flaky
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -1063,6 +1063,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [P] bug-pascal-unqualified-call-binds-builtin-over-used-unit
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [A] feature-unicodestring-model
