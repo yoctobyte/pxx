@@ -95,3 +95,29 @@ Implementing arbitrary-precision integer arithmetic in the IR is disproportionat
 to the value. Left in backlog at low prio as a **compat** item; pick up only if a
 real corpus (not gcc-torture) depends on sub-word bitfield arithmetic wrapping.
 Add `bitfld-3.c` to the C skip list with this reason rather than chasing it.
+
+## Effort re-estimate (2026-07-15, agent-ACP — plan correction, prio unchanged)
+
+The "needs arbitrary-precision integer types in the IR" framing above is too
+pessimistic. cfront already computes C types for the usual-arithmetic
+conversions, so the whole fix can live PARSER-SIDE in the C->IR lowering — no
+new IR node metadata:
+
+- Track "bitfield precision N" (34..63 band; width<32 already promotes to int,
+  width 64 is plain long long) on the cparser's expression-type bookkeeping,
+  starting at a bitfield read and propagating through binops via
+  max(precision) per the usual arithmetic conversions.
+- After each `+ - * <<` whose result type is a :N bitfield type, emit an
+  explicit normalize node: mask to N bits (unsigned) or sign-extend from bit
+  N-1 (signed, the existing `(v xor signBit) - signBit` branchless trick from
+  IRLowerBitFieldRead).
+- Before value-observing ops (`>> / % == <` etc.) operands must already be
+  normalized — which mask-after-every-op guarantees.
+- Carry out of bit N-1 is DISCARDED by definition (C unsigned arithmetic is
+  mod 2^N); signed overflow is UB, so two's-complement wrap matches gcc.
+- `sizeof(a.u33 + 0)` = 8 stays right for free (storage type is int64).
+
+Moderate cfront work + a differential test vs gcc, not an IR feature. Value
+still low (in-expression overflow of a 33-63-bit field without an intervening
+store — real code masks explicitly), hence prio stays 15; but if picked up,
+THIS is the plan, not the IR one.
