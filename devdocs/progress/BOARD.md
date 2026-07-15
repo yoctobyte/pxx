@@ -29,12 +29,13 @@ _none_
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
-| bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
+| bug-c-int-mod-unsigned-uses-signed-conversion | C | 50 | bug | C `int op unsigned` does SIGNED arithmetic — the usual arithmetic conversions don't convert the signed operand to unsigned, so `-13 % 61u` yields -13 (should be 3); silent wrong values for %, /, and comparisons | — |
+| bug-c-long-long-bitfield-promotion | C | 45 | bug | C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort | — |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-methodref-arg-to-named-of-object-param-no-match | P | 40 | bug | passing @obj.Method directly as an argument to a named `of object` parameter type fails overload matching ('no overload matches') — assignment to the same type works | — |
@@ -196,7 +197,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (756)
+## done (757)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -236,6 +237,7 @@ _none_
 | bug-c-anonymous-struct-union-members | C | 55 | bug | C anonymous struct/union members (C11) reject with "expected C expression" | — |
 | bug-c-arrow-on-array-store-of-call-result-clobbered | A | 50 | bug | C: `arr->field = call()` store miscompiled when `arr` is an array | — |
 | bug-c-binary-op-no-integer-promotion-sizeof | C | 45 | bug | `sizeof(us + 0)` reports 2, not 4 — binary ops skip the integer promotions | — |
+| bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
 | bug-c-block-scope-func-decl | C | 55 | bug | C block-scope function declaration `int f(char *);` inside a body fails | — |
 | bug-c-builtin-va-copy | C | 50 | bug | C: __builtin_va_copy not supported (blocks tcc libtcc.c) | — |
 | bug-c-call-inline-function-pointer-struct-member | C | 50 | bug | C: calling an inline function-pointer struct member mis-lowers | — |
@@ -996,7 +998,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
-- [p 55] [C] bug-c-bitfield-promotion-and-layout-cluster
 - [p 55] [P] bug-pascal-member-visibility-unenforced
 - [p 55] [A] bug-pascal-openarray-of-array-param-marshal
 - [p 55] [P] compat-pascal-copy-of-char-literal
@@ -1011,6 +1012,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
+- [p 50] [C] bug-c-int-mod-unsigned-uses-signed-conversion
 - [p 50] [B] bug-crtl-stdint-constant-macros
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [B] feature-fpjson-fpcunit-suite-target
@@ -1020,6 +1022,7 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [C] bug-c-long-long-bitfield-promotion
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
