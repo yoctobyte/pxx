@@ -962,6 +962,13 @@ test-core: $(COMPILER)
 	# legality filtering. Perft exact through depth 3 (no EP/castle before ply 4).
 	./$(COMPILER) test/test_rust_chess_perft.rs /tmp/test_rust_chess_perft26
 	test "$$(/tmp/test_rust_chess_perft26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
+	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
+	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
+	# promotion, underpromotion + check detection. Node counts match the reference perft
+	# through depth 5 from startpos and a promotion-heavy CPW position through depth 3.
+	# Also exercises 5-param internal calls (r8/r9 register spill, REmitParamRegSpill).
+	./$(COMPILER) test/test_rust_chess_perft_full.rs /tmp/test_rust_chess_perft_full26
+	test "$$(/tmp/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483')"
 	# Rust tuple structs — two field-bearing structs, smaller first
 	# (bug-uclass-field-window-stale-base fixed: second struct's field window re-bases)
 	./$(COMPILER) test/test_rust_tuple_struct.rs /tmp/test_rust_tuple26

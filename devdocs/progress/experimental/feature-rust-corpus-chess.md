@@ -108,3 +108,29 @@ pure swallowing/trivia, cheap and high-leverage.
   unblocked rungs continue meanwhile (associated fns/Self, Option,
   intrinsics, statics).
 
+- 2026-07-15 — **FULL-LEGALITY PERFT MILESTONE** (Track R, A+B+C+P held).
+  test/test_rust_chess_perft_full.rs extends the depth-3 port to complete
+  chess rules — en passant, castling (path-attack + emptiness checks),
+  promotion + underpromotion, check filtering with make/unmake. Node counts
+  match the standard reference perft EXACTLY:
+    startpos  1=20 2=400 3=8902 4=197281 5=4865609
+    CPW promo (n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b)  1=24 2=496 3=9483
+  i.e. the movegen enumerates identically to the reference implementation
+  (the "bit-comparable" bar for a chess engine = identical move sets).
+  Move packed into one i64 (from | to<<6 | flags<<12) + castling-bitmask/ep
+  threaded by value stands in for the engine's `Move` struct + ArrayVec<Move,
+  256> — the ticket's sanctioned local-structure replacement. Board stays a
+  signed-i64 mailbox (documented deviation from the engine's u8 encoding).
+  Enabler landed (Track A file, self-resolved under combined assignment):
+  **5th/6th internal-call params were miscompiled.** The Rust frontend's two
+  bespoke param-register spill loops (RParseTopLevelFn, RParseTopLevelImpl)
+  had a `case i of 0..3` that emitted NOTHING for param index 4/5 — so `mov
+  [rbp+off], r8` came out as `48 89 <off32>` (REX+opcode, no modrm), a bad
+  instruction stream that SIGILL'd at the 5th param. Extracted one
+  REmitParamRegSpill helper that computes REX.R for r8/r9; param cap set to 6
+  (register-convention max) with a clear over-limit error. Shared prologue in
+  parser.inc was always correct (Pascal 5-param works) — this was
+  Rust-frontend-only. Regressions green: quick tier, all test_rust_*.rs
+  compile, else_if=20, self-host byte-identical. Next real-source rungs
+  unchanged: Option (stage 2), unity build (stage 3), then perft on the
+  ACTUAL chess.rs sources vs cargo.

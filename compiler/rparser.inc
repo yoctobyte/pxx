@@ -1981,7 +1981,7 @@ end;
   specialization, so there is one signature-parsing implementation, not two. }
 function RRegisterFnSignatureAt(i: Integer): Integer;
 var j, depth, nparams, procIdx, k: Integer; name: AnsiString;
-    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
+    pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
     retType: TTypeKind;
 begin
   name := GetTokenStr(i + 1);
@@ -2001,7 +2001,7 @@ begin
   while Tokens[j].Kind <> tkRParen do
   begin
     if Tokens[j].Kind = tkMut then Inc(j);
-    if nparams >= 4 then Error('Rust: too many parameters (skeleton limit is 4)');
+    if nparams >= 6 then Error('Rust: too many parameters (register-convention limit is 6)');
     if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + name);
     pnames[nparams] := GetTokenStr(j); Inc(j);
     if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
@@ -2099,7 +2099,7 @@ end;
 procedure RRegisterImpls;
 var i, j, ci, nparams, procIdx, selfBase: Integer;
     typeName, traitName, methodName, fullName: AnsiString;
-    pnamesFull: array[0..3] of AnsiString; ptypesFull: array[0..3] of TTypeKind;
+    pnamesFull: array[0..7] of AnsiString; ptypesFull: array[0..7] of TTypeKind;
     retType: TTypeKind; hasTrait: Boolean;
 begin
   i := 0;
@@ -2158,7 +2158,7 @@ begin
         while Tokens[j].Kind <> tkRParen do
         begin
           if Tokens[j].Kind = tkMut then Inc(j);
-          if nparams + selfBase >= 4 then Error('Rust: too many parameters in ' + methodName + ' (skeleton limit is 4 incl. self)');
+          if nparams + selfBase >= 6 then Error('Rust: too many parameters in ' + methodName + ' (limit is 6 incl. self)');
           if Tokens[j].Kind <> tkIdent then Error('Rust: expected parameter name in ' + methodName);
           pnamesFull[nparams + selfBase] := GetTokenStr(j); Inc(j);
           if Tokens[j].Kind <> tkColon then Error('Rust: expected : in parameter list');
@@ -2357,6 +2357,36 @@ begin
   Expect(tkEnd, '}');
 end;
 
+{ Spill the incoming integer param registers (rdi,rsi,rdx,rcx,r8,r9) into each
+  param's frame slot, `count` params in index order. The internal call
+  convention passes up to 6 integer/pointer args in registers; params 5 and 6
+  (index 4,5) live in r8/r9 and need REX.R, so the REX prefix is computed per
+  register rather than the old rdi..rcx-only `case`. sz<8 stores the low dword
+  (matching the historic rdi..rcx behaviour); >6 params are rejected at parse
+  time so no stack-arg read is needed here. }
+procedure REmitParamRegSpill(procIdx, count: Integer);
+var i, idx, rex: Integer;
+begin
+  for i := 0 to count - 1 do
+  begin
+    idx := Procs[procIdx].Params[i].SymIdx;
+    rex := 0;
+    if ParamSize(idx) = 8 then rex := rex or $08;   { REX.W }
+    if i >= 4 then rex := rex or $04;               { REX.R — r8/r9 }
+    if rex <> 0 then EmitB($40 or rex);
+    EmitB($89);
+    case i of
+      0: EmitB($BD);   { rdi -> [rbp+disp32] }
+      1: EmitB($B5);   { rsi }
+      2: EmitB($95);   { rdx }
+      3: EmitB($8D);   { rcx }
+      4: EmitB($85);   { r8  (with REX.R) }
+      5: EmitB($8D);   { r9  (with REX.R) }
+    end;
+    EmitI32(Syms[idx].Offset);
+  end;
+end;
+
 { `impl [Trait for] Type { fn method(&self, ...) -> RetType { .. } ... }` —
   methods were already RegisterProc'd (mangled "Type::method") by
   RRegisterImpls; this compiles each body, same shape as RParseTopLevelFn
@@ -2364,7 +2394,7 @@ end;
 procedure RParseTopLevelImpl;
 var typeName, traitName, fname, pname, fullName: AnsiString;
     ci, procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode, selfBase: Integer;
-    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
+    pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
 begin
   Next; { impl }
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkIdent) and (GetTokenStr(TokPos) = 'for') then
@@ -2402,7 +2432,7 @@ begin
     while CurTok.Kind <> tkRParen do
     begin
       if CurTok.Kind = tkMut then Next;
-      if nparams + selfBase >= 4 then Error('Rust: too many parameters (skeleton limit is 4 incl. self)');
+      if nparams + selfBase >= 6 then Error('Rust: too many parameters (limit is 6 incl. self)');
       if CurTok.Kind <> tkIdent then Error('Rust: expected parameter name');
       pname := CurTok.SVal; Next;
       Expect(tkColon, ':');
@@ -2442,19 +2472,7 @@ begin
 
     patchPos := EmitProcPrologue;
     Procs[procIdx].FramePatch := patchPos;
-    for i := 0 to nparams + selfBase - 1 do
-    begin
-      idx := Procs[procIdx].Params[i].SymIdx;
-      if ParamSize(idx) = 8 then EmitB($48);
-      EmitB($89);
-      case i of
-        0: EmitB($BD);
-        1: EmitB($B5);
-        2: EmitB($95);
-        3: EmitB($8D);
-      end;
-      EmitI32(Syms[idx].Offset);
-    end;
+    REmitParamRegSpill(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
     bodyNode := RParseBlock;
@@ -2474,8 +2492,8 @@ end;
 procedure RParseTopLevelFn;
 var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
-    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
-    precids: array[0..3] of Integer;
+    pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
+    precids: array[0..7] of Integer;
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Rust: expected function name');
@@ -2552,19 +2570,7 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    if ParamSize(idx) = 8 then EmitB($48);
-    EmitB($89);
-    case i of
-      0: EmitB($BD);
-      1: EmitB($B5);
-      2: EmitB($95);
-      3: EmitB($8D);
-    end;
-    EmitI32(Syms[idx].Offset);
-  end;
+  REmitParamRegSpill(procIdx, nparams);
 
   Expect(tkBegin, '{');
   bodyNode := RParseBlock;
