@@ -1482,7 +1482,7 @@ function RecordHasManagedFieldsDepth(recId, depth: Integer): Boolean;
   by value — which a valid C program can't produce, but a struct-tag
   redefinition bug once did — would otherwise recurse without bound and crash
   the compiler. Past the cap, treat as unmanaged rather than fault. }
-var ci, base, cnt, i: Integer;
+var ci, base, cnt, i, fci: Integer;
 begin
   Result := False;
   if depth > 64 then Exit;
@@ -1499,6 +1499,14 @@ begin
       retained on record copy, and released on finalization. }
     if UFldIsArray[base + i] and (UFldArrLen[base + i] = -1) then
       begin Result := True; Exit; end;
+    { A COM/ARC interface field is a refcounted handle (managed exactly like an
+      ansistring). CORBA interface fields are plain pointers (unmanaged). }
+    if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] >= REC_UCLASS_BASE) then
+    begin
+      fci := UFldRec_[base + i] - REC_UCLASS_BASE;
+      if (fci >= 0) and (fci < UClsCount) and UClsIsInterface[fci] and UClsIsComInterface[fci] then
+        begin Result := True; Exit; end;
+    end;
     if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
        RecordHasManagedFieldsDepth(UFldRec_[base + i], depth + 1) then
       begin Result := True; Exit; end;

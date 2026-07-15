@@ -1487,6 +1487,8 @@ begin
           PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
         3: { Record }
           PXXRecordRetain(itemAddr, subDesc);
+        4: { COM interface — typeRef is the interface id }
+          PXXIntfAddRef(itemAddr, typeRef);
       end;
       j := j + 1;
     end;
@@ -1543,6 +1545,8 @@ begin
           end;
         3: { Record }
           PXXRecordRelease(itemAddr, subDesc);
+        4: { COM interface — typeRef is the interface id }
+          PXXIntfRelease(itemAddr, typeRef);
       end;
       j := j + 1;
     end;

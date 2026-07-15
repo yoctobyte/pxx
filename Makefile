@@ -1889,6 +1889,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
 	./$(COMPILER) test/test_interface_com_value_param.pas /tmp/test_interface_com_value_param26
 	test "$$(/tmp/test_interface_com_value_param26)" = "$$(printf 'go\nafter DoStash freed=0\ngo\nafter nil freed=1')"
+	./$(COMPILER) test/test_interface_com_record_field.pas /tmp/test_interface_com_record_field26
+	test "$$(/tmp/test_interface_com_record_field26)" = "$$(printf 'go\nafter UseOne freed=1\ngo\nafter Copied freed=2')"
 	./$(COMPILER) test/test_tinterfacedobject_builtin.pas /tmp/test_tio_builtin26
 	test "$$(/tmp/test_tio_builtin26)" = "$$(printf 'go\ndestroyed=1\ndestroyed=2\nsurvived scope exit')"
 	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_uint64_ops26
