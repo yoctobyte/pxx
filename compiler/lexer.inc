@@ -663,6 +663,28 @@ begin
   Result := v;
 end;
 
+procedure EnableStrictFpc;
+{ The `--strict-fpc` / {$STRICT_FPC ON} umbrella: the FPC-parity behaviour flags
+  that are proven to compile the real FPC corpora (fgl, Synapse, fpjson 203/203,
+  the conformance pass-set). All OPT-IN — the PXX dialect stays deliberately lax
+  by default (override/overload freely is a first-class feature: platform
+  softfloat-in-builtin, the RTL, and user code all override at will). --strict-fpc
+  makes pxx DIVERGE to FPC's stricter choices; --mimic-fpc is this plus declaring
+  FPC defined (+ {$I+}). Does NOT change default name resolution.
+
+  StrictOverload is DELIBERATELY EXCLUDED: our own RTL uses undirectived overloads
+  by design (the lax dialect), so requiring the `overload` directive would fail to
+  compile every RTL-using program (fpjson/Synapse) — and directive boilerplate
+  across the RTL is exactly what we refuse. It stays a standalone experimental
+  flag (--strict-overload) for directive-clean code. See
+  bug-pascal-unqualified-call-binds-builtin-over-used-unit. }
+begin
+  StrictOperator   := True;
+  StrictCase       := True;
+  StrictVisibility := True;
+  RequireForward   := True;
+end;
+
 procedure PasInitDefines;
 var name: AnsiString;
 begin
@@ -1486,6 +1508,19 @@ begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
+    end
+    else if CaseEqual(command, 'strict_fpc') then
+    begin
+      { {$STRICT_FPC ON}: the umbrella — all FPC-parity behaviour flags at once
+        (the --strict-fpc flag pinned in source). OFF clears them again. }
+      if CaseEqual(name, 'on') then EnableStrictFpc
+      else if CaseEqual(name, 'off') then
+      begin
+        { clears the umbrella set only; StrictOverload is independent (standalone) }
+        StrictOperator := False; StrictCase := False;
+        StrictVisibility := False; RequireForward := False;
+      end
+      else Error('strict_fpc requires on or off');
     end
     else if CaseEqual(command, 'overflowchecks') then
     begin

@@ -821,6 +821,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_class_const_visibility_strict_fail.pas /tmp/test_ccvsf_lax26 > /tmp/test_ccvsf_lax.log 2>&1
 	! ./$(COMPILER) --strict-visibility test/test_class_const_visibility_strict_fail.pas /tmp/test_ccvsf26 > /tmp/test_ccvsf.log 2>&1
 	grep -q "cannot access strict private" /tmp/test_ccvsf.log
+	# --strict-fpc umbrella: bundles case/operator/visibility/require-forward (NOT
+	# StrictOverload), so an ordinary RTL-using program still compiles under it...
+	./$(COMPILER) --strict-fpc -Fulib/rtl test/lib_strict_fpc.pas /tmp/lib_strict_fpc26
+	test "$$(/tmp/lib_strict_fpc26)" = "42 OK"
+	# ...and it activates its member flags (StrictCase rejects a duplicate label
+	# that the lax default accepts). feature-strict-fpc-umbrella.
+	./$(COMPILER) test/strict_fpc_case_fail.pas /tmp/strict_fpc_case_lax26 > /tmp/strict_fpc_case_lax.log 2>&1
+	! ./$(COMPILER) --strict-fpc test/strict_fpc_case_fail.pas /tmp/strict_fpc_case26 > /tmp/strict_fpc_case.log 2>&1
+	grep -q "duplicate or overlapping case label" /tmp/strict_fpc_case.log
 	! ./$(COMPILER) test/test_record_self_field_fail.pas /tmp/test_rsf26 > /tmp/test_rsf.log 2>&1
 	grep -q "record field cannot be of the enclosing record type" /tmp/test_rsf.log
 	! ./$(COMPILER) test/test_record_class_var_fail.pas /tmp/test_rcv26 > /tmp/test_rcv.log 2>&1

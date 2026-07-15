@@ -455,6 +455,16 @@ begin
       StrictVisibility := True;
       Inc(i);
     end
+    else if option = '--strict-fpc' then
+    begin
+      { Umbrella: every FPC-parity behaviour flag at once (case, operator,
+        visibility, overload, require-forward). Opt-in; the lax dialect is
+        unchanged by default (override/overload freely stays first-class —
+        platform softfloat-in-builtin, RTL, user code all override at will).
+        --mimic-fpc = this + declaring FPC defined. }
+      EnableStrictFpc;
+      Inc(i);
+    end
     else if option = '--threadsafe' then
     begin
       ThreadSafeMode := True;
@@ -463,16 +473,18 @@ begin
     else if option = '--mimic-fpc' then
     begin
       MimicFpc := True;
-      { mimic == "behave like FPC", and FPC is strict about routine ordering. }
-      RequireForward := True;
-      { ...and FPC defaults {$I+} ON (the pxx-lax default stays quiet pending
-        the user's dialect call — feature-pascal-io-checks-i-plus). }
+      { mimic == "behave like FPC" == the --strict-fpc umbrella (case / operator /
+        visibility / require-forward — all validated green across fgl, Synapse,
+        fpjson 203/203 and the conformance pass-set)... }
+      EnableStrictFpc;
+      { ...PLUS what makes pxx claim to BE FPC, which --strict-fpc alone does not:
+        FPC defaults {$I+} ON (the pxx-lax default stays quiet pending the user's
+        dialect call — feature-pascal-io-checks-i-plus), and the curated FPC define
+        set installed at lex time by {$MIMIC FPC}/PasApplyMimicDefines.
+        NOT included (in either --strict-fpc or here): StrictOverload — our RTL
+        uses undirectived overloads by design, so it would fail to compile the
+        very corpora --mimic-fpc exists to build; see EnableStrictFpc. }
       IChecksVal := True;
-      { ...and FPC enforces member visibility. Promoted 2026-07-15 after the
-        flag stayed green ON across the FPC-valid corpora (fgl, Synapse,
-        fpjson 203/203, conformance pass-set 328/328) —
-        bug-pascal-member-visibility-unenforced. }
-      StrictVisibility := True;
       Inc(i);
     end
     else if (option = '--strict') or (option = '--require-forward') then

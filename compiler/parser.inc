@@ -21269,8 +21269,15 @@ begin
       procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
       if procIdx < 0 then
       begin
-        if StrictOverload and (FindProc(name) >= 0) then
+        if StrictOverload and (FindProc(name) >= 0) and (CurrentUnitIdx < 0) then
         begin
+          { --strict-overload polices only the MAIN program's own declarations, not
+            the units it pulls: builtin, the RTL, and libraries are written in the
+            lax PXX dialect (override/overload freely — a first-class feature) and
+            must not be held to FPC's `overload`-directive rule, or every RTL-using
+            program (fpjson, Synapse) would fail to compile and the fix would be
+            compatibility boilerplate we deliberately avoid. This flags an
+            un-directived overload / a System-name shadow in YOUR code. }
           if not declOverload then Error('overloaded routine requires overload directive');
           if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
         end;
