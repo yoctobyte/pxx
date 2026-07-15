@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -108,7 +108,6 @@ _none_
 | feature-promo-launch-plan | A | 45 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | decide-1-0-scope-promise |
 | feature-pxx-basic | A | 60 | feature | feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe) | — |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-range-checks-nd-bases | A | 25 | feature | {$R+} follow-up: N-D static-array bases — per-dimension index checks (a[i,j] checks i and j against their own lo..hi) | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
@@ -196,7 +195,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (744)
+## done (745)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -801,6 +800,7 @@ _none_
 | feature-procedural-types | A | 50 | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | A | 50 | feature | Wire `progress.sh check` into a make target | — |
 | feature-progress-transition-helpers | A | 50 | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-range-checks-nd-bases | A | 25 | feature | {$R+} follow-up: N-D static-array bases — per-dimension index checks (a[i,j] checks i and j against their own lo..hi) | — |
 | feature-real-cross-target-consistency | A | 50 | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-relative-path-units | A | 50 | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-release-packaging | B | 50 | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
@@ -1063,7 +1063,6 @@ _none_
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
-- [p 25] [A] feature-range-checks-nd-bases
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] bug-pascal-member-visibility-unenforced
 - [p 15] [P] feature-pascal-corpus-expansion

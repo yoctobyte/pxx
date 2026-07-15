@@ -15,3 +15,6 @@ prio: 25
   subscript at its parse-composition site (under StmtRChecks) with
   IRWrapChkBounds-equivalent AST calls — dims live in SymArrDimLo/Span and
   UFldArrDimLo/Span. Oracle-probe FPC first per the arc's standing lesson.
+
+## Log
+- 2026-07-15 — resolved, commit e40b6026.
