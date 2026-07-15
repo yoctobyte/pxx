@@ -644,6 +644,32 @@ begin
   end
   else if op = Ord(tkStar) then
   begin
+    if qchk and qchkUns then
+    begin
+      { {$Q+} unsigned checked mul: the 128-bit product's high 64 bits are
+        non-zero iff BOTH hi words non-zero, either cross-product's high
+        half non-zero, or the result-hi sum carries out. Verdict built in
+        t6 BEFORE the product (operands still intact); signed checked mul
+        stays deferred on the 32-bit pairs. }
+      rv32_sltu(reg_t2, reg_zero, reg_t1);   { a_hi <> 0 }
+      rv32_sltu(reg_t3, reg_zero, reg_a1);   { b_hi <> 0 }
+      rv32_and(reg_t6, reg_t2, reg_t3);
+      rv32_mulhu(reg_t2, reg_t0, reg_a1);    { high(Alo*Bhi) }
+      rv32_sltu(reg_t2, reg_zero, reg_t2);
+      rv32_or(reg_t6, reg_t6, reg_t2);
+      rv32_mulhu(reg_t2, reg_t1, reg_a0);    { high(Ahi*Blo) }
+      rv32_sltu(reg_t2, reg_zero, reg_t2);
+      rv32_or(reg_t6, reg_t6, reg_t2);
+      rv32_mulhu(reg_t2, reg_t0, reg_a0);    { m = high(Alo*Blo) }
+      rv32_mul(reg_t3, reg_t0, reg_a1);      { x = low(Alo*Bhi) }
+      rv32_add(reg_t4, reg_t2, reg_t3);      { m + x }
+      rv32_sltu(reg_t5, reg_t4, reg_t2);     { carry1 }
+      rv32_or(reg_t6, reg_t6, reg_t5);
+      rv32_mul(reg_t3, reg_t1, reg_a0);      { y = low(Ahi*Blo) }
+      rv32_add(reg_t4, reg_t4, reg_t3);      { + y }
+      rv32_sltu(reg_t5, reg_t4, reg_t3);     { carry2 }
+      rv32_or(reg_t6, reg_t6, reg_t5);
+    end;
     { low 64 of (t1:t0) * (a1:a0) }
     rv32_mul(reg_t2, reg_t0, reg_a0);    { lo = low(Alo*Blo) }
     rv32_mulhu(reg_t3, reg_t0, reg_a0);  { high(Alo*Blo) }
@@ -652,6 +678,11 @@ begin
     rv32_add(reg_a1, reg_t3, reg_t4);
     rv32_add(reg_a1, reg_a1, reg_t5);
     rv32_addi(reg_a0, reg_t2, 0);
+    if qchk and qchkUns then
+    begin
+      rv32_addi(reg_t3, reg_t6, 0);
+      EmitOvfTrapRISCV32;
+    end;
   end
   else if op = Ord(tkAnd) then
   begin
@@ -1577,7 +1608,7 @@ begin
         begin
           EmitBinop64RISCV32(left, right, op,
             not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)),
-            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus))),
+            (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
         end;

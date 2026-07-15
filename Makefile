@@ -3414,10 +3414,10 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas /tmp/test_riscv32_u64d
 	./$(COMPILER) test/test_u64_to_double.pas /tmp/test_riscv32_u64d_x64
 	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_u64d)" = "$$(/tmp/test_riscv32_u64d_x64)"
-	# {$$Q+} pair add/sub raise catchable EIntOverflow; checked MUL not yet
-	# ported to the 32-bit pairs (feature-overflow-checks-cross-and-intrinsics)
+	# {$$Q+} add/sub/unsigned-mul raise catchable EIntOverflow (riscv32 full for
+	# the unsigned rows; signed checked MUL stays deferred on 32-bit pairs)
 	./$(COMPILER) --target=riscv32 test/test_overflow_checks_qplus.pas /tmp/test_riscv32_qplus
-	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_qplus)" = "$$(printf 'no-raise-mul 18446744073709551613\nwrapped 0\ncaught=3')"
+	test "$$(tools/run_target.sh riscv32 /tmp/test_riscv32_qplus)" = "$$(printf 'wrapped 0\ncaught=4')"
 	./$(COMPILER) --target=riscv32 test/ccross_entry.c /tmp/test_riscv32_centry
 	tools/run_target.sh riscv32 /tmp/test_riscv32_centry; test "$$?" = "42"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c /tmp/test_riscv32_cargs
