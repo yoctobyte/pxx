@@ -18,27 +18,11 @@
 
 procedure EmitLayoutRTTI; forward;
 
-function FieldIsComInterface(fi: Integer): Boolean;
-{ A COM/ARC interface field (tyRecord whose rec is a COM interface): a
-  refcounted handle, so it is a managed member — retained on record copy,
-  released on record finalization. A CORBA interface field is NOT (plain pointer,
-  no lifetime coupling). }
-var fci: Integer;
-begin
-  FieldIsComInterface := False;
-  if UFldTk[fi] <> Ord(tyRecord) then Exit;
-  if UFldRec_[fi] < REC_UCLASS_BASE then Exit;
-  fci := UFldRec_[fi] - REC_UCLASS_BASE;
-  if (fci >= 0) and (fci < UClsCount) and UClsIsInterface[fci] and UClsIsComInterface[fci] then
-    FieldIsComInterface := True;
-end;
-
 function FieldIsManaged(fi: Integer): Boolean;
 begin
   FieldIsManaged := False;
   if UFldTk[fi] = Ord(tyAnsiString) then FieldIsManaged := True
   else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then FieldIsManaged := True
-  else if FieldIsComInterface(fi) then FieldIsManaged := True
   else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then FieldIsManaged := True;
 end;
 
@@ -561,8 +545,6 @@ begin
             mKind := 1
           else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
             mKind := 2
-          else if FieldIsComInterface(fi) then
-            mKind := 4
           else
             mKind := 3;
           PatchDataI32(mHdr + 4, mKind);
@@ -625,11 +607,7 @@ begin
             subCi := UFldRec_[fi] - REC_UCLASS_BASE;
             if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
               typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
-          end
-          else if mKind = 4 then
-            { COM interface member: typeRef carries the interface id (its UCls
-              index), the runtime key PXXIntfRelease/PXXIntfAddRef dispatch on. }
-            typeRef := UFldRec_[fi] - REC_UCLASS_BASE;
+          end;
           PatchDataI32(mHdr + 12, typeRef);
 
           Inc(k);
