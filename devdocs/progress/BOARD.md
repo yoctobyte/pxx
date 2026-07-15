@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (101)
+## backlog (100)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | doc-licensing-split-mpl-zlib | D | 45 | doc | Document the licensing split (MPL 2.0 compiler / Zlib RTL) | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
-| docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
 | feature-assembler-first-class-citizen | A | 53 | feature | Assembler as a first-class citizen (umbrella) | — |
@@ -192,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (768)
+## done (769)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -595,6 +594,7 @@ _none_
 | chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | compat-pascal-copy-of-char-literal | P | 55 | compat | Copy('a', i, n) — FPC promotes a char to a string, pxx rejects the program | — |
+| docs-fpc-compatibility-overstates-subset | D | 30 | docs | Track D: fpc-compatibility.md understates the language aim ("useful subset") | — |
 | docs-reference-cli-modes-directives | D | 40 | docs | Reference docs incomplete: cli.md lists ~26 of the compiler's 37 --flags, there is no compiler-modes/strictness page (lax -> --strict -> granular -> --mimic-fpc), and no {$...} directive reference — three linked reference gaps | — |
 | docs-user-documentation-site-structure | D | 50 | docs | User documentation site structure and first content pass | — |
 | feature-aarch64-asm-emitter | A | 50 | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
@@ -1074,7 +1074,6 @@ _none_
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [A] chore-sqlite-static-capacity-bumps
-- [p 30] [D] docs-fpc-compatibility-overstates-subset
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear

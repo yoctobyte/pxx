@@ -45,3 +45,6 @@ carve-outs correctly — only the intro's language framing needs fixing.
 The website (Track W) already leads its FPC-compatibility page with the corrected
 framing, but it still renders this doc verbatim below, so the stale sentence is
 publicly visible until this is fixed.
+
+## Log
+- 2026-07-15 — resolved, commit 67c37ed2.
