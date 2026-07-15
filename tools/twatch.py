@@ -181,13 +181,36 @@ class Clone:
         """pull --rebase, but never leave a half-applied rebase behind: on any
         conflict/failure, `git rebase --abort` so the daemon can't wedge in a
         UU state (observed 2026-07-11: committed generated html conflicted and
-        the publish loop span forever). Re-raises so the caller backs off."""
+        the publish loop span forever). Returns True on a clean rebase, False
+        on conflict/failure (already aborted) — the caller decides how to
+        recover; it must NOT strand the local commit (see _drop_to_origin)."""
         try:
             sh(["git", "pull", "--rebase", "--quiet", "origin", self.branch],
                cwd=self.path)
+            return True
         except RuntimeError:
             sh(["git", "rebase", "--abort"], cwd=self.path, check=False)
-            raise
+            return False
+
+    def _drop_to_origin(self):
+        """A tstate publish couldn't rebase onto origin — typically because a
+        co-edited data file (bench.tsv, borg.json) was reformatted by a HUMAN
+        commit and our append conflicts line-for-line. Per Track T's
+        latest-only model a stale verdict is worthless, so DROP this cycle's
+        local tstate commit(s) rather than strand them: `reset --hard` to the
+        fresh origin tip. The next cycle recomputes tstate against origin's
+        current format and publishes cleanly.
+
+        This is the guard against the 2026-07-15 incident: the old code aborted
+        the rebase but LEFT the commit, so every following cycle piled another
+        unpushable tstate commit on top (75 stranded, master 94 behind) and
+        publishing stalled for ~11h. reset-to-origin also auto-drains any such
+        pre-existing pile on the very next publish."""
+        self.fetch()
+        sh(["git", "reset", "--hard", "origin/%s" % self.branch], cwd=self.path)
+        print("twatch: publish conflicted with origin — dropped this cycle's "
+              "tstate commit; will republish against fresh origin next cycle",
+              flush=True)
 
     def publish(self, message, paths=None):
         """Commit ONLY the given paths (default: tstate) onto the branch tip
@@ -195,7 +218,11 @@ class Clone:
         Only tracked, non-ignored files under `paths` are committed — the
         generated tstate/*.html dashboard is gitignored on purpose (every
         writer would otherwise collide on it), so this publishes just the
-        source-of-truth data (bench.tsv, conformance.tsv, runs/regressions)."""
+        source-of-truth data (bench.tsv, conformance.tsv, runs/regressions).
+
+        A conflict is never fatal and never strands: on any failed rebase the
+        local commit is dropped (latest-only), so a busy origin can at worst
+        cost this cycle's publish, not wedge the daemon."""
         paths = list(paths or [TSTATE_REL])
         sh(["git", "checkout", "--quiet", self.branch], cwd=self.path)
         sh(["git", "add", "--"] + paths, cwd=self.path)
@@ -203,15 +230,21 @@ class Clone:
             return
         sh(["git", "commit", "--quiet", "-m", message, "--"] + paths,
            cwd=self.path)
-        self._pull_rebase()
+        if not self._pull_rebase():
+            self._drop_to_origin()
+            return
         for attempt in range(5):
             try:
                 sh(["git", "push", "--quiet", "origin", self.branch], cwd=self.path)
                 return
             except RuntimeError:
                 time.sleep(2 + attempt * 3)
-                self._pull_rebase()
-        raise RuntimeError("twatch: push kept failing after retries")
+                if not self._pull_rebase():
+                    self._drop_to_origin()
+                    return
+        # push kept being rejected without a rebase conflict (origin racing us
+        # every attempt): drop rather than raise, so the daemon loop survives.
+        self._drop_to_origin()
 
 
 # ---------------------------------------------------------------- testing --

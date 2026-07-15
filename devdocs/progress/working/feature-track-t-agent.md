@@ -90,3 +90,21 @@ replacing the dev-side quick gate.
     were resolved by dev tracks from the tickets alone — face-2 gate's
     "repro quality" criterion met twice.
   - Open: LLM enrichment of stub tickets (tier 2) — config key reserved.
+- **2026-07-15 (opus-trackT):**
+  - **Publish-jam incident + fix.** Overnight the watcher stalled ~11h: a
+    tstate `bench.tsv` append (1ecd5176) couldn't rebase onto origin because
+    HUMAN commits (421bdfe7 portable-mandelbrot, c9d1c31d fpc-dialect) had
+    reformatted the SAME file. `Clone.publish` aborted the rebase but LEFT
+    the local commit, so every following cycle piled another unpushable
+    tstate commit — 75 stranded, watcher clone 94 behind origin, nothing
+    published since 07-14 18:46. No CODE lost (all commits were ancestors of
+    origin); only tstate publishing stalled. Cleared the pile by resetting
+    ~/trackt-watch to origin (latest-only: stale verdicts are worthless).
+  - **Root fix (twatch.py):** `_pull_rebase` now returns a bool instead of
+    re-raising; new `_drop_to_origin` resets the clone to the fresh origin
+    tip on any failed rebase/push, so a conflicted publish DROPS this cycle
+    (self-heals next cycle) instead of stranding a growing pile. Also drains
+    a pre-existing pile on the next conflicting publish. Tested against a
+    scratch bare repo reproducing the exact human-reformat-vs-watcher-append
+    conflict (scratchpad/test_publish_conflict.py): conflict → clean at
+    origin, human reformat intact, next cycle republishes cleanly.
