@@ -468,6 +468,11 @@ begin
       { ...and FPC defaults {$I+} ON (the pxx-lax default stays quiet pending
         the user's dialect call — feature-pascal-io-checks-i-plus). }
       IChecksVal := True;
+      { ...and FPC enforces member visibility. Promoted 2026-07-15 after the
+        flag stayed green ON across the FPC-valid corpora (fgl, Synapse,
+        fpjson 203/203, conformance pass-set 328/328) —
+        bug-pascal-member-visibility-unenforced. }
+      StrictVisibility := True;
       Inc(i);
     end
     else if (option = '--strict') or (option = '--require-forward') then

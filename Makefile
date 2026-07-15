@@ -803,11 +803,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_member_visibility.pas /tmp/test_member_visibility26
-	test "$$(/tmp/test_member_visibility26)" = "$$(printf '7\n30\n3')"
+	test "$$(/tmp/test_member_visibility26)" = "$$(printf '7\n30\n3\n1')"
 	./$(COMPILER) --strict-visibility test/test_member_visibility.pas /tmp/test_member_visibility_strict26
-	test "$$(/tmp/test_member_visibility_strict26)" = "$$(printf '7\n30\n3')"
+	test "$$(/tmp/test_member_visibility_strict26)" = "$$(printf '7\n30\n3\n1')"
 	! ./$(COMPILER) --strict-visibility test/test_member_visibility_strict_fail.pas /tmp/test_mvsf26 > /tmp/test_mvsf.log 2>&1
 	grep -q "cannot access strict private" /tmp/test_mvsf.log
+	! ./$(COMPILER) --strict-visibility test/test_method_visibility_strict_fail.pas /tmp/test_methvsf26 > /tmp/test_methvsf.log 2>&1
+	grep -q "cannot access strict private" /tmp/test_methvsf.log
 	! ./$(COMPILER) test/test_record_self_field_fail.pas /tmp/test_rsf26 > /tmp/test_rsf.log 2>&1
 	grep -q "record field cannot be of the enclosing record type" /tmp/test_rsf.log
 	! ./$(COMPILER) test/test_record_class_var_fail.pas /tmp/test_rcv26 > /tmp/test_rcv.log 2>&1

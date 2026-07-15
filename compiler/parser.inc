@@ -912,6 +912,17 @@ begin
   if fi >= 0 then EnforceMemberVis(FieldDeclClass(fi), UFldVis[fi], fieldName);
 end;
 
+{ Enforce access control for a METHOD call at a committed dispatch site (the
+  resolved UMth index). No-op unless StrictVisibility. Call it only where the
+  method call is actually being built, never on a speculative probe — a probe
+  that would fall through to another meaning must not error. }
+procedure EnforceMethVis(mIdx: Integer; const methName: AnsiString);
+begin
+  if not StrictVisibility then Exit;
+  if mIdx < 0 then Exit;
+  EnforceMemberVis(MethDeclClass(mIdx), UMthVis[mIdx], methName);
+end;
+
 function FindClassVar(ci: Integer; const name: AnsiString): Integer;
 { Class-variable lookup by (class ci, name), walking up the parent chain so a
   subclass sees an inherited `class var`. Returns the backing global var sym idx,
@@ -2895,6 +2906,7 @@ end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
+  viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi: Integer;
   cpIsAssign: Boolean;
   cpName: AnsiString;
@@ -3073,6 +3085,7 @@ begin
         mmi := FindUMethOverloadAhead(selfClassCi, fieldName, CountCallArgsAhead);
         if mmi >= 0 then
         begin
+          EnforceMethVis(mmi, fieldName);
           mpi := UMthProc_[mmi];
           mselfArg := AllocNode(AN_ARG);
           ASTLeft[mselfArg] := withNode;
@@ -3623,6 +3636,7 @@ begin
 
             Error('class method not found: ' + fieldName);
           end;
+          EnforceMethVis(mmi, fieldName);
           mpi := UMthProc_[mmi];
 
           if UMthIsCtor[mmi] then
@@ -4070,6 +4084,7 @@ begin
         access overrides it below with the backing field's span. }
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
+      viaProp := False;
 
       { IMPLICIT DEREF: `p.field` where p is a pointer to a RECORD means `p^.field`
         (FPC/Delphi). Without this the AN_FIELD was built straight over the pointer,
@@ -4154,6 +4169,7 @@ begin
         if mmi < 0 then mmi := FindUMeth(ci, fieldName);
         if (mmi >= 0) and UMthIsCtor[mmi] then
         begin
+          EnforceMethVis(mmi, fieldName);
           Next; { consume the constructor name }
           node := BuildMetaclassNew(node, ci, mmi);
           recName := REC_UCLASS_BASE + ci;
@@ -4264,6 +4280,7 @@ begin
               AppendChar(fieldName, TokChars[UPropWriteFOff[pri] + i]);
             propFOff := UPropWriteFOff[pri];
             propFLen := UPropWriteFLen[pri];
+            viaProp := True;
           end
           else if UPropWriteMLen[pri] > 0 then
           begin
@@ -4323,6 +4340,7 @@ begin
               AppendChar(fieldName, TokChars[UPropReadFOff[pri] + i]);
             propFOff := UPropReadFOff[pri];
             propFLen := UPropReadFLen[pri];
+            viaProp := True;
           end
           else if UPropReadMLen[pri] > 0 then
           begin
@@ -4476,6 +4494,7 @@ begin
 
       if mmi >= 0 then
       begin
+        EnforceMethVis(mmi, fieldName);
         mpi := UMthProc_[mmi];
         Next; { consume method name }
         if (mci >= 0) and UClsIsInterface[mci] then
@@ -4659,7 +4678,11 @@ begin
       if (tk = tyPointer) and (recName = REC_NONE) then
         Error('"' + fieldName + '": a pointer has no members (dereference it with ^, or the pointee type is unknown here)');
 
-      EnforceFieldVis(recName, fieldName);   { --strict-visibility member access control }
+      { Property-backed access: FPC checks the PROPERTY's visibility, and the
+        backing field is read on the declaring class's behalf — a private FField
+        behind a public Count property must stay accessible (test_tfplist_b259). }
+      if not viaProp then
+        EnforceFieldVis(recName, fieldName);   { --strict-visibility member access control }
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := propFOff;
@@ -5456,6 +5479,7 @@ begin
     matching THIS call's arg count (CurTok = '(' or the follower) }
   mmi := FindUMethOverloadAhead(parentCi, name, CountCallArgsAhead);
   if mmi < 0 then Error('inherited method not found: ' + name);
+  EnforceMethVis(mmi, name);
   mpi := UMthProc_[mmi];
 
   node := AllocNode(AN_CALL); { Deliberately static: call the ancestor body. }
@@ -5716,6 +5740,7 @@ begin
       if ci >= 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
       if mmi >= 0 then
       begin
+        EnforceMethVis(mmi, fieldName);
         mpi := UMthProc_[mmi];
         if (ci >= 0) and UClsIsInterface[ci] then
         begin
@@ -6952,6 +6977,7 @@ begin
             if FindUProp(mci, fieldName) < 0 then
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
           end;
+          if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
           begin
             { `(iface-expr).M(args)` — dispatch through the IMT slot, exactly like
@@ -8285,6 +8311,7 @@ begin
         smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
         if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
         begin
+          EnforceMethVis(smmiS, name);
           smSelfNode := GenMakeImplicitMetaclass;
           if smSelfNode >= 0 then
           begin
@@ -9066,6 +9093,7 @@ begin
             if i < 0 then i := FindUMeth(mcCtorCi, mcCtorNm);
             if i >= 0 then
             begin
+              EnforceMethVis(i, mcCtorNm);
               Next; { consume the constructor name }
               node := BuildMetaclassNew(node, mcCtorCi, i);
               CurASTNode := node;
@@ -9882,6 +9910,7 @@ begin
           mmi := FindUMethOverloadAhead(ci, name, CountCallArgsAhead);
           if mmi >= 0 then
           begin
+            EnforceMethVis(mmi, name);
             mpi := UMthProc_[mmi];
             Next; { consume method name }
             smSelfIdx := Procs[CurProc].Params[0].SymIdx;
@@ -14595,6 +14624,7 @@ begin
         smmiS := FindUMethOverloadAhead(CurMethClass - REC_UCLASS_BASE, name, CountCallArgsAhead);
         if (smmiS >= 0) and UMthIsStatic[smmiS] and (UMthProc_[smmiS] >= 0) then
         begin
+          EnforceMethVis(smmiS, name);
           smSelfNode := GenMakeImplicitMetaclass;
           if smSelfNode >= 0 then
           begin
@@ -14775,6 +14805,7 @@ begin
             smmii := FindUMethOverloadAhead(smci, name, CountCallArgsAhead);
             if smmii >= 0 then
             begin
+              EnforceMethVis(smmii, name);
               smpii := UMthProc_[smmii];
               Next; { consume method name }
               smSelfIdx := Procs[CurProc].Params[0].SymIdx;
