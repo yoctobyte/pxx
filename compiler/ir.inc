@@ -1588,6 +1588,7 @@ var argTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall: Integer;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
+  arcArg1, arcArg2, arcCall: Integer;
 begin
   { A WideChar VALUE passed to a string parameter converts to its UTF-8
     encoding (fpjson's `UTF8Encode(WideChar(U1))`). Without this the 16-bit
@@ -2114,6 +2115,23 @@ begin
       IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord))
     else
       IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
+
+    { COM/ARC interface by-VALUE param: this private temp is an owning reference
+      released at the caller's scope exit (EmitManagedLocalCleanup). Without a
+      matching retain here the raw copy_rec above just aliases the caller's single
+      reference, so the temp's scope-exit release double-drops it (silent
+      use-after-free if the callee re-published the value, e.g. to a global). A
+      `const` interface param never reaches this path — it stays a by-ref alias of
+      the caller's slot (no copy, no refcount), matching FPC. }
+    if (argRecId >= REC_UCLASS_BASE) and UClsIsInterface[argRecId - REC_UCLASS_BASE] and
+       UClsIsComInterface[argRecId - REC_UCLASS_BASE] then
+    begin
+      arcArg1 := IRAppend(IR_ARG, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+      arcArg2 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, argRecId - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+      IRB[arcArg1] := arcArg2;
+      arcCall := IRAppendCall(FindProc('PXXIntfAddRef'), arcArg1, -1, Ord(tyNativeInt));
+      IRIVal[arcCall] := 1;
+    end;
 
     value := tmpAddr;
   end
