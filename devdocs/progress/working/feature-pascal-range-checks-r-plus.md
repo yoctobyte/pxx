@@ -10,8 +10,11 @@ prio: 55
 - **Status:** working (fable-nightA) — v1 e5cc5e06 (narrowing stores +
   statement-anchored semantics per trange4) and v2 37475d8a (index bounds
   centralized in IRLowerAddress: reads+writes, static + dyn-depth-1 via
-  PXXDynIdxChkI64) LANDED, oracle-matched. REMAINING: N-D/field/param-array
-  bases, enum/subrange/char dests — oracle-probe each first ({$Q+} lesson).
+  PXXDynIdxChkI64) LANDED, oracle-matched. Slice 3 landed: Char dests +
+  FIELD static-array indexes; enum CAST verified UNCHECKED in FPC.
+  REMAINING: subrange dests (needs subrange-bounds metadata — pxx maps
+  3..7 to the base int kind and drops the bounds), N-D/param-array bases,
+  dyn-array FIELDS.
 - **Opened:** 2026-07-15 night, straight out of the {$Q+} arc
   ([[feature-pascal-overflow-checks-q-plus]] — subword probing showed
   truncation is {$R+} territory, then the oracle probe found pxx's gap
