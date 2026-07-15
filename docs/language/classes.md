@@ -192,30 +192,116 @@ Rex says Woof
 `a` is typed `TAnimal` but holds a `TDog`; `a.Speak` resolves to `TDog.Speak`
 through the virtual method table.
 
-## Interfaces (CORBA-style)
+## Interfaces
 
-PXX supports CORBA-style interfaces on all targets, matching the behavior of Free Pascal's `{$interfaces corba}` mode.
+PXX supports two interface models, selected with the `{$interfaces …}`
+directive. The default is **COM**, matching FPC's and Delphi's default.
 
-### Key Characteristics
+| Model | Directive | Lifetime | Implementing class |
+| --- | --- | --- | --- |
+| COM (default) | `{$interfaces com}` | Reference-counted (ARC): the compiler inserts `_AddRef`/`_Release` at assignment, parameter passing, results, and scope exit. | Inherit `TInterfacedObject`, which supplies `QueryInterface`/`_AddRef`/`_Release`. |
+| CORBA | `{$interfaces corba}` | Unmanaged: no refcounting; you `Free` the underlying instance yourself. | Any class — no `QueryInterface` needed. |
 
-- **No automatic reference counting**: Unlike COM-style interfaces, CORBA-style interfaces in PXX do not perform automatic reference counting (ARC). There is no implicit `_AddRef` or `_Release` call, and the compiler does not automatically free implementing class instances when interface references go out of scope. You must manage the lifecycle of the underlying class instances manually.
-- **Fat pointers**: An interface value is represented internally as a two-word fat pointer containing:
-  1. A pointer to the interface method table (IMT).
-  2. A pointer to the underlying class instance.
-- **Interface inheritance**: Interfaces can inherit from other interfaces. A class implementing a derived interface must implement all methods of that interface and its ancestors.
-- **Implicit coercion**: A class instance can be assigned directly to an interface variable of an interface it implements, or passed to a routine parameter expecting that interface. The compiler performs the coercion automatically.
-- **Checked casting & type checks**:
-  - Use `obj is IMyInterface` to check if a class instance implements an interface.
-  - Use `obj as IMyInterface` to cast a class instance to an interface. A failed cast traps at runtime.
-  - Comparing interface values (`iface1 = iface2`) or comparing against `nil` (`iface1 = nil`) is fully supported.
-  - Interface-to-class casting is not supported.
+Both models share the runtime representation and the same casting rules:
 
-### Interfaces Example
+- **Fat pointers**: an interface value is a two-word fat pointer — a pointer to
+  the interface method table (IMT), and a pointer to the underlying instance.
+- **Interface inheritance**: an interface may inherit another; an implementing
+  class must satisfy the derived interface and all its ancestors.
+- **Implicit coercion**: a class instance assigns directly to an interface
+  variable it implements, or passes to a parameter of that interface type.
+- **Checked casting & type checks**: `obj is IFoo` tests implementation;
+  `obj as IFoo` casts (a failed cast traps at runtime). Interface values compare
+  with `=`/`<>`, including against `nil`. Interface-to-class casting is not
+  supported.
 
-The following example compiles and runs on the pinned compiler:
+### COM interfaces (default) — reference counted
+
+Under the default COM model, an interface variable owns a reference: the
+compiler retains and releases it automatically, and the object is destroyed when
+the last reference goes away. Implement the interface on a class descending from
+`TInterfacedObject`. The following compiles and runs on the pinned compiler:
 
 ```pascal
-program interfaces_demo;
+program interfaces_com_demo;
+
+type
+  IReadable = interface
+    function ReadStr: string;
+  end;
+
+  // Interface inheritance
+  IDocument = interface(IReadable)
+    function GetTitle: string;
+  end;
+
+  // TInterfacedObject supplies QueryInterface / _AddRef / _Release
+  TDocument = class(TInterfacedObject, IDocument)
+  private
+    FTitle: string;
+  public
+    constructor Create(const ATitle: string);
+    destructor Destroy; override;
+    function ReadStr: string;
+    function GetTitle: string;
+  end;
+
+constructor TDocument.Create(const ATitle: string);
+begin
+  FTitle := ATitle;
+end;
+
+destructor TDocument.Destroy;
+begin
+  writeln('document released');
+  inherited;
+end;
+
+function TDocument.ReadStr: string;
+begin
+  Result := 'body';
+end;
+
+function TDocument.GetTitle: string;
+begin
+  Result := FTitle;
+end;
+
+var
+  doc: IDocument;
+begin
+  doc := TDocument.Create('PXX Manual');   { reference count = 1 }
+  writeln(doc.GetTitle, ': ', doc.ReadStr);
+
+  if doc is IReadable then
+    writeln('implements IReadable');
+
+  doc := nil;   { last reference released — the destructor runs automatically }
+  writeln('done');
+end.
+```
+
+Output:
+
+```
+PXX Manual: body
+implements IReadable
+document released
+```
+
+Note that no `Free` call is needed — assigning `nil` (or the variable going out
+of scope) drops the reference count to zero and destroys the object.
+
+### CORBA interfaces (opt-in) — manual lifetime
+
+`{$interfaces corba}` selects the lightweight, unmanaged model: no `_AddRef`/
+`_Release`, no `QueryInterface` requirement, and any class can implement an
+interface. You manage the underlying instance's lifetime yourself. This matches
+FPC's `{$interfaces corba}` mode:
+
+```pascal
+program interfaces_corba_demo;
+{$interfaces corba}
 
 type
   IReadable = interface
@@ -226,12 +312,11 @@ type
     procedure WriteStr(const S: string);
   end;
 
-  // Interface inheritance
   IDocument = interface(IReadable)
     function GetTitle: string;
   end;
 
-  // TDocument implements IDocument (and implicitly IReadable) and IWritable
+  // A plain class — no TInterfacedObject needed under CORBA
   TDocument = class(IDocument, IWritable)
   private
     FTitle: string;
@@ -271,20 +356,16 @@ var
 begin
   doc := TDocument.Create('PXX Design Manual');
 
-  // Implicit coercion on assignment
   writer := doc;
   writer.WriteStr('CORBA-style interfaces are lightweight.');
 
-  // Checked casting via 'as'
   reader := doc as IReadable;
   writeln(doc.GetTitle, ': ', reader.ReadStr);
 
-  // Type checking via 'is'
   if doc is IDocument then
     writeln('doc implements IDocument');
 
-  // Clean up the class instance manually
-  doc.Free;
+  doc.Free;   { manual cleanup — no reference counting under CORBA }
 end.
 ```
 
@@ -293,6 +374,97 @@ Output:
 ```
 PXX Design Manual: CORBA-style interfaces are lightweight.
 doc implements IDocument
+```
+
+## Metaclasses (`class of`)
+
+A **metaclass** type — `class of TSomeClass` — holds a class reference rather
+than an instance. A metaclass variable can call the class's `class` methods, and
+`virtual` class methods dispatch to the runtime class it holds. This is the basis
+for factory patterns and class registries.
+
+```pascal
+program metaclass_demo;
+
+type
+  TShape = class
+    class function Name: string; virtual;
+  end;
+
+  TShapeClass = class of TShape;
+
+  TCircle = class(TShape)
+    class function Name: string; override;
+  end;
+
+class function TShape.Name: string;
+begin
+  Result := 'shape';
+end;
+
+class function TCircle.Name: string;
+begin
+  Result := 'circle';
+end;
+
+var
+  k: TShapeClass;
+begin
+  k := TCircle;
+  writeln(k.Name);   { virtual class method dispatches through the metaclass }
+end.
+```
+
+Output:
+
+```
+circle
+```
+
+## Class properties and class vars
+
+A `class var` field is shared by all instances (one storage slot per class, not
+per object). A `class property` exposes it through the class name. Accessors may
+be `class` methods or the `class var` itself.
+
+```pascal
+program class_property_demo;
+
+type
+  TCounter = class
+  private
+    class var FTotal: Integer;
+    class function GetTotal: Integer;
+  public
+    class property Total: Integer read GetTotal;
+    constructor Create;
+  end;
+
+class function TCounter.GetTotal: Integer;
+begin
+  Result := FTotal;
+end;
+
+constructor TCounter.Create;
+begin
+  Inc(FTotal);
+end;
+
+var
+  a, b: TCounter;
+begin
+  a := TCounter.Create;
+  b := TCounter.Create;
+  writeln('instances created: ', TCounter.Total);   { read through the class }
+  a.Free;
+  b.Free;
+end.
+```
+
+Output:
+
+```
+instances created: 2
 ```
 
 ## Next

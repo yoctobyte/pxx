@@ -60,10 +60,22 @@ end;
 
 ## Key Characteristics & Limitations
 
-### 1. No Built-in Exception Hierarchy
-Unlike Free Pascal or Delphi, PXX does **not** bundle a predefined `Exception` class hierarchy (such as `Exception`, `EExternal`, `EAbort`, etc.) with message constructors. 
-- You must supply the classes you intend to raise and catch.
-- Any user-defined class can be raised and caught.
+### 1. Any Class Is Raisable; a Standard Hierarchy Ships in `sysutils`
+The `raise` mechanism itself is class-agnostic: **any class instance can be
+raised and caught**, so a small program can define and raise its own bare class
+without importing anything (as the example below does).
+
+For FPC-style code, `uses sysutils` brings in a base `Exception` class (with a
+`Message` property and a message constructor) and a standard descendant family:
+`EAbort`, `EConvertError`, `EInOutError`, `EAccessViolation`, `EIntError`
+(→ `EDivByZero`, `ERangeError`, `EIntOverflow`), `EMathError`, `EOutOfMemory`,
+and more. The runtime checks raise the matching ones — `{$R+}` raises
+`ERangeError`, `{$Q+}` raises `EIntOverflow`, and integer division by zero
+raises `EDivByZero`. The `classes` and `json` units add their own
+(`EStreamError`, `EJSONError`, …).
+
+What is **not** bundled is FPC's complete RTL exception surface — only the
+subset above and the units' own classes are present.
 
 ### 2. Automatic Resource Cleanup (Unwinding)
 When an exception is raised, the runtime unwinds the stack frames until a matching handler is found. During unwinding, the compiler automatically calls the appropriate cleanup code (releasing reference counts) for any **managed local variables** (such as managed `string`s, dynamic arrays, and records with managed fields) in the unwound frames, preventing memory leaks.

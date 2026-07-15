@@ -78,6 +78,51 @@ type
 Access fields with `.`. Records are value types — assignment copies the whole
 record. Variant records (a `case` part sharing storage) are supported.
 
+### Advanced records
+
+Records can also carry methods, visibility sections, constructors, and operator
+overloads — they stay value types, but gain much of a class's surface without
+heap allocation. Operators use the **symbol form** (`class operator + (...)`),
+not Delphi's named form (`class operator Add`):
+
+```pascal
+program advanced_record_demo;
+
+type
+  TVec = record
+    X, Y: Integer;
+    constructor Create(ax, ay: Integer);
+    function Len2: Integer;
+    class operator + (const a, b: TVec): TVec;
+  end;
+
+constructor TVec.Create(ax, ay: Integer);
+begin
+  X := ax;
+  Y := ay;
+end;
+
+function TVec.Len2: Integer;
+begin
+  Result := X * X + Y * Y;
+end;
+
+class operator TVec.+ (const a, b: TVec): TVec;
+begin
+  Result.X := a.X + b.X;
+  Result.Y := a.Y + b.Y;
+end;
+
+var
+  a, b, c: TVec;
+begin
+  a := TVec.Create(1, 2);
+  b := TVec.Create(3, 4);
+  c := a + b;
+  writeln(c.X, ',', c.Y, ' len2=', c.Len2);   { 4,6 len2=52 }
+end.
+```
+
 ## Arrays
 
 **Fixed arrays** have a compile-time index range:
