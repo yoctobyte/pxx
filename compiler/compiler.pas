@@ -458,6 +458,9 @@ begin
       MimicFpc := True;
       { mimic == "behave like FPC", and FPC is strict about routine ordering. }
       RequireForward := True;
+      { ...and FPC defaults {$I+} ON (the pxx-lax default stays quiet pending
+        the user's dialect call — feature-pascal-io-checks-i-plus). }
+      IChecksVal := True;
       Inc(i);
     end
     else if (option = '--strict') or (option = '--require-forward') then

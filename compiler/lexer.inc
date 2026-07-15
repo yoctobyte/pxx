@@ -695,7 +695,6 @@ begin
   StmtRChecks := False;
   IChecksVal := False;
   StmtIChecks := False;
-  IoChkInit := False;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
@@ -1668,7 +1667,7 @@ begin
         already in progress; defines must take effect before the next {$IF}).
         Only FPC is a valid target; {$MIMIC DELPHI} is reserved (unimplemented). }
       if CaseEqual(name, 'fpc') then
-      begin MimicFpc := True; PasApplyMimicDefines; end
+      begin MimicFpc := True; IChecksVal := True; PasApplyMimicDefines; end
       else Error('unknown {$MIMIC} target (only FPC is supported): ' + name);
     end
     else if CaseEqual(command, 'asmmode') then

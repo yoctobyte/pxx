@@ -2879,28 +2879,25 @@ end;
 
 function IRIoCheckedCallee(pi: Integer): Boolean;
 { {$I+}: true when pi is one of the textfile IO procs a PXXIoCheck must
-  follow. Indexes are lazily cached; a user proc SHADOWING one of the names
-  resolves to a different index and correctly stays unchecked
+  follow. Matched by NAME + a Text first parameter — interface and body can
+  occupy separate Procs rows, so a cached-index compare missed the bound
+  callee; the Text-param guard keeps a user's own same-named proc unchecked
   (feature-pascal-io-checks-i-plus). }
-var k: Integer;
 begin
-  if not IoChkInit then
-  begin
-    IoChkProc[0] := FindProc('Reset');
-    IoChkProc[1] := FindProc('Rewrite');
-    IoChkProc[2] := FindProc('Append');
-    IoChkProc[3] := FindProc('Close');
-    IoChkProc[4] := FindProc('CloseFile');
-    IoChkProc[5] := FindProc('Erase');
-    IoChkProc[6] := FindProc('TextWrite');
-    IoChkProc[7] := FindProc('TextWriteLn');
-    IoChkProc[8] := FindProc('TextReadLn');
-    IoChkInit := True;
-  end;
   Result := False;
-  if pi < 0 then Exit;
-  for k := 0 to 8 do
-    if IoChkProc[k] = pi then begin Result := True; Exit; end;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if not ((Procs[pi].ParamCount >= 1) and
+          (Procs[pi].Params[0].TypeKind = tyRecord)) then Exit;
+  if CaseEqual(Procs[pi].Name, 'Reset') or
+     CaseEqual(Procs[pi].Name, 'Rewrite') or
+     CaseEqual(Procs[pi].Name, 'Append') or
+     CaseEqual(Procs[pi].Name, 'Close') or
+     CaseEqual(Procs[pi].Name, 'CloseFile') or
+     CaseEqual(Procs[pi].Name, 'Erase') or
+     CaseEqual(Procs[pi].Name, 'TextWrite') or
+     CaseEqual(Procs[pi].Name, 'TextWriteLn') or
+     CaseEqual(Procs[pi].Name, 'TextReadLn') then
+    Result := True;
 end;
 
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer;

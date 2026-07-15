@@ -1645,8 +1645,6 @@ var
   IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state (default off — pxx-lax; FPC defaults ON, flip pending the user) }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
   StmtIChecks : Boolean;     { {$I} state at the current statement's first token (same anchor rule as StmtRChecks) }
-  IoChkProc : array[0..8] of Integer; { lazy cache of the textfile IO proc indexes PXXIoCheck sequences after ({$I+}); resolved on first use }
-  IoChkInit : Boolean;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
