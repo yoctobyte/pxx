@@ -233,8 +233,70 @@ begin
   Result := seq;
 end;
 
+{ Mask a value to a C bitfield's EXACT bit-precision (width 33..63): `v & (2^N-1)`
+  for unsigned; `((v & mask) ^ signBit) - signBit` (branchless sign-extend from bit
+  N-1) for signed — the same construction CMakeNarrowIntCast uses, with an arbitrary
+  bit count. Arithmetic already ran in the 64-bit register; since 2^N divides 2^64
+  for N<=64, masking after the fact reproduces gcc's mod-2^N wrap exactly.
+  bug-c-long-long-bitfield-promotion. }
+function CMaskToBits(operand, bits: Integer; isSigned: Boolean): Integer;
+var m, sb: Int64; lit, n1: Integer;
+begin
+  m := (Int64(1) shl bits) - 1;
+  lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := m; ASTTk[lit] := Ord(tyInt64);
+  n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkAnd);
+  ASTLeft[n1] := operand; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyUInt64);
+  Result := n1;
+  if isSigned then
+  begin
+    sb := Int64(1) shl (bits - 1);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := sb; ASTTk[lit] := Ord(tyInt64);
+    n1 := AllocNode(AN_BINOP); ASTIVal[n1] := Ord(tkXor);
+    ASTLeft[n1] := Result; ASTRight[n1] := lit; ASTTk[n1] := Ord(tyInt64);
+    lit := AllocNode(AN_INT_LIT); ASTIVal[lit] := sb; ASTTk[lit] := Ord(tyInt64);
+    Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkMinus);
+    ASTLeft[Result] := n1; ASTRight[Result] := lit; ASTTk[Result] := Ord(tyInt64);
+  end;
+end;
+
+{ The gcc bit-precision (33..63) of a C integer expression, or 0 if it is not a
+  wide-bitfield expression. Base case: a bitfield READ of a 33..63-bit field. It
+  propagates through integer binops (usual arithmetic conversions: the greater
+  precision governs; equal precision -> unsigned wins) so a parent op knows the
+  width to normalize to. Stops at any non-integer result (comparison -> boolean,
+  pointer arith, float) and at non-arithmetic node kinds. Only ever called when
+  CHasWideBitfield, so normal C code never walks this. }
+function CNodeBitPrec(node: Integer; var isSigned: Boolean): Integer;
+var w, pl, pr, recId: Integer; sl, sr: Boolean; fieldName: AnsiString; tk: TTypeKind;
+begin
+  Result := 0; isSigned := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    if recId = REC_NONE then Exit;
+    fieldName := GetASTIdentName(node);
+    w := RecFieldBitWidth(recId, fieldName);
+    if (w >= 33) and (w <= 63) then
+    begin
+      Result := w;
+      isSigned := TypeSigned(RecFieldType(recId, fieldName));
+    end;
+  end
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    tk := IntToTypeKind(ASTTk[node]);
+    if not (tk in [tyInteger, tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) then Exit;
+    pl := CNodeBitPrec(ASTLeft[node], sl);
+    pr := CNodeBitPrec(ASTRight[node], sr);
+    if pl > pr then begin Result := pl; isSigned := sl; end
+    else if pr > pl then begin Result := pr; isSigned := sr; end
+    else begin Result := pl; isSigned := sl and sr; end;
+  end;
+end;
+
 function CMakeBinop(cTok, l, r: Integer): Integer;
-var node, ivalOp: Integer;
+var node, ivalOp, bfPrec: Integer; bfSigned: Boolean;
 begin
   ivalOp := cTok;
   if cTok = Ord(tkSlash) then
@@ -318,6 +380,19 @@ begin
     pointer arith -> tyPointer above), so mask it back to 32 bits. }
   if IntToTypeKind(ASTTk[node]) = tyUInt32 then
     node := CTrunc32(node);
+  { Wide C bitfield (width 33..63): gcc gives it an integer type of EXACT
+    bit-precision = width, and `+ - * <<` can push bits past the width, so wrap
+    the result mod 2^width (sign-extend if the field is signed). Value-observing
+    ops (>>, comparisons, & | ^) can't exceed the operands' width, so they need no
+    normalize — only these four. Gated on CHasWideBitfield: no cost in normal C.
+    bug-c-long-long-bitfield-promotion. }
+  if CHasWideBitfield and
+     ((cTok = Ord(tkPlus)) or (cTok = Ord(tkMinus)) or
+      (cTok = Ord(tkStar)) or (cTok = Ord(tkShl))) then
+  begin
+    bfPrec := CNodeBitPrec(node, bfSigned);
+    if bfPrec > 0 then node := CMaskToBits(node, bfPrec, bfSigned);
+  end;
   Result := node;
 end;
 
@@ -351,7 +426,7 @@ function ParseCPostfixTail(node: Integer): Integer; forward;
   for prefix (yield NEW). The pointed-at record for `(p++)->field` is derived from
   the lvalue (Left) by CNodePtrElemRec, not carried on the node. }
 function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
-var node: Integer;
+var node, bfPrec: Integer; bfSigned: Boolean;
 begin
   node := AllocNode(AN_INCDEC);
   ASTLeft[node] := lv;
@@ -359,6 +434,15 @@ begin
   if isPre then ASTSOffset[node] := 0 else ASTSOffset[node] := 1;
   ASTTk[node] := ASTTk[lv];
   Result := node;
+  { PRE ++/-- on a wide bitfield yields the NEW value, which can overflow the
+    field's bit-precision (`++c.u33` when c.u33 = 2^33-1 must read back 0). The
+    store already masks; normalize the yielded value too. POST yields the OLD
+    value, already normalized by the read. bug-c-long-long-bitfield-promotion. }
+  if CHasWideBitfield and isPre then
+  begin
+    bfPrec := CNodeBitPrec(lv, bfSigned);
+    if bfPrec > 0 then Result := CMaskToBits(Result, bfPrec, bfSigned);
+  end;
 end;
 
 { Precedence-climbing binary-expression parser (left-associative). }
@@ -7215,6 +7299,7 @@ begin
   CProgramMode := True;
   CAggInitCount := 0;
   CScalInitCount := 0;
+  CHasWideBitfield := False;
 
   { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
@@ -9311,6 +9396,9 @@ begin
         begin
           if bitWidth < 0 then bitWidth := 0;
           if bitWidth > sz * 8 then bitWidth := sz * 8;
+          { A >32-bit bitfield (width 33..63) has gcc bit-precision arithmetic —
+            enable the CMakeBinop normalize for this translation unit. }
+          if (bitWidth >= 33) and (bitWidth <= 63) then CHasWideBitfield := True;
           if isUnion then
           begin
             { UNION bitfields all alias the same storage at offset 0, and each

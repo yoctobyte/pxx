@@ -1283,6 +1283,10 @@ var
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
     signature scan must mark it ProcExternal=False even while skipping the body,
     or a caller compiled before the callee's definition emits an external call. }
+  CHasWideBitfield : Boolean; { the current C translation unit declared a bitfield
+    of width 33..63. gcc treats such a field as an integer of EXACT bit-precision
+    = width; +,-,*,<< wrap mod 2^width. Gates the CMakeBinop normalize so normal C
+    (no wide bitfields) pays only one boolean test. bug-c-long-long-bitfield-promotion. }
   CTypedefCount : Integer;
   CTypedefNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefNameLen : array[0..MAX_CTYPEDEF-1] of Integer;

@@ -1152,6 +1152,11 @@ test-core: $(COMPILER)
 	# struct bitfields -- f2 read bits 14..27, silent wrong value vs the gcc oracle)
 	./$(COMPILER) test/cunion_bitfield_overlap_b352.c /tmp/cunion_bitfield_b35226
 	test "$$(/tmp/cunion_bitfield_b35226)" = "$$(printf 'f0=fffffffb f1=3ffb f2=3ffb f3=fffffffb sz=4\nafter: f0=ffffc005 f1=5\nstruct: a=5 b=9\nstruct after: a=5 b=3')"
+	# >32-bit bitfield ARITHMETIC reduces to the field's exact bit-precision (gcc):
+	# +,-,*,<< wrap mod 2^width, signed sign-extends, pre-inc/dec yields the wrapped
+	# value (bug-c-long-long-bitfield-promotion arithmetic residual). gcc-differential.
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cbitfield_arith_precision.c /tmp/cbitfield_arith26
+	test "$$(/tmp/cbitfield_arith26)" = "$$(printf 'mul33=0 mul40=0 mul41=1099511627776\ns.q=-549755813888 sadd=-6\npre=0 predec=1099511627774 post=0')"
 	# a multidim LOCAL array of STRUCTS: the walker got nDims=1, so only the first
 	# element was initialised and the rest stayed zero (silently)
 	./$(COMPILER) test/cmultidim_struct_array_init_b311.c /tmp/cmultidim_struct_array_b31126
