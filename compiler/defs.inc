@@ -136,6 +136,15 @@ const
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
 
+  { Member visibility levels (UFldVis/UMthVis). Enforced only under
+    StrictVisibility; parsed always. private/protected are UNIT-scoped (the whole
+    declaring unit sees them, FPC semantics); the strict variants are TYPE-scoped. }
+  VIS_PUBLIC          = 0;   { public / published — no restriction }
+  VIS_PROTECTED       = 1;   { declaring unit + descendant classes }
+  VIS_PRIVATE         = 2;   { declaring unit only }
+  VIS_STRICT_PROTECTED= 3;   { declaring class + descendants only }
+  VIS_STRICT_PRIVATE  = 4;   { declaring class only }
+
   { AST node kinds }
   AN_NONE      = 0;
   AN_INT_LIT   = 1;
@@ -1048,6 +1057,7 @@ var
   StrictOverload : Boolean;
   StrictOperator : Boolean;  { --strict-operator / {$STRICT_OPERATOR ON}: FPC-parity operator-overload rejections (= / <> on class operands, toperator71). Default off: the PXX dialect allows value-equality operators on classes. }
   StrictCase : Boolean;  { --strict-case / {$STRICT_CASE ON}: FPC-parity case-label validation -- reject inverted ranges and duplicate/overlapping labels. Default off: PXX's dialect keeps first-match semantics for overlapping labels and treats an inverted range as never-matching. Label TYPE checks are always on. }
+  StrictVisibility : Boolean;  { --strict-visibility / {$STRICT_VISIBILITY ON}: FPC-parity member access control -- enforce private/protected/strict private/strict protected. Default off: PXX's dialect parses the markers but grants access from anywhere (the deliberate lax ergonomics -- same-unit access and the cracker cast still work under FPC semantics when on). Scoping: private/protected are UNIT-scoped (declaring unit sees all), strict private is type-scoped (declaring class only), strict protected adds descendants. }
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }
@@ -1966,6 +1976,7 @@ var
   UClsMBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsMCount : array[0..MAX_UCLASS-1] of Integer;
   UClsParent : array[0..MAX_UCLASS-1] of Integer;
+  UClsUnitIdx : array[0..MAX_UCLASS-1] of Integer; { Strs[] idx of the unit that DECLARES this class/record (CurrentUnitIdx at parse), -1 = main program. The access-control unit scope for private/protected under StrictVisibility. }
   UClsVirtCount : array[0..MAX_UCLASS-1] of Integer;
   UClsVMTOffset : array[0..MAX_UCLASS-1] of Integer;
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
@@ -2019,6 +2030,7 @@ var
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
+  UFldVis    : array[0..MAX_UFIELD-1] of Integer;  { member visibility: VIS_PUBLIC/PROTECTED/PRIVATE/STRICT_PROTECTED/STRICT_PRIVATE. Enforced only under StrictVisibility. }
   UFldStrCap : array[0..MAX_UFIELD-1] of Integer;  { see decl above }
   UFldIsSub : array[0..MAX_UFIELD-1] of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
   UFldSubLo : array[0..MAX_UFIELD-1] of Int64;
@@ -2042,6 +2054,7 @@ var
   UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
   UMthIsCtor   : array[0..MAX_UMETH-1] of Boolean; { declared `constructor` — TClass.AnyCtor(args) builds a metaclass-new, not a method call }
   UMthPub    : array[0..MAX_UMETH-1] of Integer;  { 1 = published, 0 = other }
+  UMthVis    : array[0..MAX_UMETH-1] of Integer;  { member visibility (see UFldVis) }
   UMthCount  : Integer;
 
   UPropNOff   : array[0..MAX_UPROP-1] of Integer;

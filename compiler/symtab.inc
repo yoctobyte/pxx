@@ -563,6 +563,7 @@ begin
   UClsPBase[UClsCount]  := UPropCount;
   UClsPCount[UClsCount] := 0;
   UClsParent[UClsCount] := -1;
+  UClsUnitIdx[UClsCount] := CurrentUnitIdx;   { declaring unit — access-control scope }
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
@@ -665,6 +666,7 @@ begin
       UFldBitShift[dst+k] := UFldBitShift[src];
       UFldBitBytes[dst+k] := UFldBitBytes[src];
       UFldPub[dst+k] := UFldPub[src];
+      UFldVis[dst+k] := UFldVis[src];
       UFldStrCap[dst+k] := UFldStrCap[src];
       UFldIsSub[dst+k] := UFldIsSub[src];
       UFldSubLo[dst+k] := UFldSubLo[src];
@@ -718,6 +720,7 @@ begin
   UFldBitShift[fi] := 0;
   UFldBitBytes[fi] := 0;
   UFldPub[fi] := 0;
+  UFldVis[fi] := VIS_PUBLIC;
   UFldStrCap[fi] := 0;
   UFldIsSub[fi] := LastTypeIsSub;
   if LastTypeIsSub then
@@ -753,6 +756,7 @@ begin
       UMthIsStatic[dst+k] := UMthIsStatic[src];
       UMthIsCtor[dst+k] := UMthIsCtor[src];
       UMthPub[dst+k] := UMthPub[src];
+      UMthVis[dst+k] := UMthVis[src];
     end;
     UClsMBase[ci] := dst;
     UMthCount := UMthCount + UClsMCount[ci];
@@ -764,6 +768,7 @@ begin
   UMthIsStatic[mi] := False;
   UMthIsCtor[mi] := False;
   UMthPub[mi] := 0;
+  UMthVis[mi] := VIS_PUBLIC;
   UMthCount := UMthCount + 1;
   UClsMCount[ci] := UClsMCount[ci] + 1;
 end;

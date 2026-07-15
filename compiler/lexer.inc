@@ -672,6 +672,7 @@ begin
   StrictOverload := False;
   StrictOperator := False;
   StrictCase := False;
+  StrictVisibility := False;
   DelphiMode := False;
   ThreadSafeMode := False;
   MatchQuiet := False;
@@ -1505,6 +1506,12 @@ begin
       if CaseEqual(name, 'on') then StrictCase := True
       else if CaseEqual(name, 'off') then StrictCase := False
       else Error('strict_case requires on or off');
+    end
+    else if CaseEqual(command, 'strict_visibility') then
+    begin
+      if CaseEqual(name, 'on') then StrictVisibility := True
+      else if CaseEqual(name, 'off') then StrictVisibility := False
+      else Error('strict_visibility requires on or off');
     end
     else if CaseEqual(command, 'scopedenums') then
     begin

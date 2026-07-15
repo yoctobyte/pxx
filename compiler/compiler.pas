@@ -448,6 +448,13 @@ begin
       StrictCase := True;
       Inc(i);
     end
+    else if option = '--strict-visibility' then
+    begin
+      { FPC-parity member access control (private/protected/strict). PXX's lax
+        default parses the markers but grants access from anywhere. }
+      StrictVisibility := True;
+      Inc(i);
+    end
     else if option = '--threadsafe' then
     begin
       ThreadSafeMode := True;

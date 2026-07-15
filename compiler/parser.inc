@@ -846,6 +846,72 @@ begin
             CaseEqual(s, 'constructor') or CaseEqual(s, 'destructor');
 end;
 
+{ The class/record that DECLARES the field at UFld index fIdx (its window
+  contains fIdx). -1 if none — the caller then skips the visibility check. }
+function FieldDeclClass(fIdx: Integer): Integer;
+var c: Integer;
+begin
+  FieldDeclClass := -1;
+  for c := 0 to UClsCount - 1 do
+    if (fIdx >= UClsFBase[c]) and (fIdx < UClsFBase[c] + UClsFCount[c]) then
+      begin FieldDeclClass := c; Exit; end;
+end;
+
+{ The class/record that DECLARES the method at UMth index mIdx. -1 if none. }
+function MethDeclClass(mIdx: Integer): Integer;
+var c: Integer;
+begin
+  MethDeclClass := -1;
+  for c := 0 to UClsCount - 1 do
+    if (mIdx >= UClsMBase[c]) and (mIdx < UClsMBase[c] + UClsMCount[c]) then
+      begin MethDeclClass := c; Exit; end;
+end;
+
+{ Member-access control (feature member-visibility). No-op unless
+  StrictVisibility (the PXX dialect is lax by default). Rejects an access to a
+  member of visibility `vis` declared in class `declCi` from a context FPC would
+  forbid. Context comes from globals: CurrentUnitIdx (accessing unit) and
+  CurSelfClass (the class whose method is being compiled). FPC scoping:
+  private/protected are UNIT-scoped (whole declaring unit sees them); the strict
+  variants are TYPE-scoped (declaring class + — for strict protected — its
+  descendants). A missing/unknown declCi fails OPEN (no rejection). }
+procedure EnforceMemberVis(declCi, vis: Integer; const memberName: AnsiString);
+var accUnit, accCi: Integer; sameUnit, inHier, ok: Boolean; vn: AnsiString;
+begin
+  if not StrictVisibility then Exit;
+  if (declCi < 0) or (declCi >= UClsCount) then Exit;
+  if vis = VIS_PUBLIC then Exit;
+  accUnit := CurrentUnitIdx;
+  if CurSelfClass >= REC_UCLASS_BASE then accCi := CurSelfClass - REC_UCLASS_BASE else accCi := -1;
+  sameUnit := (accUnit = UClsUnitIdx[declCi]);
+  inHier := (accCi = declCi) or ((accCi >= 0) and IsSubclassOf(accCi, declCi));
+  ok := False;
+  if vis = VIS_PRIVATE then ok := sameUnit
+  else if vis = VIS_PROTECTED then ok := sameUnit or inHier
+  else if vis = VIS_STRICT_PRIVATE then ok := (accCi = declCi)
+  else if vis = VIS_STRICT_PROTECTED then ok := inHier;
+  if ok then Exit;
+  if vis = VIS_PRIVATE then vn := 'private'
+  else if vis = VIS_PROTECTED then vn := 'protected'
+  else if vis = VIS_STRICT_PRIVATE then vn := 'strict private'
+  else vn := 'strict protected';
+  Error('cannot access ' + vn + ' member "' + memberName + '" of ' +
+        GetTokenStrFromRaw(UClsNOff[declCi], UClsNLen[declCi]) +
+        ' from here (--strict-visibility)');
+end;
+
+{ Enforce access control for a field `fieldName` of class/record `recId` at a
+  genuine access site. No-op unless StrictVisibility (so the lax default runs no
+  FindUField and stays byte-identical). }
+procedure EnforceFieldVis(recId: Integer; const fieldName: AnsiString);
+var fi: Integer;
+begin
+  if not StrictVisibility then Exit;
+  if recId < REC_UCLASS_BASE then Exit;
+  fi := FindUField(recId - REC_UCLASS_BASE, fieldName);
+  if fi >= 0 then EnforceMemberVis(FieldDeclClass(fi), UFldVis[fi], fieldName);
+end;
+
 function FindClassVar(ci: Integer; const name: AnsiString): Integer;
 { Class-variable lookup by (class ci, name), walking up the parent chain so a
   subclass sees an inherited `class var`. Returns the backing global var sym idx,
@@ -3116,6 +3182,11 @@ begin
 
       if fldIdx >= 0 then
     begin
+      { --strict-visibility: a bare (implicit-Self) field access. Own-class members
+        always pass; the check bites an INHERITED strict-private field reached from
+        a descendant method (tclass12b). }
+      if StrictVisibility then
+        EnforceMemberVis(FieldDeclClass(fldIdx), UFldVis[fldIdx], fieldName);
       selfIdx := Procs[CurProc].Params[0].SymIdx;
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
@@ -4586,6 +4657,7 @@ begin
       if (tk = tyPointer) and (recName = REC_NONE) then
         Error('"' + fieldName + '": a pointer has no members (dereference it with ^, or the pointee type is unknown here)');
 
+      EnforceFieldVis(recName, fieldName);   { --strict-visibility member access control }
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := propFOff;
@@ -5757,6 +5829,7 @@ begin
       ASTLeft[sub] := node;
       ASTSOffset[sub] := Tokens[prevTok].SOffset;
       ASTSLen[sub] := Tokens[prevTok].SLen;
+      EnforceFieldVis(recId, fieldName);   { --strict-visibility member access control }
       tk := RecFieldType(recId, fieldName);
       recId := RecFieldRecId(recId, fieldName);
       ASTTk[sub] := Ord(tk);
@@ -17742,6 +17815,8 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   curPublishedExplicit: Boolean;  { the section was an EXPLICIT `published` marker (not the implicit default) — the class-property publish check keys on it }
+  curVis: Integer;   { current member visibility (VIS_*) for the class body section; stamped onto each field/method (enforced only under StrictVisibility) }
+  curStrictVis: Boolean;  { the pending section was introduced by `strict` }
   etid, propEnumId, propSetEnumId: Integer;
   propIsIndexed, propIsDefault, propRedecl, propHasIndex: Boolean;
   propIndexVal: Int64;   { indexed (array) property + `default;` + `property X;` redeclaration }
@@ -18213,33 +18288,42 @@ begin
           only effect is extra RTTI, which is harmless. }
         curPublished := 1;
         curPublishedExplicit := False;
+        curVis := VIS_PUBLIC;   { the implicit first section is public (published for RTTI) }
         { FPC shorthand: `TFoo = class(TBase);` — semicolon closes the type
           declaration immediately with an empty body; no `end` needed. }
         if CurTok.Kind <> tkSemicolon then
         begin
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
-          { `strict private` / `strict protected` (FPC/Delphi). pxx does not enforce
-            access at all (project policy), so strict adds nothing to enforce — it is
-            consumed and the section is treated as the plain visibility that follows.
-            Unconsumed, `strict` was read as a FIELD name and demanded a ':'. }
+          { `strict private` / `strict protected` (FPC/Delphi): TYPE-scoped variants.
+            Consume the `strict` marker and record it so the following
+            private/protected section is stamped as the strict (type-scoped) level. }
+          curStrictVis := False;
           if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'strict') and
              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
              (CaseEqual(GetTokenStr(TokPos), 'private') or
               CaseEqual(GetTokenStr(TokPos), 'protected')) then
-            Next;
+          begin curStrictVis := True; Next; end;
 
           { Visibility section markers. Not reserved words, so treat as section
-            switch only when immediately at member-start position. Access is not
-            enforced (project policy); we only record the published flag for RTTI. }
+            switch only when immediately at member-start position. curVis drives
+            access control under StrictVisibility; curPublished the RTTI flag. }
           if (CurTok.Kind = tkIdent) and
              (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
               CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
           begin
             if CaseEqual(CurTok.SVal, 'published') then
-            begin curPublished := 1; curPublishedExplicit := True; end
+            begin curPublished := 1; curPublishedExplicit := True; curVis := VIS_PUBLIC; end
             else
-            begin curPublished := 0; curPublishedExplicit := False; end;
+            begin
+              curPublished := 0; curPublishedExplicit := False;
+              if CaseEqual(CurTok.SVal, 'private') then
+                begin if curStrictVis then curVis := VIS_STRICT_PRIVATE else curVis := VIS_PRIVATE; end
+              else if CaseEqual(CurTok.SVal, 'protected') then
+                begin if curStrictVis then curVis := VIS_STRICT_PROTECTED else curVis := VIS_PROTECTED; end
+              else
+                curVis := VIS_PUBLIC;    { public }
+            end;
             Next;
             continue;
           end;
@@ -18613,6 +18697,7 @@ begin
             UMthIsStatic[mmi] := isClassMethod;
             UMthIsCtor[mmi] := isConstructor;
             UMthPub[mmi] := curPublished;
+            UMthVis[mmi] := curVis;
 
             if isVirtual then
             begin
@@ -18997,6 +19082,7 @@ begin
                 end;
               end;
               UFldPub[UFldCount-1] := curPublished;
+              UFldVis[UFldCount-1] := curVis;
               curFieldOff := curFieldOff + fSize;
             end;
             if fAlign > classAlign then classAlign := fAlign;
