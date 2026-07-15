@@ -43,6 +43,32 @@ if either operand is unsigned and its rank >= the signed operand's, the whole
 operation (and result) is unsigned. Centralise a `UsualArithConv(tkA, tkB)` and
 have `%`, `/`, `>>`, and comparisons consult it.
 
+## Recon (2026-07-15, agent-A — parked, needs frontend-aware fix)
+
+Narrowed to `/` and `%` (and `>>`); relational comparisons already do the right
+thing. In `ir_codegen.inc` the div/mod emit keys signedness on the LEFT operand
+only — `if TypeDivideUnsigned(IntToTypeKind(IRTk[left]))` (idiv vs div) — so it is
+order-dependent (`Integer div Cardinal` signed, `Cardinal div Integer` unsigned).
+Comparisons use `TypeCompareUnsigned(IRTk[left], IRTk[right])` (both operands),
+which is why they're correct.
+
+The catch: the equal-rank rule DIFFERS by frontend, so a naive shared-codegen
+change (e.g. "either operand unsigned → unsigned") would break Pascal:
+- **C**: `int % unsigned int` (equal rank, one unsigned) → **unsigned**.
+- **Pascal/FPC**: `Cardinal`/`Integer` mixed (both 32-bit) widen to **Int64
+  (signed)**. `TypeCompareUnsigned` encodes the Pascal rule ("at equal width a
+  signed operand wins"), which is wrong for C.
+
+So the fix must be frontend-aware. Cleanest: apply C's usual arithmetic
+conversions in the **C frontend** when building `%` / `/` / `>>` — cast the
+operands to the common type (unsigned int for int-vs-uint at equal rank) so the
+binop's operand/result types already carry the right signedness; the codegen then
+picks div vs idiv correctly with no shared-rule change. Verify whether C `%`
+currently routes through a runtime helper vs a raw IR_BINOP (the `--dump-ir` of a
+`%` showed a `call`) and fix the chosen path. Do NOT change `TypeCompareUnsigned`
+(shared with Pascal). Guard any codegen change on `CProgramMode` if it can't be
+done purely in the frontend.
+
 ## Acceptance
 
 The repro prints `3 3`; unsigned/signed `%` `/` `>>` and comparisons match gcc
