@@ -5005,7 +5005,15 @@ begin
         if ASTRChk[node] then
         begin
           if ASTKind[ASTLeft[node]] = AN_IDENT then
-            value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]))
+          begin
+            { a named-SUBRANGE dest checks its declared lo..hi (T = 3..7);
+              the retained alias bounds outrank the plain width table. }
+            varIdx := ASTIVal[ASTLeft[node]];
+            if (varIdx >= 0) and (varIdx < SymCount) and SymIsSub[varIdx] then
+              value := IRWrapChkBounds(value, SymSubLo[varIdx], SymSubHi[varIdx])
+            else
+              value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]));
+          end
           else
             value := IRWrapRangeChk(value, lhsStoreTk);
         end;

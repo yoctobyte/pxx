@@ -15094,6 +15094,7 @@ begin
   LastTypeProcSig := -1;
   LastTypeEnumId := -1;
   LastTypeStrCap := 0;
+  LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
   case CurTok.Kind of
     tkRecord, tkPacked:
     begin
@@ -15453,6 +15454,14 @@ begin
               begin
                 LastTypeRecId := AliasElemRec[aliasIdx];
                 LastTypeProcSig := AliasProcSig[aliasIdx];  { method-pointer record carries a call signature }
+                if AliasIsSub[aliasIdx] then
+                begin
+                  { named subrange: hand the retained bounds to Alloc* for
+                    {$R+} store checks (feature-pascal-range-checks-r-plus). }
+                  LastTypeIsSub := True;
+                  LastTypeSubLo := AliasSubLo[aliasIdx];
+                  LastTypeSubHi := AliasSubHi[aliasIdx];
+                end;
                 Result := IntToTypeKind(AliasTk[aliasIdx]);
               end;
             end
@@ -17590,6 +17599,7 @@ var
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
   fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer; tMoreDims: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fStrCap, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
+  subLoVal, subHiVal: Int64;
   variantBaseOff, variantMax, branchFieldOff: Integer;
   enumNOff, enumNLen: Integer; enumNm: AnsiString;
   fTk: TTypeKind;
@@ -19213,10 +19223,15 @@ begin
           tyInteger) — same treatment as an inline `var x: lo..hi` subrange (the
           bounds are not retained). }
         if CurTok.Kind = tkString then fTk := tyChar else fTk := tyInteger;
-        ConstEval;                 { low bound }
+        subLoVal := ConstEval;     { low bound }
         Expect(tkDotDot, '..');
-        ConstEval;                 { high bound }
+        subHiVal := ConstEval;     { high bound }
         RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
+        { RETAIN the bounds ({$R+} checks stores against them —
+          feature-pascal-range-checks-r-plus; they used to be dropped). }
+        AliasIsSub[AliasCount - 1] := True;
+        AliasSubLo[AliasCount - 1] := subLoVal;
+        AliasSubHi[AliasCount - 1] := subHiVal;
       end
       else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
               ((TokPos >= TokCount) or (Tokens[TokPos].Kind = tkSemicolon)) then

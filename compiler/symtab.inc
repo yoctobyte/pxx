@@ -2033,6 +2033,12 @@ begin
   SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymIsSub[SymCount] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    SymSubLo[SymCount] := LastTypeSubLo;
+    SymSubHi[SymCount] := LastTypeSubHi;
+  end;
   SymPtrDepth[SymCount] := 0;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
@@ -2148,6 +2154,12 @@ begin
   SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymIsSub[SymCount] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    SymSubLo[SymCount] := LastTypeSubLo;
+    SymSubHi[SymCount] := LastTypeSubHi;
+  end;
   SymPtrDepth[SymCount] := 0;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
@@ -2259,6 +2271,12 @@ begin
   SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymIsSub[SymCount] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    SymSubLo[SymCount] := LastTypeSubLo;
+    SymSubHi[SymCount] := LastTypeSubHi;
+  end;
   SymPtrDepth[SymCount] := 0;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
@@ -2327,6 +2345,12 @@ begin
   SymEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymIsSub[SymCount] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    SymSubLo[SymCount] := LastTypeSubLo;
+    SymSubHi[SymCount] := LastTypeSubHi;
+  end;
   SymPtrDepth[SymCount] := 0;
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;

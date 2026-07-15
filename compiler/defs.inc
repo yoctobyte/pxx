@@ -1138,7 +1138,10 @@ var
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymEnumId : array[0..MAX_SYMS-1] of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
-  SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
+  SymStrCap : array[0..MAX_SYMS-1] of Integer; { see decl below }
+  SymIsSub : array[0..MAX_SYMS-1] of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
+  SymSubLo : array[0..MAX_SYMS-1] of Int64;
+  SymSubHi : array[0..MAX_SYMS-1] of Int64; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
   SymPtrDepth : array[0..MAX_SYMS-1] of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
   SymPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
   SymPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
@@ -1328,7 +1331,10 @@ var
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
   LastTypeElemDynDepth : Integer; { set when a fixed-array element type resolves to a dynamic-array alias; consumed by AllocArray to lay the element out pointer-sized and record SymElemDynDepth, then reset }
-  LastTypeStrCap : Integer; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
+  LastTypeStrCap : Integer; { see decl below }
+  LastTypeIsSub : Boolean; { ParseTypeKind resolved a named subrange alias — Alloc* stamps SymIsSub/Lo/Hi from the pair below; reset at ParseTypeKind entry like LastTypeStrCap }
+  LastTypeSubLo : Int64;
+  LastTypeSubHi : Int64; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
   TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
                            element), or REC_NONE if the unit isn't loaded }
   MethodPtrRecId : Integer; { record id of the 16-byte method-pointer layout
@@ -2090,6 +2096,9 @@ var
   AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
+  AliasIsSub : array[0..MAX_TYPEALIAS-1] of Boolean; { named SUBRANGE alias (T = lo..hi): bounds retained for {$R+}. BSS-false default keeps every other Register*Alias site honest without touching them (feature-pascal-range-checks-r-plus). }
+  AliasSubLo : array[0..MAX_TYPEALIAS-1] of Int64;
+  AliasSubHi : array[0..MAX_TYPEALIAS-1] of Int64;
   AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasCount   : Integer;
