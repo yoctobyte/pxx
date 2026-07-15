@@ -195,6 +195,32 @@ def print_tstate(clone):
         return twatch.status(fallback, grace_min=45)
 
 
+def print_pubhealth(clone):
+    """Publish health: the line that was MISSING on 2026-07-15. A running daemon
+    that cannot publish (repeated drops from a conflict it can't clear) used to
+    look identical to a healthy quiet one — the only hint was the coverage line
+    drifting to a vague 'DOWN' while 'daemon RUNNING' sat right above it. Make
+    the failure loud and name the reason."""
+    h = read_json(os.path.join(clone, twatch.PUBHEALTH_REL))
+    if not h:
+        return
+    drops = h.get("consec_drops", 0)
+    behind = h.get("behind")
+    behind_txt = "; %d behind origin" % behind if behind else ""
+    if drops:
+        print("  publish: %s⚠ BLOCKED%s — %d consecutive drop%s over %s "
+              "(last: %s)%s"
+              % (RED, OFF, drops, "" if drops == 1 else "s",
+                 fmt_age(h.get("drops_since")),
+                 h.get("last_reason") or "conflict", behind_txt))
+        print("           %sstale verdicts are being discarded each cycle — a "
+              "human edit to a co-edited tstate file (bench.tsv) usually clears "
+              "on its own; if it persists, inspect the clone%s" % (DIM, OFF))
+    elif h.get("last_push_ts"):
+        print("  publish: %sok%s — last push %s ago%s"
+              % (GRN, OFF, fmt_age(h["last_push_ts"]), behind_txt))
+
+
 def cmd_status(clone, attach_ok=True):
     conf = twatch.load_conf(clone)
     pid, w = daemon_pid(clone)
@@ -224,6 +250,7 @@ def cmd_status(clone, attach_ok=True):
               % (GRN, OFF, pid, phase, extra, age))
     else:
         print("  daemon : %sSTOPPED%s — trackt start" % (RED, OFF))
+    print_pubhealth(clone)
     print_tstate(clone)
     if attach_ok and pid and w.get("phase") == "testing":
         print("%s-- run in progress, attaching (Ctrl-C detaches) --%s" % (DIM, OFF))

@@ -48,6 +48,7 @@ import time
 
 TSTATE_REL = "devdocs/progress/tstate"
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
+PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
 CONF_DEFAULTS = {"tier": "full", "fast_tier": "native", "interval": 60,
                  "debounce": 20, "no_bisect": False,
@@ -192,7 +193,48 @@ class Clone:
             sh(["git", "rebase", "--abort"], cwd=self.path, check=False)
             return False
 
-    def _drop_to_origin(self):
+    def _behind(self):
+        """How many commits the clone is behind origin (0 when caught up).
+        Cheap health signal; None if it can't be computed."""
+        try:
+            n = sh(["git", "rev-list", "--count",
+                    "HEAD..origin/%s" % self.branch], cwd=self.path)
+            return int(n) if n else 0
+        except (RuntimeError, ValueError):
+            return None
+
+    def _record_pub(self, result, reason=""):
+        """Persist a publish outcome to PUBHEALTH_REL so `trackt status` and the
+        web UI can tell a HEALTHY-but-quiet daemon from one that is alive but
+        UNABLE to publish. Before 2026-07-15 that distinction was invisible: the
+        daemon kept running (phase=testing/idle) while every publish failed, and
+        the only signal was the coverage line drifting to a vague 'DOWN'.
+
+        result: 'pushed' (clears the drop streak) | 'dropped' (a cycle was
+        thrown away — increments the streak that flags a stuck daemon)."""
+        p = os.path.join(self.path, PUBHEALTH_REL)
+        h = {}
+        try:
+            with open(p) as f:
+                h = json.load(f)
+        except (OSError, ValueError):
+            pass
+        now = time.time()
+        if result == "dropped":
+            h["consec_drops"] = h.get("consec_drops", 0) + 1
+            h.setdefault("drops_since", now)
+            h["last_drop_ts"] = now
+            h["last_reason"] = reason
+        elif result == "pushed":
+            h["consec_drops"] = 0
+            h.pop("drops_since", None)
+            h["last_push_ts"] = now
+            h["last_reason"] = ""
+        h["ts"] = now
+        h["behind"] = self._behind()
+        write_json_atomic(p, h)
+
+    def _drop_to_origin(self, reason="rebase conflict onto origin"):
         """A tstate publish couldn't rebase onto origin — typically because a
         co-edited data file (bench.tsv, borg.json) was reformatted by a HUMAN
         commit and our append conflicts line-for-line. Per Track T's
@@ -205,12 +247,15 @@ class Clone:
         the rebase but LEFT the commit, so every following cycle piled another
         unpushable tstate commit on top (75 stranded, master 94 behind) and
         publishing stalled for ~11h. reset-to-origin also auto-drains any such
-        pre-existing pile on the very next publish."""
+        pre-existing pile on the very next publish. The drop is recorded to
+        pubhealth so a REPEATED drop (a conflict it can't clear) surfaces as a
+        loud health warning instead of a silent quiet daemon."""
         self.fetch()
         sh(["git", "reset", "--hard", "origin/%s" % self.branch], cwd=self.path)
-        print("twatch: publish conflicted with origin — dropped this cycle's "
-              "tstate commit; will republish against fresh origin next cycle",
-              flush=True)
+        self._record_pub("dropped", reason)
+        print("twatch: publish conflicted with origin (%s) — dropped this "
+              "cycle's tstate commit; will republish against fresh origin next "
+              "cycle" % reason, flush=True)
 
     def publish(self, message, paths=None):
         """Commit ONLY the given paths (default: tstate) onto the branch tip
@@ -231,20 +276,21 @@ class Clone:
         sh(["git", "commit", "--quiet", "-m", message, "--"] + paths,
            cwd=self.path)
         if not self._pull_rebase():
-            self._drop_to_origin()
+            self._drop_to_origin("rebase conflict onto origin")
             return
         for attempt in range(5):
             try:
                 sh(["git", "push", "--quiet", "origin", self.branch], cwd=self.path)
+                self._record_pub("pushed")
                 return
             except RuntimeError:
                 time.sleep(2 + attempt * 3)
                 if not self._pull_rebase():
-                    self._drop_to_origin()
+                    self._drop_to_origin("rebase conflict onto origin")
                     return
         # push kept being rejected without a rebase conflict (origin racing us
         # every attempt): drop rather than raise, so the daemon loop survives.
-        self._drop_to_origin()
+        self._drop_to_origin("push rejected after 5 attempts (origin racing)")
 
 
 # ---------------------------------------------------------------- testing --

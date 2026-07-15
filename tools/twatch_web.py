@@ -413,6 +413,7 @@ def serve(clone, host, port):
  #fill{background:#4c4;height:100%%;width:0;border-radius:3px}
 </style></head><body>%s
 <h1>Track T — <span id=host></span> <span id=phase class=dim></span></h1>
+<div id=pubwarn style="display:none;background:#822;color:#fff;padding:.5em .7em;border-radius:4px;margin:.4em 0"></div>
 <div id=run style="display:none">
  <div id=bar><div id=fill></div></div>
  <div class=dim><span id=pct></span>%%%% — <span id=njobs></span> jobs,
@@ -429,6 +430,13 @@ function esc(s){const d=document.createElement('i');d.textContent=s;return d.inn
 async function tick(){
   const l=await j('/api/live');
   host.textContent=l.watch.host||'?';phase.textContent=l.watch.phase||'daemon off';
+  const p=l.pubhealth||{};
+  if(p.consec_drops){pubwarn.style.display='block';
+    pubwarn.textContent='⚠ PUBLISHING BLOCKED — '+p.consec_drops+
+      ' consecutive drop'+(p.consec_drops==1?'':'s')+' (last: '+(p.last_reason||'conflict')+')'+
+      (p.behind?'; '+p.behind+' behind origin':'')+
+      ' — stale verdicts discarded each cycle; usually a human edit to a co-edited tstate file, clears on its own.';}
+  else{pubwarn.style.display='none';}
   const t=l.watch.phase=='testing'&&l.live.ts;run.style.display=t?'block':'none';
   if(t){const v=l.live;fill.style.width=v.pct+'%%';pct.textContent=v.pct;
     njobs.textContent=v.done+'/'+v.total;elapsed.textContent=v.elapsed;
@@ -488,7 +496,8 @@ tick();once();setInterval(tick,2000);setInterval(once,30000);
     def api_live():
         return jsonify({
             "watch": _rj(os.path.join(clone, ".testmgr", "watch.json")),
-            "live": _rj(os.path.join(clone, ".testmgr", "live.json"))})
+            "live": _rj(os.path.join(clone, ".testmgr", "live.json")),
+            "pubhealth": _rj(os.path.join(clone, ".testmgr", "pubhealth.json"))})
 
     @app.route("/api/history")
     def api_history():
