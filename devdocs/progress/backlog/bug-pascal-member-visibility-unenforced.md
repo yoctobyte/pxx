@@ -54,3 +54,39 @@ workarounds (same-unit access, the cracker cast).
 - Enforcement likely belongs behind the `--strict` umbrella
   (feature-require-forward-strict-mode's flag infrastructure), not the lax
   default dialect.
+
+## Progress (2026-07-15, agent-A — FIELD visibility landed behind the flag)
+
+Landed (commit 23fd7574): the real, FPC-faithful, unit-scoped model behind
+`--strict-visibility` / `{$STRICT_VISIBILITY ON}`, **default OFF** — self-host
+byte-identical (the lax path runs no extra lookup).
+
+- **Data model:** `UClsUnitIdx` (declaring unit, stamped in AddUClass),
+  `UFldVis`/`UMthVis` (per-member level VIS_*, stamped from the class-body section
+  tracker beside UFldPub), VIS_* constants, the flag (CLI + directive + default
+  off, mirroring --strict-case).
+- **Enforcement (FIELDS):** `EnforceMemberVis` uses the access context from the
+  globals CurrentUnitIdx + CurSelfClass; scoping = private/protected UNIT-scoped
+  (protected also grants descendants), strict variants TYPE-scoped. Wired at the
+  genuine field-access sites (explicit obj.field read+write, bare implicit-Self),
+  guarded on the flag. Unknown declaring class fails OPEN.
+- **Verified:** flag rejects an external private access and a strict-private field
+  reached from a descendant (the tclass12b shape, on a field); valid patterns
+  (same-class other-instance private, descendant-reads-protected, same-unit,
+  public) compile; **ZERO false-positives** sweeping the whole class/OOP/interface/
+  record test suite with the flag on. Regressions: `test_member_visibility`
+  (positive, both modes) + `test_member_visibility_strict_fail` (negative).
+
+### Remaining before full resolution / --mimic-fpc promotion
+1. **Method-call enforcement** — same helper + MethDeclClass/UMthVis, wired at the
+   obj.method() and bare-Self call sites (numerous; each needs the same
+   false-positive sweep the field wiring got). `MethDeclClass` helper already added.
+2. **Class-const scoping** — tclass12b's EXACT case is a `strict private const`,
+   which pxx models as a GLOBAL (class consts are not scoped members here), so it
+   is not yet caught. Needs class-const scoping, a separate mechanism.
+3. **Full FPC-corpus validation** — compile fgl / Synapse / fpjson / the
+   conformance pass-set with the flag ON; any rejection of that valid code is a
+   semantics bug to fix before promoting into `--mimic-fpc`.
+
+## Log
+- 2026-07-15 — resolved, commit 23fd7574.
