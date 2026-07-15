@@ -1,4 +1,5 @@
 program TestInterfacesInherit;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 { Interface inheritance: `IBar = interface(IFoo)` extends IFoo. A class that
   implements IBar also implements IFoo; IBar dispatches IFoo's inherited methods
   through the leading IMT slots; an IBar value widens to IFoo. }

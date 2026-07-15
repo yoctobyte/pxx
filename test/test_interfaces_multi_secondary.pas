@@ -1,4 +1,5 @@
 program TestInterfacesMultiSecondary;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 {$mode objfpc}
 
 type

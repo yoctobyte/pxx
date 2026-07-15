@@ -676,7 +676,7 @@ begin
   ThreadSafeMode := False;
   MatchQuiet := False;
   MimicFpc := False;
-  InterfacesComMode := False;
+  InterfacesComMode := True;   { FPC/Delphi default: interfaces are COM (refcounted). {$interfaces corba} opts out. }
   ComInterfaceUsed := False;
   CStyleComments := False;
   NestedComments := True;   { REAL FPC default (verified 3.2.2, fpc AND objfpc

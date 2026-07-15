@@ -1,4 +1,5 @@
 program TestInterfacesAs;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 { `obj as IFoo` — checked cast to an interface VALUE. Yields a CORBA fat pointer
   the same as a class-to-interface assignment, but with a runtime implementation
   check: nil passes through as a null fat pointer; a non-implementer traps. }

@@ -1,4 +1,5 @@
 program TestInterfacesIs;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 { `obj is IFoo` — true iff obj's class implements the interface (directly or
   inherited). This is a real implementation check (FPC's CORBA `is` does not do
   one, so the expected values here are the correct semantics, not an FPC diff). }

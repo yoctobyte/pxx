@@ -1,4 +1,5 @@
 program TestInterfacesParam;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 { Interface values across procedure boundaries and identity:
   - implicit class->interface coercion at a call site and into a Result
   - identity =/<> compares the referenced instance, not the shared IMT

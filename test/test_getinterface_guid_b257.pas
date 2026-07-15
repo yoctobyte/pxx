@@ -1,4 +1,5 @@
 program test_getinterface_guid_b257;
+{$interfaces corba}  {non-refcounted CORBA interfaces on plain classes; FPC needs this too}
 { FPC's TObject.GetInterface(const IID: TGUID; out Obj): Boolean — look an implemented
   interface up BY GUID at runtime and hand back the interface value. Available with no
   `uses`, as FPC declares it on TObject in System.
