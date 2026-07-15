@@ -28,11 +28,12 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (107)
+## backlog (108)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
+| bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
@@ -976,6 +977,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
+- [p 65] [A] bug-a-double-global-initializer-arithmetic-folds-to-zero
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 60] [A] bug-a-compiler-hang-on-valid-c-programs

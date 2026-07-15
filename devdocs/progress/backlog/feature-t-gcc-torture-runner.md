@@ -35,12 +35,17 @@ skip-file, no tier, no maintenance.
 (each `abort()`s on a wrong result, exits 0 on success; oracle-free). GPL test DATA
 only, gitignored, never linked/shipped. Left in place by the reverted Track A draft.
 
-## Harvest recipe (scratchpad/torture_harvest.sh)
+## Harvest tool: `tools/c_torture_harvest.sh` (one-shot, NOT gated)
 
-Compile each with `pxx -Ilib/crtl/include -Ilib/crtl/src`; a COMPILE failure is a
-dialect gap (skip — not a bug); a program that COMPILES but exits nonzero
-(134 abort / 139 segv / 124 timeout / other) is a MISCOMPILE candidate. One-time, no
-infrastructure.
+`bash tools/c_torture_harvest.sh [outdir]`. Compiles each program with
+`pxx -Ilib/crtl/include -Ilib/crtl/src`; a COMPILE failure is a dialect gap (skip); a
+compile HANG or nonzero RUN exit is a candidate. Candidates are cross-checked against
+gcc and bucketed into `pxx_only.txt` (gcc passes → real pxx bug), `both_fail.txt`
+(gcc also fails even with `-O2 -lm` → INVESTIGATE, never dropped), and
+`feature_gap.txt` (program declares a `dg-options` flag pxx lacks). The gcc check
+retries `-O2` and `-lm` before believing gcc fails — that recovers real bugs a naive
+`gcc <f>` would hide (see the float-floor case below). NOT a runner, NOT wired into
+any tier — a manual discovery tool.
 
 ## Results (2026-07-15 harvest, opus-trackT)
 
@@ -49,8 +54,27 @@ infrastructure.
 
 - **875 pass**, **705 compile-fail** (GNU/dialect gaps — discarded, not bugs),
   **76 miscompile candidates** (compile OK, wrong runtime behavior).
-- Filtered the 76 through a gcc oracle (gcc-built binary must exit 0): **74 are
-  clean pxx-only miscompiles**; 2 dropped (gcc also fails — e.g. `float-floor.c`).
+- Cross-checked the 76 against a gcc oracle. **74 gcc passes → pxx-only miscompiles.**
+  Of the 2 where gcc "also failed": **`float-floor.c` was a REAL pxx bug the oracle
+  check nearly hid** — gcc's failure was a `-lm` link artifact at -O0 (`floor` needs
+  libm; gcc -O2 folds it and passes), and pxx aborts because of
+  [[bug-a-double-global-initializer-arithmetic-folds-to-zero]] (a global
+  `double = 1024.0 - 1.0/32768.0` folds to 0.0). `eeprof-1.c` is a genuine feature
+  gap (requires `-finstrument-functions`, which pxx lacks — gcc aborts without it too).
+- **NET: 75 gcc-verified pxx-only bugs** (74 + float-floor).
+
+### Methodology note — do NOT auto-dismiss "gcc also fails" (user, 2026-07-15)
+
+The gcc oracle is a cross-check, **not ground truth**, and a "gcc also fails" result
+is *more* intriguing, not a reason to drop:
+1. the failure may be a harness artifact hiding a real pxx bug (float-floor: missing
+   `-lm` at -O0) — always retry with `-O2` and `-lm` before concluding gcc fails;
+2. both compilers may mishandle a well-defined program differently (a real pxx bug
+   gcc happens to share, or a genuine gcc bug);
+3. only a documented *feature requirement* the program itself declares (a `dg-options`
+   flag pxx doesn't implement, like `-finstrument-functions`) is a legitimate drop.
+Same principle pasmith already applies to its FPC oracle: earn the dismissal, never
+reflex it. A "both fail" case is a THIRD bucket to investigate, never a silent discard.
 
 **74 gcc-verified pxx-only miscompiles**, clustered by construct (the standing triage
 queue — reproduce any with
