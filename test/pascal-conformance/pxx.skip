@@ -144,8 +144,6 @@ tprocvar1.pp	gap: method pointers (`procedure(l:longint) of object`), @Class.Met
 tprocvar2.pp	gap: typed const procvar initialized with bare proc name (TP mode), procvar via move()
 tprocvar3.pp	gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)
-trange2.pp	gap: {$R+} range-check errors on longint<->cardinal conversion raising exceptions
-trange3.pp	gap: {$R+} range checking on array indexes (currently segfaults instead of raising)
 trange5.pp	gap: `with` over a record typecast (int64rec(q)) plus 64-bit {$R+} range checks
 tsealed6.pp	gap: `object abstract` / `object sealed` modifiers in object declarations
 tset2a.pp	gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics
