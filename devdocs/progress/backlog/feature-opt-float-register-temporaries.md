@@ -1,7 +1,7 @@
 ---
 summary: "float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm"
 type: feature
-prio: 55
+prio: 35  # user 2026-07-15: worth a ticket, not high prio
 ---
 
 # Track O: float expression temporaries in registers
@@ -36,6 +36,19 @@ still pays, but the honest fix is an xmm-resident float accumulator
 today, but as MOVSD spills, no GPR transit), which touches every float
 consumer: binops, compares, call args/returns, stores, writeln. Sized as
 a MULTI-SESSION Track O arc — do not start it as a night-tail.
+
+## User constraints (2026-07-15)
+
+- **Not high prio** — worth the ticket, not a campaign.
+- **-O0 keeps today's emission exactly** (the GPR-transit accumulator stays
+  the simple, debuggable baseline); the xmm-resident evaluation is an
+  optimization LEVEL behavior (-O2+, or -O3 first per the Track O promotion
+  rule).
+- **Highly platform-specific**: this is per-backend value-model work, NOT a
+  shared-IR pass — x86-64 (and aarch64 later) only, per the O charter;
+  32-bit/ESP targets keep their existing models. (Note: FPC's exact codegen
+  strategy for its 4x — FP stack vs SSE — is its business; our number comes
+  from the bench oracle either way.)
 
 ## Shape (per the regcall/residency precedents)
 
