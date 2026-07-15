@@ -2918,6 +2918,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     helperPi, wrapperArg, wrapperCall: Integer;
     lhsTk, lhsStoreTk, castTk: TTypeKind;
     lhsStrCap: Integer;
+    rcSubLo, rcSubHi: Int64;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
@@ -5014,6 +5015,13 @@ begin
             else
               value := IRWrapRangeChk(value, IntToTypeKind(ASTTk[ASTLeft[node]]));
           end
+          else if (ASTKind[ASTLeft[node]] = AN_FIELD) and
+                  (ResolveNodeRec(ASTLeft[ASTLeft[node]]) <> REC_NONE) and
+                  RecFieldSubBounds(ResolveNodeRec(ASTLeft[ASTLeft[node]]),
+                                    GetASTIdentName(ASTLeft[node]),
+                                    rcSubLo, rcSubHi) then
+            { subrange FIELD dest: its retained lo..hi outranks the width table }
+            value := IRWrapChkBounds(value, rcSubLo, rcSubHi)
           else
             value := IRWrapRangeChk(value, lhsStoreTk);
         end;

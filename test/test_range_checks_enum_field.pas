@@ -5,7 +5,7 @@ program test_range_checks_enum_field;
   feature-pascal-range-checks-r-plus. }
 uses sysutils;
 type TE = (e0, e1, e2); TSub = 3..7;
-     TR = record arr: array[1..3] of integer; end;
+     TR = record arr: array[1..3] of integer; fs: TSub; end;
 var e: TE; sb: TSub; ch: char; i: integer; r: TR; caught: Integer;
 begin
   caught := 0;
@@ -17,9 +17,11 @@ begin
   i := 99;
   try sb := i; writeln('sb ', sb); except on erangeerror do inc(caught); end;
   sb := 5;
+  try r.fs := i; writeln('fs ', r.fs); except on erangeerror do inc(caught); end;
+  r.fs := 4;
   i := 5;
   try r.arr[i] := 1; writeln('fld ok'); except on erangeerror do inc(caught); end;
   i := 2;
   r.arr[i] := 7;
-  writeln('ok ', r.arr[2], ' ', sb, ' caught=', caught);
+  writeln('ok ', r.arr[2], ' ', sb, ' ', r.fs, ' caught=', caught);
 end.

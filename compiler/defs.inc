@@ -2015,7 +2015,10 @@ var
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
-  UFldStrCap : array[0..MAX_UFIELD-1] of Integer;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
+  UFldStrCap : array[0..MAX_UFIELD-1] of Integer;  { see decl above }
+  UFldIsSub : array[0..MAX_UFIELD-1] of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
+  UFldSubLo : array[0..MAX_UFIELD-1] of Int64;
+  UFldSubHi : array[0..MAX_UFIELD-1] of Int64;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
   UFldSetEnumId : array[0..MAX_UFIELD-1] of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
   UFldSetElemTk : array[0..MAX_UFIELD-1] of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
   UFldBitWidth : array[0..MAX_UFIELD-1] of Integer; { C named bit-field width in bits; 0 = ordinary field }

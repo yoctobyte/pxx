@@ -666,6 +666,9 @@ begin
       UFldBitBytes[dst+k] := UFldBitBytes[src];
       UFldPub[dst+k] := UFldPub[src];
       UFldStrCap[dst+k] := UFldStrCap[src];
+      UFldIsSub[dst+k] := UFldIsSub[src];
+      UFldSubLo[dst+k] := UFldSubLo[src];
+      UFldSubHi[dst+k] := UFldSubHi[src];
       for fi := 0 to MAX_ARR_DIMS - 1 do
       begin
         UFldArrDimLo[(dst+k) * MAX_ARR_DIMS + fi]   := UFldArrDimLo[src * MAX_ARR_DIMS + fi];
@@ -716,6 +719,12 @@ begin
   UFldBitBytes[fi] := 0;
   UFldPub[fi] := 0;
   UFldStrCap[fi] := 0;
+  UFldIsSub[fi] := LastTypeIsSub;
+  if LastTypeIsSub then
+  begin
+    UFldSubLo[fi] := LastTypeSubLo;
+    UFldSubHi[fi] := LastTypeSubHi;
+  end;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
 end;
@@ -1090,6 +1099,25 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field);
     if fi >= 0 then Result := UFldStrCap[fi];
+  end;
+end;
+
+function RecFieldSubBounds(rec: Integer; const field: AnsiString;
+  var lo, hi: Int64): Boolean;
+{ True + the retained lo..hi when the field was declared via a named SUBRANGE
+  type ({$R+} store checks — feature-pascal-range-checks-r-plus). }
+var fi: Integer;
+begin
+  Result := False;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field);
+    if (fi >= 0) and UFldIsSub[fi] then
+    begin
+      lo := UFldSubLo[fi];
+      hi := UFldSubHi[fi];
+      Result := True;
+    end;
   end;
 end;
 
