@@ -98,3 +98,35 @@ The repro above prints `DTOR-thing` then `DTOR-holder` (field released on
 `Free`); an ansistring/dynarray class field is released on destruction (a
 leak-counter or valgrind-style check); self-host byte-identical; cross targets
 green.
+
+## Resolution (2026-07-15, agent-ACP — commit 56e8261b)
+
+Landed via the [VMT-16] layout-backlink design (runtime-class dispatch, so a
+base-typed Free releases a descendant's fields):
+- EmitLayoutRTTI: class layout descriptors (record format + member kind 4 =
+  COM interface), whole parent chain, backlinked at [VMT-16].
+- PXXClassFinalize: kind-4 interface pass FIRST and UNLOCKED (exactly the
+  ticket's option (b) — the release runs Destroy + self-locking FreeMem, so no
+  lock may be held); strings/dynarrays/records via PXXRecordRelease after.
+- Injected at the FreeMem-intrinsic IR lowering when the arg is class-typed
+  (all Free routes + all six targets share it), after the Destroy chain =
+  FPC's FreeInstance timing.
+- Heap-lock hazard resolution: single-threaded + softlock targets finalize
+  fully; x86-64 --threadsafe gates the string/dynarray pass off
+  (PXX_TS_HARDLOCK — the codegen BSS spinlock is unreachable from Pascal), so
+  the interface release works everywhere and the hardlock string case keeps
+  the pre-existing benign leak instead of racing the allocator.
+- Verified: repro prints DTOR-thing after DTOR-holder; ARC-balance alias test;
+  RSS flat over 5000 create/free cycles (string+dynarray fields); fpjson
+  203/203; {$threadsafe on} interface field released, no deadlock;
+  FPC-differential identical. Regression: test_class_managed_fields_finalize
+  (in make test). Self-host fixedpoint (one reseed, gen2==gen3).
+
+RESIDUAL kept out (documented, not silent): x86-64 --threadsafe string/dynarray
+class-field release (needs a reentrant heap lock or a Pascal-visible acquire);
+RECORD COM-interface fields (the original cb2ed843 scope) still a benign leak
+under the same lock constraint.
+
+
+## Log
+- 2026-07-15 — resolved, commit 56e8261b.
