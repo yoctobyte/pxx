@@ -47,10 +47,20 @@ computation, no pxx-only units:
   the checksum (which is what makes the timing comparison legitimate — same checksum means
   same work), and it self-checks against the example's pinned `EXPECTED` before timing
   anything. New data: **pxx -O3 1166ms vs fpc 364ms — 3.2x**.
-- **raytracer** — harder: it leans on `image`/`png` for output and `hashing` for the
-  canary. A portable variant would render into a plain array and checksum it, dropping
-  PNG entirely. The float/call-heavy inner loop, which is the part worth timing, does not
-  touch those units at all.
+- ~~**raytracer**~~ — **DONE 2026-07-15**: `bench/portable/raytracer.pas`, same fixed
+  scene + Double kernel + positional checksum, only `uses math` (Sqrt). Drops
+  image/png/hashing/platform — it folds each traced pixel straight into the checksum
+  instead of into an image buffer, since the tracing is the part being timed, not the
+  storage. Registered as `raytracer-p`, `fpc_ok=True`, canary 96x64 / timed 480x360.
+  New data: **pxx -O3 704ms vs fpc 74ms — 9.5x**, the biggest gap in the suite and the
+  call-dense-float shape that was missing.
+  Two notes: (1) `Power(ndh,32)` was replaced by repeated squaring so the timed inner
+  loop is pure codegen, not an RTL transcendental. (2) pxx and FPC checksums differ by
+  0.05% (297858362 vs 297697376) — expected two-compiler float drift (association / fused
+  multiply-add / x87-vs-SSE intermediates), NOT different work; the self-check uses a
+  0.2% tolerance band, so both pass while a real regression (orders of magnitude) still
+  Halt(1)s. Not worth a bug ticket per the user; may vanish once float codegen is
+  optimised.
 
 Keep the originals as they are — they are Track B/E demos and should stay idiomatic (they
 exist to *use* our libraries). The portable variants are bench fixtures, not replacements.
@@ -64,11 +74,11 @@ inlining and register allocation actually show up. `nbody` at 565ms (pxx -O2) vs
 (fpc) says there is a large gap to explain; more comparable workloads is how you find out
 where it lives.
 
-## Acceptance
+## Acceptance — MET 2026-07-15
 
-`bench/portable/raytracer.pas` exists, uses only units FPC also has, is registered in
-`BENCH_SUITE` with `fpc_ok=True`, and produces `fpc` rows in `tstate/bench.tsv` alongside
-the `-O0/-O2/-O3` ones. (mandelbrot: done.)
+`bench/portable/raytracer.pas` exists, uses only units FPC also has (`math`), is registered
+in `BENCH_SUITE` with `fpc_ok=True`, and produces `fpc` rows in `tstate/bench.tsv` alongside
+the `-O0/-O2/-O3` ones. Both mandelbrot and raytracer done — ticket ready to resolve.
 
 ## Where the gap stands now
 
