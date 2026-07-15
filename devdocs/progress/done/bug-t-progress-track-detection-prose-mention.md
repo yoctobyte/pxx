@@ -47,3 +47,6 @@ real declaration position) so a mid-sentence "Found by Track T" no longer matche
 A ticket with `track: A` (or P/B/…) in frontmatter and a prose "Track T" mention in
 its Type/Track bullet resolves to its frontmatter track; the existing R/O/E/T
 slug-surfacing tickets are unchanged (add a couple as regression fixtures).
+
+## Log
+- 2026-07-15 — resolved, commit f39a071e.
