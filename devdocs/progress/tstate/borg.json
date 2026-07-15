@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-14T14:48:50Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "811b20fb702f804751552692784a09e8578f7816",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-14T14:57:47Z",
    "fixed": [],
    "new_red": [],
@@ -419,18 +411,20 @@
    "sha": "0bef32368d1e85e5bafef185abff0a72c7fbf873",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-15T04:45:00Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0bef32368d1e85e5bafef185abff0a72c7fbf873",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
   "fpc-bootstrap#src:compiler/compiler.pas": "fail",
   "lib-fpc-clean#00": "pass",
-  "optdiff#shard0/6": "pass",
-  "optdiff#shard1/6": "pass",
-  "optdiff#shard2/6": "pass",
-  "optdiff#shard3/6": "pass",
-  "optdiff#shard4/6": "pass",
-  "optdiff#shard5/6": "pass",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "test-aarch64#src:test/ccross_args.c": "pass",
   "test-aarch64#src:test/ccross_double_to_int.c": "pass",
@@ -1715,11 +1709,6 @@
   "test-i386#src:test/test_uint64_ops.pas": "pass",
   "test-lua#src:test/lua/runner.c": "pass",
   "test-lua-cross#src:test/lua/runner.c": "pass",
-  "test-opt#00": "pass",
-  "test-opt#src:compiler/compiler.pas@1": "pass",
-  "test-opt#src:compiler/compiler.pas@2": "pass",
-  "test-opt#src:compiler/compiler.pas@3": "pass",
-  "test-opt#src:test/test_atomic64.pas": "pass",
   "test-riscv32#00": "pass",
   "test-riscv32#src:test/ccross_args.c@1": "pass",
   "test-riscv32#src:test/ccross_args.c@2": "pass",
@@ -1858,11 +1847,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-15T04:41:28Z",
+  "date": "2026-07-15T04:45:00Z",
   "sha": "0bef32368d1e85e5bafef185abff0a72c7fbf873",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 79.0
+  "wall": 204.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1872,11 +1861,11 @@
   "sha": "0b28fdabbd479ccea37dbc46b02b782931b9f5ad"
  },
  "last_full": {
-  "date": "2026-07-15T04:20:25Z",
-  "sha": "0b28fdabbd479ccea37dbc46b02b782931b9f5ad",
+  "date": "2026-07-15T04:45:00Z",
+  "sha": "0bef32368d1e85e5bafef185abff0a72c7fbf873",
   "tier": "full",
   "verdict": "GREEN",
-  "wall": 218.0
+  "wall": 204.5
  },
  "last_opt": {
   "date": "2026-07-15T04:23:09Z",
