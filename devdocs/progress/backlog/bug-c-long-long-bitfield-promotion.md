@@ -1,8 +1,9 @@
 ---
-summary: "C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort"
+summary: "RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5"
 type: bug
 track: C
-prio: 45
+tags: compat
+prio: 15  # user-visible disposition 2026-07-15: conformance-only edge, near-zero real-world value; pick up only if a real corpus needs sub-word bitfield wrap
 ---
 
 # C long-long bitfields (width 33-64) mis-promoted

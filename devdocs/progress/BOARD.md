@@ -33,7 +33,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
-| bug-c-long-long-bitfield-promotion | C | 45 | bug | C long-long bitfields (width 33-64, `unsigned long long u:40`) are not promoted/extended correctly — the width<32 sub-int promotion doesn't cover them; gcc-torture bf64-1/bitfld-3 abort | — |
+| bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -1020,7 +1020,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [C] bug-c-long-long-bitfield-promotion
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
@@ -1077,6 +1076,7 @@ _none_
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [T] feature-t-gcc-torture-runner
+- [p 15] [C] bug-c-long-long-bitfield-promotion
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
 
