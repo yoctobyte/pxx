@@ -479,6 +479,7 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 
 procedure IRLowerCleanupToDepth(targetDepth: Integer);
@@ -1680,7 +1681,7 @@ begin
     tmpSym := AllocVar('', tyRecord);
     LastTypeRecId := savedLastTypeRecId;
     tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
-    value := IRAppend(IR_PROCADDR, Integer(ASTIVal[argAST]), -1, -1, 0, Ord(tyPointer));
+    value := IRMethodRefCode(argAST);   { VMT-resolved for a virtual method }
     IRAppend(IR_STORE_MEM, tmpAddr, value, -1, 0, Ord(tyPointer));   { Code @0 }
     srcAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
     value := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
@@ -2940,6 +2941,27 @@ begin
     Exit;
   end;
   Result := IRWrapChkBounds(value, lo, hi);
+end;
+
+{ Code pointer for an AN_METHODREF (`@obj.Method`). For a NON-virtual method
+  (ASTRight = -1) it is the static proc address. For a VIRTUAL method
+  (ASTRight = VMT slot >= 0) it must be resolved through the object's VMT at
+  runtime so `@baseref.VirtualMethod` captures the derived override, matching
+  direct virtual dispatch: vmt = [self]; code = [vmt + slot*8]. Mirrors the
+  IR_VIRTUAL_CALL codegen (mov rax,[rdi]; call [rax+slot*8]). }
+function IRMethodRefCode(mref: Integer): Integer;
+var selfVal, vmt, codeAddr, slotK: Integer;
+begin
+  if ASTRight[mref] < 0 then
+  begin
+    IRMethodRefCode := IRAppend(IR_PROCADDR, Integer(ASTIVal[mref]), -1, -1, 0, Ord(tyPointer));
+    Exit;
+  end;
+  selfVal := IRLowerAST(ASTLeft[mref]);
+  vmt := IRAppend(IR_LOAD_MEM, selfVal, -1, -1, 0, Ord(tyPointer));
+  slotK := IRAppend(IR_CONST_INT, -1, -1, -1, ASTRight[mref] * 8, Ord(tyInteger));
+  codeAddr := IRAppend(IR_BINOP, vmt, slotK, Ord(tkPlus), 0, Ord(tyPointer));
+  IRMethodRefCode := IRAppend(IR_LOAD_MEM, codeAddr, -1, -1, 0, Ord(tyPointer));
 end;
 
 { Resolve an AN_FIELD node to (record id, field index). Returns True and sets the
@@ -4354,8 +4376,10 @@ begin
     AN_METHODREF:
     begin
       { Outside an assignment to a TMethod target we can only surface the code
-        half; the proper 16-byte store lives in AN_ASSIGN. }
-      Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+        half; the proper 16-byte store lives in AN_ASSIGN. VMT-resolved for a
+        virtual method so `@obj.VirtualMethod` in a value/arg position points at
+        the override. }
+      Result := IRMethodRefCode(node);
     end;
 
     AN_NEG:
@@ -4939,7 +4963,7 @@ begin
           64-bit, 4 on i386/arm32, matching the user TMethod's Data offset). }
         left := ASTRight[node];
         leftAddr := IRLowerAddress(ASTLeft[node]);
-        value := IRAppend(IR_PROCADDR, Integer(ASTIVal[left]), -1, -1, 0, Ord(tyPointer));
+        value := IRMethodRefCode(left);   { VMT-resolved for a virtual method }
         IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
         right := IRLowerAddress(ASTLeft[node]);
         item := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));

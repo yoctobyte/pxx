@@ -6646,6 +6646,11 @@ begin
         node := AllocNode(AN_METHODREF);
         ASTIVal[node] := UMthProc_[mmi];
         ASTLeft[node] := valNode;
+        { Record the method's VMT slot (>=0 virtual, -1 non-virtual) so the code
+          pointer resolves through the object's VMT at runtime, not the static base
+          address — `@baseref.VirtualMethod` must capture the derived override
+          (bug-a-method-pointer-virtual-captures-static-address). }
+        ASTRight[node] := UMthVirSlot[mmi];
         { Typed as a Pointer: in a value/argument context @obj.Method surfaces its
           CODE address (IR lowering yields IR_PROCADDR), so it matches a Pointer
           parameter — `TakesPtr(@h.M)`. Assignment to a TMethod target still
@@ -6672,6 +6677,7 @@ begin
         node := AllocNode(AN_METHODREF);
         ASTIVal[node] := UMthProc_[mmi];
         ASTLeft[node] := valNode;
+        ASTRight[node] := UMthVirSlot[mmi];   { VMT slot (>=0 virtual): resolve via VMT }
         ASTTk[node] := Ord(tyPointer);
         Next;            { consume method name }
         CurASTNode := node;
@@ -15041,6 +15047,7 @@ begin
                   CurASTNode := AllocNode(AN_METHODREF);
                   ASTIVal[CurASTNode] := UMthProc_[smmii];
                   ASTLeft[CurASTNode] := opNode;
+                  ASTRight[CurASTNode] := UMthVirSlot[smmii];   { VMT slot (>=0 virtual) }
                   ASTTk[CurASTNode] := Ord(tyRecord);
                   LastExprTk := tyRecord;
                   Next;   { consume method name }

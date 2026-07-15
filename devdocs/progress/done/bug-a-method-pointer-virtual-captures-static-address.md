@@ -79,3 +79,6 @@ The minimal repro prints `via ptr: 1005` under pxx at every `-O` level; the pasm
 `--mptrs` rung stops diverging (its ledger signature clears on `--recheck`); a
 `test/test_*.pas` regression that calls a virtual method through a method pointer and
 folds the result matches FPC.
+
+## Log
+- 2026-07-15 — resolved, commit PENDING.

@@ -29,12 +29,11 @@ _none_
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (103)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
-| bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
@@ -196,7 +195,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (755)
+## done (756)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -207,6 +206,7 @@ _none_
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
+| bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
@@ -1019,7 +1019,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-method-pointer-virtual-captures-static-address
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [D] doc-licensing-split-mpl-zlib
 - [p 45] [C] feature-c-gtk3-header-final-wiring
