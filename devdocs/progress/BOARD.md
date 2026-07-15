@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
 | feature-signal-handlers | A | 65 | feature | Libc-free POSIX signal handler infrastructure (rt_sigaction) | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
@@ -32,6 +33,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-interface-release-on-last-ref-not-destroyed | T | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
@@ -100,7 +102,6 @@ _none_
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
-| feature-pasmith-deep-oop | T | 60 | feature | pasmith OOP is one linear chain: no interfaces, no is/as, no method pointers, no properties | — |
 | feature-pasmith-multi-unit-programs | T | 55 | feature | pasmith: generate multi-UNIT programs — the last structurally unreachable bug class | — |
 | feature-pasmith-pascal-program-generator | T | 70 | feature | pasmith — Csmith-style random Object Pascal generator, FPC as differential oracle | — |
 | feature-pasmith-qplus-rplus-rungs | T | 30 | feature | pasmith rungs for {$Q+}/{$R+}: generate checked regions + try/except EIntOverflow/ERangeError harnesses, differential vs FPC | — |
@@ -981,7 +982,6 @@ _none_
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
-- [p 60] [T] feature-pasmith-deep-oop
 - [p 60] [A] feature-pxx-basic
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
@@ -1051,6 +1051,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [T] bug-a-interface-release-on-last-ref-not-destroyed
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [T] feature-t-bench-portable-variants

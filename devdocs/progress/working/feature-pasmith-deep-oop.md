@@ -8,7 +8,7 @@ prio: 60
 
 - **Type:** feature (fuzzer coverage — Track T owns the tool; findings file into the
   owning lane as always: IR/codegen → A, dialect/frontend → P, RTL → B).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-14, user question after [[feature-pasmith-widen-grammar]] landed:
   "does our fuzzer test complex OOP?" It does not. It tests **one axis of OOP, deeply**.
 - **Related:** [[feature-pasmith-pascal-program-generator]] (the tool),
@@ -95,3 +95,30 @@ Each rung ships independently and is gated the same way the last widening was:
 Do **interfaces** and the **branching hierarchy** first: the hierarchy is a prerequisite
 for `is`/`as` and for polymorphic containers being worth anything, and interfaces are the
 one lifetime system in the dialect that has zero fuzz coverage today.
+
+## Log
+- 2026-07-15 (opus-trackT) — **Interface rung landed (`--intfs N`); found a real,
+  silent pxx bug on first run.** N COM interfaces (GUID'd — FPC requires one for
+  `as`/QueryInterface; pxx is lax and accepts a GUID-less `as`, a compat note not a
+  bug), one `TInterfacedObject`-derived class implementing all N (>=2 forces distinct
+  interface vtables). Objects are held only through interface refs — refcount owns
+  their lifetime, the generator never Frees them, and the destructor folds into the
+  checksum so Release count/order is observable. Dual-interface thunk is exercised
+  via INLINE `(iw as IPasM).IcM(..)` dispatch (temp released in-statement) — NOT a
+  stored `as`-alias, whose temporary lifetime is implementation-defined (FPC keeps it
+  to end-of-scope) and would fold destruction timing at a moment neither compiler is
+  obliged to agree on. That distinction was found the hard way: a stored-alias first
+  cut produced FPC=2-of-3 dtors vs the naive 3, the eval-order false-positive class —
+  removed.
+  Gate: `--check 60 --intfs 3` and `--check 40 --intfs 3 --wide`, 0 FPC rejects.
+  Soundness: on interface seeds FPC is self-consistent across `-O`, pxx is
+  self-consistent across `-O`, and they cross-diverge on every seed — the
+  single-real-bug fingerprint, not generator noise.
+  **Finding filed:** [[bug-a-interface-release-on-last-ref-not-destroyed]] — dropping
+  the last interface reference (`:= nil`) does not run the destructor on pxx (FPC runs
+  it synchronously). Interface RAII silently broken. Airtight 20-line repro in the
+  ticket. Per user: don't chase it, file it — that's what the fuzzer is for.
+  **Remaining deep-oop rungs** (unstarted): branching hierarchy (prereq for meaningful
+  is/as), `is`/`as` type tests + checked downcasts, method pointers (`procedure of
+  object`), properties, class methods/vars, polymorphic containers, exceptions
+  crossing a destructor.

@@ -127,7 +127,7 @@ CHAIN = 3          # heap nodes in the linked list a ptrwalk walks
 class Gen:
     def __init__(self, seed, nvars=8, nfuncs=3, stmts=12, depth=3, trace=False,
                  nclasses=0, nobjs=3, nstrs=0, nrecs=0, narrs=0, nenums=0,
-                 nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45):
+                 nshorts=0, nexcepts=0, nmodeprocs=0, wide_p=0.45, nintfs=0):
         self.rnd = random.Random(seed)
         self.seed = seed
         # The widened rungs (feature-pasmith-widen-grammar). Every one of them is a
@@ -161,6 +161,19 @@ class Gen:
         self.classes = []      # [{name, base, fields, methods}]
         self.in_method = False  # guards against o.Name recursion inside a method
         self.strs = []         # ansistring globals
+        # Interface rung (feature-pasmith-deep-oop): COM-refcounted interfaces --
+        # the ONE lifetime system in the dialect with zero fuzz coverage. A single
+        # class implements N interfaces (N>=2 forces distinct interface vtables and
+        # an offset-adjusting QueryInterface thunk -- the classic ABI corpse), and
+        # objects are held ONLY through interface refs so the RTL's AddRef/Release
+        # owns their lifetime. The generator NEVER Frees them -- doing so would
+        # double-free against the refcount -- and the impl's destructor folds into
+        # the checksum, so a missed or doubled Release changes the number. Kept a
+        # SEPARATE object set from the manual-Free class rung: no shared object, no
+        # lifetime interaction the generator could get wrong.
+        self.nintfs = nintfs
+        self.intfs = []        # interface method indices (0..nintfs-1)
+        self.intfvars = []     # (varname, iface_index) -- static interface type
         # --trace: emit the running checksum after EVERY statement instead of
         # only at exit. Diffing two oracles' traces localises a divergence to
         # the exact statement, on a program of ANY size -- which is why this
@@ -389,6 +402,25 @@ class Gen:
             return self.tagged("field", [
                 "%s%s.%s := %s(%s);"
                 % (pad, o, fn, ft.name, self.expr(ft, scope, 2))])
+
+        if k < 0.955 and self.intfvars:
+            # Interface dispatch through the interface vtable (distinct from the
+            # class vtable); the result folds into the checksum.
+            var, kk = rnd.choice(self.intfvars)
+            arg = self.expr(INT_TYPES[4], scope, 2)
+            if self.nintfs >= 2 and rnd.random() < 0.5:
+                # Dual-interface thunk: cast the object to a DIFFERENT interface
+                # inline and dispatch through it. `as` always resolves (the impl
+                # satisfies every interface, so no raise), and the temporary is
+                # released within this statement -- it cannot perturb destruction
+                # timing, unlike a stored alias. This is the offset-adjusting
+                # QueryInterface thunk the ticket calls out, exercised soundly.
+                m = (kk + 1) % self.nintfs
+                return self.tagged("intfthunk", [
+                    "%sMix((%s as IPas%d).Ic%d(longint(%s)));"
+                    % (pad, var, m, m, arg)])
+            return self.tagged("intfcall", [
+                "%sMix(%s.Ic%d(longint(%s)));" % (pad, var, kk, arg)])
 
         if k < 0.97 and self.strs:
             name, _ = rnd.choice(self.strs)
@@ -918,6 +950,85 @@ class Gen:
         self.in_method = False
         return L
 
+    def _guid(self, k):
+        """A deterministic GUID for interface k. FPC requires one for `as` /
+        QueryInterface (pxx is lax and accepts a GUID-less `as` -- noted as a
+        compat difference, not a bug); the generator's contract is FPC-valid
+        code, so every interface carries one. Derived from the seed so `--seed N`
+        still reproduces byte-for-byte."""
+        h = "%08x" % (self.rnd.getrandbits(32))
+        return "{%s-%04x-%04x-%04x-%04x%08x}" % (
+            h, self.rnd.getrandbits(16), self.rnd.getrandbits(16),
+            self.rnd.getrandbits(16), self.rnd.getrandbits(16),
+            self.rnd.getrandbits(32))
+
+    def gen_interfaces(self):
+        """N COM interfaces + one refcounted class implementing all of them.
+
+        Each interface IPask has a unique method Ick(a): distinct names keep the
+        impl unambiguous when one class satisfies several interfaces. N>=2 is the
+        point -- the impl then carries N interface vtables at different offsets and
+        a cast between them exercises the thunk. TInterfacedObject (present in both
+        FPC's System and pxx's builtin heap, so no `uses`) supplies the refcount.
+        """
+        rnd = self.rnd
+        self.intfs = list(range(self.nintfs))
+        L = ["type"]
+        for k in self.intfs:
+            L.append("  IPas%d = interface" % k)
+            L.append("    ['%s']" % self._guid(k))
+            L.append("    function Ic%d(a: longint): longint;" % k)
+            L.append("  end;")
+        # The impl: implements every interface, so it holds nintfs vtables.
+        impl = "TIfc = class(TInterfacedObject, %s)" % ", ".join(
+            "IPas%d" % k for k in self.intfs)
+        L.append("  " + impl)
+        L.append("    fi: longint;")
+        L.append("    fs: ansistring;")
+        L.append("    constructor Create(v: longint);")
+        L.append("    destructor Destroy; override;")
+        for k in self.intfs:
+            L.append("    function Ic%d(a: longint): longint;" % k)
+        L.append("  end;")
+        L.append("")
+        return L
+
+    def gen_intf_bodies(self):
+        rnd = self.rnd
+        L = []
+        L.append("constructor TIfc.Create(v: longint);")
+        L.append("begin")
+        L.append("  inherited Create;")
+        L.append("  fi := v;")
+        L.append("  fs := 'i';")
+        L.append("end;")
+        L.append("")
+        # Destructor folds field + a per-class marker: Release count and order are
+        # now part of the observed checksum. A leaked object never runs this and
+        # the number changes; a double-release would (in a correct RTL) not happen
+        # at all, but if a buggy one Released twice the second dtor changes it too.
+        L.append("destructor TIfc.Destroy;")
+        L.append("begin")
+        L.append("  Mix(8000);")
+        L.append("  Mix(int64(fi));")
+        L.append("  inherited Destroy;")
+        L.append("end;")
+        L.append("")
+        self.in_method = True
+        for k in self.intfs:
+            mloc = [("m%d" % j, t) for j, t in enumerate(INT_TYPES)]
+            L.append("function TIfc.Ic%d(a: longint): longint;" % k)
+            L += ["var"] + ["  %s: %s;" % (n, t.name) for n, t in mloc]
+            L.append("begin")
+            L += ["  %s := %s(a);" % (n, t.name) for n, t in mloc]
+            scope = [("fi", INT_TYPES[4]), ("a", INT_TYPES[4])] + mloc
+            L.append("  Ic%d := longint(%d + fi + %s);"
+                     % (k, k, self.expr(INT_TYPES[4], scope, 2)))
+            L.append("end;")
+            L.append("")
+        self.in_method = False
+        return L
+
     def gen_modeprocs(self):
         """Procedures with var / const / out parameters.
 
@@ -1088,6 +1199,8 @@ class Gen:
         L += self.gen_types()
         clsdecl = self.gen_classes() if self.nclasses else []
         L += clsdecl
+        if self.nintfs:
+            L += self.gen_interfaces()
         L.append("var")
         L.append("  cs: qword;")
         for n, t in self.globals:
@@ -1125,6 +1238,20 @@ class Gen:
             # that gets this wrong shows up as an -O-level self-contradiction.
             for i in range(self.nobjs):
                 L.append("  o%d: TC0;" % i)
+        if self.nintfs:
+            # One fresh object per interface, held through that interface only.
+            # NO stored `as`-alias variable: the lifetime of the temporary a
+            # stored `iw as IPasM` creates is implementation-defined (FPC keeps
+            # it to end-of-scope, so a folded destructor fires at a moment
+            # neither compiler is obliged to agree on -- a false positive, the
+            # eval-order class the generator promises never to emit). The
+            # dual-interface vtable/thunk is exercised the SOUND way instead:
+            # INLINE `(iw as IPasM).IcM(..)` in the statement stream, whose temp
+            # is released within the statement and cannot perturb destruction
+            # timing. self.intfvars drives dispatch and the nil-release.
+            for k in self.intfs:
+                L.append("  iw%d: IPas%d;" % (k, k))
+                self.intfvars.append(("iw%d" % k, k))
         for lv in ["li0", "li1", "li2"]:
             L.append("  %s: longint;" % lv)
         L.append("")
@@ -1171,6 +1298,8 @@ class Gen:
         L += self.gen_modeprocs()
         if self.nclasses:
             L += self.gen_class_bodies()
+        if self.nintfs:
+            L += self.gen_intf_bodies()
 
         # Functions, generated in reverse so function i can only call j>i:
         # the call graph is a DAG, hence no recursion, hence termination.
@@ -1189,6 +1318,10 @@ class Gen:
             # Instantiate a RANDOM class from the chain into a base-typed slot.
             L.append("  o%d := TC%d.Create(%d);"
                      % (i, rnd.randrange(self.nclasses), rnd.randint(1, 50)))
+        if self.nintfs:
+            # Fresh object per interface (implicit class->interface cast AddRefs).
+            for k in self.intfs:
+                L.append("  iw%d := TIfc.Create(%d);" % (k, rnd.randint(1, 50)))
         L.append("")
         # Record fields, array elements and pointer derefs enter the scope AS
         # VARIABLES (see int_paths), so every operator the generator already knows
@@ -1230,6 +1363,15 @@ class Gen:
             # chain (count and order) is part of the observed output -- a missed
             # or doubled destructor call changes the number.
             L.append("  o%d.Free;" % i)
+        if self.nintfs:
+            # Release every interface ref by niling it, in a fixed order. NEVER
+            # Free -- the refcount owns these objects; dropping the last reference
+            # runs the destructor (which folds into the checksum), so a missing or
+            # deferred Release changes the number. Each object has exactly one
+            # reference (its owner var), so each nil frees exactly one object at a
+            # deterministic point.
+            for k in self.intfs:
+                L.append("  iw%d := nil;" % k)
         L.append("  writeln(cs);")
         L.append("end.")
         return "\n".join(L) + "\n"
@@ -1327,6 +1469,12 @@ def main():
                          "overrides its parent's virtuals and calls inherited, so one "
                          "call through a base-typed ref walks the whole chain.")
     ap.add_argument("--objs", type=int, default=3, help="base-typed object slots")
+    ap.add_argument("--intfs", type=int, default=None,
+                    help="COM-refcounted interfaces (>=2 -> one class implements "
+                         "several, forcing distinct interface vtables + an "
+                         "offset-adjusting `as`/QueryInterface thunk). Objects are "
+                         "held only through interface refs: refcount owns their "
+                         "lifetime, the destructor folds into the checksum.")
     ap.add_argument("--strs", type=int, default=None, help="ansistring globals")
     # The widened rungs. Each is a bug class we have SHIPPED and the scalar grammar
     # could not express -- see feature-pasmith-widen-grammar.
@@ -1359,16 +1507,17 @@ def main():
         # blocked (e.g. the cross targets reject records holding a string[N]), so
         # the defaults only fill in flags the user did not pass at all.
         for f, v in (("recs", 2), ("arrs", 2), ("enums", 2), ("shorts", 2),
-                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3)):
+                     ("excepts", 3), ("modeprocs", 2), ("strs", 3), ("classes", 3),
+                     ("intfs", 3)):
             if getattr(a, f) is None:
                 setattr(a, f, v)
     for f in ("recs", "arrs", "enums", "shorts", "excepts", "modeprocs",
-              "strs", "classes"):
+              "strs", "classes", "intfs"):
         if getattr(a, f) is None:
-            setattr(a, f, 0 if f != "classes" else 0)
+            setattr(a, f, 0)
     src = Gen(a.seed, a.vars, a.funcs, a.stmts, a.depth, a.trace,
               a.classes, a.objs, a.strs, a.recs, a.arrs, a.enums, a.shorts,
-              a.excepts, a.modeprocs, a.wide_p).gen()
+              a.excepts, a.modeprocs, a.wide_p, a.intfs).gen()
     if a.output:
         with open(a.output, "w") as f:
             f.write(src)
