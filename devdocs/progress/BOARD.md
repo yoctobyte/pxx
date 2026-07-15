@@ -34,7 +34,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
 | bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
-| bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
+| bug-pascal-class-const-visibility | P | 20 | bug | class CONSTS are unscoped globals, so visibility (tclass12b: strict private const reached from a descendant) cannot be enforced on them; needs a class-const registry + name-resolution gate | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (765)
+## done (766)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -484,6 +484,7 @@ _none_
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
 | bug-pascal-interface-arg-not-converted-from-class | A+P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
+| bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
 | bug-pascal-method-default-param-self-shift | P | 70 | bug | Method default parameters land on the WRONG slot (silent wrong values) | — |
 | bug-pascal-methodref-arg-to-named-of-object-param-no-match | P | 40 | bug | passing @obj.Method directly as an argument to a named `of object` parameter type fails overload matching ('no overload matches') — assignment to the same type works | — |
@@ -1000,7 +1001,6 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
-- [p 55] [P] bug-pascal-member-visibility-unenforced
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
@@ -1075,6 +1075,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [P] bug-pascal-class-const-visibility
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [C] bug-c-long-long-bitfield-promotion
 - [p 15] [P] feature-pascal-corpus-expansion

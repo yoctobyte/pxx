@@ -90,3 +90,22 @@ byte-identical (the lax path runs no extra lookup).
 
 ## Log
 - 2026-07-15 — resolved, commit 23fd7574.
+
+## Resolution (2026-07-15, agent-ACP — commit df41ab5e)
+
+Items 1 and 3 of the remaining list landed; item 2 split out.
+1. **Method-call enforcement** — EnforceMethVis wired at all committed dispatch
+   sites (never on probes). Negative tests: external private call, descendant
+   strict-private (test_method_visibility_strict_fail); positives extended in
+   test_member_visibility (private/protected methods, property-over-protected).
+2. **Property-backed field exemption** — a public property over a private field
+   was false-positived at the property expansion site (TList.Count and 4 more
+   Classes tests); the backing-field access is now exempt (viaProp), matching
+   FPC (the check belongs to the property, which pxx parses in-section).
+3. **Corpus validation + PROMOTION** — flag ON: test/ sweep 745 files clean,
+   conformance pass-set 328/328, fpjson 203/203 (binary identical), Synapse
+   identical output, real-FPC fgl green. --mimic-fpc now sets StrictVisibility.
+Residual (class-CONST scoping, tclass12b's exact case) →
+[[bug-pascal-class-const-visibility]] (prio 20, compat).
+
+- 2026-07-15 — resolved, commit df41ab5e.
