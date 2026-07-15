@@ -21,8 +21,14 @@ prio: 35
 - **riscv32/i386/arm32: add/sub + UNSIGNED mul DONE** (sltu chains /
   umull high halves / pushed-operand mul probes; caught=4 Makefile-pinned
   on all five hosted targets).
+- **Succ/Pred: DONE** (desugar tag; FPC-verified — see the Succ/Pred commit).
+- **Abs/Sqr: NOT CHECKED — matching FPC.** Verified against FPC 3.2.2
+  (2026-07-15): under {$Q+}, Abs(Low(Int64)) and an overflowing Sqr WRAP
+  SILENTLY there (caught=0) — the ticket's original scope note was wrong,
+  an implemented-and-reverted checked variant is in git history if Delphi
+  parity ever wants it.
 - **Remaining:** SIGNED checked mul on the 32-bit pairs; xtensa ignores
-  ival=1 entirely; Succ/Pred/Abs/Sqr; subword widths.
+  ival=1 entirely; subword widths.
 - **Succ/Pred/Abs/Sqr** inside {$Q+} (FPC checks them; we only tag +,-,*).
 - **Subword widths:** checks currently fire at the promoted 64-bit width;
   FPC checks byte/word/longint ops at their own range. Needs the result
