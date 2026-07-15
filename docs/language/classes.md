@@ -467,6 +467,54 @@ Output:
 instances created: 2
 ```
 
+## Runtime type information (RTTI)
+
+Every `TObject` descendant carries runtime type information. The basic
+reflection surface is available as methods on any instance:
+
+- `ClassName` — the class's name as a string.
+- `InheritsFrom(AClass)` — whether the object descends from `AClass`.
+- `MethodAddress(name)` — the code address of a published method by name, or
+  `nil` if there is none.
+- `MethodName(addr)` — the name of a published method given its address.
+
+```pascal
+program rtti_demo;
+
+type
+  TAnimal = class
+    procedure Speak; virtual;
+  end;
+
+  TDog = class(TAnimal)
+    procedure Speak; override;
+  end;
+
+procedure TAnimal.Speak; begin end;
+procedure TDog.Speak; begin end;
+
+var
+  d: TDog;
+begin
+  d := TDog.Create;
+  writeln('class: ', d.ClassName);
+  writeln('is a TAnimal: ', d.InheritsFrom(TAnimal));
+  writeln('method by address: ', d.MethodName(d.MethodAddress('Speak')));
+  d.Free;
+end.
+```
+
+Output:
+
+```
+class: TDog
+is a TAnimal: TRUE
+method by address: Speak
+```
+
+Method enumeration (`GetMethodList`) is used by the fpcunit-style test framework
+to discover `Test*` methods at runtime; see `lib/rtl/testutils.pas`.
+
 ## Next
 
 - [Types](./types.md)
