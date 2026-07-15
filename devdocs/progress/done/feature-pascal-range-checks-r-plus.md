@@ -7,7 +7,7 @@ prio: 55
 # {$R+} / {$RANGECHECKS ON}: runtime range checking
 
 - **Type:** feature (FPC-parity runtime checks). **Track A.**
-- **Status:** working (fable-nightA) — v1 e5cc5e06 (narrowing stores +
+- **Status:** done
   statement-anchored semantics per trange4) and v2 37475d8a (index bounds
   centralized in IRLowerAddress: reads+writes, static + dyn-depth-1 via
   PXXDynIdxChkI64) LANDED, oracle-matched. Slice 3 landed: Char dests +
@@ -71,3 +71,6 @@ neighbour (caught printed 1 BECAUSE a[4] overwrote it).
 - tclass5.pp's "range-check error 210" note and any skip-list entries
   keying on range checks get re-triaged after landing.
 - x86-64 first; cross legs follow the {$Q+} porting pattern.
+
+## Log
+- 2026-07-15 — resolved, commit 51279865.
