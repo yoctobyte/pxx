@@ -28,10 +28,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (97)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-gui-pcl-apps-broken-current-stable | A | 70 | bug | GUI/PCL apps regressed on current stable — real window never shows (crash / 20x20) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -120,6 +121,7 @@ _none_
 | feature-writeln-as-library | B | 45 | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | 45 | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
+| idea-public-status-page | D | 30 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
@@ -188,7 +190,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (773)
+## done (774)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -846,6 +848,7 @@ _none_
 | feature-softfloat-lib | B | 50 | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
 | feature-stackless-generator-record-locals | A | 50 | feature | Stackless generator: record locals / record yield element (chess GenMoves wall #2) | — |
 | feature-stackless-generator-yield-in-case | A | 50 | feature | Stackless generator: allow `yield` inside a `case` statement | — |
+| feature-strict-fpc-umbrella | P | 40 | feature | --strict-fpc / {$STRICT_FPC ON}: one umbrella for the corpus-safe FPC-parity behaviour flags (case, operator, visibility, require-forward). --mimic-fpc = --strict-fpc + {$I+} + FPC defines. StrictOverload deliberately EXCLUDED (breaks the lax RTL). | — |
 | feature-string-copy-intrinsic-norter | A | 50 | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-subrange-type-decl | A | 50 | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
 | feature-sync-primitives-futex | A | 50 | feature | Sync primitives on futex — TCriticalSection/TMutex/TEvent/Once + atomics (M2) | — |
@@ -987,6 +990,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [A] bug-gui-pcl-apps-broken-current-stable
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
@@ -1075,6 +1079,7 @@ _none_
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
+- [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
