@@ -106,11 +106,16 @@ Landed the COM managed-lifetime arc:
   global). Fixed: `PXXIntfAddRef` the temp after the `copy_rec`. `const` params
   stay by-ref aliases (no copy, no refcount); function results already AddRef.
   Regression: `test_interface_com_value_param`.
-- **Item 3 (record fields)** — commit cb2ed843. COM interface fields of a value
-  record are now managed: `RecordHasManagedFields`/`FieldIsManaged` recognise
-  them, `EmitLayoutRTTI` emits descriptor member kind 4 (Interface, ifaceId in
-  typeRef), `PXXRecordRetain`/`PXXRecordRelease` handle kind 4. Zero-init +
-  copy-retain + scope-release. Regression: `test_interface_com_record_field`.
+- **Item 3 (record fields)** — ATTEMPTED (cb2ed843) then **REVERTED** (87108477).
+  The record-field managed path deadlocks under `{$threadsafe on}`: the
+  record-scope finalization holds the non-reentrant heap spinlock across
+  `PXXRecordRelease`, and a COM interface member's `_Release -> Free -> FreeMem`
+  re-acquires it and spins forever. Reverted to a benign leak. The fix needs the
+  interface release moved outside the heap lock (reentrant lock, or an unlocked
+  interface pass) — folded into
+  [[bug-a-class-managed-fields-not-finalized-on-destroy]] with the full analysis.
+  Items 1/2/4 are unaffected (they release interface handles without the lock and
+  are verified threadsafe-correct).
 - **Item 4 (default flip)** — commit 3cd9f25a. Default is now `{$interfaces com}`
   (FPC parity); CORBA is `{$interfaces corba}`. Resolves the anchor bug in
   default mode. GUID-less CORBA-style tests carry the directive explicitly.

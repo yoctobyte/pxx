@@ -1,9 +1,34 @@
 ---
-summary: "a class's managed fields (ansistring / dynarray / COM interface) are NOT released when the object is destroyed — pxx finalizes managed fields only for VALUE records, so every managed class field leaks on Free (silent)"
+summary: "managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock"
 type: bug
 track: A
 prio: 40
 ---
+
+# Class managed fields are not finalized on destruction
+
+## The heap-lock hazard (read first — blocks the COM interface field case)
+
+Record-field managed finalization runs under the heap spinlock
+(`EmitAcquireHeapLock` around `PXXRecordRelease`, at every record-finalize site
+on all six backends). String/dynarray members are safe there because `PXXFree`
+assumes the caller holds the lock and does not re-acquire. A **COM interface**
+member is NOT safe: its `PXXIntfRelease -> _Release -> Free -> FreeMem` routes
+through the SELF-LOCKING `FreeMem`, which re-acquires the non-reentrant spinlock
+and spins forever. Confirmed: a `{$threadsafe on}` program with a record holding
+a COM interface field prints the destructor then hangs. So interface-field
+finalization (record OR class) requires the interface release to happen OUTSIDE
+the heap lock: either (a) a **reentrant heap lock** (owner + depth — needs a
+per-thread identity / TLS), or (b) a **separate unlocked interface-release pass**
+emitted before the locked string/dynarray pass at every finalize site. Both are
+heap-critical and must be validated by the threading stress tests, not just the
+single-threaded native tier. The COM record-field attempt (cb2ed843) hit exactly
+this and was reverted (87108477) to a benign leak.
+
+Scope-exit interface LOCALS and by-value interface param temps are already
+finalized correctly and threadsafe (they call `PXXIntfRelease` WITHOUT holding
+the heap lock — `EmitManagedLocalCleanup` does no lock wrap). Only the
+record/class FIELD path (which holds the lock) is blocked.
 
 # Class managed fields are not finalized on destruction
 
