@@ -32,7 +32,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: an unqualified routine call can bind to a System BUILTIN (e.g. Random) instead of a same-named routine from an explicitly-used unit — klondike's `Random` drew from the unseeded builtin, not `uses random`'s xoshiro, so a fixed-seed shuffle was non-reproducible | — |
+| bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |

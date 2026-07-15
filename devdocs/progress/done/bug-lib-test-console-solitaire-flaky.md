@@ -42,4 +42,15 @@ PROGRAM's input loop or the TEST harness — not the expectation.
 20/20; `make lib-test` green repeatedly.
 
 ## Log
-- 2026-07-15 — resolved, commit c80ec4e7.
+- 2026-07-15 — resolved, commit c80ec4e7 (qualified the calls to `random.*`).
+- 2026-07-15 — **Part B superseded the qualify fix** (user-directed cleanup): the
+  root hazard was `lib/rtl/random.pas` redefining the System PRNG names
+  (`Random`/`RandSeed`/`Randomize`) with a different generator, splitting the seed
+  state. random.pas now exports only its DISTINCT surface (`Random64`/`RandRange`/
+  `Xoshiro*`/`LCG*`/`OSEntropy*`); klondike/maze/life/g2048/dns seed the built-in
+  System PRNG directly (`RandSeed := s; Random(n)`, FPC-idiomatic, no `uses
+  random`). All apps now reproducible; console_solitaire smoke expectation updated
+  to the new deterministic `moves=0`. The frontend defect underneath (a builtin
+  overload-competing with a used-unit routine of the same name) is filed as
+  [[bug-pascal-unqualified-call-binds-builtin-over-used-unit]] — now with a minimal
+  repro + nailed root cause.
