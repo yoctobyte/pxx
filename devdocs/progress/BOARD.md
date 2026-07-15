@@ -28,12 +28,13 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (104)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
+| bug-c-bitfield-promotion-and-layout-cluster | C | 55 | bug | C bitfields: unsigned bitfield <32b promotes to UNSIGNED not signed int (silent wrong arithmetic); plus a compile HANG on a bitfield+empty-union struct — gcc-torture cluster | — |
 | bug-crtl-stdint-constant-macros | B | 50 | bug | crtl stdint.h lacks the C99 constant macros (UINT64_C/INT64_C/...) — QuickJS libbf fails with 'call to undeclared function: UINT64_C' | — |
 | bug-pascal-forin-variants-wrong-output | A | 55 | bug | for-in variants run to exit 0 with SILENT wrong output: tforin14 prints element ADDRESSES, tforin25 prints nothing where FPC prints values | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
@@ -114,7 +115,7 @@ _none_
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-t-bench-portable-variants | T | 40 | feature | mandelbrot and raytracer have no FPC comparison — they depend on pxx-only units, not on dialect extensions | — |
-| feature-t-gcc-torture-runner | T | 55 | feature | Track T: gcc c-torture `execute/` runner — corpus rung above c-testsuite | — |
+| feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
@@ -989,6 +990,7 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
+- [p 55] [C] bug-c-bitfield-promotion-and-layout-cluster
 - [p 55] [A] bug-pascal-forin-variants-wrong-output
 - [p 55] [P] bug-pascal-member-visibility-unenforced
 - [p 55] [A] bug-pascal-openarray-of-array-param-marshal
@@ -998,7 +1000,6 @@ _none_
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
-- [p 55] [T] feature-t-gcc-torture-runner
 - [p 53] [A] feature-asm-textual-emit-mode
 - [p 53] [A] feature-assembler-first-class-citizen
 - [p 53] [E] feature-demo-chess
@@ -1071,6 +1072,7 @@ _none_
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
 
