@@ -179,7 +179,7 @@ pass	tforin10.pp	tforin	-
 pass	tforin11.pp	tforin	-	
 skip	tforin12.pp	tforin	gap	initializing array-of-char elements from string literals in an array const
 skip	tforin13.pp	tforin	gap	for-in over a set constructor with ranges (`for ch in ['a'..'c', ...]`)
-pass	tforin14.pp	tforin	-	
+skip	tforin14.pp	tforin	gap	for-in variant prints ADDRESSES not element values (silent wrong output, exit 0) — re-triaged 2026-07-15, needs its own minimal repro
 skip	tforin15.pp	tforin	gap	`operator enumerator` (custom enumerator operator) not supported
 skip	tforin16.pp	tforin	gap	for-in over a string constant
 skip	tforin17.pp	tforin	gap	for-in over a string literal
@@ -191,7 +191,7 @@ pass	tforin21.pp	tforin	-
 pass	tforin22.pp	tforin	-	
 pass	tforin23.pp	tforin	-	
 skip	tforin24.pp	tforin	gap	enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
-pass	tforin25.pp	tforin	-	
+skip	tforin25.pp	tforin	gap	for-in form prints nothing where FPC prints four 0 lines (silent wrong output, exit 0) — re-triaged 2026-07-15
 skip	tforin26.pp	tforin	gap	user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
 skip	tforin27.pp	tforin	gap	user function named `Write` (builtin name shadowing) + for-in over dynamic array
 skip	tforin28.pp	tforin	gap	for-in over a set constructor literal [One, Three]
