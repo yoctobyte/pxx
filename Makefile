@@ -973,7 +973,7 @@ test-core: $(COMPILER)
 	# through depth 5 from startpos and a promotion-heavy CPW position through depth 3.
 	# Also exercises 5-param internal calls (r8/r9 register spill, REmitParamRegSpill).
 	./$(COMPILER) test/test_rust_chess_perft_full.rs /tmp/test_rust_chess_perft_full26
-	test "$$(/tmp/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483')"
+	test "$$(/tmp/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483\nkiwi1 48\nkiwi2 2039\nkiwi3 97862')"
 	# Rust chess ENGINE (feature-rust-corpus-chess): faithful struct-based branch —
 	# real Move struct held in [Move; 256] passed as &[Move] (slice-of-record), make/
 	# unmake, negamax, and UCI best-move output via char casts. perft(4) exact +

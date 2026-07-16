@@ -330,5 +330,32 @@ fn main() -> i32 {
     println!("promo1 {}", perft(p, -1, -1, 0, 1));
     println!("promo2 {}", perft(p, -1, -1, 0, 2));
     println!("promo3 {}", perft(p, -1, -1, 0, 3));
+
+    // "Kiwipete" (CPW position 2) — the gold-standard movegen validator: both
+    // sides can castle, en passant is available, and there are pins. White to
+    // move, full rights, no ep.
+    //   r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -
+    //   perft(1)=48  perft(2)=2039  perft(3)=97862
+    let mut kb: [i64; 64] = [0; 64];
+    let k = &kb[0..64];
+    // rank 8: r3k2r
+    k[56] = -4; k[60] = -6; k[63] = -4;
+    // rank 7: p1ppqpb1
+    k[48] = -1; k[50] = -1; k[51] = -1; k[52] = -5; k[53] = -1; k[54] = -3;
+    // rank 6: bn2pnp1
+    k[40] = -3; k[41] = -2; k[44] = -1; k[45] = -2; k[46] = -1;
+    // rank 5: 3PN3
+    k[35] = 1; k[36] = 2;
+    // rank 4: 1p2P3
+    k[25] = -1; k[28] = 1;
+    // rank 3: 2N2Q1p
+    k[18] = 2; k[21] = 5; k[23] = -1;
+    // rank 2: PPPBBPPP
+    k[8] = 1; k[9] = 1; k[10] = 1; k[11] = 3; k[12] = 3; k[13] = 1; k[14] = 1; k[15] = 1;
+    // rank 1: R3K2R
+    k[0] = 4; k[4] = 6; k[7] = 4;
+    println!("kiwi1 {}", perft(k, 1, -1, 15, 1));
+    println!("kiwi2 {}", perft(k, 1, -1, 15, 2));
+    println!("kiwi3 {}", perft(k, 1, -1, 15, 3));
     return 0;
 }
