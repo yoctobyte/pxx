@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-15T15:54:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6d5f29270a93804cda207d6a6c63036360ee08fa",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-15T16:31:03Z",
    "fixed": [],
    "new_red": [],
@@ -411,6 +403,14 @@
    "sha": "fb9346bd4bce1bef522968ffe0c212f99880b693",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-16T20:51:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ee96c9f2c4fa373519d1b95870796cecefb14b8f",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1853,6 +1853,7 @@
   "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-threads#src:test/test_array_var_param_assign.pas": "pass",
+  "test-threads#src:test/test_async_parallel_compat.pas": "pass",
   "test-threads#src:test/test_atomic64.pas": "pass",
   "test-threads#src:test/test_atomic_counter.pas": "pass",
   "test-threads#src:test/test_condvar.pas": "pass",
@@ -1862,6 +1863,8 @@
   "test-threads#src:test/test_mulhi.pas": "pass",
   "test-threads#src:test/test_mutex.pas": "pass",
   "test-threads#src:test/test_palthread.pas": "pass",
+  "test-threads#src:test/test_parallel_for.pas": "pass",
+  "test-threads#src:test/test_parallel_for_lang.pas": "pass",
   "test-threads#src:test/test_thread_clone.pas@1": "pass",
   "test-threads#src:test/test_thread_heap.pas": "pass",
   "test-threads#src:test/test_thread_heap_mixed.pas": "pass",
@@ -1873,11 +1876,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-16T18:02:43Z",
-  "sha": "fb9346bd4bce1bef522968ffe0c212f99880b693",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 202.2
+  "date": "2026-07-16T20:51:47Z",
+  "sha": "ee96c9f2c4fa373519d1b95870796cecefb14b8f",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 147.5
  },
  "last_bench": {
   "conf_rows": 550,
