@@ -8575,6 +8575,18 @@ begin
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+                Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
+                (SymArrNDims[idx] >= 2) then
+        begin
+          { High of a WHOLE multi-dim static array = the FIRST dimension's upper
+            bound (FPC: `High(m)` reports dim 0). The runtime -tkLength path reads
+            a [data-8] header a static array has none of, so multi-dim used to
+            return -1. First-dim low/span live in SymArrDim{Lo,Span}[sym*MAX+0]. }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS] + SymArrDimSpan[idx * MAX_ARR_DIMS] - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else if (ASTKind[valNode] = AN_FIELD) and
                 RecFieldIsArray(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) and
                 (RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) >= 0) and
@@ -8627,6 +8639,11 @@ begin
         if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
            (SymArrNDims[idx] <= 1) then
           ASTIVal[CurASTNode] := Syms[idx].ConstVal
+        else if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
+                (SymArrNDims[idx] >= 2) then
+          { Low of a whole multi-dim static array = the FIRST dimension's lower
+            bound (SymArrDimLo[sym*MAX+0]); was silently 0. }
+          ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS]
         else
           ASTIVal[CurASTNode] := 0;
         ASTTk[CurASTNode] := Ord(tyInteger);
@@ -8680,6 +8697,18 @@ begin
         begin
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := Syms[ASTIVal[valNode]].ArrLen; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+                Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
+                (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] >= 2) then
+        begin
+          { Length of a WHOLE multi-dim static array = the FIRST dimension's count
+            (FPC). A static array carries no [data-8] header, so the runtime
+            -tkLength path returned 0 for multi-dim; fold to the first-dim span
+            (SymArrDimSpan[sym*MAX+0]). }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := SymArrDimSpan[ASTIVal[valNode] * MAX_ARR_DIMS]; ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
         else if (lenFieldIdx >= 0) and UFldIsArray[lenFieldIdx] and
