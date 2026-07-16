@@ -93,3 +93,8 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   (UINT64_C/INT64_C/UINT32_C/...) are missing from crtl's stdint.h. Track C/B
   (crtl header) — a few `#define UINT64_C(c) c##ULL` lines, needs cpreproc
   token-paste in that position.
+- 2026-07-16 — requeued unfinished/ -> backlog/. No live agent; QuickJS is a
+  long corpus campaign, not one-shot completable. NEXT WALL unchanged:
+  `UINT64_C` / stdint.h constant macros (INT64_C/UINT32_C/...) missing from
+  crtl's stdint.h — a few `#define UINT64_C(c) c##ULL` lines, needs cpreproc
+  token-paste in that position (Track C/B, crtl header).

@@ -5,7 +5,7 @@ prio: 53  # auto
 # ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt"
 
 - **Type:** feature (library / Track B)
-- **Status:** working
+- **Status:** backlog
 - **Owner:** opus-night
 - **Opened:** 2026-06-21 (out of the ISR layering discussion; see
   `feature-esp32-isr-iram` for why the `interrupt;` *keyword* is NOT this)
@@ -123,3 +123,9 @@ This ticket builds the high-level layer that hides the SDK call **and** the
 - 2026-07-12 — **ESP work parked by user decision: Pascal has prio.** The ESP
   ticket family (this, the heap-mmap bug, the non-iram @proc fixup, the fd
   semantics follow-up) is deprioritized until Pascal/compat work settles.
+- 2026-07-16 — requeued unfinished/ -> backlog/. Both Track A blockers now
+  DONE (bug-esp-idf-heap-linux-mmap-ecall, bug-esp-emit-obj-proc-fixup-non-iram),
+  so the technical park is cleared; remaining is low-prio Track B work (qemu
+  acceptance run, drop the interim `iram;`, then GPIO/ADC slices). Stays low
+  prio per the user's "Pascal has prio" call — no live agent, so out of the
+  unfinished/ live-lock.
