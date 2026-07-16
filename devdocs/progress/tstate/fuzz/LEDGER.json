@@ -399,12 +399,12 @@
       "first_sha": "41ee31436656",
       "hits": 1,
       "kind": "trace-length",
-      "note": "pxx and FPC each self-consistent but disagree -- investigate in order: (a) pasmith emitted UB/impl-defined code, (b) pxx bug, (c) FPC bug. Do NOT auto-dismiss (c).",
+      "note": "wide rungs (with/reccopy/...) mutated a GLOBAL inside an fN function body; the function is called mid-expression as a binop operand, so the mutation raced an unspecified operand order (pxx L-to-R reads pre, FPC R-to-L reads post) -- a divergence nobody owns. Fixed in generator: wide rungs disabled inside function bodies (self.in_func). pxx not involved.",
       "opened": "2026-07-15T09:02:17Z",
       "reopened_from_fixed": false,
       "sig": "pxx-vs-fpc_trace-length",
-      "status": "open",
-      "ticket": null
+      "status": "dodged",
+      "ticket": "bug-t-pasmith-with-rung-mutates-global-inside-function"
     }
   },
   "version": 1

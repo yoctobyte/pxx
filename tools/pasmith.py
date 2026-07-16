@@ -251,6 +251,18 @@ class Gen:
         # within an expression. See expr().
         self.calls_in_expr = 0
         self.tmpc = 0
+        # True while generating a function body. A function may be CALLED from
+        # inside an expression (callable_func -> a binop operand), so it must be
+        # pure w.r.t. any global a sibling operand could read -- Pascal fixes no
+        # operand evaluation order (pxx left-to-right, FPC right-to-left), so a
+        # global the function mutates and the sibling reads yields a divergence
+        # nobody owns. gen_func already restricts `assignable` to locals, but the
+        # `with`/`reccopy`/... wide rungs hardcode a GLOBAL record and bypass it
+        # (pasmith seed 27863: `r0g.r0f0 xor f0(...)` where f0 wrote r0g.r0f0).
+        # So the wide rungs are disabled inside a function body. Top-level/main,
+        # procedures and methods are unaffected: a method is only ever called as
+        # the sole Mix() argument, never beside a global-reading operand.
+        self.in_func = False
 
     # -- expressions --------------------------------------------------------
     def vars_of(self, ty, scope):
@@ -577,6 +589,11 @@ class Gen:
         """
         rnd = self.rnd
         pad = "  " * ind
+        # Inside a function body every wide rung is disabled: they mutate GLOBALS
+        # (with/reccopy write r%dg, etc.), and a function is callable mid-expression
+        # where that mutation races an unspecified operand order. See self.in_func.
+        if self.in_func:
+            return None
         opts = []
         if self.recs:
             opts += ["with", "reccopy", "ptrwalk"]
@@ -1867,11 +1884,13 @@ class Gen:
             L.append("  %s := %s;" % (n, lit_for(t, rnd)))
         saved, self.loopvars = self.loopvars, []
         savedp, self.lvprefix = self.lvprefix, lvp
+        savedf, self.in_func = self.in_func, True
         for _ in range(rnd.randint(1, 3)):
             L += self.stmt(scope, 2, 1, locs)
+        L.append("  %s := %s;" % (name, self.expr(ret, scope, 2)))
+        self.in_func = savedf
         self.loopvars = saved
         self.lvprefix = savedp
-        L.append("  %s := %s;" % (name, self.expr(ret, scope, 2)))
         L.append("end;")
 
         # Registered only AFTER its body is generated, so its own body cannot
