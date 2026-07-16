@@ -766,3 +766,4 @@
 {"date": "2026-07-16T13:18:40Z", "fixed": [], "full": false, "new_red": [], "sha": "74206639dec9c9a0ee7cd2d03f7b46655c6edbb3", "tier": "native", "verdict": "GREEN", "wall": 143.0}
 {"date": "2026-07-16T13:44:06Z", "fixed": [], "full": true, "new_red": ["test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"], "sha": "74206639dec9c9a0ee7cd2d03f7b46655c6edbb3", "tier": "full", "verdict": "RED", "wall": 314.2}
 {"date": "2026-07-16T13:47:17Z", "fixed": [], "full": false, "new_red": [], "sha": "74206639dec9c9a0ee7cd2d03f7b46655c6edbb3", "tier": "opt", "verdict": "GREEN", "wall": 183.6}
+{"date": "2026-07-16T13:58:50Z", "fixed": [], "full": false, "new_red": [], "sha": "3bb5fa4db2b988a503b8d415409a7eafe8f1e687", "tier": "native", "verdict": "GREEN", "wall": 154.4}
