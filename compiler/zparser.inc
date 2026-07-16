@@ -1034,7 +1034,50 @@ begin
     Result := ZAssignNode(ZFieldNode(RMakeIdent(symIdx), '__has', tyInt64), ZIntLit(0));
     Exit;
   end;
-  if isArr then Error('Zig: arrays only take `= undefined` (no array literals in the skeleton)');
+  { array literal RHS: anonymous dot-brace or typed [N]T brace form — lowered
+    to one AN_INDEX store per element, the same no-construct-node shape struct
+    literals use. Requires the [N]T annotation so the length/element type are
+    known up front. }
+  if (CurTok.Kind = tkLBrack) or (isArr and (CurTok.Kind = tkDot)) then
+  begin
+    if CurTok.Kind = tkLBrack then
+    begin
+      { typed `[N]T{ ... }` form (with or without a matching annotation):
+        read N and T from the RHS prefix so the length/element type are known. }
+      Next; { [ }
+      if CurTok.Kind <> tkInteger then Error('Zig: expected array length in [N]T literal');
+      if isArr and (CurTok.IVal <> arrLen) then
+        Error('Zig: array-literal length does not match the annotation');
+      arrLen := CurTok.IVal;
+      Next;
+      Expect(tkRBrack, ']');
+      if CurTok.Kind <> tkIdent then Error('Zig: expected element type in array literal');
+      arrElemTk := ZTypeKindFromName(CurTok.SVal, False);
+      Next; { elem type }
+    end
+    else
+      Next; { leading dot of the anonymous form }
+    Expect(tkBegin, '{');
+    symIdx := AllocArray(name, arrElemTk, 0, arrLen - 1);
+    seq := -1; ci := 0;
+    while CurTok.Kind <> tkEnd do
+    begin
+      rhsNode := ZParseExpr;
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := ci; ASTTk[node] := Ord(tyInt64);
+      fieldNode := AllocNode(AN_INDEX);
+      ASTLeft[fieldNode] := RMakeIdent(symIdx);
+      ASTRight[fieldNode] := node;
+      ASTTk[fieldNode] := Ord(arrElemTk);
+      seq := RSeqAppend(seq, ZAssignNode(fieldNode, rhsNode));
+      Inc(ci);
+      if not Eat(tkComma) then Break;
+    end;
+    Expect(tkEnd, '}');
+    if ci <> arrLen then Error('Zig: array literal length does not match [N]T annotation');
+    Result := seq;
+    Exit;
+  end;
+  if isArr then Error('Zig: arrays only take `= undefined` or an array literal');
   { `= try f(...)` — clear the error slot, call, propagate on error, else
     the payload lands in the fresh variable. Whole-initializer form only. }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'try') then

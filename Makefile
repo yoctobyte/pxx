@@ -1021,6 +1021,11 @@ test-core: $(COMPILER)
 	# __ptr/__len record passed by address; s[i] rw + s.len through the pointer.
 	./$(COMPILER) test/test_zig_slice_params.zig /tmp/test_zig_slice_params26
 	test "$$(/tmp/test_zig_slice_params26)" = "$$(printf 'sum 15\nscaled 13 53 n 5')"
+	# Zig chess perft (feature-zig-frontend, real-load bug-probe): full-legality
+	# movegen exercising []i64 slice params, array literals, 5-param recursion +
+	# deep control flow. Node counts match the reference (startpos d4, Kiwipete d3).
+	./$(COMPILER) test/test_zig_chess_perft.zig /tmp/test_zig_chess_perft26
+	test "$$(/tmp/test_zig_chess_perft26)" = "$$(printf 'perft4 197281\nkiwi3 97862')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.

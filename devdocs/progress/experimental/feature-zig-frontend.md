@@ -364,3 +364,29 @@ from 4 to the register-convention 6. test/test_zig_manyparams.zig (add5/add6 +
 self-host byte-identical. Lesson reinforced: a bug copied byte-for-byte across
 sibling frontends must be fixed (or factored) across all of them — see the
 sweep-sibling-dispatch-branches rule.
+
+## Slice params + array literals + a real-load chess perft (2026-07-16, Track Z)
+
+Two frontend enablers landed (zparser.inc only; self-host byte-identical):
+- **`[]T` slice parameters** — `fn f(s: []T, ...)`: the 16-byte __ptr/__len
+  record passed by address (IsRef), so `s[i]` rw and `s.len` work through the
+  pointer, mirroring the Rust `&[T]` param path. Added to the signature prescan
+  (register slice class, mark tyRecord param IsRef) and the body parser
+  (AllocParam with the slice recid + isRef). test/test_zig_slice_params.zig.
+- **Array literals** — anonymous dot-brace and typed `[N]T{ ... }` forms,
+  lowered to one AN_INDEX store per element (the struct-literal no-construct
+  shape). Both annotation-present and RHS-typed (`const t = [4]i64{...}`) forms.
+  LANDMINE re-hit: a `.{` inside a `{ }` .inc comment desynced pxx's own
+  brace-nesting comment lexer and produced an "unexpected character" ~94k lines
+  downstream in the self-compile — keep literal braces out of .inc comments
+  (see nested-comment-brace-selfhost-landmine).
+
+Then the payoff — **test/test_zig_chess_perft.zig**, a full-legality chess
+perft compiled from Zig (the esoteric-frontend-probe's point: exercise the
+shared pipeline under real load). Slice params carry the board + move list,
+5-param recursion drives the tree, array literals hold the offset tables, deep
+nested control flow runs movegen/make/unmake. Node counts are reference-exact:
+startpos perft(4)=197281, Kiwipete perft(3)=97862. **Probe verdict: no
+shared-internals bug** — the one bug found this pass was the frontend-local
+5/6-param spill (fixed above, shared with Rust). Regressions green: all Zig
+tests, quick tier, self-host byte-identical.
