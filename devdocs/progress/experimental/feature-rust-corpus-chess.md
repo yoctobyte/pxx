@@ -167,3 +167,23 @@ pure swallowing/trivia, cheap and high-leverage.
   `list[i] = some_move` (record-value copy) not yet wired — the movegen writes
   fields individually; pxx also does not enforce Rust definite-init, so the
   arrays are annotation-only `let` then filled.
+- 2026-07-16 — **ENGINE milestone + slice-of-struct enabler** (Track R / A).
+  test/test_rust_chess_engine.rs: a faithful struct-based branch of the engine
+  using the REAL data model — a `Move { from, to, flags }` struct held in a
+  `[Move; 256]` list, passed between fns as `&[Move]` — instead of the packed
+  i64 of the perft/search ports. make/unmake, negamax, material eval, and UCI
+  best-move formatting via `as u8 as char`. Verifies end to end: perft(4) =
+  197281 (movegen through the struct move list) and bestmove a1a8 (search picks
+  the mate-in-1 rook lift and prints it in UCI). Enabler landed to get here:
+  **slice-of-record** — `&[Move]` params, `&arr[lo..hi]` over a record array,
+  and `slice[i].field` read/write. RSliceClassForRec now tracks the element
+  recid (RSliceElemRec) alongside the elem tk; the slice-index lowering strides
+  by RecSize and stamps the element recid on the AN_DEREF (ResolveNodeRec reads
+  ASTIVal>0 there), so `slice[i].field` builds AN_FIELD over the deref with no
+  shared-codegen change. Guarded the RTypeKindFromName-then-LastTypeRecId
+  sequencing (side effect) against Pascal arg-eval-order at both param sites.
+  Scalar `&[i64]` slices unchanged (perft/advanced regressions green); rust
+  sweep + quick tier green; self-host byte-identical. The engine now mirrors
+  the real chess.rs shape closely enough that the remaining gap to the actual
+  source is the value-flow features (Option/Result/? and String/format!), not
+  the board/movegen/search skeleton.

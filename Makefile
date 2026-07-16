@@ -974,6 +974,13 @@ test-core: $(COMPILER)
 	# Also exercises 5-param internal calls (r8/r9 register spill, REmitParamRegSpill).
 	./$(COMPILER) test/test_rust_chess_perft_full.rs /tmp/test_rust_chess_perft_full26
 	test "$$(/tmp/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483')"
+	# Rust chess ENGINE (feature-rust-corpus-chess): faithful struct-based branch —
+	# real Move struct held in [Move; 256] passed as &[Move] (slice-of-record), make/
+	# unmake, negamax, and UCI best-move output via char casts. perft(4) exact +
+	# picks the mate-in-1 rook lift a1a8. Exercises fixed-array-of-structs and
+	# slice-of-struct (arr[i].field / slice[i].field) end to end.
+	./$(COMPILER) test/test_rust_chess_engine.rs /tmp/test_rust_chess_engine26
+	test "$$(/tmp/test_rust_chess_engine26)" = "$$(printf 'perft4 197281\nbestmove a1a8')"
 	# Rust chess SEARCH (feature-rust-corpus-chess, stage-6 gate "search finds a mate"):
 	# material-eval negamax with mate scoring on the same movegen. Finds a forced
 	# mate-in-1 (depth 2) and mate-in-2 (depth 4), and does NOT see them one ply

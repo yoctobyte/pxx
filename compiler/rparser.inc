@@ -94,6 +94,8 @@ var
     type — the Zig frontend's slice representation ported back. }
   RSliceCi: array[0..MAX_UCLASS-1] of Boolean;
   RSliceElemTk: array[0..MAX_UCLASS-1] of TTypeKind;
+  { REC_UCLASS_BASE+ci of a record slice's element (REC_NONE for scalar slices) }
+  RSliceElemRec: array[0..MAX_UCLASS-1] of Integer;
 
 function RStoredName(const s: AnsiString): Integer;
 var i: Integer;
@@ -230,11 +232,17 @@ begin
 end;
 
 { One auto-registered UClass per slice element type ("&[i64]"): __ptr (raw
-  element address as i64 @0) + __len (i64 @8) — 16 bytes. }
-function RSliceClassFor(elemTk: TTypeKind): Integer;
+  element address as i64 @0) + __len (i64 @8) — 16 bytes. elemRec is the
+  element's REC_UCLASS_BASE+ci for a record/tuple-struct element, or REC_NONE
+  for a scalar element (`&[i64]`); it names the slice by class and is stamped
+  on the AN_DEREF of `slice[i]` so `slice[i].field` resolves. }
+function RSliceClassForRec(elemTk: TTypeKind; elemRec: Integer): Integer;
 var name: AnsiString; ci: Integer;
 begin
-  name := '&[' + RScalarTypeName(elemTk) + ']';
+  if (elemTk = tyRecord) and (elemRec >= REC_UCLASS_BASE) then
+    name := '&[rec' + RIntToStr(elemRec) + ']'
+  else
+    name := '&[' + RScalarTypeName(elemTk) + ']';
   ci := FindUClass(name);
   if ci < 0 then
   begin
@@ -246,8 +254,14 @@ begin
     UClsSize_[ci] := 16;
     RSliceCi[ci] := True;
     RSliceElemTk[ci] := elemTk;
+    RSliceElemRec[ci] := elemRec;
   end;
   Result := ci;
+end;
+
+function RSliceClassFor(elemTk: TTypeKind): Integer;
+begin
+  Result := RSliceClassForRec(elemTk, REC_NONE);
 end;
 
 function RIsSliceSym(symIdx: Integer): Boolean;
@@ -556,13 +570,18 @@ begin
       if (CurTok.Kind = tkLBrack) and RIsSliceSym(symIdx) then
       begin
         { s[i] — AN_DEREF(__ptr + i*elemsize), raw i64 pointer math (the
-          Zig frontend's slice-index shape ported back). }
+          Zig frontend's slice-index shape ported back). For a record-element
+          slice the stride is RecSize and the deref carries the element recid
+          (ASTIVal) so a trailing `.field` resolves via ResolveNodeRec. }
         Next;
         fieldNode := RParseExpr;
         Expect(tkRBrack, ']');
         ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
         gfi := AllocNode(AN_INT_LIT);
-        ASTIVal[gfi] := TypeSize(RSliceElemTk[ci]);
+        if (RSliceElemTk[ci] = tyRecord) and (RSliceElemRec[ci] >= REC_UCLASS_BASE) then
+          ASTIVal[gfi] := RecSize(RSliceElemRec[ci])
+        else
+          ASTIVal[gfi] := TypeSize(RSliceElemTk[ci]);
         ASTTk[gfi] := Ord(tyInt64);
         argNode := AllocNode(AN_FIELD);
         ASTLeft[argNode] := node;
@@ -572,6 +591,27 @@ begin
         ASTLeft[lastArg] := RBinOp(tkPlus, argNode,
           RBinOp(tkStar, fieldNode, gfi, tyInt64), tyInt64);
         ASTTk[lastArg] := Ord(RSliceElemTk[ci]);
+        if (RSliceElemTk[ci] = tyRecord) and (RSliceElemRec[ci] >= REC_UCLASS_BASE) then
+        begin
+          ASTIVal[lastArg] := RSliceElemRec[ci];   { record id for slice[i].field }
+          { `slice[i].field` — AN_FIELD over the record deref, read or write. }
+          if (CurTok.Kind = tkDot) and
+             ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkInteger)) then
+          begin
+            Next; { . }
+            if CurTok.Kind = tkInteger then methodName := RIntToStr(CurTok.IVal)
+            else methodName := CurTok.SVal;
+            fTokIdx := TokPos - 1;
+            Next;
+            argNode := AllocNode(AN_FIELD);
+            ASTLeft[argNode] := lastArg;
+            ASTSOffset[argNode] := Tokens[fTokIdx].SOffset;
+            ASTSLen[argNode] := Tokens[fTokIdx].SLen;
+            ASTTk[argNode] := Ord(RecFieldType(RSliceElemRec[ci], methodName));
+            Result := argNode;
+            Exit;
+          end;
+        end;
         Result := lastArg;
         Exit;
       end;
@@ -1148,7 +1188,7 @@ begin
     Expect(tkDotDot, '..');
     hiNode := RParseExpr;
     Expect(tkRBrack, ']');
-    ci := RSliceClassFor(arrElemTk);
+    ci := RSliceClassForRec(arrElemTk, Syms[symIdx].ElemRecName);
     fieldNode := AllocNode(AN_INDEX);
     ASTLeft[fieldNode] := RMakeIdent(symIdx);
     ASTRight[fieldNode] := loNode;
@@ -2017,7 +2057,7 @@ end;
 function RRegisterFnSignatureAt(i: Integer): Integer;
 var j, depth, nparams, procIdx, k: Integer; name: AnsiString;
     pnames: array[0..7] of AnsiString; ptypes: array[0..7] of TTypeKind;
-    retType: TTypeKind;
+    retType, sElemTk: TTypeKind;
 begin
   name := GetTokenStr(i + 1);
   j := i + 2;
@@ -2053,7 +2093,10 @@ begin
     begin
       Inc(j);
       if Tokens[j].Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
-      RSliceClassFor(RTypeKindFromName(GetTokenStr(j), False));
+      { sequence the side-effecting RTypeKindFromName (sets LastTypeRecId)
+        before reading LastTypeRecId — do NOT rely on arg eval order. }
+      sElemTk := RTypeKindFromName(GetTokenStr(j), True);
+      RSliceClassForRec(sElemTk, LastTypeRecId);
       ptypes[nparams] := tyRecord;
       Inc(j);
       if Tokens[j].Kind <> tkRBrack then Error('Rust: expected ] in &[T] parameter');
@@ -2557,8 +2600,11 @@ begin
       { &[T] / &mut [T] borrowed-slice parameter }
       Next;
       if CurTok.Kind <> tkIdent then Error('Rust: expected element type in &[T] parameter');
+      { sequence RTypeKindFromName (sets LastTypeRecId) before reading it;
+        stash the element tk in ptypes[nparams] first, then set it to tyRecord. }
+      ptypes[nparams] := RTypeKindFromName(CurTok.SVal, True);
+      precids[nparams] := REC_UCLASS_BASE + RSliceClassForRec(ptypes[nparams], LastTypeRecId);
       ptypes[nparams] := tyRecord;
-      precids[nparams] := REC_UCLASS_BASE + RSliceClassFor(RTypeKindFromName(CurTok.SVal, False));
       pnames[nparams] := pname;
       Next;
       Expect(tkRBrack, ']');
