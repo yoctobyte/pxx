@@ -135,6 +135,63 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
     rejected (order-independent). Requires `--threadsafe` (compile error like
     `__pxxclone`, since the body may alloc). Off-unless-used ⇒ self-host gate holds.
 
+- 2026-07-16 (cont.) — **STEP 2a SHIPPED** (commit e3f52d73). `parallel for`
+  capture-free: soft keyword, worker synthesis (forward-reg via re-entrant
+  ParseSubroutine + pass-2 flush), `AN_PARFOR` node, IR lowering to the runtime
+  call. Self-host **byte-identical**; `quick` + full `test-threads` green.
+  LANDMINE fixed mid-build: the body-token stash must copy the FULL TRawToken —
+  copying only Kind/SOffset/SLen zeroed `IVal`, so every integer/float LITERAL in
+  the body silently became 0 (`a := 99` → `a := 0`). Verbatim record copy fixes it.
+  Extended-tested: method bodies, multiple `parallel for` in one routine, 2M-element
+  workload (correct), and the guards (downto / main-body / no-`uses` / no-`--threadsafe`).
+  Gates: `test_parallel_for.pas` (runtime) + `test_parallel_for_lang.pas` (surface)
+  + a no-threadsafe error probe.
+
+  **v1 LIMITS (all clean compile errors, not miscompiles):** body captures the loop
+  var + globals only (enclosing-local capture rejected); must be inside a routine
+  (main program body has no nested-proc flush point); `to` only. Nested `parallel
+  for` sharing the outer index needs capture (2b).
+
+  ### 2b — full implicit capture (NEXT increment, designed)
+  The thread-boundary worker MUST take exactly `(ctx, lo, hi)` — lambda-lift can't
+  cross it (any routine touching a capture gains by-ref params, breaking the fixed
+  ABI). So captures funnel through one `ctx` pointer, unpacked manually in the worker:
+  - collect distinct captured locals from the body scan (the 2a reject-scan already
+    finds them — collect instead of erroring);
+  - pass by-ref: synthesize an enclosing-frame `__pfc: array[0..k-1] of Pointer`,
+    fill `__pfc[j] := @capj` at the call site, pass `@__pfc[0]` as ctx;
+  - worker declares `capj: ^Tj`, preamble `capj := PPointer(ctx)[j]`, and every
+    captured use `a` gets a postfix `^` (uniform: `a[i]`→`a^[i]`, `a:=x`→`a^:=x`,
+    like lambda-lift's field-prefix insertion);
+  - the one hard sub-problem is **reconstructing `^Tj` as tokens** from TSymbol
+    (scalars + named record/class + dynamic array + string are nameable; inline
+    fixed-array types are not — error there in 2b-v1). Reference types (dyn array /
+    string / class) MAY instead capture by value (handle copy shares storage).
+
+  ### Async × parallel — COMPATIBILITY VERIFIED (2026-07-16)
+  Inventory of the two concurrency models and whether they compose:
+  - **parallel** (this ticket / M1-M3): preemptive OS threads (`clone`/`futex`),
+    multicore, `TThread` + `parallel for`, needs `--threadsafe` (atomic ARC + locked
+    heap/IO). Real parallelism.
+  - **async** ([[feature-async-coroutines]] / [[feature-async-language-surface]]):
+    cooperative stackful/stackless coroutines, single-threaded concurrency,
+    `Spawn`/`CoYield`/`await`/`RunUntilDone` + epoll reactor. NOT parallelism.
+  - **They compose cleanly.** `scheduler.pas` `CurR` keys each thread's reactor on
+    the kernel tid (`gettid`), attaching a per-thread slot under an atomic spinlock
+    ("per-thread state without threadvar"). Generators are per-instance
+    (`coroutine.pas`, state in a passed heap block). So every `parallel for` worker /
+    `TThread` runs its OWN independent coroutine scheduler; the spinlock's
+    `__pxxatomic_cas` is exactly what `--threadsafe` (required by `parallel for`)
+    provides. PROVEN: `test/test_async_parallel_compat.pas` — 400 coroutines fanned
+    across 8 worker threads, each yielding on its own reactor, all correct
+    (`ASYNC x PARALLEL OK`), gated in `test-threads`.
+  - **The invariant (document in user docs):** a coroutine/reactor is bound to the
+    thread that created it — never resume the SAME coroutine, or drive one reactor,
+    from two threads. `await`/`CoSleep` inside a `parallel for` body run on the
+    WORKER's reactor, not the main thread's. Within the natural "each thread owns its
+    coroutines" model they are fully compatible; cross-thread coroutine handoff is not
+    supported (and not needed — that's what the thread surface is for).
+
 ## Part of the multithreading epic (2026-06-30)
 
 Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;

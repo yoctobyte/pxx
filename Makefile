@@ -322,6 +322,9 @@ test-threads: $(COMPILER)
 	# `parallel for` without --threadsafe = clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_parallel_for_lang.pas /tmp/test_parallel_for_guard26 > /tmp/test_parallel_for_guard.log 2>&1
 	grep -q "requires --threadsafe" /tmp/test_parallel_for_guard.log
+	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
+	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas /tmp/test_async_parallel_compat26
+	test "$$(/tmp/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas /tmp/test_mulhi26
 	test "$$(/tmp/test_mulhi26 | tail -1)" = "MULHI OK"
