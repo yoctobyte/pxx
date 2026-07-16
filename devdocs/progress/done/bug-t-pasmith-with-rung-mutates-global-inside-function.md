@@ -49,4 +49,4 @@ Ledger sig `pxx-vs-fpc_trace-length` → dodged (root-caused in generator; no
 compiler change).
 
 ## Log
-- 2026-07-16 — resolved, commit 5e2821fe.
+- 2026-07-16 — resolved, commit e48592cc.
