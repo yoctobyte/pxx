@@ -585,6 +585,30 @@ begin
         ASTLeft[node] := RMakeIdent(symIdx);
         ASTRight[node] := fieldNode;
         ASTTk[node] := Ord(Syms[symIdx].ElemType);
+        { `arr[i].field` on an array of records: wrap the AN_INDEX in an
+          AN_FIELD (read or, as an assign target, write). The element record is
+          Syms[symIdx].ElemRecName, resolved by ResolveNodeRec(AN_INDEX) in the
+          shared codegen. Supports named fields and tuple-struct `.0` digits. }
+        if (Syms[symIdx].ElemType = tyRecord) and (CurTok.Kind = tkDot) and
+           ((Tokens[TokPos].Kind = tkIdent) or (Tokens[TokPos].Kind = tkInteger)) then
+        begin
+          ci := Syms[symIdx].ElemRecName;
+          Next; { . }
+          if CurTok.Kind = tkInteger then methodName := RIntToStr(CurTok.IVal)
+          else methodName := CurTok.SVal;
+          fTokIdx := TokPos - 1;
+          Next;
+          argNode := AllocNode(AN_FIELD);
+          ASTLeft[argNode] := node;
+          ASTSOffset[argNode] := Tokens[fTokIdx].SOffset;
+          ASTSLen[argNode] := Tokens[fTokIdx].SLen;
+          if ci >= REC_UCLASS_BASE then
+            ASTTk[argNode] := Ord(RecFieldType(ci, methodName))
+          else
+            ASTTk[argNode] := Ord(tyInt64);
+          Result := argNode;
+          Exit;
+        end;
         Result := node;
         Exit;
       end;
@@ -974,22 +998,26 @@ var name, typeName, variantName, fname, mangled: AnsiString;
     symIdx, ci, structCi, fTokIdx, ci2, vi, k, tagOff, tagNode, tagAssign: Integer;
     annotTk, arrElemTk: TTypeKind; hasType, qualified, isArr: Boolean;
     identNode, fieldNode, valNode, assignNode, seq, arrLen, loNode, hiNode: Integer;
+    arrElemRecId: Integer;
 begin
   Next; { let }
   if CurTok.Kind = tkMut then Next;
   if CurTok.Kind <> tkIdent then Error('Rust: expected variable name after let');
   name := CurTok.SVal; Next;
   hasType := False; annotTk := tyUnknown; structCi := -1;
-  isArr := False; arrElemTk := tyUnknown; arrLen := 0;
+  isArr := False; arrElemTk := tyUnknown; arrLen := 0; arrElemRecId := REC_NONE;
   if CurTok.Kind = tkColon then
   begin
     Next;
     if CurTok.Kind = tkLBrack then
     begin
-      { `[T; N]` fixed-array annotation }
+      { `[T; N]` fixed-array annotation. T may be a struct/enum: a fixed array
+        of records is stored + indexed by the shared codegen (ElemRecName), and
+        `arr[i].field` resolves via ResolveNodeRec(AN_INDEX). }
       Next;
       if CurTok.Kind <> tkIdent then Error('Rust: expected element type in [T; N]');
-      arrElemTk := RTypeKindFromName(CurTok.SVal, False);
+      arrElemTk := RTypeKindFromName(CurTok.SVal, True);
+      arrElemRecId := LastTypeRecId;
       Next;
       Expect(tkSemicolon, ';');
       if CurTok.Kind <> tkInteger then Error('Rust: array length must be an integer literal (skeleton)');
@@ -1014,6 +1042,10 @@ begin
     if not hasType then Error('Rust: let without initializer needs a type annotation');
     if isArr then
     begin
+      { fixed array of a record type: AllocArray reads LastTypeRecId for the
+        element's size + ElemRecName (uninitialised is allowed here — pxx does
+        not enforce Rust's definite-init; the movegen fills slots field-wise). }
+      if arrElemTk = tyRecord then LastTypeRecId := arrElemRecId;
       AllocArray(name, arrElemTk, 0, arrLen - 1);
       Result := -1;
       Exit;
@@ -1786,10 +1818,13 @@ begin
   end;
 
   Result := RParseExpr;
-  { `a[i] = e;` / `s[i] = e;` — indexed stores parse as an expression
-    followed by `=` (AN_INDEX / slice AN_DEREF are valid assign targets). }
+  { `a[i] = e;` / `s[i] = e;` / `a[i].field = e;` — indexed and
+    indexed-field stores parse as an expression followed by `=` (AN_INDEX,
+    slice AN_DEREF, and AN_FIELD over an indexed record are all valid assign
+    targets). }
   if (CurTok.Kind = tkAssign) and
-     ((ASTKind[Result] = AN_INDEX) or (ASTKind[Result] = AN_DEREF)) then
+     ((ASTKind[Result] = AN_INDEX) or (ASTKind[Result] = AN_DEREF) or
+      (ASTKind[Result] = AN_FIELD)) then
   begin
     Next;
     node := AllocNode(AN_ASSIGN);

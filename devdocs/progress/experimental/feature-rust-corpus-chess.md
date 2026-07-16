@@ -150,3 +150,20 @@ pure swallowing/trivia, cheap and high-leverage.
   new-corpus + Makefile. Remaining ladder toward the ACTUAL engine sources is
   unchanged: Option (stage 2), unity build (stage 3), then perft/search on the
   real chess.rs/search.rs vs cargo.
+- 2026-07-16 — **struct-array enabler** (Track R / A shared). Fixed arrays of a
+  struct or tuple-struct type with per-element field access: `let mut list:
+  [Move; N];`, `list[i].field = e` / `= list[i].field`, and tuple `list[i].0`.
+  Rides the shared array-of-record codegen — AllocArray already sizes record
+  elements via LastTypeRecId/ElemRecName, and ResolveNodeRec(AN_INDEX) already
+  yields the element record, so the frontend only had to (a) accept a struct
+  element type in the `[T; N]` annotation, (b) set LastTypeRecId before the
+  no-init AllocArray, (c) parse `arr[i].field` into AN_FIELD(AN_INDEX) in the
+  expression path, (d) accept AN_FIELD as an assign target. No shared-codegen
+  change. This is the [Move; 256] move-list stand-in for the engine's
+  ArrayVec<Move, 256> — the last piece needed to rebuild the movegen with the
+  engine's real Move/Square STRUCTS instead of the i64 packing. test/
+  test_rust_struct_array.rs; regressions green (rust sweep, quick tier,
+  self-host byte-identical). Deliberate narrowing: whole-element store
+  `list[i] = some_move` (record-value copy) not yet wired — the movegen writes
+  fields individually; pxx also does not enforce Rust definite-init, so the
+  arrays are annotation-only `let` then filled.

@@ -962,6 +962,11 @@ test-core: $(COMPILER)
 	# legality filtering. Perft exact through depth 3 (no EP/castle before ply 4).
 	./$(COMPILER) test/test_rust_chess_perft.rs /tmp/test_rust_chess_perft26
 	test "$$(/tmp/test_rust_chess_perft26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902')"
+	# Rust fixed array of structs (feature-rust-corpus-chess enabler): arr[i].field
+	# read/write + tuple arr[i].0 over the shared array-of-record codegen — the
+	# [Move; 256] move-list stand-in for the engine's ArrayVec<Move, 256>.
+	./$(COMPILER) test/test_rust_struct_array.rs /tmp/test_rust_struct_array26
+	test "$$(/tmp/test_rust_struct_array26)" = "$$(printf 'checksum 1202\nsq 30')"
 	# Rust chess FULL legality (feature-rust-corpus-chess): Move packed into one i64
 	# (from|to<<6|flags<<12) replaces the engine's Move struct + ArrayVec; EP, castling,
 	# promotion, underpromotion + check detection. Node counts match the reference perft
