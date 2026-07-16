@@ -107,6 +107,27 @@ Reserve genuine concurrency for when wall-clock latency actually matters (a rele
 crunch), and spend the cap knowingly. The `claudecap blocks` view measures per-block
 peak/mean concurrency so you can see the cost against ground-truth `/usage` pastes.
 
+**Working hypothesis (adopt as a safe default until `claudecap` confirms):**
+- *H1* — a single session at a time is effectively unlimited (a lone worker rarely
+  exhausts a 5h block).
+- *H2* — concurrent sessions hit the cap fast, super-linearly (two light agents trip
+  a limit one hard worker never would).
+
+**The rule this buys — serial handoff with a cooldown.** Background/scheduled workers
+must never let their active windows overlap, *including during a swap*: the outgoing
+agent finishes, then a **≥60 s quiet gap**, then the incoming one may touch tokens.
+The gap matters because an agent's last requests/streaming linger a few seconds after
+it "ends", and accidental few-second overlaps still cost — better a deliberate margin.
+
+Mechanism: a **run-lock with a cooldown stamp** (a small file, e.g.
+`.claude-run-lock.json` in a coordination dir — same-box now; a shared/synced location
+for cross-box, since the cap aggregates server-side). Acquire requires *both* `holder
+== null` *and* `now - released_at ≥ 60 s`; on exit write `released_at = now`. A worker
+(or a scheduled routine firing into a busy window) that can't acquire just backs off
+and retries next tick — which, combined with the durable ranked queue, means no work
+is lost, only deferred. This is the automated version of what the maintainer did by
+hand ("don't start a second agent until the first is well clear").
+
 ## The human review cadence
 
 The whole point is that this is **small and infrequent**:
