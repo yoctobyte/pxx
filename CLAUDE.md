@@ -26,7 +26,7 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   libraries. The set below is deliberately small; resist splitting it finer.
 - **Two axes: lanes vs tags.** The letters mix two kinds of thing, and that's
   fine once you see it. **File-lanes** (exclusive, collision-avoidance): **A**
-  core, **B** libs/demos, **C/P/R/Z** frontends — these answer "who owns this
+  core, **B** libs/demos, **C/N/P/R/Z** frontends — these answer "who owns this
   file when two agents run at once." **Work-tags** (human grouping, compose
   freely, each *inherits* a file-lane): **O** optimization (owned by A), **E**
   examples/apps (owned by B), **T** testing, **D** docs, **X** experimental. A
@@ -63,8 +63,9 @@ Two axes cut the repo, and the tracks follow them:
 
 1. **Accepted languages (frontends)** — what the compiler *parses*: **P** Pascal
    (the full dialect — classes, generics, RTL semantics, *far* past the subset
-   self-host needs), **C**, **R** Rust, **Z** Zig. Each is a whole language with
-   its own tests; each lowers to the shared IR.
+   self-host needs), **C**, **N** Nil-Python, **R** Rust, **Z** Zig. Each is a
+   whole language with its own tests; each lowers to the shared IR. (N/C are
+   mainline and gated; R/Z are experimental — X-tagged, see below.)
 2. **The core + everything around it** — **A** the language-agnostic machinery
    (AST/IR/backends/ABI/ELF/self-host), **B** libraries (all languages), **D**
    public docs.
@@ -164,6 +165,18 @@ frontend)"). **At session start, infer your track from the request:**
   do not edit it under Track Z. Gate = Zig tests green + self-host byte-identical
   + cross. Land only green; destabilizing work behind a flag or incremental,
   never a long-lived branch.
+- **Track N — Nil-Python frontend (npyfront).** The Nil-Python language frontend —
+  `compiler/pylexer.inc`, `compiler/pyparser.inc`, Python→IR lowering, `.npy`
+  tests. **Mainline** (peer of C, not experimental like R/Z): it has its own
+  carved-out files AND a gated suite (`make test-nilpy`, managed + frozen; real
+  coverage — SQLite CRUD, classes, variants, string methods). Works on `master`,
+  under the same pin boundary as C. Same rule as C/Z: own your frontend files; a
+  shared-internals change (new AST node / IR op / symtab field / backend / anything
+  in `lexer.inc`, `parser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends)
+  → **file a Track A ticket**, do not edit it under N. Gate = `test-nilpy` green +
+  self-host byte-identical + cross. Land only green. NOTE the two-hats split: the
+  *language* is N; a **NilPy IDE or app built with it is an E app** (Track B
+  file-ownership), never N — same P-vs-A distinction as everywhere.
 - **Track U — User (the decision lane).** Where human judgment lives. NOT a
   file-lane: owns no source, has no gate, builds nothing — it is the **escalation
   target**. The rule for every agent, and *especially* an autonomous/scheduled
@@ -180,9 +193,9 @@ frontend)"). **At session start, infer your track from the request:**
   review cadence — in **`devdocs/dev/autonomy.md`**.
 
 If genuinely ambiguous, **ask: "Track A (core), B (libraries/demos), C (C
-frontend), D (docs/website), P (Pascal frontend), R (Rust frontend), or Z (Zig
-frontend)?"** — don't guess; the tracks have opposite rules about rebuilding the
-compiler and where they work. (And remember one agent may legitimately hold
+frontend), D (docs/website), N (Nil-Python frontend), P (Pascal frontend), R (Rust
+frontend), or Z (Zig frontend)?"** — don't guess; the tracks have opposite rules
+about rebuilding the compiler and where they work. (And remember one agent may legitimately hold
 several at once.) And whenever the fork is *what to build/decide* rather than
 *which lane owns it*, that's **Track U** — file `decide-*`, don't guess.
 
@@ -226,11 +239,15 @@ the agent is single-track again.
 
 Not all combinations carry the same risk, and it's about **shared files, not
 topics**:
-- **Frontend + frontend** (C/P/R/Z pairs) is the low-risk combo — each owns a
-  mostly-disjoint file set (`cparser` vs `zparser` vs the Rust files…), so their
-  edits merge cleanly. The catch is **P**: the Pascal frontend still lives in the
-  *shared* `lexer.inc`/`parser.inc`, so "P + anything" touches A's ground — treat
-  the P edits under A's gate + no-concurrent-edit rule.
+- **Frontend + frontend** (C/N/P/R/Z pairs) is the low-risk combo — each owns a
+  mostly-disjoint file set (`cparser` vs `pyparser` vs `zparser` vs the Rust files…),
+  so their edits merge cleanly. So **A+N, B+N, N+C**, etc. are all fine — N owns
+  `pylexer`/`pyparser`, disjoint from every other lane. The catch is **P**: the
+  Pascal frontend still lives in the *shared* `lexer.inc`/`parser.inc`, so "P +
+  anything" touches A's ground — treat the P edits under A's gate + no-concurrent-edit
+  rule. (N does NOT have this catch — it's carved out like C/Z.) For automated /
+  scheduled workers the overlap rules may need tuning, but a single supervised
+  agent holding e.g. A+N is exactly the intended combined-track case.
 - **Anything + A** is the combo that needs the "no other agent holds A"
   confirmation, because A is where the shared files (`ir*.inc`, `symtab.inc`,
   `defs.inc`, backends, and the P-shared `lexer`/`parser`) actually live. Two
@@ -304,6 +321,14 @@ IR op / symtab field / backend change → **file a Track A ticket**, don't edit 
 under Z (keeps A's self-host gate safe, stops node-number / token collisions).
 Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
 destabilizing work behind a flag or incrementally, never a long-lived branch.
+
+### Track N in one line
+Own the Nil-Python frontend files (`pylexer.inc` / `pyparser.inc`, Python→IR
+lowering, `.npy` tests) on `master`. Mainline + gated (peer of C, not X). **Shared
+compiler internals stay A's** — new AST node / IR op / symtab field / backend
+change → **file a Track A ticket**, don't edit under N. Gate = `test-nilpy` green +
+self-host byte-identical + cross. Land only green. The language is N; an IDE/app
+built with NilPy is an E app (Track B), not N.
 
 ### Track U in one line
 The decision lane — human judgment, no files, no gate, no build. **Escalate,

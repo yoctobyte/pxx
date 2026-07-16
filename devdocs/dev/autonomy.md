@@ -81,7 +81,8 @@ Run the loops as scheduled cloud agents (`/schedule` → cron routines) and/or
 | --- | --- | --- | --- |
 | **A+** (core, usually combined) | top ticket: IR/backend/ABI/self-host/opt; most work lands here | daily / nightly | sole-A guard: only one A worker at a time (self-host gate is serial) |
 | **B** (libs/demos) | lib compat, demo fixes, `lib-test`/`demos` dashboard | daily | builds on `pinned`, never rebuilds the compiler — cheap, parallel-safe with A |
-| **C / Z / R** (frontends) | corpus expansion, frontend long-tails | a few times/week | disjoint files → safe alongside A; shared-internals change → files a Track A ticket |
+| **N / C** (mainline frontends) | Nil-Python + C long-tails, corpus, compat | a few times/week | own carved-out files (`pylexer`/`pyparser`, `clexer`/`cparser`) → safe alongside A; shared-internals change → files a Track A ticket. Both gated (`test-nilpy`, C tests). |
+| **Z / R** (experimental frontends, X) | Zig/Rust, opt-in — never auto-prioritised | on request / for fun | X-tagged; tickets in `experimental/`. Not part of the unattended grind unless you point a worker at them. |
 | **T** (watcher) | already live: test matrix + fuzz + file regressions | continuous | the reference daemon; keep it running |
 | **U** (decisions) | **human**, not scheduled | your cadence (e.g. weekly) | clearing U is the steering act |
 
