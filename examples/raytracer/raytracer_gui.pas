@@ -238,6 +238,18 @@ type
     FInteractive: Boolean;
     FDownscale: Integer;
 
+    { incremental full render: fill the image in horizontal stripes across timer
+      callbacks so the event loop never blocks on a whole-scene trace. FFullRow<0
+      means idle; the camera basis is captured once at BeginFullRender so every
+      stripe is consistent even if the view is nudged mid-render (which restarts it). }
+    FFullRow: Integer;
+    FPumpOn: Boolean;
+    FCRo, FCU, FCV, FCW: Vec3;
+    FCAspect, FCFov: Double;
+    FCIw, FCIh: Integer;
+    FFullT0: Int64;
+
+    procedure SetupCamera(out ro, u, v, w: Vec3; out aspect, fov: Double);
     procedure RenderToBitmap;
   public
     constructor Create(APaintBox: TPaintBox; AStatusLabel: TLabel);
@@ -252,7 +264,12 @@ type
 
     procedure SetInteractive(AInteractive: Boolean);
     procedure Render;
+    procedure BeginFullRender;
+    function RenderFullStripe: Boolean;
+    function Pump: Integer;   { timer tick: render a stripe; 1=keep firing, 0=done }
   end;
+
+function FullStripeCb(data: Pointer): Integer; cdecl; forward;
 
 constructor TRaytracerHandler.Create(APaintBox: TPaintBox; AStatusLabel: TLabel);
 begin
@@ -261,6 +278,8 @@ begin
   FDragging := False;
   FInteractive := False;
   FDownscale := 4;
+  FFullRow := -1;
+  FPumpOn := False;
 
   FTarget := V(0.0, 0.0, -4.0);
   FTheta := 3.14159265 * 1.5;
@@ -287,6 +306,21 @@ begin
   end;
 end;
 
+procedure TRaytracerHandler.SetupCamera(out ro, u, v, w: Vec3; out aspect, fov: Double);
+begin
+  aspect := FBitmap.Width / FBitmap.Height;
+  fov := 1.0;
+  ro.x := FTarget.x + FRadius * Cos(FTheta) * Cos(FPhi);
+  ro.y := FTarget.y + FRadius * Sin(FPhi);
+  ro.z := FTarget.z + FRadius * Sin(FTheta) * Cos(FPhi);
+  w := VNorm(VSub(ro, FTarget));
+  u := VNorm(VCross(V(0.0, 1.0, 0.0), w));
+  v := VCross(w, u);
+end;
+
+{ Whole-image synchronous render at the interactive downscale (ds=4). Fast — used
+  for the startup preview and while dragging, where a coarse frame now beats a
+  sharp frame later. }
 procedure TRaytracerHandler.RenderToBitmap;
 var
   iw, ih, px, py, subx, suby, ds: Integer;
@@ -299,22 +333,8 @@ begin
   iw := FBitmap.Width;
   ih := FBitmap.Height;
   if (iw <= 0) or (ih <= 0) then Exit;
-
-  aspect := iw / ih;
-  fov := 1.0;
-
-  ro.x := FTarget.x + FRadius * Cos(FTheta) * Cos(FPhi);
-  ro.y := FTarget.y + FRadius * Sin(FPhi);
-  ro.z := FTarget.z + FRadius * Sin(FTheta) * Cos(FPhi);
-
-  w := VNorm(VSub(ro, FTarget));
-  u := VNorm(VCross(V(0.0, 1.0, 0.0), w));
-  v := VCross(w, u);
-
-  if FInteractive then
-    ds := FDownscale
-  else
-    ds := 1;
+  SetupCamera(ro, u, v, w, aspect, fov);
+  ds := FDownscale;
 
   py := 0;
   while py < ih do
@@ -324,35 +344,106 @@ begin
     begin
       sx := (2.0 * ((px + 0.5) / iw) - 1.0) * aspect * fov;
       sy := (1.0 - 2.0 * ((py + 0.5) / ih)) * fov;
-
       rd := VNorm(VAdd(VAdd(VScale(u, sx), VScale(v, sy)), VScale(w, -1.0)));
       col := Trace(ro, rd, 0);
-
       color := (Clamp255(col.z) shl 16) or (Clamp255(col.y) shl 8) or Clamp255(col.x);
-
-      if ds > 1 then
-      begin
-        for suby := 0 to ds - 1 do
-          for subx := 0 to ds - 1 do
-            if (px + subx < iw) and (py + suby < ih) then
-              FBitmap.SetPixel(px + subx, py + suby, color);
-      end
-      else
-        FBitmap.SetPixel(px, py, color);
-
+      for suby := 0 to ds - 1 do
+        for subx := 0 to ds - 1 do
+          if (px + subx < iw) and (py + suby < ih) then
+            FBitmap.SetPixel(px + subx, py + suby, color);
       px := px + ds;
     end;
     py := py + ds;
   end;
 
   t1 := NowUsec;
-  FStatusLabel.Caption := 'Render Time: ' + IntToStr((t1 - t0) div 1000) + 'ms | Camera: (' + FloatToStrF(ro.x, 2) + ', ' + FloatToStrF(ro.y, 2) + ', ' + FloatToStrF(ro.z, 2) + ') | Zoom Radius: ' + FloatToStrF(FRadius, 2);
+  FStatusLabel.Caption := 'Preview ' + IntToStr((t1 - t0) div 1000) + 'ms | rendering full quality...';
 end;
 
+{ Arm the incremental full-quality render: capture the camera + dimensions so all
+  stripes agree, and reset the row cursor to the top. RenderFullStripe then fills a
+  band per call. }
+procedure TRaytracerHandler.BeginFullRender;
+begin
+  if (FBitmap.Width <= 0) or (FBitmap.Height <= 0) then Exit;
+  FCIw := FBitmap.Width;
+  FCIh := FBitmap.Height;
+  SetupCamera(FCRo, FCU, FCV, FCW, FCAspect, FCFov);
+  FFullRow := 0;             { (re)arm from the top }
+  FFullT0 := NowUsec;
+  if not FPumpOn then        { start the stripe pump if it isn't already running }
+  begin
+    FPumpOn := True;
+    g_timeout_add(1, @FullStripeCb, Pointer(Self));
+  end;
+end;
+
+{ One timer tick: advance the incremental render by a stripe. Returns the g_timeout
+  code — 1 to keep firing, 0 to remove the source when the frame is complete. }
+function TRaytracerHandler.Pump: Integer;
+begin
+  if RenderFullStripe then Pump := 1
+  else begin FPumpOn := False; Pump := 0; end;
+end;
+
+{ Render the next band of full-quality (ds=1) rows. Returns True while more remain
+  (the timer pump keeps firing), False when the frame is complete. }
+function TRaytracerHandler.RenderFullStripe: Boolean;
+const STRIPE = 24;
+var
+  px, py, endRow: Integer;
+  sx, sy: Double;
+  rd, col: Vec3;
+  color: TColor;
+  t1: Int64;
+begin
+  if FFullRow < 0 then begin RenderFullStripe := False; Exit; end;
+  endRow := FFullRow + STRIPE;
+  if endRow > FCIh then endRow := FCIh;
+  py := FFullRow;
+  while py < endRow do
+  begin
+    px := 0;
+    while px < FCIw do
+    begin
+      sx := (2.0 * ((px + 0.5) / FCIw) - 1.0) * FCAspect * FCFov;
+      sy := (1.0 - 2.0 * ((py + 0.5) / FCIh)) * FCFov;
+      rd := VNorm(VAdd(VAdd(VScale(FCU, sx), VScale(FCV, sy)), VScale(FCW, -1.0)));
+      col := Trace(FCRo, rd, 0);
+      color := (Clamp255(col.z) shl 16) or (Clamp255(col.y) shl 8) or Clamp255(col.x);
+      FBitmap.SetPixel(px, py, color);
+      px := px + 1;
+    end;
+    py := py + 1;
+  end;
+  FFullRow := endRow;
+  FPaintBox.Invalidate;   { show the band just filled }
+  if FFullRow >= FCIh then
+  begin
+    FFullRow := -1;
+    t1 := NowUsec;
+    FStatusLabel.Caption := 'Render Time: ' + IntToStr((t1 - FFullT0) div 1000) + 'ms | Camera: (' +
+      FloatToStrF(FCRo.x, 2) + ', ' + FloatToStrF(FCRo.y, 2) + ', ' + FloatToStrF(FCRo.z, 2) +
+      ') | Zoom Radius: ' + FloatToStrF(FRadius, 2);
+    RenderFullStripe := False;
+  end
+  else
+    RenderFullStripe := True;
+end;
+
+{ Dispatch: interactive (dragging) -> fast synchronous coarse frame; otherwise arm
+  the incremental full render so the loop stays responsive. The stripe pump is
+  started once from the main body and self-sustains (its callback returns 1 to keep
+  firing); a re-arm here just resets the cursor, which the running pump picks up. }
 procedure TRaytracerHandler.Render;
 begin
-  Self.RenderToBitmap;
-  FPaintBox.Invalidate;
+  if FInteractive then
+  begin
+    Self.RenderToBitmap;
+    FPaintBox.Invalidate;
+  end
+  else
+    Self.BeginFullRender;
 end;
 
 procedure TRaytracerHandler.OnPaint(Sender: TControl; Canvas: TCanvas);
@@ -476,6 +567,14 @@ begin
   AutoQuit := 0;
 end;
 
+{ The incremental-render pump: fires on a g_timeout; each call renders one stripe
+  of the full-quality frame and returns whether to keep firing. Because it yields
+  between stripes, the event loop keeps servicing input/paint during a ~1s render. }
+function FullStripeCb(data: Pointer): Integer; cdecl;
+begin
+  FullStripeCb := TRaytracerHandler(data).Pump;
+end;
+
 var
   Form1: TForm;
   PaintBox: TPaintBox;
@@ -511,7 +610,13 @@ begin
   PaintBox.OnKeyDown := @Handler.DoKeyDown;
   Form1.OnResize := @Handler.DoResize;
 
-  Handler.Render;
+  { Responsive startup, progressive: render a fast downscaled PREVIEW now (fills the
+    bitmap in a few ms) so the window maps with a rough scene immediately, then arm
+    the incremental full render. The stripe pump (started by BeginFullRender) sharpens
+    the image top-to-bottom once the loop is running, never blocking it. Window ->
+    coarse preview -> full scene, all responsive. }
+  Handler.SetInteractive(True);    { ds=4 preview into the bitmap }
+  Handler.SetInteractive(False);   { arm the incremental full render + start the pump }
 
   if ParamCount > 0 then
   begin
