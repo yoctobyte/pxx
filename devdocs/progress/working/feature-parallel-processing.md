@@ -98,6 +98,42 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
 - 2026-06-28 — blocker moved from the completed unified allocator to
   `feature-threadsafe-heap-contract`: refcounting exists in threadsafe mode, but
   heap safety needs an explicit Track A contract per memory-management mode.
+- 2026-07-16 — UNBLOCKED (both blockers done: heap-contract + io-serialization).
+  Surface decided (user, Track U): **`parallel for`** data-parallel loop as the
+  first slice. Lowering = **new AST node `AN_PARFOR` + IR**; capture = **full
+  implicit local capture**.
+
+  ### Design (as built)
+  **Runtime (STEP 1 — DONE, commit c35e90b3, Track B):** `lib/rtl/palparallel.pas`
+  over the M1 PAL. Fixed body ABI:
+  ```
+  TParForBody = procedure(ctx: Pointer; lo, hi: NativeInt);
+  procedure PXXParallelFor(lo, hi: NativeInt; body: TParForBody; ctx: Pointer);
+  ```
+  Partitions [lo..hi] into contiguous chunks (remainder spread over first chunks),
+  chunk 0 runs inline on the caller (no idle spawn), rest spawn via PalThreadCreate,
+  barrier-join. Worker count = sched_getaffinity popcount clamped [1..64],
+  overridable (PXXSetParForWorkers). Empty range = no-op; spawn failure falls back
+  to inline. Test `test_parallel_for.pas` drives it directly (exact partition:
+  every index once; values; edge ranges) — gated in `test-threads`.
+
+  **Parser + IR (STEP 2 — in progress, Track A/P, shared parser.inc):**
+  ARCHITECTURE FINDING: this compiler mints helper procs ONLY at parse time
+  (lambda-lift + stackless-generator both token-transform in the parser); there is
+  no path to synthesize a proc during IR lowering. So AN_PARFOR reconciles the two
+  choices as: a first-class node whose *parse action* uses the lambda-lift token
+  machinery to synthesize the worker proc `__pf_K(ctx, lo, hi)` + capture, whose
+  *IR lowering* emits the `PXXParallelFor(lo, hi, @__pf_K, @ctx)` call.
+  - **2a (capture-free):** body may reference loop var + globals only; an enclosing
+    local ref is a clear error. Worker synthesized as a capture-free stashed proc.
+    Green intermediate (compiler self-build uses no `parallel for` → byte-identical).
+  - **2b (full capture):** extend the lift capture scan to pack captured-by-ref
+    locals into a synthesized ctx record; worker reads `PCtx(ctx)^.field^`; call
+    site fills ctx from `@local`s. This is the large piece (extends the delicate
+    lambda-lift machinery).
+  - `parallel` = soft keyword recognized only immediately before `for`. `downto`
+    rejected (order-independent). Requires `--threadsafe` (compile error like
+    `__pxxclone`, since the body may alloc). Off-unless-used ⇒ self-host gate holds.
 
 ## Part of the multithreading epic (2026-06-30)
 
