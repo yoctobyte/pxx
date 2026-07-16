@@ -71,8 +71,16 @@ mapfile -t LIBDIRS < <(
     | { grep -vE '/platform/' || true; } \
   ; printf '%s/lib/rtl/platform/posix\n' "$ROOT"   # re-add the host PAL backend
 )
-# Dedup (the posix re-add may duplicate) and keep only existing dirs.
-mapfile -t LIBDIRS < <(printf '%s\n' "${LIBDIRS[@]}" | sort -u)
+# Dedup (the posix re-add may duplicate), then ORDER: Pascal unit roots
+# (lib/rtl, lib/pcl, …) BEFORE lib/crtl/*. A plain `sort -u` puts crtl first
+# (alphabetical), so `uses math` bound the C header lib/crtl/include/math.h via
+# C-header-import and shadowed the Pascal lib/rtl/math.pas — Sqrt/Cos vanished for
+# every Pascal program built through ./pxx. crtl stays on the path (C `#include`
+# still resolves), just after the Pascal roots so Pascal `uses` wins.
+mapfile -t LIBDIRS < <(
+  { printf '%s\n' "${LIBDIRS[@]}" | sort -u | grep -vE '/crtl(/|$)'; \
+    printf '%s\n' "${LIBDIRS[@]}" | sort -u | grep -E  '/crtl(/|$)'; }
+)
 
 mkdir -p "$BINDIR"
 
