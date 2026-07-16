@@ -363,6 +363,10 @@ begin
   pm.Code := @H.DoAuto;  MkButton(Form1, 'Auto', 580, 118, 90, pm);
 
   Form1.Realize;
+  { register as the application main form so Application.Run shows it — without
+    this FMainForm stays nil and Run only spins the event loop, leaving the real
+    toplevel created but never shown (only GTK's tiny helper window maps). }
+  Application.MainForm := Form1;
 
   arg := '';
   if ParamCount > 0 then arg := ParamStr(1);
