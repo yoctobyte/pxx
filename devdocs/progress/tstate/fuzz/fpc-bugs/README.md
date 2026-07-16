@@ -48,6 +48,23 @@ level changes the outcome. So the fault is in FPC's CSE pass, not the program.
 
 pxx compiles and runs it correctly at `-O0/-O2/-O3` (prints `survived`).
 
+### Status: FIXED in trunk (do NOT file)
+
+Built FPC **3.3.1** trunk (`ppcx64`, commit `3b5c7beebeff`, 2026-07-15) from
+source, bootstrapped off 3.2.2. The reproducer runs **clean at every level** on
+trunk — `-O1`, `-O2`, `-O3`, and `-O1 -OoCSE` all print `survived`:
+
+```
+trunk 3.3.1  -O2          -> survived (clean)
+trunk 3.3.1  -O1 -OoCSE   -> survived (clean)
+release 3.2.2 -O2         -> RTE 216
+```
+
+So the CSE miscompile is **already fixed upstream** and only affects the aging
+3.2.2 release. Not worth a new issue; at most a fixes-3.2 backport candidate, and
+even that is marginal given 3.2.2's age. Kept here as a documented fuzzer find
+and a regression guard: if pxx ever grows a CSE pass, this is a ready test case.
+
 ### Reproduce
 
 ```
