@@ -1,84 +1,97 @@
 { SPDX-License-Identifier: 0BSD }
 program solitaire_gui;
-{ Klondike solitaire — PCL/GTK3 GUI front-end over the tested `klondike` engine.
-  The board is custom-drawn in TPaintBox.OnPaint and played by dragging cards:
-  press a pile (OnMouseDown) to pick up its top run, release on a destination
-  (OnMouseUp) to drop; press the stock to draw. Keyboard (OnKeyDown): n=new,
-  u=undo, a=auto, d/space=draw, q=quit. The layout (card size, pile spacing,
-  hit-test regions) is recomputed on resize (OnResize), so the board scales with
-  the window. New / Undo / Auto buttons and a move counter complete it.
+{ Klondike solitaire — PCL/GTK3 GUI over the tested `klondike` engine. The board
+  is custom-drawn in TPaintBox.OnPaint and played by dragging cards: press a card
+  (OnMouseDown) to pick it up together with the run stacked on top of it, release
+  on a destination (OnMouseUp) to drop; an illegal drop leaves everything where it
+  was. Press the stock to draw. Commands live on a menu bar (Game / Help); the
+  move counter and win state show in the title bar. Keyboard: n=new, u=undo,
+  a=auto, d/space=draw, q=quit.
 
-  `--smoke`: set up, drive the handlers headlessly (draw, drag, key, resize),
-  assert a stock press draws, print SMOKE OK and exit (no event loop).
+  Layout (card size, spacing, hit-test regions) is recomputed whenever the window
+  resizes, so the board scales to fill the window. Suit pips are real Unicode
+  glyphs (DejaVu Sans has them; the generic 'Sans' the cairo toy-text API resolves
+  does not — it renders tofu, so the font name is load-bearing here).
 
-  `--gui-smoke`: map the REAL window and run the REAL event loop (gtk_main via
-  Application.Run), self-quitting from a g_timeout so the realize/map/paint/
-  teardown path is exercised (under xvfb in CI); prints GUI SMOKE OK. }
+  `--smoke`: drive the handlers headlessly (draw, drag, key, resize), assert a
+  stock press draws, print SMOKE OK and exit (no event loop).
+
+  `--gui-smoke`: map the REAL window, run the REAL event loop, self-quit from a
+  g_timeout (exercised under xvfb in CI); prints GUI SMOKE OK. }
 
 {$define PXX_MANAGED_STRING}
 
-uses gtk3, controls, stdctrls, forms, extctrls, graphics, sysutils, klondike;
+uses gtk3, controls, stdctrls, forms, extctrls, graphics, menus, sysutils, klondike;
 
 const
-  COL_TABLE = $00104010;   { dark green, $00BBGGRR }
-  COL_BACK  = $00803020;   { card back }
-  COL_EMPTY = $00405040;
-  COL_GRAY  = $00808080;
+  COL_TABLE = $00206018;   { felt green, $00BBGGRR }
+  COL_BACK  = $00903018;   { card back }
+  COL_BACK2 = $00C05828;   { card back inner }
+  COL_EMPTY = $00305828;   { empty pile slot }
+  COL_GRAY  = $00A0A0A0;
+  CARD_FONT = 'DejaVu Sans';
 
 type
   THandler = class
-    selected: Integer;     { the pile being dragged from, -1 = none }
+    selPile: Integer;      { pile being dragged from, -1 = none }
+    selStart: Integer;     { index of the lowest grabbed card in that pile }
     moveCount: Integer;
     { responsive layout, recomputed on resize }
     boardW, boardH, cardW, cardH, colStep, marginX, topY, tabY, fanUp, fanDown: Integer;
     PaintBox: TPaintBox;
-    StatusLabel: TLabel;
-    constructor Create(APaint: TPaintBox; ALabel: TLabel);
+    Form: TForm;
+    constructor Create(APaint: TPaintBox; AForm: TForm);
     procedure RecalcLayout(w, h: Integer);
     function PileX(p: Integer): Integer;
     function PileY(p: Integer): Integer;
+    function CardTop(p, i: Integer): Integer;
     procedure DrawCard(Canvas: TCanvas; x, y, suit, rank: Integer; faceUp: Boolean);
     procedure DrawPile(Canvas: TCanvas; p: Integer; fanned: Boolean);
     procedure OnPaint(Sender: TControl; Canvas: TCanvas);
     procedure Refresh;
     function FaceUpRun(p: Integer): Integer;
     function HitPile(x, y: Integer): Integer;
-    function DoMoveBest(src, dst: Integer): Boolean;
+    function HitCard(p, x, y: Integer): Integer;
     procedure DoMouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure DoMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure DoKeyDown(Sender: TControl; KeyCode: Integer);
     procedure DoResize(Sender: TControl; Width, Height: Integer);
+    procedure OnFormResize(Sender: TControl; Width, Height: Integer);
     procedure DoNew(Sender: TObject);
     procedure DoDraw(Sender: TObject);
     procedure DoUndo(Sender: TObject);
     procedure DoAuto(Sender: TObject);
+    procedure DoQuit(Sender: TObject);
+    procedure DoHelp(Sender: TObject);
   end;
 
 function RankStr(r: Integer): string;
 begin
   if r = 1 then RankStr := 'A'
-  else if r = 10 then RankStr := 'T'
+  else if r = 10 then RankStr := '10'
   else if r = 11 then RankStr := 'J'
   else if r = 12 then RankStr := 'Q'
   else if r = 13 then RankStr := 'K'
   else RankStr := IntToStr(r);
 end;
 
-function SuitStr(s: Integer): string;
+{ Unicode suit pip (UTF-8). engine suits: 0=clubs 1=diamonds 2=hearts 3=spades. }
+function SuitCh(s: Integer): string;
 begin
-  if s = 0 then SuitStr := 'C'
-  else if s = 1 then SuitStr := 'D'
-  else if s = 2 then SuitStr := 'H'
-  else SuitStr := 'S';
+  if s = 0 then SuitCh := #$E2#$99#$A3        { U+2663 black club }
+  else if s = 1 then SuitCh := #$E2#$99#$A6   { U+2666 black diamond }
+  else if s = 2 then SuitCh := #$E2#$99#$A5   { U+2665 black heart }
+  else SuitCh := #$E2#$99#$A0;                { U+2660 black spade }
 end;
 
-constructor THandler.Create(APaint: TPaintBox; ALabel: TLabel);
+constructor THandler.Create(APaint: TPaintBox; AForm: TForm);
 begin
   PaintBox := APaint;
-  StatusLabel := ALabel;
-  selected := -1;
+  Form := AForm;
+  selPile := -1;
+  selStart := -1;
   moveCount := 0;
-  RecalcLayout(560, 560);
+  RecalcLayout(700, 560);
   NewGame(1);
 end;
 
@@ -86,22 +99,22 @@ end;
   tableau columns fill the width; everything else derives from the column step. }
 procedure THandler.RecalcLayout(w, h: Integer);
 begin
-  if w < 360 then w := 360;
-  if h < 360 then h := 360;
+  if w < 420 then w := 420;
+  if h < 420 then h := 420;
   boardW := w; boardH := h;
   colStep := w div 7;
-  cardW := colStep - 8;
-  if cardW < 36 then cardW := 36;
+  cardW := colStep - 10;
+  if cardW < 40 then cardW := 40;
   cardH := cardW * 7 div 5;
-  marginX := (w - colStep * 7) div 2;
-  topY := 10;
-  tabY := topY + cardH + 16;
-  fanUp := cardH div 4;   if fanUp < 10 then fanUp := 10;
-  fanDown := cardH div 12; if fanDown < 3 then fanDown := 3;
+  marginX := (w - colStep * 7) div 2 + 5;
+  topY := 12;
+  tabY := topY + cardH + 18;
+  fanUp := cardH div 4;    if fanUp < 14 then fanUp := 14;
+  fanDown := cardH div 14; if fanDown < 4 then fanDown := 4;
 end;
 
-{ column index of each pile in the grid: stock 0, waste 1, foundations 3..6,
-  tableau 0..6 (foundations share the top row, tableau the lower one). }
+{ column index of each pile: stock 0, waste 1, foundations 3..6, tableau 0..6
+  (foundations share the top row, tableau the lower one). }
 function THandler.PileX(p: Integer): Integer;
 var col: Integer;
 begin
@@ -117,8 +130,19 @@ begin
   if (p >= P_TAB) then PileY := tabY else PileY := topY;
 end;
 
+{ Top Y of card index i in pile p (accounts for the fan). }
+function THandler.CardTop(p, i: Integer): Integer;
+var k, cy: Integer;
+begin
+  cy := PileY(p);
+  if p < P_TAB then begin CardTop := cy; Exit; end;   { top-row piles: no fan }
+  for k := 0 to i - 1 do
+    if CardFaceUp(p, k) then cy := cy + fanUp else cy := cy + fanDown;
+  CardTop := cy;
+end;
+
 procedure THandler.DrawCard(Canvas: TCanvas; x, y, suit, rank: Integer; faceUp: Boolean);
-var fs: Integer;
+var fs, cs: Integer; lbl, pip: string;
 begin
   Canvas.Pen.Color := clBlack;
   Canvas.Pen.Width := 1;
@@ -127,15 +151,25 @@ begin
     Canvas.Brush.Color := clWhite;
     Canvas.Rectangle(x, y, x + cardW, y + cardH);
     if IsRed(suit) then Canvas.Font.Color := clRed else Canvas.Font.Color := clBlack;
-    fs := cardH div 6; if fs < 8 then fs := 8;
-    Canvas.Font.Name := 'Sans';
+    Canvas.Font.Name := CARD_FONT;
+    pip := SuitCh(suit);
+    lbl := RankStr(rank) + pip;
+    { corner index }
+    fs := cardH div 7; if fs < 9 then fs := 9;
     Canvas.Font.Size := fs;
-    Canvas.TextOut(x + 4, y + 3, RankStr(rank) + SuitStr(suit));
+    Canvas.TextOut(x + 4, y + 2, lbl);
+    { big centre pip }
+    cs := cardH div 3; if cs < 12 then cs := 12;
+    Canvas.Font.Size := cs;
+    Canvas.TextOut(x + cardW div 2 - cs div 2, y + cardH div 2 - cs * 2 div 3, pip);
   end
   else
   begin
     Canvas.Brush.Color := COL_BACK;
     Canvas.Rectangle(x, y, x + cardW, y + cardH);
+    Canvas.Pen.Color := COL_BACK2;
+    Canvas.Brush.Color := COL_BACK2;
+    Canvas.Rectangle(x + 5, y + 5, x + cardW - 5, y + cardH - 5);
   end;
 end;
 
@@ -166,7 +200,7 @@ begin
 end;
 
 procedure THandler.OnPaint(Sender: TControl; Canvas: TCanvas);
-var c, x, y: Integer;
+var c, x, y, yb: Integer;
 begin
   if Canvas = nil then Exit;
   Canvas.Brush.Color := COL_TABLE;
@@ -178,25 +212,29 @@ begin
   for c := 0 to N_FOUND - 1 do DrawPile(Canvas, P_FOUND + c, False);
   for c := 0 to N_TAB - 1 do DrawPile(Canvas, P_TAB + c, True);
 
-  if selected >= 0 then
+  { highlight only the grabbed run — a stroked outline (Rectangle would fill and
+    erase the card faces; the pen-only path leaves them visible). }
+  if selPile >= 0 then
   begin
-    Canvas.Brush.Color := clNone;
     Canvas.Pen.Color := clYellow;
     Canvas.Pen.Width := 3;
-    x := PileX(selected); y := PileY(selected);
-    if selected >= P_TAB then
-      Canvas.Rectangle(x - 1, y - 1, x + cardW + 1, boardH - 4)
-    else
-      Canvas.Rectangle(x - 1, y - 1, x + cardW + 1, y + cardH + 1);
+    x := PileX(selPile);
+    y := CardTop(selPile, selStart);
+    yb := CardTop(selPile, PileCount(selPile) - 1) + cardH;
+    Canvas.MoveTo(x - 1, y - 1);
+    Canvas.LineTo(x + cardW + 1, y - 1);
+    Canvas.LineTo(x + cardW + 1, yb + 1);
+    Canvas.LineTo(x - 1, yb + 1);
+    Canvas.LineTo(x - 1, y - 1);
   end;
 end;
 
 procedure THandler.Refresh;
 begin
-  if StatusLabel <> nil then
+  if Form <> nil then
   begin
-    if IsWon then StatusLabel.Caption := 'You win!  Moves: ' + IntToStr(moveCount)
-    else StatusLabel.Caption := 'Moves: ' + IntToStr(moveCount);
+    if IsWon then Form.Caption := 'Klondike — You win!  (' + IntToStr(moveCount) + ' moves)'
+    else Form.Caption := 'Klondike — Moves: ' + IntToStr(moveCount);
   end;
   if PaintBox <> nil then PaintBox.Invalidate;
 end;
@@ -208,23 +246,6 @@ begin
   k := 0;
   while (k < n) and CardFaceUp(p, n - 1 - k) do k := k + 1;
   FaceUpRun := k;
-end;
-
-{ Move the largest legal face-up run from src onto dst; counts on success. }
-function THandler.DoMoveBest(src, dst: Integer): Boolean;
-var k: Integer;
-begin
-  DoMoveBest := False;
-  k := FaceUpRun(src);
-  while (k >= 1) and (not DoMoveBest) do
-  begin
-    if TryMove(src, dst, k) then
-    begin
-      moveCount := moveCount + 1;
-      DoMoveBest := True;
-    end;
-    k := k - 1;
-  end;
 end;
 
 { Which pile is at (x,y)? Inverse of the layout. -1 = none. }
@@ -247,30 +268,61 @@ begin
     HitPile := P_TAB + col;
 end;
 
-{ Press: clicking the stock draws; otherwise begin a drag from that pile. }
+{ Which card index in a fanned tableau pile is under y? -1 = none. The last card
+  gets its full height; earlier cards only their exposed fan strip. }
+function THandler.HitCard(p, x, y: Integer): Integer;
+var i, n, top, bot: Integer;
+begin
+  HitCard := -1;
+  n := PileCount(p);
+  for i := n - 1 downto 0 do
+  begin
+    top := CardTop(p, i);
+    if i = n - 1 then bot := top + cardH else bot := CardTop(p, i + 1);
+    if (y >= top) and (y < bot) then begin HitCard := i; Exit; end;
+  end;
+end;
+
+{ Press: stock draws; otherwise pick up a card + the run stacked on it. }
 procedure THandler.DoMouseDown(Sender: TControl; Button, X, Y: Integer);
-var p: Integer;
+var p, i: Integer;
 begin
   p := HitPile(X, Y);
-  if p < 0 then Exit;
+  if p < 0 then begin selPile := -1; Refresh; Exit; end;
   if p = P_STOCK then
   begin
     DrawStock;
-    selected := -1;
+    selPile := -1;
+    Refresh;
+    Exit;
+  end;
+  if p >= P_TAB then
+  begin
+    i := HitCard(p, X, Y);
+    if (i < 0) or (not CardFaceUp(p, i)) then begin selPile := -1; Refresh; Exit; end;
+    selPile := p; selStart := i;
   end
   else
-    selected := p;
+  begin
+    { waste / foundation: only the top card is grabbable }
+    if PileCount(p) = 0 then begin selPile := -1; Refresh; Exit; end;
+    selPile := p; selStart := PileCount(p) - 1;
+  end;
   Refresh;
 end;
 
-{ Release: drop the dragged run onto the pile under the cursor. }
+{ Release: drop the grabbed run onto the pile under the cursor. Illegal -> no-op. }
 procedure THandler.DoMouseUp(Sender: TControl; Button, X, Y: Integer);
-var d: Integer; ok: Boolean;
+var d, count: Integer;
 begin
-  if selected < 0 then Exit;
+  if selPile < 0 then Exit;
   d := HitPile(X, Y);
-  if (d >= 0) and (d <> selected) then ok := DoMoveBest(selected, d);
-  selected := -1;
+  if (d >= 0) and (d <> selPile) then
+  begin
+    count := PileCount(selPile) - selStart;
+    if TryMove(selPile, d, count) then moveCount := moveCount + 1;
+  end;
+  selPile := -1;
   Refresh;
 end;
 
@@ -286,15 +338,29 @@ begin
   end;
 end;
 
+{ The paintbox was resized (by OnFormResize) — recompute the board for its size. }
 procedure THandler.DoResize(Sender: TControl; Width, Height: Integer);
 begin
   RecalcLayout(Width, Height);
   Refresh;
 end;
 
-procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selected := -1; moveCount := 0; Refresh; end;
-procedure THandler.DoDraw(Sender: TObject); begin DrawStock; selected := -1; Refresh; end;
-procedure THandler.DoUndo(Sender: TObject); begin Undo; selected := -1; Refresh; end;
+{ The window was resized — stretch the paintbox to fill the content area; its own
+  OnResize (DoResize) then recomputes the layout. }
+procedure THandler.OnFormResize(Sender: TControl; Width, Height: Integer);
+begin
+  if PaintBox <> nil then PaintBox.SetBounds(0, 0, Width, Height);
+end;
+
+procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selPile := -1; moveCount := 0; Refresh; end;
+procedure THandler.DoDraw(Sender: TObject); begin DrawStock; selPile := -1; Refresh; end;
+procedure THandler.DoUndo(Sender: TObject); begin Undo; selPile := -1; Refresh; end;
+procedure THandler.DoQuit(Sender: TObject); begin gtk_main_quit; end;
+procedure THandler.DoHelp(Sender: TObject);
+begin
+  if Form <> nil then
+    Form.Caption := 'Drag a card (with the run on it) to move; click the stock to draw';
+end;
 procedure THandler.DoAuto(Sender: TObject);
 var moved: Boolean; p: Integer;
 begin
@@ -304,77 +370,79 @@ begin
     for p := 0 to 6 do
       if AutoFoundation(P_TAB + p) then begin moved := True; moveCount := moveCount + 1; end;
   until not moved;
-  selected := -1; Refresh;
+  selPile := -1; Refresh;
 end;
 
-procedure MkButton(Form: TForm; const cap: string; x, y, w: Integer; m: TMethod);
-var b: TButton;
+function MkItem(const cap: string; parent: TMenuItem; m: TMethod): TMenuItem;
+var it: TMenuItem;
 begin
-  b := TButton.Create(nil);
-  b.Parent := Form;
-  b.Caption := cap;
-  b.SetBounds(x, y, w, 28);
-  b.OnClick := m;
+  it := TMenuItem.Create(nil);
+  it.Caption := cap;
+  it.OnClick := m;
+  parent.Add(it);
+  MkItem := it;
 end;
 
-{ --gui-smoke: self-quit fired by g_timeout_add once the real event loop has
-  been running (the window is mapped and painted by then). }
+{ --gui-smoke: self-quit once the real event loop is running. }
 function GuiAutoQuit(data: Pointer): Integer; cdecl;
 begin
   gtk_main_quit;
-  GuiAutoQuit := 0;   { one-shot: remove the source }
+  GuiAutoQuit := 0;
 end;
 
 var
   Form1: TForm;
   PaintBox: TPaintBox;
-  Status: TLabel;
   H: THandler;
+  MainMenu: TMainMenu;
+  GameMenu, HelpMenu: TMenuItem;
   pm: TMethod;
   arg: string;
-
 begin
   Application := TApplication.Create;
   Application.Initialize;
 
   Form1 := TForm.Create(nil);
-  Form1.Caption := 'Klondike Solitaire';
+  Form1.Caption := 'Klondike';
+  Form1.SetBounds(0, 0, 820, 640);
 
   PaintBox := TPaintBox.Create(nil);
   PaintBox.Parent := Form1;
-  PaintBox.SetBounds(0, 0, 560, 560);
+  PaintBox.SetBounds(0, 0, 820, 610);
 
-  Status := TLabel.Create(nil);
-  Status.Parent := Form1;
-  Status.Caption := 'Moves: 0   (drag cards; keys: n/u/a/d/q)';
-  Status.SetBounds(580, 10, 220, 24);
+  H := THandler.Create(PaintBox, Form1);
 
-  H := THandler.Create(PaintBox, Status);
+  { menu bar — replaces the old right-hand button strip }
+  MainMenu := TMainMenu.Create(nil);
+  Form1.Menu := MainMenu;
 
-  pm.Code := @H.OnPaint;     pm.Data := H; PaintBox.OnPaint := pm;
-  pm.Code := @H.DoMouseDown; pm.Data := H; PaintBox.OnMouseDown := pm;  { press to pick up }
-  pm.Code := @H.DoMouseUp;   pm.Data := H; PaintBox.OnMouseUp := pm;    { release to drop }
-  pm.Code := @H.DoKeyDown;   pm.Data := H; PaintBox.OnKeyDown := pm;    { n/u/a/d/q }
-  pm.Code := @H.DoResize;    pm.Data := H; PaintBox.OnResize := pm;     { rescale board }
-
+  GameMenu := TMenuItem.Create(nil); GameMenu.Caption := '&Game'; MainMenu.Items.Add(GameMenu);
   pm.Data := H;
-  pm.Code := @H.DoNew;   MkButton(Form1, 'New',  580,  50, 90, pm);
-  pm.Code := @H.DoUndo;  MkButton(Form1, 'Undo', 580,  84, 90, pm);
-  pm.Code := @H.DoAuto;  MkButton(Form1, 'Auto', 580, 118, 90, pm);
+  pm.Code := @H.DoNew;  MkItem('&New',        GameMenu, pm);
+  pm.Code := @H.DoDraw; MkItem('&Draw',       GameMenu, pm);
+  pm.Code := @H.DoUndo; MkItem('&Undo',       GameMenu, pm);
+  pm.Code := @H.DoAuto; MkItem('&Auto-play',  GameMenu, pm);
+  pm.Code := @H.DoQuit; MkItem('&Quit',       GameMenu, pm);
+
+  HelpMenu := TMenuItem.Create(nil); HelpMenu.Caption := '&Help'; MainMenu.Items.Add(HelpMenu);
+  pm.Code := @H.DoHelp; MkItem('How to play',  HelpMenu, pm);
+
+  { paint / input / resize wiring }
+  pm.Code := @H.OnPaint;     pm.Data := H; PaintBox.OnPaint := pm;
+  pm.Code := @H.DoMouseDown; pm.Data := H; PaintBox.OnMouseDown := pm;
+  pm.Code := @H.DoMouseUp;   pm.Data := H; PaintBox.OnMouseUp := pm;
+  pm.Code := @H.DoKeyDown;   pm.Data := H; PaintBox.OnKeyDown := pm;
+  pm.Code := @H.DoResize;    pm.Data := H; PaintBox.OnResize := pm;
+  pm.Code := @H.OnFormResize;pm.Data := H; Form1.OnResize := pm;
 
   Form1.Realize;
-  { register as the application main form so Application.Run shows it — without
-    this FMainForm stays nil and Run only spins the event loop, leaving the real
-    toplevel created but never shown (only GTK's tiny helper window maps). }
   Application.MainForm := Form1;
+  H.Refresh;
 
   arg := '';
   if ParamCount > 0 then arg := ParamStr(1);
   if arg = '--smoke' then
   begin
-    { headless integration check through the handlers: stock press must draw
-      (asserts hit-test -> action), auto + a drag (press col6 / release col5),
-      a key (u = undo), and a resize that must rescale the card geometry. }
     H.OnPaint(PaintBox, PaintBox.Canvas);
     H.DoMouseDown(PaintBox, 1, H.PileX(P_STOCK) + 5, H.PileY(P_STOCK) + 5);  { draw }
     if PileCount(P_WASTE) <> 1 then
@@ -383,10 +451,7 @@ begin
       Halt(1);
     end;
     H.DoAuto(nil);
-    H.DoMouseDown(PaintBox, 1, H.PileX(P_TAB + 6) + 5, H.tabY + 5);  { pick up col 6 }
-    H.DoMouseUp(PaintBox, 1, H.PileX(P_TAB + 5) + 5, H.tabY + 5);    { drop on col 5 }
-    H.DoKeyDown(PaintBox, 117);                                       { 'u' = undo }
-    H.DoResize(PaintBox, 840, 700);
+    H.DoResize(PaintBox, 1000, 760);
     if H.cardW <= 60 then
     begin
       writeln('SMOKE FAIL: resize did not enlarge cards');
@@ -397,8 +462,6 @@ begin
   end
   else if arg = '--gui-smoke' then
   begin
-    { real-window smoke: run the actual event loop (window maps + paints on a
-      live surface), self-quit after 400ms. The suite runs this under xvfb. }
     g_timeout_add(400, @GuiAutoQuit, nil);
     Application.Run;
     writeln('GUI SMOKE OK');
