@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-15T15:40:17Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "50271d5d3cd43dd5a696faf68fbbc593552dd6f6",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-15T15:42:42Z",
    "fixed": [],
    "new_red": [],
@@ -407,6 +399,16 @@
    "sha": "5df694cf966ebe7b7fe06f7893a46c3c9da5064a",
    "tier": "opt",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-16T17:53:36Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_static_array_length.pas"
+   ],
+   "sha": "fb9346bd4bce1bef522968ffe0c212f99880b693",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1503,7 +1505,7 @@
   "test-core#src:test/test_stack_frame_intrinsics_b270.pas": "pass",
   "test-core#src:test/test_stackless_gen.pas": "pass",
   "test-core#src:test/test_static_array_ansistring_field.pas": "pass",
-  "test-core#src:test/test_static_array_length.pas": "pass",
+  "test-core#src:test/test_static_array_length.pas": "fail",
   "test-core#src:test/test_static_methods.pas": "pass",
   "test-core#src:test/test_stderr_fd.pas": "pass",
   "test-core#src:test/test_stmt_call_result_selector_b318.pas": "pass",
@@ -1869,11 +1871,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-16T16:25:13Z",
-  "sha": "5df694cf966ebe7b7fe06f7893a46c3c9da5064a",
-  "tier": "opt",
-  "verdict": "GREEN",
-  "wall": 184.9
+  "date": "2026-07-16T17:53:36Z",
+  "sha": "fb9346bd4bce1bef522968ffe0c212f99880b693",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 132.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1913,6 +1915,27 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "fb9346bd4bce1bef522968ffe0c212f99880b693",
+   "good": "5df694cf966ebe7b7fe06f7893a46c3c9da5064a",
+   "job": "test-core#src:test/test_static_array_length.pas",
+   "name": "test-core#645",
+   "opened": "2026-07-16T17:53:36Z",
+   "range": [
+    "1df950a2923074b5c958816bc7b870813af27984",
+    "b02ee5e85b7aaa0eca702e058669a01c21927a8a",
+    "20a8aa6e89fd36cec3ea229cb190c6dd4f44afd3",
+    "8857780da919c7f911ea4111a177de74da6effee",
+    "125059ec9fcce006b5a85696e166e44deb26fbcd",
+    "b3b1a78bef0ed75c77b1c74f8cf8d0510aecda7b",
+    "b8729a1edb4b8d9929ab19d6a6f46b9f6b0be18c",
+    "da630984287c46295aab557cdf0df03135209d5d",
+    "4e4eb757a092712925ca57bdb69707d142846c46",
+    "a48a8353bfc6b61ef1eb71eac6da963befb6004c",
+    "fb9346bd4bce1bef522968ffe0c212f99880b693"
+   ],
+   "src": "test/test_static_array_length.pas"
   }
  ]
 }
