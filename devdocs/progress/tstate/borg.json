@@ -1920,16 +1920,11 @@
   },
   {
    "bad": "fb9346bd4bce1bef522968ffe0c212f99880b693",
-   "good": "5df694cf966ebe7b7fe06f7893a46c3c9da5064a",
+   "good": "125059ec9fcce006b5a85696e166e44deb26fbcd",
    "job": "test-core#src:test/test_static_array_length.pas",
    "name": "test-core#645",
    "opened": "2026-07-16T17:53:36Z",
    "range": [
-    "1df950a2923074b5c958816bc7b870813af27984",
-    "b02ee5e85b7aaa0eca702e058669a01c21927a8a",
-    "20a8aa6e89fd36cec3ea229cb190c6dd4f44afd3",
-    "8857780da919c7f911ea4111a177de74da6effee",
-    "125059ec9fcce006b5a85696e166e44deb26fbcd",
     "b3b1a78bef0ed75c77b1c74f8cf8d0510aecda7b",
     "b8729a1edb4b8d9929ab19d6a6f46b9f6b0be18c",
     "da630984287c46295aab557cdf0df03135209d5d",
