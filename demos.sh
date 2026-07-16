@@ -36,6 +36,21 @@ mkdir -p "$BUILD"
 KEEPMAP="${DEMO_MAP:-0}"
 drop_map() { [ "$KEEPMAP" = 1 ] || rm -f "$1.map"; }
 
+# The hello demo doubles as a size showcase: build it a second time with the
+# managed-string (ansistring) runtime removed and report both binaries, so the
+# cost of the managed-string machinery is visible at a glance.
+hello_size_note() {
+  local src="$1" base frozen managed frozensz
+  base="$(basename "$src" .pas)"
+  frozen="$BUILD/${base}_frozen"
+  "${PXX[@]}" -uPXX_MANAGED_STRING "$src" "$frozen" >/dev/null 2>&1 || return 0
+  drop_map "$frozen"
+  managed="$(stat -c%s "$BUILD/$base" 2>/dev/null || echo '?')"
+  frozensz="$(stat -c%s "$frozen" 2>/dev/null || echo '?')"
+  printf '   size: %s B default (ansistring)  vs  %s B with -uPXX_MANAGED_STRING\n' \
+    "$managed" "$frozensz"
+}
+
 # Demos build with the installed ./pxx. Require install first — the demos need a
 # configured compiler (library roots, optional externals), so this stays a
 # post-install step rather than something runnable straight from a bare checkout.
@@ -58,6 +73,7 @@ while IFS= read -r d; do EXFU+=("-Fu$d"); done < <(
 #   kind: batch (runs to completion) | tty (reads stdin) | gui (needs X/GTK/GL)
 #         | net (needs network — built, not auto-run)
 DEMOS=(
+  "hello|examples/hello/hello.pas|batch|Hello world (also built -uPXX_MANAGED_STRING to show the tiny frozen binary)"
   "primes|examples/primes/sieve.pas|batch|Sieve of Eratosthenes"
   "sudoku|examples/sudoku/sudoku.pas|batch|Sudoku solver"
   "sudoku-game|examples/sudoku/sudoku_game.pas|tty|Interactive Sudoku game"
@@ -104,6 +120,7 @@ build_run() {
     echo "   build FAILED"; return 1
   fi
   drop_map "$out"
+  [ "$name" = hello ] && hello_size_note "$src"
   case "$kind" in
     gui) echo "   built: $out  (GUI app — run it directly: $out)" ;;
     net) echo "   built: $out  (needs network — run it directly: $out)" ;;
@@ -126,6 +143,7 @@ run_all() {
       echo "   build FAILED"; fail=$((fail+1)); continue
     fi
     drop_map "$out"
+    [ "$name" = hello ] && hello_size_note "$src"
     built=$((built+1))
     if [ "$kind" = batch ]; then
       "$out"; ran=$((ran+1))
