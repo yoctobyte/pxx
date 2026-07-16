@@ -1610,6 +1610,17 @@ begin
       ZTypeKindFromName(GetTokenStr(j), False); { validate scalar }
       ptypes[nparams] := tyPointer;
     end
+    else if Tokens[j].Kind = tkLBrack then
+    begin
+      { `p: []T` slice parameter — the 16-byte __ptr/__len record, passed by
+        address like every record param (IsRef marked after RegisterProc). }
+      Inc(j);
+      if Tokens[j].Kind <> tkRBrack then Error('Zig: expected ] in []T parameter of ' + name);
+      Inc(j);
+      if Tokens[j].Kind <> tkIdent then Error('Zig: expected element type in []T parameter of ' + name);
+      ZSliceClassFor(ZTypeKindFromName(GetTokenStr(j), False));
+      ptypes[nparams] := tyRecord;
+    end
     else
     begin
       if Tokens[j].Kind <> tkIdent then Error('Zig: expected parameter type in ' + name);
@@ -1639,6 +1650,9 @@ begin
   procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
   k := procIdx; { silence unused warning on compilers that care }
   if k < 0 then Error('Zig: internal error registering ' + name);
+  { record (slice) params are passed by address — same as the Rust frontend }
+  for k := 0 to nparams - 1 do
+    if ptypes[k] = tyRecord then Procs[procIdx].Params[k].IsRef := True;
   ZProcErrs[procIdx] := fnErrs;
 end;
 
@@ -1662,6 +1676,7 @@ var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
     pnames: array[0..5] of AnsiString; ptypes: array[0..5] of TTypeKind;
     pElemTk: array[0..5] of TTypeKind;
+    pSliceCi: array[0..5] of Integer;  { slice-param element UClass, or -1 }
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Zig: expected function name');
@@ -1676,6 +1691,7 @@ begin
     pname := CurTok.SVal; Next;
     Expect(tkColon, ':');
     pElemTk[nparams] := tyUnknown;
+    pSliceCi[nparams] := -1;
     if CurTok.Kind = tkStar then
     begin
       Next;
@@ -1683,6 +1699,15 @@ begin
       if CurTok.Kind <> tkIdent then Error('Zig: expected pointee type after *');
       pElemTk[nparams] := ZTypeKindFromName(CurTok.SVal, False);
       ptypes[nparams] := tyPointer;
+    end
+    else if CurTok.Kind = tkLBrack then
+    begin
+      { `p: []T` slice parameter (matches the prescan). }
+      Next;
+      Expect(tkRBrack, ']');
+      if CurTok.Kind <> tkIdent then Error('Zig: expected element type in []T parameter');
+      pSliceCi[nparams] := ZSliceClassFor(ZTypeKindFromName(CurTok.SVal, False));
+      ptypes[nparams] := tyRecord;
     end
     else
     begin
@@ -1706,8 +1731,19 @@ begin
   for i := 0 to nparams - 1 do
   begin
     if ptypes[i] = tyPointer then ZSetPtrType(pElemTk[i]);
-    LastTypeRecId := REC_NONE;
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    { slice param: a by-address record — set LastTypeRecId so AllocParam
+      records the slice UClass (RecName), and pass isRef so s[i]/s.len read
+      through the pointer. }
+    if (ptypes[i] = tyRecord) and (pSliceCi[i] >= 0) then
+    begin
+      LastTypeRecId := REC_UCLASS_BASE + pSliceCi[i];
+      idx := AllocParam(pnames[i], ptypes[i], True, False);
+    end
+    else
+    begin
+      LastTypeRecId := REC_NONE;
+      idx := AllocParam(pnames[i], ptypes[i], False, False);
+    end;
     Procs[procIdx].Params[i].SymIdx := idx;
   end;
   idx := AllocVar('Result', Procs[procIdx].RetType);

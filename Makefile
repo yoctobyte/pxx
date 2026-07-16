@@ -1017,6 +1017,10 @@ test-core: $(COMPILER)
 	# via the shared REmitParamRegSpill — the old case i of 0..3 SIGILL'd on param 5.
 	./$(COMPILER) test/test_zig_manyparams.zig /tmp/test_zig_manyparams26
 	test "$$(/tmp/test_zig_manyparams26)" = "$$(printf 'a5 15 a6 21\nrec 103')"
+	# Zig slice parameters (feature-zig-frontend): `fn f(s: []T, ...)` — the 16-byte
+	# __ptr/__len record passed by address; s[i] rw + s.len through the pointer.
+	./$(COMPILER) test/test_zig_slice_params.zig /tmp/test_zig_slice_params26
+	test "$$(/tmp/test_zig_slice_params26)" = "$$(printf 'sum 15\nscaled 13 53 n 5')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.
