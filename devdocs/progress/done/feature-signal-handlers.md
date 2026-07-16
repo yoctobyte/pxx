@@ -5,7 +5,7 @@ prio: 65  # auto
 # Libc-free POSIX signal handler infrastructure (rt_sigaction)
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** working
+- **Status:** done
 - **Owner:** fable-a
 - **Opened:** 2026-07-02, from the div-zero / math-error design discussion with
   the user (see [[bug-integer-div-zero-sigfpe-uncatchable]] and
@@ -229,3 +229,6 @@ ESP bare-metal is unaffected (signals gated off there).
 - --threadsafe interaction (per-thread masks).
 - sigaltstack (a guard-page fault currently reuses the faulting stack).
 - FPC-compat Signal()/sigaction surface; the float-mask consumer.
+
+## Log
+- 2026-07-16 — resolved, commit b371.
