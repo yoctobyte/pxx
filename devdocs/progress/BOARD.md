@@ -183,15 +183,14 @@ _none_
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
-## done-followup (3)
+## done-followup (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-static-array-length-direct | A | 50 | bug | `Length`/`High` of a static array used directly returns garbage | — |
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (777)
+## done (778)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -548,6 +547,7 @@ _none_
 | bug-sizeof-array-and-typename-wrong | A | 50 | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-sizeof-variable-unsupported | A | 50 | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | bug-stack-corruption-inline-string-concat | A | 50 | bug | Stack frame corruption on inline string concatenation assignments | — |
+| bug-static-array-length-direct | A | 50 | bug | `Length`/`High` of a static array used directly returns garbage | — |
 | bug-stderr-not-fd2 | A | 50 | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-string-const-index-and-typed-init | A | 50 | bug | Typed string constant with a string initializer won't parse | — |
 | bug-string-literal-concat-compare-segfault | A | 50 | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |

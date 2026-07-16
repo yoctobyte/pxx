@@ -9,11 +9,27 @@
 
 > **Combined 2026-06-17.** The async language surface (`; async;` + `await`,
 > stackful default, stackless backend, small stacks) is **shipped byte-identical
-> on all four targets**. The remaining open items — cross async-I/O reactor,
-> stackless params, `Task`/`Future`, Nil-Python `async def` shim — are now
-> tracked under **feature-cross-target-feature-parity** (its "Async sub-track").
-> This file is retained for the locked spelling + transform design detail; do
-> not work it independently.
+> on all four targets**. The remaining open items were tracked under
+> **feature-cross-target-feature-parity** (its "Async sub-track").
+>
+> **2026-07-16 re-home.** That parent ticket is now in `done/` (the parity audit
+> closed) but it deliberately left the async *depth* items unbuilt
+> ("opportunistic, not gating"). To avoid orphaning them, they are re-listed
+> here as this ticket's own optional remainder — verified still-open:
+>
+> 1. **Async I/O on cross** — the epoll reactor / `asyncnet` / `CoSleep` are
+>    x86-64-only (hard-coded syscall numbers). Cross needs per-arch numbers:
+>    `epoll_pwait` (not `epoll_wait`) on aarch64/arm32, i386 `socketcall`,
+>    per-arch socket numbers, plus the cross test wiring. The one real
+>    target-parity item.
+> 2. **Stackless v1 depth** — params via instance slots (mirror the generator
+>    for-in arg store); a `Task`/`Future` for `await`-with-result.
+> 3. **Nil-Python `async def`/`await` shim** over `AsyncGo`/`SLRunUntilDone`.
+>
+> The language surface itself is done and needs no more work; the above are
+> feature depth, not blockers. This file also keeps the locked spelling +
+> transform design detail — do not re-litigate that, just build the items above
+> when they become worth it.
 
 ## Motivation
 

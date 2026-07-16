@@ -1,7 +1,7 @@
 # `Length`/`High` of a static array used directly returns garbage
 
 - **Type:** bug (codegen)
-- **Status:** DONE (1-D) — 2026-06-22. Multi-dim static `Length`/`High` used
+- **Status:** done
   directly still takes the (broken) runtime path; rare, left as follow-up.
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-22
@@ -64,3 +64,6 @@ first-dim span), else leave the runtime path.
   oracle-matched (3 / 2 / 64 / 60). make test + cross-bootstrap byte-identical.
   **REMAINING:** multi-dim static `Length`/`High` used directly (still runtime,
   still wrong; rare — `Length` of a 2-D static array's first dimension).
+
+## Log
+- 2026-07-16 — resolved, commit a48a8353.

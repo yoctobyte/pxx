@@ -115,6 +115,34 @@ All four: make test green, self-host fixedpoint byte-identical.
   (varargs/TVarRec). `shortstring` keyword currently aliases tyFixedString(255).
 - **Slice 6:** byte-identical BOTH builds, cross+ESP build, extend tests.
 
+## 2026-07-16 — slice 4p2 (the HELD scalar flip) VERIFIED LANDED + re-pinned
+
+Audit + empirical check: the held scalar-string managed flip has shipped.
+`compiler/parser.inc` ParseTypeKind `tkString_T` now resolves scalar bare
+`string` -> `tyAnsiString` under `PXX_MANAGED_STRING` (the default); the
+`of`-peek stopgap is gone; `string[N]`/`shortstring` stay `tyFixedString`;
+`-uPXX_MANAGED_STRING` keeps all-frozen. The pinned stable (Jul 15,
+`stable_linux_amd64/default/pinned`) is a managed-default build. The former
+segfault repro now prints instead of crashing:
+
+    program r; var a: array of string; s: string;
+    begin SetLength(a,1); a[0]:='hello world long enough'; s:=a[0]; writeln(s); end.
+    -> "hello world long enough", exit 0  (was exit 139)
+
+So the ticket's headline acceptance is MET. Kept here (done-followup, not
+done/) for the genuinely-optional remainder below.
+
+### Still open (optional, niche — none block using managed strings)
+- **tyShortString true byte-prefix codegen** — `shortstring` still aliases
+  `tyFixedString(255)` (word-length prefix). The genuine byte-length-prefix
+  FPC ABI is only needed for `shortstring` in varargs / `TVarRec`. The one real
+  capability gap; file a `bug-`/`feature-` ticket in the owning lane if it bites
+  a corpus.
+- **Slice 3b (cross backends)** — widen the symbol-direct frozen `= tyString`
+  checks in `ir_codegen386/arm32/aarch64/riscv32/xtensa` to the
+  `TypeIsFrozenString` predicate for `tyFixedString`. Only affects cross
+  FEATURE builds (x64 + all self-host paths use AnsiString, unaffected).
+
 ## Landmines
 
 - TTypeKind enum: append only (low ordinals are bootstrap-stable; the seed
