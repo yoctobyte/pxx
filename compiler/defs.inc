@@ -969,6 +969,7 @@ var
   DebugTrace : Boolean;
   DumpIR : Boolean;
   DumpProcMap : Boolean;  { --proc-map: print 'PROC hexvaddr name' per routine to stderr (profiler symbolication) }
+  EmitMapFile : Boolean;  { emit <out>.map (addr->proc symbol table). ON by default — it is the ONLY symbolication for the stripped binaries, so a crash address stays lookup-able. --no-map suppresses it (clean output dirs / release), --map forces it. }
   OptLevel : Integer;     { -O0..-O3: optimization level. 0 (default) = the historic 1:1 emission — the self-host byte-identity gate runs at -O0 and is NEVER affected by opt passes; each pass gates on OptLevel >= its tier. }
   WarnedMissedFold : Boolean;  { one-shot latch for IROptWarnMissedFold: a foldable const-const / identity IR_BINOP reached codegen (const-fold was measured 0-fire and not shipped; this tripwire flags a future pass that starts producing them). }
   WarnMissedFold : Boolean;  { opt-in (--warn-missed-fold) gate for the tripwire. OFF by default: with -O2 the default, inline (-O2) legitimately produces foldable BINOPs on nearly every compile, so the tripwire would spam. Kept as a dev/measurement tool to re-check whether const-fold/identities are now worth reviving (feature-revive-const-fold-identity-pass). }

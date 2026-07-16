@@ -1479,7 +1479,7 @@ begin
   end;
   Close(f);
   FpChmod(outPath,&755);
-  WriteMapFile(outPath, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, codeOffset);
 end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
@@ -1601,7 +1601,7 @@ begin
   end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
-  WriteMapFile(outPath, codeOffset);
+  if EmitMapFile then WriteMapFile(outPath, codeOffset);
 end;
 {$endif}
 

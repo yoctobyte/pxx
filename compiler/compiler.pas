@@ -118,6 +118,7 @@ begin
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
   DumpProcMap := False;
+  EmitMapFile := True;   { default on; --no-map suppresses }
   MeasureRegcall := False;
   RegcallProcsWithParams := 0;
   RegcallTotalParams := 0;
@@ -187,6 +188,16 @@ begin
     else if option = '--proc-map' then
     begin
       DumpProcMap := True;
+      Inc(i);
+    end
+    else if option = '--no-map' then
+    begin
+      EmitMapFile := False;
+      Inc(i);
+    end
+    else if option = '--map' then
+    begin
+      EmitMapFile := True;
       Inc(i);
     end
     else if option = '--measure-regcall' then
