@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-15T08:32:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6ad4e1ba46679cd9873b44190aca4771005a1308",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-15T08:35:53Z",
    "fixed": [],
    "new_red": [],
@@ -397,6 +389,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "65ecae4dfa5d4e32fd94fee89a5bdc7e912fd630",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-16T05:35:08Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a9cfede69543d6db112b675603cdea509e439e94",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1589,6 +1589,7 @@
   "test-core#src:test/test_writeln_shortstring_param.pas": "pass",
   "test-core#src:test/test_ws_skeleton.ws": "pass",
   "test-core#src:test/test_zig_advanced.zig": "pass",
+  "test-core#src:test/test_zig_chess_perft.zig": "pass",
   "test-core#src:test/test_zig_manyparams.zig": "pass",
   "test-core#src:test/test_zig_skeleton.zig": "pass",
   "test-core#src:test/test_zig_slice_params.zig": "pass",
@@ -1860,11 +1861,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-16T05:25:08Z",
-  "sha": "65ecae4dfa5d4e32fd94fee89a5bdc7e912fd630",
+  "date": "2026-07-16T05:35:08Z",
+  "sha": "a9cfede69543d6db112b675603cdea509e439e94",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 110.6
+  "wall": 157.1
  },
  "last_bench": {
   "conf_rows": 550,
