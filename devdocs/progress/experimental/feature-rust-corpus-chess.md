@@ -134,3 +134,19 @@ pure swallowing/trivia, cheap and high-leverage.
   compile, else_if=20, self-host byte-identical. Next real-source rungs
   unchanged: Option (stage 2), unity build (stage 3), then perft on the
   ACTUAL chess.rs sources vs cargo.
+- 2026-07-16 — **SEARCH MILESTONE + perft(6) confirmed** (Track R).
+  test/test_rust_chess_search.rs: material-eval negamax with mate scoring on
+  the same movegen (MATE=1000000, nearer mates score higher via a ply term).
+  Finds a forced mate-in-1 (depth 2, score 999999) and mate-in-2 (depth 4,
+  score 999997 = MATE-3), and does NOT see either one ply shallower — so mate
+  detection is genuine minimax depth, not a static-eval artifact; symmetric
+  start-position eval = 0. This clears the stage-6 "search finds a mate" rung.
+  Note on the scheme: a delivered-mate node is only recognised when it still
+  GENERATES moves (depth >= 1), so detecting mate-in-N needs search depth 2N.
+  Also confirmed perft(6) from startpos = 119060324 (exact reference; 119M
+  nodes, ~60s single-threaded) — the strongest single-position movegen check,
+  left out of `make test` for runtime. No compiler change this round (the
+  5/6-param fix from the previous entry was the only frontend edit); pure
+  new-corpus + Makefile. Remaining ladder toward the ACTUAL engine sources is
+  unchanged: Option (stage 2), unity build (stage 3), then perft/search on the
+  real chess.rs/search.rs vs cargo.

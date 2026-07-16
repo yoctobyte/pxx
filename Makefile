@@ -969,6 +969,12 @@ test-core: $(COMPILER)
 	# Also exercises 5-param internal calls (r8/r9 register spill, REmitParamRegSpill).
 	./$(COMPILER) test/test_rust_chess_perft_full.rs /tmp/test_rust_chess_perft_full26
 	test "$$(/tmp/test_rust_chess_perft_full26)" = "$$(printf 'perft1 20\nperft2 400\nperft3 8902\nperft4 197281\nperft5 4865609\npromo1 24\npromo2 496\npromo3 9483')"
+	# Rust chess SEARCH (feature-rust-corpus-chess, stage-6 gate "search finds a mate"):
+	# material-eval negamax with mate scoring on the same movegen. Finds a forced
+	# mate-in-1 (depth 2) and mate-in-2 (depth 4), and does NOT see them one ply
+	# shallower — proving real minimax depth, not a static-eval artifact.
+	./$(COMPILER) test/test_rust_chess_search.rs /tmp/test_rust_chess_search26
+	test "$$(/tmp/test_rust_chess_search26)" = "$$(printf 'mate1 1 score 999999\nshallow 0 score 200\nmate2 1 score 999997\nmate2shallow 0 score 500\nstarteval 0')"
 	# Rust tuple structs — two field-bearing structs, smaller first
 	# (bug-uclass-field-window-stale-base fixed: second struct's field window re-bases)
 	./$(COMPILER) test/test_rust_tuple_struct.rs /tmp/test_rust_tuple26
