@@ -31,6 +31,10 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 # Override to pin a specific version ad hoc, e.g.
 #   make lib-test PXX_STABLE=stable_linux_amd64/default/v9
 PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
+# Where `make demos` writes built demo binaries. Defaults to an in-checkout,
+# gitignored dir so the binaries are convenient to run/inspect after a build;
+# override (e.g. DEMO_OUT=/tmp/demos) for a throwaway/CI build.
+DEMO_OUT   ?= build/demos
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
@@ -5214,24 +5218,26 @@ gui-test: pxx-stable-check
 # an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are
 # expected (they map to library/feature gaps -> tickets), not build breakers.
 demos: pxx-stable-check
-	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
-	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
-	    examples/maze/maze.pas examples/bignum/factorial.pas examples/bignum/bigmath.pas \
-	    examples/json/jsondemo.pas examples/calc/calcdemo.pas examples/sat/satdemo.pas \
-	    examples/mathf/mathdemo.pas examples/vm/vmdemo.pas examples/mandelbrot/mandelbrot.pas examples/lisp/lispdemo.pas \
-	    examples/raytracer/raytracer.pas \
-	    examples/chess/chess.pas examples/adventure/adventure.pas \
-	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas \
-	    examples/gl/triangle.pas; do \
-	  flags="-Fulib/pcl"; \
-	  if [ "$$src" = "examples/player/player.pas" ] || [ "$$src" = "examples/fm/fm.pas" ]; then flags="$$flags -Fulib/rtl/platform/posix"; fi; \
-	  if $(PXX_STABLE) $$flags "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
-	    printf '  OK    %s\n' "$$src"; \
-	  else \
-	    printf '  FAIL  %s  -- %s\n' "$$src" "$$(tail -1 /tmp/demo.log)"; \
-	  fi; \
-	done; \
-	echo "(demos is a dashboard, not a gate; FAILs -> file a ticket)"; exit 0
+	@echo "=== demos: build ALL examples/* against $(PXX_STABLE) into $(DEMO_OUT)/ ==="
+	@mkdir -p $(DEMO_OUT)
+	@# Discover every example PROGRAM (skip esp32 — cross-only, needs the IDF
+	@# toolchain, not $(PXX_STABLE)). Unit search path = each demo's own dir, every
+	@# example dir that holds a `unit` (so a cross-dir engine like klondike resolves),
+	@# plus the libs. This replaces the old hand-maintained list so a new demo builds
+	@# with no Makefile edit.
+	@unitdirs=`grep -rlE '^[[:space:]]*unit[[:space:]]' examples --include='*.pas' | grep -v '/esp32/' | xargs -r -n1 dirname | sort -u`; \
+	 fu=; for d in $$unitdirs; do fu="$$fu -Fu$$d"; done; \
+	 fail=0; n=0; ok=0; \
+	 for src in `grep -rlE '^[[:space:]]*program[[:space:]]' examples --include='*.pas' | grep -v '/esp32/' | sort`; do \
+	   dir=`dirname $$src`; base=`basename $$src .pas`; n=$$((n+1)); \
+	   if $(PXX_STABLE) -Fu$$dir $$fu -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix "$$src" "$(DEMO_OUT)/$$base" >$(DEMO_OUT)/.build.log 2>&1; then \
+	     printf '  OK    %s\n' "$$src"; ok=$$((ok+1)); \
+	   else \
+	     printf '  FAIL  %s  -- %s\n' "$$src" "`tail -1 $(DEMO_OUT)/.build.log`"; fail=1; \
+	   fi; \
+	 done; \
+	 echo "=== demos: $$ok/$$n built into $(DEMO_OUT)/ (esp32 skipped — cross-only) ==="; \
+	 echo "(demos is a dashboard, not a gate; FAILs -> file a ticket)"; exit 0
 
 # C interop discovery dashboard for Track B. This intentionally exits 0 for
 # candidate-library gaps; keep `lib-test` as the green gate.
