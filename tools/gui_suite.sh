@@ -81,6 +81,52 @@ gui_window_smoke() {
 
 gui_window_smoke solitaire_gui /tmp/gui_test_solitaire "GUI SMOKE OK"
 
+# Real-window ASSERTION: the --gui-smoke line only proves "didn't crash in 400ms";
+# it says nothing about a window actually mapping. Two real regressions slipped
+# past it (bug-gui-pcl-apps-broken-current-stable): eliah threw at startup, and
+# solitaire ran the loop but never showed its toplevel (FMainForm nil), yet
+# --gui-smoke still printed OK. This launches the app in its DEFAULT mode (the real
+# Application.Run, no self-quit), grabs the BIGGEST window owned by the pid, and
+# asserts it realizes to a real size. GTK always maps a tiny (10x10/20x20) helper
+# window, so a name/first match is worthless -- pick the largest by area and ignore
+# the helper. A startup exception leaves NO big window, so this catches crashes too.
+have_xdotool() { command -v xdotool >/dev/null 2>&1; }
+
+gui_realwindow() {
+  local name="$1" bin="$2" minw="$3" minh="$4"; shift 4
+  local log="/tmp/gui_test_${name}_realwin.log"
+  if ! have_xvfb; then say "SKIP  $name (real window size) -- xvfb-run not installed"; return; fi
+  if ! have_xdotool; then say "SKIP  $name (real window size) -- xdotool not installed"; return; fi
+  local geo
+  geo="$(timeout 30 xvfb-run -a bash -c '
+    bin="$1"; shift
+    "$bin" "$@" &
+    p=$!
+    for _ in $(seq 1 20); do
+      [ -n "$(xdotool search --pid "$p" 2>/dev/null)" ] && break
+      sleep 0.3
+    done
+    sleep 1
+    best=0 bw=0 bh=0
+    for w in $(xdotool search --pid "$p" 2>/dev/null); do
+      g="$(xdotool getwindowgeometry "$w" 2>/dev/null | grep -oE "[0-9]+x[0-9]+" | head -1)"
+      [ -n "$g" ] || continue
+      ww="${g%x*}"; hh="${g#*x}"; a=$((ww*hh))
+      if [ "$a" -gt "$best" ]; then best=$a; bw=$ww; bh=$hh; fi
+    done
+    kill "$p" 2>/dev/null; wait "$p" 2>/dev/null
+    printf "%sx%s\n" "$bw" "$bh"
+  ' _ "$bin" "$@" 2>"$log")" || true
+  local gw="${geo%x*}" gh="${geo#*x}"
+  if [ -z "$gw" ] || [ "${gw:-0}" -lt "$minw" ] || [ "${gh:-0}" -lt "$minh" ]; then
+    say "FAIL  $name -- no real toplevel (biggest window ${geo:-none}, need >=${minw}x${minh}; startup crash or unshown form)"
+    fail=1; return
+  fi
+  say "OK    $name (real window ${geo})"
+}
+
+gui_realwindow solitaire_gui /tmp/gui_test_solitaire 400 300
+
 # life: the original real-window self-closing GUI run (its --smoke maps a GTK
 # window and auto-quits after ~9 generations) — the reference case.
 life_smoke() {
@@ -115,6 +161,10 @@ eliah_smoke() {
 }
 eliah_smoke
 gui_window_smoke eliah_ide "$ROOT/apps/ide/eliah/eliah" "GUI SMOKE OK"
+# eliah is the app that regressed (startup EInOutError under the {$I+} flip); a
+# real-window assertion is exactly what would have caught it -- a crash leaves no
+# 'Eliah - IDE' toplevel.
+gui_realwindow eliah_ide "$ROOT/apps/ide/eliah/eliah" 800 500
 
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."
