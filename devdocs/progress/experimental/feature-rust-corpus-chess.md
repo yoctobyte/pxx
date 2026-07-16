@@ -3,6 +3,30 @@ prio: 0
 ---
 # Rust corpus: the own-written chess engine as Track R's real-world target
 
+## STATUS (2026-07-16)
+
+**Adapted-branch engine: DONE and bit-comparable by perft.** A pxx-friendly
+branch of the movegen/search compiles and runs, and its move enumeration is
+*identical to the reference perft* — the "bit-comparable" bar for a chess
+engine. Two forms live in `test/`:
+- `test_rust_chess_engine.rs` — faithful struct model (real `Move` struct in a
+  `[Move; 256]` list passed as `&[Move]`), make/unmake, negamax, UCI output.
+  perft(4)=197281 exact; picks the mate-in-1 `a1a8`.
+- `test_rust_chess_perft_full.rs` / `test_rust_chess_search.rs` — packed-i64
+  form: perft exact to depth 5 in `make test` (depth 6 = 119060324 confirmed
+  locally), forced mate-in-1 and mate-in-2 found and depth-sensitive.
+
+Frontend enablers landed to get here (all green, self-host byte-identical):
+5/6-param internal calls (r8/r9 spill), fixed arrays of structs (`arr[i].field`),
+slice-of-record (`&[Move]`, `slice[i].field`).
+
+**NOT done: the UNMODIFIED `~/nextlevel/engine/src` sources.** Those remain
+blocked on value-flow features the adapted branch sidesteps — in priority order
+as the real modules hit them: `Option<T>` (chess.rs wall, stage 2), array-typed
+return values (`fn -> [T; N]`, attacks.rs), the unity build for data modules
+(tables.rs, stage 3), then `Result`/`?`, `String`/`format!`, derives/traits.
+Do NOT claim the real source compiles — only the adapted branch does.
+
 - **Type:** feature — corpus / north star for Track R (X-tagged: zero prio,
   experimental; work it on user request or for fun)
 - **Opened:** 2026-07-09 (user decision: "we have a real-world own-written
