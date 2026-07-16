@@ -88,9 +88,24 @@ Run the loops as scheduled cloud agents (`/schedule` → cron routines) and/or
 
 Most autonomous throughput is **A+** — the maintainer confirmed the bulk of the
 backlog lands under A (or A-tagged O/E work). B and the frontends fill spare
-parallel capacity. **Only one agent holds A at a time** (the self-host
-byte-identical gate is serialising); B/C/Z/R workers run alongside freely because
-their files are disjoint.
+capacity. **Only one agent holds A at a time** (the self-host byte-identical gate is
+serialising); B/C/N/Z/R workers *could* run alongside on file-disjointness grounds.
+
+### But serialise anyway — concurrency burns the cap super-linearly
+
+File-lanes make parallel workers *safe*; the usage cap makes them *expensive*.
+Empirically (see the `claudecap` tool): a single hard-working agent struggles to
+exhaust a 5-hour block, but **two concurrent sessions trip the limit even under light
+load** — concurrent work appears to cost the cap far more than the sum of its tokens.
+So the cap, not file safety, is the binding constraint on how many workers to run.
+
+Practical rule for the unattended grind: **prefer one worker cycling lanes over a
+parallel fleet.** A single scheduled worker that does `next` (any lane, highest
+effective-prio), lands it, and loops, gets *more done per 5-hour block* than three
+concurrent lane-workers that finish sooner in wall-clock but exhaust the block early.
+Reserve genuine concurrency for when wall-clock latency actually matters (a release
+crunch), and spend the cap knowingly. The `claudecap blocks` view measures per-block
+peak/mean concurrency so you can see the cost against ground-truth `/usage` pastes.
 
 ## The human review cadence
 
