@@ -70,6 +70,35 @@ Suggested gate additions:
 2. `git bisect` between the 2026-07-12 stable and current pinned to find the
    offending compiler commit.
 
+## RESOLUTION (2026-07-16) — not a compiler bug; two app-side causes + the gate
+
+Root-caused to **two independent app bugs**, no compiler regression (PCL source
+unchanged in the window; `{$I}` include verified working):
+
+1. **eliah crash** — the intentional **`{$I+}` FPC-default flip (2026-07-15,
+   feature-pascal-io-checks-i-plus)** makes `Reset`/`Rewrite` RAISE on I/O error.
+   garin's `project.pas`/`buffer.pas` use the lax `{$I-}` idiom (`Assign; Reset; if
+   IOResult<>0`) with no guard, so eliah's absent `examples/eliah.pxxproj` at
+   startup raised EInOutError → Unhandled exception → no window. Fixed by guarding
+   the four Assign/Reset|Rewrite sites with `{$I-}…{$I+}` (commit edb030a6).
+   Compiler left as-is — the `{$I+}` default is FPC-faithful and intended.
+
+2. **solitaire no real window** — never set `Application.MainForm` (used
+   `TForm.Create(nil)` directly, not `CreateForm`), so `FMainForm` stayed nil and
+   `Application.Run` skipped `ShowWidget`: the 800x560 toplevel was created but
+   never shown, leaving only GTK's 10x10 helper. Fixed by setting
+   `Application.MainForm := Form1` like every other GUI demo (commit bc73f272).
+
+3. **the gate (the real ask)** — `tools/gui_suite.sh` gained `gui_realwindow`: run
+   the app's real `Application.Run`, grab the biggest window by pid (ignore the GTK
+   helper), assert a real size; a startup crash leaves no big window so it catches
+   the exception mode too. Wired for solitaire (≥400x300) and eliah (≥800x500).
+   Verified it FAILs on a solitaire built without the MainForm fix (commit
+   0f3ff6f7).
+
+Status: **resolved**. All three GUI demos map real titled windows under Xvfb
+(solitaire 800x560, life 800x480, eliah 1100x700).
+
 ## Notes for whoever picks this up
 
 - Grabbing by window *name = binary name* only ever finds the 20x20 helper; the
@@ -77,3 +106,6 @@ Suggested gate additions:
   bit the investigation and will bite the test if it name-matches.
 - Confirmed on both headless Xvfb and the live `:0` session — not a display/WM
   issue.
+
+## Log
+- 2026-07-16 — resolved, commit 0f3ff6f7.

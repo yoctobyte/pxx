@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-gui-pcl-apps-broken-current-stable | A | 70 | bug | GUI/PCL apps regressed on current stable — real window never shows (crash / 20x20) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -191,7 +190,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (775)
+## done (776)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -419,6 +418,7 @@ _none_
 | bug-frozen-string-unsupported-riscv32-xtensa | A | 55 | bug | bug: frozen inline strings (string[N]) are not implemented on riscv32 / xtensa | — |
 | bug-generator-yield-call-expression | A | 50 | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | bug-generic-class-methods-in-program | A | 50 | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
+| bug-gui-pcl-apps-broken-current-stable | A | 70 | bug | GUI/PCL apps regressed on current stable — real window never shows (crash / 20x20) | — |
 | bug-hard-keyword-intrinsics-block-identifier-use | A | 50 | bug | Some intrinsics are hard-reserved keyword tokens, blocking their use as identifiers (FPC allows it) | — |
 | bug-hex-char-code-literal | A | 50 | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | 50 | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
@@ -992,7 +992,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-gui-pcl-apps-broken-current-stable
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
