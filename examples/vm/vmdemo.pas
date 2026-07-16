@@ -12,6 +12,21 @@ var
   ok: Boolean;
 
 { Assemble + run src, compare its output to want (newline-separated values). }
+{ The VM prints each result followed by a newline, so `want`/`got` carry embedded
+  #10s (e.g. '55'#10, or '36'#10'81'#10 for a two-line result). Echoing them raw
+  inside `ok (...)` wraps the line and reads like a bug. Disp renders the newlines
+  as ' ' and trims the trailing one for a clean one-line display; the actual
+  comparison still uses the exact strings. }
+function Disp(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  Disp := '';
+  for i := 1 to Length(s) do
+    if s[i] = #10 then Disp := Disp + ' ' else Disp := Disp + s[i];
+  while (Length(Disp) > 0) and (Disp[Length(Disp)] = ' ') do
+    Disp := Copy(Disp, 1, Length(Disp) - 1);
+end;
+
 procedure RunProg(const name, src, want: AnsiString);
 var m: TMachine; got: AnsiString;
 begin
@@ -30,11 +45,11 @@ begin
     writeln('RUN FAIL: ', m.Err);
     Exit;
   end;
-  if got = want then writeln('ok (', want, ')')
+  if got = want then writeln('ok (', Disp(want), ')')
   else
   begin
     ok := False;
-    writeln('FAIL: got [', got, '] want [', want, ']');
+    writeln('FAIL: got [', Disp(got), '] want [', Disp(want), ']');
   end;
 end;
 
