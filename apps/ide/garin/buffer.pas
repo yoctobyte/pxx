@@ -42,8 +42,10 @@ begin
   FText := '';
   FCount := 0;
 
+  {$I-}
   Assign(f, APath);
   Reset(f);
+  {$I+}
   if IOResult <> 0 then
   begin
     Result := False;
@@ -75,8 +77,10 @@ end;
 function WriteAllText(const APath, AText: AnsiString): Boolean;
 var f: Text;
 begin
+  {$I-}
   Assign(f, APath);
   Rewrite(f);
+  {$I+}
   if IOResult <> 0 then
   begin
     Result := False;

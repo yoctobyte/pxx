@@ -218,8 +218,10 @@ end;
 function TProject.SaveToFile(const APath: AnsiString): Boolean;
 var f: Text;
 begin
+  {$I-}
   Assign(f, APath);
   Rewrite(f);
+  {$I+}
   if IOResult <> 0 then begin Result := False; Exit; end;
   write(f, SaveToText);
   Close(f);
@@ -232,8 +234,10 @@ var
   line, all: AnsiString;
   first: Boolean;
 begin
+  {$I-}
   Assign(f, APath);
   Reset(f);
+  {$I+}
   if IOResult <> 0 then begin Result := False; Exit; end;
   all := '';
   first := True;
