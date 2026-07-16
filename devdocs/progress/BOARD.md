@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (100)
+## backlog (101)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ _none_
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
 | feature-opt-float-register-temporaries | O | 35 | feature | float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -1084,6 +1085,7 @@ _none_
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
+- [p 25] [O] feature-opt-div0-stub-on-use
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [T] feature-t-gcc-torture-runner
