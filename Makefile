@@ -313,6 +313,9 @@ test-threads: $(COMPILER)
 	grep -q "only" /tmp/test_threadsafe_riscv32_guard.log
 	./$(COMPILER) --threadsafe test/test_critsec_once.pas /tmp/test_critsec_once26
 	test "$$(/tmp/test_critsec_once26)" = "$$(printf 'critsec=400000 expected=400000\ninit ran=1 expected=1\nCRITSEC_ONCE OK')"
+	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
+	./$(COMPILER) --threadsafe test/test_parallel_for.pas /tmp/test_parallel_for26
+	test "$$(/tmp/test_parallel_for26 | tail -n 4)" = "$$(printf 'visitErr=0\nvalErr=0\nedgeErr=0\nPARALLELFOR OK')"
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas /tmp/test_mulhi26
 	test "$$(/tmp/test_mulhi26 | tail -1)" = "MULHI OK"

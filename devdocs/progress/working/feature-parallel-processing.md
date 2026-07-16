@@ -5,8 +5,8 @@ prio: 45  # auto
 # Parallel processing as a language feature
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** A-parallel
 - **Blocked-by:** feature-threadsafe-heap-contract
 - **Opened:** 2026-06-06 (user request)
 
