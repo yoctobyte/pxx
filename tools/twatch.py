@@ -787,7 +787,7 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
         os.makedirs(os.path.dirname(ledger_loc), exist_ok=True)
         shutil.copy(ledger_pub, ledger_loc)
     shape0 = ledger_shape(ledger_loc)
-    n_open = sum(1 for v in shape0.values() if v == "open")
+    n_open = open_actionable_count(ledger_loc)
 
     findings = os.path.join(tempfile.gettempdir(), "twatch-fuzz-%d" % os.getpid())
     env = dict(os.environ, PASMITH_FINDINGS_DIR=findings)
@@ -808,7 +808,7 @@ def run_fuzz_idle(clone, host, st, sha, preempted):
         clone_head_back(clone)
         print("twatch: fuzz recheck %s — %s" % (sha[:12], tail), flush=True)
         shape1 = ledger_shape(ledger_loc)
-        n_open = sum(1 for v in shape1.values() if v == "open")
+        n_open = open_actionable_count(ledger_loc)
         if shape1 != shape0:
             publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha)
             shape0 = shape1
@@ -925,6 +925,32 @@ def ledger_shape(path):
     except (OSError, ValueError):
         return {}
     return {s: e.get("status") for s, e in d.get("findings", {}).items()}
+
+
+# Finding classes with NO owning dev lane: an FPC-self contradiction is an FPC
+# bug, an upstream bug -- nothing we commit can ever "fix" it. The fuzz throttle
+# (fuzz_backoff_minutes) exists to give the owning lane room to land a fix before
+# the fuzzer re-derives the same bug; a finding no lane owns must not count toward
+# it, or a single permanently-open fpc-self finding wedges the fuzzer forever
+# (recheck ~3s -> throttle -> idle, every cycle, never fuzzing). See
+# open_actionable_count / run_fuzz_idle.
+NONACTIONABLE_CLASSES = {"fpc-self"}
+
+
+def open_actionable_count(path):
+    """Count OPEN findings a dev lane can actually fix (throttle-relevant subset).
+
+    Excludes NONACTIONABLE_CLASSES -- external bugs that can never be resolved
+    locally and would otherwise pin the fuzzer in permanent backoff.
+    """
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for e in d.get("findings", {}).values()
+               if e.get("status") == "open"
+               and e.get("class") not in NONACTIONABLE_CLASSES)
 
 
 def publish_ledger(clone, host, ledger_loc, ledger_pub, findings, sha,
