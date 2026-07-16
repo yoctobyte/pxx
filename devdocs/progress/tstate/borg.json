@@ -1919,14 +1919,13 @@
    "src": "compiler/compiler.pas"
   },
   {
-   "bad": "fb9346bd4bce1bef522968ffe0c212f99880b693",
+   "bad": "a48a8353bfc6b61ef1eb71eac6da963befb6004c",
    "good": "4e4eb757a092712925ca57bdb69707d142846c46",
    "job": "test-core#src:test/test_static_array_length.pas",
    "name": "test-core#645",
    "opened": "2026-07-16T17:53:36Z",
    "range": [
-    "a48a8353bfc6b61ef1eb71eac6da963befb6004c",
-    "fb9346bd4bce1bef522968ffe0c212f99880b693"
+    "a48a8353bfc6b61ef1eb71eac6da963befb6004c"
    ],
    "src": "test/test_static_array_length.pas"
   },

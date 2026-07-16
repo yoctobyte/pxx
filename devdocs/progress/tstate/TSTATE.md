@@ -7,5 +7,5 @@
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `603cf2bda859`, last good `9ae7a3617ccb`, 1 commit(s) in range
-- **test-core#src:test/test_static_array_length.pas** — test/test_static_array_length.pas (borg): bad `fb9346bd4bce`, last good `4e4eb757a092`, 2 commit(s) in range
+- **test-core#src:test/test_static_array_length.pas** — test/test_static_array_length.pas (borg): bad `a48a8353bfc6`, last good `4e4eb757a092`, 1 commit(s) in range
 - **test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh** — tools/run_sqlite_thread_test.sh (borg): bad `fb9346bd4bce`, last good `fb9346bd4bce`, 0 commit(s) in range
