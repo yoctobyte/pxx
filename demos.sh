@@ -7,6 +7,11 @@
 #     ./demos.sh all        # build every demo (runs the batch ones)
 #     ./demos.sh list       # just list them
 #
+# Binaries go to build/demos/ (gitignored). By default the per-binary .map symbol
+# files are dropped to keep the dir clean; set DEMO_MAP=1 to keep them (or answer
+# yes at the build-all prompt) — a .map turns a crash address into a proc name,
+# which is exactly what you want back with a crash report from another OS/CPU.
+#
 # Uses ./pxx (created by ./install.sh) — falls back to the pinned compiler with
 # the library roots if ./pxx is absent.
 
@@ -19,6 +24,17 @@ cd "$ROOT"
 # DEMO_OUT=/tmp/... for a throwaway build.
 BUILD="${DEMO_OUT:-$ROOT/build/demos}"
 mkdir -p "$BUILD"
+
+# .map symbol files: the compiler writes one per binary (<out>.map, addr->proc).
+# It is the ONLY symbolication for the stripped binaries — invaluable if a demo
+# crashes on some other OS/CPU and you get back a raw address — but 26 of them
+# clutter this dir. Default here: drop them after building. Keep them with
+# DEMO_MAP=1 (or answer yes at the build-all prompt) when you want crash triage.
+# (Direct compiler users get the same control via the --no-map / --map flags; we
+# remove-after-build rather than pass --no-map so demos.sh works against any
+# pinned compiler, including ones predating those flags.)
+KEEPMAP="${DEMO_MAP:-0}"
+drop_map() { [ "$KEEPMAP" = 1 ] || rm -f "$1.map"; }
 
 # Demos build with the installed ./pxx. Require install first — the demos need a
 # configured compiler (library roots, optional externals), so this stays a
@@ -82,11 +98,12 @@ list() {
 }
 
 build_run() {
-  local src="$1" kind="$2" name="$3" out="$BUILD/$3"
+  local src="$1" kind="$2" name="$3" out="$BUILD/$(basename "$src" .pas)"
   printf '\n\033[1m-- %s\033[0m  (%s)\n' "$name" "$src"
   if ! "${PXX[@]}" "${EXFU[@]}" "$src" "$out"; then
     echo "   build FAILED"; return 1
   fi
+  drop_map "$out"
   case "$kind" in
     gui) echo "   built: $out  (GUI app — run it directly: $out)" ;;
     net) echo "   built: $out  (needs network — run it directly: $out)" ;;
@@ -103,11 +120,12 @@ run_all() {
   local d name src kind desc built=0 fail=0 ran=0 out
   for d in "${DEMOS[@]}"; do
     IFS='|' read -r name src kind desc <<<"$d"
-    out="$BUILD/$name"
+    out="$BUILD/$(basename "$src" .pas)"
     printf '\n\033[1m-- %s\033[0m  (%s) [%s]\n' "$name" "$src" "$kind"
     if ! "${PXX[@]}" "${EXFU[@]}" "$src" "$out"; then
       echo "   build FAILED"; fail=$((fail+1)); continue
     fi
+    drop_map "$out"
     built=$((built+1))
     if [ "$kind" = batch ]; then
       "$out"; ran=$((ran+1))
@@ -130,7 +148,12 @@ while true; do
   read -rp "pick a demo number (or a/q): " sel || exit 0
   case "$sel" in
     q|Q|'') exit 0 ;;
-    a|A) run_all ;;
+    a|A)
+      if [ "$KEEPMAP" != 1 ]; then
+        read -rp "keep .map symbol files (help debug a crash)? [y/N]: " m
+        case "$m" in y|Y) KEEPMAP=1 ;; esac
+      fi
+      run_all ;;
     *[!0-9]*|'') echo "?" ;;
     *)
       idx=$((sel-1))
