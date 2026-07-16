@@ -164,12 +164,27 @@ frontend)"). **At session start, infer your track from the request:**
   do not edit it under Track Z. Gate = Zig tests green + self-host byte-identical
   + cross. Land only green; destabilizing work behind a flag or incremental,
   never a long-lived branch.
+- **Track U — User (the decision lane).** Where human judgment lives. NOT a
+  file-lane: owns no source, has no gate, builds nothing — it is the **escalation
+  target**. The rule for every agent, and *especially* an autonomous/scheduled
+  one: **escalate, don't guess.** When you hit a fork you can't settle from the
+  code, the request, or a sensible default — a design choice, "is this intended vs
+  a bug?", a spec ambiguity, a semantics/wording call — **file a Track U ticket
+  (slug `decide-<topic>`: state the fork, the options, the trade-offs, your
+  recommendation) and move on**; do not burn cycles guessing or silently pick a
+  direction that may be wrong. The user works Track U to steer — resolving a
+  `decide-*` unblocks the ranked chain behind it (prio propagates down dep edges).
+  A U item that turns out to be plain work once decided is re-filed into the owning
+  lane (U holds *open questions*, not work). The `decide-*` tickets already in the
+  backlog ARE Track U. Full autonomy model — scheduled per-lane workers, gates,
+  review cadence — in **`devdocs/dev/autonomy.md`**.
 
 If genuinely ambiguous, **ask: "Track A (core), B (libraries/demos), C (C
 frontend), D (docs/website), P (Pascal frontend), R (Rust frontend), or Z (Zig
 frontend)?"** — don't guess; the tracks have opposite rules about rebuilding the
 compiler and where they work. (And remember one agent may legitimately hold
-several at once.)
+several at once.) And whenever the fork is *what to build/decide* rather than
+*which lane owns it*, that's **Track U** — file `decide-*`, don't guess.
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
@@ -289,6 +304,14 @@ IR op / symtab field / backend change → **file a Track A ticket**, don't edit 
 under Z (keeps A's self-host gate safe, stops node-number / token collisions).
 Gate = Zig tests green + self-host byte-identical + cross. Land only green; big
 destabilizing work behind a flag or incrementally, never a long-lived branch.
+
+### Track U in one line
+The decision lane — human judgment, no files, no gate, no build. **Escalate,
+don't guess:** hit a design/intent/semantics fork you can't settle from code,
+request, or a sane default → file `decide-<topic>` (fork + options + trade-offs +
+your recommendation) and move to the next queue item. The user resolves `decide-*`
+to steer; one answer unblocks the ranked chain behind it. A U item that's plain
+work once decided → re-file into the owning lane. See `devdocs/dev/autonomy.md`.
 
 ## Claims discipline — TWO different "byte-identical", never conflate them
 Internal shorthand blurs these; **public-facing copy must not**. A compiler engineer
