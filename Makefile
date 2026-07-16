@@ -316,6 +316,12 @@ test-threads: $(COMPILER)
 	# data-parallel loop runtime (palparallel PXXParallelFor): exact partition (each index once), values, edge ranges. worker count is host-dependent, so gate on the deterministic tail.
 	./$(COMPILER) --threadsafe test/test_parallel_for.pas /tmp/test_parallel_for26
 	test "$$(/tmp/test_parallel_for26 | tail -n 4)" = "$$(printf 'visitErr=0\nvalErr=0\nedgeErr=0\nPARALLELFOR OK')"
+	# `parallel for` LANGUAGE surface: parse-time worker synthesis + PXXParallelFor dispatch (exact partition, values)
+	./$(COMPILER) --threadsafe test/test_parallel_for_lang.pas /tmp/test_parallel_for_lang26
+	test "$$(/tmp/test_parallel_for_lang26)" = "$$(printf 'visitErr=0\nvalErr=0\nPARFORLANG OK')"
+	# `parallel for` without --threadsafe = clear compile error, not a heisencrash
+	! ./$(COMPILER) test/test_parallel_for_lang.pas /tmp/test_parallel_for_guard26 > /tmp/test_parallel_for_guard.log 2>&1
+	grep -q "requires --threadsafe" /tmp/test_parallel_for_guard.log
 	# __pxxmulhi_u64: unsigned 64x64->128 high half (x86-64 mul / aarch64 umulh)
 	./$(COMPILER) test/test_mulhi.pas /tmp/test_mulhi26
 	test "$$(/tmp/test_mulhi26 | tail -1)" = "MULHI OK"

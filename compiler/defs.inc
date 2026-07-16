@@ -336,6 +336,13 @@ const
                            loads -- no backend op, because a class method's Self is the BLOB,
                            not an instance, so IR_VIRTUAL_CALL (which loads the VMT from
                            [Self + 0]) cannot be reused. }
+  AN_PARFOR        = 91; { `parallel for` data-parallel loop (feature-parallel-processing).
+                           A thin marker over the parse-time desugaring: ASTLeft = the
+                           synthesized `PXXParallelFor(lo, hi, @__pf_K, ctx)` AN_CALL that
+                           runs the loop across a worker pool; the worker proc __pf_K and
+                           the capture ctx record are minted at parse time (ParseParallelFor)
+                           because this compiler can only synthesize procs during parsing.
+                           IR lowering just lowers ASTLeft. }
   AN_ALLOCA        = 90; { C alloca(n) / __builtin_alloca(n): Left = the byte-count expression.
                            Allocates n bytes (16-aligned) of DYNAMIC stack in the current
                            function's frame, freed by the epilogue's frame-pointer restore
@@ -912,6 +919,9 @@ var
   LiftCapPtrRec      : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapProcSig     : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapTot         : Integer;
+  ParForSeq          : Integer;   { monotonic id for synthesized `parallel for` worker procs (__pf_<n>) }
+  PFScratch          : array[0..31] of TRawToken;  { `parallel for` worker-header token build buffer }
+  PFScratchN         : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;

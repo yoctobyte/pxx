@@ -832,6 +832,7 @@ procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
 procedure ParseNestedRoutine; forward;
 procedure FlushPendingNestedProcs; forward;
+function ParseParallelFor: Integer; forward;
 
 { GetTokenStrFromRaw moved up to lexer.inc (before its lexer.inc use) for FPC
   declaration-order; see there. }
@@ -13633,6 +13634,208 @@ begin
   Result := AllocNode(AN_SEQ); ASTLeft[Result] := outerCall; ASTRight[Result] := forN;
 end;
 
+{ ===== `parallel for` (feature-parallel-processing, Track A/P) =====
+  Desugars at parse time — the only place this compiler can mint a proc — into a
+  synthesized worker + a PXXParallelFor call that fans the range across the
+  libc-free worker pool (lib/rtl/palparallel.pas).
+
+      parallel for V := lo to hi do BODY
+   ->
+      procedure __pf_<n>(__pfctx: Pointer; __pflo, __pfhi: NativeInt);
+      var V: NativeInt; begin for V := __pflo to __pfhi do BODY end;
+      ... PXXParallelFor(lo, hi, @__pf_<n>, nil);
+
+  v1: the body may reference the loop var + globals only; capturing an enclosing
+  local is a clear error (full implicit capture follows). Must sit inside a
+  routine (the main program body has no nested-proc flush point). Requires
+  --threadsafe and `uses palparallel`. }
+
+procedure PFSet(k: TTokenKind; so, sl, ln: Integer);
+{ Emit one token into the PFScratch worker-header build buffer. }
+begin
+  if PFScratchN > High(PFScratch) then Error('parallel for: header token overflow');
+  PFScratch[PFScratchN].Kind := k;
+  PFScratch[PFScratchN].IVal := 0;
+  PFScratch[PFScratchN].Line := ln;
+  PFScratch[PFScratchN].SOffset := so;
+  PFScratch[PFScratchN].SLen := sl;
+  Inc(PFScratchN);
+end;
+
+procedure PFStash(k: TTokenKind; so, sl, ln: Integer);
+{ Append a token to PendNestTok (the stashed worker body, flushed in pass 2). }
+begin
+  if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+  PendNestTok[PendNestCount].Kind := k;
+  PendNestTok[PendNestCount].IVal := 0;
+  PendNestTok[PendNestCount].Line := ln;
+  PendNestTok[PendNestCount].SOffset := so;
+  PendNestTok[PendNestCount].SLen := sl;
+  Inc(PendNestCount);
+end;
+
+function ParseParallelFor: Integer;
+var
+  Vname, wname, capNm: AnsiString;
+  loNode, hiNode, bodyAst, node, callNode: Integer;
+  a1, a2, a3, a4, procAddr, nilNode: Integer;
+  bodyStart, bodyEnd, i, si, scopeBase, ppi, workerIdx: Integer;
+  savedTokPos, savedTokCount, ln: Integer;
+  savedCurProc, savedSC, savedFS, savedSelf: Integer;
+  wnameOff, wnameLen, ctxOff, loPOff, hiPOff, ptrOff, niOff, vOff, vLen: Integer;
+begin
+  ln := CurTok.Line;
+  Next;  { consume 'parallel' }
+  if CurTok.Kind <> tkFor then Error('parallel: expected `for`');
+  Next;  { consume 'for' }
+
+  if CurProc < 0 then
+    Error('parallel for must be inside a procedure or function (not the main program body)');
+  if not ThreadSafeMode then
+    Error('parallel for requires --threadsafe or {$threadsafe on}: the default heap/ARC/console-I/O runtime is not thread-safe');
+  ppi := FindProc('PXXParallelFor');
+  if ppi < 0 then
+    Error('parallel for: the palparallel unit is not in scope (add `uses palparallel;`)');
+
+  if CurTok.Kind <> tkIdent then Error('parallel for: expected loop variable');
+  Vname := CurTok.SVal;
+  Next;
+  Expect(tkAssign, ':=');
+  ParseExpr; loNode := CurASTNode;
+  if CurTok.Kind = tkDownto then
+    Error('parallel for: `downto` not supported (iteration order is unspecified) — use `to`');
+  Expect(tkTo, 'to');
+  ParseExpr; hiNode := CurASTNode;
+  Expect(tkDo, 'do');
+
+  { Capture the body TOKEN span by parsing it once (span + validation); the AST is
+    discarded — the body is re-parsed inside the worker. }
+  bodyStart := TokPos - 1;
+  bodyAst := ParseStatementAST;
+  bodyEnd := TokPos - 1;
+  if bodyEnd <= bodyStart then Error('parallel for: empty loop body');
+
+  { v1 capture rejection: a body ident resolving to a LOCAL/PARAM of the current
+    routine (other than the loop var) is a capture — not yet supported. }
+  scopeBase := Procs[CurProc].ScopeBase;
+  for i := bodyStart to bodyEnd - 1 do
+    if Tokens[i].Kind = tkIdent then
+    begin
+      capNm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      if CaseEqual(capNm, Vname) then Continue;
+      if (i > bodyStart) and (Tokens[i-1].Kind = tkDot) then Continue;   { qualified field }
+      si := FindSym(capNm);
+      if (si >= 0) and (si >= scopeBase) then
+      begin
+        ErrorIdent := capNm;
+        Error('parallel for: capturing enclosing local ''' + capNm + ''' is not yet supported — move it to a global (capture support: follow-up)');
+      end;
+    end;
+
+  { --- synthesize worker name + intern the string-pool offsets --- }
+  wname := '__pf_' + MangleSuffix(ParForSeq);
+  Inc(ParForSeq);
+  wnameOff := NestStrOff(wname); wnameLen := Length(wname);
+  ctxOff := NestStrOff('__pfctx');
+  loPOff := NestStrOff('__pflo');
+  hiPOff := NestStrOff('__pfhi');
+  ptrOff := NestStrOff('Pointer');
+  niOff  := NestStrOff('NativeInt');
+  vOff   := NestStrOff(Vname); vLen := Length(Vname);
+
+  { header: procedure <wname> ( __pfctx : Pointer ; __pflo , __pfhi : NativeInt ) ; }
+  PFScratchN := 0;
+  PFSet(tkProcedure, 0, 0, ln);
+  PFSet(tkIdent, wnameOff, wnameLen, ln);
+  PFSet(tkLParen, 0, 0, ln);
+  PFSet(tkIdent, ctxOff, 7, ln);
+  PFSet(tkColon, 0, 0, ln);
+  PFSet(tkIdent, ptrOff, 7, ln);       { Pointer }
+  PFSet(tkSemicolon, 0, 0, ln);
+  PFSet(tkIdent, loPOff, 6, ln);
+  PFSet(tkComma, 0, 0, ln);
+  PFSet(tkIdent, hiPOff, 6, ln);
+  PFSet(tkColon, 0, 0, ln);
+  PFSet(tkIdent, niOff, 9, ln);        { NativeInt }
+  PFSet(tkRParen, 0, 0, ln);
+  PFSet(tkSemicolon, 0, 0, ln);
+
+  { (1) register the worker FORWARD signature synchronously (lambda-lift's proven
+    re-entrant path) so @<wname> resolves now; code address patched at finalize. }
+  savedTokPos := TokPos;
+  savedTokCount := TokCount;
+  for i := 0 to PFScratchN - 1 do
+  begin
+    if TokCount >= MAX_TOKENS then Error('parallel for: token buffer overflow');
+    Tokens[TokCount] := PFScratch[i]; Inc(TokCount);
+  end;
+  if TokCount + 2 >= MAX_TOKENS then Error('parallel for: token buffer overflow');
+  Tokens[TokCount].Kind := tkForward; Tokens[TokCount].IVal := 0; Tokens[TokCount].Line := ln;
+  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount);
+  Tokens[TokCount].Kind := tkSemicolon; Tokens[TokCount].IVal := 0; Tokens[TokCount].Line := ln;
+  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount);
+
+  TokPos := savedTokCount;   { point at the appended 'procedure' }
+  Next;
+  savedCurProc := CurProc; savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  ParseSubroutine;           { registers the forward signature; Exits before a body }
+  CurProc := savedCurProc; SymCount := savedSC; FrameSize := savedFS; CurSelfClass := savedSelf;
+  workerIdx := FindProc(wname);
+  if workerIdx < 0 then Error('parallel for: internal — worker registration failed');
+
+  TokCount := savedTokCount;      { drop the appended forward tokens }
+  TokPos := savedTokPos - 1;      { restore the caller's stream position }
+  Next;
+
+  { (2) stash the FULL worker body for the pass-2 nested-proc flush:
+      <header> var <V> : NativeInt ; begin for <V> := __pflo to __pfhi do <BODY> ; end ; }
+  if PendNestRtnCount >= MAX_LIFTS then Error('parallel for: too many synthesized routines in one body');
+  PendNestRtnStart[PendNestRtnCount] := PendNestCount;
+  Inc(PendNestRtnCount);
+  for i := 0 to PFScratchN - 1 do
+    PFStash(PFScratch[i].Kind, PFScratch[i].SOffset, PFScratch[i].SLen, ln);
+  PFStash(tkVar, 0, 0, ln);
+  PFStash(tkIdent, vOff, vLen, ln);
+  PFStash(tkColon, 0, 0, ln);
+  PFStash(tkIdent, niOff, 9, ln);      { NativeInt }
+  PFStash(tkSemicolon, 0, 0, ln);
+  PFStash(tkBegin, 0, 0, ln);
+  PFStash(tkFor, 0, 0, ln);
+  PFStash(tkIdent, vOff, vLen, ln);
+  PFStash(tkAssign, 0, 0, ln);
+  PFStash(tkIdent, loPOff, 6, ln);
+  PFStash(tkTo, 0, 0, ln);
+  PFStash(tkIdent, hiPOff, 6, ln);
+  PFStash(tkDo, 0, 0, ln);
+  { Copy the body tokens VERBATIM (full record) — an integer/float literal carries
+    its value in IVal, so a field-by-field copy that zeroed IVal would turn every
+    literal into 0. }
+  for i := bodyStart to bodyEnd - 1 do
+  begin
+    if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+    PendNestTok[PendNestCount] := Tokens[i];
+    Inc(PendNestCount);
+  end;
+  PFStash(tkSemicolon, 0, 0, ln);
+  PFStash(tkEnd, 0, 0, ln);
+  PFStash(tkSemicolon, 0, 0, ln);
+
+  { (3) PXXParallelFor(lo, hi, @<wname>, nil), wrapped in AN_PARFOR }
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := loNode; ASTTk[a1] := Ord(tyInt64);
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := hiNode; ASTTk[a2] := Ord(tyInt64);
+  procAddr := AllocNode(AN_PROCADDR); ASTIVal[procAddr] := workerIdx; ASTTk[procAddr] := Ord(tyPointer);
+  a3 := AllocNode(AN_ARG); ASTLeft[a3] := procAddr; ASTTk[a3] := Ord(tyPointer);
+  nilNode := AllocNode(AN_INT_LIT); ASTIVal[nilNode] := 0; ASTTk[nilNode] := Ord(tyPointer);
+  a4 := AllocNode(AN_ARG); ASTLeft[a4] := nilNode; ASTTk[a4] := Ord(tyPointer);
+  ASTRight[a1] := a2; ASTRight[a2] := a3; ASTRight[a3] := a4; ASTRight[a4] := -1;
+  callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppi;
+  ASTLeft[callNode] := a1; ASTRight[callNode] := -1;
+
+  node := AllocNode(AN_PARFOR);
+  ASTLeft[node] := callNode;
+  Result := node;
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
@@ -13647,6 +13850,16 @@ var
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
 begin
+  { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
+    parallel-for only immediately before `for`. Everywhere else it stays a
+    normal identifier (variable/routine name). }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'parallel') and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkFor) then
+  begin
+    Result := ParseParallelFor;
+    Exit;
+  end;
+
   { {$R} is governed by the mode at the STATEMENT's first token — a directive
     between the RHS and the statement end must not retro-apply (trange4.pp:
     `x:=y {$R+} end`). AllocNode(AN_ASSIGN) reads this anchor. }

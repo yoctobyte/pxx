@@ -6218,6 +6218,10 @@ begin
       Result := IRAppend(IR_BLOCK, startLabelNode, endLabelNode, -1, 0, 0);
     end;
 
+    AN_PARFOR:
+      { `parallel for` -> lower the parse-time-synthesized PXXParallelFor call. }
+      Result := IRLowerAST(ASTLeft[node]);
+
     AN_FOR:
     begin
       lhsNode := ASTLeft[node];
