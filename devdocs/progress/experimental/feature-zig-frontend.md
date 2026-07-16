@@ -350,3 +350,17 @@ Sequence with the Rust tagged-union/slice/drop work to share the primitives.
   [[feature-js-frontend-parked]]) because it is C-style and maps directly onto
   the existing IR. No code yet; skeleton (#1) branches off `master` under
   Track A per the C-frontend precedent when work starts.
+
+## 5/6-param internal calls fixed (2026-07-16, Track Z / A)
+
+Sibling-sweep of the Rust 5/6-param spill fix: ZParseTopLevelFn had the same
+bespoke `case i of 0..3` param-register spill the Rust frontend did (the code
+comment literally said "byte-for-byte the sequence RParseTopLevelFn emits") —
+emitting no modrm byte for param index 4/5, so `mov [rbp+off], r8` came out as
+`48 89 <off32>` and SIGILL'd on the 5th param. Both frontends now share
+`REmitParamRegSpill` (computes REX.R for r8/r9); the Zig param cap is raised
+from 4 to the register-convention 6. test/test_zig_manyparams.zig (add5/add6 +
+5-param recursion). Regressions green: all three prior Zig tests, quick tier,
+self-host byte-identical. Lesson reinforced: a bug copied byte-for-byte across
+sibling frontends must be fixed (or factored) across all of them — see the
+sweep-sibling-dispatch-branches rule.

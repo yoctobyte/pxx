@@ -1013,6 +1013,10 @@ test-core: $(COMPILER)
 	# minimal slices (a[lo..hi], s[i] rw, s.len) -- all parse-time desugar, no new IR.
 	./$(COMPILER) test/test_zig_advanced.zig /tmp/test_zig_advanced26
 	test "$$(/tmp/test_zig_advanced26)" = "$$(printf 'c0 100 c1 200 c2 200 c9 300\nok 3 bad -1\nt1 7 t2 -2\nunderflow caught 2\nalways\nr1 10\nalways\ncleanup\nr2 -1\nnone\nsome 42\norelse 42 unwrap 42\norelse2 7\nslices 60999\ngen 9 7 100\nend\nmain done')"
+	# Zig 5/6-param internal calls (feature-zig-frontend): r8/r9 arg-register spill
+	# via the shared REmitParamRegSpill — the old case i of 0..3 SIGILL'd on param 5.
+	./$(COMPILER) test/test_zig_manyparams.zig /tmp/test_zig_manyparams26
+	test "$$(/tmp/test_zig_manyparams26)" = "$$(printf 'a5 15 a6 21\nrec 103')"
 	# LOLCODE frontend skeleton (feature-esoteric-lolcode, esoteric probe): HAI/KTHXBYE,
 	# I HAS A/ITZ, VISIBLE, R assign, prefix ops (SUM OF..), BOTH SAEM/DIFFRINT + O RLY?,
 	# IM IN YR loop + GTFO, SMOOSH string concat -- all on existing shared IR.

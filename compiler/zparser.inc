@@ -1586,7 +1586,7 @@ end;
   fn name(p: T, ...) RetType — return type directly after ), no arrow. }
 procedure ZRegisterFnSignatureAt(i: Integer; var mainIsVoid: Boolean);
 var j, nparams, k, procIdx: Integer; name, retName: AnsiString;
-    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
+    pnames: array[0..5] of AnsiString; ptypes: array[0..5] of TTypeKind;
     retType: TTypeKind; fnErrs: Boolean;
 begin
   name := GetTokenStr(i + 1);
@@ -1595,7 +1595,7 @@ begin
   Inc(j); nparams := 0;
   while Tokens[j].Kind <> tkRParen do
   begin
-    if nparams >= 4 then Error('Zig: too many parameters (skeleton limit is 4)');
+    if nparams >= 6 then Error('Zig: too many parameters (register-convention limit is 6)');
     if Tokens[j].Kind <> tkIdent then Error('Zig: expected parameter name in ' + name);
     pnames[nparams] := GetTokenStr(j); Inc(j);
     if Tokens[j].Kind <> tkColon then Error('Zig: expected : in parameter list of ' + name);
@@ -1660,8 +1660,8 @@ end;
 procedure ZParseTopLevelFn;
 var name, pname: AnsiString;
     procIdx, nparams, i, idx, savedSC, savedFS, patchPos, bodyNode: Integer;
-    pnames: array[0..3] of AnsiString; ptypes: array[0..3] of TTypeKind;
-    pElemTk: array[0..3] of TTypeKind;
+    pnames: array[0..5] of AnsiString; ptypes: array[0..5] of TTypeKind;
+    pElemTk: array[0..5] of TTypeKind;
 begin
   Next; { fn }
   if CurTok.Kind <> tkIdent then Error('Zig: expected function name');
@@ -1715,21 +1715,10 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  { spill the SysV integer arg registers (rdi/rsi/rdx/rcx) into the frame
-    slots — byte-for-byte the sequence RParseTopLevelFn emits. }
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    if ParamSize(idx) = 8 then EmitB($48);
-    EmitB($89);
-    case i of
-      0: EmitB($BD);
-      1: EmitB($B5);
-      2: EmitB($95);
-      3: EmitB($8D);
-    end;
-    EmitI32(Syms[idx].Offset);
-  end;
+  { spill the SysV integer arg registers into the frame slots — shared with
+    the Rust frontend (REmitParamRegSpill handles r8/r9 via REX.R for the
+    5th/6th param; the old inline case i of 0..3 miscompiled those). }
+  REmitParamRegSpill(procIdx, nparams);
 
   ZDeferCount := 0;
   Expect(tkBegin, '{');
