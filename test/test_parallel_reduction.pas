@@ -11,7 +11,8 @@ type TA = array[0..N-1] of Integer;
 var good: Boolean; a: TA;
 
 procedure Run;
-var i, isum, mx, mn: Integer; sum, xr: Int64; fsum: Double;
+var i, isum, mx, mn, mvBest, mvWorst: Integer;
+    sum, xr, mnvSum, mnvCnt, mvTot: Int64; fsum: Double;
 begin
   { + Int64: 0+1+...+N-1 = N*(N-1)/2 }
   sum := 0;
@@ -42,6 +43,24 @@ begin
   mn := a[0];
   parallel for i := 0 to N-1 reduction(min: mn) do if a[i] < mn then mn := a[i];
   if mn <> 0 then good := False;
+
+  { multi-var: form 1 (comma-list, same op) + form 2 (stacked clauses, mixed ops) }
+  mnvSum := 0; mnvCnt := 0;
+  parallel(pdOnDemand) for i := 0 to N-1 reduction(+: mnvSum, mnvCnt) do
+  begin mnvSum := mnvSum + i; mnvCnt := mnvCnt + 1; end;
+  if (mnvSum <> Int64(N) * (N - 1) div 2) or (mnvCnt <> N) then good := False;
+
+  mvBest := a[0]; mvWorst := a[0]; mvTot := 0;
+  parallel for i := 0 to N-1
+    reduction(max: mvBest)
+    reduction(min: mvWorst)
+    reduction(+: mvTot)
+  do begin
+    if a[i] > mvBest then mvBest := a[i];
+    if a[i] < mvWorst then mvWorst := a[i];
+    mvTot := mvTot + Int64(a[i]);
+  end;
+  if (mvBest <> 999999) or (mvWorst <> 0) then good := False;
 end;
 
 var r: Integer;
