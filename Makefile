@@ -383,6 +383,10 @@ test-threads: $(COMPILER)
 	# exact deterministic +/xor results (a race would flake the sum).
 	./$(COMPILER) --threadsafe test/test_parallel_reduction.pas /tmp/test_parallel_reduction26
 	test "$$(/tmp/test_parallel_reduction26)" = "PARRED OK"
+	# parallel(named args) for: bare enum / dist|workers keys / cap|chunk|n ints
+	# folded to PXXParallelForN; each form covers exactly once, composes w/ reduction.
+	./$(COMPILER) --threadsafe test/test_parallel_policy_named.pas /tmp/test_parallel_policy_named26
+	test "$$(/tmp/test_parallel_policy_named26)" = "PARNAMED OK"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.

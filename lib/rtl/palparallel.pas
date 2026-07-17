@@ -84,6 +84,13 @@ procedure PXXParallelForP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
 procedure PXXParallelForPP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
                            polPtr: Pointer);
 
+{ Field-taking variant — builds a TParPolicy from ordinals + ints. This is what
+  the `parallel(dist pdX, cap N, ...)` named-arg clause lowers to: the parser
+  constant-folds the named args to these five integers, so the synthesized call
+  again carries only scalars. }
+procedure PXXParallelForN(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
+                          distOrd, workersOrd, fixedN, capPct, minChunk: Integer);
+
 { Estimate of currently-FREE logical CPUs from /proc/stat (idle fraction * cores),
   0 if unavailable (first call with no prior sample, or no /proc). Stateful:
   each call deltas against the previous call's snapshot. }
@@ -476,6 +483,18 @@ type PParPolicy = ^TParPolicy;
 begin
   if polPtr = nil then PXXParallelForP(lo, hi, body, ctx, ParDefault)
   else PXXParallelForP(lo, hi, body, ctx, PParPolicy(polPtr)^);
+end;
+
+procedure PXXParallelForN(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
+                          distOrd, workersOrd, fixedN, capPct, minChunk: Integer);
+var pol: TParPolicy;
+begin
+  pol.dist    := TParDist(distOrd);
+  pol.workers := TParWorkers(workersOrd);
+  pol.fixedN  := fixedN;
+  pol.capPct  := capPct;
+  pol.minChunk := minChunk;
+  PXXParallelForP(lo, hi, body, ctx, pol);
 end;
 
 procedure PXXParallelFor(lo, hi: NativeInt; body: TParForBody; ctx: Pointer);

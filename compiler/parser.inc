@@ -13698,6 +13698,36 @@ begin
   Inc(PendNestCount);
 end;
 
+{ TParDist / TParWorkers value name -> ordinal (must match the enum order in
+  lib/rtl/palparallel.pas). -1 = not that enum. Used to constant-fold the
+  `parallel(...)` named-arg clause. }
+function PFDistOrd(const s: AnsiString): Integer;
+begin
+  if CaseEqual(s, 'pdChunked') then PFDistOrd := 0
+  else if CaseEqual(s, 'pdGuided') then PFDistOrd := 1
+  else if CaseEqual(s, 'pdOnDemand') then PFDistOrd := 2
+  else PFDistOrd := -1;
+end;
+
+function PFWorkersOrd(const s: AnsiString): Integer;
+begin
+  if CaseEqual(s, 'pwAllCores') then PFWorkersOrd := 0
+  else if CaseEqual(s, 'pwFixed') then PFWorkersOrd := 1
+  else if CaseEqual(s, 'pwLoadOnce') then PFWorkersOrd := 2
+  else if CaseEqual(s, 'pwLoadCont') then PFWorkersOrd := 3
+  else PFWorkersOrd := -1;
+end;
+
+{ True when a `parallel(` clause opens a NAMED-arg list (a key or a bare enum
+  value) rather than a single TParPolicy expression (preset/var). }
+function PFIsNamedPolicyStart(const s: AnsiString): Boolean;
+begin
+  PFIsNamedPolicyStart :=
+    CaseEqual(s, 'cap') or CaseEqual(s, 'chunk') or CaseEqual(s, 'n') or
+    CaseEqual(s, 'dist') or CaseEqual(s, 'workers') or
+    (PFDistOrd(s) >= 0) or (PFWorkersOrd(s) >= 0);
+end;
+
 function ParseParallelFor: Integer;
 const MAX_PFCAP = 32;
 var
@@ -13719,6 +13749,12 @@ var
   capCount, ci, absOff, ptrCastOff, niCastOff, pniOff: Integer;
   found: Boolean;
   policyNode, ppiP, a5, polAddr: Integer; hasPolicy: Boolean;
+  { named-arg policy clause `parallel(dist pdX, cap N, ...)` -> constant-folded to
+    five ints passed to PXXParallelForN. }
+  hasNamedPolicy: Boolean; ppiN, o, an, ai, prevArg: Integer;
+  polDistOrd, polWorkersOrd, polFixedN, polCapPct, polMinChunk: Integer;
+  polVals: array[0..4] of Integer;
+  polKey: AnsiString;
   { reduction(op: v) — v is a captured scalar; each worker folds a private
     __red0 partial into v^ under PXXReduceLock after its loop. }
   redHasClause: Boolean; redOp: TTokenKind;
@@ -13733,12 +13769,54 @@ begin
     (a preset like ParPolite, or a const/var); passed by address to
     PXXParallelForPP (feature-parallel-for-scheduling-policy). }
   hasPolicy := False; policyNode := -1; ppiP := -1;
+  hasNamedPolicy := False; ppiN := -1;
+  polDistOrd := 0; polWorkersOrd := 0; polFixedN := 0; polCapPct := 0; polMinChunk := 0;
   if CurTok.Kind = tkLParen then
   begin
     Next;  { consume '(' }
-    ParseExpr; policyNode := CurASTNode;
+    if (CurTok.Kind = tkIdent) and PFIsNamedPolicyStart(CurTok.SVal) then
+    begin
+      { NAMED-ARG list: comma-separated `key value` pairs and/or bare enum values.
+        keys: cap/chunk/n -> ints; dist/workers -> enum; bare pd*/pw* -> dist/workers. }
+      hasNamedPolicy := True;
+      while True do
+      begin
+        if CurTok.Kind <> tkIdent then Error('parallel(...): expected a policy key or value');
+        polKey := CurTok.SVal;
+        o := PFDistOrd(polKey);
+        if o >= 0 then begin polDistOrd := o; Next; end
+        else if PFWorkersOrd(polKey) >= 0 then begin polWorkersOrd := PFWorkersOrd(polKey); Next; end
+        else if CaseEqual(polKey, 'dist') then
+        begin
+          Next; if CurTok.Kind <> tkIdent then Error('parallel(dist ...): expected pdChunked/pdGuided/pdOnDemand');
+          o := PFDistOrd(CurTok.SVal); if o < 0 then Error('parallel(dist ...): unknown distribution');
+          polDistOrd := o; Next;
+        end
+        else if CaseEqual(polKey, 'workers') then
+        begin
+          Next; if CurTok.Kind <> tkIdent then Error('parallel(workers ...): expected pwAllCores/pwFixed/pwLoadOnce/pwLoadCont');
+          o := PFWorkersOrd(CurTok.SVal); if o < 0 then Error('parallel(workers ...): unknown worker mode');
+          polWorkersOrd := o; Next;
+        end
+        else if CaseEqual(polKey, 'cap') then
+        begin Next; if CurTok.Kind <> tkInteger then Error('parallel(cap ...): expected an integer'); polCapPct := CurTok.IVal; Next; end
+        else if CaseEqual(polKey, 'chunk') then
+        begin Next; if CurTok.Kind <> tkInteger then Error('parallel(chunk ...): expected an integer'); polMinChunk := CurTok.IVal; Next; end
+        else if CaseEqual(polKey, 'n') then
+        begin
+          Next; if CurTok.Kind <> tkInteger then Error('parallel(n ...): expected an integer'); polFixedN := CurTok.IVal; Next;
+          if polWorkersOrd = 0 then polWorkersOrd := 1;   { `n` implies pwFixed unless overridden }
+        end
+        else Error('parallel(...): unknown policy key ''' + polKey + '''');
+        if CurTok.Kind = tkComma then Next else Break;
+      end;
+    end
+    else
+    begin
+      ParseExpr; policyNode := CurASTNode;
+      hasPolicy := True;
+    end;
     Expect(tkRParen, ')');
-    hasPolicy := True;
   end;
 
   if CurTok.Kind <> tkFor then Error('parallel: expected `for`');
@@ -13756,6 +13834,12 @@ begin
     ppiP := FindProc('PXXParallelForPP');
     if ppiP < 0 then
       Error('parallel(policy) for: palparallel too old (PXXParallelForPP not found)');
+  end;
+  if hasNamedPolicy then
+  begin
+    ppiN := FindProc('PXXParallelForN');
+    if ppiN < 0 then
+      Error('parallel(named args) for: palparallel too old (PXXParallelForN not found)');
   end;
 
   if CurTok.Kind <> tkIdent then Error('parallel for: expected loop variable');
@@ -14174,6 +14258,21 @@ begin
     a5 := AllocNode(AN_ARG); ASTLeft[a5] := polAddr; ASTTk[a5] := Ord(tyPointer);
     ASTRight[a4] := a5; ASTRight[a5] := -1;
     callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppiP;
+  end
+  else if hasNamedPolicy then
+  begin
+    { 5 folded int args: distOrd, workersOrd, fixedN, capPct, minChunk }
+    polVals[0] := polDistOrd; polVals[1] := polWorkersOrd; polVals[2] := polFixedN;
+    polVals[3] := polCapPct;  polVals[4] := polMinChunk;
+    prevArg := a4;
+    for ai := 0 to 4 do
+    begin
+      an := AllocNode(AN_INT_LIT); ASTIVal[an] := polVals[ai]; ASTTk[an] := Ord(tyInteger);
+      a5 := AllocNode(AN_ARG); ASTLeft[a5] := an; ASTTk[a5] := Ord(tyInteger);
+      ASTRight[prevArg] := a5; prevArg := a5;
+    end;
+    ASTRight[prevArg] := -1;
+    callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppiN;
   end
   else
   begin
