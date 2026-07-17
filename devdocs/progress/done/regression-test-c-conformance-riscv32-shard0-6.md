@@ -57,3 +57,26 @@ mismatch — not timing).
   slot / buffering, not the C logic.
 - **Age:** found 2026-07-15 (`ba5b85d6`), pre-dates the current session; 0-in-range
   (watcher couldn't bisect a single-commit window).
+
+## Resolution (2026-07-17) — already fixed on HEAD
+
+**No longer reproduces.** Rebuilt the HEAD `pascal26`, compiled `00187.c` for riscv32
+with the same flags the runner uses (`--target=riscv32 -Ilib/crtl/include
+-Ilib/crtl/src`), ran under `tools/run_target.sh riscv32`:
+
+- `00187.c` riscv32: **3/3 MATCH** (deterministic, not a flake) — full expected output,
+  all 12 bytes, both `fgetc`/`getc` loops + `fgets`.
+- `test-c-conformance-riscv32#shard0/6`: **GREEN** (`testmgr --tier full`).
+
+The 6-of-12 stdio truncation was fixed by a commit in `ba5b85d6..HEAD` — most likely
+the **cross IO-lock / stdio-path rework** ([[feature-threadsafe-io-lock-cross]],
+`ca63cb7b` / `9d72203e`), which reworked the crtl IO write path where a short-write /
+buffer-flush truncation of exactly that shape lives. Not bisected to the exact commit
+(would need an old-compiler rebuild for a ticket that is already green); the fix is
+verified by the 3/3 + shard-green above.
+
+*(Lesson recorded: reproduce a stale auto-filed regression against HEAD **before**
+triaging its internals — this one, asyncecho, and the parked pasmith divergences were
+all already fixed by intervening work. The initial "empty output" I saw was
+self-inflicted — a compile missing the `-Ilib/crtl` includes, not the bug.)*
+- 2026-07-17 — resolved, commit ca63cb7b.

@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (112)
+## backlog (111)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +135,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-test-c-conformance-riscv32-shard0-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard0/6 red at ba5b85d6122d (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -199,7 +198,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (787)
+## done (788)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -942,6 +941,7 @@ _none_
 | regression-test-c-conformance-arm32-shard5-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-i386-shard2-6 | T | 70 | regression | regression: test-c-conformance-i386#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-i386-shard5-6 | T | 70 | regression | regression: test-c-conformance-i386#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard0-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard0/6 red at ba5b85d6122d (auto-filed by twatch) | — |
 | regression-test-c-conformance-riscv32-shard2-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-riscv32-shard5-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-core-131 | T | 70 | regression | regression: test-core#131 red at 83006e927e35 (auto-filed by twatch) | — |
@@ -1014,7 +1014,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
-- [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
