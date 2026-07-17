@@ -8,7 +8,7 @@ prio: 50
 
 - **Type:** bug (Track A/P — assign lowering / WideChar handling). Crash, not silent, but
   same shape-blind-spot family as the PChar-cast bugs.
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, conversion-context sweep.
 
 ## Repro
@@ -75,3 +75,6 @@ Cover the cast, assign, arg, and return contexts (the shape/context matrix), per
 - The repro prints `A` twice (or errors cleanly) — never segfaults.
 - `test/test_*.pas` regression for WideChar var → string.
 - Gate: `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-17 — resolved, commit 19fbf64a.

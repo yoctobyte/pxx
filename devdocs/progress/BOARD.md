@@ -205,7 +205,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (790)
+## done (791)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -530,6 +530,7 @@ _none_
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
+| bug-pascal-widechar-var-to-string-segfault | A | 50 | bug | SEGFAULT: assigning a WideChar VARIABLE to an AnsiString crashes (direct widechar(x) value works) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
 | bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
 | bug-pchar-to-string-implicit-conv | A | 50 | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
