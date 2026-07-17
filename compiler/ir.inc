@@ -1538,8 +1538,10 @@ begin
     end;
   end;
 
-  { 4. If it's a function call }
-  if ASTKind[node] = AN_CALL then
+  { 4. If it's a function call (direct, or indirect through a proc-typed value:
+       AN_CALL_IND stores the signature's Procs[] index in IVal, so the return
+       pointer-element type reads the same way). }
+  if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) then
   begin
     procIdx := ASTIVal[node];
     if (procIdx >= 0) and (procIdx < ProcCount) then

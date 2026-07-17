@@ -20453,6 +20453,17 @@ begin
         end;
         mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
         Procs[mpi].BodyAddr := -1;
+        { Record the return pointer-element type on the signature (mRetType was the
+          last type parsed above, so LastTypePointerElem* still describe it). Without
+          this a `T = function(...): PAnsiChar` sig leaves ProcRetPtrElemTk at
+          tyUnknown, so IsNodePChar can't tell an indirect call through T returns
+          char* and `AnsiString(fp(...))` mis-lowers. Same dropped-field pattern as
+          the external-decl path. See bug-pascal-ansistring-cast-of-fnptr-call-result. }
+        if mIsFunc and (mRetType = tyPointer) then
+        begin
+          ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
+          ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
+        end;
         for i := 0 to mNParams-1 do
         begin
           Procs[mpi].Params[i].IsArray := mPArr[i];
