@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (113)
+## backlog (112)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -135,7 +135,6 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
-| regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-c-conformance-riscv32-shard0-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard0/6 red at ba5b85d6122d (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
@@ -200,7 +199,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (786)
+## done (787)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -926,6 +925,7 @@ _none_
 | regression-fpc-bootstrap-compiler | T | 40 | regression | advisory: fpc-bootstrap#src:compiler/compiler.pas red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
+| regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -1014,7 +1014,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
-- [p 70] [T] regression-test-aarch64-test-asyncecho
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
