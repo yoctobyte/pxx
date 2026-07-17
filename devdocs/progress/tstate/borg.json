@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T06:20:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c8a532661264cdc739ae7ea93355b05be8974649",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-17T06:25:36Z",
    "fixed": [],
    "new_red": [
@@ -415,6 +407,14 @@
    "new_red": [],
    "sha": "fc5f76ef6c5165ed222c9d2adf1ca4a9bd908b8b",
    "tier": "full",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-17T21:58:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a457f01b66ebfd9f5823f7620fcdbcd463fa4b07",
+   "tier": "native",
    "verdict": "GREEN"
   }
  ],
@@ -1381,6 +1381,7 @@
   "test-core#src:test/test_nested_dynarray_field.pas": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@1": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@2": "pass",
+  "test-core#src:test/test_nested_interface_as_cast.pas": "pass",
   "test-core#src:test/test_nested_proc_sibling_call.pas": "pass",
   "test-core#src:test/test_nested_variant_record.pas": "pass",
   "test-core#src:test/test_new_dispose.pas": "pass",
@@ -1909,11 +1910,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-17T21:27:11Z",
-  "sha": "fc5f76ef6c5165ed222c9d2adf1ca4a9bd908b8b",
-  "tier": "full",
+  "date": "2026-07-17T21:58:17Z",
+  "sha": "a457f01b66ebfd9f5823f7620fcdbcd463fa4b07",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 362.6
+  "wall": 146.2
  },
  "last_bench": {
   "conf_rows": 550,
