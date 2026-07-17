@@ -47,10 +47,20 @@ track: A
     Boolean); `mul` = word (since `*` is `(*` the comment opener), combines with a
     real tkStar, identity 1. `/ div mod` stay rejected (not associative). Gate +
     cross via `test_parallel_reduction`.
-  - TODO — **Phase B** persistent-pool monitor thread for true mid-region
-    `pwLoadCont` (today it == `pwLoadOnce`); ramp/EMA smoothing of the load sample;
-    BSD/cgroup samplers. **The whole language surface is now complete** — only the
-    Phase-B runtime work and sampler refinements remain.
+  - DONE — **Phase B** mid-region dynamic `pwLoadCont` (`lib/rtl/palparallel.pas`,
+    commit 62400486): a pool of all cores runs the steal loop, each worker gated on
+    its index < ActiveTarget (parks on a futex over the limit); a monitor thread
+    re-samples /proc/stat every ~50ms, updates ActiveTarget to the free-CPU
+    headroom, and wakes parked workers. Result-invariant (atomic counter still
+    covers each index once). Launcher wakes the monitor at region end (short region
+    ~1-4ms, not the ~50ms tick). Gate `test_parallel_policy` (pwLoadOnce +
+    pwLoadCont).
+  - **FEATURE FUNCTIONALLY COMPLETE.** Remaining = optional refinements only:
+    ramp/EMA smoothing of the load sample (monitor currently jumps to free-capped,
+    could oscillate under many competing jobs); BSD `sysctl kern.cp_time` +
+    cgroup `cpu.max`/`cpu.stat` samplers (Linux `/proc/stat` only today); reduction
+    `*`/`and` — wait, those shipped (0af32212). Consider closing + filing the
+    sampler refinements as a small separate ticket.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
