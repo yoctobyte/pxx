@@ -165,7 +165,35 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
   (user's responsibility); single-worker write-back is deterministic. Self-host
   byte-identical.
 
-  ### 2b Phase B — NON-scalar capture (arrays/records/strings) — DESIGNED, not built
+  ### 2b B-1 — NAMED-type aggregate capture SHIPPED (2026-07-16, 84e74646 + 122552c8)
+  Capture of enclosing locals with a NAMED type (fixed array, dynamic array,
+  record, class), on the Phase-A frame-pointer mechanism. Worker names its
+  accessor `capj: ^<TypeName>` and reads at `ctx + Syms[si].Offset`. Exact
+  fidelity — reuses the SAME declared type, no reconstruction.
+  - **Type-name recovery:** new parallel array `SymDeclTypeNOff/NLen` records a
+    single-named-type span at var-decl time (ParseVarSection); reset in EVERY
+    `Alloc*` (Var/Param/Array/DynArray) so a recycled slot can't leak a stale name
+    ([[project_symtab_alloc_parallel_array_landmine]] discipline). Self-host stayed
+    byte-identical — landmine handled.
+  - **Handle types:** a dyn array / ansistring slot holds a DATA POINTER, so the
+    worker derefs once more: `capj := Pointer(PNativeInt(ctx+off)^)` vs inline
+    `capj := Pointer(ctx+off)`. Found by disasm (a `^TDyn` indexes off the data
+    base, but the frame slot holds the handle). `capHandle` flag branches it.
+  - **Array-scalar-path fix (122552c8):** an array var's TypeKind is its ELEMENT
+    type, so arrays were masquerading as scalars (anon fixed "worked" by accident;
+    anon dyn crashed). Guarded — arrays route to the named path or a clean error.
+  - Covers the flagship `parallel for i do a[i]:=f(a[i])` with a local **named-type**
+    array (fixed or dynamic). `test_parallel_for_capture_aggr.pas` gated.
+
+  ### 2b B-2 — ANONYMOUS-type capture (remaining, optional)
+  `var a: array[0..9] of Integer` (inline, unnamed) still errors: "declare it with
+  a named type". Workaround is trivial (`type TA = array[..]; var a: TA`) and
+  arguably good practice. Proper fix = record the anonymous type's TOKEN span at
+  decl and synthesize `type __pft_n = <copied tokens>` via re-entrant type-section
+  parse (exact fidelity, per the copy-source-tokens insight). Real machinery for a
+  case with a clean error + one-line workaround — deferred as polish.
+
+
   Same frame-pointer mechanism; the ONLY gap is naming `^Tj` for the worker's typed
   accessor. Findings:
   - inline `^array[..] of T` / `^array of T` is NOT valid pxx syntax — pointer
