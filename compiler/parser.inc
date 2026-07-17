@@ -13792,6 +13792,14 @@ begin
         if capSi[j] = si then begin found := True; Break; end;
       if found then Continue;
       if capCount >= MAX_PFCAP then Error('parallel for: too many captured variables');
+      { Managed strings have their own `^`-deref convention (distinct from a dyn
+        array's) that the frame-pointer accessor doesn't model yet — reject rather
+        than risk a wrong deref. }
+      if Syms[si].TypeKind = tyAnsiString then
+      begin
+        ErrorIdent := capNm;
+        Error('parallel for: capturing an ansistring (''' + capNm + ''') is not yet supported — read it into a scalar (e.g. Length) before the loop, or use a global');
+      end;
       { Accessor type for the worker's `capj: ^<T>`: a scalar maps to a keyword;
         a non-scalar (array/record/class/string) uses its DECLARED type NAME when it
         has one (`x: TGrid` -> `^TGrid`) — must be a unit/global-level named type,
@@ -13821,9 +13829,9 @@ begin
       capNmOff[capCount] := NestStrOff(capNm);
       capNmLen[capCount] := Length(capNm);
       capOfs[capCount]   := Syms[si].Offset;
-      { handle types: the frame slot holds a data POINTER (dyn array) / string
-        handle, not inline data — the worker must deref it once more. }
-      capHandle[capCount] := (SymDynDepth[si] > 0) or (Syms[si].TypeKind = tyAnsiString);
+      { handle type: a dynamic array's frame slot holds a data POINTER, not inline
+        data — the worker derefs it once more (fixed arrays/records are inline). }
+      capHandle[capCount] := SymDynDepth[si] > 0;
       Inc(capCount);
     end;
 
