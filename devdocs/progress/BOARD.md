@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (111)
+## backlog (114)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -36,6 +36,7 @@ _none_
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-asm-source-frontend | A | 60 | feature | `.asm` as a first-class source frontend (assemble + link to object/exe/.so) | — |
 | feature-asm-textual-emit-mode | A | 53 | feature | Codegen: emit human-readable assembly text instead of raw bytes | — |
@@ -80,6 +81,7 @@ _none_
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
 | feature-opt-float-register-temporaries | O | 35 | feature | float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -116,6 +118,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-synapse-compile-check | B | 45 | feature | Synapse library — proper compile check (Track B) | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
+| feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-windows-wine-harness | T | 45 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 | feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve | T | 25 | feature | Track T: bench.tsv has no `fpc` column for mandelbrot / raytracer / sieve | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
@@ -1054,6 +1057,7 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [O] feature-callconv-register-args
@@ -1096,6 +1100,7 @@ _none_
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [O] feature-opt-rtti-emit-on-use
+- [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] feature-c-esp-conformance-coverage
@@ -1124,5 +1129,6 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **2** — feature-web-track-w-bootstrap
 - **1** — decide-1-0-scope-promise
+- **1** — decide-nilpy-parallel-capture-semantics
 - **1** — feature-port-freebsd-native
 - **1** — feature-port-windows-pe
