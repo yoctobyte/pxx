@@ -71,8 +71,24 @@ default; by-value intf temp needs AddRef) and [[project_interface_single_pointer
 - A shrunk `test/test_*.pas` regression for the isolated construct.
 - Gate: `make test` + self-host byte-identical + cross.
 
-## Related
+## Related — SAME ROOT (verified), and it points at the mechanism
 
-`pxx-vs-fpc_trace-length` (32 hits same run) — pxx output *differs* from FPC on other
-interface programs (not a crash). Likely the same interface-lifetime defect surfacing as
-a wrong checksum rather than a crash; triage together.
+`pxx-vs-fpc_trace-length` (32 hits same run, seed 53002) — pxx output *differs* from FPC,
+no crash. **Verified NOT a generator false-positive:** the diverging exit checksum hashes
+the RETURN VALUE of interface method calls via an `as`-cast —
+`Mix((iw0 as IPas1).Ic1(...))`, `Mix((iw1 as IPas2).Ic2(...))` — not a raw interface
+pointer. Both per-statement traces agree (21=21); only the exit checksum differs. Ic*(a)
+returns `a + fi` (a field), so pxx computing a **different value** means
+`(iwX as IOther).Method()` on a **multi-interface object** reaches the wrong `Self` /
+field after the interface-to-interface cast. That is exactly the mechanism that, pushed
+harder, corrupts the stack and SIGSEGVs above.
+
+So the headline is: **interface-to-interface `as`-cast on an object implementing multiple
+interfaces resolves the wrong object base** (each interface sits at a different IMT
+offset; the cast must adjust the `Self` pointer, and doesn't correctly in the general
+case). A minimal 3-interface `(iw1 as IPas2).Ic2()` DID return the right value, so the
+break needs the fuller graph (deep hierarchy / multiple objects) — source-delta-debug
+either seed. Fix once isolated: correct the base-pointer adjustment in the
+interface-to-interface QueryInterface/`as` lowering. Cross-check
+[[project_interface_single_pointer_abi_b337]] (interface value = one pointer) and
+[[project_com_interface_default_and_lifetime]].
