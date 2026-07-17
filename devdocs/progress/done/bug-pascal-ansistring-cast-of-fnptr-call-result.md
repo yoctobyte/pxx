@@ -9,7 +9,7 @@ prio: 45
 - **Type:** bug (Track A — `IsNodePChar` / typecast lowering). SILENT (garbage length,
   heap over-read). Sibling of the now-fixed
   [[bug-pascal-ansistring-cast-of-cdecl-call-result]] (external direct-call variant).
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, sibling sweep after fixing the external-call variant.
 
 ## Repro
@@ -54,3 +54,6 @@ bogus length. Yet another shape the enumerator doesn't cover.
 - The repro reports the correct length; a `test/test_*.pas` regression covers the
   fnptr-call cast.
 - Gate: `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-17 — resolved, commit 9118a760.
