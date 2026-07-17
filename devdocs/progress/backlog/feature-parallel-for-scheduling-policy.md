@@ -27,10 +27,18 @@ track: A
     NOT offered — `(*` is the comment opener. Gate `test_parallel_reduction`;
     self-host byte-identical. Commits e78d1503 (+/or/xor), b7665f12 (min/max +
     keyword-type fix).
+  - DONE — **named-arg clause** (`compiler/parser.inc`): `parallel(pdOnDemand,
+    cap 90, chunk 64) for`, `parallel(workers pwLoadOnce, cap 80) for`,
+    `parallel(n 3) for`. Named mode triggers when the first token is a key
+    (dist/workers/cap/chunk/n) or a bare pd*/pw* enum; else the single-expr @P
+    form. Const-folded to 5 ints → `PXXParallelForN` (scalars only, no record
+    materialization); `n` implies pwFixed. Composes with reduction. Bare-enum arg
+    now works too. Gate `test_parallel_policy_named`; self-host byte-identical.
+    Commit efc654e0.
   - TODO — reduction `*`/`and` (need non-`(*` spelling) + multiple reduction vars;
     **Phase B** persistent-pool monitor thread for true mid-region `pwLoadCont`
-    (today it == `pwLoadOnce`); **named-arg clause** `parallel(pdOnDemand, cap 90)
-    for`; ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
+    (today it == `pwLoadOnce`); ramp/EMA smoothing of the load sample; BSD/cgroup
+    samplers.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
