@@ -8,6 +8,20 @@ track: A
 - **Type:** feature — language surface (Track A/P: parser + IR) **and** runtime
   (Track B: RTL worker pool / OS-load sampler). File under A (touches shared
   `parser.inc`/IR); the RTL pool + samplers are the B sub-tasks.
+- **Status (2026-07-17): CORE SHIPPED, reduction + Phase B + named-args remain.**
+  - DONE — runtime (`lib/rtl/palparallel.pas`): `TParDist`/`TParWorkers`/
+    `TParPolicy` + presets; `PXXParallelForP`; `pdChunked` (contiguous fan),
+    `pdOnDemand`/`pdGuided` (atomic-counter work-stealing); `pwAllCores`/`pwFixed`/
+    `pwLoadOnce`/`pwLoadCont`; `PXXQueryFreeCores` (/proc/stat, x86-64/i386/
+    aarch64/arm32). Gate: `test_parallel_policy` (coverage exact, all modes).
+  - DONE — language (`compiler/parser.inc`): `parallel(P) for` lowers to
+    `PXXParallelForPP(@P)`; soft-keyword disambiguation vs a normal `parallel(x)`
+    call; bare `parallel for` byte-identical (self-host fixedpoint). Gate:
+    `test_parallel_policy_lang`.
+  - TODO — **reduction** clause (`reduction(+: v)`); **Phase B** persistent-pool
+    monitor thread for true mid-region `pwLoadCont` (today it == `pwLoadOnce`);
+    **named-arg clause** `parallel(pdOnDemand, cap 90) for`; ramp/EMA smoothing of
+    the load sample; BSD/cgroup samplers.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
@@ -266,6 +280,11 @@ ordinals/floats; managed types later.
   **worker count** `TParWorkers` (pwAllCores/pwFixed/pwLoadOnce/pwLoadCont).
   Load-aware = axis 2, with once-vs-continuous sub-modes = `pwLoadOnce`
   (Phase A) / `pwLoadCont` (Phase B). Names still an open sub-decision.
+- 2026-07-17 (impl) — Increments 1 (runtime: PXXParallelForP + distributions +
+  /proc/stat load sampler) and 2 (language: `parallel(P) for` -> PXXParallelForPP,
+  soft-keyword disambiguation) SHIPPED green (self-host byte-identical, cross
+  x86-64/i386/aarch64). Reduction, Phase B monitor thread, and the named-arg
+  clause remain. Commits: runtime 49cd869e, language 0e896f9d.
 - 2026-07-17 (rev2) — Encoding decided: **record + presets**, NOT packed OR-able
   int flags (rationale section — axes are choose-one enums, packing is
   single-payload/ambiguous, `+`vs`or` is a silent-miscompile risk, record is
