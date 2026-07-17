@@ -59,11 +59,12 @@ implementation
 
 { sched_getaffinity syscall number per arch (Linux). Anything without a number
   below falls through to the fixed-worker fallback. }
-{ CPU-affinity worker autodetect. Enabled only where verified working (x86-64,
-  i386 — real cpu counts). aarch64/arm32 keep the fixed-worker fallback: under
-  qemu the syscall returns EINVAL (untestable) and aarch64 additionally trips the
-  cross-codegen alignment bug (bug-a-parallel-for-aarch64-multi-capture) — their
-  syscall numbers are recorded below, gate them on when real-hardware verified. }
+{ CPU-affinity worker autodetect via sched_getaffinity. QueryCpuCount fails SAFE:
+  any r<=0 (incl. qemu-user's EINVAL) falls back to the fixed worker count, so
+  enabling an arch only ever HELPS on real hardware and never breaks emulation.
+  aarch64 was gated off on bug-a-parallel-for-aarch64-multi-capture (a BSS-align
+  codegen bug that bus-errored the --threadsafe path); that is fixed (bssBase is
+  now 8-aligned), so aarch64/arm32 are enabled here too. }
 {$ifdef CPUX86_64}
 const SYS_sched_getaffinity = 204;
 {$define PXX_HAS_AFFINITY}
@@ -72,7 +73,14 @@ const SYS_sched_getaffinity = 204;
 const SYS_sched_getaffinity = 242;
 {$define PXX_HAS_AFFINITY}
 {$endif}
-{ aarch64 = 122 · arm EABI = 241 — recorded, not enabled (see note above). }
+{$ifdef CPUAARCH64}
+const SYS_sched_getaffinity = 122;
+{$define PXX_HAS_AFFINITY}
+{$endif}
+{$ifdef CPU_ARM32}
+const SYS_sched_getaffinity = 241;   { arm EABI }
+{$define PXX_HAS_AFFINITY}
+{$endif}
 
 type
   { Per-worker argument: which sub-range to run plus the shared body+ctx. One
