@@ -128,3 +128,6 @@ Implementation: `MatchProcCall` gains `suppressBuiltin`; `BuiltinUnitIdx` caches
 `test/test_builtin_name_demote.pas` (+ `test/builtin_shadow/myrand.pas`). Gate:
 `make test` GREEN, self-host byte-identical (reseeded), testmgr quick GREEN;
 matrix/corpus (fpjson/Synapse/cross) offloaded to Track T at the pushed SHA.
+
+## Log
+- 2026-07-17 — resolved, commit 848e6b7e.
