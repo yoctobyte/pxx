@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-16T20:59:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ee96c9f2c4fa373519d1b95870796cecefb14b8f",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-17T02:45:12Z",
    "fixed": [],
    "new_red": [],
@@ -416,6 +408,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "66bc24dcac27e072bbdaa4e197c1a22d6f082a73",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-17T21:10:52Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9106a868d27ca289bd658e2bbcdf35dc8578c9d0",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1616,6 +1616,7 @@
   "test-core#src:test/test_warn_stack_frame.pas@1": "pass",
   "test-core#src:test/test_warn_stack_frame.pas@2": "pass",
   "test-core#src:test/test_widechar_to_utf8_b319.pas": "pass",
+  "test-core#src:test/test_widechar_var_to_string.pas": "pass",
   "test-core#src:test/test_wildcard_lfm.pas": "pass",
   "test-core#src:test/test_with.pas": "pass",
   "test-core#src:test/test_with_class_create.pas": "pass",
@@ -1909,11 +1910,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-17T21:03:49Z",
-  "sha": "66bc24dcac27e072bbdaa4e197c1a22d6f082a73",
+  "date": "2026-07-17T21:10:52Z",
+  "sha": "9106a868d27ca289bd658e2bbcdf35dc8578c9d0",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 138.1
+  "wall": 134.8
  },
  "last_bench": {
   "conf_rows": 550,
