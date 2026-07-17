@@ -74,9 +74,15 @@ const
 procedure PXXParallelFor(lo, hi: NativeInt; body: TParForBody; ctx: Pointer);
 
 { Policy-aware parallel-for. `pol` selects the distribution + worker count (see
-  TParPolicy). This is what `parallel(P) for` lowers to. }
+  TParPolicy). }
 procedure PXXParallelForP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
                           const pol: TParPolicy);
+
+{ Pointer-taking variant — `polPtr` points to a TParPolicy. This is what
+  `parallel(P) for` lowers to (the parser passes @P), so the synthesized call
+  carries only scalars + pointers. }
+procedure PXXParallelForPP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
+                           polPtr: Pointer);
 
 { Estimate of currently-FREE logical CPUs from /proc/stat (idle fraction * cores),
   0 if unavailable (first call with no prior sample, or no /proc). Stateful:
@@ -439,6 +445,14 @@ begin
   for i := 1 to nw - 1 do
     if ok[i] then PalThreadJoin(handles[i]);
   if spawned = 0 then ;
+end;
+
+procedure PXXParallelForPP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
+                           polPtr: Pointer);
+type PParPolicy = ^TParPolicy;
+begin
+  if polPtr = nil then PXXParallelForP(lo, hi, body, ctx, ParDefault)
+  else PXXParallelForP(lo, hi, body, ctx, PParPolicy(polPtr)^);
 end;
 
 procedure PXXParallelFor(lo, hi: NativeInt; body: TParForBody; ctx: Pointer);

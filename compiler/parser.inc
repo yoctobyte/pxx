@@ -13718,9 +13718,23 @@ var
   capHandle: array[0..MAX_PFCAP-1] of Boolean;  { dyn array / ansistring: value at frame slot is a HANDLE (needs an extra deref) }
   capCount, ci, absOff, ptrCastOff, niCastOff, pniOff: Integer;
   found: Boolean;
+  policyNode, ppiP, a5, polAddr: Integer; hasPolicy: Boolean;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
+
+  { optional policy clause: parallel(P) for ... — P is a TParPolicy-typed lvalue
+    (a preset like ParPolite, or a const/var); passed by address to
+    PXXParallelForPP (feature-parallel-for-scheduling-policy). }
+  hasPolicy := False; policyNode := -1; ppiP := -1;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;  { consume '(' }
+    ParseExpr; policyNode := CurASTNode;
+    Expect(tkRParen, ')');
+    hasPolicy := True;
+  end;
+
   if CurTok.Kind <> tkFor then Error('parallel: expected `for`');
   Next;  { consume 'for' }
 
@@ -13731,6 +13745,12 @@ begin
   ppi := FindProc('PXXParallelFor');
   if ppi < 0 then
     Error('parallel for: the palparallel unit is not in scope (add `uses palparallel;`)');
+  if hasPolicy then
+  begin
+    ppiP := FindProc('PXXParallelForPP');
+    if ppiP < 0 then
+      Error('parallel(policy) for: palparallel too old (PXXParallelForPP not found)');
+  end;
 
   if CurTok.Kind <> tkIdent then Error('parallel for: expected loop variable');
   Vname := CurTok.SVal;
@@ -13987,7 +14007,8 @@ begin
   PFStash(tkEnd, 0, 0, ln);
   PFStash(tkSemicolon, 0, 0, ln);
 
-  { (3) PXXParallelFor(lo, hi, @<wname>, ctx), wrapped in AN_PARFOR.
+  { (3) PXXParallelFor(lo, hi, @<wname>, ctx) — or, with a policy clause,
+    PXXParallelForPP(lo, hi, @<wname>, ctx, @policy) — wrapped in AN_PARFOR.
     ctx = the enclosing frame pointer when the body captures locals (workers read
     each capture at ctx + its frame offset), else nil. }
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := loNode; ASTTk[a1] := Ord(tyInt64);
@@ -14002,8 +14023,19 @@ begin
   end;
   ASTTk[ctxNode] := Ord(tyPointer);
   a4 := AllocNode(AN_ARG); ASTLeft[a4] := ctxNode; ASTTk[a4] := Ord(tyPointer);
-  ASTRight[a1] := a2; ASTRight[a2] := a3; ASTRight[a3] := a4; ASTRight[a4] := -1;
-  callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppi;
+  ASTRight[a1] := a2; ASTRight[a2] := a3; ASTRight[a3] := a4;
+  if hasPolicy then
+  begin
+    polAddr := AllocNode(AN_ADDR); ASTLeft[polAddr] := policyNode; ASTTk[polAddr] := Ord(tyPointer);
+    a5 := AllocNode(AN_ARG); ASTLeft[a5] := polAddr; ASTTk[a5] := Ord(tyPointer);
+    ASTRight[a4] := a5; ASTRight[a5] := -1;
+    callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppiP;
+  end
+  else
+  begin
+    ASTRight[a4] := -1;
+    callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppi;
+  end;
   ASTLeft[callNode] := a1; ASTRight[callNode] := -1;
 
   node := AllocNode(AN_PARFOR);
@@ -14024,15 +14056,32 @@ var
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
+  pfIsPF: Boolean; pfK, pfDepth: Integer;
 begin
   { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
-    parallel-for only immediately before `for`. Everywhere else it stays a
-    normal identifier (variable/routine name). }
-  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'parallel') and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkFor) then
+    parallel-for only when followed by `for`, or by a policy clause `(...)` whose
+    matching `)` is itself followed by `for` (`parallel(P) for`). Everywhere else
+    (incl. an ordinary `parallel(x)` call) it stays a normal identifier. }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'parallel')
+     and (TokPos < TokCount) then
   begin
-    Result := ParseParallelFor;
-    Exit;
+    pfIsPF := False;
+    if Tokens[TokPos].Kind = tkFor then pfIsPF := True
+    else if Tokens[TokPos].Kind = tkLParen then
+    begin
+      { scan to the matching ) then peek for `for` }
+      pfDepth := 0; pfK := TokPos;
+      while pfK < TokCount do
+      begin
+        if Tokens[pfK].Kind = tkLParen then Inc(pfDepth)
+        else if Tokens[pfK].Kind = tkRParen then
+        begin Dec(pfDepth); if pfDepth = 0 then Break; end;
+        Inc(pfK);
+      end;
+      if (pfDepth = 0) and (pfK + 1 < TokCount) and (Tokens[pfK + 1].Kind = tkFor) then
+        pfIsPF := True;
+    end;
+    if pfIsPF then begin Result := ParseParallelFor; Exit; end;
   end;
 
   { {$R} is governed by the mode at the STATEMENT's first token — a directive

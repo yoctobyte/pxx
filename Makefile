@@ -375,6 +375,10 @@ test-threads: $(COMPILER)
 	# exactly once — a broken atomic-counter work-steal would drop/double indices.
 	./$(COMPILER) --threadsafe test/test_parallel_policy.pas /tmp/test_parallel_policy26
 	test "$$(/tmp/test_parallel_policy26)" = "PARPOL OK"
+	# `parallel(P) for` language surface: policy clause lowers to PXXParallelForPP;
+	# bare/preset/var-policy all cover exactly once; `parallel` stays a normal ident.
+	./$(COMPILER) --threadsafe test/test_parallel_policy_lang.pas /tmp/test_parallel_policy_lang26
+	test "$$(/tmp/test_parallel_policy_lang26)" = "PARPOLLANG OK"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
