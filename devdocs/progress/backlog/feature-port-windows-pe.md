@@ -63,6 +63,9 @@ IAT, never the raw syscall instruction.
 
 ## Testing is cheap — Wine
 
+Test bed: [[feature-t-windows-wine-harness]] (wine runner + mingw-w64 oracle), and this
+sits under umbrella [[feature-port-multi-os-abstraction]].
+
 `wine out.exe` on Linux runs user-mode PE hitting kernel32/ntdll/msvcrt faithfully —
 **no Windows VM needed**. Wine gives the loader + DLL resolution free. So Windows is
 *cheaper to test than to implement*: the PE writer + MS x64 ABI is real work, but the
