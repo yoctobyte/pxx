@@ -75,10 +75,12 @@ work-stealing pool + shared counter.
 type
   TParDist    = (pdChunked, pdGuided, pdOnDemand);
   TParWorkers = (pwAllCores, pwFixed, pwLoadOnce, pwLoadCont);
+  TParFlag    = (pfPinThreads, pfNoStealFromMain, pfSpinWait);  { future modifiers }
   TParPolicy  = record
     dist:    TParDist;
     workers: TParWorkers;
     fixedN, capPct, minChunk: Integer;   { 0 = mode default }
+    flags:   set of TParFlag;            { orthogonal boolean modifiers (later) }
   end;
 ```
 Convenience presets keep simple calls short:
@@ -94,14 +96,23 @@ Optional policy value on the keyword — OpenMP's `schedule()`/`num_threads()`
 promoted from a pragma to real syntax. Bare `parallel for` unchanged (default =
 all cores, chunked), so existing code is untouched.
 
+Three ways to pass a policy, in ascending specificity — a preset, an inline
+record, or **named args** in the clause (the compiler folds the named args into a
+policy; preferred inline form, see rationale below):
+
 ```pascal
-{ preset }
+{ (a) preset — covers ~95% of uses, stays short }
 parallel(ParPolite) for i := 0 to N-1 do Work(i);
 
-{ tuned inline const record (plain record, compile-time const, NO heap) }
+{ (b) inline const record (plain record, compile-time const, NO heap) }
 const HeavyIO: TParPolicy =
   (dist: pdOnDemand; workers: pwLoadCont; capPct: 80; minChunk: 64);
 parallel(HeavyIO) for i := 0 to N-1 do Work(i);
+
+{ (c) named args in the clause — inline tuning WITHOUT a named const, still
+      type-checked + folded to a policy by the compiler (Phase 2 grammar) }
+parallel(pdOnDemand, cap 90, chunk 64) for i := 0 to N-1 do Work(i);
+parallel(workers pwLoadOnce, cap 90)   for i := 0 to N-1 do Work(i);
 
 { reduction: RTL gives each worker a private partial, combines at the barrier }
 parallel(ParPolite) for i := 0 to N-1
@@ -113,9 +124,49 @@ do
 parallel for i := 0 to N-1 do Work(i);
 ```
 
+Named-arg keys map 1:1 to `TParPolicy` fields (`dist`, `workers`, `cap`→capPct,
+`chunk`→minChunk, `n`→fixedN); a bare `TParDist`/`TParWorkers`/preset as the first
+arg sets that and defaults the rest. The parser validates keys + rejects
+duplicate/contradictory axes — the safety a packed int can't give.
+
 ### Precedence
 `loop clause` > `PXXSetParForPolicy(P)` (process default) > built-in default
 (all cores, chunked).
+
+## Why a RECORD (+ presets / named args), NOT packed bit-flags
+
+Considered and rejected: encoding the policy as OR-able int constants
+(`mLoadAware or 90`, `mNumCores or 8`). Reasons:
+
+- **The axes are choose-ONE enums, not orthogonal toggles.** Distribution is
+  `pdChunked` XOR `pdOnDemand` XOR `pdGuided`; OR/`+` implies a combinability that
+  is meaningless (can't be chunked AND on-demand) and the compiler couldn't reject
+  the nonsense.
+- **Value-packing is single-payload + ambiguous.** One int carries one value, but
+  a policy needs `capPct` AND `minChunk` AND maybe `fixedN`; sub-field bit
+  allocation = hand-rolled bitfields = fragile. `X or 8` — cores? percent? chunk?
+  unreadable.
+- **`+` vs `or` is a live silent-miscompile.** `A + B <> A or B` the moment bits
+  overlap or a payload overflows its field (carry corrupts the mode) — exactly the
+  silent-wrong-value class this project keeps getting burned by.
+- **The record has ~zero cost here.** A `const TParPolicy` is compile-time; the
+  clause reads its fields at compile time (or passes a pointer to one static const,
+  1 word) ONCE at region entry, never per iteration. The "record overhead" worry
+  does not apply.
+- **"Hard to OR-combine" is the point.** A policy is a fixed, validated
+  combination; the type system SHOULD forbid soup. Presets give the ergonomic
+  short form; the sensible run-modes are genuinely few.
+
+**Where bit-flags DO belong (later):** genuinely orthogonal boolean MODIFIERS
+(`pfPinThreads`, `pfNoStealFromMain`, `pfSpinWait`) → a `flags: set of TParFlag`
+field. Pascal's `set of` gives OR ergonomics (`[pfPinThreads, pfSpinWait]`) WITH
+type safety — never hand-OR'd ints. That is the modifier layer, not the axis layer.
+
+## Names — OPEN sub-decision
+Clear canonical names above; OpenMP name kept as a documented alias (NOT
+`static`/`dynamic` as bare identifiers — both reserved dialect keywords). `pd`/`pw`
+prefixes shown but not required — final spelling confirmed at implementation.
+Passing a bare `TParDist` or `TParWorkers` = that axis set, the other defaulted.
 
 ## Names — OPEN sub-decision
 Clear canonical names above; OpenMP name kept as a documented alias (NOT
@@ -215,3 +266,10 @@ ordinals/floats; managed types later.
   **worker count** `TParWorkers` (pwAllCores/pwFixed/pwLoadOnce/pwLoadCont).
   Load-aware = axis 2, with once-vs-continuous sub-modes = `pwLoadOnce`
   (Phase A) / `pwLoadCont` (Phase B). Names still an open sub-decision.
+- 2026-07-17 (rev2) — Encoding decided: **record + presets**, NOT packed OR-able
+  int flags (rationale section — axes are choose-one enums, packing is
+  single-payload/ambiguous, `+`vs`or` is a silent-miscompile risk, record is
+  zero-cost). Added **named-arg clause** form `parallel(pdOnDemand, cap 90, chunk
+  64) for` as the preferred inline-tuning surface (Phase 2 grammar; compiler
+  validates + folds to a policy). Future boolean modifiers → `flags: set of
+  TParFlag`, never hand-OR'd ints.
