@@ -19,16 +19,18 @@ track: A
     call; bare `parallel for` byte-identical (self-host fixedpoint). Gate:
     `test_parallel_policy_lang`.
   - DONE — **reduction** (`compiler/parser.inc`): `reduction(op: v)` between the
-    range and `do`; private per-worker `__pfred0` (identity 0), body refs
-    redirected to it, combined `v^ := v^ op __pfred0` under `PXXReduceLock`.
-    v1 ops `+ or xor` (Int64 + Double). `*` NOT offered — `(*` is the comment
-    opener. Gate `test_parallel_reduction`; self-host byte-identical. Commit
-    e78d1503.
-  - TODO — reduction `*`/`and`/`min`/`max` (need non-`(*` spelling / typed
-    identity / conditional combine) + multiple reduction vars; **Phase B**
-    persistent-pool monitor thread for true mid-region `pwLoadCont` (today it ==
-    `pwLoadOnce`); **named-arg clause** `parallel(pdOnDemand, cap 90) for`;
-    ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
+    range and `do`; private per-worker `__pfred0`, body refs redirected to it,
+    combined under `PXXReduceLock`. Ops: `+ or xor` (identity 0, combine
+    `v^ := v^ op __pfred0`) and `min max` (seed `__pfred0 := v^`, combine
+    `if __pfred0 </> v^ then v^ := __pfred0`). Int64/Double/Integer/keyword types
+    (the `__pfred0` decl emits the type-KEYWORD token, not a bare ident). `*`/`and`
+    NOT offered — `(*` is the comment opener. Gate `test_parallel_reduction`;
+    self-host byte-identical. Commits e78d1503 (+/or/xor), b7665f12 (min/max +
+    keyword-type fix).
+  - TODO — reduction `*`/`and` (need non-`(*` spelling) + multiple reduction vars;
+    **Phase B** persistent-pool monitor thread for true mid-region `pwLoadCont`
+    (today it == `pwLoadOnce`); **named-arg clause** `parallel(pdOnDemand, cap 90)
+    for`; ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
