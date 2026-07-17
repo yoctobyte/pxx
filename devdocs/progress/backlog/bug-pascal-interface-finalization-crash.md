@@ -77,6 +77,24 @@ missing-release), the object refcount drifts across those calls, and the final
 temp refcount lifetime next (not the base-pointer, which `a457f01b` handled). Still needs
 source delta-debug on the seed to confirm.
 
+**Hypotheses tested minimally and DISPROVEN (narrows the search):**
+- Simple as-cast temp refcount drift: a loop of 5 `(a as IB).Gb` calls destroys the
+  object exactly once at `a := nil` (correct) — simple refcounting is fine.
+- Basic single/nested interface `as`-cast: single works; nested was a *separate* bug
+  (fixed `a457f01b`). Multi-interface flat class + managed field + ctor/dtor + release:
+  all correct.
+- Ansistring finalization, class methods: ruled out (crash survives `--strs 0`/`--clsm 0`).
+
+So the trigger is NOT the isolated interface primitives — it emerges from the fuller
+generated graph (deep hierarchy + many objects + properties finalizing together). Only
+source-level delta-debug on the fixed 1469-line seed will isolate it.
+
+**Ledger note (Track T):** the `pxx-vs-fpc_trace-length` signature COLLIDES with a
+previously-fixed bug of the same coarse "trace-length" kind — do not mark this
+interface divergence via that signature (it reads as already-fixed). This is exactly
+[[feature-pasmith-divergence-signature-granularity]]; track this bug via THIS ticket,
+not the ledger signature.
+
 ## Acceptance
 
 - The seed compiles and runs to completion (matches the FPC checksum
