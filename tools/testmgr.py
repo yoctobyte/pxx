@@ -109,6 +109,21 @@ CLASSES = {
     "conformance": {"est_mem": 1000 << 20, "timeout": 1200},
     "opt":         {"est_mem": 700 << 20,  "timeout": 900},
 }
+# Runtime-nondeterministic classes: they RUN a program whose scheduling/socket/
+# thread timing can flake under a loaded full-matrix run (asyncecho = qemu,
+# sqlite-threads = qemu, optdiff = opt, threaded sqlite/lua = corpus, sharded
+# conformance = conformance).  A single transient nonzero exit or timeout in
+# these is NOT a regression — it produces a 0-in-range false NEW-RED in tstate
+# that self-clears next tick.  So re-run a FAILED job in these classes before
+# calling it RED (the bench path already does this for lost samples via
+# BENCH_EXTRA_TRIES).  Deterministic classes — `unit` (build+run of a fixed
+# program) and `selfhost` (build + byte-identical fixedpoint, where a flake is a
+# genuine nondeterminism bug to reseed, not retry) — stay SINGLE-SHOT.  A real
+# red fails every attempt, so confirm-retry never hides one; it only costs
+# re-runs on the already-failing minority.  See
+# bug-t-flaky-async-multithreaded-tests-false-newred.
+RUN_RETRY_CLASSES = frozenset({"qemu", "corpus", "conformance", "opt"})
+RUN_RETRY_TRIES = 3      # total attempts before a fail/timeout is final
 # tiers that carry the FPC cold-start canary (advisory; see fpc_canary_job).
 # Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
 # whole build, not an inner-loop cost.
@@ -462,6 +477,8 @@ class Job:
         self.status = "queued"    # queued|running|pass|fail|timeout|skipped|skip
         self.logpath = None
         self.requeued = False
+        self.attempts = 0         # launch count; retriable classes may re-run
+        self.flaky = False        # failed at least once, then passed on retry
         self.sel = None           # stable selector; set by assign_selectors()
         # advisory: reported, ticketed by twatch, but NOT part of the gate —
         # its failure does not turn the run RED or change the exit code.  For
@@ -954,6 +971,7 @@ class Manager:
         logf.close()
         job.t0 = time.monotonic()
         job.status = "running"
+        job.attempts += 1
         self.running.append(job)
 
     def kill_group(self, job, sig=signal.SIGKILL):
@@ -962,25 +980,57 @@ class Manager:
         except (ProcessLookupError, PermissionError):
             pass
 
+    def _retriable(self, job):
+        # Re-run a FAILED job before calling it RED, only in the
+        # runtime-nondeterministic classes and only while attempts remain.
+        # Advisory jobs never gate, so retrying them just burns time.
+        return (not job.advisory
+                and job.cls in RUN_RETRY_CLASSES
+                and job.attempts < RUN_RETRY_TRIES)
+
+    def _requeue_retry(self, job, why):
+        # A transient failure: put the job back on the queue for another launch
+        # instead of finalizing it RED.  Do NOT add to `done` — it re-enters the
+        # normal admission path and launch() bumps job.attempts.
+        print("testmgr: %s %s on attempt %d/%d — retrying (flake guard)"
+              % (job.name, why, job.attempts, RUN_RETRY_TRIES), flush=True)
+        self.running.remove(job)
+        job.proc = None
+        job.t0 = job.t1 = None
+        job.status = "queued"
+        self.queue.append(job)
+
     def reap(self):
         done = []
         now = time.monotonic()
         for job in list(self.running):
             rc = job.proc.poll()
             if rc is not None:
-                job.t1 = now
-                job.status = "pass" if rc == 0 else "fail"
-                self.running.remove(job)
-                done.append(job)
-                if job.status == "pass":
+                if rc == 0:
+                    job.t1 = now
+                    job.status = "pass"
+                    if job.attempts > 1:
+                        job.flaky = True   # failed earlier, recovered on retry
+                    self.running.remove(job)
+                    done.append(job)
                     self.learn(job)
+                elif self._retriable(job):
+                    self._requeue_retry(job, "failed (rc=%d)" % rc)
+                else:
+                    job.t1 = now
+                    job.status = "fail"
+                    self.running.remove(job)
+                    done.append(job)
             elif now - job.t0 > job.timeout:
                 self.kill_group(job)
                 job.proc.wait()
-                job.t1 = now
-                job.status = "timeout"
-                self.running.remove(job)
-                done.append(job)
+                if self._retriable(job):
+                    self._requeue_retry(job, "timed out")
+                else:
+                    job.t1 = now
+                    job.status = "timeout"
+                    self.running.remove(job)
+                    done.append(job)
         return done
 
     def sample(self):
@@ -1215,8 +1265,12 @@ class Manager:
                 mark = {"pass": "ok", "fail": "FAIL", "timeout": "TIMEOUT"}[job.status]
                 if job.advisory and job.status != "pass":
                     mark = "NOTICE"
-                print("  [%4d/%d] %-7s %-28s %6.1fs" %
-                      (self.done_count(), len(self.jobs), mark, job.name, dur),
+                elif job.flaky:
+                    mark = "flaky"          # passed, but only after a retry
+                print("  [%4d/%d] %-7s %-28s %6.1fs%s" %
+                      (self.done_count(), len(self.jobs), mark, job.name, dur,
+                       "  (flaked, recovered on attempt %d)" % job.attempts
+                       if job.flaky else ""),
                       flush=True)
                 if job.status != "pass" and not job.advisory:
                     failed = True
@@ -1976,15 +2030,22 @@ def main():
         # advisory reds are reported, but they are a NOTICE for the owning
         # track — not part of the gate, and not "the first failure"
         state = ("NOTICE" if j.advisory and j.status != "pass"
+                 else "FLAKY" if j.flaky
                  else j.status.upper())
+        if j.flaky:
+            note += "  (flaked, passed on attempt %d)" % j.attempts
         print("  %-8s %-32s %-12s %6.1fs  %s%s" %
               (state, j.name, j.cls, dur, j.src, note))
         if j.status in ("fail", "timeout") and not j.advisory \
                 and first_fail is None:
             first_fail = j
     npass = sum(1 for j in jobs if j.status == "pass")
-    print("  %d/%d pass%s" % (npass, len(jobs) - nskip,
-                              ", %d skip (corpus absent)" % nskip if nskip else ""))
+    flaky = [j.name for j in jobs if j.flaky]
+    print("  %d/%d pass%s%s" % (npass, len(jobs) - nskip,
+                                ", %d skip (corpus absent)" % nskip if nskip else "",
+                                ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
+    if flaky:
+        print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
     # repeat the banner at the END too: on a 1000-job run the startup one has
     # long scrolled away, and this is the line someone reads before believing
     # a GREEN
@@ -2007,6 +2068,7 @@ def main():
         rep = {"tier": args.tier, "wall": round(wall, 1), "scale": round(scale, 2),
                "verdict": "GREEN" if rc == 0 else "RED",
                "slow": slow,
+               "flaky": [j.name for j in jobs if j.flaky],
                # "sel": the STABLE way to name this job again later (twatch
                # bisects and files tickets on it).  j.name is a positional
                # index that renumbers whenever a test is inserted above it.
@@ -2014,6 +2076,8 @@ def main():
                          "sel": j.sel or j.name,
                          "advisory": j.advisory,
                          "status": j.status,
+                         "flaky": j.flaky,
+                         "attempts": j.attempts,
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
                          "log": j.logpath}
