@@ -26,6 +26,13 @@ variable (14 scalars + 4×`array` + 4×`record` + strings + objects) into one `m
 hence low priority — but a large generated/amalgamated function (or a huge `case`, a big
 unrolled initializer) legitimately can.
 
+## Status: cheap tier DONE, proper fix open
+
+`MAX_IR` bumped 131072 → 262144 (`5a067617`) — seed 60030 now compiles and matches the
+FPC checksum (the cap was not hiding a miscompile), self-host byte-identical. The hard
+cap still exists at 2× — a large enough function still overflows. Ticket stays open for
+the **dynamic-array** proper fix; deprioritised (the wall just moved).
+
 ## Fix direction
 
 - **Cheap, partial:** bump `MAX_IR` (e.g. 131072 → 262144). Byte-identical-safe (the
