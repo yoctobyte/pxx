@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `fed71966fed1` | 2026-07-17T22:29:31Z | GREEN (full) | 382.5s | `fed71966fed1` GREEN |
+| borg | `fed71966fed1` | 2026-07-17T22:33:33Z | GREEN (opt) | 235.9s | `fed71966fed1` GREEN |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
