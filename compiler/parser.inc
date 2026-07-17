@@ -21823,6 +21823,16 @@ begin
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     ProcRetRecId[procIdx] := retRecId;
+    { Record the return-element metadata like the normal registration paths do —
+      without this an external `function f(...): PAnsiChar` leaves ProcRetPtrElemTk
+      at tyUnknown, so IsNodePChar can't tell f() returns a char pointer and
+      `AnsiString(f(...))` silently mis-lowers (reads a bogus managed-string
+      header). See bug-pascal-ansistring-cast-of-cdecl-call-result. }
+    ProcRetIsDynArray[procIdx] := retIsDynArr;
+    ProcRetElemTk[procIdx] := retElemTk;
+    ProcRetElemRec[procIdx] := retElemRec;
+    ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetPtrElemRec[procIdx] := retPtrElemRec;
     for i := 0 to nparams-1 do
     begin
       Procs[procIdx].Params[i].IsArray := parr[i];
