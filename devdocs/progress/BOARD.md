@@ -88,7 +88,7 @@ _none_
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-pal-esp-posix-fd-semantics | B | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-parallel-for-scheduling-policy | A | 55 | feature | `parallel for` scheduling policy + reduction (load-aware, work-stealing) | — |
+| feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | — |
 | feature-pascal-builtin-tobject-class | A | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
@@ -194,7 +194,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (782)
+## done (783)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -802,6 +802,7 @@ _none_
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
+| feature-parallel-for-scheduling-policy | A | 55 | feature | `parallel for` scheduling policy + reduction (load-aware, work-stealing) | — |
 | feature-parallel-processing | B | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
@@ -1024,7 +1025,6 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
-- [p 55] [A] feature-parallel-for-scheduling-policy
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
@@ -1104,6 +1104,7 @@ _none_
 - [p 25] [O] feature-opt-div0-stub-on-use
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [B] feature-parallel-load-sampler-refine
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [P] feature-pascal-corpus-expansion

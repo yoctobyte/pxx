@@ -26,6 +26,20 @@ numbers + ABI**, not a userland/libc port.
 
 ## Notes
 
+- **NOT only syscall numbers — a few Linux `/proc`-based readbacks need OS
+  equivalents too.** The static-binary model maps cleanly, but some runtime code
+  reads Linux `procfs` text, which BSD/macOS do not have:
+  - **CPU load sampler** (`lib/rtl/palparallel.pas`, `PXXQueryFreeCores` for the
+    parallel-for `pwLoadOnce`/`pwLoadCont` policies) reads `/proc/stat`. BSD →
+    `sysctl kern.cp_time` (per-CPU jiffies); macOS → `host_processor_info` /
+    `sysctlbyname`. No `/proc/stat` there. It already fails SAFE (falls back to
+    the fixed worker count), so this is a *feature-parity* item, not a blocker.
+  - **CPU count** uses `sched_getaffinity` (`palparallel`); BSD/macOS →
+    `sysctl hw.ncpu` / `hw.activecpu`.
+  - Audit for any other `/proc/*` or Linux-specific `sysfs` reads when porting
+    (grep `'/proc/'` across `lib/rtl/**`). Treat the sampler/affinity as part of
+    the per-OS port, alongside the syscall table.
+
 - This is about the **compiler binary's** host portability and what users can
   target. The static-syscall-only design is what makes it cheap (see the
   kernel-only portability property).

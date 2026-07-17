@@ -334,3 +334,4 @@ ordinals/floats; managed types later.
   64) for` as the preferred inline-tuning surface (Phase 2 grammar; compiler
   validates + folds to a policy). Future boolean modifiers → `flags: set of
   TParFlag`, never hand-OR'd ints.
+- 2026-07-17 — resolved, commit d60424dc.
