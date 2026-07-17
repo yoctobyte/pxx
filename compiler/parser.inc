@@ -13797,7 +13797,13 @@ begin
         has one (`x: TGrid` -> `^TGrid`) — must be a unit/global-level named type,
         visible at the worker's top-level scope. An unnamed non-scalar type
         (`array[..] of T` inline) is a clear error (Phase B-2 will synthesize a name). }
-      kw := PFScalarKw(Syms[si].TypeKind);
+      { An array var's TypeKind is its ELEMENT type, so guard the scalar path on
+        not-an-array — else a fixed array would masquerade as its scalar element
+        (and a dyn array would skip the handle deref and crash). }
+      if (not Syms[si].IsArray) and (SymDynDepth[si] = 0) then
+        kw := PFScalarKw(Syms[si].TypeKind)
+      else
+        kw := '';
       if kw <> '' then
       begin
         capKwOff[capCount] := NestStrOff(kw); capKwLen[capCount] := Length(kw);
