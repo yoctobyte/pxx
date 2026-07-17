@@ -35,10 +35,15 @@ track: A
     materialization); `n` implies pwFixed. Composes with reduction. Bare-enum arg
     now works too. Gate `test_parallel_policy_named`; self-host byte-identical.
     Commit efc654e0.
-  - TODO — reduction `*`/`and` (need non-`(*` spelling) + multiple reduction vars;
-    **Phase B** persistent-pool monitor thread for true mid-region `pwLoadCont`
-    (today it == `pwLoadOnce`); ramp/EMA smoothing of the load sample; BSD/cgroup
-    samplers.
+  - DONE — **multi-variable reduction** (`compiler/parser.inc`, MAX_REDVARS=8):
+    `reduction(+: sum, count)` (comma-list, same op) and stacked
+    `reduction(max: best) reduction(+: t)` (different ops). Per-entry model; the
+    four synthesis spots iterate; one `PXXReduceLock` brackets all folds; a var in
+    two reductions is rejected. Gate `test_parallel_reduction` (comma-list +
+    mixed-op cases); self-host byte-identical. Commit 2a7b794c.
+  - TODO — reduction `*`/`and` (need non-`(*` spelling); **Phase B** persistent-pool
+    monitor thread for true mid-region `pwLoadCont` (today it == `pwLoadOnce`);
+    ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
