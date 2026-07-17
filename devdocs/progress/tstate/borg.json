@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-16T16:25:13Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "5df694cf966ebe7b7fe06f7893a46c3c9da5064a",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-16T17:53:36Z",
    "fixed": [],
    "new_red": [
@@ -419,6 +411,17 @@
    "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-17T17:08:37Z",
+   "fixed": [
+    "test-aarch64#src:test/test_asyncecho.pas",
+    "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"
+   ],
+   "new_red": [],
+   "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
+   "tier": "full",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -440,7 +443,7 @@
   "test-aarch64#src:test/test_asm_a64_sum.asm": "pass",
   "test-aarch64#src:test/test_asm_ifdef_multiarch.pas": "pass",
   "test-aarch64#src:test/test_async_sl.pas": "pass",
-  "test-aarch64#src:test/test_asyncecho.pas": "fail",
+  "test-aarch64#src:test/test_asyncecho.pas": "pass",
   "test-aarch64#src:test/test_call_result_member.pas": "pass",
   "test-aarch64#src:test/test_cdecl_indirect.pas": "pass",
   "test-aarch64#src:test/test_channel.pas": "pass",
@@ -1872,7 +1875,7 @@
   "test-smoke#src:test/test_mutex.pas": "pass",
   "test-smoke#src:test/test_record_temp_byval_arg.pas": "pass",
   "test-smoke#src:test/test_tthread_sync.pas": "pass",
-  "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh": "fail",
+  "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh": "pass",
@@ -1908,11 +1911,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-17T17:02:21Z",
+  "date": "2026-07-17T17:08:37Z",
   "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
-  "tier": "native",
+  "tier": "full",
   "verdict": "GREEN",
-  "wall": 144.0
+  "wall": 367.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1922,11 +1925,11 @@
   "sha": "88986014e07d32db61be699184456df72ecc1a16"
  },
  "last_full": {
-  "date": "2026-07-17T16:11:10Z",
-  "sha": "88986014e07d32db61be699184456df72ecc1a16",
+  "date": "2026-07-17T17:08:37Z",
+  "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
   "tier": "full",
-  "verdict": "RED",
-  "wall": 352.6
+  "verdict": "GREEN",
+  "wall": 367.8
  },
  "last_opt": {
   "date": "2026-07-17T16:15:03Z",
@@ -1952,24 +1955,6 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
-   "good": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
-   "job": "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh",
-   "name": "test-sqlite-threads-aarch64#00",
-   "opened": "2026-07-17T13:34:06Z",
-   "range": [],
-   "src": "tools/run_sqlite_thread_test.sh"
-  },
-  {
-   "bad": "88986014e07d32db61be699184456df72ecc1a16",
-   "good": "88986014e07d32db61be699184456df72ecc1a16",
-   "job": "test-aarch64#src:test/test_asyncecho.pas",
-   "name": "test-aarch64#93",
-   "opened": "2026-07-17T16:11:10Z",
-   "range": [],
-   "src": "test/test_asyncecho.pas tools/run_target.sh"
   }
  ]
 }
