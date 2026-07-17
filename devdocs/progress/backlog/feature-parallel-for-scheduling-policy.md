@@ -33,57 +33,101 @@ Plus a recurring safety gap: concurrent accumulation into a shared captured var
 [[project_parallel_for_byref_capture_shared_write_race]] and `WriteCap`'s
 1-worker guard. A first-class **reduction** makes the common case safe + ergonomic.
 
+## Two ORTHOGONAL axes (design correction 2026-07-17)
+
+An earlier draft mashed distribution and worker-count into one enum. They are
+independent — OpenMP splits them into `schedule()` and `num_threads()` for the
+same reason:
+
+- **Distribution** — HOW to divide iterations among a fixed worker set (load
+  balancing INSIDE the loop). Answers "which iterations go to which worker."
+- **Workers** — HOW MANY workers to run (resource level vs the rest of the
+  machine). Answers "how many, and when is that decided." Load-aware lives HERE,
+  and does not care how the loop is split.
+
+You compose them freely: "however many cores are free (load-aware) AND hand work
+out on demand (dynamic) so those workers stay balanced."
+
+### Axis 1 — distribution (the OpenMP `schedule` kinds)
+| canonical (proposed) | OpenMP | meaning | overhead / balance |
+| --- | --- | --- | --- |
+| `pdChunked`  | static  | P contiguous blocks decided UP FRONT; zero runtime coordination. Bad on uneven loads (Mandelbrot). `static,chunk` variant = round-robin fixed chunks (interleave) | cheapest / worst |
+| `pdGuided`   | guided  | on-demand, chunk size starts big and SHRINKS (∝ remaining/P): few grabs early (cheap), fine tail balance | middle / good |
+| `pdOnDemand` | dynamic | persistent pool; a free worker grabs the next `minChunk` iters via an atomic next-index counter. Balances at runtime as workers free up | priciest / best |
+
+Overhead↔balance ladder: `pdChunked` → `pdGuided` → `pdOnDemand` (small chunk).
+`pdChunked` needs no pool (today's path); `pdGuided`/`pdOnDemand` need the Phase B
+work-stealing pool + shared counter.
+
+### Axis 2 — worker count (the `num_threads` / load axis)
+| canonical (proposed) | meaning |
+| --- | --- |
+| `pwAllCores`  | fixed = affinity core count (today's default) |
+| `pwFixed`     | explicit `fixedN` workers |
+| `pwLoadOnce`  | sample free CPU at region ENTRY, pick P, run to completion (Phase A; cheap, no mid-region reaction) |
+| `pwLoadCont`  | monitor thread re-samples every T ms, parks/wakes workers mid-region to hold the headroom target (Phase B; reacts to load changes, higher overhead) |
+
+**Load-aware has two sub-modes (once vs continuous)** — they ARE `pwLoadOnce` /
+`pwLoadCont`, and map directly onto build phases A / B.
+
+### Policy record + presets
+```pascal
+type
+  TParDist    = (pdChunked, pdGuided, pdOnDemand);
+  TParWorkers = (pwAllCores, pwFixed, pwLoadOnce, pwLoadCont);
+  TParPolicy  = record
+    dist:    TParDist;
+    workers: TParWorkers;
+    fixedN, capPct, minChunk: Integer;   { 0 = mode default }
+  end;
+```
+Convenience presets keep simple calls short:
+```pascal
+const
+  ParAllCores: TParPolicy = (dist: pdChunked;  workers: pwAllCores);
+  ParPolite:   TParPolicy = (dist: pdOnDemand; workers: pwLoadOnce; capPct: 90);
+```
+
 ## Language surface (decided)
 
-Policy is an optional value on the keyword — spiritually OpenMP's `schedule()`
-clause, promoted from a pragma to real syntax. Bare `parallel for` is unchanged
-(default = all cores, contiguous split), so existing code is untouched.
+Optional policy value on the keyword — OpenMP's `schedule()`/`num_threads()`
+promoted from a pragma to real syntax. Bare `parallel for` unchanged (default =
+all cores, chunked), so existing code is untouched.
 
 ```pascal
-{ simple: a mode enum }
-parallel(pmLoadAware) for i := 0 to N-1 do Work(i);
+{ preset }
+parallel(ParPolite) for i := 0 to N-1 do Work(i);
 
-{ tuned: a const record (plain record, compile-time const, NO heap) }
-const HeavyIO: TParPolicy = (mode: pmOnDemand; capPct: 80; minChunk: 64);
+{ tuned inline const record (plain record, compile-time const, NO heap) }
+const HeavyIO: TParPolicy =
+  (dist: pdOnDemand; workers: pwLoadCont; capPct: 80; minChunk: 64);
 parallel(HeavyIO) for i := 0 to N-1 do Work(i);
 
 { reduction: RTL gives each worker a private partial, combines at the barrier }
-parallel(pmOnDemand) for i := 0 to N-1
+parallel(ParPolite) for i := 0 to N-1
   reduction(+: total)
 do
   total := total + f(i);
 
-{ default — all cores, contiguous split, as today }
+{ default — all cores, chunked split, as today }
 parallel for i := 0 to N-1 do Work(i);
 ```
 
 ### Precedence
 `loop clause` > `PXXSetParForPolicy(P)` (process default) > built-in default
-(all cores, contiguous).
+(all cores, chunked).
 
-## Policy modes (names — OPEN sub-decision)
-
-Clear unprefixed canonical names; OpenMP name kept as a documented alias/comment
-(NOT `static`/`dynamic` as bare identifiers — both are reserved dialect keywords).
-`pm` prefix shown but not required — final spelling to confirm at implementation.
-
-| canonical (proposed) | OpenMP | meaning |
-| --- | --- | --- |
-| `pmAllCores`  | — (num_threads) | fixed = affinity core count (today's default) |
-| `pmChunked`   | static  | contiguous even split (current behavior) |
-| `pmOnDemand`  | dynamic | persistent pool; workers grab `minChunk` iters via an atomic next-index counter (work-stealing) |
-| `pmGuided`    | guided  | on-demand with shrinking chunk sizes (tail-balance) |
-| `pmLoadAware` | (novel) | throttle active workers to system CPU headroom (experimental) |
-| `pmAuto`      | auto    | runtime picks (later) |
-
-`TParPolicy` = plain record `(mode: TParMode; capPct, minChunk, workers: Integer)`
-(0 fields = mode defaults). Passing a bare `TParMode` = that mode with defaults.
+## Names — OPEN sub-decision
+Clear canonical names above; OpenMP name kept as a documented alias (NOT
+`static`/`dynamic` as bare identifiers — both reserved dialect keywords). `pd`/`pw`
+prefixes shown but not required — final spelling confirmed at implementation.
+Passing a bare `TParDist` or `TParWorkers` = that axis set, the other defaulted.
 
 ## Runtime design — build order (A then B, decided)
 
 ### Phase A — region-entry load throttle (cheap, ~zero overhead)
-`pmLoadAware` at region entry only: compute `nw` from free CPU, run the existing
-static split. No pool, no monitor thread.
+`pwLoadOnce` at region entry only: compute `nw` from free CPU, run the existing
+`pdChunked` split. No pool, no monitor thread.
 - **Signal:** `/proc/stat` `cpu` line — `idleFrac = Δidle/Δtotal`,
   `freeCores = idleFrac*nCores`. One open/read/close (~5–20µs) via PAL file I/O.
   NOT `/proc/loadavg` (too laggy/coarse).
@@ -95,14 +139,19 @@ static split. No pool, no monitor thread.
   `0.9*nCores` (configurable `capPct`). Converges without overshoot when multiple
   load-aware jobs ramp together.
 
-### Phase B — dynamic work-stealing pool (`pmOnDemand`/`pmGuided`, mid-region adaptive)
-Persistent worker pool + shared atomic next-index counter; workers grab
-`minChunk` iterations via fetch-add (batch to amortize contention). A monitor
-thread samples `/proc/stat` every T ms and parks/wakes workers (futex) to hold
-the load target mid-region. Costs: persistent pool, atomic contention, monitor
-thread, park/wake — worth it only for long regions. This is what "saves the
-programmer from thread management" (the MTProcs `ProcThreadPool` setup pain, but
-owned by the RTL).
+### Phase B — dynamic work-stealing pool (`pdOnDemand`/`pdGuided` + `pwLoadCont`)
+Two things land together (both need the persistent pool):
+- **Distribution** `pdOnDemand`/`pdGuided`: workers grab `minChunk` iterations
+  via an atomic next-index fetch-add (batch to amortize contention); `pdGuided`
+  shrinks the chunk over time.
+- **Worker count** `pwLoadCont`: a monitor thread samples `/proc/stat` every T ms
+  and parks/wakes workers (futex) to hold the headroom target MID-region.
+
+Costs: persistent pool, atomic contention, monitor thread, park/wake — worth it
+only for long regions. This is what "saves the programmer from thread management"
+(the MTProcs `ProcThreadPool` setup pain, but owned by the RTL). Note the axes are
+independent: `pdOnDemand` + `pwAllCores` (balance, no throttle) and `pdChunked` +
+`pwLoadOnce` (throttle, no rebalance) are both valid Phase-A/B mixes.
 
 ### Reduction (v1, decided)
 `reduction(op: var[, var...])`, ops `+ * min max and or xor`. Lowering: each
@@ -115,7 +164,7 @@ ordinals/floats; managed types later.
 ## Portability
 
 - Load sampler is backend-gated; the POLICY syntax always parses. Missing sampler
-  → `pmLoadAware` degrades to `pmAllCores`.
+  → `pwLoadOnce`/`pwLoadCont` degrade to `pwAllCores`.
 - Linux: `/proc/stat`. BSD: `sysctl kern.cp_time`. Windows: PDH/perf counters —
   likely skip (degrade). ESP/bare: no `/proc` → degrade. Non-issue per user.
 - **cgroup-blind:** `/proc/stat` shows HOST cpus, ignores container CPU quota →
@@ -128,9 +177,10 @@ ordinals/floats; managed types later.
   memory-bound (self-compile is; see [[project_o3_w1_operand_scheduler]]). Don't
   sell load-aware as a universal speed knob.
 - **Spawn cost:** short frequent regions pay thread create/join regardless →
-  "recommended for long-running regions" is the honest label (esp. `pmLoadAware`).
+  "recommended for long-running regions" is the honest label (esp. `pwLoadCont`).
 - **SMT:** `/proc/stat` counts logical CPUs; 90% logical ≠ 90% useful. Heuristic.
-- `pmLoadAware` is EXPERIMENTAL/opt-in; `pmChunked` stays the proven default.
+- `pwLoadOnce`/`pwLoadCont` are EXPERIMENTAL/opt-in; `pdChunked` + `pwAllCores`
+  stays the proven default.
 
 ## Precedent (for the implementer)
 
@@ -146,17 +196,21 @@ ordinals/floats; managed types later.
 
 - Parser: `parallel(P) for` + `reduction(...)` parse; bare `parallel for`
   byte-identical to today (self-host unaffected).
-- Phase A: `pmLoadAware` throttles to headroom on a busy host (validate on
+- Phase A: `pwLoadOnce` throttles to headroom on a busy host (validate on
   `mandelbrot_parallel` under an artificial background load); ~zero overhead when
   idle. Falls back cleanly where no sampler.
-- Phase B: `pmOnDemand` beats `pmChunked` on Mandelbrot (uneven load) without the
-  hand-interleave; mid-region load hold via monitor thread.
+- Phase B: `pdOnDemand` beats `pdChunked` on Mandelbrot (uneven load) without the
+  hand-interleave; `pwLoadCont` holds the load target mid-region via the monitor
+  thread.
 - Reduction: `reduction(+: total)` gives the serial sum with N workers,
   deterministic for integer ops; gate + cross.
 - Self-host byte-identical; cross green; land only green.
 
 ## Log
-- 2026-07-17 — Design agreed: `parallel(P) for` syntax, clear names (OpenMP
-  aliases documented, not `static`/`dynamic` bare), A-then-B build order,
-  reduction in v1. Implementation deferred (fresh context). Names = open
-  sub-decision.
+- 2026-07-17 — Design agreed: `parallel(P) for` syntax, A-then-B build order,
+  reduction in v1. Implementation deferred (fresh context).
+- 2026-07-17 (rev) — Split into TWO orthogonal axes (was one enum): **distribution**
+  `TParDist` (pdChunked/pdGuided/pdOnDemand = OpenMP static/guided/dynamic) and
+  **worker count** `TParWorkers` (pwAllCores/pwFixed/pwLoadOnce/pwLoadCont).
+  Load-aware = axis 2, with once-vs-continuous sub-modes = `pwLoadOnce`
+  (Phase A) / `pwLoadCont` (Phase B). Names still an open sub-decision.
