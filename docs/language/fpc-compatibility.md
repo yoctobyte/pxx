@@ -74,6 +74,22 @@ Use this pattern for compiler-specific code:
   states are still inert markers.
 - Only tested project units and examples should be treated as supported.
 
+## Hint directives
+
+FPC hint modifiers on `const`, `type`, and routine declarations are accepted, and
+`deprecated` may carry a message string:
+
+```pascal
+const OldLimit = 100 deprecated;
+type  TLegacy = Integer platform;
+procedure OldWay; deprecated 'use NewWay';
+procedure Probe; experimental;
+```
+
+`deprecated`, `platform`, `experimental`, `unimplemented`, and `library` parse on
+those declarations. They are accepted for source compatibility; PXX does not yet
+emit a usage warning for them, and they are not accepted on `var` declarations.
+
 ## Common fixes
 
 Prefer these changes when moving small FPC examples to PXX:

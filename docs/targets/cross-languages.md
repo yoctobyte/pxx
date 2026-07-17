@@ -14,8 +14,10 @@ frontends that share backend infrastructure.
 | --- | --- |
 | `.pas`, `.pp` | Pascal |
 | `.c` | C |
+| `.asm` | Assembly source (assemble + link to executable, `.o`, or `.so`) |
 | `.bas` | BASIC, experimental |
 | `.npy` | Nil Python, experimental |
+| `.rs` | Rust, experimental |
 
 The Pascal frontend is the supported user-facing path. The other frontends exist
 to test interop and backend reuse, and their accepted language subsets are still
@@ -26,8 +28,21 @@ totally different grammar than Pascal, calling into arbitrary Pascal and C
 libraries through the same `USES` mechanism the other frontends use. It mixes
 classic line-numbered control flow (`GOTO`/`GOSUB`) with modern numberless
 loops (`FOR`/`WHILE`) in the same program by design — a deliberately
-non-standard dialect, not a spec to conform to. Currently blocked on a real
-`GOTO`/`GOSUB` bug (tracked internally); revisit before relying on it.
+non-standard dialect, not a spec to conform to.
+
+## Assembly source
+
+The `.asm` frontend assembles a target's own assembly text and links it with the
+compiler's built-in ELF writer — no external `as`/`ld`. It is the path that
+validates the `--shared` (`.so`) and `--emit-obj` (`.o`) output modes. See the
+[command-line reference](../reference/cli.md).
+
+## Rust
+
+The `.rs` frontend is an experimental research path that lowers a growing subset
+of Rust (generics with trait bounds, enum-payload `match`) to the same IR. Like
+BASIC and Nil Python it exists to stress backend reuse across very different
+grammars, not as a usable Rust toolchain.
 
 ## C Frontend
 

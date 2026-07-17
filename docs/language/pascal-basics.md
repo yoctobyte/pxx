@@ -55,6 +55,18 @@ for P.Y := 1 to 3 do
   writeln(P.Y);
 ```
 
+`case` selects on an ordinal value. The default branch may be introduced with
+either `else` or its synonym `otherwise`:
+
+```pascal
+case P.X of
+  0:    writeln('zero');
+  1, 2: writeln('small');
+otherwise
+  writeln('large');
+end;
+```
+
 ## Routines
 
 Procedures do not return a value. Functions assign their return value through

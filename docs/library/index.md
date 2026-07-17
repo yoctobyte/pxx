@@ -20,6 +20,9 @@ programs can use these units without passing extra `-Fu` flags.
 | `textfile` | Pascal text-file support, including the standard `Input`/`Output` files, `Flush`, and `Erase`. |
 | `strings` | Classic NUL-terminated `PChar` routines (`StrLen`, `StrPos`, `StrComp`, …). |
 | `math` | Numeric helpers. |
+| `ucomplex` | Complex numbers with the FPC `ucomplex` API and operator overloads. |
+| `vecmath` | 2/3/4-component vectors and matrices (`TVec3`, `TMat4`, …) with operator overloads. |
+| `bignum` | Arbitrary-precision integers with operator overloads. |
 | `typinfo` | RTTI inspection helpers. |
 
 Several language features also have runtime support in the default environment:
@@ -50,6 +53,7 @@ the same name in your program shadows the built-in version.
 | `net` / `sockets` | Lower-level networking primitives. |
 | `dns`, `dns_async` | DNS lookup helpers. |
 | [`scheduler` & `coroutine`](./async.md) | Coroutine reactor, cooperative scheduling, and async networking support. |
+| [`palthreadobj`, `palparallel`](./concurrency.md) | OS-level threads (`TThread`) and the `parallel for` worker pool. |
 | `tls`, `tls_openssl` | TLS backend interface and OpenSSL-backed implementation. |
 
 ## Crypto and checksums

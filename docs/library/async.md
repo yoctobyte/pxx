@@ -198,8 +198,13 @@ All done
 
 ---
 
+For **real OS threads** (`TThread`) and **data-parallel loops** (`parallel for`)
+that use every core — the other axis of concurrency — see
+[Threads & parallelism](./concurrency.md).
+
 ## Next
 
+- [Threads & parallelism](./concurrency.md)
 - [Networking (HTTP / HTTPS)](./networking.md)
 - [JSON processing](./json.md)
 - [Back to the standard library reference](./index.md)

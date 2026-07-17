@@ -85,8 +85,9 @@ conversions, some `ShortString` edge cases, parts of the generics corpus, and
 ## Cross-targets
 
 The figures above describe the x86-64 host. PXX also cross-compiles to i386,
-AArch64, ARM32, RISC-V 32, Xtensa, and ESP32; most of the above runs there too,
-but per-target status is a separate axis with its own gates.
+AArch64, and ARM32 (Linux), plus the ESP32-oriented `riscv32` and `xtensa`
+embedded targets — six backends in all. Most of the above runs on the Linux
+cross-targets too, but per-target status is a separate axis with its own gates.
 
 ## How this is measured
 

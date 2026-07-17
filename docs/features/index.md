@@ -31,6 +31,9 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   overflow (`{$Q+}`), and IO (`{$I+}`); plus opt-in strictness flags
   (`--strict-visibility`, `--strict-case`, …). Lax by default.
 - Conditional compilation and a PXX identity symbol.
+- Concurrency on two axes: a single-thread cooperative coroutine scheduler, plus
+  real OS threads (`TThread`) and a data-parallel `parallel for` loop over a
+  libc-free worker pool (build threaded code with `--threadsafe`).
 - Inline assembly and experimental alternate frontends are available, but should
   be treated as advanced or unstable surfaces.
 
