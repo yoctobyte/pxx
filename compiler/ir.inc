@@ -4917,8 +4917,17 @@ begin
         { A WideChar VALUE assigned to a string converts to its UTF-8 encoding
           (fpjson's `U := widechar(U1)`). Without this the 16-bit ordinal fell
           into the managed-assign path, which retained it AS A POINTER —
-          silent memory corruption, then a crash. }
-        if NodeIsWideCharVal(ASTRight[node]) then
+          silent memory corruption, then a crash. This catches both a
+          `widechar(x)` cast node (NodeIsWideCharVal) AND a bare 2-byte-ordinal
+          RHS — a `w: WideChar` variable read is a plain tyUInt16 ident (WideChar
+          collapses to tyUInt16, no subtype marker), which the cast-only check
+          missed → `s := w` crashed. Assigning any tyUInt16 to a string is only
+          meaningful as a widechar (a genuine Word->string is invalid in FPC and
+          nonsensical here); pxx's lax default converts rather than rejecting
+          (strict-FPC parity would belong behind --strict-fpc). See
+          bug-pascal-widechar-var-to-string-segfault. }
+        if NodeIsWideCharVal(ASTRight[node]) or
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyUInt16) then
           ASTRight[node] := WrapWideCharToUTF8(ASTRight[node]);
         if IsNodePChar(ASTRight[node]) and not CProgramMode then
           ASTRight[node] := WrapPCharToString(ASTRight[node]);
