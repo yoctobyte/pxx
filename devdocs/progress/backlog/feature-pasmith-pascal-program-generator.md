@@ -208,6 +208,25 @@ reproducer + a ticket in the owning lane + a permanent `test/test_*.pas` regress
 test.
 
 ## Log
+- 2026-07-17 — **parked scalar divergences no longer reproduce; ledger de-staled**
+  (v222). Re-ran the exact parked config from the 2026-07-13 entry
+  (`--seeds 100-400 --stmts 20 --vars 10 --depth 4`) against HEAD: **301 programs,
+  0 divergences** (oracles fpc-O0/O2 + pxx-O0/O2/O3, all agree). The 11 pxx-vs-FPC
+  checksum disagreements parked on 07-13 are gone — resolved by the compiler fixes
+  that landed 07-13→07-17 (b338–b352 and friends). The re-test is valid: the parked
+  config is scalar-only (no `--strs`/`--classes`), so the `NO_ONE_CHAR_STRING_LITERAL`
+  dodge-lift below does not touch those seeds' generated output. Also cleaned the
+  fuzz ledger: `pxx-reject_copy-dynamic-array-copy` marked `dodged → fixed` (fix
+  913ad5fc, `Copy()` promotes a Char arg to string — ticket
+  `compat-pascal-copy-of-char-literal`, done), and lifted `NO_ONE_CHAR_STRING_LITERAL`
+  in `pasmith.py` (`True → False`) so the generator emits the shape again now the
+  reject is gone. Gates: FPC `--check` 60/0; pinned pxx 41/0 fresh seeds; a 151-seed
+  differential run (30000–30150) clean. Commit 88986014. A follow-up full-feature
+  differential sweep (seeds 40000–40100 — `--classes 4 --objs 3 --strs 3 --recs 2
+  --arrs 2 --enums 2 --shorts 2 --excepts 3 --hier 4 --props 3 --exdtor 3 --clsm 3`)
+  ran **101 programs / 0 divergences** — HEAD clean across the whole current feature
+  ladder, no new bug filed. (A 401-seed range timed out at 5 oracles × full features;
+  ~100 seeds/run is the practical batch size.)
 - 2026-07-13 — **shrinker removed; OOP + ansistring rungs landed** (commits 9e0cf382,
   07f4b35f). Two corrections to this ticket's own design, both from the user:
 
