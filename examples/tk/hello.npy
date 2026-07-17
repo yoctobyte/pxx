@@ -1,0 +1,20 @@
+# hello.npy — a Tk window from Nil-Python, via the thin `lib/pcl/tk.pas` embed.
+#
+# The whole GUI is Tcl/Tk command strings through TkEval — the CPython-tkinter
+# model, minus tkinter's weight. `import tk` binds the system libtcl/libtk 8.6
+# directly (no -dev headers, no wrapper boilerplate). Build:
+#   pxx -Fulib/pcl examples/tk/hello.npy hello  &&  xvfb-run -a ./hello
+import tk
+
+def main() -> None:
+    if not TkInit():
+        print("TkInit failed")
+        return
+    TkEval("wm title . {hello}")
+    TkEval("label .l -text {hello tk from nilpy}")
+    TkEval("pack .l -padx 40 -pady 20")
+    TkEval("after 400 {destroy .}")   # auto-close so a headless smoke terminates
+    TkMainLoop()
+    print("ok: nilpy tk window shown and closed")
+
+main()
