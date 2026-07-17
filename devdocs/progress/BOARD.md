@@ -25,10 +25,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (114)
+## backlog (118)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-pascal-ansistring-cast-of-cdecl-call-result | A | 55 | bug | SILENT: AnsiString(<direct external-call PChar result>) yields a garbage length (over-read/crash); via a variable it is correct | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -54,6 +55,7 @@ _none_
 | feature-demo-chess | E | 53 | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
+| feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
 | feature-demo-parallel-hashing-pow | E | 30 | feature | Demo — parallel hashing / mini proof-of-work | — |
 | feature-demo-parallel-prime-count | E | 30 | feature | Demo — parallel prime count / find | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
@@ -79,9 +81,11 @@ _none_
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
+| feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
+| feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
 | feature-opt-float-register-temporaries | O | 35 | feature | float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
@@ -1035,6 +1039,7 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [A] bug-pascal-ansistring-cast-of-cdecl-call-result
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
@@ -1058,6 +1063,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
+- [p 45] [B] feature-nilpy-tk-binding (unblocks 1)
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [O] feature-callconv-register-args
@@ -1096,6 +1102,7 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom
 - [p 40] [B] feature-dns-backends-selection
@@ -1130,5 +1137,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — decide-1-0-scope-promise
 - **1** — decide-nilpy-parallel-capture-semantics
+- **1** — feature-nilpy-break-continue
+- **1** — feature-nilpy-tk-binding
 - **1** — feature-port-freebsd-native
 - **1** — feature-port-windows-pe
