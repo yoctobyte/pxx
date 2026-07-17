@@ -13792,16 +13792,6 @@ begin
         if capSi[j] = si then begin found := True; Break; end;
       if found then Continue;
       if capCount >= MAX_PFCAP then Error('parallel for: too many captured variables');
-      { ansistring capture would use `^AnsiString` + a postfix-`^` rewrite, but
-        char-indexing through a pointer-to-string deref (`p^[k]`) is miscompiled in
-        the compiler (bug-pascal-ptr-deref-string-index) — it silently reads
-        garbage. Reject ALL ansistring captures (named or not) until that root bug
-        is fixed; then this unlocks for free (Length/compare/assign already work). }
-      if Syms[si].TypeKind = tyAnsiString then
-      begin
-        ErrorIdent := capNm;
-        Error('parallel for: capturing an ansistring (''' + capNm + ''') is not yet supported (blocked on the `p^[k]` string-index bug) — read what you need into a scalar before the loop, or use a global');
-      end;
       { Accessor type for the worker's `capj: ^<T>`: a scalar maps to a keyword;
         a non-scalar (array/record/class/string) uses its DECLARED type NAME when it
         has one (`x: TGrid` -> `^TGrid`) — must be a unit/global-level named type,
@@ -13821,6 +13811,14 @@ begin
       else if SymDeclTypeNOff[si] <> 0 then
       begin
         capKwOff[capCount] := SymDeclTypeNOff[si]; capKwLen[capCount] := SymDeclTypeNLen[si];
+      end
+      else if Syms[si].TypeKind = tyAnsiString then
+      begin
+        { `s: AnsiString` via the built-in keyword (no user alias) — use it directly.
+          Managed but INLINE-style: the frame slot holds the string handle and
+          `^AnsiString` derefs it (capHandle stays false; @s = frame slot). Char
+          indexing now works through the deref (bug-pascal-ptr-deref-string-index). }
+        kw := 'AnsiString'; capKwOff[capCount] := NestStrOff(kw); capKwLen[capCount] := Length(kw);
       end
       else
       begin

@@ -328,6 +328,9 @@ test-threads: $(COMPILER)
 	# `parallel for` named-type aggregate capture (B-1): local fixed array + dyn array + record by-ref via the frame pointer
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture_aggr.pas /tmp/test_parallel_for_capture_aggr26
 	test "$$(/tmp/test_parallel_for_capture_aggr26 | tail -n 1)" = "PARFORAGGR OK"
+	# `parallel for` ansistring capture: Length + char-index + compare of a captured string (needs the p^[k] fix)
+	./$(COMPILER) --threadsafe test/test_parallel_for_capture_string.pas /tmp/test_parallel_for_capture_string26
+	test "$$(/tmp/test_parallel_for_capture_string26 | tail -n 1)" = "PARFORSTR OK"
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas /tmp/test_async_parallel_compat26
 	test "$$(/tmp/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"
@@ -441,6 +444,9 @@ test-core: $(COMPILER)
 	# string-literal default parameter values (bug-pascal-string-default-param)
 	./$(COMPILER) test/test_string_default_param_b245.pas /tmp/test_string_default_param_b24526
 	test "$$(/tmp/test_string_default_param_b24526)" = "$$(printf 'a=1 msg=default len=7 taillen=0\na=2 msg=abc len=3 taillen=0\na=3 msg=abc len=3 taillen=2\nhi bob 3 len=2\nyo ann 3 len=2\nhey cid 9 len=3')"
+	# char-index through a pointer-to-string deref (p^[k]) reads chars, not the handle (bug-pascal-ptr-deref-string-index)
+	./$(COMPILER) test/test_ptr_deref_string_index.pas /tmp/test_ptr_deref_string_index26
+	test "$$(/tmp/test_ptr_deref_string_index26)" = "PTRSTRIDX OK"
 	# method defaults must not shift onto the previous slot (bug-pascal-method-default-param-self-shift)
 	./$(COMPILER) test/test_method_default_param_b246.pas /tmp/test_method_default_param_b24626
 	test "$$(/tmp/test_method_default_param_b24626)" = "$$(printf 'a=1 b=2\na=9 b=2\na=9 b=8\nx=1 msg=hi n=3 len=2\nx=2 msg=yo n=3 len=2\nx=3 msg=hey n=7 len=3')"

@@ -1167,6 +1167,13 @@ begin
       elemSize := 1;
       tk := tyChar;
       recName := REC_NONE;
+      { A pointer-deref string base (`p^[k]`, p: ^AnsiString): IRLowerAddress
+        yields the ADDRESS p points at (the string's frame slot), not the loaded
+        char-data handle the AN_IDENT path produces — so index off the string's
+        VALUE (the handle) instead. Fixes bug-pascal-ptr-deref-string-index (a
+        silent garbage read); unblocks `parallel for` ansistring capture. }
+      if ASTKind[baseNode] = AN_DEREF then
+        baseAddr := IRLowerAST(baseNode);
     end
     else if TypeIsFrozenString(tk) and not isArr then
     begin
