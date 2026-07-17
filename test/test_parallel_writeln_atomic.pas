@@ -7,9 +7,9 @@ program test_parallel_writeln_atomic;
   for feature-threadsafe-io-lock-cross: the lock is emitted + lowered on
   x86-64/i386/aarch64/arm32, so every line stays atomic on all four.
   The Makefile greps: exactly 200 well-formed lines, then 'PARWROK'.
-  NOTE: workers deliberately do NOT allocate — concurrent per-worker managed
-  string alloc is a separate open heap bug (bug-a-threadsafe-heap-parallel-for-
-  managed-string-race). }
+  NOTE: lines are captured by-ref (shared) and only READ in the body — writing
+  a shared captured var from workers is a data race (see WriteCap's 1-worker
+  guard in test_parallel_for_capture.pas), so we pre-build and only read. }
 uses palparallel;
 
 const N = 200;

@@ -24,11 +24,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | `--threadsafe` heap races: concurrent managed-string alloc from parallel-for workers → SIGSEGV + silent corruption (ALL targets) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -978,10 +977,11 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (14)
+## rejected (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | REJECTED — not a heap bug: was a shared captured-variable data race | — |
 | bug-c-invalid-symbol-in-lea-sqlite | C | 50 | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-compiler-uses-unit-interactions | A | 50 | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-frozen-self-build-unreliable | A | 50 | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
@@ -999,7 +999,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-a-threadsafe-heap-parallel-for-managed-string-race
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 70] [T] regression-test-core-test-static-array-length
