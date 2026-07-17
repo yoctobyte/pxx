@@ -11,8 +11,17 @@ prio: 50
 - **Opened:** 2026-07-17, from a user observation: "we keep finding AnsiString bugs — it's
   one managed type with features; all sub-features work individually, yet issues recur.
   This smells like we special-case it in too many places."
-- **Motivating instance:** [[bug-pascal-ansistring-cast-of-cdecl-call-result]] (silent
-  garbage length casting an external-call PChar result).
+- **Motivating instances (all silent, all the SAME dropped-field/shape-miss pattern):**
+  - [[bug-pascal-ansistring-cast-of-cdecl-call-result]] — external decl dropped
+    `ProcRetPtrElemTk` (FIXED, `33f0d555`).
+  - [[bug-pascal-ansistring-cast-of-fnptr-call-result]] — `$proctype` sig dropped
+    `ProcRetPtrElemTk` + `IsNodePChar` missed `AN_CALL_IND` (FIXED, `9118a760`).
+  - The conversion block itself was copy-pasted at 2 sites → now one
+    `WrapPCharToString` builder (`7e4bebc0`, `FindProc('PCharToString')` 2→1).
+
+  Three instances in one night. Each was a different *place* that either re-implemented
+  registration and forgot a return field, or enumerated node shapes and missed one. The
+  point-fixes stopped the bleeding; the refactor below is still the durable close-out.
 
 ## The observation, and why it's right
 
