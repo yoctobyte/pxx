@@ -2390,6 +2390,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ansistring_cast_fnptr26)" = "fnptr=world len=5"
 	./$(COMPILER) test/test_widechar_var_to_string.pas /tmp/test_widechar_var_to_string26
 	test "$$(/tmp/test_widechar_var_to_string26)" = "$$(printf 'direct=A\nviavar=B')"
+	./$(COMPILER) test/test_widechar_var_concat.pas /tmp/test_widechar_var_concat26
+	test "$$(/tmp/test_widechar_var_concat26)" = "$$(printf 'concat=xA\nlconcat=Ay\nwordadd=3000')"
 	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26
 	test "$$(/tmp/test_auto_var26)" = "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
 	./$(COMPILER) test/test_sqlite_crud_autotyped.pas /tmp/test_sqlite_crud_autotyped26

@@ -20,11 +20,17 @@ procedure show(const s: AnsiString); begin writeln('arg=', s); end;
 var s: AnsiString; w: WideChar;
 begin
   w := WideChar($41);
-  s := w;            { assign  — FIXED (prints A) }
-  s := 'x' + w;      { concat  — SEGFAULT at runtime }
-  show(w);           { arg     — compile error: "Mismatch in MatchProcCall" }
+  s := w;            { assign  — FIXED, b1cbd204 (prints A) }
+  s := 'x' + w;      { concat  — FIXED, this session (single-sided string+ordinal) }
+  show(w);           { arg     — STILL OPEN: compile error "Mismatch in MatchProcCall" }
 end.
 ```
+
+**Remaining:** only the ARG/overload case. `show(w)` (widechar var to a `const
+AnsiString` param) fails overload resolution — `MatchProcCall` does not treat a tyUInt16
+arg as string-compatible. Lower-severity than the crashes (a compile error, not a
+segfault); needs the same widechar-string-compat rule at the call site, or the
+centralization refactor.
 
 ## Root (same family, different sites)
 

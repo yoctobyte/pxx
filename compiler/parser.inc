@@ -10235,11 +10235,21 @@ begin
       CurASTNode := node;
       continue;
     end;
-    if (op = tkPlus) and NodeIsWideCharVal(left) and
+    { A 2-byte ordinal (tyUInt16 = WideChar; there is no distinct WideChar type)
+      concatenated with a string/char MUST be a widechar — `Word + string` is
+      invalid Pascal — so convert it, matching the widechar(x)-cast case. This
+      catches a bare `w: WideChar` variable, which NodeIsWideCharVal (cast-only)
+      misses; without it `'x' + w` crashed. Restricted to the SINGLE-sided form:
+      `tyUInt16 + tyUInt16` stays integer addition (Word+Word), since two 2-byte
+      ordinals are ambiguous and must not be silently turned into string-building.
+      See bug-pascal-widechar-var-to-string-other-contexts. }
+    if (op = tkPlus) and
+       (NodeIsWideCharVal(left) or (IntToTypeKind(ASTTk[left]) = tyUInt16)) and
        ((ASTTk[right] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyString)) or
         (ASTTk[right] = Ord(tyChar))) then
       left := WrapWideCharToUTF8(left)
-    else if (op = tkPlus) and NodeIsWideCharVal(right) and
+    else if (op = tkPlus) and
+       (NodeIsWideCharVal(right) or (IntToTypeKind(ASTTk[right]) = tyUInt16)) and
        ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[left] = Ord(tyString)) or
         (ASTTk[left] = Ord(tyChar))) then
       right := WrapWideCharToUTF8(right);
