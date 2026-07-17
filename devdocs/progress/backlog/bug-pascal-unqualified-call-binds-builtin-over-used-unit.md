@@ -84,24 +84,47 @@ reached when nothing else declares the name. Core resolution change (touches
 every call): gate = make test + self-host byte-identical + conformance/fpjson/
 Synapse. Test against the k2 repro above, FPC-differential.
 
-## Disposition (2026-07-15) — DEFAULT IS INTENDED, not a bug to fix
+## Disposition v1 (2026-07-15) — SUPERSEDED: "intended, no fix"
 
-After discussion with the user (the repo owner): the lax overload-compete is
-**intended, first-class pxx behaviour**, not a defect. builtin / RTL / libraries
-overriding by name is how the whole architecture selects implementations (e.g.
-platform softfloat-in-builtin). FPC just chose a different rule (a same-name decl
-HIDES System); that difference belongs behind the compatibility switch, NOT in a
-default-resolution change. So: **no default change, no resolution surgery.**
+Originally closed as intended: lax overload-compete is first-class pxx (builtin/
+RTL override by name = how impl selection works), FPC's hide rule belongs behind
+`--strict-fpc`. That call conflated TWO questions (see v2).
 
-- Real-world impact removed by [[bug-lib-test-console-solitaire-flaky]] Part B
-  (rtl/random no longer shadows the System names).
-- FPC-parity strictness delivered as [[feature-strict-fpc-umbrella]]: `--strict-fpc`
-  bundles case/operator/visibility/require-forward. `StrictOverload` (which would
-  ERROR on a System-name shadow) is a **standalone** flag, kept out of the umbrella
-  because our RTL uses undirectived overloads by design and bundling it would fail
-  to compile the corpora — and directive boilerplate across the RTL is refused.
+## Disposition v2 (2026-07-17) — FIXED as a default correctness bug
 
-Left in backlog only as a reference (minimal repro + root cause above). The one
-remaining "could do": make `StrictOverload` usable against the lax RTL (scope it
-so it polices user code without choking on pulled units) — low value, no owner.
-Not a default correctness bug.
+The v1 call answered only **Q1** (*who wins on a name collision — builtin or
+used-unit?*), where "lax, builtin overridable by name" is a defensible dialect
+choice. It never addressed **Q2**: *when both are in the set, is the winner
+STABLE across call sites, or does arg width flip it?* Q2 is the real defect and
+is independent of FPC parity:
+
+- Overload resolution assumes overloads are interchangeable impls of one
+  operation differing only in accepted types. builtin-vs-used-unit violates that:
+  they are different implementations with **independent state** (two RNGs).
+- So arg width silently routed `Random(1000)` → unit and `Random(i+1)` → builtin
+  inside one body: **split-brain, silent, non-reproducible, refactor-fragile**
+  (a type change elsewhere reroutes which code runs). Emits **wrong values**, no
+  diagnostic — which by the repo's own escape rule promotes a compat finding to a
+  real `bug-` (silent wrong behavior is not a parkable parity difference).
+
+**Fix (commit below):** builtin unit is **fallback-only**. On a plain unqualified
+call, if any non-builtin routine of the name is in scope, all builtin-unit
+candidates are demoted out of the overload set — **name-level, not
+arg-width-level**. The used unit then owns the whole set; the builtin is reached
+only when nothing else declares the name (softfloat / platform intrinsics, which
+no user unit shadows, are unaffected). `System.X` (qUnit = -2) keeps the builtin,
+preserving the explicit-System escape hatch.
+
+Why this is right and NOT a `--strict-*` matter: a default silent miscompile is
+not "fixed" by a non-default flag most code never sets. `--strict-fpc` still owns
+**hard FPC parity** (error on a used-unit shadow, demand the `overload`
+directive, `{%FAIL}` conformance) — a separate, opt-in policy layer. The v1
+blocker ("RTL uses undirectived overloads, StrictOverload would fail the corpora")
+conflated **intra-unit** overloading (legit, untouched) with the **cross-origin**
+builtin-vs-unit collision this fix scopes to; no directive boilerplate needed.
+
+Implementation: `MatchProcCall` gains `suppressBuiltin`; `BuiltinUnitIdx` caches
+`InternStr('builtin')`; `MatchElig` gates every match phase. Guard test
+`test/test_builtin_name_demote.pas` (+ `test/builtin_shadow/myrand.pas`). Gate:
+`make test` GREEN, self-host byte-identical (reseeded), testmgr quick GREEN;
+matrix/corpus (fpjson/Synapse/cross) offloaded to Track T at the pushed SHA.
