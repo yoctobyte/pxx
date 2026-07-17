@@ -24,11 +24,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (106)
+## backlog (105)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -192,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (780)
+## done (781)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -208,6 +207,7 @@ _none_
 | bug-a-method-pointer-virtual-captures-static-address | A | 45 | bug | @baseref.VirtualMethod binds the STATIC base method address, not the virtual override — a method pointer to a virtual method via a base-typed ref calls the wrong method (silent), and contradicts pxx's own direct virtual dispatch | — |
 | bug-a-o2-miscompiles-disassembler | A | 70 | bug | -O2 miscompiles the x86-64 disassembler (`WriteDisassemblyX64`) | — |
 | bug-a-o2-resident-param-stale-after-longjmp | A | 90 | bug | bug: -O2 (DEFAULT) resident param reads STALE after exception longjmp | — |
+| bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
 | bug-aarch64-arm32-record-temp-byvalue-arg | A | 50 | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-aggregate-member-array-as-var-param | A | 50 | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-ansistring-concat-arg-static-bloat | A | 50 | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
@@ -1076,7 +1076,6 @@ _none_
 - [p 45] [B+C] wish-compile-gnu-pascal
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [A] bug-a-parallel-for-aarch64-multi-capture
 - [p 40] [P] bug-pascal-unqualified-call-binds-builtin-over-used-unit
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [B] feature-dns-backends-selection

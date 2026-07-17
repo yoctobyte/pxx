@@ -61,3 +61,6 @@ the 2-capture repro as a regression once green.
 
 Full `parallel for` capture on aarch64 (single-capture + capture-free already
 work). i386/arm32 already pass all capture tests.
+
+## Log
+- 2026-07-17 — resolved, commit b79c2cdc.
