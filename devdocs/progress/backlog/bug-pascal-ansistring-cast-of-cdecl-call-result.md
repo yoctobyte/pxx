@@ -62,13 +62,32 @@ value, memory over-read. It bites **every** idiomatic C-interop line of the form
 `StrPas(PChar(func()))` (lib/rtl `strings`/`sysutils`) copies to the NUL correctly and is
 the RTL idiom regardless. `lib/pcl/tk.pas` uses it.
 
+## Root located (2026-07-17)
+
+The conversion is gated on **`IsNodePChar`** (`compiler/ir.inc:1494`), which does NOT
+ask "is this expression's static type PChar?" — it **enumerates node SHAPES**: (1) PChar
+cast-node, (2) `AN_IDENT`, (3) `AN_FIELD`, (4) `AN_CALL` (keyed on
+`ProcRetPtrElemTk[procIdx]`). A **local** function call matches case 4 and converts
+correctly; the **external cdecl** `getenv` call does not — its `ProcRetPtrElemTk`
+element-type metadata is not matching the case. Because `IsNodePChar` returns False, the
+cast falls through to the `PChar(managedString)` branch and reinterprets the raw pointer
+as a managed handle → bogus length.
+
+The conversion block itself is **copy-pasted** across ≥2 sites (`ir.inc:3937` cast,
+`ir.inc:4917` assign; `FindProc('PCharToString')` grep = 2), each independently gated on
+`IsNodePChar`. This is the duplication + shape-enumeration anti-pattern tracked by
+[[refactor-centralize-managed-string-pchar-conversion]].
+
 ## Fix direction
 
-In the `AnsiString(...)` typecast lowering, when the operand's static type is
-`PChar`/`PAnsiChar` (call-expression or not), always take the pchar→ansistring
-strlen-copy path — never the managed-string-header reinterpretation. Likely a
-type-classification miss on the call node (cf. the b346 "IR value node is a subtree"
-family, [[project_case_selector_reeval_and_fuzzer_narrowness]]).
+**Narrow:** make `IsNodePChar` case 4 recognise external-cdecl PChar-returning calls, OR
+— better — have `IsNodePChar` key on the node's **resolved static type** (`^Char`/PChar)
+instead of enumerating shapes, covering every call/var/field/element form at once.
+
+**Systemic (preferred):** [[refactor-centralize-managed-string-pchar-conversion]] — one
+`MaybeConvertPCharToString(node)` helper keyed on static type, called from every context
+(cast, assign, arg, return), replacing the copy-pasted blocks. This bug is its motivating
+instance.
 
 ## Acceptance
 
