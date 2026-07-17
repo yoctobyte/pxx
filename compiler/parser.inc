@@ -13792,13 +13792,15 @@ begin
         if capSi[j] = si then begin found := True; Break; end;
       if found then Continue;
       if capCount >= MAX_PFCAP then Error('parallel for: too many captured variables');
-      { Managed strings have their own `^`-deref convention (distinct from a dyn
-        array's) that the frame-pointer accessor doesn't model yet — reject rather
-        than risk a wrong deref. }
+      { ansistring capture would use `^AnsiString` + a postfix-`^` rewrite, but
+        char-indexing through a pointer-to-string deref (`p^[k]`) is miscompiled in
+        the compiler (bug-pascal-ptr-deref-string-index) — it silently reads
+        garbage. Reject ALL ansistring captures (named or not) until that root bug
+        is fixed; then this unlocks for free (Length/compare/assign already work). }
       if Syms[si].TypeKind = tyAnsiString then
       begin
         ErrorIdent := capNm;
-        Error('parallel for: capturing an ansistring (''' + capNm + ''') is not yet supported — read it into a scalar (e.g. Length) before the loop, or use a global');
+        Error('parallel for: capturing an ansistring (''' + capNm + ''') is not yet supported (blocked on the `p^[k]` string-index bug) — read what you need into a scalar before the loop, or use a global');
       end;
       { Accessor type for the worker's `capj: ^<T>`: a scalar maps to a keyword;
         a non-scalar (array/record/class/string) uses its DECLARED type NAME when it
