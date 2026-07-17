@@ -55,12 +55,12 @@ track: A
     covers each index once). Launcher wakes the monitor at region end (short region
     ~1-4ms, not the ~50ms tick). Gate `test_parallel_policy` (pwLoadOnce +
     pwLoadCont).
-  - **FEATURE FUNCTIONALLY COMPLETE.** Remaining = optional refinements only:
-    ramp/EMA smoothing of the load sample (monitor currently jumps to free-capped,
-    could oscillate under many competing jobs); BSD `sysctl kern.cp_time` +
-    cgroup `cpu.max`/`cpu.stat` samplers (Linux `/proc/stat` only today); reduction
-    `*`/`and` — wait, those shipped (0af32212). Consider closing + filing the
-    sampler refinements as a small separate ticket.
+  - **FEATURE COMPLETE — resolved 2026-07-17.** All of it shipped: distributions
+    (chunked/guided/on-demand), load-aware (once + continuous), `parallel(P) for`
+    + named-arg clause, full reduction set (`+ or xor and min max mul`, multi-var),
+    native + cross gates, three demos. Optional polish (load-sample ramp/EMA,
+    BSD/cgroup/macOS samplers) split out to
+    [[feature-parallel-load-sampler-refine]].
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
