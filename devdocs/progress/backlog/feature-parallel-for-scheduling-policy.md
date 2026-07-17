@@ -185,8 +185,9 @@ ordinals/floats; managed types later.
 ## Precedent (for the implementer)
 
 - **OpenMP** `#pragma omp parallel for schedule(static|dynamic|guided) num_threads(n)
-  reduction(+:x)` — the direct model for the clause + reduction. `pmLoadAware` is a
-  new schedule kind OpenMP lacks.
+  reduction(+:x)` — the direct model for the clause + reduction. `pwLoadOnce`/
+  `pwLoadCont` are a worker-count policy OpenMP lacks (it has num_threads but no
+  system-headroom throttle).
 - **FPC `MTProcs`** (`ProcThreadPool.DoParallelLocalProc`) — library form; the
   global-pool setup is exactly the pain the RTL-owned pool removes.
 - **Delphi PPL** `TParallel.For(..., APool)` — hands the loop a pool object;
