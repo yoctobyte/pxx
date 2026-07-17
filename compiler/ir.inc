@@ -1565,6 +1565,29 @@ begin
   end;
 end;
 
+{ Build the AST for PCharToString(pcharNode): an AN_CALL wrapping the pchar value
+  as its argument, tagged with the helper's ACTUAL return kind (AnsiString in
+  managed mode, frozen tyString under -uPXX_MANAGED_STRING — hardcoding tyString
+  mislabels the managed handle as frozen and miscompiles the result). ONE builder
+  for every PChar->managed-string conversion site (cast, assign, …) so the wrapper
+  cannot drift between contexts. See
+  refactor-centralize-managed-string-pchar-conversion. }
+function WrapPCharToString(pcharNode: Integer): Integer;
+var procIdx, wrapperArg: Integer;
+begin
+  procIdx := FindProc('PCharToString');
+  if procIdx < 0 then Error('compiler error: PCharToString helper not found');
+  wrapperArg := AllocNode(AN_ARG);
+  ASTLeft[wrapperArg] := pcharNode;
+  ASTRight[wrapperArg] := -1;
+  ASTTk[wrapperArg] := Ord(tyPointer);
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(Procs[procIdx].RetType);
+  ASTLeft[Result] := wrapperArg;
+  ASTRight[Result] := -1;
+end;
+
 function IsASTLValue(node: Integer): Boolean;
 var symIdx: Integer;
 begin
@@ -3934,24 +3957,7 @@ begin
       begin
         if IsNodePChar(ASTLeft[node]) and not CProgramMode then
         begin
-          procIdx := FindProc('PCharToString');
-          if procIdx < 0 then Error('compiler error: PCharToString helper not found');
-
-          wrapperArg := AllocNode(AN_ARG);
-          ASTLeft[wrapperArg] := ASTLeft[node];
-          ASTRight[wrapperArg] := -1;
-          ASTTk[wrapperArg] := Ord(tyPointer);
-
-          wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := procIdx;
-          { Tag with PCharToString's ACTUAL return kind (AnsiString in managed
-            mode, frozen tyString under -uPXX_MANAGED_STRING). Hardcoding tyString
-            mislabelled the managed handle as frozen and miscompiled the result. }
-          ASTTk[wrapperCall] := Ord(Procs[procIdx].RetType);
-          ASTLeft[wrapperCall] := wrapperArg;
-          ASTRight[wrapperCall] := -1;
-
-          Result := IRLowerAST(wrapperCall);
+          Result := IRLowerAST(WrapPCharToString(ASTLeft[node]));
           Exit;
         end;
       end;
@@ -4913,26 +4919,7 @@ begin
         if NodeIsWideCharVal(ASTRight[node]) then
           ASTRight[node] := WrapWideCharToUTF8(ASTRight[node]);
         if IsNodePChar(ASTRight[node]) and not CProgramMode then
-        begin
-          procIdx := FindProc('PCharToString');
-          if procIdx < 0 then Error('compiler error: PCharToString helper not found');
-
-          wrapperArg := AllocNode(AN_ARG);
-          ASTLeft[wrapperArg] := ASTRight[node];
-          ASTRight[wrapperArg] := -1;
-          ASTTk[wrapperArg] := Ord(tyPointer);
-
-          wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := procIdx;
-          { Tag with PCharToString's ACTUAL return kind (AnsiString in managed
-            mode, frozen tyString under -uPXX_MANAGED_STRING). Hardcoding tyString
-            mislabelled the managed handle as frozen and miscompiled the result. }
-          ASTTk[wrapperCall] := Ord(Procs[procIdx].RetType);
-          ASTLeft[wrapperCall] := wrapperArg;
-          ASTRight[wrapperCall] := -1;
-
-          ASTRight[node] := wrapperCall;
-        end;
+          ASTRight[node] := WrapPCharToString(ASTRight[node]);
       end;
 
       { Class -> interface: build the CORBA fat pointer {IMT, instance} into the
