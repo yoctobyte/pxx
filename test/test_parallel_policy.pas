@@ -44,5 +44,9 @@ begin
   if not Ok(p) then good := False;             { finest chunk = worst-case contention }
   p := ParDefault; p.workers := pwFixed; p.fixedN := 3;
   if not Ok(p) then good := False;             { fixed worker count }
+  p := ParBalanced; p.workers := pwLoadOnce; p.capPct := 90;
+  if not Ok(p) then good := False;             { load-aware, region-entry }
+  p := ParBalanced; p.workers := pwLoadCont; p.capPct := 80;
+  if not Ok(p) then good := False;             { load-aware, mid-region monitor + parking }
   if good then writeln('PARPOL OK') else writeln('PARPOL FAIL');
 end.

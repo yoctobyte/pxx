@@ -48,7 +48,7 @@ type
     pwAllCores,   { fixed = affinity core count (default) }
     pwFixed,      { exactly fixedN workers }
     pwLoadOnce,   { sample free CPU at region entry, cap to headroom (experimental) }
-    pwLoadCont);  { like pwLoadOnce; mid-region re-sampling deferred (Phase B) — behaves as pwLoadOnce today }
+    pwLoadCont);  { mid-region adaptive: a monitor thread re-samples /proc/stat and parks/wakes workers to track free CPU (experimental) }
   TParPolicy = record
     dist:     TParDist;
     workers:  TParWorkers;
@@ -433,6 +433,126 @@ begin
   until False;
 end;
 
+{ ---- pwLoadCont: mid-region dynamic worker count (Phase B) ----
+  A pool of ALL cores runs the work-stealing loop, but a worker only grabs work
+  while its index < ActiveTarget; over the limit it parks (futex timeout). A
+  monitor thread resamples /proc/stat every ~50ms and raises/lowers ActiveTarget
+  to hold the free-CPU headroom, waking parked workers when the target rises. This
+  needs the pull model — a static split can't shed a worker mid-region — so
+  pwLoadCont always uses the steal loop (guided if the dist asked for it). Worker
+  count changes never affect the RESULT: the atomic counter still hands each index
+  out exactly once. }
+type
+  PLoadCtx = ^TLoadCtx;
+  TLoadCtx = record
+    Body: TParForBody; Ctx: Pointer;
+    Counter: Integer; Lo: NativeInt; Total, Chunk, NW: Integer;
+    Guided: Boolean;
+    ActiveTarget: Integer;   { workers with index < this may run; monitor updates it }
+    CapPct: Integer;
+    ParkWord: Integer;       { futex word parked workers wait on (stays 0) }
+    MonWord:  Integer;       { futex word the monitor sleeps on }
+  end;
+  PLoadWArg = ^TLoadWArg;
+  TLoadWArg = record D: PLoadCtx; Wi: Integer; end;
+
+procedure LoadWorker(arg: Pointer);
+var wa: PLoadWArg; d: PLoadCtx; g, ch, rem, e, ig: Integer;
+begin
+  wa := PLoadWArg(arg); d := wa^.D;
+  repeat
+    if d^.Counter >= d^.Total then Break;             { range drained }
+    if wa^.Wi >= d^.ActiveTarget then                 { over the active limit → park }
+    begin
+      ig := PalFutexWaitTimeout(@d^.ParkWord, 0, 1000000);   { 1 ms }
+      if ig = 0 then ;
+      Continue;
+    end;
+    if d^.Guided then
+    begin
+      rem := d^.Total - d^.Counter; if rem <= 0 then Break;
+      ch := rem div d^.NW; if ch < d^.Chunk then ch := d^.Chunk;
+    end
+    else ch := d^.Chunk;
+    g := Integer(__pxxatomic_add(@d^.Counter, ch));
+    if g >= d^.Total then Break;
+    e := g + ch - 1; if e >= d^.Total then e := d^.Total - 1;
+    d^.Body(d^.Ctx, d^.Lo + g, d^.Lo + e);
+  until False;
+end;
+
+procedure MonitorThread(arg: Pointer);
+var d: PLoadCtx; free, cores, cap, maxN, nt, ig: Integer;
+begin
+  d := PLoadCtx(arg);
+  cores := d^.NW;
+  cap := d^.CapPct; if cap <= 0 then cap := 90;
+  maxN := (cores * cap) div 100; if maxN < 1 then maxN := 1;
+  repeat
+    ig := PalFutexWaitTimeout(@d^.MonWord, 0, 50000000);   { ~50 ms tick }
+    if ig = 0 then ;
+    if d^.Counter >= d^.Total then Break;
+    free := PXXQueryFreeCores;
+    if free <= 0 then nt := maxN
+    else begin nt := free; if nt > maxN then nt := maxN; end;
+    if nt < 1 then nt := 1;
+    d^.ActiveTarget := nt;
+    ig := PalFutexWake(@d^.ParkWord, PAR_MAX_WORKERS);      { let parked workers re-check }
+  until False;
+  d^.ActiveTarget := d^.NW;                                { region done: release everyone }
+  ig := PalFutexWake(@d^.ParkWord, PAR_MAX_WORKERS);
+  if ig = 0 then ;
+end;
+
+procedure LoadContFan(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
+                      const pol: TParPolicy; total: NativeInt);
+var
+  lc: TLoadCtx;
+  wargs: array[0..PAR_MAX_WORKERS-1] of TLoadWArg;
+  handles: array[0..PAR_MAX_WORKERS-1] of TThreadHandle;
+  ok: array[0..PAR_MAX_WORKERS-1] of Boolean;
+  monH: TThreadHandle; monOk: Boolean;
+  maxNW, initial, ch, i: NativeInt;
+begin
+  maxNW := PXXParForWorkers;                     { pool = all cores }
+  if maxNW > total then maxNW := total;
+  if maxNW < 1 then maxNW := 1;
+  if maxNW = 1 then begin body(ctx, lo, hi); Exit; end;
+
+  initial := ResolveWorkers(pol);                { pwLoadOnce-style starting target }
+  if initial > maxNW then initial := maxNW;
+  if initial < 1 then initial := 1;
+
+  ch := pol.minChunk;
+  if ch <= 0 then begin ch := total div (maxNW * 8); if ch < 1 then ch := 1; end;
+
+  lc.Body := body; lc.Ctx := ctx; lc.Counter := 0; lc.Lo := lo;
+  lc.Total := Integer(total); lc.Chunk := Integer(ch); lc.NW := Integer(maxNW);
+  lc.Guided := (pol.dist = pdGuided);
+  lc.ActiveTarget := Integer(initial); lc.CapPct := pol.capPct;
+  lc.ParkWord := 0; lc.MonWord := 0;
+
+  for i := 0 to maxNW - 1 do begin wargs[i].D := @lc; wargs[i].Wi := Integer(i); end;
+
+  monOk := PalThreadCreate(monH, @MonitorThread, @lc, 0) = 0;
+  for i := 1 to maxNW - 1 do
+  begin
+    ok[i] := PalThreadCreate(handles[i], @LoadWorker, @wargs[i], 0) = 0;
+    if not ok[i] then LoadWorker(@wargs[i]);      { spawn failed: run inline }
+  end;
+  LoadWorker(@wargs[0]);                          { this thread = worker 0 (always active) }
+  for i := 1 to maxNW - 1 do
+    if ok[i] then PalThreadJoin(handles[i]);
+  { workers done — break the monitor's tick early so a short region doesn't wait
+    out its ~50ms sleep before joining. }
+  if monOk then
+  begin
+    lc.MonWord := 1;
+    if PalFutexWake(@lc.MonWord, 1) < -999999 then ;   { ignore result }
+    PalThreadJoin(monH);
+  end;
+end;
+
 procedure PXXParallelForP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
                           const pol: TParPolicy);
 var
@@ -443,6 +563,15 @@ var
 begin
   if hi < lo then Exit;                          { empty range }
   total := hi - lo + 1;
+
+  { pwLoadCont: dynamic mid-region worker count via the monitor thread + parking.
+    Needs the pull model, so it runs even when dist = pdChunked. }
+  if (pol.workers = pwLoadCont) and (total > 1) and (total <= $7FFFFFFF) then
+  begin
+    LoadContFan(lo, hi, body, ctx, pol, total);
+    Exit;
+  end;
+
   nw := ResolveWorkers(pol);
   if nw > total then nw := total;
   if nw < 1 then nw := 1;
