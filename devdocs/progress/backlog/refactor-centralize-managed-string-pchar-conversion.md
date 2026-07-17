@@ -23,6 +23,17 @@ prio: 50
   registration and forgot a return field, or enumerated node shapes and missed one. The
   point-fixes stopped the bleeding; the refactor below is still the durable close-out.
 
+  **More dropped-field sites found by sweep (parser.inc, method-decl registrations —
+  NOT yet fixed):** `18447`, `19128`, `19649` all `RegisterProc` a method + set
+  `BodyAddr` but never `ProcRetPtrElemTk`. Harmless when a method has a BODY (the impl
+  re-registers via the normal path at 22153/22163 and sets it), which is why the common
+  case works. But a **decl-only method returning PChar** (abstract / interface / a
+  virtual called through a base-typed ref, where IsNodePChar keys on the *declared*
+  proc's tyUnknown return-elem) would mis-lower `AnsiString(ref.Method())`. Exotic,
+  untested (found read-only during a csmith run), but the same pattern — fold into the
+  fix: either set the field at these sites too, or (better) key on static type so the
+  field's presence stops mattering.
+
 ## The observation, and why it's right
 
 The recurring AnsiString bugs are not many unrelated defects — they are **one structural
