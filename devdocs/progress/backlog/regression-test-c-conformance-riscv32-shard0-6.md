@@ -33,3 +33,27 @@ test-c-conformance-riscv32: FAILURES: 00187.c(output)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (2026-07-17, T face-2 enrich)
+
+**Real riscv32-specific libc-free stdio/file-VFS bug — not a flake.** `00187.c` does
+file I/O: `fwrite("hello\nhello\n", 1, 12, f)` (12 bytes) then reads it back via
+`fread`, `fgetc`, `getc`, `fgets` loops. Output **truncates at exactly 6 of 12 bytes**:
+the first `fgetc` loop stops after the first `hello\n` (`ch: 10 '.'`) and never reaches
+the second `hello` (`ch: 104 'h'` onward). Deterministic (36 pass / 1 fail, output
+mismatch — not timing).
+
+- **Locus:** the riscv32 **file-VFS / stdio PAL bridge** in the libc-free `crtl` file
+  path (see [[project_c_stdio_pal_bridge_done]], [[project_sqlite_file_vfs_wall4_null_syscall_slot]],
+  [[project_c_sqlite_file_vfs_...]]). The 6-of-12 split points at a **short `fwrite`**
+  (only half the buffer hit disk) or a **file-position/`fread` interaction** leaving the
+  stream at offset 6 so the first `fgetc` loop sees premature EOF.
+- **Owning lane:** riscv32 cross runtime → **Track A** (backend/PAL/crtl file path), or
+  Track C if the defect is in C-specific stdio lowering. T owns the tool, not the bug —
+  filed here for a dev track to take.
+- **Next step to localize:** on qemu-riscv32, run a 2-line repro — `fwrite` N bytes,
+  reopen, `ftell`/`fread` — and check the byte count actually written vs the offset seen
+  on read. Compare against x86-64 (passes) to confirm it's the riscv32 file syscall
+  slot / buffering, not the C logic.
+- **Age:** found 2026-07-15 (`ba5b85d6`), pre-dates the current session; 0-in-range
+  (watcher couldn't bisect a single-commit window).
