@@ -28,6 +28,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-threadsafe-heap-parallel-for-managed-string-race | A | 70 | bug | `--threadsafe` heap races: concurrent managed-string alloc from parallel-for workers → SIGSEGV + silent corruption (ALL targets) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -109,7 +110,6 @@ _none_
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve | T | 25 | feature | Track T: bench.tsv has no `fpc` column for mandelbrot / raytracer / sieve | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
-| feature-threadsafe-io-lock-cross | A | 30 | feature | Port the statement-atomic I/O lock to i386/aarch64/arm32 | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | 45 | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-tls13-from-scratch | B | 53 | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
@@ -191,7 +191,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (781)
+## done (782)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -881,6 +881,7 @@ _none_
 | feature-testmgr-opt-tier-and-benchmarks | T | 60 | feature | testmgr: opt-level differential tier + tracked benchmark runs | — |
 | feature-textfile-keyword-io-dispatch | A+B | 50 | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-heap-contract | B | 50 | feature | Threadsafe heap contract by memory-management mode | — |
+| feature-threadsafe-io-lock-cross | A | 30 | feature | Port the statement-atomic I/O lock to i386/aarch64/arm32 | — |
 | feature-threadsafe-io-serialization | A | 50 | feature | Statement-level I/O serialization under threads | — |
 | feature-tobject-getinterface-guid-table | A | 50 | feature | TObject.GetInterface(IID, out obj) — needs an interface GUID table | — |
 | feature-track-t-watcher | T | 70 | feature | Track T face 1: standalone test watcher (twatch) — continuous offloaded gate | — |
@@ -998,6 +999,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [A] bug-a-threadsafe-heap-parallel-for-managed-string-race
 - [p 70] [T] feature-pasmith-pascal-program-generator
 - [p 70] [T] regression-test-c-conformance-riscv32-shard0-6
 - [p 70] [T] regression-test-core-test-static-array-length
@@ -1090,7 +1092,6 @@ _none_
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
-- [p 30] [A] feature-threadsafe-io-lock-cross
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [O] feature-opt-div0-stub-on-use

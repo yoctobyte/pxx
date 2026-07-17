@@ -32,3 +32,6 @@ interleave.pas` (currently x86-64-only) green on each cross target under qemu.
 
 Part of [[meta-multithreading]] (M5 cross parity). Low priority — cosmetic vs the
 compute path.
+
+## Log
+- 2026-07-17 — resolved, commit 198ad36c.
