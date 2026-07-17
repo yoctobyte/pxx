@@ -18,10 +18,17 @@ track: A
     `PXXParallelForPP(@P)`; soft-keyword disambiguation vs a normal `parallel(x)`
     call; bare `parallel for` byte-identical (self-host fixedpoint). Gate:
     `test_parallel_policy_lang`.
-  - TODO — **reduction** clause (`reduction(+: v)`); **Phase B** persistent-pool
-    monitor thread for true mid-region `pwLoadCont` (today it == `pwLoadOnce`);
-    **named-arg clause** `parallel(pdOnDemand, cap 90) for`; ramp/EMA smoothing of
-    the load sample; BSD/cgroup samplers.
+  - DONE — **reduction** (`compiler/parser.inc`): `reduction(op: v)` between the
+    range and `do`; private per-worker `__pfred0` (identity 0), body refs
+    redirected to it, combined `v^ := v^ op __pfred0` under `PXXReduceLock`.
+    v1 ops `+ or xor` (Int64 + Double). `*` NOT offered — `(*` is the comment
+    opener. Gate `test_parallel_reduction`; self-host byte-identical. Commit
+    e78d1503.
+  - TODO — reduction `*`/`and`/`min`/`max` (need non-`(*` spelling / typed
+    identity / conditional combine) + multiple reduction vars; **Phase B**
+    persistent-pool monitor thread for true mid-region `pwLoadCont` (today it ==
+    `pwLoadOnce`); **named-arg clause** `parallel(pdOnDemand, cap 90) for`;
+    ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
@@ -280,6 +287,9 @@ ordinals/floats; managed types later.
   **worker count** `TParWorkers` (pwAllCores/pwFixed/pwLoadOnce/pwLoadCont).
   Load-aware = axis 2, with once-vs-continuous sub-modes = `pwLoadOnce`
   (Phase A) / `pwLoadCont` (Phase B). Names still an open sub-decision.
+- 2026-07-17 (impl-red) — reduction(op:v) SHIPPED (+ or xor, Int64+Double);
+  private __pfred0 combined under PXXReduceLock. `*` blocked by `(*` comment.
+  Commit e78d1503.
 - 2026-07-17 (impl) — Increments 1 (runtime: PXXParallelForP + distributions +
   /proc/stat load sampler) and 2 (language: `parallel(P) for` -> PXXParallelForPP,
   soft-keyword disambiguation) SHIPPED green (self-host byte-identical, cross
