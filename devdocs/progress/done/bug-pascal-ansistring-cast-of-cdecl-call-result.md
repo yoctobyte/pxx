@@ -9,7 +9,7 @@ prio: 55
 - **Type:** bug (Track A — typecast lowering, shared `parser.inc`/`ir.inc`; the
   Pascal-frontend semantics is P, the codegen is core A). **SILENT** — no error, a
   garbage-length managed string that over-reads the heap and prints garbage / crashes.
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, building the thin `lib/pcl/tk.pas` Tcl/Tk embed — a hello
   window worked, but `AnsiString(Tcl_GetStringResult(interp))` dumped 72 KB of Tcl heap.
 - **Owner:** —
@@ -95,3 +95,6 @@ instance.
 - A `test/test_*.pas` regression: `AnsiString(<cdecl PChar func>())` has the correct
   length and content.
 - Gate: `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-17 — resolved, commit 33f0d555.
