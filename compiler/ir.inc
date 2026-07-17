@@ -2602,7 +2602,17 @@ begin
   ASTLiftedVar[node] := tmpSym;
 
   instSym := AllocVar('', tyPointer);
-  instVal := IRLowerAST(ASTLeft[node]);
+  { The instance is a single pointer. A plain object/interface-var operand lowers
+    straight to that pointer, but an interface `as`-cast operand lowers to the
+    ADDRESS of its fat-pointer temp (see the AN_AS_CAST value path) — so a nested
+    `(x as IA) as IB` would store the temp's address as the "instance" and the
+    trap below would read the wrong word and Halt 1 on a valid cast. Deref it to
+    recover the instance value. See bug-pascal-nested-interface-as-cast. }
+  if (ASTKind[ASTLeft[node]] = AN_AS_CAST) and
+     UClsIsInterface[Integer(ASTIVal[ASTLeft[node]])] then
+    instVal := IRAppend(IR_LOAD_MEM, IRLowerAST(ASTLeft[node]), -1, -1, 0, Ord(tyPointer))
+  else
+    instVal := IRLowerAST(ASTLeft[node]);
   IRAppend(IR_STORE_SYM, instSym, instVal, -1, 0, Ord(tyPointer));
 
   { the value IS the instance }
