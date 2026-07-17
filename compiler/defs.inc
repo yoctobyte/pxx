@@ -1153,6 +1153,13 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  { `parallel for` capture support: for a var/param declared with a SINGLE named
+    type (`x: TGrid`), the type NAME's TokChars span (0 = anonymous/unnamed type).
+    Lets ParseParallelFor emit a `capj: ^TGrid` accessor for a non-scalar capture.
+    Reset to 0 in EVERY Alloc* (recycled slots would else leak a stale name);
+    set only in ParseVarSection. }
+  SymDeclTypeNOff : array[0..MAX_SYMS-1] of Integer;
+  SymDeclTypeNLen : array[0..MAX_SYMS-1] of Integer;
   SymElemDynDepth : array[0..MAX_SYMS-1] of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
   SymDynElemRowLen : array[0..MAX_SYMS-1] of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
   SymDynElemRowLo  : array[0..MAX_SYMS-1] of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }

@@ -325,6 +325,9 @@ test-threads: $(COMPILER)
 	# `parallel for` scalar capture (Phase A): enclosing scalars by-ref via the frame pointer (read + write-back)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture.pas /tmp/test_parallel_for_capture26
 	test "$$(/tmp/test_parallel_for_capture26)" = "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"
+	# `parallel for` named-type aggregate capture (B-1): local fixed array + dyn array + record by-ref via the frame pointer
+	./$(COMPILER) --threadsafe test/test_parallel_for_capture_aggr.pas /tmp/test_parallel_for_capture_aggr26
+	test "$$(/tmp/test_parallel_for_capture_aggr26 | tail -n 1)" = "PARFORAGGR OK"
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas /tmp/test_async_parallel_compat26
 	test "$$(/tmp/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"

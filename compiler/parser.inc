@@ -13715,7 +13715,8 @@ var
   capKwOff: array[0..MAX_PFCAP-1] of Integer;   { type-keyword string-pool offset }
   capKwLen: array[0..MAX_PFCAP-1] of Integer;
   capOfs  : array[0..MAX_PFCAP-1] of Integer;   { rbp-relative frame offset }
-  capCount, ci, absOff, ptrCastOff, niCastOff: Integer;
+  capHandle: array[0..MAX_PFCAP-1] of Boolean;  { dyn array / ansistring: value at frame slot is a HANDLE (needs an extra deref) }
+  capCount, ci, absOff, ptrCastOff, niCastOff, pniOff: Integer;
   found: Boolean;
 begin
   ln := CurTok.Line;
@@ -13790,24 +13791,33 @@ begin
       for j := 0 to capCount - 1 do
         if capSi[j] = si then begin found := True; Break; end;
       if found then Continue;
-      if Syms[si].IsArray or (SymDynDepth[si] > 0) then
-      begin
-        ErrorIdent := capNm;
-        Error('parallel for: capturing enclosing array ''' + capNm + ''' not yet supported (Phase B) — use a global');
-      end;
-      kw := PFScalarKw(Syms[si].TypeKind);
-      if kw = '' then
-      begin
-        ErrorIdent := capNm;
-        Error('parallel for: capturing enclosing non-scalar ''' + capNm + ''' not yet supported (Phase B) — use a global');
-      end;
       if capCount >= MAX_PFCAP then Error('parallel for: too many captured variables');
+      { Accessor type for the worker's `capj: ^<T>`: a scalar maps to a keyword;
+        a non-scalar (array/record/class/string) uses its DECLARED type NAME when it
+        has one (`x: TGrid` -> `^TGrid`) — must be a unit/global-level named type,
+        visible at the worker's top-level scope. An unnamed non-scalar type
+        (`array[..] of T` inline) is a clear error (Phase B-2 will synthesize a name). }
+      kw := PFScalarKw(Syms[si].TypeKind);
+      if kw <> '' then
+      begin
+        capKwOff[capCount] := NestStrOff(kw); capKwLen[capCount] := Length(kw);
+      end
+      else if SymDeclTypeNOff[si] <> 0 then
+      begin
+        capKwOff[capCount] := SymDeclTypeNOff[si]; capKwLen[capCount] := SymDeclTypeNLen[si];
+      end
+      else
+      begin
+        ErrorIdent := capNm;
+        Error('parallel for: capturing ''' + capNm + ''' — its type is unnamed; declare it with a named type (e.g. `type TFoo = ...`) to capture it (Phase B-2)');
+      end;
       capSi[capCount]    := si;
       capNmOff[capCount] := NestStrOff(capNm);
       capNmLen[capCount] := Length(capNm);
-      capKwOff[capCount] := NestStrOff(kw);
-      capKwLen[capCount] := Length(kw);
       capOfs[capCount]   := Syms[si].Offset;
+      { handle types: the frame slot holds a data POINTER (dyn array) / string
+        handle, not inline data — the worker must deref it once more. }
+      capHandle[capCount] := (SymDynDepth[si] > 0) or (Syms[si].TypeKind = tyAnsiString);
       Inc(capCount);
     end;
 
@@ -13873,6 +13883,7 @@ begin
   Inc(PendNestRtnCount);
   ptrCastOff := ptrOff;   { reuse interned 'Pointer' / 'NativeInt' for the casts }
   niCastOff  := niOff;
+  pniOff := NestStrOff('PNativeInt');
   for i := 0 to PFScratchN - 1 do
     PFStash(PFScratch[i].Kind, PFScratch[i].SOffset, PFScratch[i].SLen, ln);
   { var i: NativeInt; <cap0>: ^<kw0>; <cap1>: ^<kw1>; ... }
@@ -13890,13 +13901,21 @@ begin
     PFStash(tkSemicolon, 0, 0, ln);
   end;
   PFStash(tkBegin, 0, 0, ln);
-  { preamble: <capj> := Pointer(NativeInt(__pfctx) +/- <frame offset>); }
+  { preamble per capture:
+      inline (scalar/fixed-array/record): capj := Pointer(NativeInt(__pfctx) +/- off);
+      handle (dyn array / ansistring):    capj := Pointer(PNativeInt(NativeInt(__pfctx) +/- off)^);
+    — a handle-typed slot holds a data POINTER, so the worker derefs it once more. }
   for ci := 0 to capCount - 1 do
   begin
     PFStash(tkIdent, capNmOff[ci], capNmLen[ci], ln);
     PFStash(tkAssign, 0, 0, ln);
     PFStash(tkIdent, ptrCastOff, 7, ln);      { Pointer( }
     PFStash(tkLParen, 0, 0, ln);
+    if capHandle[ci] then
+    begin
+      PFStash(tkIdent, pniOff, 10, ln);       { PNativeInt( }
+      PFStash(tkLParen, 0, 0, ln);
+    end;
     PFStash(tkIdent, niCastOff, 9, ln);       { NativeInt( }
     PFStash(tkLParen, 0, 0, ln);
     PFStash(tkIdent, ctxOff, 7, ln);          { __pfctx }
@@ -13913,6 +13932,11 @@ begin
     PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := absOff;
     PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
     Inc(PendNestCount);
+    if capHandle[ci] then
+    begin
+      PFStash(tkRParen, 0, 0, ln);            { ) closing PNativeInt( }
+      PFStash(tkCaret, 0, 0, ln);             { ^ deref the handle }
+    end;
     PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
     PFStash(tkSemicolon, 0, 0, ln);
   end;
@@ -16304,6 +16328,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     initDepth, scOff, scLen: Integer;
+    declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
 begin
   Next;
   { Stop at section / declaration-introducer keywords: these are plain
@@ -16333,6 +16358,17 @@ begin
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');
+    { Record a SINGLE named type's span (`x: TGrid;`) for `parallel for` capture —
+      the worker names its accessor `^TGrid`. Anonymous types (`array[..] of T`,
+      `^P`, `set of ...`) leave it 0 (Phase B-2 synthesizes a name). }
+    declTypeNOff := 0; declTypeNLen := 0;
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       ((Tokens[TokPos].Kind = tkSemicolon) or (Tokens[TokPos].Kind = tkBegin) or
+        (Tokens[TokPos].Kind = tkEnd)) then
+    begin
+      declTypeNOff := Tokens[TokPos-1].SOffset;
+      declTypeNLen := Tokens[TokPos-1].SLen;
+    end;
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
     elemResolved := False; elemDynDepth := 0;
     elemRowLen := 0; elemRowLo := 0;
@@ -16608,11 +16644,13 @@ begin
 	          end;
 	        end;
 	        if elemProcSig >= 0 then SymElemProcSig[idx] := elemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
+	        if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
 	      end
 	    else
 	      for i := 0 to n-1 do
 	      begin
 	        idx := AllocVar(names[i], tk);
+	        if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
 	        { `absolute` overlay: take the target's storage instead of our own. AllocVar
 	          already reserved a slot; we simply never use it, which costs a few bytes and
 	          keeps every other invariant (scope, rollback, slot recycling) intact. }

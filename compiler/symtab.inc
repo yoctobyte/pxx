@@ -2064,6 +2064,7 @@ begin
   SymCLongRank[SymCount]  := 0;
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
+  SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   SymDynDepth[SymCount] := 0;
   SymElemDynDepth[SymCount] := 0;
   SymArrNDims[SymCount] := 0;
@@ -2171,6 +2172,7 @@ function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boole
 var sz, align: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
+  SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
@@ -2264,6 +2266,7 @@ function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer
 var elemSize, totalSize, align: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
+  SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   if LastTypeElemDynDepth > 0 then
   begin
     { Element is itself a dynamic array (`array[..] of TDynAlias`): each slot holds
@@ -2372,6 +2375,7 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
   elemType is the BASE element type at the deepest level. }
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
+  SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   Syms[SymCount].Name        := name;
   Syms[SymCount].TypeKind    := elemType;
   Syms[SymCount].ConstVal    := 0;            { lower bound: dynamic arrays are 0-based }
