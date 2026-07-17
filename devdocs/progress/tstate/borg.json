@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-16T14:13:42Z",
-   "fixed": [
-    "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"
-   ],
-   "new_red": [],
-   "sha": "3bb5fa4db2b988a503b8d415409a7eafe8f1e687",
-   "tier": "full",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-16T14:17:04Z",
    "fixed": [],
    "new_red": [],
@@ -419,6 +409,16 @@
    "sha": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-17T13:34:06Z",
+   "fixed": [],
+   "new_red": [
+    "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"
+   ],
+   "sha": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
+   "tier": "full",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -523,6 +523,10 @@
   "test-aarch64#src:test/test_parallel_for_capture_aggr.pas": "pass",
   "test-aarch64#src:test/test_parallel_for_capture_string.pas": "pass",
   "test-aarch64#src:test/test_parallel_for_lang.pas": "pass",
+  "test-aarch64#src:test/test_parallel_policy.pas": "pass",
+  "test-aarch64#src:test/test_parallel_policy_lang.pas": "pass",
+  "test-aarch64#src:test/test_parallel_policy_named.pas": "pass",
+  "test-aarch64#src:test/test_parallel_reduction.pas": "pass",
   "test-aarch64#src:test/test_parallel_writeln_atomic.pas": "pass",
   "test-aarch64#src:test/test_reactor.pas": "pass",
   "test-aarch64#src:test/test_readln.pas": "pass",
@@ -645,6 +649,10 @@
   "test-arm32#src:test/test_parallel_for_capture_aggr.pas": "pass",
   "test-arm32#src:test/test_parallel_for_capture_string.pas": "pass",
   "test-arm32#src:test/test_parallel_for_lang.pas": "pass",
+  "test-arm32#src:test/test_parallel_policy.pas": "pass",
+  "test-arm32#src:test/test_parallel_policy_lang.pas": "pass",
+  "test-arm32#src:test/test_parallel_policy_named.pas": "pass",
+  "test-arm32#src:test/test_parallel_reduction.pas": "pass",
   "test-arm32#src:test/test_parallel_writeln_atomic.pas": "pass",
   "test-arm32#src:test/test_reactor.pas": "pass",
   "test-arm32#src:test/test_readln.pas": "pass",
@@ -1724,6 +1732,10 @@
   "test-i386#src:test/test_parallel_for_capture_aggr.pas": "pass",
   "test-i386#src:test/test_parallel_for_capture_string.pas": "pass",
   "test-i386#src:test/test_parallel_for_lang.pas": "pass",
+  "test-i386#src:test/test_parallel_policy.pas": "pass",
+  "test-i386#src:test/test_parallel_policy_lang.pas": "pass",
+  "test-i386#src:test/test_parallel_policy_named.pas": "pass",
+  "test-i386#src:test/test_parallel_reduction.pas": "pass",
   "test-i386#src:test/test_parallel_writeln_atomic.pas": "pass",
   "test-i386#src:test/test_proctype.pas": "pass",
   "test-i386#src:test/test_reactor.pas": "pass",
@@ -1859,7 +1871,7 @@
   "test-smoke#src:test/test_mutex.pas": "pass",
   "test-smoke#src:test/test_record_temp_byval_arg.pas": "pass",
   "test-smoke#src:test/test_tthread_sync.pas": "pass",
-  "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh": "pass",
+  "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh": "fail",
   "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh": "pass",
   "test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh": "pass",
@@ -1895,11 +1907,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-17T13:28:41Z",
+  "date": "2026-07-17T13:34:06Z",
   "sha": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
-  "tier": "native",
+  "tier": "full",
   "verdict": "RED",
-  "wall": 155.8
+  "wall": 316.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1909,11 +1921,11 @@
   "sha": "a841ce6cbc079dca12acc61d584273e5a1eece5b"
  },
  "last_full": {
-  "date": "2026-07-17T13:03:34Z",
-  "sha": "2ceed61fed797c1871bdf002c7b1edbdfbf21c64",
+  "date": "2026-07-17T13:34:06Z",
+  "sha": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
   "tier": "full",
   "verdict": "RED",
-  "wall": 293.8
+  "wall": 316.5
  },
  "last_opt": {
   "date": "2026-07-17T10:05:25Z",
@@ -1950,6 +1962,15 @@
     "a48a8353bfc6b61ef1eb71eac6da963befb6004c"
    ],
    "src": "test/test_static_array_length.pas"
+  },
+  {
+   "bad": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
+   "good": "d8aba4329f0cd6ee14fb5d6ca9c0acae58bca370",
+   "job": "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh",
+   "name": "test-sqlite-threads-aarch64#00",
+   "opened": "2026-07-17T13:34:06Z",
+   "range": [],
+   "src": "tools/run_sqlite_thread_test.sh"
   }
  ]
 }
