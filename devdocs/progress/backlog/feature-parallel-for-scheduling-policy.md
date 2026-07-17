@@ -41,9 +41,16 @@ track: A
     four synthesis spots iterate; one `PXXReduceLock` brackets all folds; a var in
     two reductions is rejected. Gate `test_parallel_reduction` (comma-list +
     mixed-op cases); self-host byte-identical. Commit 2a7b794c.
-  - TODO — reduction `*`/`and` (need non-`(*` spelling); **Phase B** persistent-pool
-    monitor thread for true mid-region `pwLoadCont` (today it == `pwLoadOnce`);
-    ramp/EMA smoothing of the load sample; BSD/cgroup samplers.
+  - DONE — reduction **`and` + `mul`** (`compiler/parser.inc`, commit 0af32212):
+    op set now `+ or xor and min max mul` (all associative/commutative monoids).
+    `and` = token, type picks identity (all-ones `not 0` for ordinals, `True` for
+    Boolean); `mul` = word (since `*` is `(*` the comment opener), combines with a
+    real tkStar, identity 1. `/ div mod` stay rejected (not associative). Gate +
+    cross via `test_parallel_reduction`.
+  - TODO — **Phase B** persistent-pool monitor thread for true mid-region
+    `pwLoadCont` (today it == `pwLoadOnce`); ramp/EMA smoothing of the load sample;
+    BSD/cgroup samplers. **The whole language surface is now complete** — only the
+    Phase-B runtime work and sampler refinements remain.
 - **Opened:** 2026-07-17 (design agreed with user; implementation deferred —
   may want fresh context).
 - **Builds on:** [[feature-parallel-processing]] (shipped `parallel for` + capture),
