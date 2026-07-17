@@ -152,7 +152,38 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
   (main program body has no nested-proc flush point); `to` only. Nested `parallel
   for` sharing the outer index needs capture (2b).
 
-  ### 2b — full implicit capture (NEXT increment, designed)
+  ### 2b Phase A — SCALAR capture SHIPPED (2026-07-16, commit 9fe36832)
+  Enclosing-local capture, scalars first, via the **frame-pointer** trick (much
+  simpler than a ctx record): ctx = the enclosing routine's frame pointer
+  (`AN_FRAME` at the call site); the worker reads each captured scalar at
+  `ctx + Syms[si].Offset` through a synthesized `capj: ^T; capj := Pointer(
+  NativeInt(ctx) + off)` preamble, and every captured reference in the body gets a
+  postfix `^` (`a`→`a^`, `a:=x`→`a^:=x`). No container, no fill — one pointer.
+  Read + write-back both work (`test_parallel_for_capture.pas`, gated). Scalar type
+  → `^T` keyword via `PFScalarKw`. Nested `parallel for` rejected cleanly (peek the
+  body span before it recursively desugars). Reduction across >1 worker is a race
+  (user's responsibility); single-worker write-back is deterministic. Self-host
+  byte-identical.
+
+  ### 2b Phase B — NON-scalar capture (arrays/records/strings) — DESIGNED, not built
+  Same frame-pointer mechanism; the ONLY gap is naming `^Tj` for the worker's typed
+  accessor. Findings:
+  - inline `^array[..] of T` / `^array of T` is NOT valid pxx syntax — pointer
+    targets must be NAMED types (`pn: ^TA` works).
+  - a var's declared type-alias NAME is not retained on `TSymbol` (only the resolved
+    `TypeKind`/`IsArray`/`ArrLen`/`ElemType`), and class/record names aren't a cheap
+    lookup either. So `^Tj` can't be reconstructed from symbol info today.
+  - **Two ways forward (the fork):** (a) record the declared type-name on the sym
+    (a parallel-array add — mind the Alloc*-reset + [[project_tsymbol_field_landmine]]),
+    then `^<that name>` uniformly covers arrays/records/strings when the local uses a
+    NAMED type (anonymous → error nudging a `type` decl); or (b) synthesize+register
+    a reconstructed type (`type __pfat_n = array[0..N-1] of T`) via the same
+    re-entrant parse used for the worker forward decl. (a) is smaller and also good
+    practice pressure; (b) handles anonymous types too. The flagship local-array case
+    needs whichever lands.
+  Currently a clean compile error: "capturing enclosing array/non-scalar … (Phase B)".
+
+  ### 2b (original full-capture ctx-record design — superseded by the frame-pointer trick)
   The thread-boundary worker MUST take exactly `(ctx, lo, hi)` — lambda-lift can't
   cross it (any routine touching a capture gains by-ref params, breaking the fixed
   ABI). So captures funnel through one `ctx` pointer, unpacked manually in the worker:
