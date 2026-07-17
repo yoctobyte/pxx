@@ -6387,7 +6387,7 @@ begin
 
   MatchQuiet := hasCand or hasPChar;   { the call-first / pchar probe must not print mismatch diag }
   if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
-  else match0 := MatchProcCall(name, nArgs, argTypes);
+  else match0 := MatchProcCall(name, nArgs, argTypes, qUnit = -1);   { qUnit=-1 plain unqualified -> builtin is fallback-only; -2 System keeps builtin }
   MatchQuiet := False;
   Result := match0;
 
@@ -6411,7 +6411,7 @@ begin
     if pcharRetry then
     begin
       if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
-      else pi := MatchProcCall(name, nArgs, retryTypes);
+      else pi := MatchProcCall(name, nArgs, retryTypes, qUnit = -1);
       if pi >= 0 then
       begin
         currArg := argsHead;
@@ -6446,7 +6446,7 @@ begin
     if pcharRetry then
     begin
       if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
-      else pi := MatchProcCall(name, nArgs, retryTypes);
+      else pi := MatchProcCall(name, nArgs, retryTypes, qUnit = -1);
       if pi >= 0 then
       begin
         currArg := argsHead;
@@ -6484,7 +6484,7 @@ begin
   for i := 0 to nArgs-1 do
     if procCand[i] then retryTypes[i] := tyPointer else retryTypes[i] := argTypes[i];
   if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
-  else pi := MatchProcCall(name, nArgs, retryTypes);
+  else pi := MatchProcCall(name, nArgs, retryTypes, qUnit = -1);
   if pi < 0 then Exit;   { retry failed -> leave the original result (genuine type error) }
   Result := pi;
 

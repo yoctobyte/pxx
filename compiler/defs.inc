@@ -1079,6 +1079,8 @@ var
     (rec-blind legacy behavior), so paths that never fill the array are safe. }
   MatchArgRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   MatchArgRecValid : Boolean;
+  BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
+  BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }
   InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }

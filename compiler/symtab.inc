@@ -4127,22 +4127,66 @@ begin
   Result := True;
 end;
 
-function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
-var i, j: Integer; match: Boolean; cn: AnsiString;
+{ Strs[] index of the compiler's builtin intrinsic unit (`builtin`, home of
+  Random and friends), cached: InternStr is an O(StrCount) scan and this is hit
+  on every unqualified call. Interns the name if the unit was never loaded — the
+  returned idx then matches no proc, so demotion simply never fires. }
+function BuiltinUnitIdx: Integer;
+begin
+  if not BuiltinUnitIdxSet then
+  begin
+    BuiltinUnitIdxCache := InternStr('builtin');
+    BuiltinUnitIdxSet := True;
+  end;
+  Result := BuiltinUnitIdxCache;
+end;
+
+{ Call-candidate eligibility gate. A proc answers to `name` as usual, EXCEPT a
+  builtin-unit proc is demoted out of the set entirely when `demote` is set —
+  i.e. some non-builtin routine of the same name is in scope. The builtin is a
+  fallback only, reached when nothing else declares the name. This makes the
+  winner name-level, not arg-width-level, so a used unit's routine can never be
+  silently split with the intrinsic by argument width
+  (bug-pascal-unqualified-call-binds-builtin-over-used-unit). }
+function MatchElig(idx: Integer; const name: AnsiString; demote: Boolean; bIdx: Integer): Boolean;
+begin
+  Result := ProcNameMatches(idx, name) and not (demote and (ProcUnitIdx[idx] = bIdx));
+end;
+
+function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind; suppressBuiltin: Boolean): Integer;
+var i, j: Integer; match: Boolean; cn: AnsiString; demote: Boolean; bIdx: Integer;
 begin
   { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
     once, then match normally (the exact-name phases below then find it). }
   cn := LazyCanonName(name);
   if cn <> name then
   begin
-    Result := MatchProcCall(cn, nArgs, argTypes);
+    Result := MatchProcCall(cn, nArgs, argTypes, suppressBuiltin);
     Exit;
+  end;
+
+  { builtin-is-fallback: only for a plain unqualified call (suppressBuiltin).
+    A `System.X` call (qUnit = -2) passes suppressBuiltin=False so the intrinsic
+    still wins, matching the explicit-System semantics. Demote fires only when a
+    real (non-builtin) same-name routine is actually in scope. }
+  demote := False;
+  bIdx := -1;
+  if suppressBuiltin then
+  begin
+    bIdx := BuiltinUnitIdx;
+    i := ProcChainHead(name);
+    while i >= 0 do
+    begin
+      if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> bIdx) then
+      begin demote := True; Break; end;
+      i := ProcHashNext[i];
+    end;
   end;
   { Phase 1: Try exact match }
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) then
+    if MatchElig(i, name, demote, bIdx) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -4168,7 +4212,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) then
+    if MatchElig(i, name, demote, bIdx) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -4199,7 +4243,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -4225,7 +4269,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) then
+    if MatchElig(i, name, demote, bIdx) then
     begin
       if ProcArityMatches(i, nArgs) then
       begin
@@ -4251,7 +4295,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) then
+    if MatchElig(i, name, demote, bIdx) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
@@ -4279,7 +4323,7 @@ begin
   i := ProcChainHead(name);
   while i >= 0 do
   begin
-    if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
+    if MatchElig(i, name, demote, bIdx) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -4307,7 +4351,7 @@ begin
     i := ProcChainHead(name);
     while i >= 0 do
     begin
-      if ProcNameMatches(i, name) then
+      if MatchElig(i, name, demote, bIdx) then
       begin
         writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
         for j := 0 to Procs[i].ParamCount-1 do
