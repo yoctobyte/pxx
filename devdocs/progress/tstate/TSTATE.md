@@ -2,10 +2,9 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `840c561549b6` | 2026-07-17T08:29:21Z | RED (native) | 131.1s | `fa9c1e8239bf` RED |
+| borg | `840c561549b6` | 2026-07-17T08:34:20Z | RED (full) | 290.9s | `840c561549b6` RED |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
 - **fpc-bootstrap#src:compiler/compiler.pas** — compiler/compiler.pas (borg): bad `603cf2bda859`, last good `9ae7a3617ccb`, 1 commit(s) in range
 - **test-core#src:test/test_static_array_length.pas** — test/test_static_array_length.pas (borg): bad `a48a8353bfc6`, last good `4e4eb757a092`, 1 commit(s) in range
-- **test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh** — tools/run_sqlite_thread_test.sh (borg): bad `c8a532661264`, last good `c8a532661264`, 0 commit(s) in range

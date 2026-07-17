@@ -803,3 +803,4 @@
 {"date": "2026-07-17T08:11:38Z", "fixed": [], "full": true, "new_red": [], "sha": "fa9c1e8239bf9ee8c03b8c018b6415d5c76261fc", "tier": "full", "verdict": "RED", "wall": 293.5}
 {"date": "2026-07-17T08:15:08Z", "fixed": [], "full": false, "new_red": [], "sha": "fa9c1e8239bf9ee8c03b8c018b6415d5c76261fc", "tier": "opt", "verdict": "GREEN", "wall": 201.5}
 {"date": "2026-07-17T08:29:21Z", "fixed": [], "full": false, "new_red": [], "sha": "840c561549b636785f5ebec1ba419a75863fdd1d", "tier": "native", "verdict": "RED", "wall": 131.1}
+{"date": "2026-07-17T08:34:20Z", "fixed": ["test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh"], "full": true, "new_red": [], "sha": "840c561549b636785f5ebec1ba419a75863fdd1d", "tier": "full", "verdict": "RED", "wall": 290.9}
