@@ -13,6 +13,8 @@ unit tk;
   Track B (library). Used by the NilPy IDE demo (Track E). }
 interface
 
+uses strings;   { StrPas: NUL-terminated PChar -> AnsiString (copies to the NUL) }
+
 { Create the Tcl interpreter and initialise Tcl + Tk. True on success. }
 function TkInit: Boolean;
 
@@ -59,7 +61,9 @@ begin
     Exit;
   end;
   Tcl_Eval(gInterp, PAnsiChar(cmd));
-  Result := AnsiString(Tcl_GetStringResult(gInterp));
+  { StrPas copies up to the NUL — a plain AnsiString(ptr) cast wraps the pointer
+    with a garbage length and over-reads Tcl's internal heap. }
+  Result := StrPas(PChar(Tcl_GetStringResult(gInterp)));
 end;
 
 procedure TkMainLoop;
