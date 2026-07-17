@@ -370,6 +370,11 @@ test-threads: $(COMPILER)
 	test "$$(tail -n1 /tmp/pwa26.out)" = "PARWROK"
 	test "$$(grep -cE '^A{49}-1[0-9]{3}-B{49}$$' /tmp/pwa26.out)" = "200"
 	test "$$(grep -oE '\-1[0-9]{3}\-' /tmp/pwa26.out | sort -u | wc -l)" = "200"
+	# policy-aware runtime (feature-parallel-for-scheduling-policy): every
+	# distribution (chunked/onDemand/guided + worker-count modes) covers the range
+	# exactly once — a broken atomic-counter work-steal would drop/double indices.
+	./$(COMPILER) --threadsafe test/test_parallel_policy.pas /tmp/test_parallel_policy26
+	test "$$(/tmp/test_parallel_policy26)" = "PARPOL OK"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
