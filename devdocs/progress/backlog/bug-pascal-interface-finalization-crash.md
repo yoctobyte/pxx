@@ -64,6 +64,19 @@ wrong base, or double-releasing an `as`-cast QueryInterface temporary, would cor
 stack/heap). Cross-check [[project_com_interface_default_and_lifetime]] (COM refcount
 default; by-value intf temp needs AddRef) and [[project_interface_single_pointer_abi_b337]].
 
+## Triage progress (2026-07-17)
+
+A nested interface as-cast bug `(x as IC) as IA` was found and **fixed separately**
+(`a457f01b`, [[bug-pascal-nested-interface-as-cast]]) while investigating this — but the
+seeds here **still crash/diverge**, so that was a different bug. Sharpened hypothesis for
+what remains: the exit checksum does MANY `Mix((iwX as IY).Method(...))` calls, each
+creating an **as-cast temp interface**. If the temp's AddRef/Release is off (double- or
+missing-release), the object refcount drifts across those calls, and the final
+`iwX := nil` releases underflow → double-free → SIGSEGV at exit; the wrong-value
+(`pxx-vs-fpc`) variant would be an object finalized too early. Look at as-cast interface
+temp refcount lifetime next (not the base-pointer, which `a457f01b` handled). Still needs
+source delta-debug on the seed to confirm.
+
 ## Acceptance
 
 - The seed compiles and runs to completion (matches the FPC checksum
