@@ -322,6 +322,9 @@ test-threads: $(COMPILER)
 	# `parallel for` without --threadsafe = clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_parallel_for_lang.pas /tmp/test_parallel_for_guard26 > /tmp/test_parallel_for_guard.log 2>&1
 	grep -q "requires --threadsafe" /tmp/test_parallel_for_guard.log
+	# `parallel for` scalar capture (Phase A): enclosing scalars by-ref via the frame pointer (read + write-back)
+	./$(COMPILER) --threadsafe test/test_parallel_for_capture.pas /tmp/test_parallel_for_capture26
+	test "$$(/tmp/test_parallel_for_capture26)" = "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"
 	# async (per-thread coroutine scheduler) composes with parallel (OS threads): each worker runs its own reactor
 	./$(COMPILER) --threadsafe test/test_async_parallel_compat.pas /tmp/test_async_parallel_compat26
 	test "$$(/tmp/test_async_parallel_compat26 | tail -n 1)" = "ASYNC x PARALLEL OK"

@@ -13650,6 +13650,30 @@ end;
   routine (the main program body has no nested-proc flush point). Requires
   --threadsafe and `uses palparallel`. }
 
+function PFScalarKw(tk: TTypeKind): AnsiString;
+{ Type keyword for a scalar capture's `^T` accessor in the worker. '' = not a
+  Phase-A scalar (record/class/array/string capture — rejected until Phase B). }
+begin
+  case tk of
+    tyInteger, tyInt32: PFScalarKw := 'Integer';
+    tyInt64:      PFScalarKw := 'Int64';
+    tyBoolean:    PFScalarKw := 'Boolean';
+    tyChar:       PFScalarKw := 'Char';
+    tyInt8:       PFScalarKw := 'ShortInt';
+    tyUInt8:      PFScalarKw := 'Byte';
+    tyInt16:      PFScalarKw := 'SmallInt';
+    tyUInt16:     PFScalarKw := 'Word';
+    tyUInt32:     PFScalarKw := 'Cardinal';
+    tyUInt64:     PFScalarKw := 'UInt64';
+    tyNativeInt:  PFScalarKw := 'NativeInt';
+    tyNativeUInt: PFScalarKw := 'NativeUInt';
+    tyPointer:    PFScalarKw := 'Pointer';
+    tySingle:     PFScalarKw := 'Single';
+    tyDouble:     PFScalarKw := 'Double';
+  else PFScalarKw := '';
+  end;
+end;
+
 procedure PFSet(k: TTokenKind; so, sl, ln: Integer);
 { Emit one token into the PFScratch worker-header build buffer. }
 begin
@@ -13675,14 +13699,24 @@ begin
 end;
 
 function ParseParallelFor: Integer;
+const MAX_PFCAP = 32;
 var
-  Vname, wname, capNm: AnsiString;
+  Vname, wname, capNm, kw: AnsiString;
   loNode, hiNode, bodyAst, node, callNode: Integer;
-  a1, a2, a3, a4, procAddr, nilNode: Integer;
-  bodyStart, bodyEnd, i, si, scopeBase, ppi, workerIdx: Integer;
+  a1, a2, a3, a4, procAddr, ctxNode: Integer;
+  bodyStart, bodyEnd, i, j, si, scopeBase, ppi, workerIdx: Integer;
   savedTokPos, savedTokCount, ln: Integer;
   savedCurProc, savedSC, savedFS, savedSelf: Integer;
   wnameOff, wnameLen, ctxOff, loPOff, hiPOff, ptrOff, niOff, vOff, vLen: Integer;
+  { captured enclosing scalars (Phase A: by-ref via the enclosing frame pointer) }
+  capSi   : array[0..MAX_PFCAP-1] of Integer;   { Syms index }
+  capNmOff: array[0..MAX_PFCAP-1] of Integer;   { name string-pool offset }
+  capNmLen: array[0..MAX_PFCAP-1] of Integer;
+  capKwOff: array[0..MAX_PFCAP-1] of Integer;   { type-keyword string-pool offset }
+  capKwLen: array[0..MAX_PFCAP-1] of Integer;
+  capOfs  : array[0..MAX_PFCAP-1] of Integer;   { rbp-relative frame offset }
+  capCount, ci, absOff, ptrCastOff, niCastOff: Integer;
+  found: Boolean;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
@@ -13708,6 +13742,28 @@ begin
   ParseExpr; hiNode := CurASTNode;
   Expect(tkDo, 'do');
 
+  { Reject a NESTED `parallel for` (Phase A): peek the body statement's token span
+    (begin/end-depth aware) for a `parallel`+`for` before consuming it — otherwise
+    the inner one would recursively desugar during the outer's body-span parse and
+    double-process. Peek only; ParseStatementAST below re-reads from here. }
+  i := TokPos - 1;
+  if Tokens[i].Kind = tkBegin then
+  begin
+    j := i + 1; scopeBase := 1;   { scopeBase reused as begin/end depth here }
+    while (j < TokCount) and (scopeBase > 0) do
+    begin
+      if (Tokens[j].Kind = tkBegin) or (Tokens[j].Kind = tkCase) then Inc(scopeBase)
+      else if Tokens[j].Kind = tkEnd then Dec(scopeBase)
+      else if (Tokens[j].Kind = tkIdent) and (j + 1 < TokCount) and (Tokens[j+1].Kind = tkFor) and
+              CaseEqual(GetTokenStrFromRaw(Tokens[j].SOffset, Tokens[j].SLen), 'parallel') then
+        Error('parallel for: nested `parallel for` is not supported');
+      Inc(j);
+    end;
+  end
+  else if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and (Tokens[i+1].Kind = tkFor) and
+          CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), 'parallel') then
+    Error('parallel for: nested `parallel for` is not supported');
+
   { Capture the body TOKEN span by parsing it once (span + validation); the AST is
     discarded — the body is re-parsed inside the worker. }
   bodyStart := TokPos - 1;
@@ -13715,9 +13771,13 @@ begin
   bodyEnd := TokPos - 1;
   if bodyEnd <= bodyStart then Error('parallel for: empty loop body');
 
-  { v1 capture rejection: a body ident resolving to a LOCAL/PARAM of the current
-    routine (other than the loop var) is a capture — not yet supported. }
+  { Collect the enclosing locals/params the body captures (any body ident, other
+    than the loop var, resolving to a routine-scope symbol). Phase A: SCALARS only
+    — passed BY REFERENCE through the enclosing frame pointer (ctx), read in the
+    worker at `ctx + Syms[si].Offset`. A non-scalar capture (record/class/array/
+    string) is a clear error until Phase B. }
   scopeBase := Procs[CurProc].ScopeBase;
+  capCount := 0;
   for i := bodyStart to bodyEnd - 1 do
     if Tokens[i].Kind = tkIdent then
     begin
@@ -13725,11 +13785,30 @@ begin
       if CaseEqual(capNm, Vname) then Continue;
       if (i > bodyStart) and (Tokens[i-1].Kind = tkDot) then Continue;   { qualified field }
       si := FindSym(capNm);
-      if (si >= 0) and (si >= scopeBase) then
+      if (si < 0) or (si < scopeBase) then Continue;                     { global / not a capture }
+      found := False;
+      for j := 0 to capCount - 1 do
+        if capSi[j] = si then begin found := True; Break; end;
+      if found then Continue;
+      if Syms[si].IsArray or (SymDynDepth[si] > 0) then
       begin
         ErrorIdent := capNm;
-        Error('parallel for: capturing enclosing local ''' + capNm + ''' is not yet supported — move it to a global (capture support: follow-up)');
+        Error('parallel for: capturing enclosing array ''' + capNm + ''' not yet supported (Phase B) — use a global');
       end;
+      kw := PFScalarKw(Syms[si].TypeKind);
+      if kw = '' then
+      begin
+        ErrorIdent := capNm;
+        Error('parallel for: capturing enclosing non-scalar ''' + capNm + ''' not yet supported (Phase B) — use a global');
+      end;
+      if capCount >= MAX_PFCAP then Error('parallel for: too many captured variables');
+      capSi[capCount]    := si;
+      capNmOff[capCount] := NestStrOff(capNm);
+      capNmLen[capCount] := Length(capNm);
+      capKwOff[capCount] := NestStrOff(kw);
+      capKwLen[capCount] := Length(kw);
+      capOfs[capCount]   := Syms[si].Offset;
+      Inc(capCount);
     end;
 
   { --- synthesize worker name + intern the string-pool offsets --- }
@@ -13792,14 +13871,51 @@ begin
   if PendNestRtnCount >= MAX_LIFTS then Error('parallel for: too many synthesized routines in one body');
   PendNestRtnStart[PendNestRtnCount] := PendNestCount;
   Inc(PendNestRtnCount);
+  ptrCastOff := ptrOff;   { reuse interned 'Pointer' / 'NativeInt' for the casts }
+  niCastOff  := niOff;
   for i := 0 to PFScratchN - 1 do
     PFStash(PFScratch[i].Kind, PFScratch[i].SOffset, PFScratch[i].SLen, ln);
+  { var i: NativeInt; <cap0>: ^<kw0>; <cap1>: ^<kw1>; ... }
   PFStash(tkVar, 0, 0, ln);
   PFStash(tkIdent, vOff, vLen, ln);
   PFStash(tkColon, 0, 0, ln);
   PFStash(tkIdent, niOff, 9, ln);      { NativeInt }
   PFStash(tkSemicolon, 0, 0, ln);
+  for ci := 0 to capCount - 1 do
+  begin
+    PFStash(tkIdent, capNmOff[ci], capNmLen[ci], ln);
+    PFStash(tkColon, 0, 0, ln);
+    PFStash(tkCaret, 0, 0, ln);
+    PFStash(tkIdent, capKwOff[ci], capKwLen[ci], ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   PFStash(tkBegin, 0, 0, ln);
+  { preamble: <capj> := Pointer(NativeInt(__pfctx) +/- <frame offset>); }
+  for ci := 0 to capCount - 1 do
+  begin
+    PFStash(tkIdent, capNmOff[ci], capNmLen[ci], ln);
+    PFStash(tkAssign, 0, 0, ln);
+    PFStash(tkIdent, ptrCastOff, 7, ln);      { Pointer( }
+    PFStash(tkLParen, 0, 0, ln);
+    PFStash(tkIdent, niCastOff, 9, ln);       { NativeInt( }
+    PFStash(tkLParen, 0, 0, ln);
+    PFStash(tkIdent, ctxOff, 7, ln);          { __pfctx }
+    PFStash(tkRParen, 0, 0, ln);
+    if capOfs[ci] >= 0 then
+    begin
+      PFStash(tkPlus, 0, 0, ln); absOff := capOfs[ci];
+    end
+    else
+    begin
+      PFStash(tkMinus, 0, 0, ln); absOff := -capOfs[ci];
+    end;
+    if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+    PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := absOff;
+    PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+    Inc(PendNestCount);
+    PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   PFStash(tkFor, 0, 0, ln);
   PFStash(tkIdent, vOff, vLen, ln);
   PFStash(tkAssign, 0, 0, ln);
@@ -13807,26 +13923,47 @@ begin
   PFStash(tkTo, 0, 0, ln);
   PFStash(tkIdent, hiPOff, 6, ln);
   PFStash(tkDo, 0, 0, ln);
-  { Copy the body tokens VERBATIM (full record) — an integer/float literal carries
-    its value in IVal, so a field-by-field copy that zeroed IVal would turn every
-    literal into 0. }
+  { Copy the body tokens VERBATIM (full record — literals carry their value in
+    IVal). Each captured-scalar reference gets a trailing `^`: the worker's `capj`
+    is a pointer into the enclosing frame, so `a` -> `a^`, `a := x` -> `a^ := x`. }
   for i := bodyStart to bodyEnd - 1 do
   begin
     if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
     PendNestTok[PendNestCount] := Tokens[i];
     Inc(PendNestCount);
+    if Tokens[i].Kind = tkIdent then
+    begin
+      capNm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      if (not CaseEqual(capNm, Vname)) and
+         (not ((i > bodyStart) and (Tokens[i-1].Kind = tkDot))) then
+      begin
+        si := FindSym(capNm);
+        found := False;
+        for j := 0 to capCount - 1 do
+          if capSi[j] = si then begin found := True; Break; end;
+        if found then PFStash(tkCaret, 0, 0, ln);
+      end;
+    end;
   end;
   PFStash(tkSemicolon, 0, 0, ln);
   PFStash(tkEnd, 0, 0, ln);
   PFStash(tkSemicolon, 0, 0, ln);
 
-  { (3) PXXParallelFor(lo, hi, @<wname>, nil), wrapped in AN_PARFOR }
+  { (3) PXXParallelFor(lo, hi, @<wname>, ctx), wrapped in AN_PARFOR.
+    ctx = the enclosing frame pointer when the body captures locals (workers read
+    each capture at ctx + its frame offset), else nil. }
   a1 := AllocNode(AN_ARG); ASTLeft[a1] := loNode; ASTTk[a1] := Ord(tyInt64);
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := hiNode; ASTTk[a2] := Ord(tyInt64);
   procAddr := AllocNode(AN_PROCADDR); ASTIVal[procAddr] := workerIdx; ASTTk[procAddr] := Ord(tyPointer);
   a3 := AllocNode(AN_ARG); ASTLeft[a3] := procAddr; ASTTk[a3] := Ord(tyPointer);
-  nilNode := AllocNode(AN_INT_LIT); ASTIVal[nilNode] := 0; ASTTk[nilNode] := Ord(tyPointer);
-  a4 := AllocNode(AN_ARG); ASTLeft[a4] := nilNode; ASTTk[a4] := Ord(tyPointer);
+  if capCount > 0 then
+    ctxNode := AllocNode(AN_FRAME)
+  else
+  begin
+    ctxNode := AllocNode(AN_INT_LIT); ASTIVal[ctxNode] := 0;
+  end;
+  ASTTk[ctxNode] := Ord(tyPointer);
+  a4 := AllocNode(AN_ARG); ASTLeft[a4] := ctxNode; ASTTk[a4] := Ord(tyPointer);
   ASTRight[a1] := a2; ASTRight[a2] := a3; ASTRight[a3] := a4; ASTRight[a4] := -1;
   callNode := AllocNode(AN_CALL); ASTIVal[callNode] := ppi;
   ASTLeft[callNode] := a1; ASTRight[callNode] := -1;
