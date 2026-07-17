@@ -379,6 +379,10 @@ test-threads: $(COMPILER)
 	# bare/preset/var-policy all cover exactly once; `parallel` stays a normal ident.
 	./$(COMPILER) --threadsafe test/test_parallel_policy_lang.pas /tmp/test_parallel_policy_lang26
 	test "$$(/tmp/test_parallel_policy_lang26)" = "PARPOLLANG OK"
+	# reduction(op: v): private per-worker partial folded under PXXReduceLock —
+	# exact deterministic +/xor results (a race would flake the sum).
+	./$(COMPILER) --threadsafe test/test_parallel_reduction.pas /tmp/test_parallel_reduction26
+	test "$$(/tmp/test_parallel_reduction26)" = "PARRED OK"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.

@@ -13719,6 +13719,11 @@ var
   capCount, ci, absOff, ptrCastOff, niCastOff, pniOff: Integer;
   found: Boolean;
   policyNode, ppiP, a5, polAddr: Integer; hasPolicy: Boolean;
+  { reduction(op: v) — v is a captured scalar; each worker folds a private
+    __red0 partial into v^ under PXXReduceLock after its loop. }
+  redHasClause: Boolean; redOp: TTokenKind;
+  redVarName: AnsiString;
+  redCapIdx, red0Off, redKwOff, redKwLen, redIdentVal: Integer;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
@@ -13761,6 +13766,30 @@ begin
     Error('parallel for: `downto` not supported (iteration order is unspecified) — use `to`');
   Expect(tkTo, 'to');
   ParseExpr; hiNode := CurASTNode;
+
+  { optional `reduction(op: v)` clause between the range and `do`. v1 ops:
+    + or xor (identity 0); each worker accumulates a private partial and combines
+    into v under PXXReduceLock. NOTE `*` is NOT offered: `(*` is Pascal's comment
+    opener, so `reduction(*:...)` lexes as a comment — a `*` reduction would need
+    a different spelling. and/min/max are follow-ups too. }
+  redHasClause := False; redOp := tkPlus; redVarName := ''; redCapIdx := -1;
+  red0Off := 0; redKwOff := 0; redKwLen := 0; redIdentVal := 0;
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reduction') then
+  begin
+    Next; Expect(tkLParen, '(');
+    redOp := CurTok.Kind;
+    if (redOp = tkPlus) or (redOp = tkOr) or (redOp = tkXor) then redIdentVal := 0
+    else Error('reduction: v1 supports + or xor (identity 0); *, and, min, max are follow-ups');
+    Next;
+    Expect(tkColon, ':');
+    if CurTok.Kind <> tkIdent then Error('reduction: expected a variable name');
+    redVarName := CurTok.SVal;
+    Next;
+    Expect(tkRParen, ')');
+    redHasClause := True;
+    red0Off := NestStrOff('__pfred0');
+  end;
+
   Expect(tkDo, 'do');
 
   { Reject a NESTED `parallel for` (Phase A): peek the body statement's token span
@@ -13855,6 +13884,22 @@ begin
       Inc(capCount);
     end;
 
+  { resolve the reduction variable to its capture (must be a captured SCALAR) and
+    grab its type keyword for the private __pfred0 accumulator. }
+  if redHasClause then
+  begin
+    for ci := 0 to capCount - 1 do
+      if CaseEqual(GetTokenStrFromRaw(capNmOff[ci], capNmLen[ci]), redVarName) then
+      begin redCapIdx := ci; Break; end;
+    if redCapIdx < 0 then
+      Error('reduction: the variable must be an enclosing local written in the body');
+    if capHandle[redCapIdx] then
+      Error('reduction: only scalar variables are supported (not dyn-array/string)');
+    redKwOff := capKwOff[redCapIdx]; redKwLen := capKwLen[redCapIdx];
+    if FindProc('PXXReduceLock') < 0 then
+      Error('reduction: palparallel too old (PXXReduceLock not found)');
+  end;
+
   { --- synthesize worker name + intern the string-pool offsets --- }
   wname := '__pf_' + MangleSuffix(ParForSeq);
   Inc(ParForSeq);
@@ -13934,6 +13979,14 @@ begin
     PFStash(tkIdent, capKwOff[ci], capKwLen[ci], ln);
     PFStash(tkSemicolon, 0, 0, ln);
   end;
+  { reduction: private accumulator `__pfred0 : <redKw> ;` }
+  if redHasClause then
+  begin
+    PFStash(tkIdent, red0Off, 8, ln);        { __pfred0 }
+    PFStash(tkColon, 0, 0, ln);
+    PFStash(tkIdent, redKwOff, redKwLen, ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   PFStash(tkBegin, 0, 0, ln);
   { preamble per capture:
       inline (scalar/fixed-array/record): capj := Pointer(NativeInt(__pfctx) +/- off);
@@ -13974,6 +14027,17 @@ begin
     PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
     PFStash(tkSemicolon, 0, 0, ln);
   end;
+  { reduction: __pfred0 := <identity> ; }
+  if redHasClause then
+  begin
+    PFStash(tkIdent, red0Off, 8, ln);
+    PFStash(tkAssign, 0, 0, ln);
+    if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+    PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := redIdentVal;
+    PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+    Inc(PendNestCount);
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   PFStash(tkFor, 0, 0, ln);
   PFStash(tkIdent, vOff, vLen, ln);
   PFStash(tkAssign, 0, 0, ln);
@@ -13992,6 +14056,16 @@ begin
     if Tokens[i].Kind = tkIdent then
     begin
       capNm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      { reduction var: redirect the reference to the private __pfred0 (a plain
+        local, NOT a captured pointer), so it accumulates race-free. Rewrite the
+        just-stashed token and skip the `^` deref. }
+      if redHasClause and CaseEqual(capNm, redVarName)
+         and (not ((i > bodyStart) and (Tokens[i-1].Kind = tkDot))) then
+      begin
+        PendNestTok[PendNestCount-1].SOffset := red0Off;
+        PendNestTok[PendNestCount-1].SLen := 8;
+        Continue;
+      end;
       if (not CaseEqual(capNm, Vname)) and
          (not ((i > bodyStart) and (Tokens[i-1].Kind = tkDot))) then
       begin
@@ -14004,6 +14078,22 @@ begin
     end;
   end;
   PFStash(tkSemicolon, 0, 0, ln);
+  { reduction combine: PXXReduceLock ; <v>^ := <v>^ <op> __pfred0 ; PXXReduceUnlock ; }
+  if redHasClause then
+  begin
+    PFStash(tkIdent, NestStrOff('PXXReduceLock'), 13, ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+    PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+    PFStash(tkCaret, 0, 0, ln);
+    PFStash(tkAssign, 0, 0, ln);
+    PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+    PFStash(tkCaret, 0, 0, ln);
+    PFStash(redOp, 0, 0, ln);
+    PFStash(tkIdent, red0Off, 8, ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+    PFStash(tkIdent, NestStrOff('PXXReduceUnlock'), 15, ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   PFStash(tkEnd, 0, 0, ln);
   PFStash(tkSemicolon, 0, 0, ln);
 

@@ -89,6 +89,14 @@ procedure PXXParallelForPP(lo, hi: NativeInt; body: TParForBody; ctx: Pointer;
   each call deltas against the previous call's snapshot. }
 function PXXQueryFreeCores: Integer;
 
+{ Global combine lock for `reduction(op: v)`: each worker folds its private
+  partial into the shared reduction variable ONCE, under this lock. Taken
+  once-per-worker-per-region (not per iteration), so a plain spinlock is fine and
+  covers every op/type (unlike a per-op atomic). Emitted by the parser around the
+  synthesized combine `v^ := v^ op partial`. }
+procedure PXXReduceLock;
+procedure PXXReduceUnlock;
+
 { The worker count PXXParallelFor fans to: the process CPU affinity count
   (sched_getaffinity), clamped to [1..PAR_MAX_WORKERS], or a fixed fallback when
   the query fails. Cached after first call. Overridable with PXXSetParForWorkers
@@ -312,6 +320,21 @@ begin
   if n < 1 then n := 1;
   if n > PAR_MAX_WORKERS then n := PAR_MAX_WORKERS;
   ResolveWorkers := n;
+end;
+
+var gReduceLock: Integer = 0;
+
+procedure PXXReduceLock;
+var spin: Int64;
+begin
+  spin := 0;
+  while Integer(__pxxatomic_xchg(@gReduceLock, 1)) <> 0 do spin := spin + 1;
+  if spin = 0 then ;
+end;
+
+procedure PXXReduceUnlock;
+begin
+  gReduceLock := 0;
 end;
 
 { palthread entry: unpack the range and dispatch into the body. }
