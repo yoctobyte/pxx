@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-parallel-processing | B | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -25,11 +24,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 
-## backlog (105)
+## backlog (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-pascal-ptr-deref-string-index | P | 45 | bug | SILENT: char-indexing through a pointer-to-string deref (`p^[k]`) reads garbage | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -192,7 +190,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (778)
+## done (780)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -502,6 +500,7 @@ _none_
 | bug-pascal-operator-on-record-call-result | P | 40 | bug | Operator overload not found when a record operand is a CALL RESULT | — |
 | bug-pascal-overload-impl-decl-signature-match | P | 50 | bug | bug: an overloaded method's IMPLEMENTATION does not always match back to its DECLARATION | — |
 | bug-pascal-paren-expr-loses-class-id | P | 50 | bug | A parenthesised expression loses its class id: `(b as T)[i]` and `(b as T).ClassName` | — |
+| bug-pascal-ptr-deref-string-index | P | 45 | bug | SILENT: char-indexing through a pointer-to-string deref (`p^[k]`) reads garbage | — |
 | bug-pascal-qword-literal-binop-signed-demote | A | 50 | bug | qword + non-negative literal demoted to Int64: correct bits, but writeln/hi()/comparisons treated the result as SIGNED | — |
 | bug-pascal-qword-to-double-signed | A | 45 | bug | qword -> double conversion treats the value as SIGNED: q >= 2^63 converts to a negative double | — |
 | bug-pascal-record-cast-field-offset | A | 55 | bug | Record-cast lvalue/rvalue field access ignores field offset — tqwordrec(q).high reads and writes offset 0 | — |
@@ -798,6 +797,7 @@ _none_
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-pal-thread-primitives | A | 50 | feature | PAL thread primitives — libc-free clone(2)/futex(2) (M1 keystone) | — |
+| feature-parallel-processing | B | 45 | feature | Parallel processing as a language feature | feature-threadsafe-heap-contract |
 | feature-parallel-test-harness | A | 80 | feature | Parallel test harness — OS-level, opt-in, safe on weak hardware | — |
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-advanced-records | P | 55 | feature | Advanced records: methods (and `public`/`private`) inside a record | — |
@@ -1037,7 +1037,6 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [P] bug-pascal-ptr-deref-string-index
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [O] feature-callconv-register-args

@@ -5,7 +5,7 @@ prio: 45  # auto
 # Parallel processing as a language feature
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** A-parallel
 - **Blocked-by:** feature-threadsafe-heap-contract
 - **Opened:** 2026-06-06 (user request)
@@ -295,3 +295,4 @@ Closed. Remaining epic items live in [[meta-multithreading]].
 
 Umbrella: [[meta-multithreading]]. Invariant: threading is opt-in/off-by-default;
 single-threaded self-build stays byte-identical; no libc (Linux syscalls only).
+- 2026-07-17 — resolved, commit d2b0459a.
