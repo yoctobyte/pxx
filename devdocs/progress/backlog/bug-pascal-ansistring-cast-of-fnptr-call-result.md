@@ -37,10 +37,13 @@ bogus length. Yet another shape the enumerator doesn't cover.
 
 ## Fix
 
-- **Narrow:** add an `AN_CALL_IND` case to `IsNodePChar` that reads the callee
-  proc-type signature's return pointer-element type (the sig is marshaled at
-  `ir.inc:5838`; the return-elem is not in a clean `ProcRetPtrElemTk`-style array, so this
-  needs a small plumb).
+- **Narrow:** `AN_CALL_IND` stores `ASTIVal[node] = the signature's Procs[] index`
+  (`cpi`, see `ir.inc:5845`). So the fix is two parts: (1) add an `AN_CALL_IND` case to
+  `IsNodePChar` that checks `ProcRetPtrElemTk[ASTIVal[node]]` (mirroring case 4); (2)
+  ensure the **Pascal proc-type signature registration sets `ProcRetPtrElemTk`** the way
+  cparser does for C fn-pointer sigs (`cparser.inc:3315`) — if it doesn't, that's the
+  same dropped-field bug as the external-decl path, one layer over. Verify (2) first (it
+  may already be set, in which case only (1) is needed).
 - **Systemic (preferred):** [[refactor-centralize-managed-string-pchar-conversion]] — key
   on the node's resolved static type instead of enumerating shapes. This bug and the
   external-call bug are its two motivating instances; the refactor kills both plus every
