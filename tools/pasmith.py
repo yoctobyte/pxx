@@ -96,7 +96,7 @@ BOOL_OPS = ["and", "or", "xor"]
 #       ord() reads are therefore wrapped in an explicit longint() cast, which is
 #       where `not` behaves; drop the wrapper when the ticket lands (enum_reads).
 NO_SHORTSTRING_TRUNCATION = False    # FIXED: fec98091 + 7716bd2a (truncating string[N] stores, all targets)
-NO_ONE_CHAR_STRING_LITERAL = True    # compat-pascal-copy-of-char-literal
+NO_ONE_CHAR_STRING_LITERAL = False   # FIXED: 913ad5fc (Copy() promotes a Char arg to string; compat-pascal-copy-of-char-literal done)
 NO_BARE_NOT_ORD = False              # FIXED: not-ord bitwise + operand-width (bug-pascal-not-of-ord-uses-boolean-negation)
 
 

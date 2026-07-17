@@ -210,12 +210,14 @@
       "hits": 2,
       "kind": "copy-dynamic-array-copy",
       "last_seen": "2026-07-14T16:12:38Z",
-      "note": "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
+      "note": "pxx REJECTED Copy('a',i,n) -- a one-char literal typed CHAR that FPC promotes to string. FIXED: Copy() now promotes a Char argument to string (913ad5fc, ticket compat-pascal-copy-of-char-literal, done). Seeds 30014 & 30017 recompile clean on HEAD; NO_ONE_CHAR_STRING_LITERAL dodge lifted in pasmith.py.",
       "opened": "2026-07-14T16:12:37Z",
       "reopened_from_fixed": false,
       "sig": "pxx-reject_copy-dynamic-array-copy",
-      "status": "dodged",
-      "ticket": "compat-pascal-copy-of-char-literal"
+      "status": "fixed",
+      "ticket": "compat-pascal-copy-of-char-literal",
+      "fixed": "2026-07-15T13:23:21Z",
+      "fixed_sha": "913ad5fc"
     },
     "pxx-reject_store-through-pointer-cross": {
       "class": "pxx-reject",
