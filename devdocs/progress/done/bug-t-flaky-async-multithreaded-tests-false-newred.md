@@ -2,6 +2,7 @@
 summary: "Flaky async/multithreaded run-tests emit false NEW-REDs — reap() fails on first nonzero exit, no confirm-retry"
 type: bug
 prio: 45
+resolved: 4c96b227
 ---
 
 # Flaky async/multithreaded run-tests produce false NEW-REDs (no confirm-retry in reap())
@@ -9,7 +10,7 @@ prio: 45
 - **Type:** bug (Track T — the harness/tooling; `tools/testmgr.py`). Not a compiler
   bug: the tests pass on re-run, so there is nothing to fix in the owning lane. The
   defect is that the harness turns a *transient* failure into a *permanent* verdict.
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-07-17, from a tstate recheck. `twatch --status` showed a NEW-RED
   `test-aarch64#src:test/test_asyncecho.pas` pinned to SHA `88986014` — a commit that
@@ -103,8 +104,20 @@ being *actionable-red*. Keep it general (all run-tests), not a hand-maintained t
   test that fails once then passes.
 
 ## Log
+- 2026-07-17 — **resolved** (`4c96b227`). Implemented fix direction (1)+(3):
+  `RUN_RETRY_CLASSES = {qemu, corpus, conformance, opt}` + `RUN_RETRY_TRIES = 3`.
+  `reap()` now requeues a failed retriable job (`_requeue_retry`) instead of
+  finalizing RED; it passes as `flaky` the moment one attempt passes. Deterministic
+  classes (`unit`, `selfhost`) stay single-shot. Real reds preserved (fail every
+  attempt → RED). Flaky-recovered jobs surfaced in the progress line, the report,
+  the end summary, and `report_json` (`flaky[]` + per-job `flaky`/`attempts`) so
+  twatch/tstate can see "flaked+recovered" without treating it as red. Verified:
+  5-case retry-logic unit test (fail-then-pass=flaky, always-fail=red-after-3,
+  unit/selfhost single-shot, clean=not-flaky); `--tier quick` + `--tier limited`
+  GREEN; asyncecho qemu job GREEN through the new path.
 - 2026-07-17 — filed. Found during a tstate recheck: asyncecho NEW-RED on a
   compiler-inert SHA, 3/3 PASS on manual re-run. Root-caused to `reap()`'s
   first-exit-is-final verdict vs the bench path's `BENCH_EXTRA_TRIES` retry. T owns the
   harness, so this is a T bug (the false NEW-RED is a *tooling* artifact); the async
   tests themselves are not broken.
+- 2026-07-17 — resolved, commit 4c96b227.
