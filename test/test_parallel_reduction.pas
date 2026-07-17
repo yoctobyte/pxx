@@ -11,8 +11,9 @@ type TA = array[0..N-1] of Integer;
 var good: Boolean; a: TA;
 
 procedure Run;
-var i, isum, mx, mn, mvBest, mvWorst: Integer;
+var i, isum, mx, mn, mvBest, mvWorst, prod, bandv: Integer;
     sum, xr, mnvSum, mnvCnt, mvTot: Int64; fsum: Double;
+    allSet, anyNeg: Boolean;
 begin
   { + Int64: 0+1+...+N-1 = N*(N-1)/2 }
   sum := 0;
@@ -61,6 +62,28 @@ begin
     mvTot := mvTot + Int64(a[i]);
   end;
   if (mvBest <> 999999) or (mvWorst <> 0) then good := False;
+
+  { mul (word — `*` is unspellable, `(*` is a comment): 1*2*...*12 = 479001600 }
+  prod := 1;
+  parallel(ParBalanced) for i := 1 to 12 reduction(mul: prod) do prod := prod * i;
+  if prod <> 479001600 then good := False;
+
+  { bitwise and: every element has 0xF0F set, so the AND keeps at least those bits }
+  for i := 0 to N-1 do a[i] := (i * 16) or $F0F;
+  bandv := -1;
+  parallel for i := 0 to N-1 reduction(and: bandv) do bandv := bandv and a[i];
+  if (bandv and $F0F) <> $F0F then good := False;
+
+  { boolean and (all) + or (any) in one loop }
+  allSet := True; anyNeg := False;
+  parallel for i := 0 to N-1
+    reduction(and: allSet)
+    reduction(or: anyNeg)
+  do begin
+    if a[i] <= 0 then allSet := False;
+    if a[i] < 0 then anyNeg := True;
+  end;
+  if (not allSet) or anyNeg then good := False;
 end;
 
 var r: Integer;

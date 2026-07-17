@@ -13761,11 +13761,11 @@ var
     = entries with different ops. }
   redN, rk, rj: Integer;
   redOpA: array[0..MAX_REDVARS-1] of TTokenKind;
-  redIsMinMaxA, redIsMaxA: array[0..MAX_REDVARS-1] of Boolean;
+  redIsMinMaxA, redIsMaxA, redIsAndA: array[0..MAX_REDVARS-1] of Boolean;
   redCapIdxA, red0OffA, redKwOffA, redKwLenA, redIdentValA: array[0..MAX_REDVARS-1] of Integer;
   redTypeTokA: array[0..MAX_REDVARS-1] of TTokenKind;
   redVarNameA: array[0..MAX_REDVARS-1] of AnsiString;
-  redOpTok: TTokenKind; redThisMinMax, redThisMax: Boolean; redThisIdent: Integer;
+  redOpTok: TTokenKind; redThisMinMax, redThisMax, redThisAnd: Boolean; redThisIdent: Integer;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
@@ -13868,16 +13868,24 @@ begin
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reduction') do
   begin
     Next; Expect(tkLParen, '(');
-    redThisMinMax := False; redThisMax := False; redOpTok := tkPlus; redThisIdent := 0;
+    redThisMinMax := False; redThisMax := False; redThisAnd := False;
+    redOpTok := tkPlus; redThisIdent := 0;
     if (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'min') or CaseEqual(CurTok.SVal, 'max')) then
     begin
       redThisMinMax := True; redThisMax := CaseEqual(CurTok.SVal, 'max');
+    end
+    else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'mul') then
+    begin
+      { `*` cannot be written here — `(*` is Pascal's comment opener — so multiply
+        uses the word `mul`; it combines with a real tkStar mid-expression. }
+      redOpTok := tkStar; redThisIdent := 1;
     end
     else
     begin
       redOpTok := CurTok.Kind;
       if (redOpTok = tkPlus) or (redOpTok = tkOr) or (redOpTok = tkXor) then redThisIdent := 0
-      else Error('reduction: ops are + or xor min max (not *; `(*` is a comment)');
+      else if redOpTok = tkAnd then redThisAnd := True   { identity = all-ones / True, set per type at init }
+      else Error('reduction: ops are + or xor and min max mul (not * / div mod; `(*` is a comment, and /,div,mod are not associative)');
     end;
     Next;
     Expect(tkColon, ':');
@@ -13892,6 +13900,7 @@ begin
       redVarNameA[redN] := CurTok.SVal;
       redOpA[redN] := redOpTok;
       redIsMinMaxA[redN] := redThisMinMax; redIsMaxA[redN] := redThisMax;
+      redIsAndA[redN] := redThisAnd;
       redIdentValA[redN] := redThisIdent;
       redCapIdxA[redN] := -1;
       red0OffA[redN] := NestStrOff('__pfred' + Chr(Ord('0') + redN));   { 8 chars }
@@ -14169,8 +14178,24 @@ begin
       PFStash(tkIdent, capNmOff[redCapIdxA[rk]], capNmLen[redCapIdxA[rk]], ln);
       PFStash(tkCaret, 0, 0, ln);
     end
+    else if redIsAndA[rk] then
+    begin
+      { `and` identity = all-ones. Boolean -> True; ordinal -> `not 0` (= -1, which
+        truncates to all-ones for the target width on assignment). }
+      if redTypeTokA[rk] = tkBoolean_T then
+        PFStash(tkTrue, 0, 0, ln)
+      else
+      begin
+        PFStash(tkNot, 0, 0, ln);
+        if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+        PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := 0;
+        PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+        Inc(PendNestCount);
+      end;
+    end
     else
     begin
+      { integer literal identity: 0 (+/or/xor) or 1 (mul) }
       if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
       PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := redIdentValA[rk];
       PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
