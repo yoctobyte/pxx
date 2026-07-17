@@ -1383,10 +1383,13 @@ begin
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
-  bssBase  := dataBase + DataLen;
+  { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
+    --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
+    per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
+  bssBase  := AlignTo(dataBase + DataLen, 8);
   entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
-  memsz    := filesz + BSSSize;
+  memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
   doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
   shoff := 0;
@@ -1501,10 +1504,13 @@ begin
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
-  bssBase  := dataBase + DataLen;
+  { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
+    --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
+    per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
+  bssBase  := AlignTo(dataBase + DataLen, 8);
   entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
-  memsz    := filesz + BSSSize;
+  memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
   { DWARF -g: Tier 1 is x86-64 only. Build the .debug_* bytes, then place a
     section-header table after them (the load image is unchanged — debug sections

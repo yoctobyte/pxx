@@ -3537,11 +3537,17 @@ test-aarch64: $(COMPILER)
 	# .asm source frontend on aarch64: labels/branches + global entry override, exit code = x0
 	./$(COMPILER) --target=aarch64 test/test_asm_a64_sum.asm /tmp/test_aarch64_asmfront
 	tools/run_target.sh aarch64 /tmp/test_aarch64_asmfront; test "$$?" = "55"
-	# parallel for + scalar capture on aarch64 (2+ aggregate captures = bug-a-parallel-for-aarch64-multi-capture, not yet gated)
+	# parallel for + capture on aarch64. Multi-aggregate capture bus-errored until
+	# bug-a-parallel-for-aarch64-multi-capture: BSS base was not 8-aligned, so the
+	# --threadsafe I/O lock's 64-bit ldaxr SIGBUS'd for some CodeLen parities.
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_lang.pas /tmp/test_aarch64_parfor
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parfor | tail -n 1)" = "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture.pas /tmp/test_aarch64_parcap
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parcap | tail -n 1)" = "PARFORCAP OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture_aggr.pas /tmp/test_aarch64_parcapaggr
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parcapaggr | tail -n 1)" = "PARFORAGGR OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture_string.pas /tmp/test_aarch64_parcapstr
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parcapstr | tail -n 1)" = "PARFORSTR OK"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin ok (output identical to x86-64)"
 
 test-riscv32: $(COMPILER)
