@@ -3234,6 +3234,15 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_parcap | tail -n 1)" = "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_capture_string.pas /tmp/test_i386_parstr
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_parstr | tail -n 1)" = "PARFORSTR OK"
+	# scheduling policy + reduction + named-arg clause on i386 (Track T cross gate)
+	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy.pas /tmp/test_i386_parpol
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_parpol)" = "PARPOL OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy_lang.pas /tmp/test_i386_parpollang
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_parpollang)" = "PARPOLLANG OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_reduction.pas /tmp/test_i386_parred
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_parred)" = "PARRED OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy_named.pas /tmp/test_i386_parnamed
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_parnamed)" = "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_writeln_atomic.pas /tmp/test_i386_pwa
 	tools/run_target.sh i386 /tmp/test_i386_pwa > /tmp/test_i386_pwa.out
 	test "$$(tail -n1 /tmp/test_i386_pwa.out)" = "PARWROK"
@@ -3577,6 +3586,15 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parcapaggr | tail -n 1)" = "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture_string.pas /tmp/test_aarch64_parcapstr
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parcapstr | tail -n 1)" = "PARFORSTR OK"
+	# scheduling policy + reduction + named-arg clause on aarch64 (Track T cross gate)
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy.pas /tmp/test_aarch64_parpol
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parpol)" = "PARPOL OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy_lang.pas /tmp/test_aarch64_parpollang
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parpollang)" = "PARPOLLANG OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_reduction.pas /tmp/test_aarch64_parred
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parred)" = "PARRED OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy_named.pas /tmp/test_aarch64_parnamed
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_parnamed)" = "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_writeln_atomic.pas /tmp/test_aarch64_pwa
 	tools/run_target.sh aarch64 /tmp/test_aarch64_pwa > /tmp/test_aarch64_pwa.out
 	test "$$(tail -n1 /tmp/test_aarch64_pwa.out)" = "PARWROK"
@@ -4280,6 +4298,15 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parcap | tail -n 1)" = "PARFORAGGR OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_capture_string.pas /tmp/test_arm32_parstr
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parstr | tail -n 1)" = "PARFORSTR OK"
+	# scheduling policy + reduction + named-arg clause on arm32 (Track T cross gate)
+	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy.pas /tmp/test_arm32_parpol
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parpol)" = "PARPOL OK"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy_lang.pas /tmp/test_arm32_parpollang
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parpollang)" = "PARPOLLANG OK"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_reduction.pas /tmp/test_arm32_parred
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parred)" = "PARRED OK"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy_named.pas /tmp/test_arm32_parnamed
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_parnamed)" = "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_writeln_atomic.pas /tmp/test_arm32_pwa
 	tools/run_target.sh arm32 /tmp/test_arm32_pwa > /tmp/test_arm32_pwa.out
 	test "$$(tail -n1 /tmp/test_arm32_pwa.out)" = "PARWROK"
