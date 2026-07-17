@@ -45,7 +45,12 @@ const
     [0..INLINE_AST_BASE); retained inline bodies live in
     [INLINE_AST_BASE..MAX_AST) and are NOT cleared by the per-proc reset. }
   INLINE_AST_BASE = 516096;   { MAX_AST - 8192 }
-  MAX_IR      = 131072;
+  MAX_IR      = 262144;   { bumped from 131072: a large single function (generated
+                            amalgamations, big checksums) could overflow the fixed IR
+                            arrays and be rejected with 'IR overflow'. Byte-identical-safe
+                            — the compiler's own bodies stay well under the cap, so unused
+                            slots don't change emitted code. See
+                            bug-pascal-ir-node-hard-limit-max-ir (proper fix = dynamic). }
   MAX_STACK_FRAME_SIZE = 1048576; { default --max-stack-frame threshold: warn when a
                                     routine's stack frame exceeds 1 MB. Locals live on
                                     the stack (~8 MB total, shared by the whole call
