@@ -31,6 +31,34 @@ change syscall numbers underneath it.
 | macOS | **via libSystem.dylib** | Mach-O | ❌ syscall numbers deliberately unstable |
 | Windows | **via ntdll/kernel32** | PE/COFF | ❌ syscall numbers change every build |
 
+## Three distinct reasons an OS forces you off raw syscalls
+
+"Go through the library" is one outcome with three orthogonal causes — do not conflate
+them (Windows and OpenBSD arrive there by different roads):
+
+| reason | OS | can you pin/hardcode numbers? |
+| --- | --- | --- |
+| **none** — table is a stable public contract *and* raw sites are permitted | Linux, FreeBSD | n/a — just issue the syscall |
+| **policy** — numbers are stable, but the kernel kills raw `syscall` *sites* not in libc (`pinsyscalls`) | OpenBSD | yes, but forbidden anyway → go through libc |
+| **instability** — the syscall numbers themselves move between builds | **Windows**, macOS | **no** — can't even hardcode them |
+
+Key asymmetry, because it reads counter-intuitive: **Linux is NOT "on par with NT".**
+Both kernels have a `syscall` mechanism, but their *stability posture is opposite* on
+the only axis that matters — *is the syscall table a public contract?* Linux: yes,
+append-only forever, numbers never reused ("we do not break userspace"). FreeBSD: yes,
+append-only + versioned COMPAT shims. **Windows: no** — the SSDT (System Service
+Descriptor Table) is a private implementation detail Microsoft reshuffles at will;
+insert a syscall in the middle and every SSN after it shifts. Public evidence:
+j00ru's NT syscall-number tables spanning Win2000→Win11 show the same call (e.g.
+`NtCreateFile`) with different SSNs across releases and even across Win10 feature
+updates. NT's public contract is **ntdll**, one layer up — not the kernel.
+
+Corollary: even direct-syscall Windows tooling (malware, "Hell's Gate" red-team code)
+**cannot escape ntdll** — it resolves the *current* SSN by parsing ntdll's stubs at
+runtime rather than hardcoding it. So on Windows you bind ntdll/kernel32 regardless;
+hardcoding SSNs is the one approach that is actually wrong. (And Wine tests DLL exports,
+not raw SSNs — settling it for our test path too.)
+
 ## What pxx already has (2026-07)
 
 - **ELF, both flavors:** static raw-syscall binaries *and* dynamically-linked binaries
