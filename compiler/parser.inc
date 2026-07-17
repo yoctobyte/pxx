@@ -13724,6 +13724,7 @@ var
   redHasClause: Boolean; redOp: TTokenKind;
   redVarName: AnsiString;
   redCapIdx, red0Off, redKwOff, redKwLen, redIdentVal: Integer;
+  redIsMinMax, redIsMax: Boolean; redTypeTok: TTokenKind;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
@@ -13767,19 +13768,28 @@ begin
   Expect(tkTo, 'to');
   ParseExpr; hiNode := CurASTNode;
 
-  { optional `reduction(op: v)` clause between the range and `do`. v1 ops:
-    + or xor (identity 0); each worker accumulates a private partial and combines
-    into v under PXXReduceLock. NOTE `*` is NOT offered: `(*` is Pascal's comment
-    opener, so `reduction(*:...)` lexes as a comment — a `*` reduction would need
-    a different spelling. and/min/max are follow-ups too. }
+  { optional `reduction(op: v)` clause between the range and `do`. Ops:
+      + or xor  — private starts at identity 0, combined `v^ := v^ op partial`
+      min max   — private starts at v^ (current), combined `if partial </> v^ ...`
+    combined under PXXReduceLock. NOTE `*` is NOT offered: `(*` is Pascal's comment
+    opener, so `reduction(*:...)` lexes as a comment (a `*`/`and` reduction needs a
+    different spelling — follow-up). }
   redHasClause := False; redOp := tkPlus; redVarName := ''; redCapIdx := -1;
   red0Off := 0; redKwOff := 0; redKwLen := 0; redIdentVal := 0;
+  redIsMinMax := False; redIsMax := False;
   if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reduction') then
   begin
     Next; Expect(tkLParen, '(');
-    redOp := CurTok.Kind;
-    if (redOp = tkPlus) or (redOp = tkOr) or (redOp = tkXor) then redIdentVal := 0
-    else Error('reduction: v1 supports + or xor (identity 0); *, and, min, max are follow-ups');
+    if (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'min') or CaseEqual(CurTok.SVal, 'max')) then
+    begin
+      redIsMinMax := True; redIsMax := CaseEqual(CurTok.SVal, 'max');
+    end
+    else
+    begin
+      redOp := CurTok.Kind;
+      if (redOp = tkPlus) or (redOp = tkOr) or (redOp = tkXor) then redIdentVal := 0
+      else Error('reduction: ops are + or xor min max (not *; `(*` is a comment)');
+    end;
     Next;
     Expect(tkColon, ':');
     if CurTok.Kind <> tkIdent then Error('reduction: expected a variable name');
@@ -13896,6 +13906,18 @@ begin
     if capHandle[redCapIdx] then
       Error('reduction: only scalar variables are supported (not dyn-array/string)');
     redKwOff := capKwOff[redCapIdx]; redKwLen := capKwLen[redCapIdx];
+    { the private __pfred0 local needs the type's KEYWORD token where one exists —
+      a bare `tkIdent('Integer')` does not resolve as a named type (only `^Integer`
+      does); Int64/NativeInt/Byte/… have no keyword token and resolve as idents. }
+    case Syms[capSi[redCapIdx]].TypeKind of
+      tyInteger, tyInt32: redTypeTok := tkInteger_T;
+      tyBoolean:          redTypeTok := tkBoolean_T;
+      tyChar:             redTypeTok := tkChar_T;
+      tyUInt32:           redTypeTok := tkLongWord_T;
+      tySingle:           redTypeTok := tkSingle_T;
+      tyDouble:           redTypeTok := tkDouble_T;
+    else                  redTypeTok := tkIdent;   { use the keyword string }
+    end;
     if FindProc('PXXReduceLock') < 0 then
       Error('reduction: palparallel too old (PXXReduceLock not found)');
   end;
@@ -13979,12 +14001,15 @@ begin
     PFStash(tkIdent, capKwOff[ci], capKwLen[ci], ln);
     PFStash(tkSemicolon, 0, 0, ln);
   end;
-  { reduction: private accumulator `__pfred0 : <redKw> ;` }
+  { reduction: private accumulator `__pfred0 : <type> ;` }
   if redHasClause then
   begin
     PFStash(tkIdent, red0Off, 8, ln);        { __pfred0 }
     PFStash(tkColon, 0, 0, ln);
-    PFStash(tkIdent, redKwOff, redKwLen, ln);
+    if redTypeTok = tkIdent then
+      PFStash(tkIdent, redKwOff, redKwLen, ln)
+    else
+      PFStash(redTypeTok, 0, 0, ln);         { Integer/Boolean/Char/… keyword token }
     PFStash(tkSemicolon, 0, 0, ln);
   end;
   PFStash(tkBegin, 0, 0, ln);
@@ -14027,15 +14052,25 @@ begin
     PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
     PFStash(tkSemicolon, 0, 0, ln);
   end;
-  { reduction: __pfred0 := <identity> ; }
+  { reduction: __pfred0 := <identity>  (+/or/xor)  or  := v^  (min/max) ; }
   if redHasClause then
   begin
     PFStash(tkIdent, red0Off, 8, ln);
     PFStash(tkAssign, 0, 0, ln);
-    if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
-    PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := redIdentVal;
-    PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
-    Inc(PendNestCount);
+    if redIsMinMax then
+    begin
+      { seed with the shared var's current value: handles an empty worker range
+        (combine becomes a no-op) with no need for a typed +/-infinity. }
+      PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+      PFStash(tkCaret, 0, 0, ln);
+    end
+    else
+    begin
+      if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+      PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := redIdentVal;
+      PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+      Inc(PendNestCount);
+    end;
     PFStash(tkSemicolon, 0, 0, ln);
   end;
   PFStash(tkFor, 0, 0, ln);
@@ -14078,19 +14113,38 @@ begin
     end;
   end;
   PFStash(tkSemicolon, 0, 0, ln);
-  { reduction combine: PXXReduceLock ; <v>^ := <v>^ <op> __pfred0 ; PXXReduceUnlock ; }
+  { reduction combine under the lock:
+      +/or/xor : v^ := v^ op __pfred0
+      min/max  : if __pfred0 </> v^ then v^ := __pfred0 }
   if redHasClause then
   begin
     PFStash(tkIdent, NestStrOff('PXXReduceLock'), 13, ln);
     PFStash(tkSemicolon, 0, 0, ln);
-    PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
-    PFStash(tkCaret, 0, 0, ln);
-    PFStash(tkAssign, 0, 0, ln);
-    PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
-    PFStash(tkCaret, 0, 0, ln);
-    PFStash(redOp, 0, 0, ln);
-    PFStash(tkIdent, red0Off, 8, ln);
-    PFStash(tkSemicolon, 0, 0, ln);
+    if redIsMinMax then
+    begin
+      PFStash(tkIf, 0, 0, ln);
+      PFStash(tkIdent, red0Off, 8, ln);
+      if redIsMax then PFStash(tkGt, 0, 0, ln) else PFStash(tkLt, 0, 0, ln);
+      PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+      PFStash(tkCaret, 0, 0, ln);
+      PFStash(tkThen, 0, 0, ln);
+      PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+      PFStash(tkCaret, 0, 0, ln);
+      PFStash(tkAssign, 0, 0, ln);
+      PFStash(tkIdent, red0Off, 8, ln);
+      PFStash(tkSemicolon, 0, 0, ln);
+    end
+    else
+    begin
+      PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+      PFStash(tkCaret, 0, 0, ln);
+      PFStash(tkAssign, 0, 0, ln);
+      PFStash(tkIdent, capNmOff[redCapIdx], capNmLen[redCapIdx], ln);
+      PFStash(tkCaret, 0, 0, ln);
+      PFStash(redOp, 0, 0, ln);
+      PFStash(tkIdent, red0Off, 8, ln);
+      PFStash(tkSemicolon, 0, 0, ln);
+    end;
     PFStash(tkIdent, NestStrOff('PXXReduceUnlock'), 15, ln);
     PFStash(tkSemicolon, 0, 0, ln);
   end;
