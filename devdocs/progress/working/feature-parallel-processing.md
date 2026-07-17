@@ -91,6 +91,36 @@ covered surface); self-host fixedpoint holds; `--threadsafe` covers the atomic
 paths. On ESP: the thread surface compiles+runs under the IDF profile (FreeRTOS
 tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
 
+## SHIPPED — `parallel for` (2026-07-17, closing)
+
+Data-parallel loop delivered end to end, self-host byte-identical throughout,
+gated in `test-threads`/`test-core`:
+
+- **Runtime** `PXXParallelFor` (libc-free pool) · **surface** `parallel for i := lo
+  to hi do BODY` (soft keyword, `AN_PARFOR` node, parse-time worker synthesis).
+- **Capture** of enclosing locals via the enclosing frame pointer: scalars (read +
+  write-back), named-type fixed/dynamic arrays, records, classes, and ansistring.
+  Dyn arrays deref the handle; ansistring is inline-style.
+- **Async × parallel VERIFIED compatible** — per-thread coroutine reactors
+  (`CurR` keyed on `gettid`); each worker/`TThread` runs its own scheduler.
+  Proven (`test_async_parallel_compat.pas`).
+- **Fixed a SILENT compiler bug on the way:** [[bug-pascal-ptr-deref-string-index]]
+  (`p^[k]`), which also unblocked ansistring capture.
+
+### Accepted limitations (decisions, not defects — every one a CLEAN compile error)
+- **Anonymous inline capture types** (`var a: array[0..9] of Integer`): error,
+  nudging a named `type`. User-confirmed a non-limitation (one-line workaround).
+  B-2 (synthesize a name via re-entrant type registration) is optional polish, not
+  planned.
+- **Nested `parallel for`**: error, by DECISION (user-agreed 2026-07-17). Outer
+  already saturates cores; inner oversubscribes → slower (OpenMP disables nesting
+  by default). Real needs = flatten the loop, or a future task API.
+- Reduction across >1 worker into a captured scalar is a race (user's
+  responsibility); single-worker write-back is deterministic.
+- x86-64 only (the PAL); other targets keep the `--threadsafe` reject.
+
+Closed. Remaining epic items live in [[meta-multithreading]].
+
 ## Log
 - 2026-06-06 — ticket opened from user request.
 - 2026-06-18 — ESP/FreeRTOS strategy + `threads ⇒ idf` + profile-default decision
