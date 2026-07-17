@@ -185,6 +185,16 @@ tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
   - Covers the flagship `parallel for i do a[i]:=f(a[i])` with a local **named-type**
     array (fixed or dynamic). `test_parallel_for_capture_aggr.pas` gated.
 
+  ### 2b ansistring capture SHIPPED (2026-07-17, commit 08e987c9)
+  Unblocked by fixing [[bug-pascal-ptr-deref-string-index]] (a SILENT compiler bug
+  the capture surfaced: `p^[k]` char-index through a pointer-to-string deref read
+  the frame-slot bytes, not the char data — `ir.inc` AN_INDEX took baseAddr from
+  IRLowerAddress (slot) instead of the loaded handle for a deref base). With that
+  fixed, the worker's `^AnsiString` + `s^[k]` is correct; ansistring capture works
+  (Length + char-index + compare, `test_parallel_for_capture_string.pas`, gated).
+  Ansistring is INLINE-style (frame slot holds the handle, `@s` = slot,
+  capHandle=false) — distinct from a dyn array (`@d` = data, capHandle=true).
+
   ### 2b B-2 — ANONYMOUS-type capture (remaining, optional)
   `var a: array[0..9] of Integer` (inline, unnamed) still errors: "declare it with
   a named type". Workaround is trivial (`type TA = array[..]; var a: TA`) and

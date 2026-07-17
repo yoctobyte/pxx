@@ -59,3 +59,6 @@ changes). Add the `p^[k]` repro as a regression.
 captured string to `^AnsiString` + `s^[k]`; once `p^[k]` indexes correctly, the
 existing capture mechanism (Length/compare/assign already verified) covers strings
 with no further work. Currently ansistring capture is a clean compile error.
+
+## Log
+- 2026-07-17 — resolved, commit 08e987c9.
