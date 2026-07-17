@@ -23,3 +23,4 @@ ok: /tmp/testmgr-scratch-614199/test_static_array_length26  [code=37001B  data=9
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-07-17 — resolved, commit a2cb70cd.
