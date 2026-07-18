@@ -29,3 +29,6 @@ per-job stubs. Scratch-harness verified: 3-red sweep → 3 stubs; 50-red sweep
 (incl. fpc-bootstrap) → 1 cascade ticket with the root named; same-sha rerun
 → no duplicate. Full dependency modeling stays future work if the threshold
 ever misroutes.
+
+## Log
+- 2026-07-18 — resolved, commit 70b16286.
