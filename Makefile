@@ -862,6 +862,14 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_iadb26)" = "120"
 	./$(COMPILER) test/test_interface_mainbody_ascast_temp.pas /tmp/test_imbt26
 	test "$$(/tmp/test_imbt26)" = "$$(printf 'cast=107\nafter nil\ndestroy 7')"
+	# Dynamic IR arrays: one function body that lowers to > 262144 IR nodes (the old
+	# fixed MAX_IR cap) must compile — bug-pascal-ir-node-hard-limit-max-ir. Generated
+	# at build time (a committed source would be ~300 KB); local array keeps it off the
+	# global-fixup table, wide-but-few statements stay under the AST cap and seq-walk
+	# recursion depth. 180 statements x 400 terms ~= 340k IR nodes; sum = 180*2200.
+	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*180+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ir_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
+	./$(COMPILER) /tmp/test_ir_overflow_large.pas /tmp/test_ir_overflow_large26
+	test "$$(/tmp/test_ir_overflow_large26)" = "396000"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26

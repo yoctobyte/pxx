@@ -20,9 +20,27 @@ begin
   CurLowerLine := 0;
 end;
 
+procedure EnsureIRCapacity(need: Integer);
+{ Grow the per-IR-node parallel arrays so index `need-1` is in bounds. Doubling
+  from a small base gives amortized-O(1) append; capacity never shrinks (IRReset
+  only zeroes IRCount), so it settles at the largest single function body seen.
+  ALL node-indexed arrays must grow in lockstep — a missed one is a silent
+  out-of-bounds. See bug-pascal-ir-node-hard-limit-max-ir. }
+var n: Integer;
+begin
+  if need <= IRCapacity then Exit;
+  if IRCapacity = 0 then n := 65536 else n := IRCapacity;
+  while n < need do n := n * 2;
+  SetLength(IRKind, n);         SetLength(IRA, n);         SetLength(IRB, n);
+  SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
+  SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
+  SetLength(IRStmtRoot, n);     SetLength(IRLine, n);
+  IRCapacity := n;
+end;
+
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
 begin
-  if IRCount >= MAX_IR then Error('IR overflow');
+  EnsureIRCapacity(IRCount + 1);
   IRKind[IRCount] := kind;
   IRA[IRCount] := a;
   IRB[IRCount] := b;

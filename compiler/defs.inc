@@ -1906,24 +1906,30 @@ var
   ASTIChk    : array[0..MAX_AST-1] of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
   ASTNodeCount : Integer;
 
-  IRKind  : array[0..MAX_IR-1] of Integer;
-  IRA     : array[0..MAX_IR-1] of Integer;
-  IRB     : array[0..MAX_IR-1] of Integer;
-  IRC     : array[0..MAX_IR-1] of Integer;
-  IRIVal  : array[0..MAX_IR-1] of Int64;
-  IRTk    : array[0..MAX_IR-1] of Integer;
+  { The per-IR-node parallel arrays are DYNAMIC: one function body's IR at a time
+    (IRReset zeroes IRCount per body), grown on demand by EnsureIRCapacity via the
+    sole append chokepoint IRAppend. Capacity never shrinks, so it settles at the
+    largest single function seen — not the whole program. Replaces a fixed
+    MAX_IR-sized static array that both wasted ~11 MB always-resident and hard-
+    capped one function's node count (bug-pascal-ir-node-hard-limit-max-ir). }
+  IRKind  : array of Integer;
+  IRA     : array of Integer;
+  IRB     : array of Integer;
+  IRC     : array of Integer;
+  IRIVal  : array of Int64;
+  IRTk    : array of Integer;
   { Hidden caller-destination for a call that returns an aggregate / frozen string
     by a caller-owned buffer. For IR_CALL the dest IR_LEA is in IRC; IR_VIRTUAL_CALL
     and IR_CALL_IND have no free operand, so their dest node lives here (-1 = none).
     bug-frozen-string-result-global-not-reentrant. }
-  IRCallDest : array[0..MAX_IR-1] of Integer;
+  IRCallDest : array of Integer;
   { Class-instantiation IR_CALL (procIdx = -tkGetMem): the ctor proc the FRONTEND
     picked by argument types. Every backend used to re-resolve the ctor itself with
     a first-name-match FindUMeth(ci,'create'), which cannot see overloads, so an
     overloaded ctor set always called whichever Create was declared first. -1 =
     none selected, keep the old first-name-match. }
-  IRCtorProc : array[0..MAX_IR-1] of Integer;
-  IRSetLenBaseRec : array[0..MAX_IR-1] of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
+  IRCtorProc : array of Integer;
+  IRSetLenBaseRec : array of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
   { Pending open-array copy-out (writeback) for a static array passed to a
     `var`/`out` open-array parameter. The call site copies the static array into
     a header'd dyn temp (so Length/High and indexing work over the param), then
@@ -1938,9 +1944,10 @@ var
     level emitter only emits roots; calls whose value is consumed are emitted
     via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
     slot and so cannot double as the IR_CALL=1 statement flag. }
-  IRStmtRoot : array[0..MAX_IR-1] of Boolean;
-  IRLine  : array[0..MAX_IR-1] of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
+  IRStmtRoot : array of Boolean;
+  IRLine  : array of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
   IRCount : Integer;
+  IRCapacity : Integer;   { current allocated length of the per-node IR arrays (grown by EnsureIRCapacity) }
 
   { DWARF -g (Tier 1): address→line rows collected at emit, and a single byte
     buffer that all .debug_* section bytes are built into. e_shoff stays 0 unless
