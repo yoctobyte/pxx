@@ -101,3 +101,12 @@ provides it earlier; two `forward;` for one routine is an FPC error.
   [[feature-require-forward-strict-mode]]. Not fixed yet (no-fix-now, ticket
   only).
 - 2026-06-27 - FIXED + verified. forwards.inc (FPC-gated) + two `;` in CompilePendingGlobalInits. `make bootstrap` green end-to-end, `make test` self-host byte-identical. Strict-mode enforcement = separate [[feature-require-forward-strict-mode]].
+- 2026-07-18 - RECURRED + re-fixed (agent opus-A, `50ed2164`). Same class of bug:
+  helpers landed since (NestStrOff, MangleSuffix, IRAppendCall, IRWrapChkBounds)
+  used above their defs without forwards, plus an exact-duplicate WrapPCharToString
+  in ir.inc (FPC "same parameter list"). Deleted the dup, added the 4 forwards to
+  forwards.inc. `make bootstrap` green end-to-end + self-host byte-identical. This
+  is the tstate fpc-bootstrap red (bad=603cf2bda859) — should clear on T's next run.
+  RECURRENCE-PRONE: any new helper used above its def re-breaks the FPC seed silently
+  (PXX prescan hides it). The real backstop is [[feature-require-forward-strict-mode]]
+  (a PXX --require-forward mode that flags used-before-def without needing FPC).

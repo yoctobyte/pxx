@@ -26,7 +26,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (119)
+## backlog (120)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -144,6 +144,7 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
+| regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -1032,6 +1033,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
+- [p 70] [T] regression-test-core-test-basic-comprehensive
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
