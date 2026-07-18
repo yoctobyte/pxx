@@ -20,3 +20,9 @@ function FindCTypedef(const name: AnsiString): Integer; forward;
 procedure EnableExceptionRuntime; forward;
 function IsASTLValue(node: Integer): Boolean; forward;
 procedure EmitOvfCheckX64(uns: Boolean); forward;
+{ Helpers added after the original forwards.inc landed, again used above their
+  definition (PXX prescans; FPC needs the forward). See the ticket's recurrence. }
+function NestStrOff(const s: AnsiString): Integer; forward;
+function MangleSuffix(n: Integer): AnsiString; forward;
+function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer; forward;
+function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer; forward;

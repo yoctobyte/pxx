@@ -1592,21 +1592,10 @@ end;
   for every PChar->managed-string conversion site (cast, assign, …) so the wrapper
   cannot drift between contexts. See
   refactor-centralize-managed-string-pchar-conversion. }
-function WrapPCharToString(pcharNode: Integer): Integer;
-var procIdx, wrapperArg: Integer;
-begin
-  procIdx := FindProc('PCharToString');
-  if procIdx < 0 then Error('compiler error: PCharToString helper not found');
-  wrapperArg := AllocNode(AN_ARG);
-  ASTLeft[wrapperArg] := pcharNode;
-  ASTRight[wrapperArg] := -1;
-  ASTTk[wrapperArg] := Ord(tyPointer);
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := procIdx;
-  ASTTk[Result] := Ord(Procs[procIdx].RetType);
-  ASTLeft[Result] := wrapperArg;
-  ASTRight[Result] := -1;
-end;
+{ WrapPCharToString lives in parser.inc (near the other Wrap* helpers); the
+  duplicate that used to sit here was an exact copy and tripped FPC's
+  "overloaded functions have the same parameter list" — removed
+  (bug-fpc-seed-helper-ordering-after-lua-c-frontend recurrence). }
 
 function IsASTLValue(node: Integer): Boolean;
 var symIdx: Integer;
