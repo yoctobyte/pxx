@@ -160,3 +160,22 @@ sites 2b/2c can't reach. Needs (see the design notes in
   remaining -O3 stack (ABI/residency both arches, regcall p3 both slices,
   inline 2c + nested-ifs + non-leaf slice 1) holds under random programs.
   Depth-1 re-land blocked on the reduced repro's root cause.
+
+- 2026-07-19 early (fable-O) **depth-1 re-inline RE-LANDED, root-caused.**
+  The pinned-anchored reducer (oracle: pinned-O3 + bad-O0 + bad-O2 must all
+  agree, only bad-O3 diverging counts — REQUIRED, or reduction drifts into
+  uninitialized-Result UB) shrank the repro to 88 lines and exposed the true
+  bug: `IRInlineExpand` bound arguments into the SHARED `InlineArgAST[]`
+  while argument LOWERING can re-enter the expander (a nested call in a
+  splice's argument list at depth<2) — the inner activation rebinds the
+  outer's argument ASTs mid-loop. Fix = the REENTRANCY CONTRACT: bind into a
+  local `boundAST[]`, publish the Inline* globals only inside the clone
+  window (IRClone* never lowers → no reentry), hold the Result temp in a
+  local across the reentrant body lowering. Bonus: arg capture now runs
+  OUTSIDE the depth bump, so argument calls inline at current depth.
+  New regression `test_inline_depth_reentry.pas` — PROVEN to catch the
+  reverted binary (diverges on it) and identical on the fix at -O0/-O2/-O3 +
+  aarch64. Pre-land fuzz: **1216 programs, 0 diffs**; full battery green
+  (test-opt, quick, bootstrap, benches, O3-built byte-identical). Side-find
+  from the UB-drifting reducer already filed:
+  [[bug-pascal-undefined-field-on-empty-record-compiles]].

@@ -2926,8 +2926,9 @@ end;
   that temp — so evaluation order and side effects are preserved without
   re-evaluating a multiply-used param. }
 function IRInlineExpand(callNode, cpi: Integer): Integer;
-var item, n, clonedRoot, tsym, identNode, aval: Integer;
+var item, n, clonedRoot, tsym, identNode, aval, resSym: Integer;
     rawArg: array[0..MAX_PROC_PARAMS-1] of Integer;
+    boundAST: array[0..MAX_PROC_PARAMS-1] of Integer;
     ptk: TTypeKind; anyImpure: Boolean;
 begin
   IRInlineExpand := -1;
@@ -2949,16 +2950,26 @@ begin
     a direct-substituted pure arg's placeholder can sit AFTER the body's
     inner call, whose side effects may write the arg's variable. }
   if InlineBodyHasCall[cpi] then anyImpure := True;
-  { Pass 2: bind each param. If EVERY arg is pure (side-effect-free, re-readable),
-    substitute directly. If ANY arg has a side effect, capture EVERY arg into a
-    fresh temp in left-to-right order first — otherwise a pure arg substituted
-    into a body position would be read AFTER a later arg's side effect, breaking
-    Pascal's left-to-right evaluation (e.g. Add(x, SetX(99))). }
-  Inc(InliningActive);
+  { Pass 2: bind each param INTO LOCALS. If EVERY arg is pure (side-effect-
+    free, re-readable), substitute directly. If ANY arg has a side effect,
+    capture EVERY arg into a fresh temp in left-to-right order first —
+    otherwise a pure arg substituted into a body position would be read AFTER
+    a later arg's side effect, breaking Pascal's left-to-right evaluation
+    (e.g. Add(x, SetX(99))).
+
+    THE REENTRANCY CONTRACT (root cause of the fuzz-found depth-1 silent -O3
+    divergence, reduced to nested calls in a splice's ARGUMENT list): lowering
+    an argument here — and later lowering the cloned body — can hit a call
+    that re-enters this function, which rebinds every Inline* global. So this
+    pass writes ONLY the local boundAST[]; the globals are published inside
+    the CLONE WINDOW below, where nothing lowers (hence nothing re-enters)
+    before the clone consumes them. Arg capture deliberately runs OUTSIDE the
+    InliningActive bump: an argument's own calls inline at the current depth,
+    exactly as they would as standalone expressions. }
   for n := 0 to InlineParamCnt[cpi] - 1 do
   begin
     if (not anyImpure) and InlineArgIsPure(rawArg[n]) then
-      InlineArgAST[n] := rawArg[n]
+      boundAST[n] := rawArg[n]
     else
     begin
       ptk := Procs[cpi].Params[n].TypeKind;
@@ -2968,20 +2979,27 @@ begin
       identNode := AllocNode(AN_IDENT);
       ASTIVal[identNode] := tsym;
       ASTTk[identNode]   := Ord(ptk);
-      InlineArgAST[n]    := identNode;
+      boundAST[n]        := identNode;
     end;
   end;
+  { Clone window: publish the globals and consume them immediately — IRClone*
+    performs no lowering, so no reentry can clobber them first. The Result
+    temp is held in the LOCAL resSym across the (reentrant) body lowering. }
+  Inc(InliningActive);
+  for n := 0 to InlineParamCnt[cpi] - 1 do
+    InlineArgAST[n] := boundAST[n];
   if InlineBodyIsStmt[cpi] then
   begin
-    { Slice 2b: alloc a caller Result temp + a fresh caller local per callee local,
-      clone the statement chain (placeholders → these syms), lower it (emits the
-      statements), then yield a load of the Result temp as the call's value. }
-    InlineResultSym := AllocVar('', Procs[cpi].RetType);
+    { Slice 2b: alloc a caller Result temp + a fresh caller local per callee
+      local, clone the statement chain (placeholders → these syms), lower it
+      (emits the statements), then yield a load of the Result temp. }
+    resSym := AllocVar('', Procs[cpi].RetType);
+    InlineResultSym := resSym;
     for n := 0 to InlineLocalCnt[cpi] - 1 do
       InlineLocalSym[n] := AllocVar('', IntToTypeKind(InlineLocalTk[cpi*MAX_INLINE_LOCALS + n]));
     clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
     IRLowerAST(clonedRoot);
-    IRInlineExpand := IRAppend(IR_LOAD_SYM, InlineResultSym, -1, -1, 0, Ord(Procs[cpi].RetType));
+    IRInlineExpand := IRAppend(IR_LOAD_SYM, resSym, -1, -1, 0, Ord(Procs[cpi].RetType));
   end
   else
   begin
@@ -5439,9 +5457,14 @@ begin
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand
-        declines (-1). Guarded InliningActive=0 so a spliced body never re-inlines. }
+        declines (-1). A spliced body's inner calls may re-inline ONE level
+        (InliningActive < 2, -O3): safe under the IRInlineExpand reentrancy
+        contract (locals-first binding, globals only in the clone window);
+        depth stays bounded and self-recursion terminates (level 2 lowers as
+        a real call). -O2 keeps depth 0. }
       if (OptLevel >= 2) and (cpi >= 0) and (cpi < MAX_PROCS) and
-         (InlineBodyRoot[cpi] >= 0) and (InliningActive = 0) then
+         (InlineBodyRoot[cpi] >= 0) and
+         ((InliningActive = 0) or ((OptLevel >= 3) and (InliningActive < 2))) then
       begin
         outNode := IRInlineExpand(node, cpi);
         if outNode >= 0 then begin Result := outNode; Exit; end;
