@@ -68,6 +68,43 @@ Keep the flattened file consistent with the binary: **edit source → rebuild `-
   timeout 60 ...)`. This bug OOM-killed the host twice (14 GB RSS) before it was
   caged. A `ulimit -v` turns an OOM into a clean, catchable SIGSEGV.
 
+## Differential fuzzing — find silent miscompiles you'd never hand-write
+
+A second implementation is a judgement-free oracle. For the C frontend this found
+three silent -O0 miscompiles in one session (signed/unsigned 64-bit compare,
+struct-array-element pointer stride, sub-int compare promotion) plus two
+frontend gaps.
+
+- **`csmith` (apt) — random UB-free C with a global checksum.** Build the same
+  program with gcc and pxx; the checksums must match. Driver:
+  `tools/csmith_fuzz.py --iters N --seed-start S` (buckets: MISCOMPILE_VS_GCC,
+  MISCOMPILE_OPT = pxx -O levels disagree with each other, PXX_CRASH,
+  PXX_COMPILE_FAIL; `--seed K` replays one). `make fuzz-csmith` wraps it.
+  Runtime headers vendor without root via `tools/install_lib_candidates.sh csmith`.
+- **Fuzz SMALL so findings are born diagnosable.** Full-complexity csmith emits
+  ~2.5k-line programs; pass `--csmith-args "--max-funcs 1 --max-block-size 3
+  --max-block-depth 2 --max-expr-complexity 4 --max-array-dim 2
+  --max-array-len-per-dim 3 --max-pointer-depth 2"` and a miscompile lands at
+  ~130 lines. Keep features ON (don't `--no-safe-math` — it can introduce UB and
+  invalidate the oracle). Bump limits gradually to reach new feature interactions.
+- **`pasmith` / `pasmith_run.py`** — the Object-Pascal analogue (FPC as oracle),
+  Track T.
+
+## Reducing a fuzz finding to a repro
+
+- **`creduce` / `cvise` (apt) — the right tool.** C-aware delta debugging.
+  Interestingness test for a miscompile: `gcc builds+runs AND pxx builds+runs AND
+  checksums differ`; for a compile-fail: `gcc accepts AND pxx rejects`. Install:
+  `sudo apt install creduce cvise` (you must be in `sudo`).
+- **No creduce? A line-delta reducer gets surprisingly far** on SMALL-mode output
+  (~130 lines → ~20). It floors at ~500-900 lines on full-size csmith (can't break
+  into nested exprs — that's what creduce is for). Pattern: remove line-chunks
+  (halving), keep a removal iff the interestingness test still holds.
+- **Instrument the diverging global.** csmith checksums globals; add a `printf` of
+  the suspect global at its mutation site in BOTH compilers with identical inputs
+  — pins the exact diverging operation without a full reduction (took seed 31039
+  from 90 lines to `(int8)g_15 >= (uint16)g_74`).
+
 ## Instrument the allocator
 
 When memory misbehaves, make the allocator *narrate*. `builtinheap.pas` is
