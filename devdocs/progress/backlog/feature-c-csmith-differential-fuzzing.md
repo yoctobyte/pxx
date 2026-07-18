@@ -98,3 +98,27 @@ failures are crashes (still one dominant class — see below).
   Use the saved `t.c` in the findings directory, not just the seed.
 - **A `printf` you inject can move or hide the crash** — that means memory corruption, and
   it is a signal, not an annoyance.
+
+## RESUMED 2026-07-18 — ~300 iters (seed 5000+), 2 finding buckets (both pre-existing)
+
+Ran `tools/csmith_fuzz.py --iters 300 --seed-start 5000`. ~95% agreed with the gcc
+oracle (rest skipped = gcc-side build/run fails). Two deduped finding buckets, BOTH
+confirmed pre-existing (the pinned stable compiler reproduces them — not from the
+2026-07-18 C multi-dim / float work):
+
+- **MISCOMPILE_VS_GCC (seeds 5038, 5194, …) — RECURRING, SERIOUS.** pxx prints a
+  wrong global checksum at -O0 (all pxx -O levels agree, differ from gcc). Filed
+  [[bug-a-csmith-o0-miscompile-seed5038]] (prio 55). Multiple seeds hit the same
+  bucket → a common codegen/lowering bug.
+- **PXX_COMPILE_FAIL (seed 5004) — kind-5 AN_BINOP.** `IR_UNSUPPORTED: could not
+  lower AST node (kind 5)`. Pre-existing: the pinned compiler fails it EARLIER at
+  "wrong number of array subscripts" (the partial-multi-dim-index bug fixed
+  2026-07-18 in de649c39) — so recent work fixed the first gap and exposed this
+  deeper AN_BINOP-lowering one. Same kind-5 family seen in
+  [[bug-c-ptr-to-array-parameter]] history.
+
+**Blocker for fixing:** both need reduction from ~2.5k-line generators; `creduce`/
+`cvise` are not installed here (apt/pip need root/PEP-668) and a homemade line-delta
+reducer floors ~800 lines (csmith's nested exprs need a C-aware reducer). Install
+creduce to reduce + fix. Reproducers (this box's csmith) preserved in the session
+scratchpad; seeds reproduce exactly via `tools/csmith_fuzz.py --seed N`.
