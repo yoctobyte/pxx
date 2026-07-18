@@ -8,7 +8,7 @@ prio: 55
 
 - **Type:** bug (Track A/P — interface refcount / finalization / dispatch; shared
   IR/runtime). Runtime crash, not a compile error.
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, pasmith run with **interfaces enabled** (`--intfs 3`) — a config
   not exercised in prior clean runs. Two NEW signatures appeared together:
   `pxx-crash_trace-length` (this) and a `pxx-vs-fpc_trace-length` cluster (32 hits, likely
@@ -123,3 +123,35 @@ either seed. Fix once isolated: correct the base-pointer adjustment in the
 interface-to-interface QueryInterface/`as` lowering. Cross-check
 [[project_interface_single_pointer_abi_b337]] (interface value = one pointer) and
 [[project_com_interface_default_and_lifetime]].
+
+## RESOLUTION (2026-07-18, agent opus-A)
+
+**Crash FIXED.** Two commits closed the SIGSEGV; seed 53011 now runs to completion
+and prints the canonical FPC checksum `9420765320240807970` at every -O level.
+
+Root cause (the ticket's "wrong object base" hypothesis was WRONG — tracing showed
+the field values were correct):
+1. **as-cast temp under-refcount** (commit 8e2d112e): `obj as IFoo` on a COM
+   interface is a QueryInterface (AddRefs) whose temp must live to routine
+   scope-exit. pxx built it as a pure reinterpret (no retain) yet
+   EmitManagedLocalCleanup released the skLocal temp → premature destroy + later
+   double-drop. Fix: PXXIntfAddRef the temp in IRMaterializeIntfCast (skLocal only).
+2. **uninitialized temp release = the actual crash** (commit ef46cd01): the temp is
+   allocated during IR lowering, AFTER the prologue zero-init pass. In a branch the
+   run skips, the slot is never stored, but the scope-exit release still fires →
+   PXXIntfRelease on stale stack bytes → heap corruption. Layout-sensitive (crashed
+   -O0/-O2/-O3, survived -O1) → only surfaced with the fuzzer's fuller graph. Fix:
+   CompileAST nil-inits COM-interface temps at body head. Self-host byte-identical
+   (compiler declares no Pascal interfaces).
+
+Regressions: test_interface_ascast_temp_lifetime.pas, test_interface_ascast_dead_branch_temp.pas.
+
+**Remaining (spun out): the 53002 wrong-value variant is a SEPARATE mechanism** — a
+main-body as-cast temp is skGlobal (BSS-zeroed, so it never crashes) and is released
+too late/never vs FPC's end-of-main, so its exit checksum still differs by
+destructor timing. That needs main-body temp AddRef + a program-exit finalization
+pass (a new mechanism; benign, no crash). Filed as
+[[bug-pascal-mainbody-ascast-temp-finalization-timing]].
+
+## Log
+- 2026-07-18 — resolved, commit 3e050167.
