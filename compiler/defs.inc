@@ -1083,6 +1083,8 @@ var
   InlineResultSym  : Integer;
   InlineWrittenLocal : array[0..MAX_INLINE_LOCALS-1] of Boolean; { read-before-write guard during shape-3 validation — DEFINITE (all-paths) assignment under slice 2c branches }
   InlineResultDef    : Boolean; { slice 2c: Result definitely (all paths) assigned so far — gates Result-READ inside the body (Clamp-style `if Result < lo then ...`) }
+  InlineRetentionSawCall : Boolean; { non-leaf slice: an AN_CALL was accepted somewhere in the body being validated for retention }
+  InlineBodyHasCall  : array[0..MAX_PROCS-1] of Boolean; { retained body contains a call — the splice must temp-capture EVERY arg (a direct-substituted pure arg would otherwise be re-read after the inner call's side effects) }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

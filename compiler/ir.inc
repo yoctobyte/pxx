@@ -2945,6 +2945,10 @@ begin
     item := ASTRight[item];
   end;
   if n <> InlineParamCnt[cpi] then Exit;
+  { A call-bearing body (non-leaf slice): every arg must be temp-captured —
+    a direct-substituted pure arg's placeholder can sit AFTER the body's
+    inner call, whose side effects may write the arg's variable. }
+  if InlineBodyHasCall[cpi] then anyImpure := True;
   { Pass 2: bind each param. If EVERY arg is pure (side-effect-free, re-readable),
     substitute directly. If ANY arg has a side effect, capture EVERY arg into a
     fresh temp in left-to-right order first — otherwise a pure arg substituted

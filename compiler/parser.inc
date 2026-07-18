@@ -140,7 +140,7 @@ end;
   uninitialised-Result hazard). }
 function InlineExprSimple(node, procIdx: Integer; allowLocals: Boolean; retSym: Integer;
                           allowResRead: Boolean): Boolean;
-var idx: Integer;
+var idx, cpi2, argN, argCnt: Integer;
 begin
   InlineExprSimple := False;
   if node < 0 then begin InlineExprSimple := True; Exit; end;  { absent child = ok }
@@ -174,6 +174,35 @@ begin
     AN_BINOP, AN_NEG, AN_NOT:
       InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx, allowLocals, retSym, allowResRead) and
                           InlineExprSimple(ASTRight[node], procIdx, allowLocals, retSym, allowResRead);
+    AN_CALL:
+      begin
+        { Non-leaf slice (-O3): a direct call to a plain internal scalar
+          function is an acceptable expression element. The retained body's
+          inner call stays a REAL call after the splice (InliningActive
+          blocks re-inlining) — the win is the removed OUTER frame. The
+          InlineRetentionSawCall flag makes the splice temp-capture every
+          argument: a direct-substituted pure arg would otherwise be re-read
+          AFTER the inner call's side effects. }
+        if OptLevel < 3 then Exit;
+        if ASTRight[node] <> -1 then Exit;         { plain call shape only }
+        cpi2 := ASTIVal[node];
+        if (cpi2 < 0) or (cpi2 >= MAX_PROCS) or (cpi2 >= ProcCount) then Exit;
+        if ProcExternal[cpi2] or ProcCdecl[cpi2] or ProcVariadic[cpi2] then Exit;
+        if ProcIsGenerator[cpi2] or ProcIsStackless[cpi2] then Exit;
+        if not Procs[cpi2].IsFunc then Exit;
+        if not InlineScalarTk(Procs[cpi2].RetType) then Exit;
+        argN := ASTLeft[node]; argCnt := 0;
+        while argN <> -1 do
+        begin
+          if ASTKind[argN] <> AN_ARG then Exit;
+          if not InlineExprSimple(ASTLeft[argN], procIdx, allowLocals, retSym, allowResRead) then Exit;
+          argN := ASTRight[argN];
+          Inc(argCnt);
+        end;
+        if argCnt <> Procs[cpi2].ParamCount then Exit;
+        InlineRetentionSawCall := True;
+        InlineExprSimple := True;
+      end;
   end;
 end;
 
@@ -447,6 +476,7 @@ begin
   if InlineASTNext - startNext > 256 then begin InlineASTNext := startNext; Exit; end;
   InlineBodyRoot[procIdx]   := cloned;
   InlineBodyIsStmt[procIdx] := True;
+  InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
   InlineParamCnt[procIdx]   := Procs[procIdx].ParamCount;
   InlineLocalCnt[procIdx]   := RetLocalCnt;
   for j := 0 to RetLocalCnt - 1 do
@@ -463,6 +493,7 @@ var seqNode, stmt, lhs, rhs, i, startNext, retSym: Integer;
 begin
   if OptLevel < 2 then Exit;
   if procIdx < 0 then Exit;
+  InlineRetentionSawCall := False;   { non-leaf slice: set by InlineExprSimple on any accepted AN_CALL }
   if not Procs[procIdx].IsFunc then Exit;
   if ProcExternal[procIdx] or ProcCdecl[procIdx] or ProcVariadic[procIdx] then Exit;
   if ProcIsGenerator[procIdx] or ProcIsStackless[procIdx] then Exit;
@@ -503,6 +534,7 @@ begin
     if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
+    InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
   end
   else if (ASTRight[seqNode] = -1) and (ASTKind[stmt] = AN_IF) then
   begin
@@ -528,6 +560,7 @@ begin
     if InlineASTNext - startNext > 96 then begin InlineASTNext := startNext; Exit; end;
     InlineBodyRoot[procIdx] := i;
     InlineParamCnt[procIdx] := Procs[procIdx].ParamCount;
+    InlineBodyHasCall[procIdx] := InlineRetentionSawCall;
   end
   else
     TryRetainInlineStmtBody(procIdx, bodyNode, retSym);

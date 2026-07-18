@@ -122,3 +122,22 @@ sites 2b/2c can't reach. Needs (see the design notes in
   -O0/-O2/-O3 + aarch64 differential. Gates: test-opt, quick, bootstrap,
   O3-built byte-identical, mandelbrot checksum. REMAINING: non-leaf (callee
   makes calls); while/for bodies.
+
+- 2026-07-18 night (fable-O) **NON-LEAF slice 1 LANDED (-O3).**
+  `InlineExprSimple` accepts a direct `AN_CALL` to a plain internal scalar
+  function (non-extern/cdecl/variadic/generator, arg count checked, args
+  recursively simple, plain-call shape only) as an expression element — so
+  wrapper bodies (`Wrap := Leaf(a) + Leaf(b)*2`, incl. inside 2b/2c chains and
+  arms) now retain. The spliced body's inner calls stay REAL calls
+  (InliningActive already blocks re-inlining) — the win is the removed outer
+  frame; measured 1.13x on a 3-wrapper loop despite inner leaf-calls
+  materializing. Correctness key: `InlineBodyHasCall[proc]` (set via
+  `InlineRetentionSawCall` during validation) forces the splice to
+  temp-capture EVERY argument — a direct-substituted pure arg's placeholder
+  can sit after the inner call's side effects. Side-effect-exact test
+  `test_inline_nonleaf.pas` (g= counts the callee's global increments) —
+  identical -O0/-O2/-O3 + aarch64 differential. Gates: test-opt, quick,
+  bootstrap (FPC), C 220/220, nilpy, checksums, O3-built byte-identical.
+  FUTURE: depth-1 re-inline of inner calls inside splices (lift the
+  InliningActive=0 gate to a depth budget) — would recover the leaf-in-wrapper
+  fusion the -O2 wrapper call keeps today. REMAINING: while/for bodies.
