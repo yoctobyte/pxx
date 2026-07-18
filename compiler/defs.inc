@@ -2084,37 +2084,38 @@ var
   IMTOff   : array[0..MAX_IMT-1] of Integer;  { Data[] offset of the IMT }
   IMTCount : Integer;
 
-  UFldNOff   : array[0..MAX_UFIELD-1] of Integer;
-  UFldNLen   : array[0..MAX_UFIELD-1] of Integer;
-  UFldOff_   : array[0..MAX_UFIELD-1] of Integer;
-  UFldTk     : array[0..MAX_UFIELD-1] of Integer;
-  UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
-  UFldAnonRec : array[0..MAX_UFIELD-1] of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
-  UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
-  UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
-  UFldPtrAlias : array[0..MAX_UFIELD-1] of Integer; { pointer field declared via a named pointer alias: that alias index, else -1. A field of type `PNode` inside `TNode` captures PtrElemRec BEFORE ResolvePendingPointerAliases fixes the forward `PNode = ^TNode` up, so it would keep REC_NONE forever and every `p^.next^.f` resolved at offset 0. Keeping the alias lets the same pass re-read it. }
-  UFldProcSig : array[0..MAX_UFIELD-1] of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }
-  UFldElemProcSig : array[0..MAX_UFIELD-1] of Integer; { POINTER-to-fn-ptr field (`ft *pf`): sig of the pointee fn-pointer, so `(*s.pf)(args)` finds the callee sig UFldProcSig drops; -1 = field not ptr-to-fn-ptr }
-  UFldIsArray : array[0..MAX_UFIELD-1] of Boolean;
-  UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
-  UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
-  UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
-  UFldVis    : array[0..MAX_UFIELD-1] of Integer;  { member visibility: VIS_PUBLIC/PROTECTED/PRIVATE/STRICT_PROTECTED/STRICT_PRIVATE. Enforced only under StrictVisibility. }
-  UFldStrCap : array[0..MAX_UFIELD-1] of Integer;  { see decl above }
-  UFldIsSub : array[0..MAX_UFIELD-1] of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
-  UFldSubLo : array[0..MAX_UFIELD-1] of Int64;
-  UFldSubHi : array[0..MAX_UFIELD-1] of Int64;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
-  UFldSetEnumId : array[0..MAX_UFIELD-1] of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
-  UFldSetElemTk : array[0..MAX_UFIELD-1] of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
-  UFldBitWidth : array[0..MAX_UFIELD-1] of Integer; { C named bit-field width in bits; 0 = ordinary field }
-  UFldBitShift : array[0..MAX_UFIELD-1] of Integer; { C named bit-field least-significant bit offset within storage unit }
-  UFldBitBytes : array[0..MAX_UFIELD-1] of Integer; { C named bit-field storage bytes used for masked RMW }
+  UFldNOff   : array of Integer;
+  UFldNLen   : array of Integer;
+  UFldOff_   : array of Integer;
+  UFldTk     : array of Integer;
+  UFldRec_   : array of Integer;
+  UFldAnonRec : array of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
+  UFldPtrElemTk : array of Integer;
+  UFldPtrElemRec : array of Integer;
+  UFldPtrAlias : array of Integer; { pointer field declared via a named pointer alias: that alias index, else -1. A field of type `PNode` inside `TNode` captures PtrElemRec BEFORE ResolvePendingPointerAliases fixes the forward `PNode = ^TNode` up, so it would keep REC_NONE forever and every `p^.next^.f` resolved at offset 0. Keeping the alias lets the same pass re-read it. }
+  UFldProcSig : array of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }
+  UFldElemProcSig : array of Integer; { POINTER-to-fn-ptr field (`ft *pf`): sig of the pointee fn-pointer, so `(*s.pf)(args)` finds the callee sig UFldProcSig drops; -1 = field not ptr-to-fn-ptr }
+  UFldIsArray : array of Boolean;
+  UFldArrLen  : array of Integer;
+  UFldDynDepth : array of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
+  UFldPub    : array of Integer;  { 1 = published, 0 = other }
+  UFldVis    : array of Integer;  { member visibility: VIS_PUBLIC/PROTECTED/PRIVATE/STRICT_PROTECTED/STRICT_PRIVATE. Enforced only under StrictVisibility. }
+  UFldStrCap : array of Integer;  { see decl above }
+  UFldIsSub : array of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
+  UFldSubLo : array of Int64;
+  UFldSubHi : array of Int64;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
+  UFldSetEnumId : array of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
+  UFldSetElemTk : array of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
+  UFldBitWidth : array of Integer; { C named bit-field width in bits; 0 = ordinary field }
+  UFldBitShift : array of Integer; { C named bit-field least-significant bit offset within storage unit }
+  UFldBitBytes : array of Integer; { C named bit-field storage bytes used for masked RMW }
   { 2-D fixed-array fields: `m: array[a..b, c..d] of T`, flattened to 1-D
     storage; r.m[i,j] / r.m[i][j] index via (i-lo1)*span2 + (j-lo2). }
-  UFldArrNDims  : array[0..MAX_UFIELD-1] of Integer;
-  UFldArrDimLo  : array[0..MAX_UFIELD*MAX_ARR_DIMS-1] of Integer;
-  UFldArrDimSpan: array[0..MAX_UFIELD*MAX_ARR_DIMS-1] of Integer;
+  UFldArrNDims  : array of Integer;
+  UFldArrDimLo  : array of Integer;
+  UFldArrDimSpan: array of Integer;
   UFldCount  : Integer;
+  UFldCapacity : Integer;   { allocated length of the dynamic UFld* arrays (grown by EnsureUFieldCapacity; the ArrDim arrays hold UFldCapacity*MAX_ARR_DIMS) }
 
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;
   UMthNLen   : array[0..MAX_UMETH-1] of Integer;

@@ -617,10 +617,33 @@ begin
   Result := MethodPtrRecId;
 end;
 
+procedure EnsureUFieldCapacity(need: Integer);
+{ Grow the UFld* field-pool arrays so index `need-1` is in bounds (the ArrDim arrays
+  are 2-D, sized need*MAX_ARR_DIMS). Doubling from 16384; capacity never shrinks across
+  the per-frontend UFldCount reset. ALL parallel arrays grow in lockstep. See
+  feature-dynamic-compiler-tables. }
+var n: Integer;
+begin
+  if need <= UFldCapacity then Exit;
+  if UFldCapacity = 0 then n := 16384 else n := UFldCapacity;
+  while n < need do n := n * 2;
+  SetLength(UFldNOff, n);       SetLength(UFldNLen, n);         SetLength(UFldOff_, n);
+  SetLength(UFldTk, n);         SetLength(UFldRec_, n);         SetLength(UFldAnonRec, n);
+  SetLength(UFldPtrElemTk, n);  SetLength(UFldPtrElemRec, n);   SetLength(UFldPtrAlias, n);
+  SetLength(UFldProcSig, n);    SetLength(UFldElemProcSig, n);  SetLength(UFldIsArray, n);
+  SetLength(UFldArrLen, n);     SetLength(UFldDynDepth, n);     SetLength(UFldPub, n);
+  SetLength(UFldVis, n);        SetLength(UFldStrCap, n);       SetLength(UFldIsSub, n);
+  SetLength(UFldSubLo, n);      SetLength(UFldSubHi, n);        SetLength(UFldSetEnumId, n);
+  SetLength(UFldSetElemTk, n);  SetLength(UFldBitWidth, n);     SetLength(UFldBitShift, n);
+  SetLength(UFldBitBytes, n);   SetLength(UFldArrNDims, n);
+  SetLength(UFldArrDimLo, n * MAX_ARR_DIMS);   SetLength(UFldArrDimSpan, n * MAX_ARR_DIMS);
+  UFldCapacity := n;
+end;
+
 procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);
 var fi, k, src, dst: Integer;
 begin
-  if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
+  EnsureUFieldCapacity(UFldCount + 1);
   { Empty window re-base: AddUClass stamps UClsFBase at CLASS-CREATION time, so a
     frontend that creates struct SHELLS up front then fills fields later (rparser's
     two-pass, so a field type can reference another struct) leaves every empty
@@ -643,8 +666,7 @@ begin
     extending PAST the tail) must be left alone. }
   if (UClsFCount[ci] > 0) and (UClsFBase[ci] + UClsFCount[ci] < UFldCount) then
   begin
-    if UFldCount + UClsFCount[ci] >= MAX_UFIELD then
-      Error('too many record/class fields (MAX_UFIELD)');
+    EnsureUFieldCapacity(UFldCount + UClsFCount[ci] + 1);   { relocation writes [dst..dst+UClsFCount) }
     dst := UFldCount;
     for k := 0 to UClsFCount[ci] - 1 do
     begin
@@ -679,8 +701,8 @@ begin
     end;
     UClsFBase[ci] := dst;
     UFldCount := UFldCount + UClsFCount[ci];
-    if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
   end;
+  EnsureUFieldCapacity(UFldCount + 1);   { the single-field append below writes slot UFldCount (may have grown via inherit) }
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;

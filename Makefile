@@ -890,6 +890,12 @@ test-core: $(COMPILER)
 	@python3 -c "L=['program p;','var']+['  v%d: longint;'%i for i in range(20000)]+['begin','  v0 := 7; writeln(v0);','end.']; open('/tmp/test_sym_growth.pas','w').write(chr(10).join(L)+chr(10))"
 	./$(COMPILER) /tmp/test_sym_growth.pas /tmp/test_sym_growth26
 	test "$$(/tmp/test_sym_growth26)" = "7"
+	# Dynamic UField arrays: a struct with >16384 fields (the EnsureUFieldCapacity
+	# reserve) must grow the UFld* pool — feature-dynamic-compiler-tables. Access low
+	# fields (offset 0/4) to sidestep a separate pre-existing huge-struct high-offset bug.
+	@python3 -c "L=['struct s {']+['  int f%d;'%i for i in range(20000)]+['};','int main(void){ struct s b; b.f0=7; b.f1=35; return b.f0+b.f1; }']; open('/tmp/test_ufield_growth.c','w').write(chr(10).join(L)+chr(10))"
+	./$(COMPILER) /tmp/test_ufield_growth.c /tmp/test_ufield_growth26
+	/tmp/test_ufield_growth26; test $$? -eq 42
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26
