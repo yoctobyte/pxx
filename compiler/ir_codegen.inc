@@ -6116,9 +6116,26 @@ begin
 end;
 
 procedure CompileAST(node: Integer);
+var iZeroTmp: Integer;
 begin
   IRReset;
   IRLowerAST(node);
+  { Nil the COM-interface temps that lowering just allocated (e.g. an `as`-cast
+    temp from IRMaterializeIntfCast). Such temps are created AFTER the prologue's
+    managed-local zero-init pass ran, so they miss it — yet EmitManagedLocalCleanup
+    releases every skLocal COM-interface temp at scope exit. A temp built inside a
+    branch the run skips would then be released UNINITIALISED: PXXIntfRelease on
+    stale stack bytes → heap corruption / SIGSEGV (bug-pascal-interface-finalization
+    -crash). Emit the nil-stores here, at the head of this body's code (before
+    IREmitMachineCode lays down the body), so the release always sees an empty slot.
+    Scoped to COM-interface temps (a single pointer -> one plain store, no register
+    clobber): the compiler declares no Pascal interfaces, so its own codegen and the
+    self-host fixedpoint stay byte-identical. }
+  if CurProc >= 0 then
+    for iZeroTmp := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') and
+         SymIsComInterface(iZeroTmp) then
+        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, RecSize(Syms[iZeroTmp].RecName));
   IRVerify;
   if MeasureRegcall and (CurProc >= 0) then RegcallMeasureBody;
   if MeasureInline and (CurProc >= 0) then InlineMeasureBody;
