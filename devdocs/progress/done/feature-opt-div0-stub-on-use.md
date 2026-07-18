@@ -57,3 +57,4 @@ what the flag tracks.
   both drivers now emit the stub unconditionally, BEFORE their RTL pulls.
   Gates: self-host byte-identical, test-opt green, C 220/220, test-nilpy,
   hasdiv/nodiv byte-identical to pinned, C div-by-zero exits RE200.
+- 2026-07-18 — resolved, commit 938c0154.
