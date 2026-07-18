@@ -2,8 +2,9 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `a3f6e70a728f` | 2026-07-18T20:43:40Z | RED (full) | 305.3s | `a3f6e70a728f` RED |
+| borg | `a3f6e70a728f` | 2026-07-18T20:48:42Z | RED (opt) | 295.2s | `a3f6e70a728f` RED |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
 - **test-core#src:test/test_ws_skeleton.ws** — test/test_ws_skeleton.ws (borg): bad `f5c8fbec6016`, last good `2dffbb7c65a2`, 4 commit(s) in range
+- **optdiff#shard5/6** — tools/optdiff.sh (borg): bad `a3f6e70a728f`, last good `a3f6e70a728f`, 0 commit(s) in range
