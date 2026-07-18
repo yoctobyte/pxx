@@ -31,7 +31,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-local-fnptr-array-initializer | C | 35 | bug | C LOCAL function-pointer array with brace initializer `int (*fp[2])(int) = {inc, dbl};` rejected ('expected C expression'); global form works | — |
-| bug-c-pointer-to-multidim-array-declarator | C | 30 | bug | C declarator `int (*p)[A][B]` (pointer to a >=2-D array) not parsed — blocks using a partial multi-dim index that leaves >=2 dims | — |
+| bug-c-ptr-to-array-parameter | C | 35 | bug | C function PARAMETER of pointer-to-array type `int f(int (*q)[N])` / `(*q)[A][B]` doesn't set the row stride — q[i][j] mis-strides (single-dim) or fails to lower (multi-dim) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -209,7 +209,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (801)
+## done (802)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -330,6 +330,7 @@ _none_
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
 | bug-c-pointer-to-array-declarator | C | 55 | bug | C pointer-to-array declarator `char (*p)[4]` hits IR "Unsupported linear node" | — |
+| bug-c-pointer-to-multidim-array-declarator | C | 30 | bug | C declarator `int (*p)[A][B]` (pointer to a >=2-D array) not parsed — blocks using a partial multi-dim index that leaves >=2 dims | — |
 | bug-c-postincrement-as-rvalue | C | 50 | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
 | bug-c-pragma-pack-ignored | C | 55 | bug | `#pragma pack` is IGNORED — struct layout silently differs from gcc | — |
 | bug-c-preproc-macro-arg-string-literal-paren | C | 55 | bug | C preprocessor: macro-arg paren/comma scan ignores string & char literals | — |
@@ -1129,13 +1130,13 @@ _none_
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] bug-c-local-fnptr-array-initializer
+- [p 35] [C] bug-c-ptr-to-array-parameter
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-float-const-pool
 - [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [C] bug-c-pointer-to-multidim-array-declarator
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count

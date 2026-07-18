@@ -47,3 +47,6 @@ sizes.
 
 - The repro compiles and returns 99; partial index leaving >=2 dims is usable.
 - Gate: C-conformance stays 220/220 + self-host byte-identical.
+
+## Log
+- 2026-07-18 — resolved, commit 77fb51df.
