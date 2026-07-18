@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** bug (Track A/P — interface member resolution). pxx accepts an invalid
   construct and miscompiles it to a SIGSEGV; FPC gives a compile error.
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-18, while delta-debugging the pasmith interface crash
   ([[bug-pascal-interface-finalization-crash]]) — a *separate* cleaner bug (the pasmith
   program does not use this construct).
@@ -60,3 +60,6 @@ access.
 Distinct from [[bug-pascal-interface-finalization-crash]] (which does NOT do field-access
 -through-interface — that one's trigger is still in the delta-debugged middle block).
 This one is minimal and FPC-oracle'd.
+
+## Log
+- 2026-07-18 — resolved, commit HEAD.

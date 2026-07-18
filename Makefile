@@ -852,6 +852,8 @@ test-core: $(COMPILER)
 	grep -q "record type contains a file field" /tmp/test_dff.log
 	! ./$(COMPILER) test/test_forin_string_char_fail.pas /tmp/test_fsc26 > /tmp/test_fsc.log 2>&1
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
+	! ./$(COMPILER) test/test_interface_field_access_fail.pas /tmp/test_ifaf26 > /tmp/test_ifaf.log 2>&1
+	grep -q 'interface has no member "fi"' /tmp/test_ifaf.log
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26

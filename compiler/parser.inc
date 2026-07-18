@@ -4757,6 +4757,16 @@ begin
           Continue;
         end;
       end;
+      { An interface-typed value exposes ONLY the interface's (and ancestors'/
+        IUnknown's) METHODS — never the implementing class's fields. A method or
+        parameterless-method access already exited above (mmi>=0 / AN_INTF_CALL);
+        reaching here with an interface base means the name is a field/backing
+        field, which FPC rejects ("identifier idents no member"). Without this the
+        fall-through built an AN_FIELD at the class field offset THROUGH the
+        interface pointer and miscompiled to a SIGSEGV
+        (bug-pascal-field-access-through-interface-var). }
+      if (recName >= REC_UCLASS_BASE) and UClsIsInterface[recName - REC_UCLASS_BASE] then
+        Error('interface has no member "' + fieldName + '" (an interface exposes only its methods)');
       { A pointer with NO pointee record has no member namespace to search: a plain
         `Pointer`, or a typed pointer to a non-record. The old fall-through built an
         AN_FIELD over it anyway, which lowered to "the pointer, at offset 0" — so
