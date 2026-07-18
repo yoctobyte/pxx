@@ -141,3 +141,15 @@ Both were pre-existing (pinned reproduced). After both fixes, all four reduced
 repros match gcc. The remaining PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) is
 still open ([[bug-a-csmith-o0-miscompile-seed5038]] history) — a lowering gap,
 lower severity (clean error).
+
+## Post-fix verification (2026-07-18)
+
+After both miscompile fixes: 650+ fresh iters clean — small-mode seeds 9000-9250
+& 12000-12250 (243/250 agree) and higher-complexity (--max-funcs 2
+--max-expr-complexity 6) seeds 20000-20200 (188/200 agree), **0 findings**, and
+the harness's pxx -O-level cross-check reported no MISCOMPILE_OPT (validates the
+-O3 float xmm-fusion against csmith too). The reducible-complexity miscompile
+space is clean. Deeper hunting needs full-complexity csmith → ~2.5k-line repros
+that require `creduce`/`cvise` (not installed; root/PEP-668) to reduce. Only the
+open PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) remains — didn't recur in
+650+ small/mid iters, so it needs a specific full-complexity shape.
