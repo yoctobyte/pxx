@@ -8,7 +8,7 @@ prio: 48
 
 - **Type:** bug (Track A/P — string concat + arg lowering / overload match). Sibling of
   [[bug-pascal-widechar-var-to-string-segfault]] (assign case, fixed `b1cbd204`).
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, context sweep right after fixing the assign case — a textbook
   demonstration of the shape/context whack-a-mole that
   [[refactor-centralize-managed-string-pchar-conversion]] exists to end.
@@ -63,3 +63,6 @@ the scatter the refactor targets.
 - All three lines above work (or arg errors cleanly, never the concat segfault); a
   `test/test_*.pas` regression per context.
 - Gate: `make test` + self-host byte-identical.
+
+## Log
+- 2026-07-18 — resolved, commit 3abb5529.

@@ -25,14 +25,13 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (123)
+## backlog (122)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
 | bug-pascal-ir-node-hard-limit-max-ir | A | 25 | bug | pxx rejects very large valid programs with 'IR overflow' — MAX_IR is a fixed 131072-node array, not dynamic | — |
 | bug-pascal-mainbody-ascast-temp-finalization-timing | A | 30 | bug | main-body interface as-cast temp is released at the wrong time vs FPC (destructor timing) — differing exit checksum, no crash | — |
-| bug-pascal-widechar-var-to-string-other-contexts | A | 48 | bug | WideChar var → string still broken in CONCAT (segfault) and as a string ARG (overload error) — only assign was fixed | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -210,7 +209,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (793)
+## done (794)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -537,6 +536,7 @@ _none_
 | bug-pascal-unicodestring-widestring-type-missing | A | 40 | bug | unicodestring/widestring: types not really supported (decls "work", semantics don't) | — |
 | bug-pascal-unknown-type-silently-integer | P | 65 | bug | An UNKNOWN type name silently becomes a 4-byte Integer (pointers truncate) | — |
 | bug-pascal-unqualified-call-binds-builtin-over-used-unit | P | 40 | bug | SILENT: a builtin System routine (Random) OVERLOAD-COMPETES with a same-named routine from an explicitly-used unit instead of being HIDDEN by it (FPC: a non-`overload` unit routine hides System). Differing param widths (unit Integer vs builtin Int64) let the arg TYPE steer the pick — a literal binds the unit, a wider expression binds the builtin | — |
+| bug-pascal-widechar-var-to-string-other-contexts | A | 48 | bug | WideChar var → string still broken in CONCAT (segfault) and as a string ARG (overload error) — only assign was fixed | — |
 | bug-pascal-widechar-var-to-string-segfault | A | 50 | bug | SEGFAULT: assigning a WideChar VARIABLE to an AnsiString crashes (direct widechar(x) value works) | — |
 | bug-pascal-writeln-shortstring-param | A | 40 | bug | writeln of a ShortString/frozen-string PARAM prints wild memory | — |
 | bug-pchar-empty-managed-string-nil | A | 50 | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
@@ -1069,7 +1069,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] feature-typeinfo-all-types
 - [p 50] [B] feature-typinfo-facade-unit
-- [p 48] [A] bug-pascal-widechar-var-to-string-other-contexts
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [A] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
