@@ -29,7 +29,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (597)
+## backlog (121)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -147,484 +147,8 @@ _none_
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
-| regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-ccross-args | T | 70 | regression | regression: test-aarch64#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-ccross-double-to-int | T | 70 | regression | regression: test-aarch64#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-ccross-entry | T | 70 | regression | regression: test-aarch64#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-hello | T | 70 | regression | regression: test-aarch64#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-arm32-arg-runtime | T | 70 | regression | regression: test-aarch64#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-arm32-record-byval-wide | T | 70 | regression | regression: test-aarch64#src:test/test_arm32_record_byval_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-array-of-const-types | T | 70 | regression | regression: test-aarch64#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-asm-a64-sum | T | 70 | regression | regression: test-aarch64#src:test/test_asm_a64_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-asm-a64 | T | 70 | regression | regression: test-aarch64#src:test/test_asm_a64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-asm-ifdef-multiarch | T | 70 | regression | regression: test-aarch64#src:test/test_asm_ifdef_multiarch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-async-sl | T | 70 | regression | regression: test-aarch64#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-call-result-member | T | 70 | regression | regression: test-aarch64#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cdecl-indirect | T | 70 | regression | regression: test-aarch64#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-channel | T | 70 | regression | regression: test-aarch64#src:test/test_channel.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-class-of | T | 70 | regression | regression: test-aarch64#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-classref | T | 70 | regression | regression: test-aarch64#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-collections | T | 70 | regression | regression: test-aarch64#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-conformance-2 | T | 70 | regression | regression: test-aarch64#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-const-record-temp-managed | T | 70 | regression | regression: test-aarch64#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-const-record-temp | T | 70 | regression | regression: test-aarch64#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-aggregate-return | T | 70 | regression | regression: test-aarch64#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-case-range | T | 70 | regression | regression: test-aarch64#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-const-alias | T | 70 | regression | regression: test-aarch64#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-exception | T | 70 | regression | regression: test-aarch64#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-float-const | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-float-return | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-float | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-aarch64#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-global-init | T | 70 | regression | regression: test-aarch64#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-heap | T | 70 | regression | regression: test-aarch64#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-huge-frame | T | 70 | regression | regression: test-aarch64#src:test/test_cross_huge_frame.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-in-operator | T | 70 | regression | regression: test-aarch64#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-loadfile | T | 70 | regression | regression: test-aarch64#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-managed-a64 | T | 70 | regression | regression: test-aarch64#src:test/test_cross_managed_a64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-many-params | T | 70 | regression | regression: test-aarch64#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-multidim | T | 70 | regression | regression: test-aarch64#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-multidim3d | T | 70 | regression | regression: test-aarch64#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-named-array | T | 70 | regression | regression: test-aarch64#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-open-array-params | T | 70 | regression | regression: test-aarch64#src:test/test_cross_open_array_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-param-2darray | T | 70 | regression | regression: test-aarch64#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-ptr-arith | T | 70 | regression | regression: test-aarch64#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-record-2darray | T | 70 | regression | regression: test-aarch64#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-record-array-store | T | 70 | regression | regression: test-aarch64#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-setlen-str | T | 70 | regression | regression: test-aarch64#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-setlen-varparam | T | 70 | regression | regression: test-aarch64#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-sets | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-shortcircuit | T | 70 | regression | regression: test-aarch64#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-static-open-array | T | 70 | regression | regression: test-aarch64#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-str-length-index | T | 70 | regression | regression: test-aarch64#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-string-cow | T | 70 | regression | regression: test-aarch64#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-syscall | T | 70 | regression | regression: test-aarch64#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-typed-const | T | 70 | regression | regression: test-aarch64#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-variant-single | T | 70 | regression | regression: test-aarch64#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-variant | T | 70 | regression | regression: test-aarch64#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-aarch64#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-cross-write-pchar | T | 70 | regression | regression: test-aarch64#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-ctor-string-literal-arg | T | 70 | regression | regression: test-aarch64#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-dynarray-copy | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-dynarray-field | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-dynarray-global-after-method | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-eof-stdin | T | 70 | regression | regression: test-aarch64#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-extern-c-float | T | 70 | regression | regression: test-aarch64#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-extern-c | T | 70 | regression | regression: test-aarch64#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-forin-implicit-field | T | 70 | regression | regression: test-aarch64#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-forin-member-access | T | 70 | regression | regression: test-aarch64#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-i386-arith | T | 70 | regression | regression: test-aarch64#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-i386-loops | T | 70 | regression | regression: test-aarch64#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-i386-procs | T | 70 | regression | regression: test-aarch64#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-i386-varparam | T | 70 | regression | regression: test-aarch64#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-i386-write | T | 70 | regression | regression: test-aarch64#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-inheritance-dispatch | T | 70 | regression | regression: test-aarch64#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-inline-expand | T | 70 | regression | regression: test-aarch64#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interface-arc | T | 70 | regression | regression: test-aarch64#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces-as | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces-inherit | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces-is | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces-multi-secondary | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces-param | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-interfaces | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-managed-record-temp-init | T | 70 | regression | regression: test-aarch64#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-managed-strlen-deref | T | 70 | regression | regression: test-aarch64#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-methcall | T | 70 | regression | regression: test-aarch64#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-method-implicit-field | T | 70 | regression | regression: test-aarch64#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-methodptr | T | 70 | regression | regression: test-aarch64#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-nested-dynarray-setlen | T | 70 | regression | regression: test-aarch64#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-not-int64-expr | T | 70 | regression | regression: test-aarch64#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-overflow-checks-qplus | T | 70 | regression | regression: test-aarch64#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-for-capture-string | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-for-capture | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-for-lang | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-policy-lang | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-policy-named | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-policy | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-reduction | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-parallel-writeln-atomic | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-reactor | T | 70 | regression | regression: test-aarch64#src:test/test_reactor.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-readln | T | 70 | regression | regression: test-aarch64#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-record-temp-byval-arg | T | 70 | regression | regression: test-aarch64#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-rtti | T | 70 | regression | regression: test-aarch64#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-scheduler-exc | T | 70 | regression | regression: test-aarch64#src:test/test_scheduler_exc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-scheduler | T | 70 | regression | regression: test-aarch64#src:test/test_scheduler.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-set-runtime | T | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-shortstring-trunc | T | 70 | regression | regression: test-aarch64#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-signal-default-revert-b336 | T | 70 | regression | regression: test-aarch64#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-aarch64#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-single-in-aggregate | T | 70 | regression | regression: test-aarch64#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-streaming | T | 70 | regression | regression: test-aarch64#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-timer | T | 70 | regression | regression: test-aarch64#src:test/test_timer.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-u64-to-double | T | 70 | regression | regression: test-aarch64#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-uint64-ops | T | 70 | regression | regression: test-aarch64#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-aarch64-test-varrec-alloc-after | T | 70 | regression | regression: test-aarch64#src:test/test_varrec_alloc_after.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-ccross-args | T | 70 | regression | regression: test-arm32#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-ccross-double-to-int | T | 70 | regression | regression: test-arm32#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-ccross-entry | T | 70 | regression | regression: test-arm32#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-hello | T | 70 | regression | regression: test-arm32#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-arm32-arg-runtime | T | 70 | regression | regression: test-arm32#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-arm32-virtual-wide | T | 70 | regression | regression: test-arm32#src:test/test_arm32_virtual_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-array-of-const-types | T | 70 | regression | regression: test-arm32#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-asm-arm32-sum | T | 70 | regression | regression: test-arm32#src:test/test_asm_arm32_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-asm-arm32 | T | 70 | regression | regression: test-arm32#src:test/test_asm_arm32.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-async-sl | T | 70 | regression | regression: test-arm32#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-call-result-member | T | 70 | regression | regression: test-arm32#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cdecl-indirect | T | 70 | regression | regression: test-arm32#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-class-of | T | 70 | regression | regression: test-arm32#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-classref | T | 70 | regression | regression: test-arm32#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-collections | T | 70 | regression | regression: test-arm32#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-conformance-2 | T | 70 | regression | regression: test-arm32#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-const-record-temp-managed | T | 70 | regression | regression: test-arm32#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-const-record-temp | T | 70 | regression | regression: test-arm32#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-aggregate-return | T | 70 | regression | regression: test-arm32#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-aggregate-stackargs | T | 70 | regression | regression: test-arm32#src:test/test_cross_aggregate_stackargs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-case-range | T | 70 | regression | regression: test-arm32#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-const-alias | T | 70 | regression | regression: test-arm32#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-dynarray | T | 70 | regression | regression: test-arm32#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-exception | T | 70 | regression | regression: test-arm32#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-float-const | T | 70 | regression | regression: test-arm32#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-float-return | T | 70 | regression | regression: test-arm32#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-float | T | 70 | regression | regression: test-arm32#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-arm32#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-global-init | T | 70 | regression | regression: test-arm32#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-heap | T | 70 | regression | regression: test-arm32#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-in-operator | T | 70 | regression | regression: test-arm32#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-int64-byref | T | 70 | regression | regression: test-arm32#src:test/test_cross_int64_byref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-int64 | T | 70 | regression | regression: test-arm32#src:test/test_cross_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-loadfile | T | 70 | regression | regression: test-arm32#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-managed-aggregate-locals | T | 70 | regression | regression: test-arm32#src:test/test_cross_managed_aggregate_locals.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-many-params | T | 70 | regression | regression: test-arm32#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-multidim | T | 70 | regression | regression: test-arm32#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-multidim3d | T | 70 | regression | regression: test-arm32#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-named-array | T | 70 | regression | regression: test-arm32#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-openarray-string | T | 70 | regression | regression: test-arm32#src:test/test_cross_openarray_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-param-2darray | T | 70 | regression | regression: test-arm32#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-ptr-arith | T | 70 | regression | regression: test-arm32#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-record-2darray | T | 70 | regression | regression: test-arm32#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-record-array-store | T | 70 | regression | regression: test-arm32#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-record | T | 70 | regression | regression: test-arm32#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-setlen-str | T | 70 | regression | regression: test-arm32#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-setlen-varparam | T | 70 | regression | regression: test-arm32#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-sets | T | 70 | regression | regression: test-arm32#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-shortcircuit | T | 70 | regression | regression: test-arm32#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-stack-params | T | 70 | regression | regression: test-arm32#src:test/test_cross_stack_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-static-open-array | T | 70 | regression | regression: test-arm32#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-str-length-index | T | 70 | regression | regression: test-arm32#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-string-cow | T | 70 | regression | regression: test-arm32#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-string | T | 70 | regression | regression: test-arm32#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-strresult | T | 70 | regression | regression: test-arm32#src:test/test_cross_strresult.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-syscall | T | 70 | regression | regression: test-arm32#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-sysopen-family | T | 70 | regression | regression: test-arm32#src:test/test_cross_sysopen_family.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-typed-const | T | 70 | regression | regression: test-arm32#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-var-string-param | T | 70 | regression | regression: test-arm32#src:test/test_cross_var_string_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-variant-single | T | 70 | regression | regression: test-arm32#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-variant | T | 70 | regression | regression: test-arm32#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-arm32#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-cross-write-pchar | T | 70 | regression | regression: test-arm32#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-ctor-string-literal-arg | T | 70 | regression | regression: test-arm32#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-dynarray-copy | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-dynarray-field | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-dynarray-global-after-method | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-eof-stdin | T | 70 | regression | regression: test-arm32#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-extern-c-float | T | 70 | regression | regression: test-arm32#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-extern-c | T | 70 | regression | regression: test-arm32#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-forin-implicit-field | T | 70 | regression | regression: test-arm32#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-forin-member-access | T | 70 | regression | regression: test-arm32#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-i386-arith | T | 70 | regression | regression: test-arm32#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-i386-loops | T | 70 | regression | regression: test-arm32#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-i386-procs | T | 70 | regression | regression: test-arm32#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-i386-varparam | T | 70 | regression | regression: test-arm32#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-i386-write | T | 70 | regression | regression: test-arm32#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-inheritance-dispatch | T | 70 | regression | regression: test-arm32#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-inline-expand | T | 70 | regression | regression: test-arm32#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interface-arc | T | 70 | regression | regression: test-arm32#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces-as | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces-inherit | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces-is | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces-multi-secondary | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces-param | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-interfaces | T | 70 | regression | regression: test-arm32#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-lfm | T | 70 | regression | regression: test-arm32#src:test/test_lfm.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-managed-record-temp-init | T | 70 | regression | regression: test-arm32#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-managed-strlen-deref | T | 70 | regression | regression: test-arm32#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-methcall | T | 70 | regression | regression: test-arm32#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-method-implicit-field | T | 70 | regression | regression: test-arm32#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-methodptr | T | 70 | regression | regression: test-arm32#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-nested-dynarray-setlen | T | 70 | regression | regression: test-arm32#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-not-int64-expr | T | 70 | regression | regression: test-arm32#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-overflow-checks-qplus | T | 70 | regression | regression: test-arm32#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-for-capture-string | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-for-lang | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-policy-lang | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-policy-named | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-policy | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-reduction | T | 70 | regression | regression: test-arm32#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-parallel-writeln-atomic | T | 70 | regression | regression: test-arm32#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-readln | T | 70 | regression | regression: test-arm32#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-record-temp-byval-arg | T | 70 | regression | regression: test-arm32#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-rtti | T | 70 | regression | regression: test-arm32#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-set-runtime | T | 70 | regression | regression: test-arm32#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-shortstring-trunc | T | 70 | regression | regression: test-arm32#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-signal-default-revert-b336 | T | 70 | regression | regression: test-arm32#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-arm32#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-single-in-aggregate | T | 70 | regression | regression: test-arm32#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-streaming-enumset | T | 70 | regression | regression: test-arm32#src:test/test_streaming_enumset.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-streaming | T | 70 | regression | regression: test-arm32#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-u64-to-double | T | 70 | regression | regression: test-arm32#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-uint32-write | T | 70 | regression | regression: test-arm32#src:test/test_uint32_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-arm32-test-uint64-ops | T | 70 | regression | regression: test-arm32#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard2-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard4-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-aarch64-shard5-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-arm32-shard1-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-arm32-shard4-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard0-6 | T | 70 | regression | regression: test-c-conformance-i386#shard0/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard1-6 | T | 70 | regression | regression: test-c-conformance-i386#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard3-6 | T | 70 | regression | regression: test-c-conformance-i386#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-i386-shard4-6 | T | 70 | regression | regression: test-c-conformance-i386#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-riscv32-shard3-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-riscv32-shard4-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard0-6 | T | 70 | regression | regression: test-c-conformance#shard0/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard3-6 | T | 70 | regression | regression: test-c-conformance#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard4-6 | T | 70 | regression | regression: test-c-conformance#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-c-conformance-shard5-6 | T | 70 | regression | regression: test-c-conformance#shard5/6 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-cjson-runner | T | 70 | regression | regression: test-cjson#src:test/cjson/runner.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-async-sl | T | 70 | regression | regression: test-core#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
-| regression-test-core-test-big-static-array-open-param | T | 70 | regression | regression: test-core#src:test/test_big_static_array_open_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-c-gtk-call | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-c-gtk-types | T | 70 | regression | regression: test-core#src:test/test_c_gtk_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-c-gtk-window | T | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-c-gtk | T | 70 | regression | regression: test-core#src:test/test_c_gtk.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
-| regression-test-core-test-missing-diagnostics-fail | T | 70 | regression | regression: test-core#src:test/test_missing_diagnostics_fail.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-core-test-resource | T | 70 | regression | regression: test-core#src:test/test_resource.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-debug-g-dwarf-smoke | T | 70 | regression | regression: test-debug-g#src:tools/dwarf_smoke.sh red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-emit-obj-test-emit-obj | T | 70 | regression | regression: test-emit-obj#src:test/test_emit_obj.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-float-determinism-mandelbrot | T | 70 | regression | regression: test-float-determinism#src:examples/mandelbrot/mandelbrot.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-ccross-args | T | 70 | regression | regression: test-i386#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-ccross-double-to-int | T | 70 | regression | regression: test-i386#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-ccross-entry | T | 70 | regression | regression: test-i386#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-i386#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-i386#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-i386#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-hello | T | 70 | regression | regression: test-i386#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-arm32-arg-runtime | T | 70 | regression | regression: test-i386#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-array-of-const-types | T | 70 | regression | regression: test-i386#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-asm-386-sum | T | 70 | regression | regression: test-i386#src:test/test_asm_386_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-asm-386 | T | 70 | regression | regression: test-i386#src:test/test_asm_386.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-async-sl | T | 70 | regression | regression: test-i386#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-atomic-counter | T | 70 | regression | regression: test-i386#src:test/test_atomic_counter.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-atomic-i386 | T | 70 | regression | regression: test-i386#src:test/test_atomic_i386.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-call-result-member | T | 70 | regression | regression: test-i386#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cdecl-indirect | T | 70 | regression | regression: test-i386#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-class-of | T | 70 | regression | regression: test-i386#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-classref | T | 70 | regression | regression: test-i386#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-collections | T | 70 | regression | regression: test-i386#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-conformance-2 | T | 70 | regression | regression: test-i386#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-const-record-temp-managed | T | 70 | regression | regression: test-i386#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-const-record-temp | T | 70 | regression | regression: test-i386#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-aggregate-return | T | 70 | regression | regression: test-i386#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-byref-params | T | 70 | regression | regression: test-i386#src:test/test_cross_byref_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-case-range | T | 70 | regression | regression: test-i386#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-const-alias | T | 70 | regression | regression: test-i386#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-dynarray | T | 70 | regression | regression: test-i386#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-exception | T | 70 | regression | regression: test-i386#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-float-const | T | 70 | regression | regression: test-i386#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-float-return | T | 70 | regression | regression: test-i386#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-float | T | 70 | regression | regression: test-i386#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-i386#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-global-init | T | 70 | regression | regression: test-i386#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-heap | T | 70 | regression | regression: test-i386#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-in-operator | T | 70 | regression | regression: test-i386#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-loadfile | T | 70 | regression | regression: test-i386#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-many-params | T | 70 | regression | regression: test-i386#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-multidim | T | 70 | regression | regression: test-i386#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-multidim3d | T | 70 | regression | regression: test-i386#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-named-array | T | 70 | regression | regression: test-i386#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-param-2darray | T | 70 | regression | regression: test-i386#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-ptr-arith | T | 70 | regression | regression: test-i386#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-record-2darray | T | 70 | regression | regression: test-i386#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-record-array-store | T | 70 | regression | regression: test-i386#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-record | T | 70 | regression | regression: test-i386#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-setlen-str | T | 70 | regression | regression: test-i386#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-setlen-varparam | T | 70 | regression | regression: test-i386#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-sets | T | 70 | regression | regression: test-i386#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-shortcircuit | T | 70 | regression | regression: test-i386#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-static-open-array | T | 70 | regression | regression: test-i386#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-string-cow | T | 70 | regression | regression: test-i386#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-string | T | 70 | regression | regression: test-i386#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-syscall | T | 70 | regression | regression: test-i386#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-sysopen-family | T | 70 | regression | regression: test-i386#src:test/test_cross_sysopen_family.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-typed-const | T | 70 | regression | regression: test-i386#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-variant-single | T | 70 | regression | regression: test-i386#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-variant | T | 70 | regression | regression: test-i386#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-i386#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-cross-write-pchar | T | 70 | regression | regression: test-i386#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-ctor-string-literal-arg | T | 70 | regression | regression: test-i386#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-dynarray-copy | T | 70 | regression | regression: test-i386#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-dynarray-global-after-method | T | 70 | regression | regression: test-i386#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-eof-stdin | T | 70 | regression | regression: test-i386#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-extern-c-float | T | 70 | regression | regression: test-i386#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-extern-c | T | 70 | regression | regression: test-i386#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-forin-implicit-field | T | 70 | regression | regression: test-i386#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-forin-member-access | T | 70 | regression | regression: test-i386#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-arith | T | 70 | regression | regression: test-i386#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-byvalue-set-param | T | 70 | regression | regression: test-i386#src:test/test_i386_byvalue_set_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-float-params | T | 70 | regression | regression: test-i386#src:test/test_i386_float_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-int64 | T | 70 | regression | regression: test-i386#src:test/test_i386_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-loops | T | 70 | regression | regression: test-i386#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-procs | T | 70 | regression | regression: test-i386#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-varparam | T | 70 | regression | regression: test-i386#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-i386-write | T | 70 | regression | regression: test-i386#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-inheritance-dispatch | T | 70 | regression | regression: test-i386#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-inline-expand | T | 70 | regression | regression: test-i386#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interface-arc | T | 70 | regression | regression: test-i386#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces-as | T | 70 | regression | regression: test-i386#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces-inherit | T | 70 | regression | regression: test-i386#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces-is | T | 70 | regression | regression: test-i386#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces-multi-secondary | T | 70 | regression | regression: test-i386#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces-param | T | 70 | regression | regression: test-i386#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-interfaces | T | 70 | regression | regression: test-i386#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-lfm | T | 70 | regression | regression: test-i386#src:test/test_lfm.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-managed-record-temp-init | T | 70 | regression | regression: test-i386#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-managed-strlen-deref | T | 70 | regression | regression: test-i386#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-methcall | T | 70 | regression | regression: test-i386#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-method-implicit-field | T | 70 | regression | regression: test-i386#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-methodptr | T | 70 | regression | regression: test-i386#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-mutex | T | 70 | regression | regression: test-i386#src:test/test_mutex.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-nested-dynarray-setlen | T | 70 | regression | regression: test-i386#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-not-int64-expr | T | 70 | regression | regression: test-i386#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-overflow-checks-qplus | T | 70 | regression | regression: test-i386#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-palthread | T | 70 | regression | regression: test-i386#src:test/test_palthread.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-for-capture-string | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-for-lang | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-policy-lang | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-policy-named | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-policy | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-reduction | T | 70 | regression | regression: test-i386#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-parallel-writeln-atomic | T | 70 | regression | regression: test-i386#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-proctype | T | 70 | regression | regression: test-i386#src:test/test_proctype.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-readln | T | 70 | regression | regression: test-i386#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-rtti | T | 70 | regression | regression: test-i386#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-set-runtime | T | 70 | regression | regression: test-i386#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-shortstring-trunc | T | 70 | regression | regression: test-i386#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-signal-default-revert-b336 | T | 70 | regression | regression: test-i386#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-i386#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-stackless-gen | T | 70 | regression | regression: test-i386#src:test/test_stackless_gen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-streaming-enumset | T | 70 | regression | regression: test-i386#src:test/test_streaming_enumset.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-streaming | T | 70 | regression | regression: test-i386#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-threadsafe-i386-stress | T | 70 | regression | regression: test-i386#src:test/test_threadsafe_i386_stress.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-tthread-sync | T | 70 | regression | regression: test-i386#src:test/test_tthread_sync.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-tthread | T | 70 | regression | regression: test-i386#src:test/test_tthread.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-u64-to-double | T | 70 | regression | regression: test-i386#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-i386-test-uint64-ops | T | 70 | regression | regression: test-i386#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-lua-runner | T | 70 | regression | regression: test-lua#src:test/lua/runner.c red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-00 | T | 70 | regression | regression: test-riscv32#00 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-ccross-args | T | 70 | regression | regression: test-riscv32#src:test/ccross_args.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-ccross-double-to-int | T | 70 | regression | regression: test-riscv32#src:test/ccross_double_to_int.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-ccross-entry | T | 70 | regression | regression: test-riscv32#src:test/ccross_entry.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_div_mod_b123.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_int_arith_b121.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-hello | T | 70 | regression | regression: test-riscv32#src:test/hello.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-lib-bignum-ops | T | 70 | regression | regression: test-riscv32#src:test/lib_bignum_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-arm32-arg-runtime | T | 70 | regression | regression: test-riscv32#src:test/test_arm32_arg_runtime.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-arm32-record-byval-wide | T | 70 | regression | regression: test-riscv32#src:test/test_arm32_record_byval_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-array-of-const-types | T | 70 | regression | regression: test-riscv32#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-asm-ifdef-multiarch | T | 70 | regression | regression: test-riscv32#src:test/test_asm_ifdef_multiarch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-asm-rv32-sum | T | 70 | regression | regression: test-riscv32#src:test/test_asm_rv32_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-asm-rv32 | T | 70 | regression | regression: test-riscv32#src:test/test_asm_rv32.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-async-sl | T | 70 | regression | regression: test-riscv32#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-call-result-member | T | 70 | regression | regression: test-riscv32#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-collections | T | 70 | regression | regression: test-riscv32#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-conformance-2 | T | 70 | regression | regression: test-riscv32#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-const-record-temp-managed | T | 70 | regression | regression: test-riscv32#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-const-record-temp | T | 70 | regression | regression: test-riscv32#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-aggregate-stackargs | T | 70 | regression | regression: test-riscv32#src:test/test_cross_aggregate_stackargs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-case-range | T | 70 | regression | regression: test-riscv32#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-const-alias | T | 70 | regression | regression: test-riscv32#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-dynarray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-exception | T | 70 | regression | regression: test-riscv32#src:test/test_cross_exception.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-float-const | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-float-return | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-float | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-global-init | T | 70 | regression | regression: test-riscv32#src:test/test_cross_global_init.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-heap | T | 70 | regression | regression: test-riscv32#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-int64-byref | T | 70 | regression | regression: test-riscv32#src:test/test_cross_int64_byref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-int64 | T | 70 | regression | regression: test-riscv32#src:test/test_cross_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-many-params | T | 70 | regression | regression: test-riscv32#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-multidim | T | 70 | regression | regression: test-riscv32#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-multidim3d | T | 70 | regression | regression: test-riscv32#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-named-array | T | 70 | regression | regression: test-riscv32#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-openarray-string | T | 70 | regression | regression: test-riscv32#src:test/test_cross_openarray_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-param-2darray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-ptr-arith | T | 70 | regression | regression: test-riscv32#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-record-2darray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-record-array-store | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-record | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-set-param | T | 70 | regression | regression: test-riscv32#src:test/test_cross_set_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-setlen-str | T | 70 | regression | regression: test-riscv32#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-setlen-varparam | T | 70 | regression | regression: test-riscv32#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-sets | T | 70 | regression | regression: test-riscv32#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-shortcircuit | T | 70 | regression | regression: test-riscv32#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-stack-params | T | 70 | regression | regression: test-riscv32#src:test/test_cross_stack_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-static-open-array | T | 70 | regression | regression: test-riscv32#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-str-length-index | T | 70 | regression | regression: test-riscv32#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-string | T | 70 | regression | regression: test-riscv32#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-strresult | T | 70 | regression | regression: test-riscv32#src:test/test_cross_strresult.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-typed-const | T | 70 | regression | regression: test-riscv32#src:test/test_cross_typed_const.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-cross-write-pchar | T | 70 | regression | regression: test-riscv32#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-ctor-string-literal-arg | T | 70 | regression | regression: test-riscv32#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-dynarray-copy | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-dynarray-field | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-dynarray-global-after-method | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-eof-stdin | T | 70 | regression | regression: test-riscv32#src:test/test_eof_stdin.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-frozen-string-cross-b305 | T | 70 | regression | regression: test-riscv32#src:test/test_frozen_string_cross_b305.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-i386-arith | T | 70 | regression | regression: test-riscv32#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-i386-loops | T | 70 | regression | regression: test-riscv32#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-i386-procs | T | 70 | regression | regression: test-riscv32#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-i386-varparam | T | 70 | regression | regression: test-riscv32#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-i386-write | T | 70 | regression | regression: test-riscv32#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-inheritance-dispatch | T | 70 | regression | regression: test-riscv32#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-inline-expand | T | 70 | regression | regression: test-riscv32#src:test/test_inline_expand.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-interfaces-multi-secondary | T | 70 | regression | regression: test-riscv32#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-interfaces | T | 70 | regression | regression: test-riscv32#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-managed-record-temp-init | T | 70 | regression | regression: test-riscv32#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-managed-strlen-deref | T | 70 | regression | regression: test-riscv32#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-methcall | T | 70 | regression | regression: test-riscv32#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-method-implicit-field | T | 70 | regression | regression: test-riscv32#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-methodptr | T | 70 | regression | regression: test-riscv32#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-not-int64-expr | T | 70 | regression | regression: test-riscv32#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-overflow-checks-qplus | T | 70 | regression | regression: test-riscv32#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-readln | T | 70 | regression | regression: test-riscv32#src:test/test_readln.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-record-temp-byval-arg | T | 70 | regression | regression: test-riscv32#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-set-runtime | T | 70 | regression | regression: test-riscv32#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-shortstring-trunc | T | 70 | regression | regression: test-riscv32#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-signal-default-revert-b336 | T | 70 | regression | regression: test-riscv32#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-riscv32#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-single-in-aggregate | T | 70 | regression | regression: test-riscv32#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-stackless-gen | T | 70 | regression | regression: test-riscv32#src:test/test_stackless_gen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-u64-to-double | T | 70 | regression | regression: test-riscv32#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-uint32-write | T | 70 | regression | regression: test-riscv32#src:test/test_uint32_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-riscv32-test-uint64-ops | T | 70 | regression | regression: test-riscv32#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-sqlite-threads-x86-64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh red at f6cad82e8063 (auto-filed by twatch) | — |
-| regression-test-zlib-install-lib-candidates | T | 70 | regression | regression: test-zlib#src:tools/install_lib_candidates.sh red at f6cad82e8063 (auto-filed by twatch) | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enroll-libtest-demos-watcher | T | 45 | task | Enroll make lib-test + make demos in testmgr tiers — Track B's gate is invisible to tstate | — |
 | task-t-enroll-pascal-conformance-tier | T | 45 | task | Enroll test-pascal-conformance in testmgr tiers (sharded, like the C battery) | — |
@@ -1503,7 +1027,7 @@ _none_
 | track-c-ternary-string-literal-segfault | C | 50 | track | C: ternary with two string-literal arms segfaults at runtime | — |
 | track-c-va-arg-nonint-lea | C | 50 | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
-## rejected (957)
+## rejected (1433)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -1525,7 +1049,243 @@ _none_
 | feature-opt-lazy-token-sval | O | 55 | feature | Lazy / conditional CurTok.SVal materialization — cut per-token string allocation | — |
 | regression-cascade-f5c8fbec-fpc-bootstrap | A | 0 | regression | Cascade sweep: 939 auto-filed regressions at f5c8fbec6016 — one root cause, already fixed | — |
 | regression-lib-fpc-clean-00 | T | 70 | regression | regression: lib-fpc-clean#00 red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-ccross-args | T | 70 | regression | regression: test-aarch64#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-ccross-double-to-int | T | 70 | regression | regression: test-aarch64#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-ccross-entry | T | 70 | regression | regression: test-aarch64#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-aarch64#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-hello | T | 70 | regression | regression: test-aarch64#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-arm32-arg-runtime | T | 70 | regression | regression: test-aarch64#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-arm32-record-byval-wide | T | 70 | regression | regression: test-aarch64#src:test/test_arm32_record_byval_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-array-of-const-types | T | 70 | regression | regression: test-aarch64#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-asm-a64-sum | T | 70 | regression | regression: test-aarch64#src:test/test_asm_a64_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-asm-a64 | T | 70 | regression | regression: test-aarch64#src:test/test_asm_a64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-asm-ifdef-multiarch | T | 70 | regression | regression: test-aarch64#src:test/test_asm_ifdef_multiarch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-async-sl | T | 70 | regression | regression: test-aarch64#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-call-result-member | T | 70 | regression | regression: test-aarch64#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cdecl-indirect | T | 70 | regression | regression: test-aarch64#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-channel | T | 70 | regression | regression: test-aarch64#src:test/test_channel.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-class-of | T | 70 | regression | regression: test-aarch64#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-classref | T | 70 | regression | regression: test-aarch64#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-collections | T | 70 | regression | regression: test-aarch64#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-conformance-2 | T | 70 | regression | regression: test-aarch64#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-const-record-temp-managed | T | 70 | regression | regression: test-aarch64#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-const-record-temp | T | 70 | regression | regression: test-aarch64#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-aggregate-return | T | 70 | regression | regression: test-aarch64#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-case-range | T | 70 | regression | regression: test-aarch64#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-const-alias | T | 70 | regression | regression: test-aarch64#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-exception | T | 70 | regression | regression: test-aarch64#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-float-const | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-float-return | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-float | T | 70 | regression | regression: test-aarch64#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-aarch64#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-global-init | T | 70 | regression | regression: test-aarch64#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-heap | T | 70 | regression | regression: test-aarch64#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-huge-frame | T | 70 | regression | regression: test-aarch64#src:test/test_cross_huge_frame.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-in-operator | T | 70 | regression | regression: test-aarch64#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-loadfile | T | 70 | regression | regression: test-aarch64#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-managed-a64 | T | 70 | regression | regression: test-aarch64#src:test/test_cross_managed_a64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-many-params | T | 70 | regression | regression: test-aarch64#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-multidim | T | 70 | regression | regression: test-aarch64#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-multidim3d | T | 70 | regression | regression: test-aarch64#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-named-array | T | 70 | regression | regression: test-aarch64#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-open-array-params | T | 70 | regression | regression: test-aarch64#src:test/test_cross_open_array_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-param-2darray | T | 70 | regression | regression: test-aarch64#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-ptr-arith | T | 70 | regression | regression: test-aarch64#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-record-2darray | T | 70 | regression | regression: test-aarch64#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-record-array-store | T | 70 | regression | regression: test-aarch64#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-setlen-str | T | 70 | regression | regression: test-aarch64#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-setlen-varparam | T | 70 | regression | regression: test-aarch64#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-sets | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-shortcircuit | T | 70 | regression | regression: test-aarch64#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-static-open-array | T | 70 | regression | regression: test-aarch64#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-str-length-index | T | 70 | regression | regression: test-aarch64#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-string-cow | T | 70 | regression | regression: test-aarch64#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-syscall | T | 70 | regression | regression: test-aarch64#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-cross-sysopen-family | T | 70 | regression | regression: test-aarch64#src:test/test_cross_sysopen_family.pas red at a5fc06ee29b6 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-typed-const | T | 70 | regression | regression: test-aarch64#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-variant-single | T | 70 | regression | regression: test-aarch64#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-variant | T | 70 | regression | regression: test-aarch64#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-aarch64#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-cross-write-pchar | T | 70 | regression | regression: test-aarch64#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-ctor-string-literal-arg | T | 70 | regression | regression: test-aarch64#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-dynarray-copy | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-dynarray-field | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-dynarray-global-after-method | T | 70 | regression | regression: test-aarch64#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-eof-stdin | T | 70 | regression | regression: test-aarch64#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-extern-c-float | T | 70 | regression | regression: test-aarch64#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-extern-c | T | 70 | regression | regression: test-aarch64#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-forin-implicit-field | T | 70 | regression | regression: test-aarch64#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-forin-member-access | T | 70 | regression | regression: test-aarch64#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-i386-arith | T | 70 | regression | regression: test-aarch64#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-i386-loops | T | 70 | regression | regression: test-aarch64#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-i386-procs | T | 70 | regression | regression: test-aarch64#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-i386-varparam | T | 70 | regression | regression: test-aarch64#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-i386-write | T | 70 | regression | regression: test-aarch64#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-inheritance-dispatch | T | 70 | regression | regression: test-aarch64#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-inline-expand | T | 70 | regression | regression: test-aarch64#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interface-arc | T | 70 | regression | regression: test-aarch64#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces-as | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces-inherit | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces-is | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces-multi-secondary | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces-param | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-interfaces | T | 70 | regression | regression: test-aarch64#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-managed-record-temp-init | T | 70 | regression | regression: test-aarch64#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-managed-strlen-deref | T | 70 | regression | regression: test-aarch64#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-methcall | T | 70 | regression | regression: test-aarch64#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-method-implicit-field | T | 70 | regression | regression: test-aarch64#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-methodptr | T | 70 | regression | regression: test-aarch64#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-nested-dynarray-setlen | T | 70 | regression | regression: test-aarch64#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-not-int64-expr | T | 70 | regression | regression: test-aarch64#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-overflow-checks-qplus | T | 70 | regression | regression: test-aarch64#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-for-capture-string | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-for-capture | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-for-lang | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-policy-lang | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-policy-named | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-policy | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-reduction | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-writeln-atomic | T | 70 | regression | regression: test-aarch64#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-reactor | T | 70 | regression | regression: test-aarch64#src:test/test_reactor.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-readln | T | 70 | regression | regression: test-aarch64#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-record-temp-byval-arg | T | 70 | regression | regression: test-aarch64#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-rtti | T | 70 | regression | regression: test-aarch64#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-scheduler-exc | T | 70 | regression | regression: test-aarch64#src:test/test_scheduler_exc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-scheduler | T | 70 | regression | regression: test-aarch64#src:test/test_scheduler.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-set-runtime | T | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-shortstring-trunc | T | 70 | regression | regression: test-aarch64#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-signal-default-revert-b336 | T | 70 | regression | regression: test-aarch64#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-aarch64#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-single-in-aggregate | T | 70 | regression | regression: test-aarch64#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-streaming | T | 70 | regression | regression: test-aarch64#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-timer | T | 70 | regression | regression: test-aarch64#src:test/test_timer.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-u64-to-double | T | 70 | regression | regression: test-aarch64#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-uint64-ops | T | 70 | regression | regression: test-aarch64#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-varrec-alloc-after | T | 70 | regression | regression: test-aarch64#src:test/test_varrec_alloc_after.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-ccross-args | T | 70 | regression | regression: test-arm32#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-ccross-double-to-int | T | 70 | regression | regression: test-arm32#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-ccross-entry | T | 70 | regression | regression: test-arm32#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-arm32#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-hello | T | 70 | regression | regression: test-arm32#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-arm32-arg-runtime | T | 70 | regression | regression: test-arm32#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-arm32-virtual-wide | T | 70 | regression | regression: test-arm32#src:test/test_arm32_virtual_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-array-of-const-types | T | 70 | regression | regression: test-arm32#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-asm-arm32-sum | T | 70 | regression | regression: test-arm32#src:test/test_asm_arm32_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-asm-arm32 | T | 70 | regression | regression: test-arm32#src:test/test_asm_arm32.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-async-sl | T | 70 | regression | regression: test-arm32#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-call-result-member | T | 70 | regression | regression: test-arm32#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cdecl-indirect | T | 70 | regression | regression: test-arm32#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-class-of | T | 70 | regression | regression: test-arm32#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-classref | T | 70 | regression | regression: test-arm32#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-collections | T | 70 | regression | regression: test-arm32#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-conformance-2 | T | 70 | regression | regression: test-arm32#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-const-record-temp-managed | T | 70 | regression | regression: test-arm32#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-const-record-temp | T | 70 | regression | regression: test-arm32#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-aggregate-return | T | 70 | regression | regression: test-arm32#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-aggregate-stackargs | T | 70 | regression | regression: test-arm32#src:test/test_cross_aggregate_stackargs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-case-range | T | 70 | regression | regression: test-arm32#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-const-alias | T | 70 | regression | regression: test-arm32#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-dynarray | T | 70 | regression | regression: test-arm32#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-exception | T | 70 | regression | regression: test-arm32#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-float-const | T | 70 | regression | regression: test-arm32#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-float-return | T | 70 | regression | regression: test-arm32#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-float | T | 70 | regression | regression: test-arm32#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-arm32#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-global-init | T | 70 | regression | regression: test-arm32#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-heap | T | 70 | regression | regression: test-arm32#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-in-operator | T | 70 | regression | regression: test-arm32#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-int64-byref | T | 70 | regression | regression: test-arm32#src:test/test_cross_int64_byref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-int64 | T | 70 | regression | regression: test-arm32#src:test/test_cross_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-loadfile | T | 70 | regression | regression: test-arm32#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-managed-aggregate-locals | T | 70 | regression | regression: test-arm32#src:test/test_cross_managed_aggregate_locals.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-many-params | T | 70 | regression | regression: test-arm32#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-multidim | T | 70 | regression | regression: test-arm32#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-multidim3d | T | 70 | regression | regression: test-arm32#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-named-array | T | 70 | regression | regression: test-arm32#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-openarray-string | T | 70 | regression | regression: test-arm32#src:test/test_cross_openarray_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-param-2darray | T | 70 | regression | regression: test-arm32#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-ptr-arith | T | 70 | regression | regression: test-arm32#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-record-2darray | T | 70 | regression | regression: test-arm32#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-record-array-store | T | 70 | regression | regression: test-arm32#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-record | T | 70 | regression | regression: test-arm32#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-setlen-str | T | 70 | regression | regression: test-arm32#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-setlen-varparam | T | 70 | regression | regression: test-arm32#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-sets | T | 70 | regression | regression: test-arm32#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-shortcircuit | T | 70 | regression | regression: test-arm32#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-stack-params | T | 70 | regression | regression: test-arm32#src:test/test_cross_stack_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-static-open-array | T | 70 | regression | regression: test-arm32#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-str-length-index | T | 70 | regression | regression: test-arm32#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-string-cow | T | 70 | regression | regression: test-arm32#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-string | T | 70 | regression | regression: test-arm32#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-strresult | T | 70 | regression | regression: test-arm32#src:test/test_cross_strresult.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-syscall | T | 70 | regression | regression: test-arm32#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-sysopen-family | T | 70 | regression | regression: test-arm32#src:test/test_cross_sysopen_family.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-typed-const | T | 70 | regression | regression: test-arm32#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-var-string-param | T | 70 | regression | regression: test-arm32#src:test/test_cross_var_string_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-variant-single | T | 70 | regression | regression: test-arm32#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-variant | T | 70 | regression | regression: test-arm32#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-arm32#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-cross-write-pchar | T | 70 | regression | regression: test-arm32#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-ctor-string-literal-arg | T | 70 | regression | regression: test-arm32#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-dynarray-copy | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-dynarray-field | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-dynarray-global-after-method | T | 70 | regression | regression: test-arm32#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-eof-stdin | T | 70 | regression | regression: test-arm32#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-extern-c-float | T | 70 | regression | regression: test-arm32#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-extern-c | T | 70 | regression | regression: test-arm32#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-forin-implicit-field | T | 70 | regression | regression: test-arm32#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-forin-member-access | T | 70 | regression | regression: test-arm32#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-i386-arith | T | 70 | regression | regression: test-arm32#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-i386-loops | T | 70 | regression | regression: test-arm32#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-i386-procs | T | 70 | regression | regression: test-arm32#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-i386-varparam | T | 70 | regression | regression: test-arm32#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-i386-write | T | 70 | regression | regression: test-arm32#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-inheritance-dispatch | T | 70 | regression | regression: test-arm32#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-inline-expand | T | 70 | regression | regression: test-arm32#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interface-arc | T | 70 | regression | regression: test-arm32#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces-as | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces-inherit | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces-is | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces-multi-secondary | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces-param | T | 70 | regression | regression: test-arm32#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-interfaces | T | 70 | regression | regression: test-arm32#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-lfm | T | 70 | regression | regression: test-arm32#src:test/test_lfm.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-managed-record-temp-init | T | 70 | regression | regression: test-arm32#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-managed-strlen-deref | T | 70 | regression | regression: test-arm32#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-methcall | T | 70 | regression | regression: test-arm32#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-method-implicit-field | T | 70 | regression | regression: test-arm32#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-methodptr | T | 70 | regression | regression: test-arm32#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-nested-dynarray-setlen | T | 70 | regression | regression: test-arm32#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-not-int64-expr | T | 70 | regression | regression: test-arm32#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-overflow-checks-qplus | T | 70 | regression | regression: test-arm32#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-for-capture-string | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-for-lang | T | 70 | regression | regression: test-arm32#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-policy-lang | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-policy-named | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-policy | T | 70 | regression | regression: test-arm32#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-reduction | T | 70 | regression | regression: test-arm32#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-parallel-writeln-atomic | T | 70 | regression | regression: test-arm32#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-readln | T | 70 | regression | regression: test-arm32#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-record-temp-byval-arg | T | 70 | regression | regression: test-arm32#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-rtti | T | 70 | regression | regression: test-arm32#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-set-runtime | T | 70 | regression | regression: test-arm32#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-shortstring-trunc | T | 70 | regression | regression: test-arm32#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-signal-default-revert-b336 | T | 70 | regression | regression: test-arm32#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-arm32#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-single-in-aggregate | T | 70 | regression | regression: test-arm32#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-streaming-enumset | T | 70 | regression | regression: test-arm32#src:test/test_streaming_enumset.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-streaming | T | 70 | regression | regression: test-arm32#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-u64-to-double | T | 70 | regression | regression: test-arm32#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-uint32-write | T | 70 | regression | regression: test-arm32#src:test/test_uint32_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-arm32-test-uint64-ops | T | 70 | regression | regression: test-arm32#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-asm-compiler | T | 70 | regression | regression: test-asm#src:compiler/compiler.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-asm-hello | T | 70 | regression | regression: test-asm#src:test/hello.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-entry-global | T | 70 | regression | regression: test-asm#src:test/test_asm_entry_global.asm red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -1541,6 +1301,24 @@ _none_
 | regression-test-asm-test-asmcore-riscv32 | T | 70 | regression | regression: test-asm#src:test/test_asmcore_riscv32.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-asm-test-asmcore-x64 | T | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-asm-test-asmcore-xtensa | T | 70 | regression | regression: test-asm#src:test/test_asmcore_xtensa.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard2-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard2/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard4-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-aarch64-shard5-6 | T | 70 | regression | regression: test-c-conformance-aarch64#shard5/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard1-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-arm32-shard4-6 | T | 70 | regression | regression: test-c-conformance-arm32#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard0-6 | T | 70 | regression | regression: test-c-conformance-i386#shard0/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard1-6 | T | 70 | regression | regression: test-c-conformance-i386#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard3-6 | T | 70 | regression | regression: test-c-conformance-i386#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-i386-shard4-6 | T | 70 | regression | regression: test-c-conformance-i386#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard3-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-riscv32-shard4-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard0-6 | T | 70 | regression | regression: test-c-conformance#shard0/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard3-6 | T | 70 | regression | regression: test-c-conformance#shard3/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard4-6 | T | 70 | regression | regression: test-c-conformance#shard4/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard5-6 | T | 70 | regression | regression: test-c-conformance#shard5/6 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-cjson-runner | T | 70 | regression | regression: test-cjson#src:test/cjson/runner.c red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-00 | T | 70 | regression | regression: test-core#00 red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-arrays | T | 70 | regression | regression: test-core#src:test/arrays.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-bootstrap-features | T | 70 | regression | regression: test-core#src:test/bootstrap_features.pas@1 red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -1866,6 +1644,7 @@ _none_
 | regression-test-core-test-asm | T | 70 | regression | regression: test-core#src:test/test_asm.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-assert-sealed-final-b264 | T | 70 | regression | regression: test-core#src:test/test_assert_sealed_final_b264.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-assign-types | T | 70 | regression | regression: test-core#src:test/test_assign_types.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-core-test-async-sl | T | 70 | regression | regression: test-core#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-async | T | 70 | regression | regression: test-core#src:test/test_async.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-auto-locals | T | 70 | regression | regression: test-core#src:test/test_auto_locals.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -1873,6 +1652,7 @@ _none_
 | regression-test-core-test-bare-procvar-call-b273 | T | 70 | regression | regression: test-core#src:test/test_bare_procvar_call_b273.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-bare-property | T | 70 | regression | regression: test-core#src:test/test_bare_property.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-goto-gosub | T | 70 | regression | regression: test-core#src:test/test_basic_goto_gosub.bas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-core-test-big-static-array-open-param | T | 70 | regression | regression: test-core#src:test/test_big_static_array_open_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-bitwise-not-lvalue-b280 | T | 70 | regression | regression: test-core#src:test/test_bitwise_not_lvalue_b280.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-bool-const-varrec-b326 | T | 70 | regression | regression: test-core#src:test/test_bool_const_varrec_b326.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-builtin-name-demote | T | 70 | regression | regression: test-core#src:test/test_builtin_name_demote.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -1887,6 +1667,10 @@ _none_
 | regression-test-core-test-c-dlopen | T | 70 | regression | regression: test-core#src:test/test_c_dlopen.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-c-enum | T | 70 | regression | regression: test-core#src:test/test_c_enum.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-c-float | T | 70 | regression | regression: test-core#src:test/test_c_float.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-call | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-types | T | 70 | regression | regression: test-core#src:test/test_c_gtk_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-window | T | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk | T | 70 | regression | regression: test-core#src:test/test_c_gtk.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-c-header-case-sensitive-import | T | 70 | regression | regression: test-core#src:test/test_c_header_case_sensitive_import.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-c-import | T | 70 | regression | regression: test-core#src:test/test_c_import.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -2175,6 +1959,7 @@ _none_
 | regression-test-core-test-methodptr | T | 70 | regression | regression: test-core#src:test/test_methodptr.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-mimic-directive | T | 70 | regression | regression: test-core#src:test/test_mimic_directive.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-mimic-fpc | T | 70 | regression | regression: test-core#src:test/test_mimic_fpc.pas@1 red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-core-test-missing-diagnostics-fail | T | 70 | regression | regression: test-core#src:test/test_missing_diagnostics_fail.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-callarg | T | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-methptr | T | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi | T | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -2277,6 +2062,7 @@ _none_
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-require-forward-strict-fail | T | 70 | regression | regression: test-core#src:test/test_require_forward_strict_fail.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-require-forward-strict | T | 70 | regression | regression: test-core#src:test/test_require_forward_strict.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-core-test-resource | T | 70 | regression | regression: test-core#src:test/test_resource.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-core-test-rtti-emit | T | 70 | regression | regression: test-core#src:test/test_rtti_emit.pas@1 red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-rtti-method-reflection-b254 | T | 70 | regression | regression: test-core#src:test/test_rtti_method_reflection_b254.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-rtti-reg | T | 70 | regression | regression: test-core#src:test/test_rtti_reg.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -2423,6 +2209,218 @@ _none_
 | regression-test-core-test-zig-slice-params | T | 70 | regression | regression: test-core#src:test/test_zig_slice_params.zig red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-test-zig-structs | T | 70 | regression | regression: test-core#src:test/test_zig_structs.zig red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-core-vars | T | 70 | regression | regression: test-core#src:test/vars.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-debug-g-dwarf-smoke | T | 70 | regression | regression: test-debug-g#src:tools/dwarf_smoke.sh red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-emit-obj-test-emit-obj | T | 70 | regression | regression: test-emit-obj#src:test/test_emit_obj.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-float-determinism-mandelbrot | T | 70 | regression | regression: test-float-determinism#src:examples/mandelbrot/mandelbrot.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-ccross-args | T | 70 | regression | regression: test-i386#src:test/ccross_args.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-ccross-double-to-int | T | 70 | regression | regression: test-i386#src:test/ccross_double_to_int.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-ccross-entry | T | 70 | regression | regression: test-i386#src:test/ccross_entry.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-i386#src:test/cunsigned_div_mod_b123.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-i386#src:test/cunsigned_int_arith_b121.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-i386#src:test/cunsigned_semantics_sweep_b138.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-hello | T | 70 | regression | regression: test-i386#src:test/hello.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-httpdemo | T | 70 | regression | regression: test-i386#src:examples/net/httpdemo.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-arm32-arg-runtime | T | 70 | regression | regression: test-i386#src:test/test_arm32_arg_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-array-of-const-types | T | 70 | regression | regression: test-i386#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-asm-386-sum | T | 70 | regression | regression: test-i386#src:test/test_asm_386_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-asm-386 | T | 70 | regression | regression: test-i386#src:test/test_asm_386.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-async-sl | T | 70 | regression | regression: test-i386#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-atomic-counter | T | 70 | regression | regression: test-i386#src:test/test_atomic_counter.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-atomic-i386 | T | 70 | regression | regression: test-i386#src:test/test_atomic_i386.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-call-result-member | T | 70 | regression | regression: test-i386#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cdecl-indirect | T | 70 | regression | regression: test-i386#src:test/test_cdecl_indirect.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-class-of | T | 70 | regression | regression: test-i386#src:test/test_class_of.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-classref | T | 70 | regression | regression: test-i386#src:test/test_classref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-collections | T | 70 | regression | regression: test-i386#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-conformance-2 | T | 70 | regression | regression: test-i386#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-const-record-temp-managed | T | 70 | regression | regression: test-i386#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-const-record-temp | T | 70 | regression | regression: test-i386#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-aggregate-return | T | 70 | regression | regression: test-i386#src:test/test_cross_aggregate_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-byref-params | T | 70 | regression | regression: test-i386#src:test/test_cross_byref_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-case-range | T | 70 | regression | regression: test-i386#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-const-alias | T | 70 | regression | regression: test-i386#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-dynarray | T | 70 | regression | regression: test-i386#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-exception | T | 70 | regression | regression: test-i386#src:test/test_cross_exception.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-float-const | T | 70 | regression | regression: test-i386#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-float-return | T | 70 | regression | regression: test-i386#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-float | T | 70 | regression | regression: test-i386#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-frozen-strlen-deref | T | 70 | regression | regression: test-i386#src:test/test_cross_frozen_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-global-init | T | 70 | regression | regression: test-i386#src:test/test_cross_global_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-heap | T | 70 | regression | regression: test-i386#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-in-operator | T | 70 | regression | regression: test-i386#src:test/test_cross_in_operator.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-loadfile | T | 70 | regression | regression: test-i386#src:test/test_cross_loadfile.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-many-params | T | 70 | regression | regression: test-i386#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-multidim | T | 70 | regression | regression: test-i386#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-multidim3d | T | 70 | regression | regression: test-i386#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-named-array | T | 70 | regression | regression: test-i386#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-param-2darray | T | 70 | regression | regression: test-i386#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-ptr-arith | T | 70 | regression | regression: test-i386#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-record-2darray | T | 70 | regression | regression: test-i386#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-record-array-store | T | 70 | regression | regression: test-i386#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-record | T | 70 | regression | regression: test-i386#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-setlen-str | T | 70 | regression | regression: test-i386#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-setlen-varparam | T | 70 | regression | regression: test-i386#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-sets | T | 70 | regression | regression: test-i386#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-shortcircuit | T | 70 | regression | regression: test-i386#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-static-open-array | T | 70 | regression | regression: test-i386#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-string-cow | T | 70 | regression | regression: test-i386#src:test/test_cross_string_cow.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-string | T | 70 | regression | regression: test-i386#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-syscall | T | 70 | regression | regression: test-i386#src:test/test_cross_syscall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-sysopen-family | T | 70 | regression | regression: test-i386#src:test/test_cross_sysopen_family.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-typed-const | T | 70 | regression | regression: test-i386#src:test/test_cross_typed_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-variant-single | T | 70 | regression | regression: test-i386#src:test/test_cross_variant_single.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-variant | T | 70 | regression | regression: test-i386#src:test/test_cross_variant.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-virtual-indirect-aggret | T | 70 | regression | regression: test-i386#src:test/test_cross_virtual_indirect_aggret.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-cross-write-pchar | T | 70 | regression | regression: test-i386#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-ctor-string-literal-arg | T | 70 | regression | regression: test-i386#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-dynarray-copy | T | 70 | regression | regression: test-i386#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-dynarray-field | T | 70 | regression | regression: test-i386#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-dynarray-global-after-method | T | 70 | regression | regression: test-i386#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-eof-stdin | T | 70 | regression | regression: test-i386#src:test/test_eof_stdin.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-extern-c-float | T | 70 | regression | regression: test-i386#src:test/test_extern_c_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-extern-c | T | 70 | regression | regression: test-i386#src:test/test_extern_c.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-forin-implicit-field | T | 70 | regression | regression: test-i386#src:test/test_forin_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-forin-member-access | T | 70 | regression | regression: test-i386#src:test/test_forin_member_access.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-arith | T | 70 | regression | regression: test-i386#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-byvalue-set-param | T | 70 | regression | regression: test-i386#src:test/test_i386_byvalue_set_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-float-params | T | 70 | regression | regression: test-i386#src:test/test_i386_float_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-int64 | T | 70 | regression | regression: test-i386#src:test/test_i386_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-loops | T | 70 | regression | regression: test-i386#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-procs | T | 70 | regression | regression: test-i386#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-varparam | T | 70 | regression | regression: test-i386#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-i386-write | T | 70 | regression | regression: test-i386#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-inheritance-dispatch | T | 70 | regression | regression: test-i386#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-inline-expand | T | 70 | regression | regression: test-i386#src:test/test_inline_expand.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interface-arc | T | 70 | regression | regression: test-i386#src:test/test_interface_arc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces-as | T | 70 | regression | regression: test-i386#src:test/test_interfaces_as.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces-inherit | T | 70 | regression | regression: test-i386#src:test/test_interfaces_inherit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces-is | T | 70 | regression | regression: test-i386#src:test/test_interfaces_is.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces-multi-secondary | T | 70 | regression | regression: test-i386#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces-param | T | 70 | regression | regression: test-i386#src:test/test_interfaces_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-interfaces | T | 70 | regression | regression: test-i386#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-lfm | T | 70 | regression | regression: test-i386#src:test/test_lfm.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-managed-record-temp-init | T | 70 | regression | regression: test-i386#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-managed-strlen-deref | T | 70 | regression | regression: test-i386#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-methcall | T | 70 | regression | regression: test-i386#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-method-implicit-field | T | 70 | regression | regression: test-i386#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-methodptr | T | 70 | regression | regression: test-i386#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-mutex | T | 70 | regression | regression: test-i386#src:test/test_mutex.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-nested-dynarray-setlen | T | 70 | regression | regression: test-i386#src:test/test_nested_dynarray_setlen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-not-int64-expr | T | 70 | regression | regression: test-i386#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-overflow-checks-qplus | T | 70 | regression | regression: test-i386#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-palthread | T | 70 | regression | regression: test-i386#src:test/test_palthread.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-for-capture-aggr | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_capture_aggr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-for-capture-string | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_capture_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-for-lang | T | 70 | regression | regression: test-i386#src:test/test_parallel_for_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-policy-lang | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy_lang.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-policy-named | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy_named.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-policy | T | 70 | regression | regression: test-i386#src:test/test_parallel_policy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-reduction | T | 70 | regression | regression: test-i386#src:test/test_parallel_reduction.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-parallel-writeln-atomic | T | 70 | regression | regression: test-i386#src:test/test_parallel_writeln_atomic.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-proctype | T | 70 | regression | regression: test-i386#src:test/test_proctype.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-readln | T | 70 | regression | regression: test-i386#src:test/test_readln.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-rtti | T | 70 | regression | regression: test-i386#src:test/test_rtti.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-set-runtime | T | 70 | regression | regression: test-i386#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-shortstring-trunc | T | 70 | regression | regression: test-i386#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-signal-default-revert-b336 | T | 70 | regression | regression: test-i386#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-i386#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-stackless-gen | T | 70 | regression | regression: test-i386#src:test/test_stackless_gen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-streaming-enumset | T | 70 | regression | regression: test-i386#src:test/test_streaming_enumset.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-streaming | T | 70 | regression | regression: test-i386#src:test/test_streaming.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-threadsafe-i386-stress | T | 70 | regression | regression: test-i386#src:test/test_threadsafe_i386_stress.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-tthread-sync | T | 70 | regression | regression: test-i386#src:test/test_tthread_sync.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-tthread | T | 70 | regression | regression: test-i386#src:test/test_tthread.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-u64-to-double | T | 70 | regression | regression: test-i386#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-i386-test-uint64-ops | T | 70 | regression | regression: test-i386#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-lua-runner | T | 70 | regression | regression: test-lua#src:test/lua/runner.c red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-00 | T | 70 | regression | regression: test-riscv32#00 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-ccross-args | T | 70 | regression | regression: test-riscv32#src:test/ccross_args.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-ccross-double-to-int | T | 70 | regression | regression: test-riscv32#src:test/ccross_double_to_int.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-ccross-entry | T | 70 | regression | regression: test-riscv32#src:test/ccross_entry.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-cunsigned-div-mod-b123 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_div_mod_b123.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-cunsigned-int-arith-b121 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_int_arith_b121.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-cunsigned-semantics-sweep-b138 | T | 70 | regression | regression: test-riscv32#src:test/cunsigned_semantics_sweep_b138.c@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-hello | T | 70 | regression | regression: test-riscv32#src:test/hello.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-lib-bignum-ops | T | 70 | regression | regression: test-riscv32#src:test/lib_bignum_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-arm32-arg-runtime | T | 70 | regression | regression: test-riscv32#src:test/test_arm32_arg_runtime.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-arm32-record-byval-wide | T | 70 | regression | regression: test-riscv32#src:test/test_arm32_record_byval_wide.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-array-of-const-types | T | 70 | regression | regression: test-riscv32#src:test/test_array_of_const_types.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-asm-ifdef-multiarch | T | 70 | regression | regression: test-riscv32#src:test/test_asm_ifdef_multiarch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-asm-rv32-sum | T | 70 | regression | regression: test-riscv32#src:test/test_asm_rv32_sum.asm red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-asm-rv32 | T | 70 | regression | regression: test-riscv32#src:test/test_asm_rv32.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-async-sl | T | 70 | regression | regression: test-riscv32#src:test/test_async_sl.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-call-result-member | T | 70 | regression | regression: test-riscv32#src:test/test_call_result_member.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-collections | T | 70 | regression | regression: test-riscv32#src:test/test_collections.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-conformance-2 | T | 70 | regression | regression: test-riscv32#src:test/test_conformance_2.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-const-record-temp-managed | T | 70 | regression | regression: test-riscv32#src:test/test_const_record_temp_managed.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-const-record-temp | T | 70 | regression | regression: test-riscv32#src:test/test_const_record_temp.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-aggregate-stackargs | T | 70 | regression | regression: test-riscv32#src:test/test_cross_aggregate_stackargs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-case-range | T | 70 | regression | regression: test-riscv32#src:test/test_cross_case_range.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-const-alias | T | 70 | regression | regression: test-riscv32#src:test/test_cross_const_alias.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-dynarray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_dynarray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-exception | T | 70 | regression | regression: test-riscv32#src:test/test_cross_exception.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-float-const | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float_const.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-float-return | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float_return.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-float | T | 70 | regression | regression: test-riscv32#src:test/test_cross_float.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-global-init | T | 70 | regression | regression: test-riscv32#src:test/test_cross_global_init.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-heap | T | 70 | regression | regression: test-riscv32#src:test/test_cross_heap.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-int64-byref | T | 70 | regression | regression: test-riscv32#src:test/test_cross_int64_byref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-int64 | T | 70 | regression | regression: test-riscv32#src:test/test_cross_int64.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-many-params | T | 70 | regression | regression: test-riscv32#src:test/test_cross_many_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-multidim | T | 70 | regression | regression: test-riscv32#src:test/test_cross_multidim.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-multidim3d | T | 70 | regression | regression: test-riscv32#src:test/test_cross_multidim3d.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-named-array | T | 70 | regression | regression: test-riscv32#src:test/test_cross_named_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-openarray-string | T | 70 | regression | regression: test-riscv32#src:test/test_cross_openarray_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-param-2darray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_param_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-ptr-arith | T | 70 | regression | regression: test-riscv32#src:test/test_cross_ptr_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-record-2darray | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record_2darray.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-record-array-store | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record_array_store.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-record | T | 70 | regression | regression: test-riscv32#src:test/test_cross_record.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-set-param | T | 70 | regression | regression: test-riscv32#src:test/test_cross_set_param.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-setlen-str | T | 70 | regression | regression: test-riscv32#src:test/test_cross_setlen_str.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-setlen-varparam | T | 70 | regression | regression: test-riscv32#src:test/test_cross_setlen_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-sets | T | 70 | regression | regression: test-riscv32#src:test/test_cross_sets.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-shortcircuit | T | 70 | regression | regression: test-riscv32#src:test/test_cross_shortcircuit.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-stack-params | T | 70 | regression | regression: test-riscv32#src:test/test_cross_stack_params.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-static-open-array | T | 70 | regression | regression: test-riscv32#src:test/test_cross_static_open_array.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-str-length-index | T | 70 | regression | regression: test-riscv32#src:test/test_cross_str_length_index.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-string | T | 70 | regression | regression: test-riscv32#src:test/test_cross_string.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-strresult | T | 70 | regression | regression: test-riscv32#src:test/test_cross_strresult.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-typed-const | T | 70 | regression | regression: test-riscv32#src:test/test_cross_typed_const.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-cross-write-pchar | T | 70 | regression | regression: test-riscv32#src:test/test_cross_write_pchar.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-ctor-string-literal-arg | T | 70 | regression | regression: test-riscv32#src:test/test_ctor_string_literal_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-dynarray-copy | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_copy.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-dynarray-field | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-dynarray-global-after-method | T | 70 | regression | regression: test-riscv32#src:test/test_dynarray_global_after_method.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-eof-stdin | T | 70 | regression | regression: test-riscv32#src:test/test_eof_stdin.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-frozen-string-cross-b305 | T | 70 | regression | regression: test-riscv32#src:test/test_frozen_string_cross_b305.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-i386-arith | T | 70 | regression | regression: test-riscv32#src:test/test_i386_arith.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-i386-loops | T | 70 | regression | regression: test-riscv32#src:test/test_i386_loops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-i386-procs | T | 70 | regression | regression: test-riscv32#src:test/test_i386_procs.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-i386-varparam | T | 70 | regression | regression: test-riscv32#src:test/test_i386_varparam.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-i386-write | T | 70 | regression | regression: test-riscv32#src:test/test_i386_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-inheritance-dispatch | T | 70 | regression | regression: test-riscv32#src:test/test_inheritance_dispatch.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-inline-expand | T | 70 | regression | regression: test-riscv32#src:test/test_inline_expand.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-interfaces-multi-secondary | T | 70 | regression | regression: test-riscv32#src:test/test_interfaces_multi_secondary.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-interfaces | T | 70 | regression | regression: test-riscv32#src:test/test_interfaces.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-managed-record-temp-init | T | 70 | regression | regression: test-riscv32#src:test/test_managed_record_temp_init.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-managed-strlen-deref | T | 70 | regression | regression: test-riscv32#src:test/test_managed_strlen_deref.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-methcall | T | 70 | regression | regression: test-riscv32#src:test/test_methcall.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-method-implicit-field | T | 70 | regression | regression: test-riscv32#src:test/test_method_implicit_field.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-methodptr | T | 70 | regression | regression: test-riscv32#src:test/test_methodptr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-not-int64-expr | T | 70 | regression | regression: test-riscv32#src:test/test_not_int64_expr.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-overflow-checks-qplus | T | 70 | regression | regression: test-riscv32#src:test/test_overflow_checks_qplus.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-readln | T | 70 | regression | regression: test-riscv32#src:test/test_readln.pas@1 red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-record-temp-byval-arg | T | 70 | regression | regression: test-riscv32#src:test/test_record_temp_byval_arg.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-set-runtime | T | 70 | regression | regression: test-riscv32#src:test/test_set_runtime.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-shortstring-trunc | T | 70 | regression | regression: test-riscv32#src:test/test_shortstring_trunc.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-signal-default-revert-b336 | T | 70 | regression | regression: test-riscv32#src:test/test_signal_default_revert_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-signal-handler-callback-b336 | T | 70 | regression | regression: test-riscv32#src:test/test_signal_handler_callback_b336.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-single-in-aggregate | T | 70 | regression | regression: test-riscv32#src:test/test_single_in_aggregate.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-stackless-gen | T | 70 | regression | regression: test-riscv32#src:test/test_stackless_gen.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-u64-to-double | T | 70 | regression | regression: test-riscv32#src:test/test_u64_to_double.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-uint32-write | T | 70 | regression | regression: test-riscv32#src:test/test_uint32_write.pas red at f6cad82e8063 (auto-filed by twatch) | — |
+| regression-test-riscv32-test-uint64-ops | T | 70 | regression | regression: test-riscv32#src:test/test_uint64_ops.pas red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-smoke-test-ansistring | T | 70 | regression | regression: test-smoke#src:test/test_ansistring.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-smoke-test-class-of | T | 70 | regression | regression: test-smoke#src:test/test_class_of.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -2435,6 +2433,7 @@ _none_
 | regression-test-smoke-test-mutex | T | 70 | regression | regression: test-smoke#src:test/test_mutex.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-smoke-test-record-temp-byval-arg | T | 70 | regression | regression: test-smoke#src:test/test_record_temp_byval_arg.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-smoke-test-tthread-sync | T | 70 | regression | regression: test-smoke#src:test/test_tthread_sync.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-sqlite-threads-x86-64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-x86_64#src:tools/run_sqlite_thread_test.sh red at f6cad82e8063 (auto-filed by twatch) | — |
 | regression-test-threads-test-array-var-param-assign | T | 70 | regression | regression: test-threads#src:test/test_array_var_param_assign.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-threads-test-async-parallel-compat | T | 70 | regression | regression: test-threads#src:test/test_async_parallel_compat.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-threads-test-atomic-counter | T | 70 | regression | regression: test-threads#src:test/test_atomic_counter.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
@@ -2464,488 +2463,13 @@ _none_
 | regression-test-threads-test-tthread-sync | T | 70 | regression | regression: test-threads#src:test/test_tthread_sync.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-threads-test-tthread-terminate | T | 70 | regression | regression: test-threads#src:test/test_tthread_terminate.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
 | regression-test-threads-test-tthread | T | 70 | regression | regression: test-threads#src:test/test_tthread.pas red at f5c8fbec6016 (auto-filed by twatch) | — |
+| regression-test-zlib-install-lib-candidates | T | 70 | regression | regression: test-zlib#src:tools/install_lib_candidates.sh red at f6cad82e8063 (auto-filed by twatch) | — |
 
 ## Ready (no unmet blocker)
 
 - [p 70] [T] feature-pasmith-pascal-program-generator
-- [p 70] [T] regression-selfhost-fixedpoint-selfhost-fixedpoint
-- [p 70] [T] regression-test-aarch64-ccross-args
-- [p 70] [T] regression-test-aarch64-ccross-double-to-int
-- [p 70] [T] regression-test-aarch64-ccross-entry
-- [p 70] [T] regression-test-aarch64-cunsigned-div-mod-b123
-- [p 70] [T] regression-test-aarch64-cunsigned-int-arith-b121
-- [p 70] [T] regression-test-aarch64-cunsigned-semantics-sweep-b138
-- [p 70] [T] regression-test-aarch64-hello
-- [p 70] [T] regression-test-aarch64-test-arm32-arg-runtime
-- [p 70] [T] regression-test-aarch64-test-arm32-record-byval-wide
-- [p 70] [T] regression-test-aarch64-test-array-of-const-types
-- [p 70] [T] regression-test-aarch64-test-asm-a64
-- [p 70] [T] regression-test-aarch64-test-asm-a64-sum
-- [p 70] [T] regression-test-aarch64-test-asm-ifdef-multiarch
-- [p 70] [T] regression-test-aarch64-test-async-sl
-- [p 70] [T] regression-test-aarch64-test-call-result-member
-- [p 70] [T] regression-test-aarch64-test-cdecl-indirect
-- [p 70] [T] regression-test-aarch64-test-channel
-- [p 70] [T] regression-test-aarch64-test-class-of
-- [p 70] [T] regression-test-aarch64-test-classref
-- [p 70] [T] regression-test-aarch64-test-collections
-- [p 70] [T] regression-test-aarch64-test-conformance-2
-- [p 70] [T] regression-test-aarch64-test-const-record-temp
-- [p 70] [T] regression-test-aarch64-test-const-record-temp-managed
-- [p 70] [T] regression-test-aarch64-test-cross-aggregate-return
-- [p 70] [T] regression-test-aarch64-test-cross-case-range
-- [p 70] [T] regression-test-aarch64-test-cross-const-alias
-- [p 70] [T] regression-test-aarch64-test-cross-exception
-- [p 70] [T] regression-test-aarch64-test-cross-float
-- [p 70] [T] regression-test-aarch64-test-cross-float-const
-- [p 70] [T] regression-test-aarch64-test-cross-float-return
-- [p 70] [T] regression-test-aarch64-test-cross-frozen-strlen-deref
-- [p 70] [T] regression-test-aarch64-test-cross-global-init
-- [p 70] [T] regression-test-aarch64-test-cross-heap
-- [p 70] [T] regression-test-aarch64-test-cross-huge-frame
-- [p 70] [T] regression-test-aarch64-test-cross-in-operator
-- [p 70] [T] regression-test-aarch64-test-cross-loadfile
-- [p 70] [T] regression-test-aarch64-test-cross-managed-a64
-- [p 70] [T] regression-test-aarch64-test-cross-many-params
-- [p 70] [T] regression-test-aarch64-test-cross-multidim
-- [p 70] [T] regression-test-aarch64-test-cross-multidim3d
-- [p 70] [T] regression-test-aarch64-test-cross-named-array
-- [p 70] [T] regression-test-aarch64-test-cross-open-array-params
-- [p 70] [T] regression-test-aarch64-test-cross-param-2darray
-- [p 70] [T] regression-test-aarch64-test-cross-ptr-arith
-- [p 70] [T] regression-test-aarch64-test-cross-record-2darray
-- [p 70] [T] regression-test-aarch64-test-cross-record-array-store
-- [p 70] [T] regression-test-aarch64-test-cross-setlen-str
-- [p 70] [T] regression-test-aarch64-test-cross-setlen-varparam
-- [p 70] [T] regression-test-aarch64-test-cross-sets
-- [p 70] [T] regression-test-aarch64-test-cross-shortcircuit
-- [p 70] [T] regression-test-aarch64-test-cross-static-open-array
-- [p 70] [T] regression-test-aarch64-test-cross-str-length-index
-- [p 70] [T] regression-test-aarch64-test-cross-string-cow
-- [p 70] [T] regression-test-aarch64-test-cross-syscall
-- [p 70] [T] regression-test-aarch64-test-cross-typed-const
-- [p 70] [T] regression-test-aarch64-test-cross-variant
-- [p 70] [T] regression-test-aarch64-test-cross-variant-single
-- [p 70] [T] regression-test-aarch64-test-cross-virtual-indirect-aggret
-- [p 70] [T] regression-test-aarch64-test-cross-write-pchar
-- [p 70] [T] regression-test-aarch64-test-ctor-string-literal-arg
-- [p 70] [T] regression-test-aarch64-test-dynarray-copy
-- [p 70] [T] regression-test-aarch64-test-dynarray-field
-- [p 70] [T] regression-test-aarch64-test-dynarray-global-after-method
-- [p 70] [T] regression-test-aarch64-test-eof-stdin
-- [p 70] [T] regression-test-aarch64-test-extern-c
-- [p 70] [T] regression-test-aarch64-test-extern-c-float
-- [p 70] [T] regression-test-aarch64-test-forin-implicit-field
-- [p 70] [T] regression-test-aarch64-test-forin-member-access
-- [p 70] [T] regression-test-aarch64-test-i386-arith
-- [p 70] [T] regression-test-aarch64-test-i386-loops
-- [p 70] [T] regression-test-aarch64-test-i386-procs
-- [p 70] [T] regression-test-aarch64-test-i386-varparam
-- [p 70] [T] regression-test-aarch64-test-i386-write
-- [p 70] [T] regression-test-aarch64-test-inheritance-dispatch
-- [p 70] [T] regression-test-aarch64-test-inline-expand
-- [p 70] [T] regression-test-aarch64-test-interface-arc
-- [p 70] [T] regression-test-aarch64-test-interfaces
-- [p 70] [T] regression-test-aarch64-test-interfaces-as
-- [p 70] [T] regression-test-aarch64-test-interfaces-inherit
-- [p 70] [T] regression-test-aarch64-test-interfaces-is
-- [p 70] [T] regression-test-aarch64-test-interfaces-multi-secondary
-- [p 70] [T] regression-test-aarch64-test-interfaces-param
-- [p 70] [T] regression-test-aarch64-test-managed-record-temp-init
-- [p 70] [T] regression-test-aarch64-test-managed-strlen-deref
-- [p 70] [T] regression-test-aarch64-test-methcall
-- [p 70] [T] regression-test-aarch64-test-method-implicit-field
-- [p 70] [T] regression-test-aarch64-test-methodptr
-- [p 70] [T] regression-test-aarch64-test-nested-dynarray-setlen
-- [p 70] [T] regression-test-aarch64-test-not-int64-expr
-- [p 70] [T] regression-test-aarch64-test-overflow-checks-qplus
-- [p 70] [T] regression-test-aarch64-test-parallel-for-capture
-- [p 70] [T] regression-test-aarch64-test-parallel-for-capture-aggr
-- [p 70] [T] regression-test-aarch64-test-parallel-for-capture-string
-- [p 70] [T] regression-test-aarch64-test-parallel-for-lang
-- [p 70] [T] regression-test-aarch64-test-parallel-policy
-- [p 70] [T] regression-test-aarch64-test-parallel-policy-lang
-- [p 70] [T] regression-test-aarch64-test-parallel-policy-named
-- [p 70] [T] regression-test-aarch64-test-parallel-reduction
-- [p 70] [T] regression-test-aarch64-test-parallel-writeln-atomic
-- [p 70] [T] regression-test-aarch64-test-reactor
-- [p 70] [T] regression-test-aarch64-test-readln
-- [p 70] [T] regression-test-aarch64-test-record-temp-byval-arg
-- [p 70] [T] regression-test-aarch64-test-rtti
-- [p 70] [T] regression-test-aarch64-test-scheduler
-- [p 70] [T] regression-test-aarch64-test-scheduler-exc
-- [p 70] [T] regression-test-aarch64-test-set-runtime
-- [p 70] [T] regression-test-aarch64-test-shortstring-trunc
-- [p 70] [T] regression-test-aarch64-test-signal-default-revert-b336
-- [p 70] [T] regression-test-aarch64-test-signal-handler-callback-b336
-- [p 70] [T] regression-test-aarch64-test-single-in-aggregate
-- [p 70] [T] regression-test-aarch64-test-streaming
-- [p 70] [T] regression-test-aarch64-test-timer
-- [p 70] [T] regression-test-aarch64-test-u64-to-double
-- [p 70] [T] regression-test-aarch64-test-uint64-ops
-- [p 70] [T] regression-test-aarch64-test-varrec-alloc-after
-- [p 70] [T] regression-test-arm32-ccross-args
-- [p 70] [T] regression-test-arm32-ccross-double-to-int
-- [p 70] [T] regression-test-arm32-ccross-entry
-- [p 70] [T] regression-test-arm32-cunsigned-div-mod-b123
-- [p 70] [T] regression-test-arm32-cunsigned-int-arith-b121
-- [p 70] [T] regression-test-arm32-cunsigned-semantics-sweep-b138
-- [p 70] [T] regression-test-arm32-hello
-- [p 70] [T] regression-test-arm32-httpdemo
-- [p 70] [T] regression-test-arm32-test-arm32-arg-runtime
-- [p 70] [T] regression-test-arm32-test-arm32-virtual-wide
-- [p 70] [T] regression-test-arm32-test-array-of-const-types
-- [p 70] [T] regression-test-arm32-test-asm-arm32
-- [p 70] [T] regression-test-arm32-test-asm-arm32-sum
-- [p 70] [T] regression-test-arm32-test-async-sl
-- [p 70] [T] regression-test-arm32-test-call-result-member
-- [p 70] [T] regression-test-arm32-test-cdecl-indirect
-- [p 70] [T] regression-test-arm32-test-class-of
-- [p 70] [T] regression-test-arm32-test-classref
-- [p 70] [T] regression-test-arm32-test-collections
-- [p 70] [T] regression-test-arm32-test-conformance-2
-- [p 70] [T] regression-test-arm32-test-const-record-temp
-- [p 70] [T] regression-test-arm32-test-const-record-temp-managed
-- [p 70] [T] regression-test-arm32-test-cross-aggregate-return
-- [p 70] [T] regression-test-arm32-test-cross-aggregate-stackargs
-- [p 70] [T] regression-test-arm32-test-cross-case-range
-- [p 70] [T] regression-test-arm32-test-cross-const-alias
-- [p 70] [T] regression-test-arm32-test-cross-dynarray
-- [p 70] [T] regression-test-arm32-test-cross-exception
-- [p 70] [T] regression-test-arm32-test-cross-float
-- [p 70] [T] regression-test-arm32-test-cross-float-const
-- [p 70] [T] regression-test-arm32-test-cross-float-return
-- [p 70] [T] regression-test-arm32-test-cross-frozen-strlen-deref
-- [p 70] [T] regression-test-arm32-test-cross-global-init
-- [p 70] [T] regression-test-arm32-test-cross-heap
-- [p 70] [T] regression-test-arm32-test-cross-in-operator
-- [p 70] [T] regression-test-arm32-test-cross-int64
-- [p 70] [T] regression-test-arm32-test-cross-int64-byref
-- [p 70] [T] regression-test-arm32-test-cross-loadfile
-- [p 70] [T] regression-test-arm32-test-cross-managed-aggregate-locals
-- [p 70] [T] regression-test-arm32-test-cross-many-params
-- [p 70] [T] regression-test-arm32-test-cross-multidim
-- [p 70] [T] regression-test-arm32-test-cross-multidim3d
-- [p 70] [T] regression-test-arm32-test-cross-named-array
-- [p 70] [T] regression-test-arm32-test-cross-openarray-string
-- [p 70] [T] regression-test-arm32-test-cross-param-2darray
-- [p 70] [T] regression-test-arm32-test-cross-ptr-arith
-- [p 70] [T] regression-test-arm32-test-cross-record
-- [p 70] [T] regression-test-arm32-test-cross-record-2darray
-- [p 70] [T] regression-test-arm32-test-cross-record-array-store
-- [p 70] [T] regression-test-arm32-test-cross-setlen-str
-- [p 70] [T] regression-test-arm32-test-cross-setlen-varparam
-- [p 70] [T] regression-test-arm32-test-cross-sets
-- [p 70] [T] regression-test-arm32-test-cross-shortcircuit
-- [p 70] [T] regression-test-arm32-test-cross-stack-params
-- [p 70] [T] regression-test-arm32-test-cross-static-open-array
-- [p 70] [T] regression-test-arm32-test-cross-str-length-index
-- [p 70] [T] regression-test-arm32-test-cross-string
-- [p 70] [T] regression-test-arm32-test-cross-string-cow
-- [p 70] [T] regression-test-arm32-test-cross-strresult
-- [p 70] [T] regression-test-arm32-test-cross-syscall
-- [p 70] [T] regression-test-arm32-test-cross-sysopen-family
-- [p 70] [T] regression-test-arm32-test-cross-typed-const
-- [p 70] [T] regression-test-arm32-test-cross-var-string-param
-- [p 70] [T] regression-test-arm32-test-cross-variant
-- [p 70] [T] regression-test-arm32-test-cross-variant-single
-- [p 70] [T] regression-test-arm32-test-cross-virtual-indirect-aggret
-- [p 70] [T] regression-test-arm32-test-cross-write-pchar
-- [p 70] [T] regression-test-arm32-test-ctor-string-literal-arg
-- [p 70] [T] regression-test-arm32-test-dynarray-copy
-- [p 70] [T] regression-test-arm32-test-dynarray-field
-- [p 70] [T] regression-test-arm32-test-dynarray-global-after-method
-- [p 70] [T] regression-test-arm32-test-eof-stdin
-- [p 70] [T] regression-test-arm32-test-extern-c
-- [p 70] [T] regression-test-arm32-test-extern-c-float
-- [p 70] [T] regression-test-arm32-test-forin-implicit-field
-- [p 70] [T] regression-test-arm32-test-forin-member-access
-- [p 70] [T] regression-test-arm32-test-i386-arith
-- [p 70] [T] regression-test-arm32-test-i386-loops
-- [p 70] [T] regression-test-arm32-test-i386-procs
-- [p 70] [T] regression-test-arm32-test-i386-varparam
-- [p 70] [T] regression-test-arm32-test-i386-write
-- [p 70] [T] regression-test-arm32-test-inheritance-dispatch
-- [p 70] [T] regression-test-arm32-test-inline-expand
-- [p 70] [T] regression-test-arm32-test-interface-arc
-- [p 70] [T] regression-test-arm32-test-interfaces
-- [p 70] [T] regression-test-arm32-test-interfaces-as
-- [p 70] [T] regression-test-arm32-test-interfaces-inherit
-- [p 70] [T] regression-test-arm32-test-interfaces-is
-- [p 70] [T] regression-test-arm32-test-interfaces-multi-secondary
-- [p 70] [T] regression-test-arm32-test-interfaces-param
-- [p 70] [T] regression-test-arm32-test-lfm
-- [p 70] [T] regression-test-arm32-test-managed-record-temp-init
-- [p 70] [T] regression-test-arm32-test-managed-strlen-deref
-- [p 70] [T] regression-test-arm32-test-methcall
-- [p 70] [T] regression-test-arm32-test-method-implicit-field
-- [p 70] [T] regression-test-arm32-test-methodptr
-- [p 70] [T] regression-test-arm32-test-nested-dynarray-setlen
-- [p 70] [T] regression-test-arm32-test-not-int64-expr
-- [p 70] [T] regression-test-arm32-test-overflow-checks-qplus
-- [p 70] [T] regression-test-arm32-test-parallel-for-capture-aggr
-- [p 70] [T] regression-test-arm32-test-parallel-for-capture-string
-- [p 70] [T] regression-test-arm32-test-parallel-for-lang
-- [p 70] [T] regression-test-arm32-test-parallel-policy
-- [p 70] [T] regression-test-arm32-test-parallel-policy-lang
-- [p 70] [T] regression-test-arm32-test-parallel-policy-named
-- [p 70] [T] regression-test-arm32-test-parallel-reduction
-- [p 70] [T] regression-test-arm32-test-parallel-writeln-atomic
-- [p 70] [T] regression-test-arm32-test-readln
-- [p 70] [T] regression-test-arm32-test-record-temp-byval-arg
-- [p 70] [T] regression-test-arm32-test-rtti
-- [p 70] [T] regression-test-arm32-test-set-runtime
-- [p 70] [T] regression-test-arm32-test-shortstring-trunc
-- [p 70] [T] regression-test-arm32-test-signal-default-revert-b336
-- [p 70] [T] regression-test-arm32-test-signal-handler-callback-b336
-- [p 70] [T] regression-test-arm32-test-single-in-aggregate
-- [p 70] [T] regression-test-arm32-test-streaming
-- [p 70] [T] regression-test-arm32-test-streaming-enumset
-- [p 70] [T] regression-test-arm32-test-u64-to-double
-- [p 70] [T] regression-test-arm32-test-uint32-write
-- [p 70] [T] regression-test-arm32-test-uint64-ops
-- [p 70] [T] regression-test-c-conformance-aarch64-shard2-6
-- [p 70] [T] regression-test-c-conformance-aarch64-shard4-6
-- [p 70] [T] regression-test-c-conformance-aarch64-shard5-6
-- [p 70] [T] regression-test-c-conformance-arm32-shard1-6
-- [p 70] [T] regression-test-c-conformance-arm32-shard4-6
-- [p 70] [T] regression-test-c-conformance-i386-shard0-6
-- [p 70] [T] regression-test-c-conformance-i386-shard1-6
-- [p 70] [T] regression-test-c-conformance-i386-shard3-6
-- [p 70] [T] regression-test-c-conformance-i386-shard4-6
-- [p 70] [T] regression-test-c-conformance-riscv32-shard3-6
-- [p 70] [T] regression-test-c-conformance-riscv32-shard4-6
-- [p 70] [T] regression-test-c-conformance-shard0-6
-- [p 70] [T] regression-test-c-conformance-shard1-6
-- [p 70] [T] regression-test-c-conformance-shard2-6
-- [p 70] [T] regression-test-c-conformance-shard3-6
-- [p 70] [T] regression-test-c-conformance-shard4-6
-- [p 70] [T] regression-test-c-conformance-shard5-6
-- [p 70] [T] regression-test-cjson-runner
-- [p 70] [T] regression-test-core-test-async-sl
 - [p 70] [T] regression-test-core-test-basic-comprehensive
-- [p 70] [T] regression-test-core-test-big-static-array-open-param
-- [p 70] [T] regression-test-core-test-c-gtk
-- [p 70] [T] regression-test-core-test-c-gtk-call
-- [p 70] [T] regression-test-core-test-c-gtk-types
-- [p 70] [T] regression-test-core-test-c-gtk-window
 - [p 70] [T] regression-test-core-test-interface-mainbody-ascast-temp
-- [p 70] [T] regression-test-core-test-missing-diagnostics-fail
-- [p 70] [T] regression-test-core-test-resource
-- [p 70] [T] regression-test-debug-g-dwarf-smoke
-- [p 70] [T] regression-test-emit-obj-test-emit-obj
-- [p 70] [T] regression-test-float-determinism-mandelbrot
-- [p 70] [T] regression-test-i386-ccross-args
-- [p 70] [T] regression-test-i386-ccross-double-to-int
-- [p 70] [T] regression-test-i386-ccross-entry
-- [p 70] [T] regression-test-i386-cunsigned-div-mod-b123
-- [p 70] [T] regression-test-i386-cunsigned-int-arith-b121
-- [p 70] [T] regression-test-i386-cunsigned-semantics-sweep-b138
-- [p 70] [T] regression-test-i386-hello
-- [p 70] [T] regression-test-i386-httpdemo
-- [p 70] [T] regression-test-i386-test-arm32-arg-runtime
-- [p 70] [T] regression-test-i386-test-array-of-const-types
-- [p 70] [T] regression-test-i386-test-asm-386
-- [p 70] [T] regression-test-i386-test-asm-386-sum
-- [p 70] [T] regression-test-i386-test-async-sl
-- [p 70] [T] regression-test-i386-test-atomic-counter
-- [p 70] [T] regression-test-i386-test-atomic-i386
-- [p 70] [T] regression-test-i386-test-call-result-member
-- [p 70] [T] regression-test-i386-test-cdecl-indirect
-- [p 70] [T] regression-test-i386-test-class-of
-- [p 70] [T] regression-test-i386-test-classref
-- [p 70] [T] regression-test-i386-test-collections
-- [p 70] [T] regression-test-i386-test-conformance-2
-- [p 70] [T] regression-test-i386-test-const-record-temp
-- [p 70] [T] regression-test-i386-test-const-record-temp-managed
-- [p 70] [T] regression-test-i386-test-cross-aggregate-return
-- [p 70] [T] regression-test-i386-test-cross-byref-params
-- [p 70] [T] regression-test-i386-test-cross-case-range
-- [p 70] [T] regression-test-i386-test-cross-const-alias
-- [p 70] [T] regression-test-i386-test-cross-dynarray
-- [p 70] [T] regression-test-i386-test-cross-exception
-- [p 70] [T] regression-test-i386-test-cross-float
-- [p 70] [T] regression-test-i386-test-cross-float-const
-- [p 70] [T] regression-test-i386-test-cross-float-return
-- [p 70] [T] regression-test-i386-test-cross-frozen-strlen-deref
-- [p 70] [T] regression-test-i386-test-cross-global-init
-- [p 70] [T] regression-test-i386-test-cross-heap
-- [p 70] [T] regression-test-i386-test-cross-in-operator
-- [p 70] [T] regression-test-i386-test-cross-loadfile
-- [p 70] [T] regression-test-i386-test-cross-many-params
-- [p 70] [T] regression-test-i386-test-cross-multidim
-- [p 70] [T] regression-test-i386-test-cross-multidim3d
-- [p 70] [T] regression-test-i386-test-cross-named-array
-- [p 70] [T] regression-test-i386-test-cross-param-2darray
-- [p 70] [T] regression-test-i386-test-cross-ptr-arith
-- [p 70] [T] regression-test-i386-test-cross-record
-- [p 70] [T] regression-test-i386-test-cross-record-2darray
-- [p 70] [T] regression-test-i386-test-cross-record-array-store
-- [p 70] [T] regression-test-i386-test-cross-setlen-str
-- [p 70] [T] regression-test-i386-test-cross-setlen-varparam
-- [p 70] [T] regression-test-i386-test-cross-sets
-- [p 70] [T] regression-test-i386-test-cross-shortcircuit
-- [p 70] [T] regression-test-i386-test-cross-static-open-array
-- [p 70] [T] regression-test-i386-test-cross-string
-- [p 70] [T] regression-test-i386-test-cross-string-cow
-- [p 70] [T] regression-test-i386-test-cross-syscall
-- [p 70] [T] regression-test-i386-test-cross-sysopen-family
-- [p 70] [T] regression-test-i386-test-cross-typed-const
-- [p 70] [T] regression-test-i386-test-cross-variant
-- [p 70] [T] regression-test-i386-test-cross-variant-single
-- [p 70] [T] regression-test-i386-test-cross-virtual-indirect-aggret
-- [p 70] [T] regression-test-i386-test-cross-write-pchar
-- [p 70] [T] regression-test-i386-test-ctor-string-literal-arg
-- [p 70] [T] regression-test-i386-test-dynarray-copy
-- [p 70] [T] regression-test-i386-test-dynarray-field
-- [p 70] [T] regression-test-i386-test-dynarray-global-after-method
-- [p 70] [T] regression-test-i386-test-eof-stdin
-- [p 70] [T] regression-test-i386-test-extern-c
-- [p 70] [T] regression-test-i386-test-extern-c-float
-- [p 70] [T] regression-test-i386-test-forin-implicit-field
-- [p 70] [T] regression-test-i386-test-forin-member-access
-- [p 70] [T] regression-test-i386-test-i386-arith
-- [p 70] [T] regression-test-i386-test-i386-byvalue-set-param
-- [p 70] [T] regression-test-i386-test-i386-float-params
-- [p 70] [T] regression-test-i386-test-i386-int64
-- [p 70] [T] regression-test-i386-test-i386-loops
-- [p 70] [T] regression-test-i386-test-i386-procs
-- [p 70] [T] regression-test-i386-test-i386-varparam
-- [p 70] [T] regression-test-i386-test-i386-write
-- [p 70] [T] regression-test-i386-test-inheritance-dispatch
-- [p 70] [T] regression-test-i386-test-inline-expand
-- [p 70] [T] regression-test-i386-test-interface-arc
-- [p 70] [T] regression-test-i386-test-interfaces
-- [p 70] [T] regression-test-i386-test-interfaces-as
-- [p 70] [T] regression-test-i386-test-interfaces-inherit
-- [p 70] [T] regression-test-i386-test-interfaces-is
-- [p 70] [T] regression-test-i386-test-interfaces-multi-secondary
-- [p 70] [T] regression-test-i386-test-interfaces-param
-- [p 70] [T] regression-test-i386-test-lfm
-- [p 70] [T] regression-test-i386-test-managed-record-temp-init
-- [p 70] [T] regression-test-i386-test-managed-strlen-deref
-- [p 70] [T] regression-test-i386-test-methcall
-- [p 70] [T] regression-test-i386-test-method-implicit-field
-- [p 70] [T] regression-test-i386-test-methodptr
-- [p 70] [T] regression-test-i386-test-mutex
-- [p 70] [T] regression-test-i386-test-nested-dynarray-setlen
-- [p 70] [T] regression-test-i386-test-not-int64-expr
-- [p 70] [T] regression-test-i386-test-overflow-checks-qplus
-- [p 70] [T] regression-test-i386-test-palthread
-- [p 70] [T] regression-test-i386-test-parallel-for-capture-aggr
-- [p 70] [T] regression-test-i386-test-parallel-for-capture-string
-- [p 70] [T] regression-test-i386-test-parallel-for-lang
-- [p 70] [T] regression-test-i386-test-parallel-policy
-- [p 70] [T] regression-test-i386-test-parallel-policy-lang
-- [p 70] [T] regression-test-i386-test-parallel-policy-named
-- [p 70] [T] regression-test-i386-test-parallel-reduction
-- [p 70] [T] regression-test-i386-test-parallel-writeln-atomic
-- [p 70] [T] regression-test-i386-test-proctype
-- [p 70] [T] regression-test-i386-test-readln
-- [p 70] [T] regression-test-i386-test-rtti
-- [p 70] [T] regression-test-i386-test-set-runtime
-- [p 70] [T] regression-test-i386-test-shortstring-trunc
-- [p 70] [T] regression-test-i386-test-signal-default-revert-b336
-- [p 70] [T] regression-test-i386-test-signal-handler-callback-b336
-- [p 70] [T] regression-test-i386-test-stackless-gen
-- [p 70] [T] regression-test-i386-test-streaming
-- [p 70] [T] regression-test-i386-test-streaming-enumset
-- [p 70] [T] regression-test-i386-test-threadsafe-i386-stress
-- [p 70] [T] regression-test-i386-test-tthread
-- [p 70] [T] regression-test-i386-test-tthread-sync
-- [p 70] [T] regression-test-i386-test-u64-to-double
-- [p 70] [T] regression-test-i386-test-uint64-ops
-- [p 70] [T] regression-test-lua-runner
-- [p 70] [T] regression-test-riscv32-00
-- [p 70] [T] regression-test-riscv32-ccross-args
-- [p 70] [T] regression-test-riscv32-ccross-double-to-int
-- [p 70] [T] regression-test-riscv32-ccross-entry
-- [p 70] [T] regression-test-riscv32-cunsigned-div-mod-b123
-- [p 70] [T] regression-test-riscv32-cunsigned-int-arith-b121
-- [p 70] [T] regression-test-riscv32-cunsigned-semantics-sweep-b138
-- [p 70] [T] regression-test-riscv32-hello
-- [p 70] [T] regression-test-riscv32-lib-bignum-ops
-- [p 70] [T] regression-test-riscv32-test-arm32-arg-runtime
-- [p 70] [T] regression-test-riscv32-test-arm32-record-byval-wide
-- [p 70] [T] regression-test-riscv32-test-array-of-const-types
-- [p 70] [T] regression-test-riscv32-test-asm-ifdef-multiarch
-- [p 70] [T] regression-test-riscv32-test-asm-rv32
-- [p 70] [T] regression-test-riscv32-test-asm-rv32-sum
-- [p 70] [T] regression-test-riscv32-test-async-sl
-- [p 70] [T] regression-test-riscv32-test-call-result-member
-- [p 70] [T] regression-test-riscv32-test-collections
-- [p 70] [T] regression-test-riscv32-test-conformance-2
-- [p 70] [T] regression-test-riscv32-test-const-record-temp
-- [p 70] [T] regression-test-riscv32-test-const-record-temp-managed
-- [p 70] [T] regression-test-riscv32-test-cross-aggregate-stackargs
-- [p 70] [T] regression-test-riscv32-test-cross-case-range
-- [p 70] [T] regression-test-riscv32-test-cross-const-alias
-- [p 70] [T] regression-test-riscv32-test-cross-dynarray
-- [p 70] [T] regression-test-riscv32-test-cross-exception
-- [p 70] [T] regression-test-riscv32-test-cross-float
-- [p 70] [T] regression-test-riscv32-test-cross-float-const
-- [p 70] [T] regression-test-riscv32-test-cross-float-return
-- [p 70] [T] regression-test-riscv32-test-cross-global-init
-- [p 70] [T] regression-test-riscv32-test-cross-heap
-- [p 70] [T] regression-test-riscv32-test-cross-int64
-- [p 70] [T] regression-test-riscv32-test-cross-int64-byref
-- [p 70] [T] regression-test-riscv32-test-cross-many-params
-- [p 70] [T] regression-test-riscv32-test-cross-multidim
-- [p 70] [T] regression-test-riscv32-test-cross-multidim3d
-- [p 70] [T] regression-test-riscv32-test-cross-named-array
-- [p 70] [T] regression-test-riscv32-test-cross-openarray-string
-- [p 70] [T] regression-test-riscv32-test-cross-param-2darray
-- [p 70] [T] regression-test-riscv32-test-cross-ptr-arith
-- [p 70] [T] regression-test-riscv32-test-cross-record
-- [p 70] [T] regression-test-riscv32-test-cross-record-2darray
-- [p 70] [T] regression-test-riscv32-test-cross-record-array-store
-- [p 70] [T] regression-test-riscv32-test-cross-set-param
-- [p 70] [T] regression-test-riscv32-test-cross-setlen-str
-- [p 70] [T] regression-test-riscv32-test-cross-setlen-varparam
-- [p 70] [T] regression-test-riscv32-test-cross-sets
-- [p 70] [T] regression-test-riscv32-test-cross-shortcircuit
-- [p 70] [T] regression-test-riscv32-test-cross-stack-params
-- [p 70] [T] regression-test-riscv32-test-cross-static-open-array
-- [p 70] [T] regression-test-riscv32-test-cross-str-length-index
-- [p 70] [T] regression-test-riscv32-test-cross-string
-- [p 70] [T] regression-test-riscv32-test-cross-strresult
-- [p 70] [T] regression-test-riscv32-test-cross-typed-const
-- [p 70] [T] regression-test-riscv32-test-cross-write-pchar
-- [p 70] [T] regression-test-riscv32-test-ctor-string-literal-arg
-- [p 70] [T] regression-test-riscv32-test-dynarray-copy
-- [p 70] [T] regression-test-riscv32-test-dynarray-field
-- [p 70] [T] regression-test-riscv32-test-dynarray-global-after-method
-- [p 70] [T] regression-test-riscv32-test-eof-stdin
-- [p 70] [T] regression-test-riscv32-test-frozen-string-cross-b305
-- [p 70] [T] regression-test-riscv32-test-i386-arith
-- [p 70] [T] regression-test-riscv32-test-i386-loops
-- [p 70] [T] regression-test-riscv32-test-i386-procs
-- [p 70] [T] regression-test-riscv32-test-i386-varparam
-- [p 70] [T] regression-test-riscv32-test-i386-write
-- [p 70] [T] regression-test-riscv32-test-inheritance-dispatch
-- [p 70] [T] regression-test-riscv32-test-inline-expand
-- [p 70] [T] regression-test-riscv32-test-interfaces
-- [p 70] [T] regression-test-riscv32-test-interfaces-multi-secondary
-- [p 70] [T] regression-test-riscv32-test-managed-record-temp-init
-- [p 70] [T] regression-test-riscv32-test-managed-strlen-deref
-- [p 70] [T] regression-test-riscv32-test-methcall
-- [p 70] [T] regression-test-riscv32-test-method-implicit-field
-- [p 70] [T] regression-test-riscv32-test-methodptr
-- [p 70] [T] regression-test-riscv32-test-not-int64-expr
-- [p 70] [T] regression-test-riscv32-test-overflow-checks-qplus
-- [p 70] [T] regression-test-riscv32-test-readln
-- [p 70] [T] regression-test-riscv32-test-record-temp-byval-arg
-- [p 70] [T] regression-test-riscv32-test-set-runtime
-- [p 70] [T] regression-test-riscv32-test-shortstring-trunc
-- [p 70] [T] regression-test-riscv32-test-signal-default-revert-b336
-- [p 70] [T] regression-test-riscv32-test-signal-handler-callback-b336
-- [p 70] [T] regression-test-riscv32-test-single-in-aggregate
-- [p 70] [T] regression-test-riscv32-test-stackless-gen
-- [p 70] [T] regression-test-riscv32-test-u64-to-double
-- [p 70] [T] regression-test-riscv32-test-uint32-write
-- [p 70] [T] regression-test-riscv32-test-uint64-ops
-- [p 70] [T] regression-test-sqlite-threads-x86-64-run-sqlite-thread-test
-- [p 70] [T] regression-test-zlib-install-lib-candidates
 - [p 65] [A] feature-c-corpus-expansion
 - [p 65] [O] feature-optimization-levels
 - [p 60] [A] decide-constructor-exception-cleanup-semantics

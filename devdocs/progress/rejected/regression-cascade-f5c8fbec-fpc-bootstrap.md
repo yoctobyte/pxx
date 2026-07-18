@@ -24,3 +24,17 @@ prio: 0
   probably SUPPRESS (or fold into one ticket) the downstream FPC-dependent
   jobs' auto-filing — 939 tickets for one missing forward is noise that buries
   real signal. Left as a suggestion, not filed as a T ticket.
+
+## Second flood, same night: 476 tickets at f6cad82e8063 — borg harness collapse
+
+A second mass filing (2026-07-18T19:56Z), ALL at `f6cad82e8063` — borg's OWN
+devdocs-only ticket-flood commit (cannot change codegen), every ticket with
+bad==good, 0-in-range, and an EMPTY log tail (incl. `selfhost-fixedpoint`,
+which ran green natively five times tonight; sqlite-threads + zlib also green
+natively). The empty tails say the borg-side run itself collapsed (jobs
+reported red with no output — disk/clone/harness state, possibly the
+939-file commit itself), not that anything regressed. Swept here like the
+first flood. The cascade suppressor (tools/twatch.py CASCADE_THRESHOLD,
+landed tonight) would have filed ONE ticket for each of these events — **the
+borg daemon needs a restart/pull to pick it up, and its clone/disk state
+deserves a look** (flagged to the user).
