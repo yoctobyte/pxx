@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T09:33:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "452ac1d2bb86e0b643de4ede4d263e2376b8991f",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-07-17T09:38:30Z",
    "fixed": [],
    "new_red": [],
@@ -414,11 +406,22 @@
    "sha": "4c8b1929383655ecb2d8aa88e1881dac2b8ae844",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-18T10:29:32Z",
+   "fixed": [
+    "fpc-bootstrap#src:compiler/compiler.pas",
+    "test-core#src:test/test_basic_comprehensive.bas"
+   ],
+   "new_red": [],
+   "sha": "81525fb00f59092b7e588f4a696a23f3937f7ad6",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
  "jobs": {
-  "fpc-bootstrap#src:compiler/compiler.pas": "fail",
+  "fpc-bootstrap#src:compiler/compiler.pas": "pass",
   "lib-fpc-clean#00": "pass",
   "optdiff#shard0/6": "pass",
   "optdiff#shard1/6": "pass",
@@ -948,6 +951,7 @@
   "test-core#src:test/cstruct_global_init_b48.c": "pass",
   "test-core#src:test/cstruct_identity_cast_b222.c": "pass",
   "test-core#src:test/cstruct_layout_stress_b134.c": "pass",
+  "test-core#src:test/cstruct_over256_fields.c": "pass",
   "test-core#src:test/cswitch_b13.c": "pass",
   "test-core#src:test/cswitch_nested_case_block_b127.c": "pass",
   "test-core#src:test/cswitch_noncompound_duff_b207.c": "pass",
@@ -1049,7 +1053,7 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "fail",
+  "test-core#src:test/test_basic_comprehensive.bas": "pass",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
@@ -1924,11 +1928,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-18T07:30:41Z",
-  "sha": "4c8b1929383655ecb2d8aa88e1881dac2b8ae844",
+  "date": "2026-07-18T10:29:32Z",
+  "sha": "81525fb00f59092b7e588f4a696a23f3937f7ad6",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 2610.8
+  "verdict": "GREEN",
+  "wall": 3044.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1957,30 +1961,6 @@
    "opened": "2026-07-13T02:18:18Z",
    "range": [],
    "src": "tools/optdiff.sh"
-  },
-  {
-   "bad": "603cf2bda859c38146854e698430b3fc2160b741",
-   "good": "9ae7a3617ccb49c4740fd0ab02e1494a98fc8bd3",
-   "job": "fpc-bootstrap#src:compiler/compiler.pas",
-   "name": "fpc-bootstrap#00",
-   "opened": "2026-07-13T17:25:45Z",
-   "range": [
-    "603cf2bda859c38146854e698430b3fc2160b741"
-   ],
-   "src": "compiler/compiler.pas"
-  },
-  {
-   "bad": "3f2828476c6cbac56775a81e1aa2791208d1d239",
-   "good": "709d6ea965562974e2d7254622e3438e34c4117a",
-   "job": "test-core#src:test/test_basic_comprehensive.bas",
-   "name": "test-core#183",
-   "opened": "2026-07-18T06:32:15Z",
-   "range": [
-    "0f5af158aafdeed73c0435b752afa1e37e5b2e00",
-    "ede8e9e486e70003377940a5b14875b8455ae590",
-    "3f2828476c6cbac56775a81e1aa2791208d1d239"
-   ],
-   "src": "test/test_basic_comprehensive.bas"
   }
  ]
 }
