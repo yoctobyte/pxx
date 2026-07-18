@@ -2371,11 +2371,17 @@ begin
       Next;
       idxExpr := ParseCExpr;
       Expect(tkRBrack, ']');
-      if (ASTKind[node] = AN_IDENT) and NodeArrNDInfo(node) and
-         (CurTok.Kind = tkLBrack) then
+      if (ASTKind[node] = AN_IDENT) and NodeArrNDInfo(node) then
       begin
-        { Local/global multidimensional C array `a[i][j]`: flatten the chained
-          subscripts to one AN_INDEX over the row-major storage. }
+        { Local/global multidimensional C array `a[i][j]..`: flatten the chained
+          subscripts to one AN_INDEX over the row-major storage. A single
+          subscript (no second `[`) is the C row decay `a[i]` -> pointer to the
+          remaining sub-array; it falls through to the partial branch below with
+          nIdx=1 (NodeArrNDInfo only fires for rank >= 2, so nIdx < rank there,
+          and a rank-1 array never reaches here — it uses the plain AN_INDEX path).
+          Without this a single subscript hit the generic path and mis-decayed the
+          row to a scalar load (NULL / SIGSEGV — bug-c-multidim-single-subscript-
+          row-decay). }
         NDIdxNode[0] := idxExpr;
         nIdx := 1;
         while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
