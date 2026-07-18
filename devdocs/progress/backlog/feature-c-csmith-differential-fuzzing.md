@@ -122,3 +122,22 @@ confirmed pre-existing (the pinned stable compiler reproduces them — not from 
 reducer floors ~800 lines (csmith's nested exprs need a C-aware reducer). Install
 creduce to reduce + fix. Reproducers (this box's csmith) preserved in the session
 scratchpad; seeds reproduce exactly via `tools/csmith_fuzz.py --seed N`.
+
+## 2026-07-18 — TWO miscompiles found AND FIXED via small-program fuzzing
+
+Small-program mode (`--csmith-args "--max-funcs 1 --max-block-size 3
+--max-block-depth 2 --max-expr-complexity 4 --max-array-dim 2
+--max-array-len-per-dim 3 --max-pointer-depth 2"`) makes findings born ~130-160
+lines → a homemade line-delta reducer (interestingness: gcc runs & pxx runs &
+checksums differ) got them to 20-40 lines, directly diagnosable WITHOUT creduce.
+
+- **seed 5038/5194/8020 → signed/unsigned 64-bit comparison** (`int64 > 0UL`
+  compared signed). FIXED 574fcac1. [[project_c_signed_unsigned_compare64]].
+- **seed 9048 → global pointer to struct-array element wrong stride**
+  (`static T *p = &g[1]` used TypeSize(tyRecord)=8 not RecSize; `*p=..` corrupted
+  the wrong slot). FIXED 4f4aceb3.
+
+Both were pre-existing (pinned reproduced). After both fixes, all four reduced
+repros match gcc. The remaining PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) is
+still open ([[bug-a-csmith-o0-miscompile-seed5038]] history) — a lowering gap,
+lower severity (clean error).
