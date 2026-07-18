@@ -64,3 +64,23 @@ a MULTI-SESSION Track O arc — do not start it as a night-tail.
 - The bench suite (mandelbrot-p, nbody) IS the acceptance metric; checksums
   must stay identical (strict IEEE, no FMA contraction — the bench header
   documents why).
+
+## Re-measured 2026-07-18 night (fable-O) — gap HALVED since opening, arc still valid
+
+Same box, same checksum (74607393270), quiet machine, hyperfine w2/r7:
+
+| build | time | vs FPC -O2 |
+| --- | --- | --- |
+| pxx -O2 | 1.399 s ± 0.009 | 4.2x (unchanged — ticket baseline) |
+| **pxx -O3** | **0.664 s ± 0.005** | **1.97x** |
+| FPC -O2 | 0.337 s ± 0.003 | 1.00x |
+
+- The opening's "-O3 is WORSE (2.47s)" is DEAD: -O3 now carries in-tree XMM
+  fusion (c14f35a1), 6-slot xmm residency across calls (the internal-ABI arc,
+  cc9bfd17..2dffbb7c), unified int+float residency and caller-side regcall —
+  mandelbrot 2.47s → 0.66s since the ticket was filed.
+- The residual ~2x against FPC is exactly this ticket's diagnosis: the rax
+  VALUE MODEL at tree/statement boundaries (movq transits + stack rounds
+  where trees meet stores, compares, calls). Fusion killed the WITHIN-tree
+  cost; the xmm-resident value model remains the multi-session fix and stays
+  the honest scope of this ticket. Do-not-night-tail note still applies.
