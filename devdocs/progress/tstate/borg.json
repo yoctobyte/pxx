@@ -1971,14 +1971,11 @@
   },
   {
    "bad": "3f2828476c6cbac56775a81e1aa2791208d1d239",
-   "good": "4e380fda9a3dd5e76c35969b1edf71967d63babf",
+   "good": "709d6ea965562974e2d7254622e3438e34c4117a",
    "job": "test-core#src:test/test_basic_comprehensive.bas",
    "name": "test-core#183",
    "opened": "2026-07-18T06:32:15Z",
    "range": [
-    "0c2879368f2a1d19f7b40836f9e8fda8de4394cf",
-    "3c3b5f4caef9575b22c831210dccd9a87fad448d",
-    "709d6ea965562974e2d7254622e3438e34c4117a",
     "0f5af158aafdeed73c0435b752afa1e37e5b2e00",
     "ede8e9e486e70003377940a5b14875b8455ae590",
     "3f2828476c6cbac56775a81e1aa2791208d1d239"
