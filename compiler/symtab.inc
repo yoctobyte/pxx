@@ -2054,10 +2054,34 @@ begin
     SymDeclTok[symIdx] := Tokens[TokPos].SOffset;
 end;
 
+procedure EnsureSymCapacity(need: Integer);
+{ Grow Syms + all ~30 parallel Sym* arrays (and SymHashPrev) so index `need-1` is in
+  bounds. Called at each Alloc* chokepoint; doubling from 16384; capacity never shrinks
+  across the per-frontend SymCount reset. ALL parallel arrays grow in lockstep — a
+  missed one is a silent out-of-bounds. See feature-dynamic-compiler-tables. }
+var n: Integer;
+begin
+  if need <= SymCapacity then Exit;
+  if SymCapacity = 0 then n := 16384 else n := SymCapacity;
+  while n < need do n := n * 2;
+  SetLength(Syms, n);              SetLength(SymCaseSensitive, n);  SetLength(SymUnitIdx, n);
+  SetLength(SymDynDepth, n);       SetLength(SymDeclTypeNOff, n);   SetLength(SymDeclTypeNLen, n);
+  SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
+  SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
+  SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
+  SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
+  SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymArrNDims, n);
+  SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
+  SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
+  SetLength(SymCLongRank, n);
+  SymCapacity := n;
+end;
+
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
 var sz, align: Integer;
 begin
-  if SymCount >= MAX_SYMS then Error('too many symbols');
+  EnsureSymCapacity(SymCount + 1);
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
@@ -2171,7 +2195,7 @@ end;
 function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
 var sz, align: Integer;
 begin
-  if SymCount >= MAX_SYMS then Error('too many symbols');
+  EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
@@ -2265,7 +2289,7 @@ end;
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
 var elemSize, totalSize, align: Integer;
 begin
-  if SymCount >= MAX_SYMS then Error('too many symbols');
+  EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   if LastTypeElemDynDepth > 0 then
   begin
@@ -2374,7 +2398,7 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
   depth is the nesting count: 1 for `array of T`, 2 for `array of array of T`...
   elemType is the BASE element type at the deepest level. }
 begin
-  if SymCount >= MAX_SYMS then Error('too many symbols');
+  EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
   Syms[SymCount].Name        := name;
   Syms[SymCount].TypeKind    := elemType;
@@ -2460,7 +2484,7 @@ begin Result := AllocVar('', tyInteger); end;
 
 function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
-  if SymCount >= MAX_SYMS then Error('too many symbols');
+  EnsureSymCapacity(SymCount + 1);
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].Kind     := skConst;

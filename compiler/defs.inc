@@ -1157,47 +1157,51 @@ var
   IramCallFix : array[0..MAX_CALLFIX-1] of TCallFix;
   IramCallFixCount : Integer;
 
-  Syms      : array[0..MAX_SYMS-1]  of TSymbol;
-  SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
-  SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
-  SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  { Syms + the ~30 parallel Sym* arrays are DYNAMIC (grown by EnsureSymCapacity at
+    the Alloc* chokepoints). Indexed by symbol id; no @Syms[i] is held across a grow
+    (audited), so realloc is safe. Was array[0..MAX_SYMS-1] (131072). }
+  Syms      : array of TSymbol;
+  SymCaseSensitive : array of Boolean; { match this symbol name case-sensitively }
+  SymUnitIdx : array of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
+  SymDynDepth : array of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   { `parallel for` capture support: for a var/param declared with a SINGLE named
     type (`x: TGrid`), the type NAME's TokChars span (0 = anonymous/unnamed type).
     Lets ParseParallelFor emit a `capj: ^TGrid` accessor for a non-scalar capture.
     Reset to 0 in EVERY Alloc* (recycled slots would else leak a stale name);
     set only in ParseVarSection. }
-  SymDeclTypeNOff : array[0..MAX_SYMS-1] of Integer;
-  SymDeclTypeNLen : array[0..MAX_SYMS-1] of Integer;
-  SymElemDynDepth : array[0..MAX_SYMS-1] of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
-  SymDynElemRowLen : array[0..MAX_SYMS-1] of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
-  SymDynElemRowLo  : array[0..MAX_SYMS-1] of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }
-  SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
-  SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
-  SymElemProcSig : array[0..MAX_SYMS-1] of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
-  SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
-  SymEnumId : array[0..MAX_SYMS-1] of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
-  SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
-  SymStrCap : array[0..MAX_SYMS-1] of Integer; { see decl below }
-  SymIsSub : array[0..MAX_SYMS-1] of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
-  SymSubLo : array[0..MAX_SYMS-1] of Int64;
-  SymSubHi : array[0..MAX_SYMS-1] of Int64; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
-  SymPtrDepth : array[0..MAX_SYMS-1] of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
-  SymPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
-  SymPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
-  SymPtrElemArrLen : array[0..MAX_SYMS-1] of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). }
+  SymDeclTypeNOff : array of Integer;
+  SymDeclTypeNLen : array of Integer;
+  SymElemDynDepth : array of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
+  SymDynElemRowLen : array of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
+  SymDynElemRowLo  : array of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }
+  SymGenSlot  : array of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
+  SymProcSig  : array of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
+  SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
+  SymSetEnumId : array of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
+  SymEnumId : array of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
+  SymSetElemTk : array of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
+  SymStrCap : array of Integer; { see decl below }
+  SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
+  SymSubLo : array of Int64;
+  SymSubHi : array of Int64; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
+  SymPtrDepth : array of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
+  SymPtrBaseTk : array of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
+  SymPtrBaseRec : array of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
+  SymPtrElemArrLen : array of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
     Horner( (i_d - lo_d) over span_d ). NDims=0 means single-dimension. Per-dim
     lo/span live in flat side tables indexed [sym*MAX_ARR_DIMS + d]. }
-  SymArrNDims  : array[0..MAX_SYMS-1] of Integer;
+  SymArrNDims  : array of Integer;
   SymArrDimLo  : array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
   SymArrDimSpan: array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
-  SymRTTIOff  : array[0..MAX_SYMS-1] of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
-  SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
-  SymBlockId : array[0..MAX_SYMS-1] of Integer;
-  SymDeclTok : array[0..MAX_SYMS-1] of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }
+  SymRTTIOff  : array of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
+  SymIsHiddenArgTemp : array of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
+  SymBlockId : array of Integer;
+  SymDeclTok : array of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }
   SymCount  : Integer;
+  SymCapacity : Integer;   { allocated length of the dynamic Syms/Sym* parallel arrays (grown by EnsureSymCapacity) }
   FrameSize : Integer;
 
   Procs     : array[0..MAX_PROCS-1] of TProc;
@@ -1216,7 +1220,7 @@ var
     heads (descending idx = each is its bucket's current head), so chains
     never hold dead indices. }
   SymHashHead : array[0..SYM_HASH_SIZE-1] of Integer;
-  SymHashPrev : array[0..MAX_SYMS-1] of Integer;   { next-older same-bucket idx }
+  SymHashPrev : array of Integer;   { next-older same-bucket idx }
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcFlexColumn : array[0..MAX_PROCS-1] of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;
@@ -1350,14 +1354,14 @@ var
   CTypeBaseConst : Boolean;  { last ParseCDeclType: the BASE type carried `const` (=> pointee-const once a star follows). Additive, C-mode only. }
   CTypeLongLong  : Boolean;  { last ParseCDeclType: base was `long long` (TTypeKind collapses it into tyInt64; _Generic needs the distinction). }
   CTypeLong      : Boolean;  { last ParseCDeclType: base was exactly one `long` (on ILP32 TTypeKind collapses it onto tyInt32 = int; _Generic needs the distinction). }
-  SymPtrPointeeConst : array[0..MAX_SYMS-1] of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
+  SymPtrPointeeConst : array of Boolean; { C pointer symbol whose pointee is const (`const T *p`); for _Generic lvalue-converted matching. }
   { C integer symbol's LONG RANK, for _Generic: 0 = none, 1 = `long`, 2 = `long long`.
     TTypeKind cannot carry this. On ILP32 `long` is 32-bit, so it collapses onto the
     same tyInt32 as `int`; on LP64 `long long` collapses onto the same tyInt64 as
     `long`. Either way _Generic would silently pick the wrong association. The width
     is not in question (sizeof is correct) — only the C-level type identity.
     C-mode only: Pascal symbols keep rank 0 (AllocVar zeroes it). }
-  SymCLongRank : array[0..MAX_SYMS-1] of Integer;
+  SymCLongRank : array of Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;

@@ -885,6 +885,11 @@ test-core: $(COMPILER)
 	@python3 -c "L=['program p;']+['procedure q%d; begin end;'%i for i in range(12000)]+['begin','  writeln(42);','end.']; open('/tmp/test_token_growth.pas','w').write(chr(10).join(L)+chr(10))"
 	./$(COMPILER) /tmp/test_token_growth.pas /tmp/test_token_growth26
 	test "$$(/tmp/test_token_growth26)" = "42"
+	# Dynamic Syms arrays: >16384 symbols (the EnsureSymCapacity initial reserve) must
+	# grow the parallel Sym* arrays, not overflow — feature-dynamic-compiler-tables.
+	@python3 -c "L=['program p;','var']+['  v%d: longint;'%i for i in range(20000)]+['begin','  v0 := 7; writeln(v0);','end.']; open('/tmp/test_sym_growth.pas','w').write(chr(10).join(L)+chr(10))"
+	./$(COMPILER) /tmp/test_sym_growth.pas /tmp/test_sym_growth26
+	test "$$(/tmp/test_sym_growth26)" = "7"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26
