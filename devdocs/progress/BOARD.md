@@ -26,11 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (120)
+## backlog (119)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-huge-struct-high-field-offset-miscompile | C | 30 | bug | C struct with a field at byte offset > 65535 miscompiles the field access (wrong value); suspect a 16-bit offset wrap | — |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
@@ -208,7 +207,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (797)
+## done (798)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -299,6 +298,7 @@ _none_
 | bug-c-goto-shadowing-00129 | C | 28 | bug | c-testsuite 00129: goto past declarations + pathological `s` shadowing + #define s s | — |
 | bug-c-gzgetc-fnlike-macro-call | C | 50 | bug | C: zlib.h `gzgetc` function-like macro call fails to parse | — |
 | bug-c-header-case-sensitivity-lookup | A | 50 | bug | Case-sensitive C header lookup mismatch on Linux | — |
+| bug-c-huge-struct-high-field-offset-miscompile | C | 30 | bug | C struct with a field at byte offset > 65535 miscompiles the field access (wrong value); suspect a 16-bit offset wrap | — |
 | bug-c-i386-enum-const-return-00120 | A | 45 | bug | C/i386: `return X` of an enum constant declared inside an anonymous-struct member returns garbage (00120) | — |
 | bug-c-i386-indirect-variadic-fnptr-00189 | A | 45 | bug | C/i386: call through a pointer to a VARIADIC function (fnptr = &fprintf) segfaults (00189) | — |
 | bug-c-init-array-designators | C | 50 | bug | C array element designators `[i] = v` + `[]` size inference from designators | — |
@@ -1129,7 +1129,6 @@ _none_
 - [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [C] bug-c-huge-struct-high-field-offset-miscompile
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count
