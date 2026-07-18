@@ -2093,7 +2093,7 @@ begin
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymCLongRank, n);
@@ -2131,6 +2131,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemNDims[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
@@ -2255,6 +2256,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemNDims[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
@@ -2375,6 +2377,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemNDims[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
@@ -2452,6 +2455,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemNDims[SymCount] := 0;
   { `array of T` where T is a named FIXED array: the parser leaves the row
     shape in LastTypeDynElemRowLen/Lo; stamp it (depth-1 only) and reset. }
   if (depth = 1) and (LastTypeDynElemRowLen > 0) then

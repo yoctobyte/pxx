@@ -1188,7 +1188,8 @@ var
   SymPtrDepth : array of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
   SymPtrBaseTk : array of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
   SymPtrBaseRec : array of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
-  SymPtrElemArrLen : array of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). }
+  SymPtrElemArrLen : array of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). For a multi-dim pointee (`elem (*p)[A][B]`) this holds the FLATTENED product A*B (p+1 stride) and SymPtrElemNDims/SymArrDimSpan carry the per-dim shape for multi-subscript indexing. }
+  SymPtrElemNDims  : array of Integer; { C pointer-to-multidim-array `elem (*p)[A][B]..`: number of pointee array dims (0 or 1 = single-dim / scalar-pointee, uses SymPtrElemArrLen only). >1 -> the dim spans live in SymArrDimSpan[idx*MAX_ARR_DIMS + d] (a pointer symbol has SymArrNDims=0, so those slots are otherwise unused). Drives the >2-subscript `p[i][j][k]` flatten. }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -1295,7 +1296,9 @@ var
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
   CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
-  CTypePtrElemArrLen : Integer; { pointer-to-array declarator `elem (*Name)[N]`: the pointee is a fixed array of N (row length). 0 = not a pointer-to-array. }
+  CTypePtrElemArrLen : Integer; { pointer-to-array declarator `elem (*Name)[N]`: the pointee is a fixed array of N (row length). For a multi-dim pointee `(*Name)[A][B]` it holds the FLATTENED product A*B. 0 = not a pointer-to-array. }
+  CTypePtrElemNDims  : Integer; { pointer-to-array declarator: number of pointee array dims (1 for `[N]`, >1 for `[A][B]..`); the spans are in CTypePtrElemDim[0..NDims-1]. }
+  CTypePtrElemDim    : array[0..MAX_ARR_DIMS-1] of Integer; { pointee per-dim spans for a `(*Name)[A][B]..` declarator }
   CTypeFnRetIsFunc : Boolean; { last ParseCDeclType saw `ret (*Name(params))(...)`: a real function returning a fn pointer, not a fn-pointer variable }
   CTypeFnRetParamCount : Integer;
   CTypeFnRetPTypes : array[0..MAX_PROC_PARAMS-1] of TTypeKind;

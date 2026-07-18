@@ -2375,7 +2375,7 @@ function ParseCPostfixTail(node: Integer): Integer;
 var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi, nIdx: Integer;
+    ndimsF, flatNode, spanD, ndi, nIdx, si: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
   done := False;
@@ -2440,25 +2440,58 @@ begin
       else if (ASTKind[node] = AN_IDENT) and
               (SymPtrElemArrLen[ASTIVal[node]] > 0) and (CurTok.Kind = tkLBrack) then
       begin
-        { Pointer-to-array `elem (*p)[N]`: `p[i][j]` addresses *(p) as a `[.][N]`
-          row-major block. Flatten to AN_INDEX(p, i*N + j); AN_INDEX over a POINTER
-          base LOADS p and strides by the element size (PtrElemTk = elem), so the
-          address is load(p) + (i*N + j)*sizeof(elem). Only the full two-subscript
-          form is modelled here (partial `p[i]` row-decay is a rarer follow-up). }
-        rowStride := SymPtrElemArrLen[ASTIVal[node]];
-        Next;                          { second '[' }
-        strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInteger);
-        mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
-        ASTLeft[mulNode] := idxExpr; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
-        idxExpr := ParseCExpr;         { second subscript }
-        Expect(tkRBrack, ']');
-        flatNode := AllocNode(AN_BINOP); ASTIVal[flatNode] := Ord(tkPlus);
-        ASTLeft[flatNode] := mulNode; ASTRight[flatNode] := idxExpr; ASTTk[flatNode] := Ord(tyInteger);
-        inode := AllocNode(AN_INDEX);
-        ASTLeft[inode] := node;
-        ASTRight[inode] := flatNode;
-        ASTTk[inode] := Ord(Syms[ASTIVal[node]].PtrElemTk);
-        node := inode;
+        si := ASTIVal[node];
+        if SymPtrElemNDims[si] > 1 then
+        begin
+          { Multi-dim pointee `elem (*p)[A][B]..`: `p[i][j][k]` flattens by Horner
+            over the pointee dims — acc = i (the pointer index); for each pointee
+            dim d: acc = acc*dim[d] + next-subscript. AN_INDEX over the POINTER base
+            loads p and strides by the element size, so the address is
+            load(p) + (i*A*B + j*B + k)*sizeof(elem). }
+          flatNode := idxExpr;           { first subscript = the pointer index }
+          ndi := 0;
+          while (CurTok.Kind = tkLBrack) and (ndi < SymPtrElemNDims[si]) do
+          begin
+            Next;                        { '[' }
+            spanD := SymArrDimSpan[si * MAX_ARR_DIMS + ndi];
+            strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
+            mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+            ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
+            idxExpr := ParseCExpr;
+            Expect(tkRBrack, ']');
+            inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+            ASTLeft[inode] := mulNode; ASTRight[inode] := idxExpr; ASTTk[inode] := Ord(tyInteger);
+            flatNode := inode;
+            Inc(ndi);
+          end;
+          inode := AllocNode(AN_INDEX);
+          ASTLeft[inode] := node;
+          ASTRight[inode] := flatNode;
+          ASTTk[inode] := Ord(Syms[si].PtrElemTk);
+          node := inode;
+        end
+        else
+        begin
+          { Pointer-to-array `elem (*p)[N]`: `p[i][j]` addresses *(p) as a `[.][N]`
+            row-major block. Flatten to AN_INDEX(p, i*N + j); AN_INDEX over a POINTER
+            base LOADS p and strides by the element size (PtrElemTk = elem), so the
+            address is load(p) + (i*N + j)*sizeof(elem). Only the full two-subscript
+            form is modelled here (partial `p[i]` row-decay is a rarer follow-up). }
+          rowStride := SymPtrElemArrLen[si];
+          Next;                          { second '[' }
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInteger);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := idxExpr; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
+          idxExpr := ParseCExpr;         { second subscript }
+          Expect(tkRBrack, ']');
+          flatNode := AllocNode(AN_BINOP); ASTIVal[flatNode] := Ord(tkPlus);
+          ASTLeft[flatNode] := mulNode; ASTRight[flatNode] := idxExpr; ASTTk[flatNode] := Ord(tyInteger);
+          inode := AllocNode(AN_INDEX);
+          ASTLeft[inode] := node;
+          ASTRight[inode] := flatNode;
+          ASTTk[inode] := Ord(Syms[si].PtrElemTk);
+          node := inode;
+        end;
       end
       else if (ASTKind[node] = AN_FIELD) and
          (RecFieldArrNDims(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) >= 2) then
@@ -2976,6 +3009,7 @@ begin
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   CTypeFnPtrArrLen := -2;
   CTypePtrElemArrLen := 0;
+  CTypePtrElemNDims := 0;
   CTypeFnRetIsFunc := False;
   CTypeFnRetParamCount := 0;
   loop := True;
@@ -3178,15 +3212,28 @@ begin
     Next;                            { consume name -> ')' }
     Next;                            { consume ')' -> '[' }
     Next;                            { consume '[' }
-    paArrLen := CEvalConstExpr;      { N }
+    paArrLen := CEvalConstExpr;      { N (first / only dim) }
     Expect(tkRBrack, ']');
+    CTypePtrElemDim[0] := paArrLen;
+    CTypePtrElemNDims := 1;
+    { Multi-dim pointee `elem (*name)[A][B]..`: consume the extra `[M]` dims,
+      accumulate the flattened product (p+1 stride) and record each span so
+      `p[i][j][k]` can flatten with the real inner strides. }
+    while (CurTok.Kind = tkLBrack) and (CTypePtrElemNDims < MAX_ARR_DIMS) do
+    begin
+      Next;                          { '[' }
+      CTypePtrElemDim[CTypePtrElemNDims] := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+      paArrLen := paArrLen * CTypePtrElemDim[CTypePtrElemNDims];
+      Inc(CTypePtrElemNDims);
+    end;
     Result := tyPointer;
     CTypeElemTk := Ord(fpRet);       { pointee element scalar kind (elem stride) }
     CTypeElemRec := baseRec;
     CTypePtrDepth := 1;
     CTypePtrBaseTk := Ord(fpRet);
     CTypePtrBaseRec := baseRec;
-    CTypePtrElemArrLen := paArrLen;
+    CTypePtrElemArrLen := paArrLen;  { flattened product for the p+1 stride }
     CTypeIsVoid := False;
   end
   { Function-pointer declarator: ret (*name)(params) — e.g. sqlite3_exec's
@@ -3530,6 +3577,13 @@ begin
       Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
       Syms[idx].PtrElemRec := elemRec;
       SymPtrElemArrLen[idx] := paLen;
+      { Multi-dim pointee `elem (*p)[A][B]..`: record the dim count + spans so
+        `p[i][j][k]` flattens with the real inner strides (single-dim `[N]`
+        keeps SymPtrElemNDims<=1 and the existing i*N+j path). }
+      SymPtrElemNDims[idx] := CTypePtrElemNDims;
+      if CTypePtrElemNDims > 1 then
+        for mdi := 0 to CTypePtrElemNDims - 1 do
+          SymArrDimSpan[idx * MAX_ARR_DIMS + mdi] := CTypePtrElemDim[mdi];
       SymPtrDepth[idx] := 1;
       SymPtrBaseTk[idx] := ptrBaseTk;
       SymPtrBaseRec[idx] := ptrBaseRec;
