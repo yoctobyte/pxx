@@ -9,7 +9,7 @@ prio: 40
 - **Type:** feature (optimization — Track O; Track A files/gate). Per-backend value-model
   work, NOT a shared-IR pass — **x86-64 first**, aarch64 later, per the O charter
   (32-bit/ESP keep their models).
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-18, split out of [[feature-opt-float-register-temporaries]] as its
   actionable first slice.
 
@@ -67,3 +67,6 @@ for float trees as part of this work. May be a quick standalone win on its own.
 - Not the full xmm-resident value model (that's [[feature-opt-float-register-temporaries]]).
 - Not aarch64 in v1 (x86-64 first; aarch64 mirrors after).
 - Not FMA / reassociation — checksums must stay bit-identical.
+
+## Log
+- 2026-07-18 — resolved, commit c14f35a1.
