@@ -207,7 +207,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (799)
+## done (800)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -322,6 +322,7 @@ _none_
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
 | bug-c-multidim-float-brace-init | C | 35 | bug | C: a 2-D (multi-dim) brace initializer of a FLOAT element array zero-fills | — |
 | bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
+| bug-c-multidim-single-subscript-row-decay | C | 40 | bug | C `g[i]` on a multi-dim array (single subscript, row decay to a pointer) produced NULL/scalar-load -> SIGSEGV; fixed | — |
 | bug-c-nested-anon-union-struct | C | 50 | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-null-pointer-literal-call-arg-sqlite | C | 50 | bug | C: null pointer literal call arg lowers as address in sqlite | — |
 | bug-c-packed-aligned-ignored | A | 50 | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
