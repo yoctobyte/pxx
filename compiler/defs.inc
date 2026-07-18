@@ -1081,7 +1081,8 @@ var
     fresh caller syms each placeholder maps to. }
   InlineLocalSym   : array[0..MAX_INLINE_LOCALS-1] of Integer;
   InlineResultSym  : Integer;
-  InlineWrittenLocal : array[0..MAX_INLINE_LOCALS-1] of Boolean; { read-before-write guard during shape-3 validation }
+  InlineWrittenLocal : array[0..MAX_INLINE_LOCALS-1] of Boolean; { read-before-write guard during shape-3 validation — DEFINITE (all-paths) assignment under slice 2c branches }
+  InlineResultDef    : Boolean; { slice 2c: Result definitely (all paths) assigned so far — gates Result-READ inside the body (Clamp-style `if Result < lo then ...`) }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

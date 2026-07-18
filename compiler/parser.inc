@@ -138,7 +138,8 @@ end;
   callee local (slice 2b). `retSym` (>=0) is the Result symbol whose READ is
   forbidden (Result may only be an assignment target, never read — avoids the
   uninitialised-Result hazard). }
-function InlineExprSimple(node, procIdx: Integer; allowLocals: Boolean; retSym: Integer): Boolean;
+function InlineExprSimple(node, procIdx: Integer; allowLocals: Boolean; retSym: Integer;
+                          allowResRead: Boolean): Boolean;
 var idx: Integer;
 begin
   InlineExprSimple := False;
@@ -150,7 +151,17 @@ begin
       begin
         idx := ASTIVal[node];
         if (idx < 0) or (idx >= SymCount) then Exit;
-        if idx = retSym then Exit;                     { Result-read not allowed }
+        if idx = retSym then
+        begin
+          { Result-read: slice 2c allows it (Clamp-style guards) — the
+            definite-assignment walker (InlineStmtRhsLocalsWritten) separately
+            requires an unconditional prior write, so -O0's stack-garbage
+            Result is never observable. Shapes 1/2a/2b keep the ban. }
+          if not allowResRead then Exit;
+          if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
+          InlineExprSimple := True;
+          Exit;
+        end;
         if Syms[idx].IsArray then Exit;
         if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
         if InlineParamIndexOf(procIdx, idx) >= 0 then
@@ -161,8 +172,8 @@ begin
           InlineExprSimple := True;
       end;
     AN_BINOP, AN_NEG, AN_NOT:
-      InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx, allowLocals, retSym) and
-                          InlineExprSimple(ASTRight[node], procIdx, allowLocals, retSym);
+      InlineExprSimple := InlineExprSimple(ASTLeft[node], procIdx, allowLocals, retSym, allowResRead) and
+                          InlineExprSimple(ASTRight[node], procIdx, allowLocals, retSym, allowResRead);
   end;
 end;
 
@@ -269,7 +280,8 @@ begin
 end;
 
 { Walk a shape-3 RHS expression; every callee-local read (RetLocal map) must
-  already be marked written in InlineWrittenLocal (read-before-write guard). }
+  already be marked written in InlineWrittenLocal, and a Result read requires
+  InlineResultDef (slice 2c) — the DEFINITE (all-paths) assignment guard. }
 function InlineStmtRhsLocalsWritten(node: Integer): Boolean;
 var lidx: Integer;
 begin
@@ -277,6 +289,12 @@ begin
   if node < 0 then begin InlineStmtRhsLocalsWritten := True; Exit; end;
   if ASTKind[node] = AN_IDENT then
   begin
+    if (RetResSym >= 0) and (ASTIVal[node] = RetResSym) then
+    begin
+      if not InlineResultDef then Exit;
+      InlineStmtRhsLocalsWritten := True;
+      Exit;
+    end;
     lidx := RetLocalIndexOf(ASTIVal[node]);
     if (lidx >= 0) and (not InlineWrittenLocal[lidx]) then Exit;
     InlineStmtRhsLocalsWritten := True;
@@ -286,13 +304,60 @@ begin
                                 InlineStmtRhsLocalsWritten(ASTRight[node]);
 end;
 
-{ Slice 2b (-O3): retain a STRAIGHT-LINE multi-statement body — an AN_SEQ chain
-  where every statement is `local := E` or `Result := E`, E over params / scalar
-  globals-consts / already-written locals, no branches, no Result read, Result
-  written at least once. All locals scalar ordinal. Retains the whole chain with
-  param/local/Result idents rewritten to placeholders. }
+{ Slice 2c: validate one if-arm — a single AN_ASSIGN or an AN_SEQ chain of
+  them, each `local := E` / `Result := E` with E over the same simple-expr
+  class, reads gated by definite-at-if-entry OR written-earlier-in-THIS-arm.
+  Mutates InlineWrittenLocal/InlineResultDef in place (the caller saved the
+  entry state and merges/restores). False = the whole retention declines. }
+function InlineArmValidate(armNode, procIdx, retSym: Integer): Boolean;
+var stmtN, lhsN, rhsN, lidx: Integer;
+begin
+  InlineArmValidate := False;
+  { normalize: a bare assign or a chain }
+  if armNode < 0 then Exit;
+  if ASTKind[armNode] = AN_ASSIGN then
+  begin
+    lhsN := ASTLeft[armNode];
+    rhsN := ASTRight[armNode];
+    if (lhsN < 0) or (ASTKind[lhsN] <> AN_IDENT) then Exit;
+    if not InlineExprSimple(rhsN, procIdx, True, retSym, True) then Exit;
+    if not InlineStmtRhsLocalsWritten(rhsN) then Exit;
+    if ASTIVal[lhsN] = retSym then
+      InlineResultDef := True
+    else
+    begin
+      lidx := RetLocalIndexOf(ASTIVal[lhsN]);
+      if lidx < 0 then Exit;
+      InlineWrittenLocal[lidx] := True;
+    end;
+    InlineArmValidate := True;
+    Exit;
+  end;
+  if ASTKind[armNode] <> AN_SEQ then Exit;
+  stmtN := armNode;
+  while stmtN <> -1 do
+  begin
+    if ASTKind[stmtN] <> AN_SEQ then Exit;
+    if not InlineArmValidate(ASTLeft[stmtN], procIdx, retSym) then Exit;
+    stmtN := ASTRight[stmtN];
+  end;
+  InlineArmValidate := True;
+end;
+
+{ Slice 2b (-O2) + 2c (-O3): retain a multi-statement body — an AN_SEQ chain
+  where every statement is `local := E` / `Result := E`, or (2c, OptLevel>=3)
+  an `if C then <assigns> [else <assigns>]` whose arms are single assigns or
+  straight-line assign chains. E over params / scalar globals-consts /
+  DEFINITELY-written locals / DEFINITELY-written Result (the Clamp shape).
+  Definite = assigned on ALL paths: an arm's writes only survive the merge
+  when BOTH arms (with an else present) performed them; Result must be
+  definite at the end. All locals scalar ordinal. Retains the whole chain
+  with param/local/Result idents rewritten to placeholders. }
 procedure TryRetainInlineStmtBody(procIdx, bodyNode, retSym: Integer);
-var i, j, seqN, stmtN, lhsN, rhsN, startNext, cloned, resultWrites, lidx: Integer;
+var i, j, seqN, stmtN, startNext, cloned: Integer;
+    condN, pairN, thenA, elseA: Integer;
+    savedW, thenW: array[0..MAX_INLINE_LOCALS-1] of Boolean;
+    savedR, thenR: Boolean;
 begin
   if OptLevel < 2 then Exit;                 { -O2 (promoted from -O3 once proven) }
   { Enumerate scalar callee locals (excluding Result) → the Ret* placeholder map. }
@@ -308,31 +373,56 @@ begin
     Inc(RetLocalCnt);
   end;
   RetResSym := retSym;
-  { Validate the chain. }
+  { Validate the chain (definite-assignment dataflow). }
   for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := False;
-  resultWrites := 0;
+  InlineResultDef := False;
   seqN := bodyNode;
   while seqN <> -1 do
   begin
     if ASTKind[seqN] <> AN_SEQ then Exit;
     stmtN := ASTLeft[seqN];
-    if (stmtN < 0) or (ASTKind[stmtN] <> AN_ASSIGN) then Exit;
-    lhsN := ASTLeft[stmtN];
-    rhsN := ASTRight[stmtN];
-    if (lhsN < 0) or (ASTKind[lhsN] <> AN_IDENT) then Exit;
-    if not InlineExprSimple(rhsN, procIdx, True, retSym) then Exit;
-    if not InlineStmtRhsLocalsWritten(rhsN) then Exit;
-    if ASTIVal[lhsN] = retSym then
-      Inc(resultWrites)
-    else
+    if stmtN < 0 then Exit;
+    if ASTKind[stmtN] = AN_ASSIGN then
     begin
-      lidx := RetLocalIndexOf(ASTIVal[lhsN]);
-      if lidx < 0 then Exit;                 { LHS is neither Result nor a tracked local }
-      InlineWrittenLocal[lidx] := True;
-    end;
+      { top-level assign: same checks as an arm statement, updates definite. }
+      if not InlineArmValidate(stmtN, procIdx, retSym) then Exit;
+    end
+    else if ASTKind[stmtN] = AN_IF then
+    begin
+      if OptLevel < 3 then Exit;             { 2c lands behind -O3 first }
+      condN := ASTLeft[stmtN];
+      pairN := ASTRight[stmtN];
+      if (pairN < 0) or (ASTKind[pairN] <> AN_PAIR) then Exit;
+      thenA := ASTLeft[pairN];
+      elseA := ASTRight[pairN];
+      if thenA < 0 then Exit;
+      if not InlineExprSimple(condN, procIdx, True, retSym, True) then Exit;
+      if not InlineStmtRhsLocalsWritten(condN) then Exit;
+      { entry state }
+      for j := 0 to RetLocalCnt - 1 do savedW[j] := InlineWrittenLocal[j];
+      savedR := InlineResultDef;
+      { then-arm (reads may use entry-definite ∪ own earlier writes) }
+      if not InlineArmValidate(thenA, procIdx, retSym) then Exit;
+      for j := 0 to RetLocalCnt - 1 do thenW[j] := InlineWrittenLocal[j];
+      thenR := InlineResultDef;
+      { back to entry for the else-arm }
+      for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := savedW[j];
+      InlineResultDef := savedR;
+      if elseA >= 0 then
+      begin
+        if not InlineArmValidate(elseA, procIdx, retSym) then Exit;
+        { merge: definite after the if = entry ∪ (then ∩ else) }
+        for j := 0 to RetLocalCnt - 1 do
+          InlineWrittenLocal[j] := savedW[j] or (thenW[j] and InlineWrittenLocal[j]);
+        InlineResultDef := savedR or (thenR and InlineResultDef);
+      end;
+      { no else: definite stays the entry state (already restored) }
+    end
+    else
+      Exit;
     seqN := ASTRight[seqN];
   end;
-  if resultWrites < 1 then Exit;
+  if not InlineResultDef then Exit;          { Result assigned on ALL paths }
   { Retain the whole chain. }
   startNext := InlineASTNext;
   if InlineASTNext + 256 >= INLINE_AST_RESERVE then Exit;
@@ -389,7 +479,7 @@ begin
     lhs := ASTLeft[stmt];
     rhs := ASTRight[stmt];
     if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
-    if not InlineExprSimple(rhs, procIdx, False, retSym) then Exit;
+    if not InlineExprSimple(rhs, procIdx, False, retSym, False) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 48 >= INLINE_AST_RESERVE then Exit;    { budget guard }
     i := CloneToInlineRegion(rhs, procIdx);
@@ -412,9 +502,9 @@ begin
     if (ASTKind[ASTLeft[elseA]] <> AN_IDENT) or (ASTIVal[ASTLeft[elseA]] <> retSym) then Exit;
     aE := ASTRight[thenA];
     bE := ASTRight[elseA];
-    if not InlineExprSimple(condN, procIdx, False, retSym) then Exit;
-    if not InlineExprSimple(aE, procIdx, False, retSym) then Exit;
-    if not InlineExprSimple(bE, procIdx, False, retSym) then Exit;
+    if not InlineExprSimple(condN, procIdx, False, retSym, False) then Exit;
+    if not InlineExprSimple(aE, procIdx, False, retSym, False) then Exit;
+    if not InlineExprSimple(bE, procIdx, False, retSym, False) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 96 >= INLINE_AST_RESERVE then Exit;
     i := BuildInlineTernary(condN, aE, bE, procIdx, Ord(Syms[retSym].TypeKind));
