@@ -43,3 +43,6 @@ Rare in real code (usually `sizeof(var)` / `sizeof(type)`), but silent.
 
 - The repro prints `40 5 24 32`; C-conformance 220/220 + self-host byte-identical.
 - A `test/*.c` regression.
+
+## Log
+- 2026-07-18 — resolved, commit ec713264.
