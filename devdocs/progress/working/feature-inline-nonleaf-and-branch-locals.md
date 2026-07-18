@@ -111,3 +111,14 @@ sites 2b/2c can't reach. Needs (see the design notes in
   byte-identical. Clamp-style microbench -O3 vs -O2: 1.32x.
   REMAINING (this ticket): non-leaf inlining (callee makes calls); nested ifs
   in arms; while/for bodies.
+
+- 2026-07-18 night (fable-O) **2c increment: NESTED ifs in arms.** The if
+  save/validate/merge dataflow extracted to `InlineIfValidate`;
+  `InlineArmValidate` recurses through it (mutual recursion, forward decl in
+  parser.inc — FPC-seed verified via `make bootstrap`). Definite-assignment
+  composes: an inner if/else that writes a local on both paths makes it
+  definite for the rest of the outer arm. Test extends with `Grade` (nested
+  if/else in a then-arm) — 4 call sites now vanish at -O3, outputs identical
+  -O0/-O2/-O3 + aarch64 differential. Gates: test-opt, quick, bootstrap,
+  O3-built byte-identical, mandelbrot checksum. REMAINING: non-leaf (callee
+  makes calls); while/for bodies.

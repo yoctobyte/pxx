@@ -42,18 +42,34 @@ begin
   else Mix := hi - lo;
 end;
 
-var i, s, t, u, w: Int64;
+function Grade(x: Int64): Int64;
+var g: Int64;
 begin
-  s := 0; t := 0; u := 0; w := 0;
+  { nested if inside an arm — 2c recursion; inner else keeps g definite }
+  g := 0;
+  if x > 10 then
+  begin
+    if x > 100 then g := 3
+    else g := 2;
+  end
+  else g := 1;
+  Grade := g * 10 + 1;
+end;
+
+var i, s, t, u, w, q: Int64;
+begin
+  s := 0; t := 0; u := 0; w := 0; q := 0;
   for i := 1 to 500000 do
   begin
     s := s + Clamp3(i mod 300 - 100, 0, 99);
     t := t + AbsDiff(i and 255, 128);
     u := u + PickSign(i mod 7 - 3);
     w := w + Mix(i and 63, i mod 97);
+    q := q + Grade(i mod 200);
   end;
   writeln('s=', s);
   writeln('t=', t);
   writeln('u=', u);
   writeln('w=', w);
+  writeln('q=', q);
 end.

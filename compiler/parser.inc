@@ -304,16 +304,56 @@ begin
                                 InlineStmtRhsLocalsWritten(ASTRight[node]);
 end;
 
-{ Slice 2c: validate one if-arm — a single AN_ASSIGN or an AN_SEQ chain of
-  them, each `local := E` / `Result := E` with E over the same simple-expr
-  class, reads gated by definite-at-if-entry OR written-earlier-in-THIS-arm.
-  Mutates InlineWrittenLocal/InlineResultDef in place (the caller saved the
-  entry state and merges/restores). False = the whole retention declines. }
+{ Slice 2c: validate one if-arm — a single statement or an AN_SEQ chain of
+  statements, each `local := E` / `Result := E` (E over the same simple-expr
+  class, reads gated by definite-at-if-entry OR written-earlier-in-THIS-arm)
+  or a NESTED if (recursing through InlineIfValidate with the same
+  save/validate/merge dataflow). Mutates InlineWrittenLocal/InlineResultDef
+  in place (the caller saved the entry state and merges/restores).
+  False = the whole retention declines. }
+function InlineArmValidate(armNode, procIdx, retSym: Integer): Boolean; forward;
+
+function InlineIfValidate(ifNode, procIdx, retSym: Integer): Boolean;
+var condN, pairN, thenA, elseA, j: Integer;
+    savedW, thenW: array[0..MAX_INLINE_LOCALS-1] of Boolean;
+    savedR, thenR: Boolean;
+begin
+  InlineIfValidate := False;
+  condN := ASTLeft[ifNode];
+  pairN := ASTRight[ifNode];
+  if (pairN < 0) or (ASTKind[pairN] <> AN_PAIR) then Exit;
+  thenA := ASTLeft[pairN];
+  elseA := ASTRight[pairN];
+  if thenA < 0 then Exit;
+  if not InlineExprSimple(condN, procIdx, True, retSym, True) then Exit;
+  if not InlineStmtRhsLocalsWritten(condN) then Exit;
+  { entry state }
+  for j := 0 to RetLocalCnt - 1 do savedW[j] := InlineWrittenLocal[j];
+  savedR := InlineResultDef;
+  { then-arm (reads may use entry-definite ∪ own earlier writes) }
+  if not InlineArmValidate(thenA, procIdx, retSym) then Exit;
+  for j := 0 to RetLocalCnt - 1 do thenW[j] := InlineWrittenLocal[j];
+  thenR := InlineResultDef;
+  { back to entry for the else-arm }
+  for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := savedW[j];
+  InlineResultDef := savedR;
+  if elseA >= 0 then
+  begin
+    if not InlineArmValidate(elseA, procIdx, retSym) then Exit;
+    { merge: definite after the if = entry ∪ (then ∩ else) }
+    for j := 0 to RetLocalCnt - 1 do
+      InlineWrittenLocal[j] := savedW[j] or (thenW[j] and InlineWrittenLocal[j]);
+    InlineResultDef := savedR or (thenR and InlineResultDef);
+  end;
+  { no else: definite stays the entry state (already restored) }
+  InlineIfValidate := True;
+end;
+
 function InlineArmValidate(armNode, procIdx, retSym: Integer): Boolean;
 var stmtN, lhsN, rhsN, lidx: Integer;
 begin
   InlineArmValidate := False;
-  { normalize: a bare assign or a chain }
+  { normalize: a bare assign, a nested if, or a chain }
   if armNode < 0 then Exit;
   if ASTKind[armNode] = AN_ASSIGN then
   begin
@@ -331,6 +371,11 @@ begin
       InlineWrittenLocal[lidx] := True;
     end;
     InlineArmValidate := True;
+    Exit;
+  end;
+  if ASTKind[armNode] = AN_IF then
+  begin
+    InlineArmValidate := InlineIfValidate(armNode, procIdx, retSym);
     Exit;
   end;
   if ASTKind[armNode] <> AN_SEQ then Exit;
@@ -355,9 +400,6 @@ end;
   with param/local/Result idents rewritten to placeholders. }
 procedure TryRetainInlineStmtBody(procIdx, bodyNode, retSym: Integer);
 var i, j, seqN, stmtN, startNext, cloned: Integer;
-    condN, pairN, thenA, elseA: Integer;
-    savedW, thenW: array[0..MAX_INLINE_LOCALS-1] of Boolean;
-    savedR, thenR: Boolean;
 begin
   if OptLevel < 2 then Exit;                 { -O2 (promoted from -O3 once proven) }
   { Enumerate scalar callee locals (excluding Result) → the Ret* placeholder map. }
@@ -390,33 +432,7 @@ begin
     else if ASTKind[stmtN] = AN_IF then
     begin
       if OptLevel < 3 then Exit;             { 2c lands behind -O3 first }
-      condN := ASTLeft[stmtN];
-      pairN := ASTRight[stmtN];
-      if (pairN < 0) or (ASTKind[pairN] <> AN_PAIR) then Exit;
-      thenA := ASTLeft[pairN];
-      elseA := ASTRight[pairN];
-      if thenA < 0 then Exit;
-      if not InlineExprSimple(condN, procIdx, True, retSym, True) then Exit;
-      if not InlineStmtRhsLocalsWritten(condN) then Exit;
-      { entry state }
-      for j := 0 to RetLocalCnt - 1 do savedW[j] := InlineWrittenLocal[j];
-      savedR := InlineResultDef;
-      { then-arm (reads may use entry-definite ∪ own earlier writes) }
-      if not InlineArmValidate(thenA, procIdx, retSym) then Exit;
-      for j := 0 to RetLocalCnt - 1 do thenW[j] := InlineWrittenLocal[j];
-      thenR := InlineResultDef;
-      { back to entry for the else-arm }
-      for j := 0 to RetLocalCnt - 1 do InlineWrittenLocal[j] := savedW[j];
-      InlineResultDef := savedR;
-      if elseA >= 0 then
-      begin
-        if not InlineArmValidate(elseA, procIdx, retSym) then Exit;
-        { merge: definite after the if = entry ∪ (then ∩ else) }
-        for j := 0 to RetLocalCnt - 1 do
-          InlineWrittenLocal[j] := savedW[j] or (thenW[j] and InlineWrittenLocal[j]);
-        InlineResultDef := savedR or (thenR and InlineResultDef);
-      end;
-      { no else: definite stays the entry state (already restored) }
+      if not InlineIfValidate(stmtN, procIdx, retSym) then Exit;
     end
     else
       Exit;
