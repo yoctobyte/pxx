@@ -26,10 +26,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (118)
+## backlog (119)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-pointer-to-multidim-array-declarator | C | 30 | bug | C declarator `int (*p)[A][B]` (pointer to a >=2-D array) not parsed — blocks using a partial multi-dim index that leaves >=2 dims | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -1128,6 +1129,7 @@ _none_
 - [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 30] [C] bug-c-pointer-to-multidim-array-declarator
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count
