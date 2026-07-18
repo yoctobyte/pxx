@@ -9,7 +9,7 @@ prio: 25
 - **Type:** bug / scalability limit (Track A — `compiler/ir.inc`, `defs.inc`). A capacity
   limit, **not** a miscompile: pxx rejects a program FPC compiles, with
   `error: IR overflow` — it never emits wrong code.
-- **Status:** backlog (low priority)
+- **Status:** done
 - **Found:** 2026-07-17, pasmith non-interface high-complexity run (seed 60030,
   `pxx-reject_overflow`, 13 hits).
 
@@ -51,3 +51,6 @@ the **dynamic-array** proper fix; deprioritised (the wall just moved).
 
 Low severity — a capacity ceiling, no wrong code. Filed for the record; the pasmith
 trigger is an unusually large single function, not typical source.
+
+## Log
+- 2026-07-18 — resolved, commit cf7bbcea.
