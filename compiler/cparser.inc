@@ -7539,7 +7539,10 @@ var
   precid: array[0..31] of Integer;    { record id per tyRecord param (for isRef field access) }
   pprocsig: array[0..31] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   pptrelemsig: array[0..31] of Integer;  { pointee fn-ptr sig for a `ft *pf` param (`(*pf)()`), else -1 }
-  savedSC, savedFS, node, savedCurProc: Integer;
+  pptrarrlen: array[0..31] of Integer;   { pointer-to-array param `elem (*q)[N]`: flattened pointee row length, else 0 }
+  pptrndims:  array[0..31] of Integer;   { pointer-to-array param: pointee array dim count (>1 -> multi-dim, spans in pptrdims) }
+  pptrdims:   array[0..31 * MAX_ARR_DIMS - 1] of Integer; { pointee per-dim spans for a `(*q)[A][B]..` param }
+  savedSC, savedFS, node, savedCurProc, pmi: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
 begin
@@ -7669,6 +7672,14 @@ begin
           precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
           pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
           pptrelemsig[nparams] := CTypePtrElemProcSig;  { `ft *pf` param: pointee sig for `(*pf)()` }
+          { pointer-to-array param `elem (*q)[N]` / `(*q)[A][B]`: carry the pointee
+            array shape so `q[i][j]` strides by the row size (bug-c-ptr-to-array-
+            parameter). Mirrors the local-declarator store. }
+          pptrarrlen[nparams] := CTypePtrElemArrLen;
+          pptrndims[nparams]  := CTypePtrElemNDims;
+          if CTypePtrElemNDims > 1 then
+            for pmi := 0 to CTypePtrElemNDims - 1 do
+              pptrdims[nparams * MAX_ARR_DIMS + pmi] := CTypePtrElemDim[pmi];
           if CTypeFnPtrName <> '' then
           begin
             { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
@@ -7877,6 +7888,16 @@ begin
       SymPtrBaseRec[idx] := pbaserec[i];
       if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
       if pptrelemsig[i] >= 0 then SymElemProcSig[idx] := pptrelemsig[i];  { `ft *pf` param: `(*pf)()` }
+      { pointer-to-array param: apply the pointee array shape so `q[i][j]` flattens
+        (single-dim uses SymPtrElemArrLen; multi-dim adds NDims + SymArrDimSpan). }
+      if pptrarrlen[i] > 0 then
+      begin
+        SymPtrElemArrLen[idx] := pptrarrlen[i];
+        SymPtrElemNDims[idx] := pptrndims[i];
+        if pptrndims[i] > 1 then
+          for pmi := 0 to pptrndims[i] - 1 do
+            SymArrDimSpan[idx * MAX_ARR_DIMS + pmi] := pptrdims[i * MAX_ARR_DIMS + pmi];
+      end;
     end;
   end;
   
