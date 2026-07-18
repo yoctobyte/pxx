@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T08:15:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fa9c1e8239bf9ee8c03b8c018b6415d5c76261fc",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-17T08:29:21Z",
    "fixed": [],
    "new_red": [],
@@ -414,6 +406,16 @@
    "sha": "4e380fda9a3dd5e76c35969b1edf71967d63babf",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-18T06:32:15Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_basic_comprehensive.bas"
+   ],
+   "sha": "3f2828476c6cbac56775a81e1aa2791208d1d239",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -1043,7 +1045,7 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "pass",
+  "test-core#src:test/test_basic_comprehensive.bas": "fail",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
@@ -1913,11 +1915,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-18T06:21:40Z",
-  "sha": "4e380fda9a3dd5e76c35969b1edf71967d63babf",
-  "tier": "full",
-  "verdict": "GREEN",
-  "wall": 250.7
+  "date": "2026-07-18T06:32:15Z",
+  "sha": "3f2828476c6cbac56775a81e1aa2791208d1d239",
+  "tier": "native",
+  "verdict": "RED",
+  "wall": 108.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -1957,6 +1959,22 @@
     "603cf2bda859c38146854e698430b3fc2160b741"
    ],
    "src": "compiler/compiler.pas"
+  },
+  {
+   "bad": "3f2828476c6cbac56775a81e1aa2791208d1d239",
+   "good": "4e380fda9a3dd5e76c35969b1edf71967d63babf",
+   "job": "test-core#src:test/test_basic_comprehensive.bas",
+   "name": "test-core#183",
+   "opened": "2026-07-18T06:32:15Z",
+   "range": [
+    "0c2879368f2a1d19f7b40836f9e8fda8de4394cf",
+    "3c3b5f4caef9575b22c831210dccd9a87fad448d",
+    "709d6ea965562974e2d7254622e3438e34c4117a",
+    "0f5af158aafdeed73c0435b752afa1e37e5b2e00",
+    "ede8e9e486e70003377940a5b14875b8455ae590",
+    "3f2828476c6cbac56775a81e1aa2791208d1d239"
+   ],
+   "src": "test/test_basic_comprehensive.bas"
   }
  ]
 }
