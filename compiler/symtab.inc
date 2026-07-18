@@ -1755,7 +1755,8 @@ end;
 
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 { The wider operand determines the comparison domain; at equal width a signed
-  operand wins. Values are still evaluated in 64-bit registers. }
+  operand wins (Pascal: the pair widens to the next larger signed type). Values
+  are still evaluated in 64-bit registers. }
 begin
   Result := False;
   if not (TypeIsOrdinal(lhs) and TypeIsOrdinal(rhs)) then Exit;
@@ -1764,7 +1765,18 @@ begin
   else if TypeSize(rhs) > TypeSize(lhs) then
     Result := not TypeSigned(rhs)
   else
+  begin
     Result := (not TypeSigned(lhs)) and (not TypeSigned(rhs));
+    { C usual arithmetic conversions: at EQUAL rank a signed operand is converted
+      to unsigned, so the comparison is UNSIGNED if EITHER operand is unsigned
+      (`int64 > 0UL` must be unsigned — csmith seed 8020 miscompiled it signed).
+      Only 8-byte needs this here: there is no wider type to widen into and the
+      full 64-bit values compare directly; the <8-byte C path is already correct
+      via integer promotion, and Pascal keeps its widen-to-larger-signed rule. }
+    if CProgramMode and (TypeSize(lhs) = 8) and
+       ((not TypeSigned(lhs)) or (not TypeSigned(rhs))) then
+      Result := True;
+  end;
 end;
 
 function TypeArithmeticResult(lhs, rhs: TTypeKind): TTypeKind;
