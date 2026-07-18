@@ -646,11 +646,74 @@ PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
                     "blocked", "done", "rejected")
 
 
+# A sweep that turns MORE than this many jobs newly red is a cascade — one
+# root cause (a broken compiler build, a red fpc-bootstrap taking every
+# FPC-dependent job down with it), not N independent regressions.  Filing a
+# stub per job buries the signal: 2026-07-18 a single missing FPC-seed
+# forward produced 939 tickets.  Above the threshold, file ONE cascade
+# ticket naming the whole set instead.
+CASCADE_THRESHOLD = 10
+
+# Jobs whose red predictably drags a whole dependent class down — listed in
+# the cascade ticket as root-cause suspects when present in the red set.
+CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
+
+
+def file_cascade_ticket(clone, host, st, sha, new_red, report):
+    """One ticket for a mass NEW-RED sweep.  Slug keyed on the bad sha, so a
+    re-test of the same sha never files twice; a DIFFERENT sha cascading
+    files its own (that is a new event worth a new signal)."""
+    slug = "regression-cascade-" + sha[:12]
+    pdir = os.path.join(clone.path, "devdocs/progress")
+    if any(os.path.exists(os.path.join(pdir, b, slug + ".md"))
+           for b in PROGRESS_BUCKETS):
+        return
+    roots = [j for j in new_red
+             if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
+    joblist = "\n".join("- `%s`" % j for j in sorted(new_red))
+    rel = os.path.join("devdocs/progress/backlog", slug + ".md")
+    with open(os.path.join(clone.path, rel), "w") as f:
+        f.write("""---
+prio: 70
+---
+
+# regression CASCADE: %d jobs newly red at %s (auto-filed by twatch)
+
+- **Type:** regression cascade (auto-filed by Track T watcher, host %s).
+  Untriaged. %d jobs went red in ONE sweep — treat as ONE root cause until
+  triage proves otherwise; do NOT fan out per-job tickets.
+- **Found:** %s
+- **Root-cause suspects in the red set:** %s
+
+## Repro (start with a suspect, or any listed job)
+`tools/testmgr.py --tier %s --job '<job>'` at %s
+
+## Newly red jobs
+%s
+
+*Cascade stub: one signal for one event. Track T agent (face 2) or the owning
+dev track triages the root; individual tickets only for whatever remains red
+after the root is fixed.*
+""" % (len(new_red), sha[:12], host, len(new_red), utcnow(),
+                ", ".join("`%s`" % r for r in roots) if roots
+                else "none of the known root jobs — likely a broken build or harness event",
+                report["tier"], sha, joblist))
+    clone.publish("tstate-ticket(%s): %s (cascade, %d jobs)" %
+                  (host, slug + ".md", len(new_red)), paths=[rel])
+    print("twatch: auto-filed CASCADE ticket for %d red jobs" % len(new_red),
+          flush=True)
+
+
 def file_stub_tickets(clone, host, st, sha, new_red, report):
     """Face-1 auto-ticket: deterministic stub per NEW-RED job — repro command,
     range, log tail.  No analysis (that's face 2); slug = the STABLE selector,
     so a job never gets a second ticket while one exists in any bucket (and a
-    renumbering can no longer file a duplicate for a test already ticketed)."""
+    renumbering can no longer file a duplicate for a test already ticketed).
+    A mass sweep (> CASCADE_THRESHOLD new reds) files ONE cascade ticket
+    instead — see file_cascade_ticket."""
+    if len(new_red) > CASCADE_THRESHOLD:
+        file_cascade_ticket(clone, host, st, sha, new_red, report)
+        return
     filed = []
     advisory = {job_key(j) for j in report["jobs"] if j.get("advisory")}
     for job in new_red:

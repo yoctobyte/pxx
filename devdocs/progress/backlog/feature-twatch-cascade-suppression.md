@@ -17,3 +17,15 @@ prio: 40
   ONE ticket naming the cascade set.
 - **Gate:** T tooling gate (`tools/testmgr.py --tier full` green) + a scratch
   bare-repo dry run of the filing path.
+
+## Resolution (fable-O, same evening — user-directed)
+
+Implemented as a threshold, not a dependency graph: `file_stub_tickets` now
+routes any sweep with > CASCADE_THRESHOLD (10) new reds to
+`file_cascade_ticket` — ONE ticket keyed on the bad sha (dedup via the same
+any-bucket check), listing the full job set, naming root-cause suspects when
+`fpc-bootstrap`/`selfhost-fixedpoint` are in the set. Small sweeps keep
+per-job stubs. Scratch-harness verified: 3-red sweep → 3 stubs; 50-red sweep
+(incl. fpc-bootstrap) → 1 cascade ticket with the root named; same-sha rerun
+→ no duplicate. Full dependency modeling stays future work if the threshold
+ever misroutes.
