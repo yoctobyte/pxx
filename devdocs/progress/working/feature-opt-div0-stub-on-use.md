@@ -38,3 +38,22 @@ what the flag tracks.
   the RTTI one ([[feature-opt-rtti-emit-on-use]]), which also hits ESP.
 - Gate = self-host byte-identical (the self-host compiler HAS division, so its own
   build is unchanged) + a division-free program shrinks + quick.
+
+## Log
+
+- 2026-07-18 (fable-O) LANDED, with a twist. Prescan (`DetectPascalRuntimeNeeds`
+  gains `needsDivStub`: tkDiv/tkMod tokens) gates the stub — but the TICKET
+  PREMISE was incomplete: the stub is NOT dead in division-free programs when
+  builtinheap is pulled, because builtinheap's OWN early div sites (compiled
+  before PXXDivZero registers; FindProc misses mid-unit) fall back to the stub.
+  And the default-RTL `uses` injection precedes the scan, so needsHeap (kept in
+  the condition) retains the stub for every default build → Pascal output
+  byte-identical to pinned across the board. The trim only fires for genuinely
+  heap-free division-free sources.
+  **The real find:** the C and NilPy drivers NEVER emitted the stub — their
+  builtinheap early div sites emitted `call 0` (into the entry stub) on the
+  div-by-zero path. Latent silent-corruption bug, exposed by the new safety net
+  (`Div0StubAddr = 0` at a stub-needing site → hard compiler error) and fixed:
+  both drivers now emit the stub unconditionally, BEFORE their RTL pulls.
+  Gates: self-host byte-identical, test-opt green, C 220/220, test-nilpy,
+  hasdiv/nodiv byte-identical to pinned, C div-by-zero exits RE200.

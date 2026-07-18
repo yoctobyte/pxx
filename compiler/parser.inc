@@ -24354,18 +24354,28 @@ end;
 
 { ===== Program ===== }
 
-procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime: Boolean);
+procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime, needsDivStub: Boolean);
 { Conservative pre-scan for optional emitted runtime support. Imported units
   are treated as opaque: keep the support bundle if uses is present. }
 var i: Integer; name: AnsiString;
 begin
   needsHeap := False;
   needsAnsiRuntime := PasDefineExists('PXX_MANAGED_STRING');
+  { div-by-zero abort stub (feature-opt-div0-stub-on-use): only integer
+    `div`/`mod` sites can branch to it, and only when no builtinheap
+    PXXDivZero is in the program — a unit-bearing program (tkUses => heap)
+    always has PXXDivZero, so the stub matters exactly for unit-free sources,
+    whose division must appear as a div/mod TOKEN in this scan. `/` yields a
+    float in Pascal — no integer-div check. Division-free programs skip the
+    stub and its 37-byte message. }
+  needsDivStub := False;
   i := 0;
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkUses, tkArray, tkClass] then
       needsHeap := True;
+    if (Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod) then
+      needsDivStub := True;
     { 32-bit cross targets write floats through the builtinheap Pascal
       helpers (PXXWriteFloat*), so any float-producing token pulls the unit.
       tkSlash counts: integer / integer yields a float. }
@@ -24637,7 +24647,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
-    needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
+    needsHeap, needsAnsiRuntime, needsDivStub, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
     dummyNames: array[0..7] of AnsiString;
@@ -24741,7 +24751,7 @@ begin
       needsTextfile := True;
     end;
   end;
-  DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
+  DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime, needsDivStub);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
     programs and on demand for Str/Val (token loop below). The heap allocator
     and managed-string helpers live in the separate `builtinheap` unit so a
@@ -25116,11 +25126,18 @@ begin
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
   if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
-  { Integer div-by-zero abort stub (Runtime error 200): unconditional, tiny, and
-    referenced by every div/mod site that has no builtinheap PXXDivZero to call.
-    x86-64 only for now (other backends keep their per-target hardware behavior
-    until their sites get the check — see bug-integer-div-zero-sigfpe-uncatchable). }
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+  { Integer div-by-zero abort stub (Runtime error 200): referenced by div/mod
+    sites that have no builtinheap PXXDivZero to call. Emitted only when the
+    pre-scan saw a div/mod token (feature-opt-div0-stub-on-use) — division-free
+    programs carry neither the stub nor its message string. x86-64 only for now
+    (other backends keep their per-target hardware behavior until their sites
+    get the check — see bug-integer-div-zero-sigfpe-uncatchable). }
+  { needsHeap keeps the stub: builtinheap's OWN div sites compile before its
+    PXXDivZero is registered (FindProc misses mid-unit) and fall back to the
+    stub. C mode likewise (C tokens carry no tkDiv; C '%'/'/' emit checks).
+    The trim targets exactly the unit-free division-free Pascal program. }
+  if (TargetArch = TARGET_X86_64) and (needsDivStub or needsHeap or CProgramMode) then
+    EmitDiv0Stub;
   { Signal runtime (restorer/dispatch/sethook/install stubs): default on for
     the PC target, --no-signals opts out (user decision: no auto-detection —
     predictable process behavior beats size sniffing; the whole runtime is

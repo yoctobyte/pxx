@@ -588,7 +588,14 @@ begin
   if procIdx >= 0 then
     EmitCallProc(procIdx)
   else
+  begin
+    { Safety net for feature-opt-div0-stub-on-use: a div site with neither
+      PXXDivZero nor an emitted stub means the pre-scan missed a division
+      (e.g. a synthesized token) — fail loudly, never call address 0. }
+    if Div0StubAddr = 0 then
+      Error('compiler error: div-zero stub not emitted but a div site needs it');
     IREmitCodeCall(Div0StubAddr);
+  end;
   if CodeLen - callStart <> 5 then
     Error('compiler error: div-zero check call must be exactly 5 bytes (jnz +5 would land mid-instruction)');
 end;

@@ -7418,6 +7418,14 @@ begin
     Error('C program entry stub not implemented for this target yet');
   end;
 
+  { Integer div-by-zero abort stub — must precede the RTL pulls below: the C
+    driver never emitted this, so any builtinheap div site compiled before
+    PXXDivZero's registration fell back to IREmitCodeCall(Div0StubAddr) with
+    the address still 0 — a silent call into the entry stub on a div-by-zero
+    (latent; exposed by the feature-opt-div0-stub-on-use safety net). C
+    '%'/'/' sites always need the check, so emit unconditionally. }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+
   { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
     `extern __pxx_write`/`__pxx_read` resolve to bodied Pascal procs over the
     cross-platform PAL — libc-free, one shared IO path with Pascal. Emitted AFTER

@@ -1156,6 +1156,10 @@ begin
   EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { Integer div-by-zero abort stub — same latent hole as the C driver: a
+    builtinheap div site compiled before PXXDivZero registers fell back to a
+    zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
   { Forward-declare the builtin heap allocator before emitting the string
     runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
     fills these in. Mirrors the Pascal ParseProgram path; without it a .npy that
