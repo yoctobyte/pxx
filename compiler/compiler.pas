@@ -129,6 +129,7 @@ begin
   RegcallEligibleUses := 0;
   MeasureInline := False;
   InlineASTNext := 0;
+  ASTNodeCount := INLINE_AST_RESERVE;   { per-proc AST starts above the low inline reserve; the per-body resets restore this, but the FIRST allocation (before any reset) must not land in [0..INLINE_AST_RESERVE) and collide with retained inline nodes }
   EnsureTokCapacity(65536);   { bootstrap the dynamic token arrays before any lexer runs }
   InliningActive := 0;
   OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable and remains the byte-identity reference; opt passes gate on OptLevel>=tier. }
@@ -727,7 +728,7 @@ begin
   MainProgramTokCount := MAX_TOKENS;
   BLabelCount := 0;
   BFixupCount := 0;
-  ASTNodeCount := 0; CurASTNode := -1;
+  ASTNodeCount := INLINE_AST_RESERVE; CurASTNode := -1;   { per-proc AST above the low inline reserve (dynamic AST arrays) }
   IRCount := 0; IRLabelCount := 0;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0; WithStackDepth := 0; AsmBytesCount := 0;
