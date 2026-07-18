@@ -1760,6 +1760,14 @@ function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 begin
   Result := False;
   if not (TypeIsOrdinal(lhs) and TypeIsOrdinal(rhs)) then Exit;
+  { C integer promotions: an operand narrower than int is promoted to (signed)
+    int before the comparison, so a comparison of TWO sub-int operands is SIGNED
+    regardless of their own signedness — `(int8)-57 >= (uint16)0` is a signed int
+    compare (-57 >= 0 -> false), not unsigned (csmith seed 31039 miscompiled it
+    unsigned via the wider-unsigned-operand rule below). A sub-int vs >=int-width
+    operand still falls through (the narrow side promotes to int, then the usual
+    conversions with the wider operand apply). Pascal keeps its own rule. }
+  if CProgramMode and (TypeSize(lhs) < 4) and (TypeSize(rhs) < 4) then Exit;
   if TypeSize(lhs) > TypeSize(rhs) then
     Result := not TypeSigned(lhs)
   else if TypeSize(rhs) > TypeSize(lhs) then
