@@ -6068,9 +6068,14 @@ begin
     end;
   if nsyms = 0 then Exit;
   picked := 0;
-  while picked < 2 do
+  { With FR_RESIDENT_MAX xmm regs (xmm8..xmm13) free in a call-free float body,
+    admit any tyDouble sym touched in a loop range (Counts>0), ranked by static
+    access count. The old >3 threshold was tuned for a 2-register budget (spend
+    a scarce reg only on the hottest); with 6 slots a loop-invariant read (static
+    count 1, but reloaded every iteration) still wins from residency. }
+  while picked < FR_RESIDENT_MAX do
   begin
-    best := -1; bestCnt := 3;
+    best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
       if Counts[k] > bestCnt then
       begin
