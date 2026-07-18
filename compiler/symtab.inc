@@ -5804,6 +5804,23 @@ begin
         EmitLoadVarA64(retSymIdx);
       end;
     end;
+    { -O3 unified residency (aarch64 mirror): restore the caller's x19..x24 /
+      d8..d13 from the save-iff-used slots before the frame teardown. Reached
+      by every return path; x0 (the result) and x29 are still valid, x9 is
+      scratch. Counts are 0 outside -O3 aarch64 bodies, so -O0/-O2 emission is
+      untouched. }
+    for i := 0 to RcResidentCount - 1 do
+    begin
+      EmitLoadImmA64(9, RcResidentSaveOff[i]);
+      EmitI32($8B0903A9);                        { add x9, x29, x9 }
+      EmitI32($F9400120 or RcResidentReg[i]);    { ldr x19..x24, [x9] }
+    end;
+    for i := 0 to FrResidentCount - 1 do
+    begin
+      EmitLoadImmA64(9, FrResidentSaveOff[i]);
+      EmitI32($8B0903A9);                        { add x9, x29, x9 }
+      EmitI32($FD400120 or (8 + i));             { ldr d(8+i), [x9] }
+    end;
     EmitI32($910003BF);  { mov sp, x29 }
     EmitI32($A8C17BFD);  { ldp x29, x30, [sp], #16 }
     EmitI32($D65F03C0);  { ret }

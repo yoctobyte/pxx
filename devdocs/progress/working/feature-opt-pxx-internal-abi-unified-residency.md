@@ -148,3 +148,23 @@ if raised) BEFORE code, so every backend + any hand-asm honors it.
   compiler output byte-identical, fstress/fext stress identical across tiers.
   Benches (-O3 vs -O2): 4-hot-int loop **1.35x**, mixed 4-int+3-double loop
   **1.66x**; self-compile parity (memory-bound). NEXT: aarch64 mirror.
+
+- 2026-07-18 (fable-O) **Slice 3 LANDED — aarch64 mirror (-O3):**
+  `UnifiedResidencyAssignA64` — int pool x19–x24 (6), float pool d8–d13 (6),
+  same tally/thresholds/eligibility as x86-64. AAPCS64 gives the ABI for free
+  (x19–x28 + low-64 of v8–v15 callee-saved by every conforming callee incl.
+  externs/indirect targets) → NO extern/indirect wraps on this target. The two
+  remaining leak paths are wrapped like x86-64: `FloatPoolSaveA64/RestoreA64`
+  around `IR_COSWITCH` (CoSwitch blob saves GPRs only) and try-entry snapshot +
+  landing-pad restore + resident refresh at `IR_EXC_ENTER` (setjmp buf has
+  x19–x30 but no V regs; int residents rolled back by longjmp get the same
+  refresh as x86). Hooks: `EmitLoadVarA64` (mov x0,xN / fmov x0,dN),
+  `EmitStoreVarA64` dual-write (fmov dN,x0 / `RegcallRefreshResidentA64`),
+  `EmitProcEpilog` aarch64 branch restores. Gates: native quick GREEN + self-
+  host byte-identical + C 220/220 + nilpy + .bas; `make test-aarch64` full
+  suite green; aarch64 -O0/-O2 output BYTE-IDENTICAL to the pinned stable's;
+  mandelbrot 74607393270 / nbody 258916018 identical -O0 vs -O3 under qemu;
+  mix/i4/fcall2/fstress(stackless-generator variant, uses slgen) O0-vs-O3
+  differential identical; byte-scan confirms residency fires (-O3: 231 int
+  reads / 69 float reads in mix; -O0: zero). qemu timing meaningless — real-hw
+  perf numbers pending. REMAINING: -O2 promotion after full matrix + hw bench.

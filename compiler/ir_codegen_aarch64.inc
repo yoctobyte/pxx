@@ -755,9 +755,219 @@ begin
   EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
 end;
 
-procedure EmitLoadVarA64(idx: Integer);
-var tk: TTypeKind; sz: Integer; sgn: Boolean;
+{ ===== -O3 unified loop residency, aarch64 mirror (pxx internal ABI §5b) =====
+
+  AAPCS64 already gives the whole design for free on this target: x19-x28 AND
+  the low 64 bits of v8-v15 are callee-saved by every conforming callee —
+  including dlsym'd C externs and indirect targets — so unlike x86-64 there is
+  NO custom convention and NO extern/indirect boundary wrap. The two places
+  the discipline still can't see through are shared with x86-64:
+
+    - CoSwitch saves only the GPR callee-saved set per context (x19-x30 +
+      exc-top on the switched stack) — the other context owns d8-d13 while we
+      are suspended → save/restore the pool around IR_COSWITCH.
+    - The exc setjmp buf carries x19-x30+sp but no V registers → snapshot the
+      pool at try-entry, restore it on the landing pad, then refresh residents
+      from their authoritative frame slots (int residents ARE in the buf and
+      get rolled back to the try-entry snapshot → same refresh as x86-64).
+
+  Pools: int x19..x24 (inline emitters that use x19-x21, e.g.
+  EmitWriteFloatNatA64, push/pop them — resident-safe), float d8..d13
+  (tyDouble only; scalar low-64 = the AAPCS-preserved half). Same tally,
+  thresholds, eligibility and choke points as UnifiedResidencyAssign —
+  EmitLoadVarA64 reads the register, EmitStoreVarA64 dual-writes + refreshes,
+  EmitProcEpilog's aarch64 branch restores the caller's registers. }
+
+procedure A64FrameAddr9(off: Integer);
 begin
+  EmitLoadImmA64(9, off);
+  EmitI32($8B0903A9);                    { add x9, x29, x9 }
+end;
+
+procedure FloatPoolSaveA64;
+var k: Integer;
+begin
+  if not FxSaveOn then Exit;
+  for k := 0 to FR_RESIDENT_MAX - 1 do
+  begin
+    A64FrameAddr9(FxSaveBase + 8 * k);
+    EmitI32($FD000120 or (8 + k));       { str d(8+k), [x9] }
+  end;
+end;
+
+procedure FloatPoolRestoreA64;
+var k: Integer;
+begin
+  if not FxSaveOn then Exit;
+  for k := 0 to FR_RESIDENT_MAX - 1 do
+  begin
+    A64FrameAddr9(FxSaveBase + 8 * k);
+    EmitI32($FD400120 or (8 + k));       { ldr d(8+k), [x9] }
+  end;
+end;
+
+{ Reload a resident int's frame slot into its x19..x24 cache with the canonical
+  size/sign extension (de-list so EmitLoadVarA64 reads memory — the aarch64
+  RegcallRefreshResident). Leaves x0 = the re-extended value, same as x86-64. }
+procedure RegcallRefreshResidentA64(idx: Integer); forward;
+
+procedure FloatResidencyRefreshAllA64;
+var k: Integer;
+begin
+  for k := 0 to FrResidentCount - 1 do
+  begin
+    A64FrameAddr9(Syms[FrResidentSym[k]].Offset);
+    EmitI32($FD400120 or (8 + k));       { ldr d(8+k), [x9] }
+  end;
+end;
+
+procedure UnifiedResidencyAssignA64;
+var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
+    islot, fslot, saveOff, reg: Integer;
+    Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
+    seen: Boolean;
+begin
+  { Arch check FIRST: on x86-64 the x86 pass has already run and filled the
+    resident arrays — this mirror must not touch them there. }
+  if TargetArch <> TARGET_AARCH64 then Exit;
+  FrResidentCount := 0;
+  if OptLevel < 3 then Exit;
+  if CurProc < 0 then Exit;
+  if RcSuppressAssign then Exit;
+  if CurProcIsGenerator or CurProcIsStackless then Exit;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  { Tally LOAD/STORE_SYM references inside backward-jump loop ranges — the
+    same walk as the x86-64 pass. }
+  nsyms := 0;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_JUMP then
+    begin
+      lbl := IRA[k];
+      t := -1;
+      for j := 0 to k - 1 do
+        if (IRKind[j] = IR_LABEL) and (IRIVal[j] = lbl) then begin t := j; Break; end;
+      if t < 0 then Continue;
+      for j := t to k do
+        if (IRKind[j] = IR_LOAD_SYM) or (IRKind[j] = IR_STORE_SYM) then
+        begin
+          si := IRA[j];
+          if si < 0 then Continue;
+          seen := False;
+          for best := 0 to nsyms - 1 do
+            if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
+          if (not seen) and (nsyms < MAX_LOOPSYM_SCAN) then
+          begin
+            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
+          end;
+        end;
+    end;
+  if nsyms = 0 then Exit;
+  { Ranked selection, per-class budgets: int x19..x24 (slot i -> x(19+i)),
+    float d8..d13 (slot i -> d(8+i)). No regcall on aarch64, so the whole GPR
+    pool is free. }
+  islot := 0; fslot := 0;
+  while (islot < 6) or (fslot < FR_RESIDENT_MAX) do
+  begin
+    best := -1; bestCnt := 0;
+    for k := 0 to nsyms - 1 do
+      if Counts[k] > bestCnt then
+      begin
+        si := CSyms[k];
+        if Syms[si].IsArray then Continue;
+        if not ((Syms[si].Kind = skLocal) or
+                ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Continue;
+        if Syms[si].TypeKind = tyDouble then
+        begin
+          if fslot >= FR_RESIDENT_MAX then Continue;
+        end
+        else
+        begin
+          if islot >= 6 then Continue;
+          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          if not RegcallScalarType(Syms[si].TypeKind) then Continue;
+          if ResidentRegOf(si) <> 0 then Continue;
+        end;
+        seen := False;   { addr-taken flag }
+        for j := 0 to IRCount - 1 do
+          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
+          begin seen := True; Break; end;
+        if seen then Continue;
+        best := k; bestCnt := Counts[k];
+      end;
+    if best < 0 then Break;
+    si := CSyms[best];
+    Counts[best] := 0;
+    FrameSize := AlignTo(FrameSize + 8, 8);
+    saveOff := -FrameSize;
+    if Syms[si].TypeKind = tyDouble then
+    begin
+      { save-iff-used: save the caller's d(8+fslot), init the cache from the
+        authoritative frame slot. }
+      FrResidentSaveOff[fslot] := saveOff;
+      A64FrameAddr9(saveOff);
+      EmitI32($FD000120 or (8 + fslot));            { str d(8+fslot), [x9] }
+      A64FrameAddr9(Syms[si].Offset);
+      EmitI32($FD400120 or (8 + fslot));            { ldr d(8+fslot), [x9] }
+      FrResidentSym[fslot] := si;
+      Inc(fslot);
+      FrResidentCount := fslot;
+    end
+    else
+    begin
+      reg := 19 + islot;
+      A64FrameAddr9(saveOff);
+      EmitI32($F9000120 or reg);                    { str x(19+islot), [x9] }
+      EmitLoadVarA64(si);                           { x0 = canonical frame value (not yet listed) }
+      EmitI32($AA0003E0 or reg);                    { mov x(19+islot), x0 }
+      RcResidentSym[RcResidentCount] := si;
+      RcResidentReg[RcResidentCount] := reg;
+      RcResidentSaveOff[RcResidentCount] := saveOff;
+      Inc(RcResidentCount);
+      Inc(islot);
+    end;
+  end;
+end;
+
+{ Reserve the 6-slot d8..d13 pool save area for every -O3 aarch64 non-asm body
+  (mirror of FloatPoolBoundaryAssign; used only by the IR_COSWITCH wrap and
+  the IR_EXC_ENTER snapshot on this target). }
+procedure FloatPoolBoundaryAssignA64;
+var k: Integer;
+begin
+  if TargetArch <> TARGET_AARCH64 then Exit;
+  FxSaveOn := False;
+  if OptLevel < 3 then Exit;
+  if RcSuppressAssign then Exit;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  FrameSize := AlignTo(FrameSize + 8 * FR_RESIDENT_MAX, 8);
+  FxSaveBase := -FrameSize;
+  FxSaveOn := True;
+end;
+
+procedure EmitLoadVarA64(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
+begin
+  { -O3 unified residency: resident reads come from the register cache. The
+    frame slot stays authoritative (stores dual-write); the cache holds the
+    canonically extended value, exactly like a fresh frame load. }
+  rreg := ResidentRegOf(idx);
+  if rreg <> 0 then
+  begin
+    EmitI32($AA0003E0 or (rreg shl 16));   { mov x0, x19..x24 }
+    Exit;
+  end;
+  if Syms[idx].TypeKind = tyDouble then
+  begin
+    rreg := FloatResidentXmmOf(idx);
+    if rreg <> 0 then
+    begin
+      EmitI32($9E660000 or (rreg shl 5));  { fmov x0, d8..d13 (value model: bits in x0) }
+      Exit;
+    end;
+  end;
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
@@ -851,6 +1061,19 @@ begin
   end;
 end;
 
+procedure RegcallRefreshResidentA64(idx: Integer);
+var k, rreg, saved: Integer;
+begin
+  rreg := 0; saved := -1;
+  for k := 0 to RcResidentCount - 1 do
+    if RcResidentSym[k] = idx then begin rreg := RcResidentReg[k]; saved := k; Break; end;
+  if rreg = 0 then Exit;
+  RcResidentSym[saved] := -1;              { de-list: force a frame load }
+  EmitLoadVarA64(idx);                     { x0 = re-extended value from the frame slot }
+  RcResidentSym[saved] := idx;             { re-list }
+  EmitI32($AA0003E0 or rreg);              { mov x19..x24, x0 }
+end;
+
 procedure EmitStoreVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
@@ -930,6 +1153,18 @@ begin
       else
         EmitI32($F9000120); { str x0, [x9] }
     end;
+  end;
+  { -O3 unified residency dual-write: the frame slot (just written, and
+    authoritative) also refreshes the register cache. Doubles copy the bits
+    straight from x0; ints reload from the slot for the canonical size/sign
+    extension. Globals/by-ref params are never resident. }
+  if (Syms[idx].Kind <> skGlobal) and
+     not ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) then
+  begin
+    if (Syms[idx].TypeKind = tyDouble) and (FloatResidentXmmOf(idx) <> 0) then
+      EmitI32($9E670000 or FloatResidentXmmOf(idx))     { fmov d8..d13, x0 }
+    else if ResidentRegOf(idx) <> 0 then
+      RegcallRefreshResidentA64(idx);
   end;
 end;
 
@@ -2385,7 +2620,13 @@ begin
         IREmitNodeAarch64(IRA[argNode]);
         EmitI32($AA0003E1);                          { mov x1, x0 (pto) }
         EmitI32($F84107E0);                          { ldr x0, [sp], #16 (pfrom) }
+        { pxx internal ABI mirror: CoSwitch saves only the GPR callee-saved set
+          per context — the other context owns d8..d13 while we are suspended.
+          Save the pool to THIS frame's slots and restore on resume (execution
+          continues right after the bl). No-op unless FxSaveOn (-O3). }
+        FloatPoolSaveA64;
         EmitI32($94000000 or (((CoSwitchAddr - CodeLen) div 4) and $03ffffff)); { bl CoSwitch }
+        FloatPoolRestoreA64;
       end;
 
     IR_SET_SIGNAL:
@@ -3268,7 +3509,7 @@ begin
 end;
 
 procedure IREmitMachineCodeAarch64;
-var i, lblId, pos, targetOffset, f, si, classIdx, procIdx: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, procIdx, excSkip: Integer;
     LabelFixupCount: Integer;
 begin
   { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
@@ -3368,6 +3609,11 @@ begin
       IR_EXC_ENTER:
         begin
           lblId := IRA[i];
+          { pxx internal ABI mirror: the exc setjmp buf carries x19-x30+sp but
+            no V registers, and a raise longjmp skips the unwound frames'
+            epilogues — snapshot the d8..d13 pool at try-entry (x29-relative,
+            before sp moves) so the landing pad can restore it. }
+          FloatPoolSaveA64;
           EmitI32($D10203FF);                                         { sub sp, sp, #128 }
           EmitI32($18000041);                                         { ldr w1, [pc+8] }
           EmitI32($14000002);                                         { b [pc+8] }
@@ -3378,6 +3624,32 @@ begin
           EmitI32($F9000022);                                         { str x2, [x1] }
           EmitI32($910043E0);                                         { add x0, sp, #16 }
           EmitI32($94000000 or (((ExcSetJmpAddr - CodeLen) div 4) and $03ffffff)); { bl ExcSetJmpAddr }
+          if (RcResidentCount > 0) or FxSaveOn then
+          begin
+            { Landing refresh (mirror of the x86-64 IR_EXC_ENTER block): int
+              residents were rolled back by the longjmp to their try-entry
+              snapshot; the d8..d13 pool holds whatever the raise path left.
+              Restore the pool from the try-entry snapshot, then refresh every
+              resident from its authoritative frame slot. x0 is dead at the
+              handler label (IR_EXC_MATCH reloads it). }
+            excSkip := CodeLen; EmitI32($B4000000);                   { cbz x0, .normal (patched) }
+            for f := 0 to RcResidentCount - 1 do
+              RegcallRefreshResidentA64(RcResidentSym[f]);
+            FloatPoolRestoreA64;
+            FloatResidencyRefreshAllA64;
+            if LabelPositions[lblId] <> -1 then
+              EmitI32($14000000 or (((LabelPositions[lblId] - CodeLen) div 4) and $03ffffff)) { b handler }
+            else
+            begin
+              if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+              LabelFixupPos[LabelFixupCount] := CodeLen;
+              LabelFixupTarget[LabelFixupCount] := lblId;
+              Inc(LabelFixupCount);
+              EmitI32($14000000);
+            end;
+            Patch32(excSkip, $B4000000 or ((((CodeLen - excSkip) div 4) and $7ffff) shl 5));
+          end
+          else
           if LabelPositions[lblId] <> -1 then
             EmitI32($B5000000 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { cbnz x0, label }
           else

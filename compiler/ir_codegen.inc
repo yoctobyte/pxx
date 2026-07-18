@@ -6243,7 +6243,9 @@ begin
     call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
     land ahead of the body code. }
   UnifiedResidencyAssign;
+  UnifiedResidencyAssignA64;
   FloatPoolBoundaryAssign;
+  FloatPoolBoundaryAssignA64;
   CalleeScratchAssign;
   if DumpIR then IRDump;
   IREmitMachineCode;
