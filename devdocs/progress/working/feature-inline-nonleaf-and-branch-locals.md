@@ -141,3 +141,14 @@ sites 2b/2c can't reach. Needs (see the design notes in
   FUTURE: depth-1 re-inline of inner calls inside splices (lift the
   InliningActive=0 gate to a depth budget) — would recover the leaf-in-wrapper
   fusion the -O2 wrapper call keeps today. REMAINING: while/for bodies.
+
+- 2026-07-18 night (fable-O) **Depth-1 re-inline LANDED (-O3).** The AN_CALL
+  splice gate `InliningActive = 0` relaxes to `< 2` at -O3: a spliced body's
+  inner calls re-inline ONE level, recovering the leaf-in-wrapper fusion the
+  real wrapper call had at -O2. Safe because the clone resolves every
+  placeholder BEFORE lowering — the one lowering-time global
+  (`InlineResultSym`) is now held locally in IRInlineExpand for its final
+  load, so nested expansion can't clobber it. Self-recursive callees
+  terminate (level 2 = real call; Fib(25) verified both tiers). Wrapper loop
+  now 1.15x vs -O2 with inner Leaf calls fully fused (IR diff: only the
+  side-effecting unretainable callee remains as calls). Full battery green.
