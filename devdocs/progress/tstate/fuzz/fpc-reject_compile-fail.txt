@@ -1,0 +1,13 @@
+sig=fpc-reject_compile-fail
+seed=91995
+sha=fed71966fed1
+compiler=/home/rene/trackt-watch/compiler/pascal26
+note=FPC REJECTED THE PROGRAM -- pasmith contract violation (see ticket triage)
+
+fpc-O0       14240128760073219952
+fpc-O2       <compile-fail>
+pxx-O0       14240128760073219952
+pxx-O2       14240128760073219952
+pxx-O3       14240128760073219952
+
+repro: tools/pasmith.py --seed 91995 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3
