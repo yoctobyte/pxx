@@ -8953,11 +8953,10 @@ end;
   fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
   inline anonymous struct definitions are skipped, not laid out. }
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
-const MAX_BF = 256;
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
-  fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
+  fldProcSig, fldElemProcSig, subci, subRecSz, subAl, sdepth, bfCount, bfCap, k: Integer;
   fTk: TTypeKind;
   isArr, firstDecl, subIsUnion, fldBaseIsEnum: Boolean;
   anonBitW, anonBitBytes: Integer;
@@ -8965,13 +8964,15 @@ var
     UFld pool only AFTER the body (and any nested sub-records) are laid out, so the
     parent's fields stay contiguous — FindUField scans [base, base+count). Without
     this, a nested-aggregate member's sub-record fields would be inserted between
-    the parent's fields and break the contiguous range. }
-  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfElemProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
-  bfIsArr: array[0..MAX_BF-1] of Boolean;
-  bfBitWidth, bfBitShift, bfBitBytes: array[0..MAX_BF-1] of Integer;
-  bfAnonRec: array[0..MAX_BF-1] of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
-  bfNDims: array[0..MAX_BF-1] of Integer;
-  bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
+    the parent's fields and break the contiguous range. Dynamic (local, so
+    recursion-safe for nested/anon structs); pre-sized per struct to the field-
+    count upper bound (see the SetLength block below). }
+  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfElemProcSig, bfArrLen: array of Integer;
+  bfIsArr: array of Boolean;
+  bfBitWidth, bfBitShift, bfBitBytes: array of Integer;
+  bfAnonRec: array of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
+  bfNDims: array of Integer;
+  bfDimSpan: array of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
   startIdx, endIdx, declStartIdx, attrEndIdx, fieldStartIdx, fieldAlign, structAlign: Integer;
@@ -9009,7 +9010,21 @@ begin
   curOff := 0;
   maxAlign := 1;
   bfCount := 0;
-  for k := 0 to MAX_BF - 1 do bfAnonRec[k] := REC_NONE;
+  { Pre-size the field buffer to an upper bound on the field count: every buffered
+    field (parent-direct or flattened from an inline anon member) owns at least one
+    identifier token inside the struct's token range [startIdx..endIdx], so the
+    token span bounds the total. Replaces the old fixed MAX_BF=256 cap that
+    SILENTLY dropped fields past 256 (bug-c-huge-struct-high-field-offset-
+    miscompile). Local dynamic arrays, so recursion (nested/anon structs) is safe. }
+  bfCap := endIdx - startIdx + 2;
+  if bfCap < 1 then bfCap := 1;
+  SetLength(bfNOff, bfCap);      SetLength(bfNLen, bfCap);      SetLength(bfOff, bfCap);
+  SetLength(bfTk, bfCap);        SetLength(bfRec, bfCap);       SetLength(bfElemTk, bfCap);
+  SetLength(bfElemRec, bfCap);   SetLength(bfProcSig, bfCap);   SetLength(bfElemProcSig, bfCap);
+  SetLength(bfArrLen, bfCap);    SetLength(bfIsArr, bfCap);     SetLength(bfBitWidth, bfCap);
+  SetLength(bfBitShift, bfCap);  SetLength(bfBitBytes, bfCap);  SetLength(bfAnonRec, bfCap);
+  SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
+  for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
@@ -9062,7 +9077,7 @@ begin
           begin
             if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
             for k := 0 to UClsFCount[subci] - 1 do
-              if bfCount < MAX_BF then
+              if bfCount < bfCap then
               begin
                 bfNOff[bfCount]    := UFldNOff[UClsFBase[subci] + k];
                 bfNLen[bfCount]    := UFldNLen[UClsFBase[subci] + k];
@@ -9126,7 +9141,7 @@ begin
         if (CPackAlign > 0) and (al > CPackAlign) then al := CPackAlign;
         if fieldAlign > al then al := fieldAlign;
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, al);
-        if (subci >= 0) and (bfCount < MAX_BF) then
+        if (subci >= 0) and (bfCount < bfCap) then
         begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
           if declStars > 0 then
@@ -9180,7 +9195,7 @@ begin
           Register it as an 8-byte pointer field; the normal name-reading loop
           below would Break (the name token is already consumed). }
         if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, TARGET_PTR_SIZE);
-        if bfCount < MAX_BF then
+        if bfCount < bfCap then
         begin
           bfNOff[bfCount] := CTypeFnPtrNameOff; bfNLen[bfCount] := CTypeFnPtrNameLen;
           bfOff[bfCount] := thisOff;
@@ -9440,7 +9455,7 @@ begin
           else thisOff := AlignTo(curOff, al);
         end;
 
-        if bfCount < MAX_BF then
+        if bfCount < bfCap then
         begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
           bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
