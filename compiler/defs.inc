@@ -1824,15 +1824,21 @@ var
     cold-bootstrap binary segfaulted in LoadFile's prologue). Single-use and never
     re-entered (include loads are sequential), so a shared global is safe here. }
   LoadFileBuf : array[0..STRING_CAP-1] of Byte;
-  Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
-  TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
-  TokQChecks : array[0..MAX_TOKENS-1] of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
-  TokRChecks : array[0..MAX_TOKENS-1] of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
-  TokIChecks : array[0..MAX_TOKENS-1] of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
-  TokScopedEnums : array[0..MAX_TOKENS-1] of Boolean;  { {$SCOPEDENUMS} state at each token }
-  CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
-  CAttrAlignValues : array[0..MAX_TOKENS-1] of Integer;
+  { Token stream — parallel arrays, DYNAMIC (grown by EnsureTokCapacity, called after
+    every Inc(TokCount) append + once at startup). Indexed by token id; the parser only
+    READS by index (no raw @Tokens[i] held across a grow — audited), so realloc is safe.
+    Was array[0..MAX_TOKENS-1] (2M) — the single biggest BSS consumer (~80 MB) and the
+    fixed cap sqlite's 257k-line amalgamation broke (feature-dynamic-compiler-tables). }
+  Tokens     : array of TRawToken;
+  TokPackRecords : array of Integer;
+  TokQChecks : array of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
+  TokRChecks : array of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
+  TokIChecks : array of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
+  TokScopedEnums : array of Boolean;  { {$SCOPEDENUMS} state at each token }
+  CAttrFlags : array of Byte;
+  CAttrAlignValues : array of Integer;
   TokCount   : Integer;
+  TokCapacity : Integer;   { current allocated length of the token parallel arrays (grown by EnsureTokCapacity) }
   TokPos     : Integer;
   MainProgramTokCount : Integer;
   PyExprMode : Boolean;  { True only while parsing Nil Python expressions: gives `and`/`or`/`not`

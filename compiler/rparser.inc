@@ -2693,7 +2693,7 @@ begin
   for i := 0 to RGenericFuncs[gfi].TokCount - 1 do
   begin
     srcIdx := RGenericFuncs[gfi].TokStart + i;
-    if TokCount >= MAX_TOKENS then Error('Rust: token buffer overflow specializing ' + RGenericFuncs[gfi].Name);
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount] := Tokens[srcIdx];
     if srcIdx = RGenericFuncs[gfi].TokStart + 1 then
     begin
@@ -2706,7 +2706,7 @@ begin
       Tokens[TokCount].SOffset := concreteOff;
       Tokens[TokCount].SLen := concreteLen;
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   end;
 
   RRegisterFnSignatureAt(startTok);

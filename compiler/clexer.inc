@@ -750,7 +750,7 @@ begin
   repeat
     CLexOne;
     k := CurTok.Kind;
-    if TokCount >= MAX_TOKENS then Error('token overflow');
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := k;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
@@ -783,7 +783,7 @@ begin
       Tokens[TokCount].SOffset := 0;
       Tokens[TokCount].SLen    := 0;
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until k = tkEOF;
 end;
 
@@ -816,7 +816,7 @@ begin
   repeat
     CLexOne;
     k := CurTok.Kind;
-    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := k;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
@@ -843,7 +843,7 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until k = tkEOF;
 
   Source := SavedLexSource;

@@ -1090,7 +1090,7 @@ begin
     Inc(i);
   end;
 
-  if TokCount + subCount >= MAX_TOKENS then Error('token buffer overflow');
+  EnsureTokCapacity(TokCount + subCount + 1);
   i := TokCount - 1;
   while i >= TokPos do
   begin
@@ -1946,7 +1946,7 @@ begin
   AppendChar(synName, Chr(Ord('0') + OvrlCount mod 10));
 
   { Insert 'function/procedure synName' at TokPos (before '(') }
-  if TokCount + 2 >= MAX_TOKENS then Error('token buffer overflow in operator def');
+  EnsureTokCapacity(TokCount + 3);
   for j := TokCount - 1 downto TokPos do
   begin
     Tokens[j + 2].Kind := Tokens[j].Kind;
@@ -14167,14 +14167,14 @@ begin
   savedTokCount := TokCount;
   for i := 0 to PFScratchN - 1 do
   begin
-    if TokCount >= MAX_TOKENS then Error('parallel for: token buffer overflow');
-    Tokens[TokCount] := PFScratch[i]; Inc(TokCount);
+    EnsureTokCapacity(TokCount + 1);
+    Tokens[TokCount] := PFScratch[i]; Inc(TokCount); EnsureTokCapacity(TokCount+1);
   end;
-  if TokCount + 2 >= MAX_TOKENS then Error('parallel for: token buffer overflow');
+  EnsureTokCapacity(TokCount + 3);
   Tokens[TokCount].Kind := tkForward; Tokens[TokCount].IVal := 0; Tokens[TokCount].Line := ln;
-  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount);
+  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount); EnsureTokCapacity(TokCount+1);
   Tokens[TokCount].Kind := tkSemicolon; Tokens[TokCount].IVal := 0; Tokens[TokCount].Line := ln;
-  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount);
+  Tokens[TokCount].SOffset := 0; Tokens[TokCount].SLen := 0; Inc(TokCount); EnsureTokCapacity(TokCount+1);
 
   TokPos := savedTokCount;   { point at the appended 'procedure' }
   Next;
@@ -21249,9 +21249,9 @@ begin
   appendStart := TokCount;
   for i := 0 to PendNestCount - 1 do
   begin
-    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount] := PendNestTok[i];
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   end;
   { One DeclItem span per stashed routine (boundaries recorded at stash time), so
     the body-pass driver parses each as its own sibling. }

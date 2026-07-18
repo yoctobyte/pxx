@@ -58,11 +58,7 @@ procedure PyEmitToken(k: TTokenKind; ival: Int64; line: Integer; const sval: Ans
 var
   off, len, i: Integer;
 begin
-  if TokCount >= MAX_TOKENS then
-  begin
-    CurTok.Line := line;
-    Error('token overflow');
-  end;
+  EnsureTokCapacity(TokCount + 1);
   Tokens[TokCount].Kind := k;
   Tokens[TokCount].IVal := ival;
   Tokens[TokCount].Line := line;
@@ -88,7 +84,7 @@ begin
     Tokens[TokCount].SOffset := 0;
     Tokens[TokCount].SLen := 0;
   end;
-  Inc(TokCount);
+  Inc(TokCount); EnsureTokCapacity(TokCount+1);
 end;
 
 procedure PyLexAll(SupportLineNumbers: Boolean);

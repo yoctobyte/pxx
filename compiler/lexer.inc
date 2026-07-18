@@ -21,6 +21,24 @@ begin
   Halt(1);
 end;
 
+procedure EnsureTokCapacity(need: Integer);
+{ Grow the token parallel arrays so index `need-1` is in bounds. Called after every
+  Inc(TokCount) append (across all frontend lexers) and once at startup, so the
+  invariant TokCapacity > TokCount holds before every write. Doubling from 65536;
+  capacity never shrinks across a per-source TokCount reset. ALL 8 token arrays grow
+  in lockstep — a missed one is a silent out-of-bounds. See
+  feature-dynamic-compiler-tables. }
+var n: Integer;
+begin
+  if need <= TokCapacity then Exit;
+  if TokCapacity = 0 then n := 65536 else n := TokCapacity;
+  while n < need do n := n * 2;
+  SetLength(Tokens, n);          SetLength(TokPackRecords, n);  SetLength(TokQChecks, n);
+  SetLength(TokRChecks, n);      SetLength(TokIChecks, n);      SetLength(TokScopedEnums, n);
+  SetLength(CAttrFlags, n);      SetLength(CAttrAlignValues, n);
+  TokCapacity := n;
+end;
+
 { Non-fatal diagnostic for accepted-but-suspect constructs (a case-insensitive
   C-import match, a narrowing, an ignored attribute). Prints
   `pascal26:<line>: warning: ...` to stdout, in the same shape as Error, and
@@ -2193,7 +2211,7 @@ begin
   TokCount   := 0;
   repeat
     LexOne;
-    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
@@ -2214,7 +2232,7 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
 end;
 
@@ -2242,7 +2260,7 @@ begin
 
   repeat
     LexOne;
-    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
@@ -2263,7 +2281,7 @@ begin
       Inc(TokCharLen);
       Inc(i);
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
 
   Source := SavedLexSource;
@@ -2292,7 +2310,7 @@ end;
 procedure InsertTokens(insertPos: Integer; const srcTokens: array of TRawToken; count: Integer);
 var i: Integer;
 begin
-  if TokCount + count >= MAX_TOKENS then Error('token buffer overflow');
+  EnsureTokCapacity(TokCount + count + 1);
   { Shift right }
   for i := TokCount - 1 downto insertPos do
     Tokens[i + count] := Tokens[i];

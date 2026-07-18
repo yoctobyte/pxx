@@ -1893,7 +1893,7 @@ begin
   begin
     srcIdx := ZGenericFns[gfi].TokStart + i;
     if (srcIdx >= skipLo) and (srcIdx <= skipHi) then Continue;
-    if TokCount >= MAX_TOKENS then Error('Zig: token buffer overflow specializing ' + ZGenericFns[gfi].Name);
+    EnsureTokCapacity(TokCount + 1);
     Tokens[TokCount] := Tokens[srcIdx];
     if srcIdx = ZGenericFns[gfi].TokStart + 1 then
     begin
@@ -1906,7 +1906,7 @@ begin
       Tokens[TokCount].SOffset := concreteOff;
       Tokens[TokCount].SLen := concreteLen;
     end;
-    Inc(TokCount);
+    Inc(TokCount); EnsureTokCapacity(TokCount+1);
   end;
 
   dummyMainIsVoid := False;

@@ -877,6 +877,14 @@ test-core: $(COMPILER)
 	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*350+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ast_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
 	./$(COMPILER) /tmp/test_ast_overflow_large.pas /tmp/test_ast_overflow_large26
 	test "$$(/tmp/test_ast_overflow_large26)" = "770000"
+	# Dynamic token arrays: a source with more tokens than the initial 65536 reserve
+	# must grow the token buffer (EnsureTokCapacity), not overflow — feature-dynamic-
+	# compiler-tables. 12000 tiny procs ~= 72k tokens (one doubling). The old 2M cap
+	# is exercised by the sqlite corpus (Track T), not a unit test (a >2M-token program
+	# trips MAX_PROCS/MAX_AST first). self-host already lexes ~1M tokens per build.
+	@python3 -c "L=['program p;']+['procedure q%d; begin end;'%i for i in range(12000)]+['begin','  writeln(42);','end.']; open('/tmp/test_token_growth.pas','w').write(chr(10).join(L)+chr(10))"
+	./$(COMPILER) /tmp/test_token_growth.pas /tmp/test_token_growth26
+	test "$$(/tmp/test_token_growth26)" = "42"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26

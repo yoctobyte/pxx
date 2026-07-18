@@ -136,7 +136,7 @@ begin
     else
     begin
       prevNl := (k = tkSemicolon);
-      if TokCount >= MAX_TOKENS then Error('token overflow');
+      EnsureTokCapacity(TokCount + 1);
       Tokens[TokCount].Kind := k;
       Tokens[TokCount].IVal := CurTok.IVal;
       Tokens[TokCount].Line := CurTok.Line;
@@ -158,7 +158,7 @@ begin
         Tokens[TokCount].SOffset := 0;
         Tokens[TokCount].SLen := 0;
       end;
-      Inc(TokCount);
+      Inc(TokCount); EnsureTokCapacity(TokCount+1);
     end;
   until k = tkEOF;
 end;
