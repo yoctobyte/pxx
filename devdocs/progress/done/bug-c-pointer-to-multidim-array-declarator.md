@@ -49,4 +49,4 @@ sizes.
 - Gate: C-conformance stays 220/220 + self-host byte-identical.
 
 ## Log
-- 2026-07-18 — resolved, commit 77fb51df.
+- 2026-07-18 — resolved, commit 5dbc89df (was 77fb51df pre-rebase).
