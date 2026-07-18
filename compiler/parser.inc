@@ -20254,6 +20254,25 @@ begin
         end;
         ParseRecordFields(ci, isPackedRecord);
       end
+      else if (CurTok.Kind = tkType) and (Tokens[TokPos].Kind = tkIdent) and
+              CaseEqual(GetTokenStrFromRaw(Tokens[TokPos].SOffset, Tokens[TokPos].SLen), 'helper') and
+              (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkFor) then
+      begin
+        { `type helper for <type>` — FPC's alternate spelling of `record helper
+          for <type>`. Same machinery: a helper-marked class-like entry whose
+          methods dispatch on values of the TARGET type, Self by reference. The
+          `record`/`type` keyword is cosmetic in FPC; both build the same helper. }
+        Next;                       { type }
+        ci := AddUClass(tnOff, tnLen);
+        UClsParent[ci] := -1;
+        UClsIsRecord[ci] := True;
+        Next;                       { helper }
+        Expect(tkFor, 'for');
+        fTk := ParseTypeKind;
+        UClsHelperTk[ci] := Ord(fTk);
+        UClsHelperRec[ci] := LastTypeRecId;
+        ParseRecordFields(ci, False);
+      end
       else if CurTok.Kind = tkCaret then
       begin
         { Named pointer type alias: PFoo = ^TFoo }

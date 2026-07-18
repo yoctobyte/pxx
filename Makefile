@@ -553,6 +553,8 @@ test-core: $(COMPILER)
 	# Self = target by reference (generics' ALeft.ToLower shape)
 	./$(COMPILER) test/test_record_helper_for_string_b331.pas /tmp/test_rec_helper_b33126
 	test "$$(/tmp/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
+	./$(COMPILER) test/test_type_helper_for_spelling.pas /tmp/test_type_helper_spelling26
+	test "$$(/tmp/test_type_helper_spelling26)" = "42 0"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas /tmp/test_macros_rot_b33026
