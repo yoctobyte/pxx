@@ -135,3 +135,46 @@ stable-binary / self-host gate for every other Track-A change).
   this is a secondary cache/startup/RAM win + dogfood) and an **execution
   constraint: do the overhaul on a dedicated git dev branch, not master**, then
   merge once converged. Still backlog, still not blocking anything.
+
+## Progress log — 2026-07-18 (agent opus-A): incremental-on-master approach PROVEN
+
+**Revised execution model — the "dev branch + multi-gen reseed" constraint is NOT
+needed for the incremental, one-family-at-a-time path.** Converting a single parallel-
+array family in isolation lands on master byte-identical with NO reseed: the self-host
+gate is fixedpoint *reproducibility* (compile self twice → identical), not "same as
+before", and a deterministic static→dynamic swap keeps the fixedpoint. Proven twice
+below. The dev-branch caution still applies to a big-bang all-at-once rewrite; do it
+incrementally instead.
+
+**The pattern (see [[project_dynamic_compiler_arrays_pattern.md]] in agent memory):**
+`array[0..MAX_X-1] of T` → `array of T`; `EnsureXCapacity(need)` (double from a base,
+grow ALL parallel arrays in lockstep) at the ONE append chokepoint; drop the overflow
+Error. Gate: rebuild fixedpoint cmp + a build-time-generated over-cap test + quick.
+
+**DONE:**
+- **IR node arrays** (11 arrays, `cf7bbcea`) — chokepoint IRAppend. BSS 365→353 MB.
+- **AST node arrays** (14 arrays, `d11bf05a`) — chokepoint AllocNode. Needed a
+  two-region SWAP: the retained-inline-body reserve moved from the fixed TOP
+  ([INLINE_AST_BASE..]) to a fixed LOW reserve [0..INLINE_AST_RESERVE=8192) so per-proc
+  can grow upward. Safe because nothing linearly scans [0..ASTNodeCount) (verified).
+  BSS 353→327 MB. Inline tests green -O2/-O3.
+- Cumulative BSS: **365 → 327 MB (−38 MB)** always-resident, and both hard caps gone.
+
+**REMAINING — priority (biggest BSS / most overflow-prone first):**
+1. **Tokens family** (`MAX_TOKENS`=2M, 8 arrays incl. the large `TRawToken` record —
+   the single biggest BSS consumer, ~100 MB, and the one sqlite already broke). LAND-
+   MINE: audit for any `@Tokens[i]` / raw pointer held across a grow (realloc moves the
+   buffer) — the token buffer is the most likely place code takes element addresses.
+   Chokepoint = the lexer's token-append.
+2. **Syms family** (`MAX_SYMS`=131072, 31 parallel `Sym*` arrays) — chokepoint AllocSym
+   (remember the Alloc*-resets-ALL-fields landmine: [[project_symtab_alloc_parallel_array_landmine]]).
+3. **UField family** (`MAX_UFIELD`=262144, 26 arrays, C-frontend heavy).
+4. Single buffers: `Code` (8 MB), `Data` (2 MB), `CPrepChars` (8 MB) — held-address
+   audit matters most here.
+- Genuinely small/bounded (MAX_ARR_DIMS, MAX_CPREP_CONDS, MAX_GOTO_LABELS, the residency
+  arrays, …) stay fixed.
+
+Superseded [[feature-dynamic-compiler-arrays-ast-fixups]] (folded into this ticket).
+Note the seq-walk STACK OVERFLOW (~3500 chained statements SIGSEGVs the recursive
+AST/IR tree walk) is a SEPARATE problem — a stack-depth limit, not an array cap; needs
+an iterative worklist, out of scope here.

@@ -50,3 +50,8 @@ walk (or a bigger compiler stack). File separately if it bites real code.
 
 Per array converted: self-host byte-identical, a generated over-cap test compiles +
 matches FPC, `make test` green. Do them one at a time (AST first — highest value).
+
+## SUPERSEDED 2026-07-18
+Folded into [[feature-dynamic-compiler-tables]] (the canonical umbrella, which now
+carries the proven incremental-on-master approach + IR/AST done + the remaining
+priority list). AST is DONE (d11bf05a); the fixups/labels live under that ticket.
