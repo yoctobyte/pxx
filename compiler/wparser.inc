@@ -211,12 +211,22 @@ begin
 end;
 
 procedure ParseWsProgram;
+var wsStubJmp: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Whitespace frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-whitespace)');
 
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
+    non-Pascal drivers (Whitespace's `div` instruction emits the check); jump
+    over it, this driver has no entry jmp. See the C driver comment. }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($E9); wsStubJmp := CodeLen; EmitI32(0);   { jmp over the stub }
+    EmitDiv0Stub;
+    Patch32(wsStubJmp, CodeLen - (wsStubJmp + 4));
+  end;
 
   WsPos := 1;
   WsSp := 0;
