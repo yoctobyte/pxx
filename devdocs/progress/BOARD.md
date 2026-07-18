@@ -26,11 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (119)
+## backlog (118)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-c-multidim-nested-subscript | A | 55 | bug | C: a multi-dim array subscript that is itself a multi-dim array read (g3[g9[i][j][k]][..]) miscompiles — TWO bugs: parse-time NDInfo* clobber + codegen nested-index clobber | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -207,7 +206,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (806)
+## done (807)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -324,6 +323,7 @@ _none_
 | bug-c-multidim-array-field-partial-row | A | 50 | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-multidim-brace-elision-flattens-rows | C | 50 | bug | bug: multidim brace elision flattens rows — partial rows are not zero-filled | — |
 | bug-c-multidim-float-brace-init | C | 35 | bug | C: a 2-D (multi-dim) brace initializer of a FLOAT element array zero-fills | — |
+| bug-c-multidim-nested-subscript | A | 55 | bug | C: a multi-dim array subscript that is itself a multi-dim array read (g3[g9[i][j][k]][..]) miscompiles — TWO bugs: parse-time NDInfo* clobber + codegen nested-index clobber | — |
 | bug-c-multidim-ordinal-global-init | C | 40 | bug | Multi-dim ORDINAL global array initializer skipped (`int a[2][3] = {{1,2,3},{4,5,6}}` stays zero) | — |
 | bug-c-multidim-single-subscript-row-decay | C | 40 | bug | C `g[i]` on a multi-dim array (single subscript, row decay to a pointer) produced NULL/scalar-load -> SIGSEGV; fixed | — |
 | bug-c-nested-anon-union-struct | C | 50 | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
@@ -1062,7 +1062,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-c-multidim-nested-subscript
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics

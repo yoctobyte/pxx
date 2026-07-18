@@ -59,3 +59,6 @@ nested IR_INDEX. Verify with a hand rvalue+lvalue matrix AND re-run csmith.
 
 - The repros match gcc (read=5, write lands at g3[0][1]); csmith seeds 5004/40020
   match gcc; C-conformance 220/220 + self-host byte-identical; test/*.c regression.
+
+## Log
+- 2026-07-18 — resolved, commit 287036fc.
