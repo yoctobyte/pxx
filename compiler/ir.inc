@@ -2619,6 +2619,26 @@ begin
   IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
            IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
 
+  { COM/ARC interface `as`-cast is a QueryInterface: it AddRefs the result, which
+    lives as an owning reference until the enclosing routine's scope exit
+    (EmitManagedLocalCleanup releases every skLocal COM-interface temp). Without
+    the retain the temp just ALIASES the source's single reference, so the
+    scope-exit release under-refcounts: the object is destroyed when the routine
+    returns instead of at end-of-routine (bug-pascal-interface-finalization-crash),
+    and a later release of the same object double-drops → SIGSEGV with a fuller
+    graph. Only when the temp is skLocal (a routine body) — a main-body temp is
+    skGlobal and has no scope-exit release, so retaining it there would leak.
+    PXXIntfAddRef is nil-safe. Mirrors the by-value-param retain in IRLowerCallArg. }
+  if (intfCi >= 0) and (intfCi < UClsCount) and UClsIsComInterface[intfCi] and
+     (Syms[tmpSym].Kind = skLocal) then
+  begin
+    li := IRAppend(IR_ARG, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+    lv := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, intfCi, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+    IRB[li] := lv;
+    va := IRAppendCall(FindProc('PXXIntfAddRef'), li, -1, Ord(tyNativeInt));
+    IRIVal[va] := 1;
+  end;
+
   if not doTrap then
   begin
     Result := tmpSym;

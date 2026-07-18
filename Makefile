@@ -854,6 +854,8 @@ test-core: $(COMPILER)
 	grep -q "loop variable must be of type Char" /tmp/test_fsc.log
 	! ./$(COMPILER) test/test_interface_field_access_fail.pas /tmp/test_ifaf26 > /tmp/test_ifaf.log 2>&1
 	grep -q 'interface has no member "fi"' /tmp/test_ifaf.log
+	./$(COMPILER) test/test_interface_ascast_temp_lifetime.pas /tmp/test_iatl26
+	test "$$(/tmp/test_iatl26)" = "$$(printf 'in P w=107\nalive v=7\ndestroy 7\ndone')"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26
