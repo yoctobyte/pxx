@@ -31,7 +31,7 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-local-fnptr-array-initializer | C | 35 | bug | C LOCAL function-pointer array with brace initializer `int (*fp[2])(int) = {inc, dbl};` rejected ('expected C expression'); global form works | — |
-| bug-c-ptr-to-array-parameter | C | 35 | bug | C function PARAMETER of pointer-to-array type `int f(int (*q)[N])` / `(*q)[A][B]` doesn't set the row stride — q[i][j] mis-strides (single-dim) or fails to lower (multi-dim) | — |
+| bug-c-ptr-to-array-parameter | C | 30 | bug | MULTI-dim ptr-to-array param `int f(int (*q)[A][B])` fails to lower (AN_BINOP/kind-5 gap). Single-dim `int (*q)[N]` FIXED in 85c233a2. | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -1130,13 +1130,13 @@ _none_
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
 - [p 35] [C] bug-c-local-fnptr-array-initializer
-- [p 35] [C] bug-c-ptr-to-array-parameter
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-float-const-pool
 - [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 30] [C] bug-c-ptr-to-array-parameter
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count

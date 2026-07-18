@@ -1,7 +1,20 @@
 ---
-summary: "C function PARAMETER of pointer-to-array type `int f(int (*q)[N])` / `(*q)[A][B]` doesn't set the row stride — q[i][j] mis-strides (single-dim) or fails to lower (multi-dim)"
+summary: "MULTI-dim ptr-to-array param `int f(int (*q)[A][B])` fails to lower (AN_BINOP/kind-5 gap). Single-dim `int (*q)[N]` FIXED in 85c233a2."
 type: bug
-prio: 35
+prio: 30
+---
+
+## UPDATE 2026-07-18 (85c233a2)
+
+Single-dim pointer-to-array params `int (*q)[N]` are FIXED — the param path now
+records SymPtrElemArrLen/NDims/dims onto the param symbol (test
+`test/cptr_to_array_param.c`, `at(m[1],2,3)`=123, was 110). What REMAINS is only
+the **multi-dim** param `int (*q)[A][B]`: it now parses (declarator dim capture
+landed with the local fix) but fails at IR lowering with `IR_UNSUPPORTED: AST node
+kind 5 (AN_BINOP)` on the `q[i][j][k]` flatten in the param body — a deeper
+lowering gap distinct from the shape capture. Clean compile error, no miscompile,
+never worked. Retargeted to that residual.
+
 ---
 
 # C: pointer-to-array function parameters mis-stride / don't lower
