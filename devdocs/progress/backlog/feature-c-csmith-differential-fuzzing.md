@@ -153,3 +153,15 @@ space is clean. Deeper hunting needs full-complexity csmith → ~2.5k-line repro
 that require `creduce`/`cvise` (not installed; root/PEP-668) to reduce. Only the
 open PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) remains — didn't recur in
 650+ small/mid iters, so it needs a specific full-complexity shape.
+
+## 2026-07-18 — 3rd miscompile (seed 31039), creduce wall reached
+
+A further small/mid-complexity batch (--max-funcs 2 --max-array-dim 3
+--max-pointer-depth 3, seeds 31000+) found another pre-existing -O0 miscompile
+(g_22 checksum), filed [[bug-a-csmith-o0-miscompile-seed31039]]. Unlike 5038/8020,
+it does NOT reduce below ~90 lines with the homemade line-reducer (nested
+functions + pointer chains + safe_math), so it is CREDUCE-GATED like 5004.
+Summary: 2 miscompiles reduced-and-FIXED (signed/unsigned, struct-array-ptr
+stride); 2 open findings (31039 miscompile, 5004 compile-fail) both need
+`creduce`/`cvise` to reduce to a diagnosable core. NEXT: install creduce (root)
+to unblock the remaining findings, or a C-aware reducer in Track T tooling.
