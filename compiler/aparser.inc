@@ -368,12 +368,22 @@ var
   symIdx: Integer;
   vtype: TTypeKind;
   initNode: Integer;
+  adaStubJmp: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Ada frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-ada)');
 
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { div-by-zero abort stub: jump over it (this driver has no entry jmp of its
+    own yet) — same latent zero-Div0StubAddr hole as the other non-Pascal
+    drivers; see the C driver comment. }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($E9); adaStubJmp := CodeLen; EmitI32(0);   { jmp over the stub }
+    EmitDiv0Stub;
+    Patch32(adaStubJmp, CodeLen - (adaStubJmp + 4));
+  end;
 
   Expect(tkProcedure, 'PROCEDURE');
   if CurTok.Kind <> tkIdent then Error('Ada: expected procedure name');

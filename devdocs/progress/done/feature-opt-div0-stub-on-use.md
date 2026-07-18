@@ -58,3 +58,12 @@ what the flag tracks.
   Gates: self-host byte-identical, test-opt green, C 220/220, test-nilpy,
   hasdiv/nodiv byte-identical to pinned, C div-by-zero exits RE200.
 - 2026-07-18 — resolved, commit 938c0154.
+
+- 2026-07-18 follow-up (fable-O): borg's zig reds at f5c8fbec were REAL and
+  mine to finish — the Zig, Rust, Erlang (eparser), BASIC (bparser) and Ada
+  (aparser) drivers ALL had the same never-emitted-stub hole as C/NilPy; the
+  safety net turned their latent `call 0` into hard compile errors. All six
+  non-Pascal drivers now emit the stub after their entry stubs (Ada gets a
+  jump-over — its driver had no entry jmp). Verified: zig skeleton+perft,
+  rust chess engine, erlang skeleton, .bas goto/gosub, ada skeleton all green;
+  self-host fixedpoint, C 220/220, nilpy unchanged.

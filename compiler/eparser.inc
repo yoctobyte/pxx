@@ -536,6 +536,10 @@ begin
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
 
+  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
+    non-Pascal drivers; see the C driver comment. }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+
   while CurTok.Kind <> tkEOF do
   begin
     { -module(x). / -export([...]). and any other attribute: swallow to '.' }

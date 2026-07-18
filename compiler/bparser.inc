@@ -689,6 +689,11 @@ begin
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 
+  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
+    non-Pascal drivers; see the C driver comment. Behind the entry jmp, reached
+    only by call. }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate
     the gosub shift-register stack (globals — BSS-zeroed, so the empty-stack

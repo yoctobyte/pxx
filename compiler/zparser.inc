@@ -1984,6 +1984,12 @@ begin
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
 
+  { Integer div-by-zero abort stub — same latent hole as the C/NilPy drivers:
+    a div site with no PXXDivZero in scope fell back to a zero Div0StubAddr
+    (silent call into the entry stub). Emit unconditionally after the entry
+    stub; never reached by fall-through. }
+  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
+
   while CurTok.Kind <> tkEOF do
   begin
     { `pub` is accepted and ignored (no module system in the skeleton). }
