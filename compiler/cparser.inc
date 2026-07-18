@@ -2184,6 +2184,19 @@ begin
         Result := operand;
         Exit;
       end;
+      { `&arr[i]` on a MULTI-DIM array: `arr[i]` already decayed to the row
+        ADDRESS (a pointer-valued AN_BINOP, base + i*rowStride — see the
+        single-subscript row decay / partial-index branches). `&` and the
+        array->pointer decay cancel, so `&m[i]` IS that address; taking AN_ADDR of
+        an arithmetic result would fail to lower (kind-5 AN_BINOP). A genuine
+        `&(p+1)` on a pointer rvalue is a C constraint violation gcc rejects, so
+        pointer-valued binops reaching `&` here are always array-row decays. }
+      if (ASTKind[operand] = AN_BINOP) and
+         (IntToTypeKind(ASTTk[operand]) = tyPointer) then
+      begin
+        Result := operand;
+        Exit;
+      end;
       node := AllocNode(AN_ADDR);
       ASTLeft[node] := operand;
       ASTIVal[node] := ResolveNodeRec(operand);
