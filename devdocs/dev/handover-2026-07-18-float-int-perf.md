@@ -83,6 +83,6 @@ calls → float residency now works in bodies WITH internal calls. Then measure 
 ## Also this session (context)
 14 correctness fixes shipped (float ×2 + C multi-dim/pointer/fnptr arc + 3
 csmith-found silent miscompiles + the nested-subscript parser clobber). csmith
-loop is clean at reducible complexity; deeper findings need `creduce` (installable:
-`sudo apt install creduce cvise`). Method + tools now in
+loop is clean at reducible complexity; deeper findings can be auto-reduced with
+`creduce`/`cvise` (now installed on the box). Method + tools now in
 `devdocs/dev/debugging-tips.md`.

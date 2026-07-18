@@ -92,10 +92,12 @@ frontend gaps.
 
 ## Reducing a fuzz finding to a repro
 
-- **`creduce` / `cvise` (apt) — the right tool.** C-aware delta debugging.
-  Interestingness test for a miscompile: `gcc builds+runs AND pxx builds+runs AND
-  checksums differ`; for a compile-fail: `gcc accepts AND pxx rejects`. Install:
-  `sudo apt install creduce cvise` (you must be in `sudo`).
+- **`creduce` / `cvise` — the right tool, installed on the dev box.** C-aware
+  delta debugging. Write an interestingness script and run `creduce ./interesting.sh
+  t.c` (or `cvise`). Interestingness for a miscompile: `gcc builds+runs AND pxx
+  builds+runs AND checksums differ`; for a compile-fail: `gcc accepts AND pxx
+  rejects`. It reduces full-size (~2.5k-line) csmith output to a few lines —
+  reach for it before hand-reducing.
 - **No creduce? A line-delta reducer gets surprisingly far** on SMALL-mode output
   (~130 lines → ~20). It floors at ~500-900 lines on full-size csmith (can't break
   into nested exprs — that's what creduce is for). Pattern: remove line-chunks
