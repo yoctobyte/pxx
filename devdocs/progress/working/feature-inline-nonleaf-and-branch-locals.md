@@ -154,3 +154,9 @@ sites 2b/2c can't reach. Needs (see the design notes in
   re-land. LESSON: fuzz before pushing aggressive splice-machinery changes;
   the optdiff corpus is too tame for inliner state bugs. Non-leaf slice 1
   (inner calls stay real) remains landed and fuzz-clean.
+
+- 2026-07-18 late night: post-revert master **fuzz-clean — 1724 pasmith
+  programs, 25 min, zero O0/O2/O3 divergences** (tools/optfuzz.sh). The full
+  remaining -O3 stack (ABI/residency both arches, regcall p3 both slices,
+  inline 2c + nested-ifs + non-leaf slice 1) holds under random programs.
+  Depth-1 re-land blocked on the reduced repro's root cause.
