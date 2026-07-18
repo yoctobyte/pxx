@@ -6875,7 +6875,13 @@ begin
             end;
             Inc(initDim);
           end;
-          if (initDim > 0) and (Syms[initSymIdx].ElemType <> tyUnknown) then
+          if (initDim > 0) and (Syms[initSymIdx].ElemType = tyRecord) then
+            { array of structs: element stride is the RECORD size, not
+              TypeSize(tyRecord)=8 (that generic 8 made `static T *p = &g[1]` on a
+              struct array point 8 bytes in instead of sizeof(elem) -> `*p = ...`
+              corrupted the wrong slot; csmith seed 9048). }
+            initOff := initOff * RecSize(Syms[initSymIdx].ElemRecName)
+          else if (initDim > 0) and (Syms[initSymIdx].ElemType <> tyUnknown) then
             initOff := initOff * TypeSize(Syms[initSymIdx].ElemType);
           if CurTok.Kind in [tkComma, tkSemicolon] then
           begin
