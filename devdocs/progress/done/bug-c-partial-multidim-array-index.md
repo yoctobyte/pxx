@@ -8,7 +8,7 @@ prio: 45
 
 - **Type:** bug (Track C — C frontend; `cparser.inc` multi-dim flattening). Valid C
   rejected (compile fail), not a miscompile.
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-07-17, csmith differential run (seed 700023, bucket
   `PXX_COMPILE_FAIL`) — filed by a Track-A+ agent into the owning lane per the
   T-owns-the-tool rule.
@@ -60,3 +60,6 @@ bookkeeping must reflect the residual dimensions.
 
 Found by `tools/csmith_fuzz.py` (pxx vs gcc). 24/30 seeds agreed; this was the lone
 `PXX_COMPILE_FAIL`. Reproduces from the seed exactly.
+
+## Log
+- 2026-07-18 — resolved, commit de649c39.
