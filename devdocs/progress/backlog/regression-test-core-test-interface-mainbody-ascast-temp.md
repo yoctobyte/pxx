@@ -26,3 +26,16 @@ Terminated
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triage (fable-O, 2026-07-18 evening)
+
+- Reproduced NATIVELY at HEAD (938c0154+): **test passes** (`cast=107 / after
+  nil / destroy 7`, exit 0), repeatedly.
+- The bad-range STARTS at `daf8d692` — a docs-only commit (rainy-day claim
+  wording) that cannot change codegen.
+- The log tail shows the suite's other jobs `ok` and then a bare `Terminated`
+  — the [[project_borg_red_harness_race_not_regression]] signature (job killed
+  by the harness under load, not a wrong-output failure).
+- Verdict: very likely harness race/timeout, not a regression. Leaving OPEN
+  for the watcher's idle bisect to confirm; close on the next borg GREEN of
+  this job.
