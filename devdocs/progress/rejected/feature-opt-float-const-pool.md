@@ -49,3 +49,21 @@ The BSS-global float load already uses `movsd xmm,[abs32]` via `EmitGlobRef`
 - mandelbrot/nbody faster at -O3, checksum/energy byte-identical.
 - No integer/-O2 regression; C float differential (O0/O2/O3) stays clean.
 - Gate: `make test` + self-host byte-identical + the bench suite.
+
+## REJECTED 2026-07-18 — implemented, correct, but PERF-NEUTRAL
+
+Implemented end to end (added a 4-byte DATA-abs fixup list `DataFix32` mirroring
+GlobFix; EmitDataRef32; writeELF apply-loop; EmitFloatTree float-const leaf ->
+8-byte pool + `movsd xmm,[abs32]`). Result: mandelbrot -O3 **0.64s vs 0.63s**
+(neutral/noise), nbody unchanged — checksum/energy byte-identical, self-host
+byte-identical. The `movsd` from an L1-hot pool is not cheaper than `movabs rax +
+movq`; the constant materialization was never the bottleneck. REVERTED.
+
+Broader finding: THREE float micro-opts now measure perf-neutral on mandelbrot —
+compare-fusion, dead-store-elim, and const-pool (see
+[[project_float_intree_xmm_fusion]]). The residual gap vs FPC (0.63 vs 0.32) is
+therefore STRUCTURAL — instruction scheduling / the arithmetic dependency chain /
+FPC's cross-loop register allocation — not the remaining GPR<->XMM transfers or
+constant loads. Further float wins need a real scheduler or a genuine xmm-resident
+value model across the whole loop, not more per-leaf peepholes. Don't re-attempt
+const-pooling without a const-materialization-bound benchmark proving a win.
