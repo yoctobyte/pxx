@@ -2389,6 +2389,7 @@ var idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
     ndimsF, flatNode, spanD, ndi, nIdx, si: Integer;
+    sIdx: array[0..MAX_ARR_DIMS-1] of Integer;  { subscript nodes captured locally — the shared NDIdxNode[] is clobbered when a subscript is itself a multi-dim read }
     done: Boolean; fieldName: AnsiString;
 begin
   done := False;
@@ -2410,15 +2411,25 @@ begin
           Without this a single subscript hit the generic path and mis-decayed the
           row to a scalar load (NULL / SIGSEGV — bug-c-multidim-single-subscript-
           row-decay). }
-        NDIdxNode[0] := idxExpr;
+        { Capture subscript nodes in a LOCAL array and re-fill NDInfo* after each
+          ParseCExpr: a subscript that is itself a multi-dim array read
+          (`g[ a[i][j][k] ]...`) recursively re-enters this flatten and CLOBBERS
+          the shared globals NDIdxNode[] AND NDInfo* with the inner array's data —
+          corrupting this array's row-major flatten (wrong outer index + wrong
+          spans -> silent wrong element). bug-c-multidim-nested-subscript. }
+        sIdx[0] := idxExpr;
         nIdx := 1;
-        while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+        while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) and (nIdx < MAX_ARR_DIMS) do
         begin
           Next;
-          NDIdxNode[nIdx] := ParseCExpr;
+          sIdx[nIdx] := ParseCExpr;
+          if not NodeArrNDInfo(node) then Error('internal: multi-dim ND info lost');
           Inc(nIdx);
           Expect(tkRBrack, ']');
         end;
+        { restore both globals from the local capture for BuildFlatNDIndex }
+        for ndi := 0 to nIdx - 1 do NDIdxNode[ndi] := sIdx[ndi];
+        if not NodeArrNDInfo(node) then Error('internal: multi-dim ND info lost');
         if nIdx = NDInfoNDims then
         begin
           { full index: one flat AN_INDEX over the row-major storage. }

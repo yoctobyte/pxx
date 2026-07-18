@@ -1420,6 +1420,8 @@ test-core: $(COMPILER)
 	/tmp/cglobal_ptr_to_struct_array_elem26; test "$$?" = "42"
 	./$(COMPILER) test/csubint_compare_promote.c /tmp/csubint_compare_promote26
 	/tmp/csubint_compare_promote26; test "$$?" = "42"
+	./$(COMPILER) test/cmultidim_nested_index_subscript.c /tmp/cmultidim_nested_index_subscript26
+	/tmp/cmultidim_nested_index_subscript26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c /tmp/crtl_lfs64_aliases_b23426
