@@ -72,3 +72,9 @@ debugging, reflection, and advanced software (streaming, fpcunit, dynamic dispat
 
 - x86-64 `EmitDiv0Stub` is unconditional even for division-free programs (~40 B). Could
   gate on "a div/mod site exists." Small host-only win; file separately if wanted.
+
+- 2026-07-18 night (fable-O): claimed, reconned, PARKED on a design fork —
+  `EmitRTTI` also emits FUNCTIONAL data (class-field finalize layouts at
+  [VMT-16], ClassName backlink at [VMT-8]), so `--rtti=none` semantics need a
+  user call. Filed [[decide-rtti-none-semantics]] (options + recommendation).
+  Unclaimed; back to backlog until decided.
