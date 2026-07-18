@@ -6904,14 +6904,13 @@
    "src": "tools/optdiff.sh"
   },
   {
-   "bad": "7f740f1810c2b98d2944c7e23999146fbd992bbe",
+   "bad": "938c01541c6fa95dc32f15800799699432d15949",
    "good": "2dffbb7c65a26af82e42fd29c185cdc6c03202c9",
    "job": "test-core#src:test/test_ws_skeleton.ws",
    "name": "test-core#178",
    "opened": "2026-07-18T18:44:24Z",
    "range": [
-    "938c01541c6fa95dc32f15800799699432d15949",
-    "7f740f1810c2b98d2944c7e23999146fbd992bbe"
+    "938c01541c6fa95dc32f15800799699432d15949"
    ],
    "src": "test/test_ws_skeleton.ws"
   },
