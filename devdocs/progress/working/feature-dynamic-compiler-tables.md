@@ -178,3 +178,21 @@ Superseded [[feature-dynamic-compiler-arrays-ast-fixups]] (folded into this tick
 Note the seq-walk STACK OVERFLOW (~3500 chained statements SIGSEGVs the recursive
 AST/IR tree walk) is a SEPARATE problem — a stack-depth limit, not an array cap; needs
 an iterative worklist, out of scope here.
+
+## Update 2026-07-18 (cont.) — Tokens DONE (biggest win)
+
+- **Token arrays** (8 arrays, `0f4b5882`) — `MAX_TOKENS`=2M, the single biggest BSS
+  consumer. No single chokepoint (20 Inc(TokCount) sites across 10 lexers + parser), so:
+  startup bootstrap `EnsureTokCapacity(65536)` + `EnsureTokCapacity` after each Inc +
+  the per-frontend pre-append `if TokCount>=MAX_TOKENS then Error` guards converted to
+  grow. No `@Tokens[i]` held across a grow (audited). `MAX_TOKENS` kept as the
+  `MainProgramTokCount=MAX_TOKENS` sentinel. Self-host byte-identical (lexes ~1M
+  tokens/build), C + NilPy frontends green. **BSS 326→215 MB (−111 MB).**
+- **Cumulative IR+AST+tokens: 365 → 215 MB BSS (−150 MB), three hard caps gone.**
+- FPC-clean: none of EnsureIRCapacity/EnsureASTCapacity/EnsureTokCapacity need
+  forwards.inc entries (each defined before all uses). The fpc-bootstrap red is
+  PRE-EXISTING (Jul-13, 603cf2bd — NestStrOff/IRAppendCall/IRWrapChkBounds/MangleSuffix
+  missing from forwards.inc + a WrapPCharToString overload clash), unrelated to this work.
+
+**REMAINING:** Syms (131072×31, chokepoint = the 5 Alloc* in symtab.inc), UField
+(262144×26), Code/Data/CPrepChars buffers.
