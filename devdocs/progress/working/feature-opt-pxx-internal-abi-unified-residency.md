@@ -108,3 +108,28 @@ if raised) BEFORE code, so every backend + any hand-asm honors it.
   bench (helper called per iteration) shows the win. No integer/-O2 regression.
 - Gate: `make test` + self-host byte-identical (-O0/-O2 unchanged; land behind -O3,
   promote per-pass after the full matrix) + cross where a backend is touched.
+
+## Log
+
+- 2026-07-18 (fable-O) **Slice 1 LANDED (x86-64, -O3):** xmm8–13 callee-saved
+  save-iff-used; float residency now allowed in call-bearing bodies (old
+  call-free whitelist → only inline-asm bodies excluded). ABI ratified in
+  `devdocs/dev/optimization-architecture.md` §5b. Mechanics: per-resident
+  prologue save + every-return-path epilogue restore (mirrors r14/r15 regcall);
+  per-body 6-slot pool save area (`FxSaveOn`/`FxSaveBase`, reserved for every
+  -O3 non-asm body) with `FloatPoolSave`/`FloatPoolRestore` wraps at every
+  boundary the callee-saved discipline can't see through: extern calls
+  (`EmitExternalIndirectCall`), cdecl+internal `IR_CALL_IND`, `IR_COSWITCH` /
+  `IR_YIELD` (other context owns the regs meanwhile), and try-entry snapshot +
+  landing-pad restore (raise longjmp skips unwound epilogues; setjmp buf has no
+  XMM) followed by own-resident refresh. Nested-routine/var-param aliasing was
+  already excluded via the addr-taken (IR_LEA/IR_SLOTADDR) scan — lifted
+  captures are by-ref params. Gates: self-host fixedpoint byte-identical,
+  testmgr quick 11/11, C-conformance 220/220, test-nilpy, .bas smoke,
+  mandelbrot 74607393270 / nbody 258916018 unchanged at -O0/-O2/-O3;
+  O3-built compiler's output byte-identical to O2-built's. Targeted stress
+  (residents × raise/longjmp × generators × extern sqrt loop) identical across
+  tiers. New-capability bench (helper called per iteration) ~1.1–1.2x vs -O2
+  and residency verified firing (byte-scan: pool saves/loads + movaps reads).
+  REMAINING: unified int+float pass over widened pools; aarch64 mirror
+  (V8–V15 free per AAPCS64); promote to -O2 after full matrix.

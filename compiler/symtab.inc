@@ -2918,6 +2918,56 @@ begin
   EmitB($49); EmitB($89); EmitB($C0 or (rreg - 8));                 { mov r12..r15, rax }
 end;
 
+{ Reload every float resident's register cache from its authoritative frame
+  slot (dual-write keeps the frame current). Emitted on the IR_EXC_ENTER
+  landing pad after the pool restore: a resident stored-to inside the try block
+  has a newer frame value than the try-entry pool snapshot. No-op when
+  FrResidentCount = 0 (-O0/-O2, non-x86-64), so those tiers stay byte-identical.
+  Touches only xmm8..xmm13 — never rax/xmm0. }
+procedure FloatResidencyRefreshAll;
+var k: Integer;
+begin
+  for k := 0 to FrResidentCount - 1 do
+  begin
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+    EmitB($85 or (k shl 3)); EmitI32(Syms[FrResidentSym[k]].Offset);  { movsd xmm(8+k), [rbp+off] }
+  end;
+end;
+
+{ pxx internal ABI boundary (optimization-architecture.md §5b): save / restore
+  the whole xmm8..13 callee-saved pool to this body's reserved frame slots.
+  Needed wherever the callee-saved discipline can't hold: a SysV extern (all
+  XMM volatile), an indirect call (target unprovable), a coroutine switch (the
+  other context's code owns the registers meanwhile), and a try-entry (a raise
+  longjmp skips the epilogues of every unwound frame, losing their save-iff-
+  used restores). Saving the FULL pool — not just this body's residents —
+  protects residents belonging to frames further up the call stack. rbp-
+  relative movsd only: never touches rsp, rax, arg registers or xmm0..7, so it
+  is safe between argument marshalling and the call, and between the call and
+  its return-value bridging. No-op unless FxSaveOn (-O3 x86-64 non-asm bodies
+  only), so -O0/-O2 stay byte-identical. }
+procedure FloatPoolSave;
+var k: Integer;
+begin
+  if not FxSaveOn then Exit;
+  for k := 0 to FR_RESIDENT_MAX - 1 do
+  begin
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($11);
+    EmitB($85 or (k shl 3)); EmitI32(FxSaveBase + 8 * k);   { movsd [rbp+slot k], xmm(8+k) }
+  end;
+end;
+
+procedure FloatPoolRestore;
+var k: Integer;
+begin
+  if not FxSaveOn then Exit;
+  for k := 0 to FR_RESIDENT_MAX - 1 do
+  begin
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+    EmitB($85 or (k shl 3)); EmitI32(FxSaveBase + 8 * k);   { movsd xmm(8+k), [rbp+slot k] }
+  end;
+end;
+
 procedure EmitStoreVar(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
@@ -5988,6 +6038,15 @@ begin
     EmitB($4C); EmitB($8B); EmitB($85 or ((RcResidentReg[i] - 8) shl 3));           { mov r12..r15, [rbp+off] }
     EmitI32(RcResidentSaveOff[i]);
   end;
+  { pxx internal ABI (optimization-architecture.md §5b): xmm8..xmm13 are
+    callee-saved save-iff-used — restore the caller's registers from the slots
+    FloatResidencyAssign reserved. Same every-return-path contract as the
+    r14/r15 restore above; the float result (if any) is already bridged to rax. }
+  for i := 0 to FrResidentCount - 1 do
+  begin
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+    EmitB($85 or (i shl 3)); EmitI32(FrResidentSaveOff[i]);          { movsd xmm(8+i), [rbp+off] }
+  end;
   { -O3 W1 callee-saved scratch: restore the caller's r12/r13 from their frame
     slots (saved once by CalleeScratchAssign). Reached by every return path,
     exactly like the r14/r15 residency restore above. }
@@ -6030,11 +6089,15 @@ end;
 procedure EmitExternalIndirectCall(extIdx: Integer);
 begin
   if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+  { pxx internal ABI: the external callee runs under SysV, where all XMM are
+    volatile — save the callee-saved xmm8..13 pool around the call. }
+  FloatPoolSave;
   EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
   DynCallCodePos[DynCallCount] := CodeLen;
   DynCallExtIdx[DynCallCount] := extIdx;
   Inc(DynCallCount);
   EmitI32(0);
+  FloatPoolRestore;
 end;
 
 { Load the resolved address of an external routine into rax. Reuses the dynamic

@@ -1931,7 +1931,15 @@ begin
         IREmitNode(IRA[argNode]);  EmitB($50);   { pto   -> push rax }
         EmitB($5E);                              { pop rsi = pto }
         EmitB($5F);                              { pop rdi = pfrom }
+        { pxx internal ABI: CoSwitch saves only the GPR callee-saved set on the
+          switched stack — the other context's code owns xmm8..13 while we are
+          suspended. Save the pool to THIS frame's slots before switching and
+          restore when this context is resumed (execution continues right after
+          the CoSwitch call), so residents of every frame up-stack survive the
+          excursion. No-op unless FxSaveOn (-O3 x86-64). }
+        FloatPoolSave;
         IREmitCodeCall(CoSwitchAddr);
+        FloatPoolRestore;
       end;
 
     IR_CLONE:
@@ -2053,7 +2061,11 @@ begin
         EmitB($48); EmitB($89); EmitB($41); EmitB(CO_OFF_CURRENT);              { mov [rcx+CURRENT], rax }
         EmitB($48); EmitB($8D); EmitB($79); EmitB(CO_OFF_GENCTX);               { lea rdi, [rcx+genctx]   (from) }
         EmitB($48); EmitB($8D); EmitB($71); EmitB(CO_OFF_CALLERCTX);            { lea rsi, [rcx+callerctx] (to) }
+        { pxx internal ABI: pool save/restore around the switch — see the
+          IR_COSWITCH comment. }
+        FloatPoolSave;
         IREmitCodeCall(CoSwitchAddr);
+        FloatPoolRestore;
       end;
 
     IR_CALL_IND:
@@ -2133,7 +2145,11 @@ begin
           EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
           EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov r11, [rsp+8] = P }
           EmitB($4D); EmitB($8B); EmitB($1B);       { mov r11, [r11] = callee }
+          { pxx internal ABI: cdecl target runs under SysV (all XMM volatile) —
+            save the callee-saved xmm8..13 pool around the call. }
+          FloatPoolSave;
           EmitB($41); EmitB($FF); EmitB($D3);       { call r11 }
+          FloatPoolRestore;
           EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] = P }
           EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8  (pop callee) }
           if TypeIsFloat(Procs[cpi].RetType) then
@@ -2188,7 +2204,12 @@ begin
             EmitB($49); EmitB($89); EmitB($C2);       { mov r10, rax }
           end;
           EmitB($41); EmitB($5B);                     { pop r11 = callee }
+          { pxx internal ABI: an indirect target can't be proven to honor the
+            xmm8..13 callee-saved convention (a proc-typed value may hold an
+            @extern) — save the pool around the call. No-op unless FxSaveOn. }
+          FloatPoolSave;
           EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
+          FloatPoolRestore;
         end;
       end;
 
@@ -5623,6 +5644,13 @@ begin
       IR_EXC_ENTER:
         begin
           lblId := IRA[i];
+          { pxx internal ABI: a raise longjmp skips the epilogues of every
+            unwound frame, losing their save-iff-used xmm8..13 restores — the
+            registers arrive at the landing pad holding whatever the raise
+            path left. Snapshot the pool at try-entry (the values every frame
+            up-stack expects back) so the landing pad can restore it. The GPR
+            residents need no snapshot: r12-r15 are in the setjmp buf. }
+          FloatPoolSave;
           EmitAsmX64([
             'sub rsp, %', EXC_FRAME_SIZE,
             'mov rax, [@glob]', BSS_EXC_TOP,
@@ -5633,7 +5661,7 @@ begin
           ]);
           IREmitCodeCall(ExcSetJmpAddr);
           EmitAsmX64(['test eax, eax']);
-          if RcResidentCount > 0 then
+          if (RcResidentCount > 0) or FxSaveOn then
           begin
             { Resident register caches (r14/r15 regcall residency) are ROLLED
               BACK by the raise longjmp to their try-entry snapshot, while the
@@ -5642,10 +5670,16 @@ begin
               an inline refresh (reload each resident register from its frame
               slot) before entering the handler, so handler reads never see the
               stale snapshot (bug-a-o2-resident-param-stale-after-longjmp).
+              The xmm8..13 pool is restored from the try-entry snapshot (an
+              extern-call wrap inside the try may have rewritten the slots,
+              but ancestor-owned values are invariant and own residents are
+              refreshed from their authoritative frame slots right after).
               rax is dead at the handler label (IR_EXC_MATCH reloads it). }
             EmitB($0F); EmitB($84); excSkip := CodeLen; EmitI32(0);   { jz over the refresh (normal path) }
             for f := 0 to RcResidentCount - 1 do
               RegcallRefreshResident(RcResidentSym[f]);
+            FloatPoolRestore;
+            FloatResidencyRefreshAll;
             if LabelPositions[lblId] <> -1 then
             begin
               EmitB($E9);                                             { jmp handler }
@@ -5994,37 +6028,22 @@ begin
   end;
 end;
 
-{ -O3 W2 slice: FLOAT loop residency in xmm8/xmm9. Caller-saved registers, so
-  zero save/restore cost — but legal ONLY in bodies whose entire emission is
-  call-free (any call clobbers xmm8-15). Whitelist over the whole body IR:
-  every node kind must be one whose x86-64 emission performs no call — and no
-  managed-string / dyn-array store traffic (those call retain/release/assign
-  helpers even without an IR_CALL node). Note div/mod stay allowed: the
-  div-zero check's call never returns. tyDouble syms only — a tySingle cache
-  would hold the unrounded double and diverge from a frame reload's
-  narrow-then-widen roundtrip. }
-function FloatResidencyBodySafe: Boolean;
+{ -O3 W2 slice: FLOAT loop residency in xmm8..xmm13. Under the pxx internal
+  ABI (optimization-architecture.md §5b) these are CALLEE-SAVED save-iff-used,
+  so residents survive internal pxx calls — call-bearing bodies are allowed.
+  The remaining barriers are handled at the call sites (external calls and
+  IR_CALL_IND refresh via FloatResidencyRefreshAll; IR_EXC_ENTER refreshes on
+  the landing pad). Only inline-asm bodies stay excluded: user asm may write
+  xmm8-15 without the save-iff-used prologue contract. tyDouble syms only — a
+  tySingle cache would hold the unrounded double and diverge from a frame
+  reload's narrow-then-widen roundtrip. }
+function FloatResidencyBodyAllowed: Boolean;
 var k: Integer;
 begin
-  FloatResidencyBodySafe := False;
+  FloatResidencyBodyAllowed := False;
   for k := 0 to IRCount - 1 do
-  begin
-    case IRKind[k] of
-      IR_NOP, IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA,
-      IR_LOAD_SYM, IR_STORE_SYM, IR_BINOP, IR_LABEL, IR_JUMP,
-      IR_JUMP_IF_FALSE, IR_NEG, IR_NOT, IR_LEA, IR_INDEX, IR_FIELD,
-      IR_LOAD_MEM, IR_STORE_MEM, IR_BLOCK, IR_TERMINATE, IR_ZERO_SYM,
-      IR_SLOTADDR, IR_COPY_REC, IR_PROCADDR, IR_CLASSREF, IR_VMTADDR: ;
-      else Exit;
-    end;
-    if (IRTk[k] = Ord(tyAnsiString)) or (IRTk[k] = Ord(tyString)) or
-       (IRTk[k] = Ord(tyVariant)) then Exit;
-    if (IRKind[k] = IR_STORE_SYM) and (IRA[k] >= 0) then
-      if (Syms[IRA[k]].IsArray and (Syms[IRA[k]].ArrLen = -1)) or
-         (Syms[IRA[k]].TypeKind = tyAnsiString) or
-         (Syms[IRA[k]].TypeKind = tyString) then Exit;
-  end;
-  FloatResidencyBodySafe := True;
+    if IRKind[k] = IR_ASM then Exit;
+  FloatResidencyBodyAllowed := True;
 end;
 
 procedure FloatResidencyAssign;
@@ -6039,7 +6058,7 @@ begin
   if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   if CurProcIsGenerator or CurProcIsStackless then Exit;
-  if not FloatResidencyBodySafe then Exit;
+  if not FloatResidencyBodyAllowed then Exit;
   { Tally tyDouble LOAD/STORE_SYM accesses inside backward-jump loop ranges
     (same walk as LoopResidencyAssign). }
   nsyms := 0;
@@ -6093,14 +6112,43 @@ begin
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
+    { pxx internal ABI, save-iff-used: this body claims xmm(8+picked), so save
+      the caller's register to a reserved frame slot; EmitProcEpilog restores
+      it on every return path (same contract as the r14/r15 regcall save). }
+    FrameSize := AlignTo(FrameSize + 8, 8);
+    FrResidentSaveOff[picked] := -FrameSize;
+    EmitB($F2); EmitB($44); EmitB($0F); EmitB($11);
+    EmitB($85 or (picked shl 3)); EmitI32(FrResidentSaveOff[picked]); { movsd [rbp+saveoff], xmm(8+picked) }
     { Init the cache from the frame slot (params were spilled by the prologue;
       an uninitialized local is garbage in BOTH places — consistently). }
     EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
-    EmitB($85 or (picked shl 3)); EmitI32(Syms[si].Offset);   { movsd xmm8/xmm9, [rbp+off] }
+    EmitB($85 or (picked shl 3)); EmitI32(Syms[si].Offset);   { movsd xmm(8+picked), [rbp+off] }
     FrResidentSym[picked] := si;
     Inc(picked);
   end;
   FrResidentCount := picked;
+end;
+
+{ pxx internal ABI (§5b): reserve this body's 6-slot xmm8..13 pool save area.
+  Reserved for EVERY -O3 x86-64 non-asm body (48 frame bytes, zero
+  instructions) rather than detecting boundary nodes: emission-level extern
+  calls exist with no dedicated IR node (runtime-helper wrappers), so IR
+  detection would under-approximate. The wraps themselves (FloatPoolSave /
+  FloatPoolRestore) emit only at actual boundary sites. Inline-asm bodies are
+  excluded: user asm owns its own register discipline and asmfront's extern
+  calls run without a reserved area. }
+procedure FloatPoolBoundaryAssign;
+var k: Integer;
+begin
+  FxSaveOn := False;
+  if OptLevel < 3 then Exit;
+  if RcSuppressAssign then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  for k := 0 to IRCount - 1 do
+    if IRKind[k] = IR_ASM then Exit;
+  FrameSize := AlignTo(FrameSize + 8 * FR_RESIDENT_MAX, 8);
+  FxSaveBase := -FrameSize;
+  FxSaveOn := True;
 end;
 
 procedure CalleeScratchAssign;
@@ -6250,6 +6298,7 @@ begin
     land ahead of the body code. }
   LoopResidencyAssign;
   FloatResidencyAssign;
+  FloatPoolBoundaryAssign;
   CalleeScratchAssign;
   if DumpIR then IRDump;
   IREmitMachineCode;

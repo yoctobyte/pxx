@@ -298,6 +298,48 @@ register-liveness scaffold, and phase-2 regcall would build toward it.
 
 ---
 
+## 5b. The pxx internal ABI (ratified 2026-07-18)
+
+pxx is freestanding: pxx→pxx calls owe SysV nothing. SysV governs only the
+boundary with explicitly-imported externs (detectable at every call site:
+`ProcExternal`, `EmitExternalIndirectCall`). So pxx defines its own internal
+convention on x86-64; every backend and **all hand-written inline asm** must
+honor it.
+
+**Register split (x86-64, internal pxx convention):**
+
+| registers | class | convention |
+|---|---|---|
+| `rax,rcx,rdx,rsi,rdi,r8–r11` | GPR | caller-saved scratch (as today) |
+| `rbx,rbp,rsp,r12–r15` | GPR | callee-saved (as SysV; r12–r15 = residency/scratch pool, save-iff-used) |
+| `xmm0–xmm7` | XMM | caller-saved scratch (xmm2–6 = in-tree fusion pool) |
+| **`xmm8–xmm15`** | XMM | **callee-saved in the pxx convention, save-iff-used** (xmm8–13 = float residency pool; xmm14/15 reserved scratch, still callee-saved if ever written) |
+
+- **Save-iff-used:** a body that assigns `xmm8+k` (float residency) saves the
+  caller's register to a frame slot in its prologue and restores it in every
+  `EmitProcEpilog` path — exactly the r14/r15 regcall machinery. A body that
+  never touches `xmm8–15` saves nothing. Scalar doubles only → **8-byte
+  `movsd` save**, alignment-free (a future packed resident needs 16B `movaps`).
+- **Extern / indirect calls:** SysV makes all XMM volatile, and an indirect
+  target can't be proven internal → after every external call
+  (`EmitExternalIndirectCall`) and every `IR_CALL_IND`, live float residents
+  are **refreshed from their authoritative frame slots** (dual-write keeps the
+  frame current, so the barrier is reload-only — no pre-call spill).
+- **syscalls:** the Linux kernel preserves XMM across `syscall` — no barrier.
+- **Exception landing:** the raise `longjmp` rolls registers back to their
+  try-entry snapshot; the `IR_EXC_ENTER` landing pad refreshes resident
+  registers (int AND float) from their frame slots before the handler runs.
+- **Exported pxx functions called from C:** save-iff-used already exceeds what
+  SysV asks of a callee (SysV callee-saved ⊂ pxx callee-saved) — conformant
+  with no special casing.
+- **Hand-written asm rule:** inline/standalone asm that writes `xmm8–15` must
+  save/restore them; asm that calls an external C function must be assumed to
+  clobber them (currently none in `lib/` does either — audited 2026-07-18).
+- **aarch64:** no custom convention needed — AAPCS64 already makes `V8–V15`
+  (low 64 bits) callee-saved; the mirror uses them as the ABI intends.
+
+---
+
 ## 6. Methodology — how every pass is proven
 
 Per-pass rhythm (never skip a step; slow steps run as separate visible
