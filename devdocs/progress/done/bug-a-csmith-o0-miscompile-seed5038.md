@@ -48,3 +48,6 @@ scratchpad `MISCOMPILE_VS_GCC-5038/`.
 
 - The reduced repro's pxx checksum matches gcc; a `test/*.c` regression from the
   reduction; C-conformance 220/220 + self-host byte-identical.
+
+## Log
+- 2026-07-18 — resolved, commit 574fcac1.

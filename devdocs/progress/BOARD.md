@@ -26,11 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (119)
+## backlog (118)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-csmith-o0-miscompile-seed5038 | A | 55 | bug | csmith seed 5038: pxx produces a WRONG global checksum vs gcc at -O0 (silent miscompile). Pre-existing (pinned reproduces). Needs creduce to reduce. | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -207,7 +206,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (804)
+## done (805)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -217,6 +216,7 @@ _none_
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
+| bug-a-csmith-o0-miscompile-seed5038 | A | 55 | bug | csmith seed 5038: pxx produces a WRONG global checksum vs gcc at -O0 (silent miscompile). Pre-existing (pinned reproduces). Needs creduce to reduce. | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
 | bug-a-libcfree-unresolved-extern-silent-zero | C | 68 | bug | libc-free link: unresolved external symbol patched to 0 instead of a link error | — |
@@ -1060,7 +1060,6 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [A] bug-a-csmith-o0-miscompile-seed5038
 - [p 55] [A] feature-c-corpus-duktape
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [P] feature-pascal-corpus-generics
