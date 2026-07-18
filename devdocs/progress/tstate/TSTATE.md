@@ -6,5 +6,5 @@
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
-- **test-core#src:test/test_ws_skeleton.ws** — test/test_ws_skeleton.ws (borg): bad `f5c8fbec6016`, last good `2dffbb7c65a2`, 4 commit(s) in range
+- **test-core#src:test/test_ws_skeleton.ws** — test/test_ws_skeleton.ws (borg): bad `7f740f1810c2`, last good `2dffbb7c65a2`, 2 commit(s) in range
 - **optdiff#shard5/6** — tools/optdiff.sh (borg): bad `a3f6e70a728f`, last good `a3f6e70a728f`, 0 commit(s) in range
