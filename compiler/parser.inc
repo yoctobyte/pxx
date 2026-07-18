@@ -32,9 +32,27 @@ function ByRefArgStartsExpression: Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
 
 
+procedure EnsureASTCapacity(need: Integer);
+{ Grow the per-node AST arrays so index `need-1` is in bounds. Doubling from a base
+  that already covers the low inline reserve; capacity never shrinks. ALL parallel
+  AST arrays grow in lockstep — a missed one is a silent out-of-bounds. See
+  feature-dynamic-compiler-tables. }
+var n: Integer;
+begin
+  if need <= ASTCapacity then Exit;
+  if ASTCapacity = 0 then n := 65536 else n := ASTCapacity;
+  while n < need do n := n * 2;
+  SetLength(ASTKind, n);       SetLength(ASTIVal, n);      SetLength(ASTSOffset, n);
+  SetLength(ASTSLen, n);       SetLength(ASTCLongRank, n); SetLength(ASTLeft, n);
+  SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
+  SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
+  SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
+  ASTCapacity := n;
+end;
+
 function AllocNode(kind: Integer): Integer;
 begin
-  if ASTNodeCount >= INLINE_AST_BASE then Error('AST node overflow');
+  EnsureASTCapacity(ASTNodeCount + 1);
   ASTKind[ASTNodeCount]    := kind;
   ASTIVal[ASTNodeCount]    := 0;
   ASTSOffset[ASTNodeCount] := 0;
@@ -148,10 +166,12 @@ begin
   end;
 end;
 
-{ Alloc a node in the reserved inline AST region; -1 on overflow. }
+{ Alloc a node in the reserved low inline AST region [0..INLINE_AST_RESERVE);
+  -1 when that fixed reserve is full (the caller then declines to inline). }
 function AllocInlineNode(kind: Integer): Integer;
 begin
-  if InlineASTNext >= MAX_AST then begin AllocInlineNode := -1; Exit; end;
+  if InlineASTNext >= INLINE_AST_RESERVE then begin AllocInlineNode := -1; Exit; end;
+  EnsureASTCapacity(INLINE_AST_RESERVE);
   ASTKind[InlineASTNext]     := kind;
   ASTIVal[InlineASTNext]     := 0;
   ASTSOffset[InlineASTNext]  := 0;
@@ -315,7 +335,7 @@ begin
   if resultWrites < 1 then Exit;
   { Retain the whole chain. }
   startNext := InlineASTNext;
-  if InlineASTNext + 256 >= MAX_AST then Exit;
+  if InlineASTNext + 256 >= INLINE_AST_RESERVE then Exit;
   cloned := CloneToInlineRegion(bodyNode, procIdx);
   if cloned < 0 then begin InlineASTNext := startNext; Exit; end;
   if InlineASTNext - startNext > 256 then begin InlineASTNext := startNext; Exit; end;
@@ -371,7 +391,7 @@ begin
     if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
     if not InlineExprSimple(rhs, procIdx, False, retSym) then Exit;
     startNext := InlineASTNext;
-    if InlineASTNext + 48 >= MAX_AST then Exit;    { budget guard }
+    if InlineASTNext + 48 >= INLINE_AST_RESERVE then Exit;    { budget guard }
     i := CloneToInlineRegion(rhs, procIdx);
     if i < 0 then begin InlineASTNext := startNext; Exit; end;
     if InlineASTNext - startNext > 48 then begin InlineASTNext := startNext; Exit; end;
@@ -396,7 +416,7 @@ begin
     if not InlineExprSimple(aE, procIdx, False, retSym) then Exit;
     if not InlineExprSimple(bE, procIdx, False, retSym) then Exit;
     startNext := InlineASTNext;
-    if InlineASTNext + 96 >= MAX_AST then Exit;
+    if InlineASTNext + 96 >= INLINE_AST_RESERVE then Exit;
     i := BuildInlineTernary(condN, aE, bE, procIdx, Ord(Syms[retSym].TypeKind));
     if i < 0 then begin InlineASTNext := startNext; Exit; end;
     if InlineASTNext - startNext > 96 then begin InlineASTNext := startNext; Exit; end;
@@ -16285,7 +16305,7 @@ var node: Integer;
 begin
   node := ParseStatementAST;
   CompileAST(node);
-  ASTNodeCount := 0;
+  ASTNodeCount := INLINE_AST_RESERVE;
 end;
 
 procedure ParseBlock;
@@ -16293,7 +16313,7 @@ var node: Integer;
 begin
   node := ParseBlockAST;
   CompileAST(node);
-  ASTNodeCount := 0;
+  ASTNodeCount := INLINE_AST_RESERVE;
 end;
 
 { ===== Declaration parsing ===== }
@@ -21320,7 +21340,7 @@ begin
     ASTRight[assignNode] := valNode;
 
     CompileAST(assignNode);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end;
   RcSuppressAssign := False;
   LocalInitCount := 0;
@@ -23188,7 +23208,7 @@ begin
     Expect(tkAsm, 'asm');
     asmNode := ParseAsmStatementAST;
     CompileAST(asmNode);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end
   else if isStackless then
   begin
@@ -23212,7 +23232,7 @@ begin
     genStepAST := BuildStacklessStep(genBodyAST, procIdx);
     ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
     CompileAST(genStepAST);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end
   else
   begin
@@ -23225,7 +23245,7 @@ begin
     inlineBodyNode := ParseBlockAST;
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     CompileAST(inlineBodyNode);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
   end;
@@ -24127,7 +24147,7 @@ begin
     end;
   end;
   CompileAST(seqNode);
-  ASTNodeCount := 0;
+  ASTNodeCount := INLINE_AST_RESERVE;
 
   EmitProcEpilog(-1);
   PatchProcPrologue(patchPos, FrameSize);
@@ -24554,7 +24574,7 @@ begin
     ASTRight[assignNode] := valNode;
 
     CompileAST(assignNode);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end;
 end;
 

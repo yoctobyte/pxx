@@ -5186,7 +5186,7 @@ begin
   else
   begin
     CompileAST(asn);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end;
 end;
 
@@ -5643,7 +5643,7 @@ begin
     ASTLeft[sAsn] := sTarget; ASTRight[sAsn] := sExpr;
     ASTTk[sAsn] := Ord(tyPointer);
     CompileAST(sAsn);
-    ASTNodeCount := 0;
+    ASTNodeCount := INLINE_AST_RESERVE;
   end;
   for i := 0 to CAggInitCount - 1 do
   begin

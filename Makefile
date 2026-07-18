@@ -870,6 +870,13 @@ test-core: $(COMPILER)
 	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*180+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ir_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
 	./$(COMPILER) /tmp/test_ir_overflow_large.pas /tmp/test_ir_overflow_large26
 	test "$$(/tmp/test_ir_overflow_large26)" = "396000"
+	# Dynamic AST arrays: a function body with > 516096 AST nodes (the old fixed
+	# INLINE_AST_BASE per-proc cap) must compile — feature-dynamic-compiler-tables.
+	# 350 statements x 400 terms ~= 560k AST nodes; sum = 350*2200. Local array +
+	# few-wide statements keep it off the global-fixup table and under seq-walk depth.
+	@python3 -c "t='+'.join('a[%d]'%(k%10) for k in range(400)); L=['program p;','procedure big;','var s: int64; a: array[0..9] of int64; i: longint;','begin','  for i := 0 to 9 do a[i] := i + 1;','  s := 0;']+['  s := s + '+t+';']*350+['  writeln(s);','end;','begin big; end.']; open('/tmp/test_ast_overflow_large.pas','w').write(chr(10).join(L)+chr(10))"
+	./$(COMPILER) /tmp/test_ast_overflow_large.pas /tmp/test_ast_overflow_large26
+	test "$$(/tmp/test_ast_overflow_large26)" = "770000"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26

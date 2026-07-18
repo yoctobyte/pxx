@@ -128,7 +128,7 @@ begin
   RegcallCapped5 := 0;
   RegcallEligibleUses := 0;
   MeasureInline := False;
-  InlineASTNext := INLINE_AST_BASE;
+  InlineASTNext := 0;
   InliningActive := 0;
   OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable and remains the byte-identity reference; opt passes gate on OptLevel>=tier. }
   OptLevelExplicit := False;

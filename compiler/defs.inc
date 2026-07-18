@@ -39,12 +39,13 @@ const
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
-  MAX_AST     = 524288;
-  { Top slice of the AST pool reserved for retained inline-routine bodies
-    (feature-inline-routines). Per-proc AST allocation (AllocNode) uses
-    [0..INLINE_AST_BASE); retained inline bodies live in
-    [INLINE_AST_BASE..MAX_AST) and are NOT cleared by the per-proc reset. }
-  INLINE_AST_BASE = 516096;   { MAX_AST - 8192 }
+  MAX_AST     = 524288;   { legacy sizing constant; the AST arrays are now dynamic }
+  { LOW slice of the (now dynamic) AST pool reserved for retained inline-routine
+    bodies (feature-inline-routines). AllocInlineNode fills [0..INLINE_AST_RESERVE)
+    and it is NOT cleared by the per-proc reset; per-proc AllocNode fills
+    [INLINE_AST_RESERVE..) and grows the arrays on demand. Was a fixed TOP reserve
+    that hard-capped one function's node count (feature-dynamic-compiler-tables). }
+  INLINE_AST_RESERVE = 8192;
   MAX_IR      = 262144;   { bumped from 131072: a large single function (generated
                             amalgamations, big checksums) could overflow the fixed IR
                             arrays and be rejected with 'IR overflow'. Byte-identical-safe
@@ -1048,7 +1049,7 @@ var
     region; at a direct call site the body is cloned in with params substituted by
     fresh arg temps and lowered in place of the call. }
   ProcInline       : array[0..MAX_PROCS-1] of Boolean; { `inline;` directive seen }
-  InlineBodyRoot   : array[0..MAX_PROCS-1] of Integer; { retained E root in [INLINE_AST_BASE..), or -1 if not inlinable }
+  InlineBodyRoot   : array[0..MAX_PROCS-1] of Integer; { retained E root in [0..INLINE_AST_RESERVE), or -1 if not inlinable }
   InlineParamCnt   : array[0..MAX_PROCS-1] of Integer; { param count of the retained body }
   InlineASTNext    : Integer;   { next free slot in the reserved inline AST region }
   InliningActive   : Integer;   { >0 while splicing an inline body (recursion/nesting guard) }
@@ -1886,25 +1887,34 @@ var
   BFixupIsGOSUBs    : array[0..255] of Boolean;
   BFixupCount       : Integer;
 
-  { AST node pool — struct-of-arrays, 8 bytes per field }
-  ASTKind    : array[0..MAX_AST-1] of Integer;
-  ASTIVal    : array[0..MAX_AST-1] of Int64;
-  ASTSOffset : array[0..MAX_AST-1] of Integer;
-  ASTSLen    : array[0..MAX_AST-1] of Integer;
+  { AST node pool — struct-of-arrays, DYNAMIC (grown by EnsureASTCapacity via the
+    AllocNode chokepoint). Two regions share the arrays: the retained inline bodies
+    live in the fixed low reserve [0..INLINE_AST_RESERVE) (allocated by
+    AllocInlineNode, never cleared), and per-proc nodes live in [INLINE_AST_RESERVE..)
+    growing on demand (AllocNode; ASTNodeCount resets to INLINE_AST_RESERVE per body).
+    Was array[0..MAX_AST-1] with the inline reserve at the TOP — a fixed cap that a
+    large single function overflowed (bug-pascal-ir-node-hard-limit-max-ir sibling;
+    feature-dynamic-compiler-tables). The AST is a tree walked by node references, not
+    a linear [0..ASTNodeCount) scan, so putting the inline reserve low is transparent. }
+  ASTKind    : array of Integer;
+  ASTIVal    : array of Int64;
+  ASTSOffset : array of Integer;
+  ASTSLen    : array of Integer;
   { C integer LITERAL's long rank (0/1/2), from the l/L suffix the lexer already
     counted into CAttrFlags. Same reason as SymCLongRank: `17L` on ILP32 and
     `17LL` on LP64 both lose their identity in TTypeKind. C-mode only. }
-  ASTCLongRank : array[0..MAX_AST-1] of Integer;
-  ASTLeft    : array[0..MAX_AST-1] of Integer;
-  ASTRight   : array[0..MAX_AST-1] of Integer;
-  ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
-  ASTLiftedVar : array[0..MAX_AST-1] of Integer; { symbol index of compiler-lifted variable, or -1 }
-  ASTEnumId : array[0..MAX_AST-1] of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
-  ASTLine    : array[0..MAX_AST-1] of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
-  ASTQChk    : array[0..MAX_AST-1] of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
-  ASTRChk    : array[0..MAX_AST-1] of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
-  ASTIChk    : array[0..MAX_AST-1] of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
+  ASTCLongRank : array of Integer;
+  ASTLeft    : array of Integer;
+  ASTRight   : array of Integer;
+  ASTTk      : array of Integer;  { TTypeKind of expression }
+  ASTLiftedVar : array of Integer; { symbol index of compiler-lifted variable, or -1 }
+  ASTEnumId : array of Integer; { enum type of an ENUM-MEMBER literal, else -1. A member const folds to an AN_INT_LIT (its ordinal), which drops the symbol — and with it the only evidence of WHICH enum it came from. Kept here so cross-enum assignment stays diagnosable. }
+  ASTLine    : array of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
+  ASTQChk    : array of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
+  ASTRChk    : array of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
+  ASTIChk    : array of Boolean; { AN_CALL built inside a {$I+} region: a Text-I/O callee gets a PXXIoCheck sequenced after it at IR lowering }
   ASTNodeCount : Integer;
+  ASTCapacity : Integer;   { current allocated length of the per-node AST arrays (grown by EnsureASTCapacity) }
 
   { The per-IR-node parallel arrays are DYNAMIC: one function body's IR at a time
     (IRReset zeroes IRCount per body), grown on demand by EnsureIRCapacity via the
