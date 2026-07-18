@@ -2398,6 +2398,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_widechar_var_to_string26)" = "$$(printf 'direct=A\nviavar=B')"
 	./$(COMPILER) test/test_widechar_var_concat.pas /tmp/test_widechar_var_concat26
 	test "$$(/tmp/test_widechar_var_concat26)" = "$$(printf 'concat=xA\nlconcat=Ay\nwordadd=3000')"
+	./$(COMPILER) test/test_widechar_var_to_string_arg.pas /tmp/test_widechar_var_to_string_arg26
+	test "$$(/tmp/test_widechar_var_to_string_arg26)" = "$$(printf 'assign=A\nconcat=xA\narg=A')"
 	./$(COMPILER) test/test_nested_interface_as_cast.pas /tmp/test_nested_interface_as_cast26
 	test "$$(/tmp/test_nested_interface_as_cast26)" = "inline=101"
 	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26

@@ -6369,7 +6369,8 @@ begin
   currArg := argsHead;
   for i := 0 to nArgs-1 do
   begin
-    if IsNodePChar(ASTLeft[currArg]) or NodeIsWideCharVal(ASTLeft[currArg]) then
+    if IsNodePChar(ASTLeft[currArg]) or NodeIsWideCharVal(ASTLeft[currArg]) or
+       (argTypes[i] = tyUInt16) then
       hasPChar := True;   { either coercion retry below may run; quiet the first-match diag }
     currArg := ASTRight[currArg];
   end;
@@ -6439,15 +6440,21 @@ begin
       end;
     end;
     { WideChar -> string implicit conversion in a call argument, same failed-match
-      retry shape as PChar above: a WideChar VALUE (the -3 cast) binding a string
-      parameter converts to its UTF-8 encoding (fpjson's UTF8Encode(WideChar(U1))).
-      The as-is match already covers ordinal parameters, so this never overrides
-      a stricter match. }
+      retry shape as PChar above: a WideChar VALUE binding a string parameter
+      converts to its UTF-8 encoding (fpjson's UTF8Encode(WideChar(U1))). Catches
+      both an explicit `WideChar(x)` cast (NodeIsWideCharVal) AND a bare `w: WideChar`
+      variable read — the latter is a plain tyUInt16 ident (WideChar collapses to
+      tyUInt16, no subtype marker), which the cast-only check missed, so `show(w)`
+      failed overload resolution (bug-pascal-widechar-var-to-string-other-contexts).
+      Mirrors the assign path (ir.inc: any tyUInt16 -> string is a widechar convert;
+      a genuine Word->string is invalid in FPC and nonsensical here — strict-FPC
+      parity would belong behind --strict-fpc). The as-is match already covers
+      ordinal parameters and runs first, so this never overrides a stricter match. }
     pcharRetry := False;
     currArg := argsHead;
     for i := 0 to nArgs-1 do
     begin
-      if NodeIsWideCharVal(ASTLeft[currArg]) then
+      if NodeIsWideCharVal(ASTLeft[currArg]) or (argTypes[i] = tyUInt16) then
         begin retryTypes[i] := tyAnsiString; pcharRetry := True; end
       else
         retryTypes[i] := argTypes[i];
@@ -6463,7 +6470,7 @@ begin
         for i := 0 to nArgs-1 do
         begin
           exprNode := ASTLeft[currArg];
-          if NodeIsWideCharVal(exprNode) and
+          if (NodeIsWideCharVal(exprNode) or (argTypes[i] = tyUInt16)) and
              ((Procs[pi].Params[i].TypeKind = tyString) or
               (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
             ASTLeft[currArg] := WrapWideCharToUTF8(exprNode);
