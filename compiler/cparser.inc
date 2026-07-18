@@ -1665,6 +1665,21 @@ begin
     begin
       tk := ParseCDeclType;
       sz := CTypeSizeBytes(tk);
+      { Abstract array type-name `sizeof(int[N][M])`: ParseCDeclType stops at the
+        '[', so multiply the element size by each extent here. Without this the
+        extents were swallowed by the balanced-')' scan below and sizeof returned
+        just the element size (bug-c-sizeof-array-type-ignores-extent). }
+      while CurTok.Kind = tkLBrack do
+      begin
+        Next;                          { '[' }
+        if CurTok.Kind = tkRBrack then { unsized `[]` — not valid in sizeof; leave sz }
+          Expect(tkRBrack, ']')
+        else
+        begin
+          sz := sz * CEvalConstExpr;   { extent }
+          Expect(tkRBrack, ']');
+        end;
+      end;
     end
     else if CurTok.Kind = tkStar then
     begin
