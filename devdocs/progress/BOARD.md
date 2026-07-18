@@ -26,11 +26,10 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (119)
+## backlog (118)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-csmith-o0-miscompile-seed31039 | A | 50 | bug | csmith seed 31039: pxx prints a wrong global (g_22) checksum vs gcc at -O0, consistent across -O levels. Pre-existing. Needs creduce (line-reducer floors ~90 lines). | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -207,7 +206,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (805)
+## done (806)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -217,6 +216,7 @@ _none_
 | bug-64bit-shift-xor-literal-gaps | A | 50 | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-a-class-managed-fields-not-finalized-on-destroy | A | 40 | bug | managed-field finalization gap + heap-lock hazard: a class finalizes NO managed fields on Free (leak), and a COM interface field of a RECORD cannot be finalized under the record heap lock without deadlocking — both need the interface release moved outside the non-reentrant heap lock | — |
 | bug-a-compiler-hang-on-valid-c-programs | A | 60 | bug | pxx compiler HANGS (non-termination, 100% CPU) compiling two valid C programs gcc builds in <1s — pr23324.c (bitfields+empty union) and pr44164.c (nested struct + empty compound literal); worst class: no output, no error | — |
+| bug-a-csmith-o0-miscompile-seed31039 | A | 50 | bug | csmith seed 31039: pxx prints a wrong global (g_22) checksum vs gcc at -O0, consistent across -O levels. Pre-existing. Needs creduce (line-reducer floors ~90 lines). | — |
 | bug-a-csmith-o0-miscompile-seed5038 | A | 55 | bug | csmith seed 5038: pxx produces a WRONG global checksum vs gcc at -O0 (silent miscompile). Pre-existing (pinned reproduces). Needs creduce to reduce. | — |
 | bug-a-double-global-initializer-arithmetic-folds-to-zero | A | 65 | bug | any compile-time ARITHMETIC in a double global/static initializer folds to 0.0 (1.0/4.0, 2.0*3.0, 1024.0-0.5 all become 0.0); a bare literal is fine — silent, hits real C code | — |
 | bug-a-interface-release-on-last-ref-not-destroyed | A | 40 | bug | COM interface: dropping the last interface reference (:= nil) does NOT run the destructor — pxx defers/skips Release, breaking interface RAII (silent) | — |
@@ -1074,7 +1074,6 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 53] [B] feature-tls-provider-abstraction
 - [p 53] [B] feature-tls13-from-scratch
-- [p 50] [A] bug-a-csmith-o0-miscompile-seed31039
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-corpus-quickjs
 - [p 50] [B] feature-fpjson-fpcunit-suite-target

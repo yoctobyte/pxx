@@ -49,3 +49,6 @@ session scratchpad (`MISCOMPILE_VS_GCC-31039/`, `reduced31039.c`).
 
 - Reduced repro's pxx checksum matches gcc; a `test/*.c` regression; C-conformance
   220/220 + self-host byte-identical.
+
+## Log
+- 2026-07-18 — resolved, commit 4de51285.
