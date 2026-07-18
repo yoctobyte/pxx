@@ -18,6 +18,21 @@ industrial scale — not on toy tests. The motive is better software built on
 50 years of borrowed Pascal language design; this is how we prove we inherited
 it correctly.
 
+The operational motive (user, 2026-07-18) is **bug harvest**: real code —
+libraries, applications — beats any fuzzer, and every corpus pulled in so far
+surfaced new compiler bugs. FPC's source is the densest such corpus, and
+uniquely it *composes into a second-order oracle*: any subtle pxx miscompile
+in `fpc'` amplifies into visible output divergence when `fpc'` compiles the
+downstream corpus. The trophy is a gimmick; the bug list is the point.
+
+**RTL-coupling note (verified 2026-07-18):** the earlier probe's claim that
+FPC's compiler needs FPC's exact ansistring/System internals was checked
+against real 3.2.2 source and is wrong — coupling is semantic only
+(refcounted strings via documented API, one missing `Initialize()`
+intrinsic). Details in `experiment-compile-fpc-as-stress-probe.md` (Path B,
+corrected). The shadow-RTL model that carried Synapse is expected to carry
+here too.
+
 ## Acceptance = the differential oracle (not "it runs")
 
 The bar is not "pp.pas compiles." It is:

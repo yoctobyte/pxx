@@ -47,13 +47,29 @@ Genuinely harder and more *interesting* — it stresses pxx differently. Probed
   standalone source; it is source **+ a build-config define profile**. So a
   probe needs an FPC-compiler define profile, exactly the per-library
   fine-grained-defines mechanism (synapse pattern) applied to FPC.
-- `cclasses.pas` = FPC's **own** container/string classes (TFPHashList,
-  ansistring internals). **Here the shadow model that made fgl work breaks**:
-  FPC's *compiler* is deeply coupled to FPC's *exact* System/RTL internals,
-  unlike fgl which only needs container semantics. This is the real
-  "what's ours / what's theirs" boundary decision — either shadow even more of
-  the RTL, or actually compile FPC's cclasses against FPC's system unit (a
-  much bigger commitment).
+- `cclasses.pas` = FPC's **own** container/string classes (TFPHashList, …).
+  **CORRECTED 2026-07-18** — the original probe claimed "deeply coupled to
+  FPC's exact System/RTL internals (ansistring layout)". Verified against
+  real FPC 3.2.2 source (`cutils.pas`, `cclasses.pas`, `globals.pas`,
+  `widestr.pas` grepped for refcount/strrec/negative-offset access): **no
+  ansistring header-layout access exists in the compiler source.** The
+  closest is `TCmdStrListItem.GetCopy` (cclasses.pas:2394), which uses
+  `Initialize()` + managed-assignment refcount *semantics* — documented,
+  layout-independent API that works on any refcounted ansistring, including
+  ours. `fphash(pchar(@s[1]),…)` is plain byte access. `widestr.pas` is
+  self-contained (its own `compilerwidestring` record, no RTL widestring
+  dependency). The layout-poking that inspired the claim lives in (a) FPC's
+  *RTL itself* (`astrings.inc`) — irrelevant, we substitute our own RTL —
+  and (b) the *testsuite* (`tstring4`, wontfix), not the compiler.
+  Actual dependencies of cutils/cclasses: `uses SysUtils, globtype, CUtils,
+  CStreams` — globtype/cstreams are compiler-local plain Pascal (corpus
+  units like any other); SysUtils = normal shadow-RTL surface accretion
+  (Synapse pattern); plus one small missing intrinsic, `Initialize()`
+  (pxx lacks it — ordinary feature ticket, not architecture). So the
+  "ours-vs-theirs RTL boundary mountain" deflates to: shadow-RTL grind +
+  a handful of intrinsics. The honest residual unknown is only that nobody
+  probed past wall #1 — but nothing found suggests a *class* of wall
+  different from what Synapse already beat.
 
 ## Why probe, not complete
 
