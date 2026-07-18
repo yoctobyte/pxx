@@ -26,11 +26,13 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (119)
+## backlog (121)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-local-fnptr-array-initializer | C | 35 | bug | C LOCAL function-pointer array with brace initializer `int (*fp[2])(int) = {inc, dbl};` rejected ('expected C expression'); global form works | — |
 | bug-c-pointer-to-multidim-array-declarator | C | 30 | bug | C declarator `int (*p)[A][B]` (pointer to a >=2-D array) not parsed — blocks using a partial multi-dim index that leaves >=2 dims | — |
+| bug-c-sizeof-array-type-ignores-extent | C | 35 | bug | C `sizeof(int[10])` returns the element size (4), not 40 — sizeof of an array TYPE-NAME ignores the extent (silent wrong value) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -1125,6 +1127,8 @@ _none_
 - [p 40] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [C] test-sqlite-external-vs-self-compiled-parity
+- [p 35] [C] bug-c-local-fnptr-array-initializer
+- [p 35] [C] bug-c-sizeof-array-type-ignores-extent
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-float-register-temporaries
