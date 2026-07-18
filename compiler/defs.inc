@@ -1453,6 +1453,12 @@ var
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;
   InitProcCount : Integer;
+  { COM-interface `as`-cast temps materialised in the MAIN program body (CurProc<0,
+    so skGlobal — no scope-exit cleanup). Each is AddRef'd on creation and released
+    at program exit, matching FPC's end-of-main temp lifetime
+    (bug-pascal-mainbody-ascast-temp-finalization-timing). }
+  MainBodyIntfTempSym : array[0..1023] of Integer;
+  MainBodyIntfTempCount : Integer;
   SourceFileDir : AnsiString;
   { Base name (no dir, no ext) of the source file currently being lexed; used to
     resolve the `*` in $R *.lfm / $R *.res to the current unit. }

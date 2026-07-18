@@ -860,6 +860,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_iatl26)" = "$$(printf 'in P w=107\nalive v=7\ndestroy 7\ndone')"
 	./$(COMPILER) test/test_interface_ascast_dead_branch_temp.pas /tmp/test_iadb26
 	test "$$(/tmp/test_iadb26)" = "120"
+	./$(COMPILER) test/test_interface_mainbody_ascast_temp.pas /tmp/test_imbt26
+	test "$$(/tmp/test_imbt26)" = "$$(printf 'cast=107\nafter nil\ndestroy 7')"
 	./$(COMPILER) test/test_dynarray_of_fixed_array.pas /tmp/test_dynarray_of_fixed_array26
 	test "$$(/tmp/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas /tmp/test_class_managed_fields_finalize26

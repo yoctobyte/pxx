@@ -2667,6 +2667,56 @@ begin
   Result := callNode;
 end;
 
+procedure EmitMainBodyIntfTempRelease;
+{ Release the COM-interface `as`-cast temps materialised in the MAIN program body
+  (skGlobal, AddRef'd on creation by IRMaterializeIntfCast) at program exit. FPC
+  keeps such an expression temp alive to end-of-main, so its object is destroyed
+  AFTER the last body statement — not early when the source `iwX := nil` drops the
+  global var's reference. pxx modelled the temp as a plain skGlobal alias (no
+  retain, no release), so the object died at `iwX := nil` and the differential
+  oracle saw a wrong exit checksum (bug-pascal-mainbody-ascast-temp-finalization
+  -timing). Emitted after the main body, before EmitExit; PXXIntfRelease is
+  nil-safe, so an as-cast whose branch never ran (nil BSS slot) is harmless. }
+var i, pi, seqNode, lastSeq, callNode, aAddr, arg0, arg1, identNode, ci, sym: Integer;
+begin
+  if MainBodyIntfTempCount = 0 then Exit;
+  pi := FindProc('PXXIntfRelease');
+  if pi < 0 then Exit;
+  seqNode := AllocNode(AN_SEQ);
+  lastSeq := seqNode;
+  for i := 0 to MainBodyIntfTempCount - 1 do
+  begin
+    sym := MainBodyIntfTempSym[i];
+    ci := Syms[sym].RecName - REC_UCLASS_BASE;
+    identNode := AllocNode(AN_IDENT);
+    ASTIVal[identNode] := sym;
+    ASTTk[identNode] := Ord(Syms[sym].TypeKind);
+    aAddr := AllocNode(AN_ADDR);            { @slot }
+    ASTLeft[aAddr] := identNode;
+    ASTTk[aAddr] := Ord(tyPointer);
+    arg0 := AllocNode(AN_ARG);
+    ASTLeft[arg0] := aAddr;
+    arg1 := AllocNode(AN_ARG);
+    ASTLeft[arg1] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[arg1]] := ci;
+    ASTTk[ASTLeft[arg1]] := Ord(tyNativeInt);
+    ASTRight[arg0] := arg1;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := pi;
+    ASTTk[callNode] := Ord(Procs[pi].RetType);
+    ASTLeft[callNode] := arg0;
+    if ASTLeft[lastSeq] = -1 then
+      ASTLeft[lastSeq] := callNode
+    else
+    begin
+      ASTRight[lastSeq] := AllocNode(AN_SEQ);
+      lastSeq := ASTRight[lastSeq];
+      ASTLeft[lastSeq] := callNode;
+    end;
+  end;
+  CompileAST(seqNode);
+end;
+
 function RegisterLineEndingConst: Integer;
 { Intern System.LineEnding as an ordinary untyped string constant and return its index,
   so every later use is just a frozen string literal. Called lazily, only once nothing
@@ -25301,6 +25351,7 @@ begin
             GetTokenStrFromRaw(GotoLabelNOff[i], GotoLabelNLen[i]));
     end;
 
+  EmitMainBodyIntfTempRelease;
   EmitExit(0);
   ApplyCallFixups;
 end;
