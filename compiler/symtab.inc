@@ -2566,9 +2566,10 @@ begin
 end;
 
 { -O3 float loop residency (x86-64): if idx is a tyDouble local/param currently
-  resident in xmm8/xmm9, return that xmm number (8 or 9), else 0. Only bodies
-  proven call-free enable this (FloatResidencyAssign), so the caller-saved
-  registers are never clobbered mid-body. }
+  resident in xmm8..xmm13, return that xmm number, else 0. Assigned by
+  UnifiedResidencyAssign; the registers are callee-saved in the pxx internal
+  ABI (§5b) and the boundary wraps cover extern/indirect/coswitch/longjmp, so
+  the cache is never stale mid-body. }
 function FloatResidentXmmOf(idx: Integer): Integer;
 var k: Integer;
 begin
@@ -2600,7 +2601,7 @@ begin
   if TypeIsFloat(tk) then
   begin
     { -O3 float loop residency: the value lives in xmm8/xmm9 (call-free body,
-      tyDouble only — see FloatResidencyAssign). Same contract as a frame
+      tyDouble only — see UnifiedResidencyAssign). Same contract as a frame
       load: value in xmm0. }
     rreg := FloatResidentXmmOf(idx);
     if rreg <> 0 then
@@ -6040,7 +6041,7 @@ begin
   end;
   { pxx internal ABI (optimization-architecture.md §5b): xmm8..xmm13 are
     callee-saved save-iff-used — restore the caller's registers from the slots
-    FloatResidencyAssign reserved. Same every-return-path contract as the
+    UnifiedResidencyAssign reserved. Same every-return-path contract as the
     r14/r15 restore above; the float result (if any) is already bridged to rax. }
   for i := 0 to FrResidentCount - 1 do
   begin

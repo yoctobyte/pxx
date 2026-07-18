@@ -5926,35 +5926,58 @@ begin
                  (not ScratchSafeSubtree(right));
 end;
 
-{ -O3 W2 slice: loop-local register residency. Per main body, find the
-  loop-hottest scalar locals/params (access counts inside backward-jump loop
-  ranges) and keep up to two resident in r12/r13 — extending the r14/r15
-  regcall residency mechanism (same choke points: EmitLoadVar/EmitLoadVarRcx
-  read the register, EmitStoreVar dual-writes + refreshes, EmitProcEpilog
-  restores the caller's registers, and the IR_EXC_ENTER landing refresh
-  covers the longjmp rollback — see
-  bug-a-o2-resident-param-stale-after-longjmp). The payoff target is the
-  loop-carried store-forward chain through the frame slot (i := i + 1 in a
-  hot loop), which OoO cannot hide — unlike plain L1 reloads (the measured
-  regcall phase-2 rejection). Mutually exclusive with the W1 r12/r13 callee
-  scratch: CalleeScratchAssign bails when residency claimed the registers. }
-procedure LoopResidencyAssign;
-var k, j, t, best, bestCnt, nextReg, saveOff, lbl: Integer;
-    sym: array[0..1] of Integer;
-    picked: Integer;
+{ -O3 W2/W3: UNIFIED loop residency — int AND float in one pass (the
+  feature-opt-pxx-internal-abi-unified-residency design). Per main body, one
+  tally over backward-jump loop ranges ranks scalar locals/params by access
+  count; each pick is assigned a free register OF ITS CLASS:
+
+    GPR pool: r12..r15 minus the slots regcall param residency (-O2) already
+      claimed — so up to 4 int residents in a body without register params
+      (was: fixed r12/r13, max 2). Threshold stays > 3 loop accesses (the
+      registers are scarce and the loop-carried store-forward chain is the
+      payoff; plain L1 reloads measured as free — the regcall phase-2
+      rejection). rbx stays out: it is baked-in scratch across the emitters
+      (EmitwriteIntW's div, inline heap-alloc, float-to-str).
+    XMM pool: xmm8..xmm13 (pxx internal ABI §5b, callee-saved save-iff-used),
+      tyDouble only — a tySingle cache would hold the unrounded double and
+      diverge from a frame reload's narrow-then-widen roundtrip. Any loop
+      access (count > 0) qualifies: 6 slots, and even a loop-invariant read
+      wins from residency.
+
+  Same choke points as regcall residency: EmitLoadVar/EmitLoadVarRcx read the
+  register, EmitStoreVar dual-writes + refreshes, EmitProcEpilog restores the
+  caller's registers, the IR_EXC_ENTER landing refresh covers the longjmp
+  rollback, and the §5b boundary wraps cover extern/indirect/coswitch sites
+  for the XMM class. Inline-asm bodies bail (user asm owns its registers).
+  Mutually exclusive with the W1 r12/r13 callee scratch: CalleeScratchAssign
+  bails when residency claimed the registers (int picks fill lowest-first, so
+  any int resident occupies r12). }
+procedure UnifiedResidencyAssign;
+var k, j, t, best, bestCnt, lbl, si, nsyms: Integer;
+    islot, fslot, nFree, reg, saveOff: Integer;
+    FreeGpr: array[0..3] of Integer;
     Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
     CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
-    nsyms, si: Integer;
-    inLoop: Boolean;
+    seen: Boolean;
 begin
+  FrResidentCount := 0;
   if OptLevel < 3 then Exit;
   if CurProc < 0 then Exit;
   if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
   if CurProcIsGenerator or CurProcIsStackless then Exit;
-  if RcResidentCount > 2 then Exit;   { no free slot }
   for k := 0 to IRCount - 1 do
     if IRKind[k] = IR_ASM then Exit;
+  { Free GPR slots: r12..r15 minus regcall-claimed (RegcallAssignResidency ran
+    first and may hold params in r14/r15). }
+  nFree := 0;
+  for reg := 12 to 15 do
+  begin
+    seen := False;
+    for k := 0 to RcResidentCount - 1 do
+      if RcResidentReg[k] = reg then seen := True;
+    if not seen then begin FreeGpr[nFree] := reg; Inc(nFree); end;
+  end;
   { Tally LOAD/STORE_SYM references that sit inside at least one loop range
     (IR_JUMP to an earlier IR_LABEL). Two nested passes over the flat IR:
     outer finds backward jumps, inner credits the accesses in the range. }
@@ -5973,109 +5996,6 @@ begin
         begin
           si := IRA[j];
           if si < 0 then Continue;
-          inLoop := False;
-          for best := 0 to nsyms - 1 do
-            if CSyms[best] = si then begin Inc(Counts[best]); inLoop := True; Break; end;
-          if (not inLoop) and (nsyms < MAX_LOOPSYM_SCAN) then
-          begin
-            CSyms[nsyms] := si; Counts[nsyms] := 1; Inc(nsyms);
-          end;
-        end;
-    end;
-  if nsyms = 0 then Exit;
-  { Filter to residency-eligible syms and pick the top two by count. }
-  picked := 0;
-  while picked < 2 do
-  begin
-    best := -1; bestCnt := 3;   { threshold: > 3 loop accesses }
-    for k := 0 to nsyms - 1 do
-      if Counts[k] > bestCnt then
-      begin
-        si := CSyms[k];
-        if Syms[si].IsArray then Continue;
-        if not ((Syms[si].Kind = skLocal) or
-                ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Continue;
-        if not RegcallScalarType(Syms[si].TypeKind) then Continue;
-        if ResidentRegOf(si) <> 0 then Continue;
-        inLoop := False;   { reuse as addr-taken flag }
-        for j := 0 to IRCount - 1 do
-          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
-          begin inLoop := True; Break; end;
-        if inLoop then Continue;
-        best := k; bestCnt := Counts[k];
-      end;
-    if best < 0 then Break;
-    sym[picked] := CSyms[best];
-    Counts[best] := 0;
-    Inc(picked);
-  end;
-  if picked = 0 then Exit;
-  nextReg := 12;
-  for k := 0 to picked - 1 do
-  begin
-    if RcResidentCount >= 4 then Break;
-    si := sym[k];
-    FrameSize := AlignTo(FrameSize + 8, 8);
-    saveOff := -FrameSize;
-    EmitB($4C); EmitB($89); EmitB($85 or ((nextReg - 8) shl 3)); EmitI32(saveOff); { mov [rbp+off], r12/r13 }
-    EmitLoadVar(si);                                        { rax = canonical frame value (register not yet listed) }
-    EmitB($49); EmitB($89); EmitB($C0 or (nextReg - 8));    { mov r12/r13, rax }
-    RcResidentSym[RcResidentCount] := si;
-    RcResidentReg[RcResidentCount] := nextReg;
-    RcResidentSaveOff[RcResidentCount] := saveOff;
-    Inc(RcResidentCount);
-    Inc(nextReg);
-  end;
-end;
-
-{ -O3 W2 slice: FLOAT loop residency in xmm8..xmm13. Under the pxx internal
-  ABI (optimization-architecture.md §5b) these are CALLEE-SAVED save-iff-used,
-  so residents survive internal pxx calls — call-bearing bodies are allowed.
-  The remaining barriers are handled at the call sites (external calls and
-  IR_CALL_IND refresh via FloatResidencyRefreshAll; IR_EXC_ENTER refreshes on
-  the landing pad). Only inline-asm bodies stay excluded: user asm may write
-  xmm8-15 without the save-iff-used prologue contract. tyDouble syms only — a
-  tySingle cache would hold the unrounded double and diverge from a frame
-  reload's narrow-then-widen roundtrip. }
-function FloatResidencyBodyAllowed: Boolean;
-var k: Integer;
-begin
-  FloatResidencyBodyAllowed := False;
-  for k := 0 to IRCount - 1 do
-    if IRKind[k] = IR_ASM then Exit;
-  FloatResidencyBodyAllowed := True;
-end;
-
-procedure FloatResidencyAssign;
-var k, j, t, best, bestCnt, lbl, picked, si, nsyms: Integer;
-    Counts: array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
-    CSyms:  array[0..MAX_LOOPSYM_SCAN - 1] of Integer;
-    seen, addrTaken: Boolean;
-begin
-  FrResidentCount := 0;
-  if OptLevel < 3 then Exit;
-  if CurProc < 0 then Exit;
-  if RcSuppressAssign then Exit;
-  if TargetArch <> TARGET_X86_64 then Exit;
-  if CurProcIsGenerator or CurProcIsStackless then Exit;
-  if not FloatResidencyBodyAllowed then Exit;
-  { Tally tyDouble LOAD/STORE_SYM accesses inside backward-jump loop ranges
-    (same walk as LoopResidencyAssign). }
-  nsyms := 0;
-  for k := 0 to IRCount - 1 do
-    if IRKind[k] = IR_JUMP then
-    begin
-      lbl := IRA[k];
-      t := -1;
-      for j := 0 to k - 1 do
-        if (IRKind[j] = IR_LABEL) and (IRIVal[j] = lbl) then begin t := j; Break; end;
-      if t < 0 then Continue;
-      for j := t to k do
-        if (IRKind[j] = IR_LOAD_SYM) or (IRKind[j] = IR_STORE_SYM) then
-        begin
-          si := IRA[j];
-          if si < 0 then Continue;
-          if Syms[si].TypeKind <> tyDouble then Continue;
           seen := False;
           for best := 0 to nsyms - 1 do
             if CSyms[best] = si then begin Inc(Counts[best]); seen := True; Break; end;
@@ -6086,13 +6006,11 @@ begin
         end;
     end;
   if nsyms = 0 then Exit;
-  picked := 0;
-  { With FR_RESIDENT_MAX xmm regs (xmm8..xmm13) free in a call-free float body,
-    admit any tyDouble sym touched in a loop range (Counts>0), ranked by static
-    access count. The old >3 threshold was tuned for a 2-register budget (spend
-    a scarce reg only on the hottest); with 6 slots a loop-invariant read (static
-    count 1, but reloaded every iteration) still wins from residency. }
-  while picked < FR_RESIDENT_MAX do
+  { Ranked selection: repeatedly take the hottest remaining eligible sym whose
+    class still has a free register. Within a class the descending-count order
+    fills the lowest register first (r12 before r13, xmm8 before xmm9). }
+  islot := 0; fslot := 0;
+  while (islot < nFree) or (fslot < FR_RESIDENT_MAX) do
   begin
     best := -1; bestCnt := 0;
     for k := 0 to nsyms - 1 do
@@ -6102,31 +6020,59 @@ begin
         if Syms[si].IsArray then Continue;
         if not ((Syms[si].Kind = skLocal) or
                 ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then Continue;
-        addrTaken := False;
+        if Syms[si].TypeKind = tyDouble then
+        begin
+          if fslot >= FR_RESIDENT_MAX then Continue;
+        end
+        else
+        begin
+          if islot >= nFree then Continue;
+          if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
+          if not RegcallScalarType(Syms[si].TypeKind) then Continue;
+          if ResidentRegOf(si) <> 0 then Continue;
+          if RcResidentCount >= 4 then Continue;
+        end;
+        seen := False;   { addr-taken flag }
         for j := 0 to IRCount - 1 do
           if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
-          begin addrTaken := True; Break; end;
-        if addrTaken then Continue;
+          begin seen := True; Break; end;
+        if seen then Continue;
         best := k; bestCnt := Counts[k];
       end;
     if best < 0 then Break;
     si := CSyms[best];
     Counts[best] := 0;
-    { pxx internal ABI, save-iff-used: this body claims xmm(8+picked), so save
-      the caller's register to a reserved frame slot; EmitProcEpilog restores
-      it on every return path (same contract as the r14/r15 regcall save). }
     FrameSize := AlignTo(FrameSize + 8, 8);
-    FrResidentSaveOff[picked] := -FrameSize;
-    EmitB($F2); EmitB($44); EmitB($0F); EmitB($11);
-    EmitB($85 or (picked shl 3)); EmitI32(FrResidentSaveOff[picked]); { movsd [rbp+saveoff], xmm(8+picked) }
-    { Init the cache from the frame slot (params were spilled by the prologue;
-      an uninitialized local is garbage in BOTH places — consistently). }
-    EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
-    EmitB($85 or (picked shl 3)); EmitI32(Syms[si].Offset);   { movsd xmm(8+picked), [rbp+off] }
-    FrResidentSym[picked] := si;
-    Inc(picked);
+    saveOff := -FrameSize;
+    if Syms[si].TypeKind = tyDouble then
+    begin
+      { pxx internal ABI, save-iff-used: this body claims xmm(8+fslot), so save
+        the caller's register to a reserved frame slot; EmitProcEpilog restores
+        it on every return path (same contract as the GPR save below). }
+      FrResidentSaveOff[fslot] := saveOff;
+      EmitB($F2); EmitB($44); EmitB($0F); EmitB($11);
+      EmitB($85 or (fslot shl 3)); EmitI32(saveOff);          { movsd [rbp+saveoff], xmm(8+fslot) }
+      { Init the cache from the frame slot (params were spilled by the prologue;
+        an uninitialized local is garbage in BOTH places — consistently). }
+      EmitB($F2); EmitB($44); EmitB($0F); EmitB($10);
+      EmitB($85 or (fslot shl 3)); EmitI32(Syms[si].Offset);  { movsd xmm(8+fslot), [rbp+off] }
+      FrResidentSym[fslot] := si;
+      Inc(fslot);
+      FrResidentCount := fslot;
+    end
+    else
+    begin
+      reg := FreeGpr[islot];
+      EmitB($4C); EmitB($89); EmitB($85 or ((reg - 8) shl 3)); EmitI32(saveOff); { mov [rbp+saveoff], r12..r15 }
+      EmitLoadVar(si);                                    { rax = canonical frame value (register not yet listed) }
+      EmitB($49); EmitB($89); EmitB($C0 or (reg - 8));    { mov r12..r15, rax }
+      RcResidentSym[RcResidentCount] := si;
+      RcResidentReg[RcResidentCount] := reg;
+      RcResidentSaveOff[RcResidentCount] := saveOff;
+      Inc(RcResidentCount);
+      Inc(islot);
+    end;
   end;
-  FrResidentCount := picked;
 end;
 
 { pxx internal ABI (§5b): reserve this body's 6-slot xmm8..13 pool save area.
@@ -6296,8 +6242,7 @@ begin
   { After IROptimize so the fire-scan sees the final IR (inline splices can add
     call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
     land ahead of the body code. }
-  LoopResidencyAssign;
-  FloatResidencyAssign;
+  UnifiedResidencyAssign;
   FloatPoolBoundaryAssign;
   CalleeScratchAssign;
   if DumpIR then IRDump;

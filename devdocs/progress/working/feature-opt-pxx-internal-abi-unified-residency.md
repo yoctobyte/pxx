@@ -133,3 +133,18 @@ if raised) BEFORE code, so every backend + any hand-asm honors it.
   and residency verified firing (byte-scan: pool saves/loads + movaps reads).
   REMAINING: unified int+float pass over widened pools; aarch64 mirror
   (V8–V15 free per AAPCS64); promote to -O2 after full matrix.
+
+- 2026-07-18 (fable-O) **Slice 2 LANDED — unified int+float residency pass
+  (x86-64, -O3):** `LoopResidencyAssign` + `FloatResidencyAssign` merged into
+  `UnifiedResidencyAssign` (one loop-range tally, one ranked selection, per-class
+  register pools). GPR pool widened: r12–r15 minus regcall-claimed slots — up to
+  4 int residents in bodies without register params (was fixed r12/r13, max 2).
+  rbx stays out (baked-in scratch: EmitwriteIntW div, inline heap-alloc,
+  float-to-str — the latter push/pops r13 so it is resident-safe). Int
+  threshold stays >3, float stays >0. Int picks fill lowest-first so any int
+  resident occupies r12 → CalleeScratchAssign mutual-exclusion guard unchanged.
+  Gates: self-host fixedpoint byte-identical, quick GREEN, C 220/220,
+  test-nilpy, .bas, mandelbrot/nbody checksums unchanged all tiers, O3-built
+  compiler output byte-identical, fstress/fext stress identical across tiers.
+  Benches (-O3 vs -O2): 4-hot-int loop **1.35x**, mixed 4-int+3-double loop
+  **1.66x**; self-compile parity (memory-bound). NEXT: aarch64 mirror.
