@@ -196,3 +196,17 @@ an iterative worklist, out of scope here.
 
 **REMAINING:** Syms (131072×31, chokepoint = the 5 Alloc* in symtab.inc), UField
 (262144×26), Code/Data/CPrepChars buffers.
+
+## Update 2026-07-18 (cont. 2) — Syms + UField DONE
+
+- **Syms** (31 arrays, `0af554f2`) — EnsureSymCapacity at the 5 Alloc* chokepoints.
+  Grows from 0 (no reserve). BSS 215→186 MB (−29 MB). All frontends validated.
+- **UField** (28 arrays incl 2-D ArrDim, `e71df9df`) — EnsureUFieldCapacity at
+  AddUField's three write points (single append + inherited-field relocation). BSS
+  186→146 MB (−40 MB). C-conformance 220/220, no C regressions.
+- **Cumulative IR+AST+tokens+syms+ufield: 365 → 146 MB BSS (−219 MB), 5 caps gone.**
+- Found (unrelated, filed): [[bug-c-huge-struct-high-field-offset-miscompile]] — a C
+  field past 64 KB offset miscompiles (16-bit wrap suspect), pre-existing.
+
+**REMAINING:** Code/Data/CPrepChars byte buffers (held-address audit matters), label
+arrays (MAX_IR-sized), smaller MAX_ tables (CTypedef/CPrep*/DBG_VARS).
