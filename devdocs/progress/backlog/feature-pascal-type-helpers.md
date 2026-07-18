@@ -66,3 +66,11 @@ Consts in helper bodies were already global-scoped and work. Remaining:
 TARGET-type-name receivers (UInt32.GetSignMask), rvalue receivers, class
 helpers — and generics.defaults' methods NAMED after type keywords
 (class function Integer(constref ...)), which is the next real wall.
+
+## v3 slice landed 2026-07-18 (a379d016): `type helper for` spelling
+`type helper for T` now parses as an alias of `record helper for T` (parser type
+-section dispatch, mirrors the record-helper branch; self-host byte-identical).
+Instance methods + statics dispatch through the existing helper machinery. Test:
+test_type_helper_for_spelling.pas. **Remaining v3:** target-type-name receivers
+(`UInt32.GetSignMask`, `UInt32.SIZED_SIGN_MASK[i]`), rvalue receivers (`'abc'.ToLower`,
+`F().ToLower` — need a materialized temp), class helpers.
