@@ -176,7 +176,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | B | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (20)
+## rainy-day (21)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -197,6 +197,7 @@ _none_
 | feature-stackful-coro-port | A | 50 | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | 50 | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | goal-compile-fpc-compiler | A | 50 | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
+| goal-compile-linux-tinyconfig | C | 50 | goal | 🗼 Lighthouse — boot a Linux tinyconfig kernel built with PXX's C frontend | — |
 | idea-demo-app-candidates | E | 50 | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
