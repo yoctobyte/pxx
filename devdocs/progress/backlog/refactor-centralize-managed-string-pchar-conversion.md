@@ -48,6 +48,21 @@ a clean lookup. Mirror that.
   method has a body (the impl re-registers via the normal path), but a decl-only PChar
   method (abstract/interface/virtual-via-base) would mis-lower `AnsiString(ref.Method())`.
 
+## Status after the reachable-instance audit (2026-07-18)
+
+**The reachable instances are all FIXED** (the 5 point-fixes above were the slices).
+Verified: instance-method AND class-method PChar-result casts (`AnsiString(o.GetP())`,
+`AnsiString(TObj.GetPC())`) work — a method **with a body** resolves to the impl's
+procIdx, which the normal registration path populates. So the 3 method-decl sites
+(`18447`/`19128`/`19649`) are **defensive-only and NOT reachable by a normal call** — no
+failing test is constructible. Deliberately **not** patched: adding metadata there would
+be self-host-identical with no test, and would set a shared field from a possibly-stale
+`LastTypePointerElemTk` that cannot be verified — which violates the "added data must be
+correct" rule. Leave them until a real reachable case appears.
+
+Net: **do-with-a-test-when-needed.** This ticket is now forward insurance + documentation
+of the pattern, not a list of open bugs. The bleeding is closed.
+
 ## The plan — additive, fallback-preserving, incremental (LOW RISK)
 
 The whole reason this is safe: **add a stored fast-path, keep the old shape-walk as a
