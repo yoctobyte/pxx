@@ -68,6 +68,31 @@ Bonus door pxx uniquely can open later: because it compiles the WHOLE internal
 program, the save-set / assignment can go INTERPROCEDURAL (a callee informed by
 its callers) — impossible for SysV/Windows compiling TUs separately. Not v1.
 
+## aarch64: mostly FREE — no custom ABI needed
+
+64-bit float codegen SHARES most of this logic across x86-64 and aarch64 (ARM's
+V0–V31 are the XMM equivalent; scalar `Dn`/`Sn` = XMM low-lane). Differences are
+minor (encoding; FMA is baseline on ARM; no 80-bit/x87 — `Extended` = double).
+Push the shared parts down into the IR/residency layer, keep only encoding
+per-backend.
+
+Crucially, **AAPCS64 already makes `V8–V15` (low 64 bits) callee-saved.** So on
+aarch64, float residency survives calls under the STANDARD ABI — the custom
+callee-saved convention in piece #1 is an **x86-64-only** fix (SysV made all XMM
+volatile). On ARM just use V8–V15 as the ABI intends. Plus 32 V + 31 X registers
+= far lower register pressure / more residents. Complex: ARMv8.3 `FCMLA`/`FCADD`
+(optional) or base NEON. `FloatResidencyAssign` is x86-64-only today; the aarch64
+mirror is simpler than x86 precisely because the ABI hands over callee-saved
+float for free.
+
+## CPU-feature baseline (x86-64)
+
+Ratified in discussion: **v2 minimal** (SSE3/SSSE3/SSE4 — universal ~15 yrs;
+gives `addsubpd`/`movddup` for complex). **v1 ignored** (early buggy 64-bitters).
+`--arch v3` (AVX2/FMA) as an opt-in for known targets. **No runtime
+multiversioning, no auto-vectorizer** — hand-roll the few hot kernels (mandelbrot/
+raytracer) in asm instead. See [[feature-opt-arch-level-and-dispatch]] if raised.
+
 ## Prereq: ratify the ABI
 
 Defining a non-SysV pxx internal convention is an ABI decision — write it in
