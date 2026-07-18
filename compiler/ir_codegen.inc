@@ -1784,6 +1784,54 @@ begin
   end;
 end;
 
+{ Slice 2: may this argument's evaluation be DEFERRED until after the complex
+  siblings ran? True for immutable leaves (consts, proc addrs) and for loads
+  of locals/by-value params whose address is never taken in this body — no
+  pointer to them exists, so no call a sibling makes can write them (a nested-
+  routine capture would surface as an IR_LEA at its call sites). Globals and
+  by-ref derefs stay position-ordered: any call can write those. }
+function ArgSymAddrClean(si: Integer): Boolean;
+var k: Integer; taken: Boolean;
+begin
+  for k := 0 to PaScanCount - 1 do
+    if PaScanSym[k] = si then
+    begin
+      ArgSymAddrClean := not PaScanTaken[k];
+      Exit;
+    end;
+  taken := False;
+  for k := 0 to IRCount - 1 do
+    if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = si) then
+    begin taken := True; Break; end;
+  if PaScanCount < 64 then
+  begin
+    PaScanSym[PaScanCount] := si;
+    PaScanTaken[PaScanCount] := taken;
+    Inc(PaScanCount);
+  end
+  else
+    taken := True;   { cache full: safe answer }
+  ArgSymAddrClean := not taken;
+end;
+
+function CallArgDeferrable(n: Integer): Boolean;
+var si: Integer;
+begin
+  CallArgDeferrable := False;
+  if not CallArgDirectLoadable(n) then Exit;
+  case IRKind[n] of
+    IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA, IR_PROCADDR:
+      CallArgDeferrable := True;
+    IR_LOAD_SYM:
+      begin
+        si := IRA[n];
+        if ((Syms[si].Kind = skLocal) or
+            ((Syms[si].Kind = skParam) and not Syms[si].IsRef)) then
+          CallArgDeferrable := ArgSymAddrClean(si);
+      end;
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
@@ -1793,7 +1841,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     size: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
-    argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx: Integer;
+    argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
@@ -4006,36 +4054,65 @@ begin
                            (not ProcVariadic[procIdx]) and
                            (Procs[procIdx].ParamCount >= 1) and
                            (Procs[procIdx].ParamCount <= 6);
-            { -O3 regcall phase 3: when EVERY argument is a direct-loadable
-              leaf (see CallArgDirectLoadable) and none needs a tyAnsiString
-              conversion helper, skip the push/pop round-trip entirely — eval
-              left-to-right, mov each into its argument register. }
-            skipAllArgs := (OptLevel >= 3) and skipLastArg;
-            if skipAllArgs then
+            { -O3 regcall phase 3 (slices 1+2): DEFERRABLE arguments (immutable
+              leaves + loads of addr-clean locals/params, CallArgDeferrable)
+              skip the push/pop round-trip. Non-deferrable ("ordered") args —
+              complex subtrees, globals, by-ref derefs, conversion cases —
+              evaluate in source order with their values parked on the stack
+              (Pascal left-to-right effects hold); the LAST ordered arg stays
+              in rax and moves straight to its register; the rest pop off in
+              reverse; then the deferred leaves load directly (their emission
+              is rax/xmm0-only, so the already-loaded registers survive, and
+              an addr-clean sym cannot have been written by the ordered args'
+              calls). All-deferrable = slice 1 (zero stack traffic);
+              none-deferrable = exactly the old push/pop + last-arg collapse. }
+            skipAllArgs := False;
+            lastOrd := -1;
+            if (OptLevel >= 3) and skipLastArg then
             begin
-              argNode := IRB[node]; i := 0;
-              while argNode <> -1 do
+              argNode := IRB[node]; nArgs := 0;
+              while (argNode <> -1) and (nArgs < Procs[procIdx].ParamCount) do
               begin
-                if not CallArgDirectLoadable(IRA[argNode]) then
-                begin skipAllArgs := False; Break; end;
-                if (i < Procs[procIdx].ParamCount) and
-                   (Procs[procIdx].Params[i].TypeKind = tyAnsiString) and
-                   ((IntToTypeKind(IRTk[argNode]) = tyString) or
-                    (IntToTypeKind(IRTk[argNode]) = tyChar)) then
-                begin skipAllArgs := False; Break; end;
+                argNodeArr[nArgs] := argNode; Inc(nArgs);
                 argNode := IRB[argNode];
-                Inc(i);
               end;
-              if skipAllArgs and (i <> Procs[procIdx].ParamCount) then
-                skipAllArgs := False;
+              if (argNode = -1) and (nArgs = Procs[procIdx].ParamCount) then
+              begin
+                skipAllArgs := True;
+                for i := 0 to nArgs - 1 do
+                begin
+                  argIsSse[i] := CallArgDeferrable(IRA[argNodeArr[i]]) and
+                                 (not ((Procs[procIdx].Params[i].TypeKind = tyAnsiString) and
+                                       ((IntToTypeKind(IRTk[argNodeArr[i]]) = tyString) or
+                                        (IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar))));
+                  if not argIsSse[i] then lastOrd := i;
+                end;
+              end;
             end;
             if skipAllArgs then
             begin
-              argNode := IRB[node]; i := 0;
-              while argNode <> -1 do
-              begin
-                IREmitNode(IRA[argNode]);                { rax = leaf value }
-                case i of
+              { ordered args: source order; push all but the last }
+              for i := 0 to nArgs - 1 do
+                if not argIsSse[i] then
+                begin
+                  IREmitNode(IRA[argNodeArr[i]]);
+                  if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
+                  begin
+                    if IntToTypeKind(IRTk[argNodeArr[i]]) = tyString then
+                      EmitAnsiStrFromInlineString
+                    else if IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar then
+                    begin
+                      EmitB($50);                                     { push rax (char code) }
+                      EmitB($48); EmitB($89); EmitB($E6);             { mov rsi, rsp }
+                      EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1);  { mov rdi, 1 }
+                      IREmitCodeCall(AnsiStrFromLiteralAddr);
+                      EmitB($59);                                     { pop rcx (restore stack) }
+                    end;
+                  end;
+                  if i <> lastOrd then EmitB($50);                    { push rax }
+                end;
+              if lastOrd >= 0 then
+                case lastOrd of
                   0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
                   1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
                   2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
@@ -4043,10 +4120,30 @@ begin
                   4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
                   5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
                 end;
-                argNode := IRB[argNode];
-                Inc(i);
-              end;
-              nArgs := i;
+              for i := nArgs - 1 downto 0 do
+                if (not argIsSse[i]) and (i <> lastOrd) then
+                  case i of
+                    0: EmitB($5F); { pop rdi }
+                    1: EmitB($5E); { pop rsi }
+                    2: EmitB($5A); { pop rdx }
+                    3: EmitB($59); { pop rcx }
+                    4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                    5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                  end;
+              { deferred leaves: rax/xmm0-only emissions, loaded last }
+              for i := 0 to nArgs - 1 do
+                if argIsSse[i] then
+                begin
+                  IREmitNode(IRA[argNodeArr[i]]);
+                  case i of
+                    0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+                    1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
+                    2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
+                    3: begin EmitB($48); EmitB($89); EmitB($C1); end; { mov rcx, rax }
+                    4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
+                    5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                  end;
+                end;
             end
             else
             begin
@@ -6332,6 +6429,7 @@ begin
   { After IROptimize so the fire-scan sees the final IR (inline splices can add
     call-bearing BINOPs); still before IREmitMachineCode so the r12/r13 saves
     land ahead of the body code. }
+  PaScanCount := 0;   { per-body addr-taken verdict cache (regcall phase 3) }
   UnifiedResidencyAssign;
   UnifiedResidencyAssignA64;
   FloatPoolBoundaryAssign;

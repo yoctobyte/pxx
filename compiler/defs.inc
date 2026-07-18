@@ -998,6 +998,14 @@ var
   FrResidentCount : Integer;                 { -O3 float loop residency: 0..FR_RESIDENT_MAX tyDouble locals/params resident in xmm8..xmm13 for the whole body. xmm8-15 are CALLEE-SAVED in the pxx internal ABI (optimization-architecture.md §5b), save-iff-used: each assigned register's caller value is saved to a frame slot in the prologue (UnifiedResidencyAssign) and restored in every EmitProcEpilog path, so residents survive internal pxx calls. External/indirect calls (SysV clobbers all XMM) refresh residents from their authoritative frame slots after the call (FloatResidencyRefreshAll); the IR_EXC_ENTER landing pad refreshes them after a longjmp rollback. Frame slot stays authoritative (stores dual-write); register slot i lives in xmm(8+i). }
   FrResidentSym   : array[0..FR_RESIDENT_MAX - 1] of Integer;  { Syms[] index of each xmm-resident sym (slot i -> xmm(8+i)) }
   FrResidentSaveOff : array[0..FR_RESIDENT_MAX - 1] of Integer; { rbp offset of the caller-xmm(8+i) save slot (save-iff-used) }
+  { -O3 regcall phase 3 slice 2: per-body cache of "is this sym's address ever
+    taken in the current body's IR" verdicts (IR_LEA/IR_SLOTADDR scan). An
+    addr-clean local/param cannot be written by any call a sibling argument
+    makes, so its load may be DEFERRED past complex arguments. Reset per
+    CompileAST body; full cache -> treat as taken (safe). }
+  PaScanSym   : array[0..63] of Integer;
+  PaScanTaken : array[0..63] of Boolean;
+  PaScanCount : Integer;
   FxSaveOn   : Boolean;  { -O3 x86-64 (pxx internal ABI §5b): this body reserved a 6-slot frame area for the xmm8..13 pool at ABI boundaries. The callee-saved discipline is invisible to SysV externs, indirect targets, coroutine switches and longjmp unwinds (skipped epilogues), so the pool is saved to these slots before each such boundary (extern call, IR_CALL_IND, IR_COSWITCH, try-entry) and restored right after (or on the IR_EXC_ENTER landing pad) — preserving residents that belong to ANY frame up-stack, not just this body's. Set per body by FloatPoolBoundaryAssign; False for -O0/-O2 / non-x86-64 / inline-asm bodies, so those stay byte-identical. }
   FxSaveBase : Integer;  { rbp offset of slot 0 (xmm8); slot k = FxSaveBase + 8*k }
   OptLevelExplicit : Boolean;  { true once an explicit -O flag was seen. -g (DWARF Tier-1) defaults to -O0 for debuggable 1:1 codegen (inline/opt would relocate or elide lines/functions, breaking breakpoints) UNLESS the user explicitly picked an -O level. }

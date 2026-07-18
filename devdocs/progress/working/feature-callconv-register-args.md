@@ -267,3 +267,27 @@ self-host (the -O3 corpus is where -O3-only emission breaks surface).
 
 Remaining: phase 3 slice 2 (mixed simple/complex args — defer simple loads
 after complex pushes when no later arg has side effects); phase 4 cross.
+
+## Phase 3 slice 2 LANDED (2026-07-18, -O3) — mixed simple/complex args
+
+Generalizes slice 1: DEFERRABLE args (immutable leaves + loads of ADDR-CLEAN
+locals/by-value params — no IR_LEA/IR_SLOTADDR on the sym in this body, so no
+call a sibling makes can write them; per-body verdict cache `PaScan*`) skip
+the push/pop from ANY position. Non-deferrable ("ordered") args — complex
+subtrees, globals, by-ref derefs, addr-taken locals, tyAnsiString-conversion
+cases — evaluate in source order onto the stack (Pascal left-to-right effects
+hold), last ordered arg collapses into rax→reg, rest pop in reverse, then the
+deferred leaves load directly. All-deferrable degenerates to slice 1;
+none-deferrable emits exactly the old sequence. Gated -O3.
+
+New permanent test `test_regcall_arg_order.pas` (optdiff-swept): global read
+BEFORE a mutating sibling call, addr-taken (var-param) local staying ordered,
+deferred leaves in every register position around a middle complex arg, strict
+L-to-R among two side-effecting args — identical -O0/-O2/-O3.
+
+Gates: test-opt green, quick GREEN, self-host byte-identical, C 220/220,
+nilpy, .bas, mandelbrot/nbody checksums unchanged, O3-built compiler output
+byte-identical, residency+frozen tests identical all tiers. Mixed-args loop
+(complex first arg + 2 deferrable per iteration) -O3 vs -O2 **1.17x**.
+
+Remaining: phase 4 cross-target caller-side (optional per charter).
