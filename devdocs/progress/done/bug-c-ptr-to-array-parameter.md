@@ -59,3 +59,6 @@ ParseCPostfixTail flatten (single- and multi-dim) works for params unchanged.
 
 - f1/f2 match gcc; C-conformance 220/220 + self-host byte-identical.
 - A `test/*.c` regression (single- and multi-dim ptr-to-array params).
+
+## Log
+- 2026-07-18 — resolved, commit 27cb6404.
