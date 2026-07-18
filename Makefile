@@ -1400,6 +1400,8 @@ test-core: $(COMPILER)
 	/tmp/cinline_struct_ptr_field_b12926; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_over256_fields.c /tmp/cstruct_over256_fields26
 	/tmp/cstruct_over256_fields26; test "$$?" = "42"
+	./$(COMPILER) test/cpartial_multidim_index.c /tmp/cpartial_multidim_index26
+	/tmp/cpartial_multidim_index26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c /tmp/crtl_lfs64_aliases_b23426

@@ -2385,12 +2385,36 @@ begin
           Inc(nIdx);
           Expect(tkRBrack, ']');
         end;
-        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
-        inode := AllocNode(AN_INDEX);
-        ASTLeft[inode] := node;
-        ASTRight[inode] := BuildFlatNDIndex(nIdx);
-        ASTTk[inode] := Ord(Syms[ASTIVal[node]].ElemType);
-        node := inode;
+        if nIdx = NDInfoNDims then
+        begin
+          { full index: one flat AN_INDEX over the row-major storage. }
+          inode := AllocNode(AN_INDEX);
+          ASTLeft[inode] := node;
+          ASTRight[inode] := BuildFlatNDIndex(nIdx);
+          ASTTk[inode] := Ord(Syms[ASTIVal[node]].ElemType);
+          node := inode;
+        end
+        else
+        begin
+          { Partial multi-index (fewer subscripts than the array rank): valid C,
+            decays to a POINTER to the remaining sub-array — g[1][3] on
+            int[2][9][7] is int(*)[7]. Address = &base + Horner(first nIdx dims)
+            * product(remaining dim spans) * elemsize. Built as a raw byte add
+            (the array ident decays to its base address, tagged tyInt64),
+            mirroring the struct-field partial-index path above; the pointer value
+            is then assignable to an int(*)[..] variable and re-indexed through it.
+            (bug-c-partial-multidim-array-index.) }
+          flatNode := BuildFlatNDIndex(nIdx);
+          rowStride := TypeSize(Syms[ASTIVal[node]].ElemType);
+          for ndi := nIdx to NDInfoNDims - 1 do rowStride := rowStride * NDInfoSpan[ndi];
+          ASTTk[node] := Ord(tyInt64);
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := node; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          node := inode;
+        end;
       end
       else if (ASTKind[node] = AN_IDENT) and
               (SymPtrElemArrLen[ASTIVal[node]] > 0) and (CurTok.Kind = tkLBrack) then
