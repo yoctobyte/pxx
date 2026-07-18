@@ -938,6 +938,7 @@ var k: Integer;
 begin
   if TargetArch <> TARGET_AARCH64 then Exit;
   FxSaveOn := False;
+  if CurProc < 0 then Exit;   { main body: no frame backing, nothing to protect — see FloatPoolBoundaryAssign }
   if OptLevel < 3 then Exit;
   if RcSuppressAssign then Exit;
   for k := 0 to IRCount - 1 do

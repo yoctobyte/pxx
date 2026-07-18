@@ -5,7 +5,7 @@ prio: 45  # auto
 # Register-based internal calling convention (args in registers, not stack slots)
 
 - **Type:** feature (codegen — ABI-wide) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-03 (pin-time optimization campaign)
 - **Umbrella:** the -O2 tier of [[feature-optimization-levels]]; split out
   because it is ABI-WIDE (every call site + every prologue must flip
@@ -235,3 +235,35 @@ Prototyped the full phase-2 extension and measured it before shipping (per the
   the callee never spills at all, and reducing per-call prologue/epilogue. Same
   measured-not-speculative call as the const-fold / strength-reduction rejections.
   Code reverted to HEAD; no source change landed.
+
+## Phase 3 slice 1 LANDED (2026-07-18, -O3) — all-simple-args direct load
+
+Caller-side: when EVERY argument of an internal <=6-param non-variadic call is
+a side-effect-free rax/xmm0-only leaf (`CallArgDirectLoadable`: IR_CONST_INT/
+STR/DATA, IR_PROCADDR, IR_LOAD_SYM of scalar/pointer/class/float/ansistring/
+frozen-string/dynarray-handle syms — incl. by-ref-param derefs and resident
+reads), the push/pop round-trip disappears: eval left-to-right, `mov <argreg>,
+rax` each. Leaves are order-invisible, so left-to-right holds Pascal semantics;
+ANY non-leaf arg falls the whole call back to the proven push/pop path (a
+call-bearing sibling could write a variable a leaf reads). tyAnsiString
+conversion args (helper calls) excluded. Gated OptLevel>=3; -O2 keeps only the
+last-arg collapse; -O0/-O2 byte-identical (fixedpoints + parity vs pinned
+verified).
+
+Measured: call-heavy int loop (3-arg helper per iteration) -O3 vs -O2 **1.11x**;
+float helper-per-iteration 1.32x (combined with residency); self-compile parity
+(memory-bound, expected). test-opt + quick + C 220/220 + nilpy + .bas green;
+O3-built compiler output byte-identical.
+
+**Regression found+fixed by test-opt while landing:** slice-1 residency's
+FloatPoolBoundaryAssign reserved pool slots in the MAIN program body, whose
+statements compile as separate CompileAST calls with no per-body frame patch —
+the IR_CALL_IND wrap then wrote wild below rbp (test_frozen_string_reentrant
+-O3 SIGSEGV, indirect frozen-string call in main). Fix: `CurProc < 0` exits the
+pass (both x86-64 + aarch64 mirror) — main is the call-stack root, nothing
+above it holds residents and main never gets residents, so the wrap protects
+nothing there. LESSON: run `make test-opt` per -O3 slice, not just quick+
+self-host (the -O3 corpus is where -O3-only emission breaks surface).
+
+Remaining: phase 3 slice 2 (mixed simple/complex args — defer simple loads
+after complex pushes when no later arg has side effects); phase 4 cross.

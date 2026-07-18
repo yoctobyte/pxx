@@ -1746,10 +1746,48 @@ begin
   end;
 end;
 
+{ -O3 regcall phase 3 (caller-side, feature-callconv-register-args): an
+  internal-call argument whose emission is a side-effect-free rax/xmm0-only
+  leaf can be loaded DIRECTLY into its SysV argument register — when EVERY
+  argument of the call qualifies, the whole push/pop round-trip disappears
+  (eval left-to-right, `mov <argreg>, rax` after each; a leaf's emission
+  never touches an argument register, so earlier loads survive). Any
+  non-leaf argument anywhere in the call falls the whole call back to the
+  proven push/pop path: leaves are order-invisible (no side effects), but a
+  call-bearing sibling could write a variable a deferred/early leaf reads,
+  so mixing orders is only safe when nothing in the list has effects.
+  Excluded: args needing the tyAnsiString conversion helpers (they emit
+  calls), fixed-array syms (address semantics), tyVariant (oversized). }
+function CallArgDirectLoadable(n: Integer): Boolean;
+var si: Integer; tk: TTypeKind;
+begin
+  CallArgDirectLoadable := False;
+  if n < 0 then Exit;
+  case IRKind[n] of
+    IR_CONST_INT, IR_CONST_STR, IR_CONST_DATA, IR_PROCADDR:
+      CallArgDirectLoadable := True;
+    IR_LOAD_SYM:
+      begin
+        si := IRA[n];
+        if si < 0 then Exit;
+        tk := Syms[si].TypeKind;
+        if Syms[si].IsArray then
+          { a dynarray handle load is a plain pointer read; fixed arrays
+            (address / copy semantics) stay on the general path }
+          CallArgDirectLoadable := Syms[si].ArrLen = -1
+        else
+          CallArgDirectLoadable :=
+            TypeIsOrdinal(tk) or TypeIsFloat(tk) or
+            (tk = tyPointer) or (tk = tyClass) or
+            (tk = tyAnsiString) or (tk = tyString);
+      end;
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
-    cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg: Boolean;
+    cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
     sVal: AnsiString;
     tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
@@ -3968,6 +4006,50 @@ begin
                            (not ProcVariadic[procIdx]) and
                            (Procs[procIdx].ParamCount >= 1) and
                            (Procs[procIdx].ParamCount <= 6);
+            { -O3 regcall phase 3: when EVERY argument is a direct-loadable
+              leaf (see CallArgDirectLoadable) and none needs a tyAnsiString
+              conversion helper, skip the push/pop round-trip entirely — eval
+              left-to-right, mov each into its argument register. }
+            skipAllArgs := (OptLevel >= 3) and skipLastArg;
+            if skipAllArgs then
+            begin
+              argNode := IRB[node]; i := 0;
+              while argNode <> -1 do
+              begin
+                if not CallArgDirectLoadable(IRA[argNode]) then
+                begin skipAllArgs := False; Break; end;
+                if (i < Procs[procIdx].ParamCount) and
+                   (Procs[procIdx].Params[i].TypeKind = tyAnsiString) and
+                   ((IntToTypeKind(IRTk[argNode]) = tyString) or
+                    (IntToTypeKind(IRTk[argNode]) = tyChar)) then
+                begin skipAllArgs := False; Break; end;
+                argNode := IRB[argNode];
+                Inc(i);
+              end;
+              if skipAllArgs and (i <> Procs[procIdx].ParamCount) then
+                skipAllArgs := False;
+            end;
+            if skipAllArgs then
+            begin
+              argNode := IRB[node]; i := 0;
+              while argNode <> -1 do
+              begin
+                IREmitNode(IRA[argNode]);                { rax = leaf value }
+                case i of
+                  0: begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+                  1: begin EmitB($48); EmitB($89); EmitB($C6); end; { mov rsi, rax }
+                  2: begin EmitB($48); EmitB($89); EmitB($C2); end; { mov rdx, rax }
+                  3: begin EmitB($48); EmitB($89); EmitB($C1); end; { mov rcx, rax }
+                  4: begin EmitB($49); EmitB($89); EmitB($C0); end; { mov r8,  rax }
+                  5: begin EmitB($49); EmitB($89); EmitB($C1); end; { mov r9,  rax }
+                end;
+                argNode := IRB[argNode];
+                Inc(i);
+              end;
+              nArgs := i;
+            end
+            else
+            begin
             argNode := IRB[node];
             i := 0;
             while argNode <> -1 do
@@ -3995,6 +4077,7 @@ begin
               Inc(i);
             end;
             nArgs := i;   { args actually pushed (== ParamCount unless variadic) }
+            end;
             { A variadic callee receives MORE args than declared params; pop all
               of them (up to 6) into SysV registers so its register-save prologue
               captures every variadic arg. nArgs == ParamCount for every
@@ -4018,7 +4101,7 @@ begin
               pop loop below has no case arm past r9, so it used to pop the
               wrong (topmost) args into the registers and leak the rest
               (bug-many-param-call-corruption). }
-            else if Procs[procIdx].ParamCount <= 6 then
+            else if (not skipAllArgs) and (Procs[procIdx].ParamCount <= 6) then
             begin
               if skipLastArg then
                 case Procs[procIdx].ParamCount - 1 of
@@ -6087,6 +6170,13 @@ procedure FloatPoolBoundaryAssign;
 var k: Integer;
 begin
   FxSaveOn := False;
+  { Main program body: statements compile as separate CompileAST calls with no
+    per-body frame patch backing late FrameSize growth — a reserved slot there
+    writes wild below rbp (test_frozen_string_reentrant -O3 SIGSEGV). Correct
+    to skip entirely: main is the call-stack ROOT, so no frame above it can
+    hold residents, and main itself never gets residents (CurProc<0 exits the
+    assign pass) — there is nothing for a boundary wrap to protect. }
+  if CurProc < 0 then Exit;
   if OptLevel < 3 then Exit;
   if RcSuppressAssign then Exit;
   if TargetArch <> TARGET_X86_64 then Exit;
