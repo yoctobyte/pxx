@@ -165,3 +165,12 @@ Summary: 2 miscompiles reduced-and-FIXED (signed/unsigned, struct-array-ptr
 stride); 2 open findings (31039 miscompile, 5004 compile-fail) both need
 `creduce`/`cvise` to reduce to a diagnosable core. NEXT: install creduce (root)
 to unblock the remaining findings, or a C-aware reducer in Track T tooling.
+
+## 2026-07-18 — seed 31039 FIXED (4de51285), not creduce-gated after all
+
+Localized WITHOUT creduce by instrumenting the diverging global g_22 with a printf
+at its mutation site (both compilers, p_3 identical) → pinpointed `(int8)g_15 >=
+(uint16)g_74` compared unsigned instead of signed (C integer promotion to int).
+Fixed 4de51285 (sub-int compare promotion). Now 3 miscompiles found+fixed
+(574fcac1 signed/unsigned-64, 4f4aceb3 struct-array-ptr, 4de51285 sub-int-promote);
+only the PXX_COMPILE_FAIL (seed 5004, kind-5 AN_BINOP) remains open.
