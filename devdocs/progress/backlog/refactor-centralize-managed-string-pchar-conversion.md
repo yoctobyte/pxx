@@ -1,94 +1,93 @@
 ---
-summary: "Centralize managed-string/PChar conversion — key on static type, not node shape; kill the recurring silent AnsiString class"
+summary: "Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source"
 type: refactor
-prio: 50
+prio: 45
 ---
 
-# Centralize managed-string conversion — stop enumerating node shapes
+# Populate pointer-element metadata consistently — the low-risk fix for the conversion class
 
-- **Type:** refactor (Track A — shared `ir.inc` / `parser.inc` lowering). Structural.
+- **Type:** refactor / data-completeness (Track A — `parser.inc` registration + node
+  creation, `ir.inc` predicates). **Additive and fallback-preserving — NOT a big-bang
+  rewrite.**
 - **Status:** backlog
-- **Opened:** 2026-07-17, from a user observation: "we keep finding AnsiString bugs — it's
-  one managed type with features; all sub-features work individually, yet issues recur.
-  This smells like we special-case it in too many places."
-- **Motivating instances (all silent, all the SAME dropped-field/shape-miss pattern):**
-  - [[bug-pascal-ansistring-cast-of-cdecl-call-result]] — external decl dropped
-    `ProcRetPtrElemTk` (FIXED, `33f0d555`).
-  - [[bug-pascal-ansistring-cast-of-fnptr-call-result]] — `$proctype` sig dropped
-    `ProcRetPtrElemTk` + `IsNodePChar` missed `AN_CALL_IND` (FIXED, `9118a760`).
-  - The conversion block itself was copy-pasted at 2 sites → now one
-    `WrapPCharToString` builder (`7e4bebc0`, `FindProc('PCharToString')` 2→1).
+- **Opened:** 2026-07-17, from a user observation ("we keep special-casing AnsiString,
+  keep finding issues"). **Re-scoped 2026-07-18** after the user correctly pointed out the
+  sane, low-risk shape: *just store the pointer type; C already does it.*
 
-  Three instances in one night. Each was a different *place* that either re-implemented
-  registration and forgot a return field, or enumerated node shapes and missed one. The
-  point-fixes stopped the bleeding; the refactor below is still the durable close-out.
+## The observation, and the corrected diagnosis
 
-  **More dropped-field sites found by sweep (parser.inc, method-decl registrations —
-  NOT yet fixed):** `18447`, `19128`, `19649` all `RegisterProc` a method + set
-  `BodyAddr` but never `ProcRetPtrElemTk`. Harmless when a method has a BODY (the impl
-  re-registers via the normal path at 22153/22163 and sets it), which is why the common
-  case works. But a **decl-only method returning PChar** (abstract / interface / a
-  virtual called through a base-typed ref, where IsNodePChar keys on the *declared*
-  proc's tyUnknown return-elem) would mis-lower `AnsiString(ref.Method())`. Exotic,
-  untested (found read-only during a csmith run), but the same pattern — fold into the
-  fix: either set the field at these sites too, or (better) key on static type so the
-  field's presence stops mattering.
+The recurring PChar/WideChar→string bugs are **one root**, and it is NOT "shape
+enumeration is inherently wrong" — it is **"the element-type metadata is not populated in
+every creation path."**
 
-## The observation, and why it's right
+- The reader predicates (`IsNodePChar`, `NodeIsWideCharVal`) key on stored data — e.g.
+  `ProcRetPtrElemTk[procIdx]` (a proc's return pointer-element type). That field already
+  exists.
+- The bugs were **registration paths that forgot to set it**: the external-directive path
+  and the `$proctype` signature path each re-implemented registration and dropped the
+  return-element fields, so the predicate read `tyUnknown` and skipped the conversion →
+  silent garbage / segfault.
 
-The recurring AnsiString bugs are not many unrelated defects — they are **one structural
-smell** surfacing in new spots. Evidence:
+C proves the pattern is fine: `cparser.inc` has the *same* shape-walk
+(`CNodePtrElemRec`), but at node creation (`cparser.inc:374`) it **computes once and
+STORES** the element type on the node (`ASTSOffset` side-channel), so downstream reads are
+a clean lookup. Mirror that.
 
-- **688** sites in `compiler/*.inc` branch on the string type
-  (`tyAnsiString`/`tyString`/`IsManaged`): ir.inc 94, parser.inc 68, ir_codegen.inc 64,
-  symtab 38, plus every backend.
-- The **PChar→managed-string conversion is copy-pasted** (`FindProc('PCharToString')` +
-  build wrapper) at ≥2 sites in `ir.inc` (cast 3937, assign 4917) — each independently.
-- Every copy is gated on **`IsNodePChar`** (`ir.inc:1494`), which classifies by
-  **node SHAPE**, not type: hand-written cases for cast-node / `AN_IDENT` / `AN_FIELD` /
-  `AN_CALL`, each reading different metadata.
+## Instances (all the SAME pattern; the point-fixes are slices of this)
 
-That is the bug engine: each new expression **shape** (external call, method result,
-array element, ternary, `with`-field, …) or each new **context** (cast, assign, arg,
-return, concat) is a case someone must remember to add to the enumerator AND a place to
-re-paste the conversion. Miss one → a **silent** wrong value (the class every AnsiString
-landmine in memory belongs to: not-on-lvalue, case-selector re-eval, forward-ptr-field,
-byval-temp double-free, this cast bug).
+- [[bug-pascal-ansistring-cast-of-cdecl-call-result]] — external decl dropped
+  `ProcRetPtrElemTk` (FIXED, `33f0d555`).
+- [[bug-pascal-ansistring-cast-of-fnptr-call-result]] — `$proctype` sig dropped it +
+  `IsNodePChar` missed `AN_CALL_IND` (FIXED, `9118a760`).
+- [[bug-pascal-widechar-var-to-string-segfault]] / [[bug-pascal-widechar-var-to-string-other-contexts]]
+  — `NodeIsWideCharVal` cast-only, missed the tyUInt16 var shape (assign + concat FIXED,
+  `19fbf64a`/`6ea2e6ff`; arg residual open).
+- The copy-pasted conversion block → one `WrapPCharToString` builder (`7e4bebc0`).
+- **Not-yet-fixed dropped-field sites:** `parser.inc` `18447`/`19128`/`19649` — method-decl
+  registrations that set `BodyAddr` + params but never `ProcRetPtrElemTk`. Harmless when a
+  method has a body (the impl re-registers via the normal path), but a decl-only PChar
+  method (abstract/interface/virtual-via-base) would mis-lower `AnsiString(ref.Method())`.
 
-## The fix — one type-keyed conversion, called everywhere
+## The plan — additive, fallback-preserving, incremental (LOW RISK)
 
-1. **`IsNodePChar` keys on the node's resolved static type**, not its shape. "Is this
-   expression `^Char`/PChar?" is answerable from the inferred type for ANY node —
-   deleting the four hand-cases and covering call/var/field/element/ternary uniformly.
-2. **One `MaybeConvertPCharToString(node): node`** helper (the wrapper-build logic, once).
-   Replace the copy-pasted blocks at the cast site, the assign site, and the
-   arg/return/concat sites with a call to it.
-3. Audit the other 688 `tyAnsiString` branches for the same duplication-of-a-decision
-   pattern; fold the ones that are re-deriving "is this managed?" / "does this need a
-   copy/finalize?" into shared predicates. (Incremental — do the PChar conversion first,
-   it is the one drawing blood now.)
+The whole reason this is safe: **add a stored fast-path, keep the old shape-walk as a
+fallback.** A reader that consults stored metadata first and falls back to the existing
+enumeration can only ever *add* recognitions (fix a missed shape) — never remove one. It
+is impossible to regress by construction.
 
-## Why this is worth a refactor, not just N point-fixes
+1. **Finish the proc side (first slice, do now).** Set `ProcRetPtrElemTk` (+ the other
+   return-element fields) at the 3 method-decl registration sites so *every* proc
+   registration records it — matching the external/`$proctype` fixes already landed.
+   Purely additive; self-host byte-identical unless it fixes a real case.
+2. **Node side (later).** Store the pointer-element type on pointer-typed nodes at
+   creation (C's store-on-node pattern); have `IsNodePChar` read the stored value first,
+   fall back to the shape-walk if unset. Populate creation sites incrementally.
+3. **Fold WideChar in.** Same treatment (WideChar==tyUInt16 has no marker; the safe
+   contexts are already handled — see [[project_string_conversion_shape_blindspot_pattern]]).
 
-Point-fixing each new shape as it's found is O(shapes × contexts) forever, and each miss
-ships a silent bug to a user wrapping a C library. Centralizing is O(1): the next new node
-shape is covered for free because it already has a static type. This is the
-`ir-as-substrate` discipline applied inward — push the decision down to one place.
+Each step: self-host byte-identical + a targeted regression + a fuzz pass. No step is a
+sweep of all 688 `tyString` branches — that count is just the *evidence* of the sprawl,
+not a to-do list.
+
+## Why not just keep point-fixing?
+
+You can, and it's safe — each new shape found by fuzzing gets a one-line populate. This
+ticket is the *systematic* version: audit the creation sites once so future shapes are
+covered as the data is populated, instead of waiting for a fuzzer to draw blood on each.
+Do it at the pace that suits; the bleeding is already stopped.
 
 ## Acceptance
 
-- `IsNodePChar` (or its replacement) returns correctly for a PChar-typed value of ANY
-  node shape, verified by a table test (var, local call, external cdecl call, field,
-  array element, ternary).
-- The cast/assign/arg/return PChar→string conversions route through one helper (grep for
-  `FindProc('PCharToString')` collapses to 1 call site).
-- [[bug-pascal-ansistring-cast-of-cdecl-call-result]] fixed as a consequence.
-- Gate: `make test` + self-host byte-identical (this touches hot lowering — reseed
-  discipline applies).
+- Every proc-registration path sets `ProcRetPtrElemTk` (grep audit); a decl-only PChar
+  method cast works.
+- `IsNodePChar` prefers stored metadata with the shape-walk as fallback (additive).
+- The known instances stay fixed; a fuzz pass finds no new PChar/WideChar-conversion
+  divergence.
+- Gate: `make test` + self-host byte-identical per slice.
 
-## Non-goals
+## Explicitly NOT
 
-- Not reworking the managed-string runtime/ABI — this is about where the compiler
-  *decides* to convert, not how the RTL represents strings.
-- Not a big-bang rewrite of all 688 sites — start with the PChar-conversion cluster
-  (the active bleeder), widen opportunistically.
+- **Not** a big-bang rewrite of the conversion sites or the 688 `tyString` branches.
+- **Not** removing the shape-enumeration walks — they stay as the fallback.
+- **Not** reworking the managed-string runtime/ABI — this is about *where the compiler
+  records/reads the pointer element type*, nothing about how strings are represented.
