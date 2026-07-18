@@ -3571,8 +3571,47 @@ begin
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
   ptrElemSig := CTypePtrElemProcSig;  { pointee sig if this is `ft *` (mutually exclusive with procSig) }
   paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
+  arrLen := CTypeFnPtrArrLen;  { array-of-fn-ptr `(*name[N])(..)` dim, else -2 }
   if CTypeFnPtrName <> '' then
   begin
+    { Array-of-function-pointers local `RET (*name[N])(params) [= {f0,f1,..}]`
+      (bug-c-local-fnptr-array-initializer). ParseCDeclType captured the name +
+      call sig + [N]; allocate an array of callable pointers and materialise the
+      brace initializer as per-element runtime `name[k] := &fk` assignments (a
+      local inits at runtime, unlike the global PendingInit path). SOLE-declarator
+      form only (the rare `..., x;` tail falls outside). }
+    if arrLen >= 0 then
+    begin
+      name := CTypeFnPtrName;
+      if arrLen < 1 then arrLen := 1;
+      idx := AllocArray(name, tyPointer, 0, arrLen - 1);
+      if procSig >= 0 then SymElemProcSig[idx] := procSig;  { fp[i](args) callable }
+      head := -1; tail := -1;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next; Expect(tkBegin, '{');
+        ei := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkAmp then Next;   { `&func` == `func` }
+          initExpr := ParseCExpr;             { function name -> its address }
+          idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := ei; ASTTk[idxLit] := Ord(tyInteger);
+          idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(tyPointer);
+          inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit; ASTTk[inode] := Ord(tyPointer);
+          asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := initExpr; ASTTk[asn] := Ord(tyPointer);
+          seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+          if head = -1 then begin head := seq; tail := seq; end
+          else begin ASTRight[tail] := seq; tail := seq; end;
+          Inc(ei);
+          if CurTok.Kind = tkComma then Next else Break;
+        end;
+        Expect(tkEnd, '}');
+      end;
+      Eat(tkSemicolon);
+      blk := AllocNode(AN_BLOCK); ASTLeft[blk] := head;
+      Result := blk;
+      Exit;
+    end;
     { Inline function-pointer local `RET (*name)(params) [= init];` —
       ParseCDeclType consumed the whole declarator and captured the name + call
       signature. The name-reading loop below would Break (the name token is

@@ -1412,6 +1412,8 @@ test-core: $(COMPILER)
 	/tmp/cptr_to_array_param26; test "$$?" = "42"
 	./$(COMPILER) test/cmultidim_row_address.c /tmp/cmultidim_row_address26
 	/tmp/cmultidim_row_address26; test "$$?" = "42"
+	./$(COMPILER) test/clocal_fnptr_array.c /tmp/clocal_fnptr_array26
+	/tmp/clocal_fnptr_array26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/src test/crtl_string_leaf_b130.c /tmp/crtl_string_leaf_b13026
 	/tmp/crtl_string_leaf_b13026; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/include/sys -Ilib/crtl/src test/crtl_lfs64_aliases_b234.c /tmp/crtl_lfs64_aliases_b23426
