@@ -2975,18 +2975,13 @@ begin
   begin
     { Slice 2b: alloc a caller Result temp + a fresh caller local per callee local,
       clone the statement chain (placeholders → these syms), lower it (emits the
-      statements), then yield a load of the Result temp as the call's value.
-      resSym is held LOCALLY: the Inline* globals are consumed entirely by the
-      CLONE (placeholders resolve there), but lowering the cloned chain may hit
-      an inner call that re-enters this function (depth-1 re-inline) and
-      reassigns InlineResultSym — the final load must use OUR temp. }
+      statements), then yield a load of the Result temp as the call's value. }
     InlineResultSym := AllocVar('', Procs[cpi].RetType);
-    tsym := InlineResultSym;
     for n := 0 to InlineLocalCnt[cpi] - 1 do
       InlineLocalSym[n] := AllocVar('', IntToTypeKind(InlineLocalTk[cpi*MAX_INLINE_LOCALS + n]));
     clonedRoot := IRCloneInlineBody(InlineBodyRoot[cpi]);
     IRLowerAST(clonedRoot);
-    IRInlineExpand := IRAppend(IR_LOAD_SYM, tsym, -1, -1, 0, Ord(Procs[cpi].RetType));
+    IRInlineExpand := IRAppend(IR_LOAD_SYM, InlineResultSym, -1, -1, 0, Ord(Procs[cpi].RetType));
   end
   else
   begin
@@ -5444,15 +5439,9 @@ begin
       { Inline expansion (feature-inline-routines, -O2): splice a retained inline
         body in place of the call when the target is inline-eligible and all args
         are side-effect-free. Falls through to a normal call if IRInlineExpand
-        declines (-1). A spliced body's inner calls may re-inline ONE level
-        (InliningActive < 2, -O3 non-leaf slice): the clone resolves all
-        placeholders before lowering, so nesting is state-safe (the one
-        lowering-time global, InlineResultSym, is held locally in
-        IRInlineExpand) — depth stays bounded and a self-recursive callee
-        terminates (level 2 lowers as a real call). -O2 keeps depth 0. }
+        declines (-1). Guarded InliningActive=0 so a spliced body never re-inlines. }
       if (OptLevel >= 2) and (cpi >= 0) and (cpi < MAX_PROCS) and
-         (InlineBodyRoot[cpi] >= 0) and
-         ((InliningActive = 0) or ((OptLevel >= 3) and (InliningActive < 2))) then
+         (InlineBodyRoot[cpi] >= 0) and (InliningActive = 0) then
       begin
         outNode := IRInlineExpand(node, cpi);
         if outNode >= 0 then begin Result := outNode; Exit; end;

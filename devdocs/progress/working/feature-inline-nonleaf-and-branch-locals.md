@@ -142,13 +142,15 @@ sites 2b/2c can't reach. Needs (see the design notes in
   InliningActive=0 gate to a depth budget) — would recover the leaf-in-wrapper
   fusion the -O2 wrapper call keeps today. REMAINING: while/for bodies.
 
-- 2026-07-18 night (fable-O) **Depth-1 re-inline LANDED (-O3).** The AN_CALL
-  splice gate `InliningActive = 0` relaxes to `< 2` at -O3: a spliced body's
-  inner calls re-inline ONE level, recovering the leaf-in-wrapper fusion the
-  real wrapper call had at -O2. Safe because the clone resolves every
-  placeholder BEFORE lowering — the one lowering-time global
-  (`InlineResultSym`) is now held locally in IRInlineExpand for its final
-  load, so nested expansion can't clobber it. Self-recursive callees
-  terminate (level 2 = real call; Fib(25) verified both tiers). Wrapper loop
-  now 1.15x vs -O2 with inner Leaf calls fully fused (IR diff: only the
-  side-effecting unretainable callee remains as calls). Full battery green.
+- 2026-07-18 late night (fable-O) **depth-1 re-inline REVERTED** (revert of
+  a3f6e70a). A 10-minute pasmith O-level self-differential fuzz run (new
+  harness: random programs, -O0 vs -O2 vs -O3 output diff) produced 21
+  SILENT -O3 divergences; commit-bisect pinned a3f6e70a (2c/non-leaf commits
+  GREEN), and reverting it clears all 21. The InlineResultSym-local fix was
+  necessary but not sufficient — some further nesting-state interaction
+  diverges values. All curated gates (test-opt corpus, benches, the inline
+  tests) had passed — ONLY the random-program fuzz caught it. Repro corpus
+  kept in the session scratchpad; a reduced case is being minimized for the
+  re-land. LESSON: fuzz before pushing aggressive splice-machinery changes;
+  the optdiff corpus is too tame for inliner state bugs. Non-leaf slice 1
+  (inner calls stay real) remains landed and fuzz-clean.
