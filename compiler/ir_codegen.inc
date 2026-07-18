@@ -1659,6 +1659,93 @@ begin
               'syscall']);
 end;
 
+{ -O3 in-tree XMM fusion (x86-64, feature-opt-float-intree-xmm-fusion).
+  The IR value model carries a double as its raw bits in rax, so each float
+  IR_BINOP normally round-trips both operands through GPRs and the stack:
+  movq xmm<-rax, op, movq rax<-xmm, per node. For a pure float arithmetic
+  subtree that is call-free, we instead evaluate the whole tree directly into
+  xmm2..xmm6, keeping intermediates resident (no push/pop / movq transit), and
+  bridge to rax only once at the root. Arithmetic runs in double exactly as the
+  scalar path does, so results are bit-identical — this is a transfer-count win
+  only. Guarded by OptLevel>=3 (so -O0/-O2 stay byte-identical for self-host);
+  promote to -O2 per-pass after the full gate. }
+function FloatArithNode(node: Integer): Boolean;
+var op: TTokenKind;
+begin
+  FloatArithNode := False;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_BINOP then Exit;
+  if not TypeIsFloat(IntToTypeKind(IRTk[node])) then Exit;
+  op := IntToTokenKind(IRC[node]);
+  FloatArithNode := (op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkSlash);
+end;
+
+{ Top xmm index a subtree needs when its result targets xmm<dst>. A float-arith
+  binop puts its left in xmm<dst> and its right in xmm<dst+1>, so register
+  pressure grows only down right spines; a leaf occupies just xmm<dst>. }
+function FloatTreeMaxReg(node, dst: Integer): Integer;
+var l, r: Integer;
+begin
+  if FloatArithNode(node) then
+  begin
+    l := FloatTreeMaxReg(IRA[node], dst);
+    r := FloatTreeMaxReg(IRB[node], dst + 1);
+    if l >= r then FloatTreeMaxReg := l else FloatTreeMaxReg := r;
+  end
+  else
+    FloatTreeMaxReg := dst;
+end;
+
+{ Eligible: root is a float-arith binop, the whole subtree is side-effect- and
+  call-free (caller-saved xmm2..xmm6 must survive across every leaf's emission),
+  and register need fits xmm2..xmm6 (dst<=5 so the deepest op's xmm<dst+1><=6). }
+function FloatTreeFits(node: Integer): Boolean;
+begin
+  FloatTreeFits := FloatArithNode(node) and ScratchSafeSubtree(node)
+                   and (FloatTreeMaxReg(node, 2) <= 6);
+end;
+
+procedure EmitFloatTree(node, dst: Integer);
+var op: TTokenKind; idx: Integer;
+begin
+  if FloatArithNode(node) then
+  begin
+    EmitFloatTree(IRA[node], dst);      { left  -> xmm<dst>   }
+    EmitFloatTree(IRB[node], dst + 1);  { right -> xmm<dst+1> }
+    op := IntToTokenKind(IRC[node]);
+    EmitB($F2); EmitB($0F);
+    case op of
+      tkPlus:  EmitB($58);   { addsd }
+      tkMinus: EmitB($5C);   { subsd }
+      tkStar:  EmitB($59);   { mulsd }
+      tkSlash: EmitB($5E);   { divsd }
+    end;
+    EmitB($C0 or (dst shl 3) or (dst + 1)); { op xmm<dst>, xmm<dst+1> (= left OP right) }
+    Exit;
+  end;
+
+  { leaf }
+  if (IRKind[node] = IR_LOAD_SYM) and (not Syms[IRA[node]].IsArray) and
+     TypeIsFloat(Syms[IRA[node]].TypeKind) and
+     ((Syms[IRA[node]].Kind = skLocal) or (Syms[IRA[node]].Kind = skParam) or
+      (Syms[IRA[node]].Kind = skGlobal)) then
+  begin
+    idx := IRA[node];
+    EmitLoadVar(idx);                                   { float sym -> xmm0 }
+    EmitB($0F); EmitB($28); EmitB($C0 or (dst shl 3));  { movaps xmm<dst>, xmm0 }
+  end
+  else if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+  begin
+    IREmitNode(node);                                   { float value bits -> rax }
+    EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 or (dst shl 3)); { movq xmm<dst>, rax }
+  end
+  else
+  begin
+    IREmitNode(node);                                   { integer value -> rax }
+    EmitCvtSi2SdOrU64(dst, 0, IntToTypeKind(IRTk[node]));{ cvtsi2sd xmm<dst>, rax (u64-aware) }
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
@@ -2885,6 +2972,15 @@ begin
         left := IRA[node];
         right := IRB[node];
         op := IntToTokenKind(IRC[node]);
+
+        { -O3 in-tree XMM fusion: a call-free float arithmetic tree evaluates
+          straight into xmm2..xmm6 and bridges to the rax value model once. }
+        if (OptLevel >= 3) and (not InLValueWrite) and FloatTreeFits(node) then
+        begin
+          EmitFloatTree(node, 2);
+          EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($D0); { movq rax, xmm2 }
+          Exit;
+        end;
 
         { -O1 imm-fold: a constant right operand of an arith/logic op whose value
           fits imm32 folds straight into the instruction's immediate, dropping
