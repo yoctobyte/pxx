@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (120)
+## backlog (121)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | feature-demo-parallel-prime-count | E | 30 | feature | Demo — parallel prime count / find | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
+| feature-dynamic-compiler-arrays-ast-fixups | A | 25 | feature | Apply the dynamic-array pattern (proven on the IR arrays) to the other fixed compiler caps: AST nodes, global fixups, label arrays | — |
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
@@ -1134,6 +1135,7 @@ _none_
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
+- [p 25] [A] feature-dynamic-compiler-arrays-ast-fixups
 - [p 25] [O] feature-opt-div0-stub-on-use
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
