@@ -123,11 +123,34 @@ Lazarus helloworld (DONE) → Synapse (in progress) → mid-size FPC libs
   (feature-mimic-fpc, feature-fpc-vs-pxx-feature-boundary, byte-identical
   self-host).
 
+## Pre-filed tickets (the known walls, in order — backlog, 2026-07-18)
+
+The 2026-07-18 gap analysis converted the known walls into concrete backlog
+tickets; unknown walls behind them get filed as the probe hits them:
+
+1. [[feature-pascal-asmmode-directive-tolerance]] — `{$asmMode default}`
+   rejected; first token of `cutils.pas` and of every compiler unit. Trivial.
+2. [[feature-mimic-fpc-compiler-define-profile]] — `{$i fpcdefs.inc}` needs
+   the build-time CPU define profile (`-dx86_64`, …); Synapse per-library
+   defines pattern applied to FPC's compiler.
+3. [[feature-pascal-initialize-finalize-intrinsics]] — `Initialize()` /
+   `Finalize()` standard procs (cclasses.pas raw-Move refcount idiom). The
+   only *verified* RTL-semantics gap after the coupling-claim correction.
+4. (existing, for the differential bar only) 80-bit extended constant
+   folding — see "The one real language gate" above and
+   `feature-extended-type-support` (rainy-day). Not needed for
+   "compiles and runs".
+
+Beyond these: shadow-RTL surface accretion (SysUtils/CStreams breadth) filed
+per-gap as hit, Synapse-style.
+
 ## Known unknown
 
 A prior manual attempt halted on a first blocker (not recorded). When the climb
 resumes, re-run `pp.pas` whole-program through PXX and capture the first error
-as the first concrete sub-ticket.
+as the first concrete sub-ticket. Nobody has probed past wall #1; the
+pre-filed list above covers the walls visible from the doorway, not the
+whole corridor.
 
 ## Log
 - 2026-06-18 — opened as a lighthouse (end-goal), grounded in an empirical grep
