@@ -74,3 +74,6 @@ Low priority: benign (correct values, no crash, no leak — the object IS destro
 just earlier). The crash sibling was [[bug-pascal-interface-finalization-crash]].
 Cross-check [[project_com_interface_default_and_lifetime]],
 [[project_interface_single_pointer_abi_b337]].
+
+## Log
+- 2026-07-18 — resolved, commit 579142c7.

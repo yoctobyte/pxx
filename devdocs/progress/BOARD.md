@@ -25,13 +25,12 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (122)
+## backlog (121)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
 | bug-pascal-ir-node-hard-limit-max-ir | A | 25 | bug | pxx rejects very large valid programs with 'IR overflow' — MAX_IR is a fixed 131072-node array, not dynamic | — |
-| bug-pascal-mainbody-ascast-temp-finalization-timing | A | 30 | bug | main-body interface as-cast temp is released at the wrong time vs FPC (destructor timing) — differing exit checksum, no crash | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -209,7 +208,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (794)
+## done (795)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -511,6 +510,7 @@ _none_
 | bug-pascal-include-search-silent-miss | A | 50 | bug | {$I file} misses are silent, and includes only resolve next to the source file | — |
 | bug-pascal-interface-arg-not-converted-from-class | A+P | 50 | bug | passing a CLASS instance to an INTERFACE parameter stores a raw object pointer — later interface calls jump into data | — |
 | bug-pascal-interface-finalization-crash | A | 55 | bug | SIGSEGV at program exit in interface-heavy generated program (pasmith --intfs 3); crash after all traced statements, all -O levels | — |
+| bug-pascal-mainbody-ascast-temp-finalization-timing | A | 30 | bug | main-body interface as-cast temp is released at the wrong time vs FPC (destructor timing) — differing exit checksum, no crash | — |
 | bug-pascal-member-access-on-pointer-silently-accepted | A | 45 | bug | Member access on a plain Pointer is SILENTLY ACCEPTED and yields the pointer | — |
 | bug-pascal-member-visibility-unenforced | P | 55 | bug | member visibility is not enforced (private/protected/strict readable+writable from anywhere) | — |
 | bug-pascal-metaclass-array-element-not-a-receiver | P | 55 | bug | bug: a metaclass ARRAY ELEMENT is not accepted as a receiver — silent garbage | — |
@@ -1127,7 +1127,6 @@ _none_
 - [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
-- [p 30] [A] bug-pascal-mainbody-ascast-temp-finalization-timing
 - [p 30] [A] chore-sqlite-static-capacity-bumps
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count
