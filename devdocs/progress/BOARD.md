@@ -25,11 +25,12 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (122)
+## backlog (123)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-partial-multidim-array-index | C | 45 | bug | C frontend rejects a partial multi-dimensional array index (g[i][j] on int g[..][..][..]) — valid C, gcc accepts | — |
+| bug-pascal-field-access-through-interface-var | A | 45 | bug | pxx accepts (and miscompiles to a crash) class-FIELD access through an interface-typed variable; FPC rejects it | — |
 | bug-pascal-interface-finalization-crash | A | 55 | bug | SIGSEGV at program exit in interface-heavy generated program (pasmith --intfs 3); crash after all traced statements, all -O levels | — |
 | bug-pascal-ir-node-hard-limit-max-ir | A | 25 | bug | pxx rejects very large valid programs with 'IR overflow' — MAX_IR is a fixed 131072-node array, not dynamic | — |
 | bug-pascal-widechar-var-to-string-other-contexts | A | 48 | bug | WideChar var → string still broken in CONCAT (segfault) and as a string ARG (overload error) — only assign was fixed | — |
@@ -1074,6 +1075,7 @@ _none_
 - [p 45] [A] decide-nilpy-parallel-capture-semantics (unblocks 1)
 - [p 45] [B] feature-nilpy-tk-binding (unblocks 1)
 - [p 45] [C] bug-c-partial-multidim-array-index
+- [p 45] [A] bug-pascal-field-access-through-interface-var
 - [p 45] [A] chore-makefile-testtmp-parameterize
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [O] feature-callconv-register-args
