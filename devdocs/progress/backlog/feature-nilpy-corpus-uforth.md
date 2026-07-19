@@ -81,8 +81,15 @@ slices, f-strings, raise, isinstance, augassign.
    call boxing, Variant-returning functions (hidden-dest ABI),
    EmitWriteVariant True/False (x86-64 only — cross variant writers still
    print ints); field(default_factory=list).
-   **Current wall:** Word.xt_id — [[feature-nilpy-classvar-counter]]
-   (ClassVar + next() + count shim + lambda default_factory).
+   **Landed since:** classvar/counter/lambda-factory chain (Word.xt_id),
+   is/is-not, in/not-in + {set} literals + class inheritance headers,
+   rich def-param annotations (Any params by-ref const, Any returns via
+   hidden dest), isinstance() (VT_OBJECT boxing + RTTI for .npy + ctor
+   calls in expression positions).
+   **Current wall (uforth.py:190):** attribute access on Any values
+   (t.word.name — [[feature-rtti-field-reflection]]) and str methods
+   ([[feature-nilpy-str-methods]]); then f-strings, dicts, tuple unpack,
+   slices, for-in.
    After that (census): dicts (TPyDict), f-strings, tuple unpack, slices,
    for-in over lists, @property, try/except payloads, nonlocal, del.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
