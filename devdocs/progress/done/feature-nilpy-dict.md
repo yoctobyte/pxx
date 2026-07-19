@@ -38,7 +38,10 @@ onto its methods. TPyDict = two parallel slot arrays (keys, values) + count.
   is what the corpus needs (`Dict[str, Word]` and `Dict[int, ...]` side by
   side). Key equality = tag-and-payload compare, with the string case
   comparing contents.
-- **Linear scan first.** `VM.dict` reaches a few hundred entries and every
+- **Linear scan first.** Measured after landing: 2 000 entries build in
+  0.01 s, 5 000 in 0.07 s, 20 000 in 1.17 s — textbook quadratic, and
+  irrelevant at uforth's scale (VM.dict holds a few hundred words). The hash
+  is worth doing when a corpus crosses ~10 000 entries, not before. `VM.dict` reaches a few hundred entries and every
   Forth word lookup hits it, so this WILL want a hash — but correctness
   before speed ([[feedback_correctness_over_optimization]]), and the hash is
   a drop-in replacement behind the same methods. Note the O(n) in the ticket
