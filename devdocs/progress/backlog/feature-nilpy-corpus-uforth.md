@@ -86,12 +86,35 @@ slices, f-strings, raise, isinstance, augassign.
    rich def-param annotations (Any params by-ref const, Any returns via
    hidden dest), isinstance() (VT_OBJECT boxing + RTTI for .npy + ctor
    calls in expression positions).
-   **Current wall (uforth.py:190):** attribute access on Any values
-   (t.word.name — [[feature-rtti-field-reflection]]) and str methods
-   ([[feature-nilpy-str-methods]]); then f-strings, dicts, tuple unpack,
-   slices, for-in.
-   After that (census): dicts (TPyDict), f-strings, tuple unpack, slices,
-   for-in over lists, @property, try/except payloads, nonlocal, del.
+   **Progress 2026-07-19 (session 3, overnight):** landed green, in wall
+   order — AST-based local typing ([[feature-n-nilpy-ast-based-typing]],
+   which also gave methods the widening they never had); ctor fields via
+   the annotated `self.x: T = ...` form plus richer initialisers, with real
+   line numbers on the pre-pass diagnostics; **dict v1**
+   ([[feature-nilpy-dict]] — TPyDict, literals, subscript, .get, in, del);
+   **set v1** (TPyList-backed, `set()` and dedup add); method parameters
+   taking the full annotation grammar; `-> None` on non-ctor methods;
+   **constant parameter defaults** on defs, methods and ctors (the ctor path
+   was a segfault); **f-strings** ([[feature-nilpy-fstrings]] — plain holes,
+   escapes, !r/!s).
+
+   **Current wall picture.** The corpus is now blocked mostly on TRACK A,
+   not on frontend syntax:
+   - [[bug-a-nilpy-variant-element-not-usable-as-scalar]] (p85) — `return
+     xs[0]` is silent garbage. List-wide, predates dict, and it is the one
+     that matters most: uforth reads from vm.stack / vm.dict / vm.xt_table on
+     almost every line.
+   - [[bug-a-str-boxed-into-variant-does-not-own-bytes]] (p80) — a str boxed
+     into a variant has frame lifetime, so same-length keys collide.
+   - [[bug-nilpy-method-returning-str-garbage]] — VM has many `-> str`
+     methods; per the user's 2026-07-19 call this waits for
+     [[feature-a-abi-oracle]] rather than a ninth copy of the return rule.
+   - [[feature-rtti-field-reflection]] — `t.word.name` on an Any (uforth.py:190).
+
+   Still frontend, still ours, and independent of all of the above:
+   [[feature-nilpy-bytes-and-slices]] (bytearray + slices + to_bytes; 99
+   slice sites, and vm.memory IS the Forth data space), then tuple unpack,
+   for-in, @property, try/except payloads, nonlocal.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
    independently tested against the 134-block corpus extracted standalone.
 3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,

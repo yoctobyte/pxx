@@ -1,10 +1,10 @@
 # f-strings. Oracle: CPython — running this file with python3 must produce
 # byte-identical output to the compiled binary.
 #
-# v1 is a plain {expr} hole plus the {{ }} escapes. A conversion ({x!r}) or a
-# format spec ({x:04d}) is a deliberate clean error rather than a silent
-# approximation: both change what is PRINTED, so guessing would produce wrong
-# output instead of an honest missing feature.
+# Covers plain {expr} holes, the {{ }} escapes, and the !r / !s conversions.
+# A format spec ({x:04d}) is still a deliberate clean error rather than a
+# silent approximation: it changes what is PRINTED, so guessing would produce
+# wrong output instead of an honest missing feature.
 
 b = True
 n = 42
@@ -50,3 +50,9 @@ print(f"{p.name}/{p.n}")
 # a dict subscript inside a hole arrives as a Variant
 q = {"k": 9}
 print(f"{q['k']}")
+
+# !r quotes a string and leaves every other type alone; !s is plain str()
+print(f"{s!r} {n!r} {b!r} {d!r}")
+print(f"{s!s}")
+r = {"k": "vv"}
+print(f"{r['k']!r}")
