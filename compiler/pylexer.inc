@@ -385,6 +385,7 @@ begin
             Error('unmatched closing brace');
           end;
         end;
+        '@': PyEmitToken(tkAt, 0, SrcLine, '');
         ':': PyEmitToken(tkColon, 0, SrcLine, '');
         ',': PyEmitToken(tkComma, 0, SrcLine, '');
         '.': PyEmitToken(tkDot, 0, SrcLine, '');

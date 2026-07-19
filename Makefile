@@ -212,6 +212,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\na\ncd\nok!')"
 	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
 	test "$$(/tmp/test_nilpy_literals26)" = "$$(printf '65536\n15\n10\n1000000\ntri\nple')"
+	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
+	test "$$(/tmp/test_nilpy_dataclass26)" = "$$(printf '3\n4\n25\n10\nfull 1.5 2 False custom\ndefaults 2.5 7 True std\nmix 9.0 7 True std')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

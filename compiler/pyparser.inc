@@ -22,11 +22,29 @@ type
     TypeKind: TTypeKind;
   end;
 
+const
+  PY_MAX_DC_FIELDS = 512;
+  { default kinds for dataclass fields }
+  PYDC_NONE  = 0;
+  PYDC_INT   = 1;
+  PYDC_FLOAT = 2;
+  PYDC_STR   = 3;
+  PYDC_BOOL  = 4;
+
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyLocalCount: Integer;
   PyModuleLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyModuleLocalCount: Integer;
+  { @dataclass field defaults, appended in declaration order per class ci.
+    Looked up positionally by PyClassCreate to fill omitted trailing args. }
+  PyDcCi:   array[0..PY_MAX_DC_FIELDS-1] of Integer;
+  PyDcKind: array[0..PY_MAX_DC_FIELDS-1] of Integer;
+  PyDcIVal: array[0..PY_MAX_DC_FIELDS-1] of Int64;
+  PyDcSOff: array[0..PY_MAX_DC_FIELDS-1] of Integer;
+  PyDcSLen: array[0..PY_MAX_DC_FIELDS-1] of Integer;
+  PyDcCount: Integer;
+  PyDcClassIsDc: array[0..PY_MAX_DC_FIELDS-1] of Boolean;  { indexed by ci }
 
 function PyIsIdent(const s: AnsiString): Boolean;
 begin
@@ -95,16 +113,22 @@ begin
       if lo = 'int' then Result := tyInteger
       else if lo = 'float' then Result := tyDouble
       else if lo = 'bool' then Result := tyBoolean
-      else if lo = 'str' then Result := tyString;
+      else if lo = 'str' then Result := tyString
+      else if IsClassType(GetTokenStr(i)) then Result := tyClass;
     end;
   end;
 end;
+
+var
+  PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
 
 function PyParseType: TTypeKind;
 begin
   Result := PyTypeFromTokenIndex(TokPos - 1);
   if Result = tyUnknown then
-    Error('Nil Python: expected type annotation (int, float, bool, or str)');
+    Error('Nil Python: expected type annotation (int, float, bool, str, or a class name)');
+  if Result = tyClass then PyLastTypeCi := FindUClass(GetTokenStr(TokPos - 1))
+  else PyLastTypeCi := -1;
   Next;
 end;
 
@@ -542,6 +566,7 @@ end;
 
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
+    nArgs, i, k, dcBase, valNode: Integer;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -560,6 +585,7 @@ begin
   ASTLeft[argNode] := sizeNode;
   ASTLeft[node] := argNode;
   lastArg := argNode;
+  nArgs := 0;
   while CurTok.Kind <> tkRParen do
   begin
     PyParseBoolExpr;
@@ -567,9 +593,57 @@ begin
     ASTLeft[argNode] := CurASTNode;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;
+    Inc(nArgs);
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')');
+  { @dataclass: fill omitted trailing args from field defaults. }
+  if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] then
+  begin
+    { locate the class's first default-table entry }
+    dcBase := -1; k := 0;
+    for i := 0 to PyDcCount - 1 do
+      if PyDcCi[i] = ci then begin dcBase := i; break; end;
+    if dcBase >= 0 then
+      while nArgs < UClsFCount[ci] do
+      begin
+        i := dcBase + nArgs;
+        if (i >= PyDcCount) or (PyDcCi[i] <> ci) or (PyDcKind[i] = PYDC_NONE) then
+          Error('Nil Python: missing argument for dataclass field without default: ' + name);
+        case PyDcKind[i] of
+          PYDC_INT:
+          begin
+            valNode := AllocNode(AN_INT_LIT);
+            ASTIVal[valNode] := PyDcIVal[i];
+            ASTTk[valNode] := Ord(tyInteger);
+          end;
+          PYDC_FLOAT:
+          begin
+            valNode := AllocNode(AN_FLOAT_LIT);
+            ASTIVal[valNode] := PyDcIVal[i];
+            ASTTk[valNode] := Ord(tyDouble);
+          end;
+          PYDC_STR:
+          begin
+            valNode := AllocNode(AN_STR_LIT);
+            ASTSOffset[valNode] := PyDcSOff[i];
+            ASTSLen[valNode] := PyDcSLen[i];
+            ASTTk[valNode] := Ord(tyString);
+          end;
+          else { PYDC_BOOL }
+          begin
+            valNode := AllocNode(AN_INT_LIT);
+            ASTIVal[valNode] := PyDcIVal[i];
+            ASTTk[valNode] := Ord(tyBoolean);
+          end;
+        end;
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := valNode;
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+        Inc(nArgs);
+      end;
+  end;
   Result := node;
 end;
 
@@ -594,40 +668,46 @@ function PyParseStatement: Integer; forward;
   x86-64 call convention: up to 6 params arrive in rdi rsi rdx rcx r8 r9;
   a proc with MORE than 6 params receives ALL of them on the caller's stack,
   pushed left-to-right, so param i sits at [rbp+16+(nparams-1-i)*8]. }
+{ Store rax into [rbp+off] with the width of the given size (1/2/4/8 bytes).
+  A too-wide store would clobber the neighbouring 1-byte/2-byte slots (a bool
+  param spilled as a dword smashed the adjacent param — silent wrong values,
+  then SIGSEGV once the clobber reached self). }
+procedure PyEmitStoreRaxWidth(off, size: Integer);
+begin
+  case size of
+    1: begin EmitB($88); EmitB($85); end;               { mov [rbp+off], al }
+    2: begin EmitB($66); EmitB($89); EmitB($85); end;   { mov [rbp+off], ax }
+    4: begin EmitB($89); EmitB($85); end;               { mov [rbp+off], eax }
+    else begin EmitB($48); EmitB($89); EmitB($85); end; { mov [rbp+off], rax }
+  end;
+  EmitI32(off);
+end;
+
 procedure PyEmitParamSpills(procIdx, nparams: Integer);
-var i, idx: Integer; wide: Boolean;
+var i, idx, sz: Integer;
 begin
   for i := 0 to nparams - 1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
-    wide := TypeSize(Syms[idx].TypeKind) = 8;
+    sz := TypeSize(Syms[idx].TypeKind);
     if nparams > 6 then
     begin
       { all-stack convention: load via rax }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(16 + 8 * (nparams - 1 - i));
-      if wide then EmitB($48);
-      EmitB($89); EmitB($85);
-      EmitI32(Syms[idx].Offset);
-    end
-    else if i <= 3 then
-    begin
-      if wide then EmitB($48);
-      EmitB($89);
-      case i of
-        0: EmitB($BD);
-        1: EmitB($B5);
-        2: EmitB($95);
-        3: EmitB($8D);
-      end;
-      EmitI32(Syms[idx].Offset);
     end
     else
     begin
-      if wide then EmitB($4C) else EmitB($44);
-      EmitB($89);
-      if i = 4 then EmitB($85) else EmitB($8D);
-      EmitI32(Syms[idx].Offset);
+      { mov rax, <arg reg i> }
+      case i of
+        0: begin EmitB($48); EmitB($89); EmitB($F8); end; { mov rax, rdi }
+        1: begin EmitB($48); EmitB($89); EmitB($F0); end; { mov rax, rsi }
+        2: begin EmitB($48); EmitB($89); EmitB($D0); end; { mov rax, rdx }
+        3: begin EmitB($48); EmitB($89); EmitB($C8); end; { mov rax, rcx }
+        4: begin EmitB($4C); EmitB($89); EmitB($C0); end; { mov rax, r8 }
+        else begin EmitB($4C); EmitB($89); EmitB($C8); end; { mov rax, r9 }
+      end;
     end;
+    PyEmitStoreRaxWidth(Syms[idx].Offset, sz);
   end;
 end;
 
@@ -885,8 +965,9 @@ end;
 procedure PyParseDef;
 var name: AnsiString; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind;
+    pcis: array[0..15] of Integer;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyEnd, bodyNode: Integer;
-    retType: TTypeKind; isProc: Boolean;
+    retType: TTypeKind; isProc: Boolean; retCi: Integer;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
   Next;
@@ -903,6 +984,7 @@ begin
     Next;
     Expect(tkColon, ':');
     ptypes[nparams] := PyParseType;
+    pcis[nparams] := PyLastTypeCi;
     Inc(nparams);
     if not Eat(tkComma) then break;
   end;
@@ -911,8 +993,9 @@ begin
   Expect(tkGt, '> in ->');
   { `-> None` declares a procedure (no Result). }
   isProc := CurTok.Kind = tkNil;
+  retCi := -1;
   if isProc then begin retType := tyInteger; Next; end
-  else retType := PyParseType;
+  else begin retType := PyParseType; retCi := PyLastTypeCi; end;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
@@ -930,11 +1013,15 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
+    if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
+      Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
   end;
   if not isProc then
   begin
     idx := AllocVar('Result', retType);
     Procs[procIdx].RetSymIdx := idx;
+    if (retType = tyClass) and (retCi >= 0) then
+      Syms[idx].RecName := REC_UCLASS_BASE + retCi;
   end;
   PyCollectLocals(bodyStart, bodyEnd);
   for i := 0 to PyLocalCount - 1 do
@@ -972,11 +1059,11 @@ begin
     end;
 end;
 
-procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer);
+procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
-    tk: TTypeKind;
+    tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
 begin
   UClsFBase[ci] := UFldCount;
   UClsFCount[ci] := 0;
@@ -992,6 +1079,68 @@ begin
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) then
+    begin
+      { @dataclass field: name : type [= literal-default] }
+      tk := PyTypeFromTokenIndex(i + 2);
+      if tk = tyUnknown then
+        Error('Nil Python: unsupported dataclass field type for ' +
+              GetTokenStr(i));
+      { A tyString FIELD means inline `string[N]` to the shared store path
+        (capacity-clamped content copy); NilPy str is pointer-semantics, so
+        class fields hold managed strings instead. }
+      if tk = tyString then tk := tyAnsiString;
+      defKind := PYDC_NONE; defIVal := 0; defSOff := 0; defSLen := 0;
+      j := i + 3;
+      if (j < bodyEnd) and (Tokens[j].Kind = tkAssign) then
+      begin
+        Inc(j);
+        case Tokens[j].Kind of
+          tkInteger: begin defKind := PYDC_INT; defIVal := Tokens[j].IVal; end;
+          tkFloat:   begin defKind := PYDC_FLOAT; defIVal := Tokens[j].IVal; end;
+          tkString:  begin defKind := PYDC_STR;
+                           defSOff := Tokens[j].SOffset;
+                           defSLen := Tokens[j].SLen; end;
+          tkTrue:    begin defKind := PYDC_BOOL; defIVal := 1; end;
+          tkFalse:   begin defKind := PYDC_BOOL; defIVal := 0; end;
+          tkMinus:
+          begin
+            Inc(j);
+            if Tokens[j].Kind = tkInteger then
+            begin defKind := PYDC_INT; defIVal := -Tokens[j].IVal; end
+            else if Tokens[j].Kind = tkFloat then
+            begin defKind := PYDC_FLOAT;
+                  { negate an IEEE double by flipping its sign bit }
+                  defIVal := Tokens[j].IVal xor (Int64(1) shl 63); end
+            else Error('Nil Python: unsupported dataclass field default');
+          end;
+          else Error('Nil Python: unsupported dataclass field default (scalar literal only)');
+        end;
+        Inc(j);
+      end;
+      if (defKind = PYDC_INT) and (tk = tyDouble) then
+      begin
+        defKind := PYDC_FLOAT;
+        defIVal := StrToDoubleBits(PyIntLiteralText(defIVal));
+      end;
+      if FindUField(ci, GetTokenStr(i)) >= 0 then
+        Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
+      sz := TypeSize(tk);
+      curOff := AlignTo(curOff, TypeAlign(tk));
+      AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
+      Inc(curOff, sz);
+      if PyDcCount >= PY_MAX_DC_FIELDS then
+        Error('Nil Python: too many dataclass fields');
+      PyDcCi[PyDcCount] := ci;
+      PyDcKind[PyDcCount] := defKind;
+      PyDcIVal[PyDcCount] := defIVal;
+      PyDcSOff[PyDcCount] := defSOff;
+      PyDcSLen[PyDcCount] := defSLen;
+      Inc(PyDcCount);
+      i := j;
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+    end
     else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
     begin
       methodStart := i;
@@ -1053,6 +1202,8 @@ begin
               tk := PyHeaderParamType(methodStart, j, rhsName);
             end;
             if tk = tyUnknown then Error('Nil Python: cannot infer class field type');
+            { see the dataclass branch: str fields are managed, not string[N] }
+            if tk = tyString then tk := tyAnsiString;
             if FindUField(ci, GetTokenStr(j + 2)) < 0 then
             begin
               sz := TypeSize(tk);
@@ -1066,6 +1217,27 @@ begin
       end;
     end;
     Inc(i);
+  end;
+  if isDC then
+  begin
+    { Synthesize the create ctor: self + one param per field, in order. }
+    if UClsFCount[ci] > 15 then
+      Error('Nil Python: too many dataclass fields for the ctor');
+    pnames[0] := 'self'; ptypes[0] := tyClass;
+    nparams := 1;
+    for k := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do
+    begin
+      pnames[nparams] := PyRawName(UFldNOff[k], UFldNLen[k]);
+      ptypes[nparams] := IntToTypeKind(UFldTk[k]);
+      Inc(nparams);
+    end;
+    fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+    AppendChar(fullName, '.');
+    name := 'create';
+    for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+    procIdx := RegisterProc(fullName, False, tyInteger, nparams, pnames, ptypes);
+    k := PyStoredName('create');
+    AddUMeth(ci, k, 6, procIdx);
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
   { RTTI backlink word (VMT-8) + LAYOUT backlink word (VMT-16) before the VMT —
@@ -1095,7 +1267,8 @@ end;
 procedure PyParseMethod(ci: Integer);
 var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode: Integer; pnames: array[0..15] of AnsiString;
-    ptypes: array[0..15] of TTypeKind; isCtor: Boolean;
+    ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
+    isCtor: Boolean;
 begin
   Expect(tkFunction, 'def');
   origName := CurTok.SVal; name := PyMethodName(origName); Next;
@@ -1105,8 +1278,14 @@ begin
   while CurTok.Kind <> tkRParen do
   begin
     pnames[nparams] := CurTok.SVal; Next;
-    if (nparams = 0) and (pnames[nparams] = 'self') then ptypes[nparams] := tyClass
-    else begin Expect(tkColon, ':'); ptypes[nparams] := PyParseType; end;
+    if (nparams = 0) and (pnames[nparams] = 'self') then
+    begin ptypes[nparams] := tyClass; pcis[nparams] := ci; end
+    else
+    begin
+      Expect(tkColon, ':');
+      ptypes[nparams] := PyParseType;
+      pcis[nparams] := PyLastTypeCi;
+    end;
     Inc(nparams);
     if not Eat(tkComma) then break;
   end;
@@ -1123,7 +1302,8 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
-    if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci;
+    if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
+      Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
   end;
   if not isCtor then begin idx := AllocVar('Result', Procs[procIdx].RetType); Procs[procIdx].RetSymIdx := idx; end;
   Procs[procIdx].BodyAddr := CodeLen;
@@ -1135,17 +1315,87 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
-procedure PyParseClass;
+{ Emit the synthesized @dataclass ctor body: spill params, then
+  self.field_i := param_i for every field, via the ordinary AST path. }
+procedure PyEmitDataclassCtor(ci: Integer);
+var fullName, name: AnsiString;
+    procIdx, i, k, idx, nparams, savedSC, savedFS, savedSelf, patchPos: Integer;
+    selfNode, fieldNode, paramNode, assignNode, seqHead: Integer;
+begin
+  fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  AppendChar(fullName, '.');
+  name := 'create';
+  for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+  procIdx := FindProc(fullName);
+  if procIdx < 0 then Error('Nil Python: internal: dataclass ctor not registered');
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
+  nparams := Procs[procIdx].ParamCount;
+  for i := 0 to nparams - 1 do
+  begin
+    if i = 0 then name := 'self'
+    else name := PyRawName(UFldNOff[UClsFBase[ci] + i - 1],
+                           UFldNLen[UClsFBase[ci] + i - 1]);
+    idx := AllocParam(name, Procs[procIdx].Params[i].TypeKind, False, False);
+    Procs[procIdx].Params[i].SymIdx := idx;
+    if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci;
+  end;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, nparams);
+  seqHead := -1;
+  for i := 1 to nparams - 1 do
+  begin
+    k := UClsFBase[ci] + i - 1;
+    selfNode := AllocNode(AN_IDENT);
+    ASTIVal[selfNode] := Procs[procIdx].Params[0].SymIdx;
+    ASTTk[selfNode] := Ord(tyClass);
+    fieldNode := AllocNode(AN_FIELD);
+    ASTLeft[fieldNode] := selfNode;
+    ASTSOffset[fieldNode] := UFldNOff[k];
+    ASTSLen[fieldNode] := UFldNLen[k];
+    ASTTk[fieldNode] := UFldTk[k];
+    paramNode := PyMakeIdent(Procs[procIdx].Params[i].SymIdx);
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := fieldNode;
+    ASTRight[assignNode] := paramNode;
+    seqHead := PySeqAppend(seqHead, assignNode);
+  end;
+  CompileAST(seqHead);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
+procedure PyParseClass(isDC: Boolean);
 var ci, bodyStart, bodyEnd: Integer;
 begin
   Expect(tkClass, 'class');
   ci := FindUClass(CurTok.SVal); Next;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
-  PyRegisterClassMembers(ci, bodyStart, bodyEnd);
+  PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC);
+  if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
   PySkipNewlines;
-  while CurTok.Kind <> tkDedent do begin PyParseMethod(ci); PySkipNewlines; end;
+  while CurTok.Kind <> tkDedent do
+  begin
+    if isDC and (CurTok.Kind = tkIdent) then
+    begin
+      { dataclass field line — already registered; skip to end of line }
+      while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+      PySkipNewlines;
+    end
+    else if CurTok.Kind = tkAt then
+      Error('Nil Python: unsupported decorator inside class (only @dataclass on classes)')
+    else
+    begin
+      PyParseMethod(ci);
+      PySkipNewlines;
+    end;
+  end;
   Expect(tkDedent, 'dedent');
+  if isDC then PyEmitDataclassCtor(ci);
 end;
 
 procedure ParsePyProgram;
@@ -1162,6 +1412,8 @@ begin
       needsBuiltin := True;
   end;
   PyValidateOperators;
+  PyDcCount := 0;
+  for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   PyRegisterClassShells;
   PyCollectModuleLocals;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
@@ -1238,7 +1490,20 @@ begin
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin
-    if CurTok.Kind = tkClass then PyParseClass
+    if CurTok.Kind = tkClass then PyParseClass(False)
+    else if CurTok.Kind = tkAt then
+    begin
+      Next;
+      if not PyIsIdent('dataclass') then
+        Error('Nil Python: unsupported decorator (only @dataclass)');
+      Next;
+      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+      Expect(tkNewline, 'newline');
+      PySkipNewlines;
+      if CurTok.Kind <> tkClass then
+        Error('Nil Python: @dataclass must precede a class');
+      PyParseClass(True);
+    end
     else if CurTok.Kind = tkFunction then PyParseDef
     else
     begin

@@ -1,0 +1,29 @@
+@dataclass
+class Point:
+    x: int
+    y: int
+
+@dataclass
+class Config:
+    name: str
+    scale: float = 2.5
+    count: int = 7
+    active: bool = True
+    label: str = "std"
+
+def dist2(p: Point) -> int:
+    return p.x * p.x + p.y * p.y
+
+p = Point(3, 4)
+print(p.x)
+print(p.y)
+print(dist2(p))
+p.x = 10
+print(p.x)
+
+c = Config("full", 1.5, 2, False, "custom")
+print(c.name, c.scale, c.count, c.active, c.label)
+d = Config("defaults")
+print(d.name, d.scale, d.count, d.active, d.label)
+e = Config("mix", 9.0)
+print(e.name, e.scale, e.count, e.active, e.label)
