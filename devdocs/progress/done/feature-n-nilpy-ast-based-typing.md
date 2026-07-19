@@ -47,3 +47,6 @@ should disappear with it.
 `test-nilpy` green + `--tier quick` + self-host byte-identical + FPC bootstrap
 clean (see [[feedback_fpc_bootstrap_advisory_invisible_to_local_gate]]).
 Every `.npy` test diffed against CPython as the oracle.
+
+## Log
+- 2026-07-19 — resolved, commit 1a4089b4.

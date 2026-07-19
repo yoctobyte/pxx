@@ -85,7 +85,7 @@ _none_
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-n-nilpy-ast-based-typing | N | 70 | feature | NilPy: type locals from the AST, like Rust and Zig already do | — |
+| feature-n-nilpy-ast-typing-module-scope | N | 55 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
@@ -215,7 +215,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (851)
+## done (852)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -854,6 +854,7 @@ _none_
 | feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | 50 | feature | Multidimensional fixed arrays | — |
+| feature-n-nilpy-ast-based-typing | N | 70 | feature | NilPy: type locals from the AST, like Rust and Zig already do | — |
 | feature-native-arch-binaries | A | 50 | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | 50 | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
@@ -2512,7 +2513,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 75] [N] bug-nilpy-method-returning-str-garbage
-- [p 70] [N] feature-n-nilpy-ast-based-typing
 - [p 70] [T] regression-optdiff-shard0-6
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [A] feature-a-typeref-handle
@@ -2532,6 +2532,7 @@ _none_
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
+- [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-corpus-uforth
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
