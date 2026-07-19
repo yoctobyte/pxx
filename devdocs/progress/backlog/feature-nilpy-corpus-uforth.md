@@ -111,10 +111,20 @@ slices, f-strings, raise, isinstance, augassign.
      [[feature-a-abi-oracle]] rather than a ninth copy of the return rule.
    - [[feature-rtti-field-reflection]] — `t.word.name` on an Any (uforth.py:190).
 
-   Still frontend, still ours, and independent of all of the above:
+   **Also landed session 3, after the wall picture above was written:**
+   f-string conversions and format specs (the whole 67-hole census);
+   class-returning top-level defs keeping their class identity (was silent
+   garbage); top-level def SIGNATURES registered up front, which also makes
+   FORWARD CALLS work; module-level names typed from the AST; **for-in over
+   list / set / dict / str**, and `break` / `continue`, which had never been
+   parsed at all — not even inside a plain `while`.
+
+   Still frontend, still ours, and independent of the Track A blockers:
    [[feature-nilpy-bytes-and-slices]] (bytearray + slices + to_bytes; 99
-   slice sites, and vm.memory IS the Forth data space), then tuple unpack,
-   for-in, @property, try/except payloads, nonlocal.
+   slice sites, and vm.memory IS the Forth data space) — but note both
+   slices and `int.to_bytes(..., signed=True)` need a shared-parser hook, so
+   that one is not purely ours after all. Then tuple unpack, @property,
+   try/except payloads, nonlocal.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
    independently tested against the 134-block corpus extracted standalone.
 3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,
