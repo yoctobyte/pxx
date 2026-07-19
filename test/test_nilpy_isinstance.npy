@@ -1,0 +1,31 @@
+from dataclasses import dataclass
+from typing import Any, List
+
+@dataclass
+class Word:
+    name: str
+
+@dataclass
+class Call:
+    depth: int
+
+def kind(t: Any) -> str:
+    if isinstance(t, Word):
+        return "word"
+    if isinstance(t, (int, float)):
+        return "num"
+    if isinstance(t, str):
+        return "text"
+    if isinstance(t, Call):
+        return "call"
+    return "other"
+
+xs = [1, 2.5, "hi"]
+xs.append(Word("dup"))
+xs.append(Call(3))
+print(kind(xs[0]))
+print(kind(xs[1]))
+print(kind(xs[2]))
+print(kind(xs[3]))
+print(kind(xs[4]))
+print(kind(True))

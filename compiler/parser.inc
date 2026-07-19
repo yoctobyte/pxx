@@ -715,6 +715,7 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
+function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 
 { Read/Write/Readln/Writeln are intrinsics resolved by context at the call site,
   not true reserved words — FPC lets a user declaration shadow them. Accept them
@@ -6963,6 +6964,18 @@ var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, pre
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
 begin
   LastExprTk := tyInteger;
+  { Nil Python: ClassName(args) in ANY expression position is construction
+    (Pascal reads it as a typecast). The statement-level intercept only saw
+    top-level assignments, so a ctor call in a method arg quietly became a
+    cast — a Word("x") boxed into a list slot carried the string pointer
+    with an int64 tag. }
+  if PyExprMode and (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    CurASTNode := PyClassCreateExpr;
+    LastExprTk := tyClass;
+    Exit;
+  end;
   case CurTok.Kind of
     tkInteger:
     begin

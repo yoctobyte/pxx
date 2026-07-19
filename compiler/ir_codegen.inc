@@ -5082,6 +5082,7 @@ begin
             tyInt64, tyNativeInt:                size := VT_INT64;
             tyUInt8, tyUInt16, tyUInt32, tyUInt64,
             tyNativeUInt, tyPointer:             size := VT_INT64;
+            tyClass:                             size := VT_OBJECT;
             tyBoolean:                           size := VT_BOOL;
             tyChar:                              size := VT_CHAR;
             tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;

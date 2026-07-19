@@ -318,10 +318,114 @@ begin
     Error('Nil Python: parenthesize the comparison next to a bitwise operator');
 end;
 
+{ isinstance(x, T) / isinstance(x, (T1, T2, ...)) — desugared to tag checks
+  on variants (int also accepts bool, like CPython) and closed-world
+  AN_IS_TEST class checks; a variant operand is unboxed via pylib pyvarobj.
+  The operand subtree is re-emitted per OR term (pure idents in the corpus;
+  a side-effecting operand would double-evaluate — b346 family, noted). }
+procedure PyParseIsinstance;
+var xNode, node, left, term, callN, argN, tagCall: Integer;
+    isVar: Boolean; nm: AnsiString; ci: Integer;
+
+  function TagEq(tagConst: Int64): Integer;
+  var c, a, e: Integer;
+  begin
+    a := AllocNode(AN_ARG);
+    ASTLeft[a] := xNode;
+    c := AllocNode(AN_CALL);
+    ASTIVal[c] := FindProc('pyvartag');
+    if ASTIVal[c] < 0 then Error('Nil Python: pylib (pyvartag) not loaded');
+    ASTTk[c] := Ord(tyInt64);
+    ASTLeft[c] := a;
+    e := AllocNode(AN_INT_LIT);
+    ASTIVal[e] := tagConst;
+    ASTTk[e] := Ord(tyInt64);
+    Result := AllocNode(AN_BINOP);
+    ASTIVal[Result] := Ord(tkEq);
+    ASTLeft[Result] := c; ASTRight[Result] := e;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
+  function OrJoin(a, b: Integer): Integer;
+  begin
+    if a < 0 then begin Result := b; Exit; end;
+    Result := AllocNode(AN_BINOP);
+    ASTIVal[Result] := Ord(tkOr);
+    ASTLeft[Result] := a; ASTRight[Result] := b;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
+begin
+  Next;                     { 'isinstance' }
+  Expect(tkLParen, '(');
+  PyParseBoolExpr;
+  xNode := CurASTNode;
+  isVar := IntToTypeKind(ASTTk[xNode]) = tyVariant;
+  Expect(tkComma, ',');
+  left := -1;
+  if CurTok.Kind = tkLParen then Next;   { optional tuple of types }
+  repeat
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a type in isinstance');
+    nm := LowerCase(CurTok.SVal);
+    if nm = 'int' then
+      term := OrJoin(OrJoin(TagEq(VT_INT), TagEq(VT_INT64)), TagEq(VT_BOOL))
+    else if nm = 'float' then term := TagEq(VT_DOUBLE)
+    else if nm = 'str' then term := TagEq(VT_STRING)
+    else if nm = 'bool' then term := TagEq(VT_BOOL)
+    else
+    begin
+      ci := FindUClass(CurTok.SVal);
+      if ci < 0 then Error('Nil Python: unknown type in isinstance: ' + CurTok.SVal);
+      if isVar then
+      begin
+        { (tag == VT_OBJECT) and (pyvarobj(x) is C) }
+        argN := AllocNode(AN_ARG);
+        ASTLeft[argN] := xNode;
+        callN := AllocNode(AN_CALL);
+        ASTIVal[callN] := FindProc('pyvarobj');
+        if ASTIVal[callN] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+        ASTTk[callN] := Ord(tyPointer);
+        ASTLeft[callN] := argN;
+        node := AllocNode(AN_IS_TEST);
+        ASTLeft[node] := callN;
+        ASTIVal[node] := ci;
+        ASTTk[node] := Ord(tyBoolean);
+        tagCall := TagEq(VT_OBJECT);
+        term := AllocNode(AN_BINOP);
+        ASTIVal[term] := Ord(tkAnd);
+        ASTLeft[term] := tagCall; ASTRight[term] := node;
+        ASTTk[term] := Ord(tyBoolean);
+      end
+      else
+      begin
+        node := AllocNode(AN_IS_TEST);
+        ASTLeft[node] := xNode;
+        ASTIVal[node] := ci;
+        ASTTk[node] := Ord(tyBoolean);
+        term := node;
+      end;
+    end;
+    Next;
+    left := OrJoin(left, term);
+  until not Eat(tkComma);
+  if CurTok.Kind = tkRParen then
+  begin
+    Next;   { tuple close }
+    if CurTok.Kind = tkRParen then Next   { call close }
+  end;
+  CurASTNode := left;
+end;
+
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
 procedure PyParseBitOperand;
 var node: Integer;
 begin
+  if PyIsIdent('isinstance') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    PyParseIsinstance;
+    Exit;
+  end;
   if CurTok.Kind = tkLogNot then
   begin
     Next;
@@ -884,6 +988,8 @@ begin
   Result := s;
 end;
 
+function PyClassCreate: Integer; forward;
+
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
 function PyIsCountCall: Boolean;
 begin
@@ -916,6 +1022,11 @@ begin
   ASTRight[argNode] := valArg;
   Expect(tkRParen, ')');
   Result := node;
+end;
+
+function PyClassCreateExpr: Integer;
+begin
+  Result := PyClassCreate;
 end;
 
 function PyClassCreate: Integer;

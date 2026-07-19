@@ -57,8 +57,20 @@ type
 function len(l: TPyList): Integer;
 function next(c: TPyCounter): Int64;
 function pycontains(l: TPyList; const v: Variant): Boolean;
+function pyvartag(const v: Variant): Int64;
+function pyvarobj(const v: Variant): Pointer;
 
 implementation
+
+function pyvartag(const v: Variant): Int64;
+begin
+  Result := PPyVarRec(@v)^.VType;
+end;
+
+function pyvarobj(const v: Variant): Pointer;
+begin
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
 
 constructor TPyCounter.Create(start: Int64);
 begin

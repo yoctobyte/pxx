@@ -853,7 +853,9 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
+  { NilPy included: isinstance() resolves class identity through the same
+    RTTI backlink chain (__pxxInheritsFrom) the Pascal `is` operator uses. }
+  if (not isC) and (not isBasic) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;
