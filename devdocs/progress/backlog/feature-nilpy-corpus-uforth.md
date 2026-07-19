@@ -135,8 +135,11 @@ slices, f-strings, raise, isinstance, augassign.
    have NO statement rule at all, and exceptions are uforth's control flow,
    not its error path), [[feature-nilpy-tuple-unpack]] (p55 — the enabler for
    `for k, v in d.items()`), and, still unfiled because neither blocks as
-   early: `@property` (only `@dataclass` is accepted as a decorator) and
-   comprehensions.
+   early: `@property` (only `@dataclass` is accepted as a decorator),
+   comprehensions, `nonlocal` (1 site), and **lambda as a VALUE** — 3 sites,
+   all `vm.define_word("X", native=lambda vm: ...)`, which is a real closure
+   passed as a Callable parameter rather than the dataclass default-factory
+   form already handled. Small in count, not small in scope.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
    independently tested against the 134-block corpus extracted standalone.
 3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,
