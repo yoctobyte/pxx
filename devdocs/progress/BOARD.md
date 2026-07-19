@@ -203,7 +203,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (835)
+## done (836)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -837,6 +837,7 @@ _none_
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
