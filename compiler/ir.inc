@@ -2836,16 +2836,25 @@ end;
   dispatch can jump straight into the loop. C markers carry ASTSLen=1 (distinct
   from a Pascal AN_CASE statement / the Default(T) node). }
 procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer; var defaultLabel: Integer);
-var condNode: Integer;
+var condNode, selSz: Integer; caseVal: Int64;
 begin
   if node < 0 then Exit;
   if ASTKind[node] = AN_SWITCH then Exit;   { nested switch owns its own case labels }
   if (ASTKind[node] = AN_CASE) and (ASTSLen[node] = 1) then
   begin
     ASTSOffset[node] := IRNewLabel;
+    { C 6.8.4.2: each case constant is CONVERTED to the promoted controlling
+      type. quickjs switches a uint32_t tag over negative enum labels
+      (JS_TAG_OBJECT = -1): the label must compare as 0xFFFFFFFF, not as a
+      sign-extended 64-bit -1 that never matches a zero-extended selector. }
+    caseVal := ASTIVal[node];
+    selSz := TypeSize(IntToTypeKind(selTk));
+    if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
+       (caseVal < 0) then
+      caseVal := caseVal and ((Int64(1) shl (selSz * 8)) - 1);
     condNode := IRAppend(IR_BINOP,
       IRAppend(IR_LOAD_SYM, selTmp, -1, -1, 0, selTk),
-      IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], selTk),
+      IRAppend(IR_CONST_INT, -1, -1, -1, caseVal, selTk),
       Ord(tkNeq), 0, Ord(tyBoolean));
     IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[node], condNode, -1, 0, 0);
     Exit;                                    { marker has no children of interest }

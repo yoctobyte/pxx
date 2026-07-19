@@ -9760,7 +9760,14 @@ begin
           end;
           bitBytes := (bitUnitUsed + bitWidth + 7) div 8;
           if bitBytes < 1 then bitBytes := 1;
-          if bitBytes > sz then bitBytes := sz;
+          { Access window: enough bytes FROM THE UNIT START to cover
+            shift+width. Cap at the UNIT size, never the field's declared-type
+            size: a `uint8_t wide:1` packed after `uint32_t len:31` (gcc packs
+            mixed-declared-type runs into one unit — quickjs's JSString header)
+            sits at shift 31, and the old `> sz` cap clamped the window to 1
+            byte, so the read/write missed the bits entirely — len/hash read
+            back garbage and the atom hash walked off the page. }
+          if bitBytes > bitUnitSize then bitBytes := bitUnitSize;
         end
         else
         begin
@@ -9808,7 +9815,12 @@ begin
           bitUnitUsed := bitUnitUsed + bitWidth;
           bitBytes := (bitUnitUsed + 7) div 8;
           if bitBytes < 1 then bitBytes := 1;
-          if bitBytes > sz then bitBytes := sz;   { was 4; identical for int (sz=4) }
+          { Cap the unit's occupied span at the UNIT size, not this field's
+            declared-type size — a narrow-typed member of a mixed-type run
+            (`uint8_t wide:1` at shift 31 of a uint32_t unit, quickjs JSString)
+            otherwise shrank the span to 1 byte and the NEXT unit started
+            inside this one, shifting every later field. }
+          if bitBytes > bitUnitSize then bitBytes := bitUnitSize;
           { A long-long bitfield unit is LOADED/STORED as 8 bytes (IRBitStorageTk),
             so it occupies a full 8-byte unit — reserve that much or the next field's
             unit overlaps it and an 8-byte store clobbers this one

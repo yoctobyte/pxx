@@ -1793,6 +1793,10 @@ test-core: $(COMPILER)
 	/tmp/cpreproc_body_string_param_b37126; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_rint_lrint_b372.c /tmp/cmath_rint_lrint_b37226
 	/tmp/cmath_rint_lrint_b37226; test "$$?" = "42"
+	./$(COMPILER) test/cbitfield_mixed_type_pack_b373.c /tmp/cbitfield_mixed_type_pack_b37326
+	/tmp/cbitfield_mixed_type_pack_b37326; test "$$?" = "42"
+	./$(COMPILER) test/cswitch_unsigned_negative_case_b374.c /tmp/cswitch_unsigned_negative_case_b37426
+	/tmp/cswitch_unsigned_negative_case_b37426; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226
