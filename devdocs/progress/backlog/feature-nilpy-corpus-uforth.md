@@ -54,8 +54,14 @@ slices, f-strings, raise, isinstance, augassign.
 
 ## Milestone ladder (each lands green independently)
 
-0. Oracle green: fix the CURRENT CPython suite red (core.fr:429 THROW -13
-   'IFFLOORED' — upstream uforth bug/missing word).
+0. Oracle green — IN PROGRESS (2026-07-19, uforth commit 9f9b45a): the
+   core.fr:429 red was uforth's LEXER truncating the token stream at `\`
+   (broke `POSTPONE \ THEN ;`); fixed upstream (standalone-`\`-only token,
+   the immediate word does the >IN skip). core.fr + additional core tests
+   now complete. NEXT KNOWN WALL: utilities.fth `\?` word (second patch in
+   9f9b45a addresses the lexing; full-suite sweep NOT yet verified — run
+   `cd tests && python3 ../uforth.py runtests.fth` and continue
+   wall-by-wall).
 1. N features by need, ranked by what blocks uforth.py's PARSE first
    (dataclass, dict, slice, f-string, ...) — each = own N ticket hung off
    this umbrella; CPython remains the oracle for every increment.
