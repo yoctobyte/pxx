@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -216,6 +216,27 @@ License: FPC sources are GPL-2.0-or-later (see LICENSE); used here only as a
 test corpus, never linked or shipped.
 EOF
   say "fpc-testsuite -> $DEST/fpc-testsuite"
+}
+
+fetch_fcl_json() {
+  # fcl-json + fcl-fpcunit sources from the SAME pinned FPC commit as the
+  # testsuite fetch — the fpjson/fpcunit 203-case suite target (make test-fpjson;
+  # feature-fpjson-fpcunit-suite-target). The pxx-side driver (tjrun.pp) and the
+  # testutils shadow live in the repo under test/fpjson/.
+  if present fcl-json; then say "fcl-json present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$FPC_URL" fcl-json "$FPC_COMMIT" \
+    packages/fcl-json/src packages/fcl-json/tests packages/fcl-fpcunit/src LICENSE
+  cat > "$DEST/fcl-json/PROVENANCE.md" <<EOF
+# fcl-json + fcl-fpcunit Candidate (fpjson/fpcunit suite target)
+Upstream: ${FPC_URL}
+Commit: ${FPC_COMMIT} (release_3_2_2 tag)
+Paths: packages/fcl-json/{src,tests}, packages/fcl-fpcunit/src, LICENSE
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: FPC packages are LGPL with static-linking exception (see LICENSE + unit headers).
+Used by \`make test-fpjson\` — fcl-json's own 203-case suite under a pxx-built
+runner (test/fpjson/tjrun.pp), asserting 203/0/0.
+EOF
+  say "fcl-json -> $DEST/fcl-json"
 }
 
 fetch_zlib() {
@@ -440,7 +461,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_duktape; fetch_csmith ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_duktape; fetch_fcl_json; fetch_csmith ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -457,6 +478,7 @@ EOF
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
     duktape)       fetch_duktape ;;
+    fcl-json)      fetch_fcl_json ;;
     csmith)        fetch_csmith ;;
     *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith)" ;;
   esac

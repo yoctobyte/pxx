@@ -40,7 +40,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -4663,6 +4663,43 @@ test-duktape: $(COMPILER)
 	  echo "test-duktape: PASS — curated JS smoke byte-exact"; \
 	else \
 	  echo "test-duktape: FAIL — output mismatch"; head -12 "$$wd/diff.txt"; exit 1; \
+	fi
+
+# fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
+# under a pxx-built runner — the strongest OOP/RTL exerciser in the Pascal
+# corpus (feature-fpjson-fpcunit-suite-target). Track B shape: builds with
+# $(PXX_STABLE), never rebuilds the compiler. Stages upstream sources flat into
+# a temp dir (unit resolution wants one dir; -Fu order alone is insufficient)
+# with our test/fpjson/testutils.pas SHADOWING upstream testutils.pp, then runs
+# test/fpjson/tjrun.pp (walks the registry itself — the ITestListener interface
+# dispatch has a separate open bug). Asserts 203 run / 0 failures / 0 errors.
+# Skips if the gitignored tree is absent (tools/install_lib_candidates.sh fcl-json).
+FCLJSON_SRC ?= library_candidates/fcl-json/packages
+test-fpjson:
+	@test -x $(PXX_STABLE) || { echo "test-fpjson: no stable compiler at $(PXX_STABLE)"; exit 1; }
+	@if [ ! -f "$(FCLJSON_SRC)/fcl-json/src/fpjson.pp" ]; then \
+	  echo "test-fpjson: SKIP — no fcl-json tree at $(FCLJSON_SRC) (tools/install_lib_candidates.sh fcl-json)"; \
+	  exit 0; \
+	fi; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	root="$$(pwd)"; \
+	for d in fcl-json/src fcl-json/tests fcl-fpcunit/src; do \
+	  for f in "$$root/$(FCLJSON_SRC)/$$d"/*; do \
+	    case "$$(basename "$$f")" in testutils.pp) continue ;; esac; \
+	    ln -sf "$$f" "$$wd/"; \
+	  done; \
+	done; \
+	cp test/fpjson/testutils.pas test/fpjson/tjrun.pp "$$wd/"; \
+	echo "compiling fpjson suite runner ..."; \
+	( cd "$$wd" && "$$root/$(PXX_STABLE)" --mimic-fpc \
+	    -Fu"$$root/lib/rtl" -Fu"$$root/lib/rtl/platform/posix" \
+	    tjrun.pp "$$wd/tjrun" ) > /dev/null || exit 1; \
+	"$$wd/tjrun" > "$$wd/out.txt" 2>&1; rc=$$?; \
+	tail -1 "$$wd/out.txt"; \
+	if [ "$$rc" = "0" ] && grep -q "run: 203  failures: 0  errors: 0" "$$wd/out.txt"; then \
+	  echo "test-fpjson: PASS — 203/203"; \
+	else \
+	  echo "test-fpjson: FAIL (exit $$rc)"; tail -12 "$$wd/out.txt"; exit 1; \
 	fi
 
 CHESS_SRC ?= library_candidates/chess/Vice11/src
