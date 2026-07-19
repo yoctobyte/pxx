@@ -1,10 +1,10 @@
 # f-strings. Oracle: CPython — running this file with python3 must produce
 # byte-identical output to the compiled binary.
 #
-# Covers plain {expr} holes, the {{ }} escapes, and the !r / !s conversions.
-# A format spec ({x:04d}) is still a deliberate clean error rather than a
-# silent approximation: it changes what is PRINTED, so guessing would produce
-# wrong output instead of an honest missing feature.
+# Covers plain {expr} holes, the {{ }} escapes, the !r / !s conversions, and
+# the format-spec subset: [<|>] [0] [width] [d|x|X|o|b|s]. A spec outside that
+# grammar halts naming itself rather than being ignored — a spec decides what
+# is PRINTED, so silently dropping one produces wrong output.
 
 b = True
 n = 42
@@ -56,3 +56,13 @@ print(f"{s!r} {n!r} {b!r} {d!r}")
 print(f"{s!s}")
 r = {"k": "vv"}
 print(f"{r['k']!r}")
+
+# format specs: base, zero padding, width, alignment
+v = 255
+w = 7
+print(f"{v:x} {v:X} {v:d}")
+print(f"{w:05d} {v:04x}")
+print(f"{w:b} {w:o}")
+print(f"0x{v:x}")
+print(f"[{s:5}] [{w:5}] [{w:<5}]")
+print(f"{-5:04d}")

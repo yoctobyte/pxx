@@ -116,6 +116,12 @@ function pyrepr_of(i: Int64): AnsiString; overload;
 function pyrepr_of(d: Double): AnsiString; overload;
 function pyrepr_of(c: Char): AnsiString; overload;
 function pyrepr_of(const v: Variant): AnsiString; overload;
+{ Python's format() for an f-string hole with a spec. The spec arrives as the
+  literal text between ':' and the closing brace; this unit is the ONE place
+  that interprets it, so the lexer never has to know what "05x" means. }
+function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
+function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -841,6 +847,137 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
 end;
+
+{ Integer -> text in the requested base, lower or upper case. Python has no
+  sign-and-magnitude form here: a negative value formats its minus sign and
+  then the magnitude, exactly as CPython does for {-255:x} = -ff. }
+function PyFmtBase(v: Int64; base: Integer; upper: Boolean): AnsiString;
+var tmp: AnsiString; neg: Boolean; d: Integer;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  tmp := '';
+  if v = 0 then tmp := '0';
+  while v > 0 do
+  begin
+    d := v mod base;
+    if d < 10 then tmp := Chr(Ord('0') + d) + tmp
+    else if upper then tmp := Chr(Ord('A') + d - 10) + tmp
+    else tmp := Chr(Ord('a') + d - 10) + tmp;
+    v := v div base;
+  end;
+  if neg then Result := '-' + tmp else Result := tmp;
+end;
+
+function PyFmtPad(const s: AnsiString; width: Integer; zero: Boolean;
+                  leftAlign: Boolean): AnsiString;
+var pad: AnsiString; i, need: Integer;
+begin
+  Result := s;
+  need := width - Length(s);
+  if need <= 0 then Exit;
+  pad := '';
+  for i := 1 to need do
+    if zero then pad := pad + '0' else pad := pad + ' ';
+  if leftAlign then Result := s + pad
+  else if zero and (Length(s) > 0) and (s[1] = '-') then
+    { zero padding goes AFTER the sign: {-5:04d} is -005, not 0-05 }
+    Result := '-' + pad + Copy(s, 2, Length(s) - 1)
+  else
+    Result := pad + s;
+end;
+
+{ Supported spec grammar, deliberately small and checked rather than guessed:
+    [ '<' | '>' ] [ '0' ] [ width ] [ 'd' | 'x' | 'X' | 'o' | 'b' | 's' ]
+  Anything else halts with the spec quoted, because a format spec decides what
+  is PRINTED and silently ignoring one produces wrong output. }
+function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
+var p, width: Integer; zero, leftAlign: Boolean; kind: Char; body: AnsiString;
+begin
+  p := 1;
+  zero := False;
+  leftAlign := False;
+  width := 0;
+  kind := 'd';
+  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  begin
+    leftAlign := spec[p] = '<';
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = '0') then
+  begin
+    zero := True;
+    Inc(p);
+  end;
+  while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+  begin
+    width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  if p <= Length(spec) then
+  begin
+    kind := spec[p];
+    Inc(p);
+  end;
+  if p <= Length(spec) then
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+    Halt(1);
+  end;
+  case kind of
+    'd': body := PyFmtBase(i, 10, False);
+    'x': body := PyFmtBase(i, 16, False);
+    'X': body := PyFmtBase(i, 16, True);
+    'o': body := PyFmtBase(i, 8, False);
+    'b': body := PyFmtBase(i, 2, False);
+    's': body := PyFmtBase(i, 10, False);
+  else
+    begin
+      WriteLn('Nil Python: unsupported f-string format spec "', spec, '"');
+      Halt(1);
+    end;
+  end;
+  Result := PyFmtPad(body, width, zero, leftAlign);
+end;
+
+function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
+var p, width: Integer; leftAlign: Boolean;
+begin
+  p := 1;
+  leftAlign := False;
+  width := 0;
+  if (p <= Length(spec)) and ((spec[p] = '<') or (spec[p] = '>')) then
+  begin
+    leftAlign := spec[p] = '<';
+    Inc(p);
+  end;
+  while (p <= Length(spec)) and (spec[p] >= '0') and (spec[p] <= '9') do
+  begin
+    width := width * 10 + (Ord(spec[p]) - Ord('0'));
+    Inc(p);
+  end;
+  if (p <= Length(spec)) and (spec[p] = 's') then Inc(p);
+  if p <= Length(spec) then
+  begin
+    WriteLn('Nil Python: unsupported f-string format spec "', spec, '" for a string');
+    Halt(1);
+  end;
+  { a string left-aligns by default, unlike a number }
+  if width > Length(s) then leftAlign := leftAlign or (spec = '') or
+                                         ((Length(spec) > 0) and (spec[1] <> '>'));
+  Result := PyFmtPad(s, width, False, leftAlign);
+end;
+
+function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
+begin
+  if pyvartag(v) = 6 then
+  begin
+    Result := pyformat_of(VariantToStr(v), spec);
+    Exit;
+  end;
+  Result := pyformat_of(PPyVarRec(@v)^.Payload, spec);
+end;
+
 
 function pystr_of(const s: AnsiString): AnsiString;
 begin

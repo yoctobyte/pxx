@@ -127,14 +127,15 @@ end;
   by rewriting rather than by deciding up front because the conversion suffix
   (!r) appears only at the END of the hole, after the expression text has
   already been emitted. }
-function PyFStrSwapLastCall(const outS: AnsiString): AnsiString;
+function PyFStrSwapLastCall(const outS: AnsiString;
+                            const newCall: AnsiString): AnsiString;
 var i, k: Integer;
 begin
   Result := outS;
   for i := Length(outS) - 8 downto 1 do
     if Copy(outS, i, 9) = 'pystr_of(' then
     begin
-      Result := Copy(outS, 1, i - 1) + 'pyrepr_of(';
+      Result := Copy(outS, 1, i - 1) + newCall;
       for k := i + 9 to Length(outS) do AppendChar(Result, outS[k]);
       Exit;
     end;
@@ -286,7 +287,7 @@ begin
             call rather than wrapping it — pyrepr_of carries the same per-type
             overload set as pystr_of. }
           if Source[i + 1] = 'r' then
-            outS := PyFStrSwapLastCall(outS);
+            outS := PyFStrSwapLastCall(outS, 'pyrepr_of(');
           outS := outS + ')';
           inHole := False;
           Inc(i, 3);
@@ -295,7 +296,29 @@ begin
         else if (depth = 0) and (c = '!') then
           ErrorAt(ln, 'Nil Python: only the !r and !s f-string conversions are supported')
         else if (depth = 0) and (c = ':') then
-          ErrorAt(ln, 'Nil Python: an f-string format spec is not supported yet');
+        begin
+          { A format spec. Captured verbatim and passed to the runtime as a
+            STRING rather than compiled here: the spec mini-language belongs
+            with the formatting code, and keeping it in one place is what
+            stops the parser and the formatter from disagreeing about what
+            "05x" means. pyformat_of rejects anything it does not implement,
+            at run time, by name. }
+          outS := PyFStrSwapLastCall(outS, 'pyformat_of(');
+          outS := outS + ', "';
+          Inc(i);
+          while (i <= n) and (Source[i] <> '}') do
+          begin
+            if (Source[i] = #10) or (Source[i] = '"') then
+              ErrorAt(ln, 'Nil Python: an f-string format spec must be a plain literal');
+            outS := outS + Source[i];
+            Inc(i);
+          end;
+          if i > n then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
+          outS := outS + '")';
+          inHole := False;
+          Inc(i);
+          continue;
+        end;
         if c = #10 then
           ErrorAt(ln, 'Nil Python: a newline inside an f-string hole is not supported');
         outS := outS + c;
