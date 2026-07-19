@@ -2794,9 +2794,15 @@ begin
         methods are limited. }
       if (not fieldsOnly) and (not isCtor) and
          (RetViaHiddenDest(mRet) or (mRet = tyAnsiString)) then
-        Error('Nil Python: a method returning ' + PyTypeName(mRet)
-          + ' is not supported yet (bug-nilpy-method-returning-str-garbage); '
-          + 'a top-level def returning it works, or return it through a field');
+        { ErrorAt with the DEF's own line: plain Error here printed the line of
+          whatever the parser cursor was on, which for a class pre-pass is the
+          `class` header — so every one of a class's offending methods reported
+          the same line and no way to tell them apart. }
+        ErrorAt(Tokens[methodStart].Line,
+                'Nil Python: method ' + origName + ' returns ' + PyTypeName(mRet)
+                + ', which is not supported yet '
+                + '(bug-nilpy-method-returning-str-garbage); '
+                + 'a top-level def returning it works, or return it through a field');
       if fieldsOnly then procIdx := -1
       else
       begin
