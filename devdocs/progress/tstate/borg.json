@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T22:33:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fed71966fed10fc42ae0bb4885d94b22243bd2d3",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-18T04:25:16Z",
    "fixed": [],
    "new_red": [],
@@ -5363,6 +5355,14 @@
    "sha": "074ceb86e974ef7dad70decd647d6329ebbff68c",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-19T10:44:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "926057047281bca017d76e44d2da73189b3f1665",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -5816,6 +5816,7 @@
   "test-core#src:test/cmath_cbrt_correct_round_b379.c": "pass",
   "test-core#src:test/cmath_domain_nan_b233.c": "pass",
   "test-core#src:test/cmath_exp_correct_round_b377.c": "pass",
+  "test-core#src:test/cmath_hyperbolic_family_b383.c": "pass",
   "test-core#src:test/cmath_log2_expm1_family_b382.c": "pass",
   "test-core#src:test/cmath_log_correct_round_b378.c": "pass",
   "test-core#src:test/cmath_pow_correct_round_b380.c": "pass",
@@ -6900,11 +6901,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T10:35:17Z",
-  "sha": "074ceb86e974ef7dad70decd647d6329ebbff68c",
+  "date": "2026-07-19T10:44:04Z",
+  "sha": "926057047281bca017d76e44d2da73189b3f1665",
   "tier": "native",
   "verdict": "RED",
-  "wall": 279.6
+  "wall": 280.1
  },
  "last_bench": {
   "conf_rows": 550,
