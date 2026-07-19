@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-18T05:55:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3dc92e72a89750a46ac7a9a3f89a4cd42cf963c4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-18T06:12:56Z",
    "fixed": [],
    "new_red": [],
@@ -5363,6 +5355,16 @@
    "sha": "042560aa8dae1ba7cfd1d9991b6347716d3c5ba0",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-19T11:21:14Z",
+   "fixed": [
+    "test-core#src:test/csystem_libs_granular_libc_b113.c"
+   ],
+   "new_red": [],
+   "sha": "bce307bbfb008e3a71bbb4cc23a3522b0397b46e",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5930,7 +5932,7 @@
   "test-core#src:test/cswitch_nested_case_block_b127.c": "pass",
   "test-core#src:test/cswitch_noncompound_duff_b207.c": "pass",
   "test-core#src:test/cswitch_unsigned_negative_case_b374.c": "pass",
-  "test-core#src:test/csystem_libs_granular_libc_b113.c": "fail",
+  "test-core#src:test/csystem_libs_granular_libc_b113.c": "pass",
   "test-core#src:test/csystem_libs_granular_math_b112.c": "pass",
   "test-core#src:test/ctag_redef_no_selfref_crash_b202.c": "pass",
   "test-core#src:test/ctcc_batch2_b185.c": "pass",
@@ -6903,11 +6905,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T11:02:35Z",
-  "sha": "042560aa8dae1ba7cfd1d9991b6347716d3c5ba0",
+  "date": "2026-07-19T11:21:14Z",
+  "sha": "bce307bbfb008e3a71bbb4cc23a3522b0397b46e",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 354.8
+  "verdict": "GREEN",
+  "wall": 287.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6972,23 +6974,6 @@
    "opened": "2026-07-19T09:37:39Z",
    "range": [],
    "src": "tools/optdiff.sh"
-  },
-  {
-   "bad": "21f0a4e53312474e94d1a60ebcc471065c8f6ab4",
-   "good": "0178c3622bd7a034d75b63e4bb2ed8989fc64cb0",
-   "job": "test-core#src:test/csystem_libs_granular_libc_b113.c",
-   "name": "test-core#509",
-   "opened": "2026-07-19T10:24:36Z",
-   "range": [
-    "9c011dc0eec87e85c0d875c798e92b84d60c2e73",
-    "c591e65d4cebcb6f3844c27727f18eed76682755",
-    "684c7ffcd777cbfe2c1188a31b747aafcb2060c7",
-    "283816d40aa43e647eee6de7725a076388dc98b0",
-    "e2d4be48d5f19619029751bbd23979a6d15cd9ab",
-    "130ef6c91e3e7a13a718db45666966831e245193",
-    "21f0a4e53312474e94d1a60ebcc471065c8f6ab4"
-   ],
-   "src": "test/csystem_libs_granular_libc_b113.c"
   }
  ]
 }
