@@ -342,19 +342,55 @@ begin
       { Operators and Punctuation }
       Inc(P);
       case c of
-        '+': PyEmitToken(tkPlus, 0, SrcLine, '');
-        '-': PyEmitToken(tkMinus, 0, SrcLine, '');
-        '*': PyEmitToken(tkStar, 0, SrcLine, '');
+        '+': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkPlusEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkPlus, 0, SrcLine, '');
+        end;
+        '-': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkMinusEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkMinus, 0, SrcLine, '');
+        end;
+        '*': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkStarEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkStar, 0, SrcLine, '');
+        end;
         '/': begin
           if (P <= Length(Source)) and (Source[P] = '/') then
           begin
             Inc(P);
-            PyEmitToken(tkDiv, 0, SrcLine, '');
+            if (P <= Length(Source)) and (Source[P] = '=') then
+            begin Inc(P); PyEmitToken(tkSlashEq, 0, SrcLine, ''); end
+            else PyEmitToken(tkDiv, 0, SrcLine, '');
           end
           else
             PyEmitToken(tkSlash, 0, SrcLine, '');
           end;
-        '%': PyEmitToken(tkMod, 0, SrcLine, '');
+        '%': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkModEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkMod, 0, SrcLine, '');
+        end;
+        '&': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkAmpEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkAmp, 0, SrcLine, '');
+        end;
+        '|': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkPipeEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkPipe, 0, SrcLine, '');
+        end;
+        '^': begin
+          if (P <= Length(Source)) and (Source[P] = '=') then
+          begin Inc(P); PyEmitToken(tkXorEq, 0, SrcLine, ''); end
+          else PyEmitToken(tkXor, 0, SrcLine, '');
+        end;
+        { `~` reuses tkLogNot as a shape token (C's `!`); NilPy-side meaning
+          is bitwise not. tkNot stays the `not` keyword. }
+        '~': PyEmitToken(tkLogNot, 0, SrcLine, '');
         '(': begin PyEmitToken(tkLParen, 0, SrcLine, ''); Inc(parenDepth); end;
         ')': begin
           PyEmitToken(tkRParen, 0, SrcLine, '');
@@ -417,6 +453,13 @@ begin
             Inc(P);
             PyEmitToken(tkLe, 0, SrcLine, '');
           end
+          else if (P <= Length(Source)) and (Source[P] = '<') then
+          begin
+            Inc(P);
+            if (P <= Length(Source)) and (Source[P] = '=') then
+            begin Inc(P); PyEmitToken(tkShlEq, 0, SrcLine, ''); end
+            else PyEmitToken(tkShl, 0, SrcLine, '');
+          end
           else
             PyEmitToken(tkLt, 0, SrcLine, '');
         end;
@@ -425,6 +468,13 @@ begin
           begin
             Inc(P);
             PyEmitToken(tkGe, 0, SrcLine, '');
+          end
+          else if (P <= Length(Source)) and (Source[P] = '>') then
+          begin
+            Inc(P);
+            if (P <= Length(Source)) and (Source[P] = '=') then
+            begin Inc(P); PyEmitToken(tkShrEq, 0, SrcLine, ''); end
+            else PyEmitToken(tkShr, 0, SrcLine, '');
           end
           else
             PyEmitToken(tkGt, 0, SrcLine, '');

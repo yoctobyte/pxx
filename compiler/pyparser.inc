@@ -207,6 +207,99 @@ end;
   comparison/arithmetic atom is parsed by the shared ParseExpr, whose and/or/not
   consumption is suppressed while PyExprMode is set; parenthesised sub-expressions
   re-enter PyParseBoolExpr (see ParseFactor). Result in CurASTNode. }
+{ Reject a boolean operand adjacent to a bitwise operator: Python binds
+  comparisons LOOSER than & | ^ << >>, the shared ParseExpr atom binds them
+  tighter, so the unparenthesized mixed case would silently change meaning.
+  Explicit parens express either reading. }
+procedure PyBitGuard(n: Integer);
+begin
+  if IntToTypeKind(ASTTk[n]) = tyBoolean then
+    Error('Nil Python: parenthesize the comparison next to a bitwise operator');
+end;
+
+{ Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
+procedure PyParseBitOperand;
+var node: Integer;
+begin
+  if CurTok.Kind = tkLogNot then
+  begin
+    Next;
+    PyParseBitOperand;
+    PyBitGuard(CurASTNode);
+    node := AllocNode(AN_NOT);
+    ASTLeft[node] := CurASTNode;
+    ASTTk[node] := ASTTk[CurASTNode];   { integer-typed AN_NOT = bitwise not }
+    CurASTNode := node;
+  end
+  else
+    ParseExpr;   { comparison + arithmetic atom }
+end;
+
+procedure PyParseShift;
+var left, right, node: Integer; op: TTokenKind;
+begin
+  PyParseBitOperand;
+  left := CurASTNode;
+  while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
+  begin
+    op := CurTok.Kind;
+    PyBitGuard(left); Next; PyParseBitOperand; right := CurASTNode; PyBitGuard(right);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
+procedure PyParseBitAnd;
+var left, right, node: Integer;
+begin
+  PyParseShift;
+  left := CurASTNode;
+  while CurTok.Kind = tkAmp do
+  begin
+    PyBitGuard(left); Next; PyParseShift; right := CurASTNode; PyBitGuard(right);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
+procedure PyParseBitXor;
+var left, right, node: Integer;
+begin
+  PyParseBitAnd;
+  left := CurASTNode;
+  while CurTok.Kind = tkXor do
+  begin
+    PyBitGuard(left); Next; PyParseBitAnd; right := CurASTNode; PyBitGuard(right);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkXor);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
+procedure PyParseBitOr;
+var left, right, node: Integer;
+begin
+  PyParseBitXor;
+  left := CurASTNode;
+  while CurTok.Kind = tkPipe do
+  begin
+    PyBitGuard(left); Next; PyParseBitXor; right := CurASTNode; PyBitGuard(right);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
 procedure PyParseBoolNot;
 var node: Integer;
 begin
@@ -220,7 +313,7 @@ begin
     CurASTNode := node;
   end
   else
-    ParseExpr;   { comparison + arithmetic atom }
+    PyParseBitOr;   { bitwise chain over the comparison + arithmetic atom }
 end;
 
 procedure PyParseBoolAnd;
@@ -868,8 +961,27 @@ begin
   Result := node;
 end;
 
+{ Map an augmented-assignment token to its binary operator, tkEOF if none. }
+function PyAugBinTok(k: TTokenKind): TTokenKind;
+begin
+  case k of
+    tkPlusEq:  Result := tkPlus;
+    tkMinusEq: Result := tkMinus;
+    tkStarEq:  Result := tkStar;
+    tkSlashEq: Result := tkDiv;   { //= — integer division, like // }
+    tkModEq:   Result := tkMod;
+    tkAmpEq:   Result := tkAnd;
+    tkPipeEq:  Result := tkOr;
+    tkXorEq:   Result := tkXor;
+    tkShlEq:   Result := tkShl;
+    tkShrEq:   Result := tkShr;
+    else Result := tkEOF;
+  end;
+end;
+
 function PyParseStatement: Integer;
 var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode: Integer; tk: TTypeKind;
+    augTk: TTokenKind;
 begin
   Result := -1;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
@@ -898,11 +1010,52 @@ begin
   begin
     PyParseBoolExpr;
     lhsNode := CurASTNode;
-    Expect(tkAssign, '=');
-    PyParseBoolExpr;
+    if CurTok.Kind in [tkNewline, tkDedent, tkEOF] then
+    begin
+      Result := lhsNode;   { expression statement, e.g. obj.method() }
+      Exit;
+    end;
+    augTk := PyAugBinTok(CurTok.Kind);
+    if augTk <> tkEOF then
+    begin
+      Next;
+      PyParseBoolExpr;
+      node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
+      ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
+      ASTTk[node] := ASTTk[lhsNode];
+      rhsNode := node;
+    end
+    else
+    begin
+      Expect(tkAssign, '=');
+      PyParseBoolExpr;
+      rhsNode := CurASTNode;
+    end;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
-    ASTRight[node] := CurASTNode;
+    ASTRight[node] := rhsNode;
+    Result := node;
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+     (PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF) then
+  begin
+    name := CurTok.SVal;
+    symIdx := FindSym(name);
+    if symIdx < 0 then
+      Error('Nil Python: augmented assignment to undefined name ' + name);
+    Next;
+    augTk := PyAugBinTok(CurTok.Kind);
+    Next;
+    PyParseBoolExpr;
+    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
+    ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;
+    ASTTk[node] := Ord(Syms[symIdx].TypeKind);
+    rhsNode := node;
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(symIdx);
+    ASTRight[node] := rhsNode;
     Result := node;
     Exit;
   end;

@@ -1,0 +1,41 @@
+v = 0xF0F0
+print(v & 0xFF00)
+print(v | 0x0F0F)
+print(v ^ 0xFFFF)
+print(1 << 10)
+print(4096 >> 4)
+print(~0 & 0xFF)
+print(1 << 2 + 3)
+print(0xF0 | 0x0F & 0x00)
+n = 10
+n += 5
+print(n)
+n -= 3
+print(n)
+n *= 2
+print(n)
+n //= 5
+print(n)
+n %= 3
+print(n)
+m = 0b1100
+m &= 0b1010
+print(m)
+m |= 0b0001
+print(m)
+m ^= 0b1111
+print(m)
+m <<= 4
+print(m)
+m >>= 2
+print(m)
+
+class Acc:
+    def __init__(self, total: int) -> None:
+        self.total = total
+
+a = Acc(100)
+a.total += 42
+print(a.total)
+a.total -= 2
+print(a.total)

@@ -10397,7 +10397,7 @@ begin
   ParseFactor;
   while ((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr'))) and
-        not (PyExprMode and (CurTok.Kind = tkAnd)) do
+        not (PyExprMode and (CurTok.Kind in [tkAnd, tkShl])) do
   begin
     opSOffset := Tokens[TokPos - 1].SOffset;
     opSLen := Tokens[TokPos - 1].SLen;
@@ -10450,7 +10450,7 @@ begin
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;
   end;
   while (CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor]) and
-        not (PyExprMode and (CurTok.Kind = tkOr)) do
+        not (PyExprMode and (CurTok.Kind in [tkOr, tkXor])) do
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;
