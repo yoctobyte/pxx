@@ -920,3 +920,4 @@
 {"date": "2026-07-19T18:19:34Z", "fixed": [], "full": false, "new_red": ["fpc-bootstrap#src:compiler/compiler.pas"], "sha": "adfa67851eba9ad04d80e51ed553906d851b0db1", "tier": "native", "verdict": "GREEN", "wall": 334.5}
 {"date": "2026-07-19T18:36:18Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_interface_mainbody_ascast_temp.pas"], "sha": "4e50f2c54fc89211ae90c9d66b66e81f3d03dbf1", "tier": "native", "verdict": "RED", "wall": 572.1}
 {"date": "2026-07-19T19:03:01Z", "fixed": ["test-core#src:test/test_interface_mainbody_ascast_temp.pas"], "full": false, "new_red": [], "sha": "c650514951bc4f1f190f299c440e96b58326a58d", "tier": "native", "verdict": "GREEN", "wall": 942.6}
+{"date": "2026-07-19T19:09:39Z", "fixed": ["fpc-bootstrap#src:compiler/compiler.pas"], "full": false, "new_red": [], "sha": "89dc59a22ed6a9e4504acc0da93beacdbc9dd304", "tier": "native", "verdict": "GREEN", "wall": 351.5}
