@@ -942,6 +942,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_symslot_stale_ndims26)" = "136"
 	! ./$(COMPILER) test/test_array_member_fail.pas /tmp/test_amf26 > /tmp/test_amf.log 2>&1
 	grep -q "an array variable has no members" /tmp/test_amf.log
+	! ./$(COMPILER) test/test_undefined_field_fail.pas /tmp/test_udf26 > /tmp/test_udf.log 2>&1
+	grep -q "no such member on this record/class" /tmp/test_udf.log
 	# what a RECORD may legally contain (b347): no published, no protected (records don't
 	# inherit), a class method must be static, a ctor needs a mandatory parameter, and a
 	# local/anonymous record type gets FIELDS ONLY. All were parse-and-dropped before.

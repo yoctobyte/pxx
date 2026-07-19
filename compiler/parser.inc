@@ -3172,6 +3172,19 @@ begin
              (ASTKind[ASTLeft[n]] = AN_INDEX) or (ASTKind[ASTLeft[n]] = AN_DEREF));
 end;
 
+procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
+{ Guard on the AN_FIELD fallthrough paths: a member name that resolved to
+  NOTHING on a user record/class (no field, no method/property/class var —
+  those all dispatched earlier) must ERROR. Without this, RecFieldType's
+  not-found default (tyInteger at offset 0) let an undefined field COMPILE
+  and read garbage (bug-pascal-undefined-field-on-empty-record-compiles).
+  Builtin records keep the lax path — their field names are compiler-authored. }
+begin
+  if (recId >= REC_UCLASS_BASE) and
+     (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
+    Error('"' + fieldName + '": no such member on this record/class');
+end;
+
 function ByRefArgStartsExpression: Boolean;
 { True when the next by-ref/array argument cannot be a bare variable lvalue:
   not an ident at all, or an ident that names no symbol and is followed by
@@ -4989,7 +5002,10 @@ begin
         backing field is read on the declaring class's behalf — a private FField
         behind a public Count property must stay accessible (test_tfplist_b259). }
       if not viaProp then
+      begin
+        RequireRecMember(recName, fieldName);
         EnforceFieldVis(recName, fieldName);   { --strict-visibility member access control }
+      end;
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := propFOff;
@@ -6165,6 +6181,7 @@ begin
         Continue;
       end;
 
+      RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);
       ASTLeft[sub] := node;
       ASTSOffset[sub] := Tokens[prevTok].SOffset;
@@ -6274,6 +6291,7 @@ begin
           Error('expected field name after .');
         prevTok := TokPos - 1;
         fieldName := GetTokenStr(prevTok);
+        RequireRecMember(recId, fieldName);
         sub := AllocNode(AN_FIELD);
         ASTLeft[sub] := node;
         ASTSOffset[sub] := Tokens[prevTok].SOffset;
