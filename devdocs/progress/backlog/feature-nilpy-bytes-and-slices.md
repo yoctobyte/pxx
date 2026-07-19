@@ -52,7 +52,9 @@ Bytes are flat ints, not variant slots, so this does NOT wait on
 [[feature-rtti-field-reflection]]. But it is **not purely Track N** either,
 which the first draft of this ticket got wrong. Split it:
 
-**Pure Track N — land first, useful alone:**
+**Pure Track N — LANDED 2026-07-20 in 6468ff22** (TPyBytes, `bytearray(n)`,
+`bytes(b)`, indexing with negative indices, `len`, `test_nilpy_bytes.npy` in
+the gate). What follows is what that commit covered:
 - TPyBytes in pylib.
 - `bytearray(n)` and `bytes(x)` spelled as ordinary pylib FUNCTIONS. Neither
   name is a Pascal keyword, so they resolve through the normal call path with
@@ -61,7 +63,7 @@ which the first draft of this ticket got wrong. Split it:
 - `b[i]` read/write and `len(b)`, via a default indexed property, exactly as
   TPyDict does.
 
-**Needs a shared-parser (Track A) hook — file separately when reached:**
+**STILL OPEN — needs a shared-parser (Track A) hook:**
 - **Slice syntax** `b[a:c]`, read and assign. The subscript grammar lives in
   `parser.inc`'s index path, which Track N must not edit.
 - **`int.to_bytes(n, "little", signed=True)`** — a method call on an int, with
