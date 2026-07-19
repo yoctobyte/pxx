@@ -1075,93 +1075,12 @@ begin
       AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
 end;
 
-{ (PyCollectLocals, the token-scanning local-typing pre-pass, was retired by
-  feature-n-nilpy-ast-based-typing — PyCollectLocalsAST parses the body
-  instead. PyInferExprType survives only for MODULE scope below, which is not
-  a single parseable block; migrating it is the remainder of that ticket.) }
+{ (PyCollectLocals and PyCollectModuleLocals, the token-scanning local-typing
+  pre-passes, were retired by PyCollectLocalsAST and PyCollectModuleLocalsAST
+  — feature-n-nilpy-ast-based-typing. Both parse instead of scanning.
+  PyInferExprType survives only for the CTOR FIELD scan, which still has no
+  parseable block of its own: fields must exist before any body is parsed.) }
 
-procedure PyCollectModuleLocals;
-var i, j, ci, depth, skipDepth: Integer; name: AnsiString; tk: TTypeKind;
-    waitingForFunctionIndent: Boolean;
-begin
-  PyLocalCount := 0;
-  depth := 0;
-  skipDepth := -1;
-  waitingForFunctionIndent := False;
-  i := 0;
-  while i < MainProgramTokCount do
-  begin
-    if (Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass) then
-      { class bodies are not module scope either: a class-level
-        `name = ...` (or ClassVar line) must not become a module local }
-      waitingForFunctionIndent := True
-    else if Tokens[i].Kind = tkIndent then
-    begin
-      Inc(depth);
-      if waitingForFunctionIndent then
-      begin
-        skipDepth := depth;
-        waitingForFunctionIndent := False;
-      end;
-    end
-    else if Tokens[i].Kind = tkDedent then
-    begin
-      if depth = skipDepth then skipDepth := -1;
-      Dec(depth);
-    end
-    else if (depth = 0) and (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 3 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkColon) and
-            (Tokens[i + 3].Kind = tkAssign) and
-            (PyTypeFromTokenIndex(i + 2) <> tyUnknown) then
-    begin
-      { annotated module assignment: NAME : type = expr }
-      name := GetTokenStr(i);
-      tk := PyTypeFromTokenIndex(i + 2);
-      ci := PyFindConstraint(name);
-      if ci < 0 then
-      begin
-        if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
-        PyLocals[PyLocalCount].Name := name;
-        PyLocals[PyLocalCount].TypeKind := tk;
-        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
-        Inc(PyLocalCount);
-      end
-      else
-        PyLocals[ci].TypeKind := tk;
-      j := i + 4;
-      while (j < MainProgramTokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
-      i := j - 1;
-    end
-    else if (depth = 0) and (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
-    begin
-      name := GetTokenStr(i);
-      PyInferName := name;
-      j := i + 2;
-      while (j < MainProgramTokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
-      tk := PyInferExprType(i + 2, j);
-      PyInferName := '';
-      if tk = tyUnknown then
-        Error('Nil Python: cannot infer module local type for ' + name);
-      ci := PyFindConstraint(name);
-      if ci < 0 then
-      begin
-        if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
-        PyLocals[PyLocalCount].Name := name;
-        PyLocals[PyLocalCount].TypeKind := tk;
-        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
-        Inc(PyLocalCount);
-      end
-      else
-        PyLocals[ci].TypeKind := PyWiden(PyLocals[ci].TypeKind, tk);
-      i := j - 1;
-    end;
-    Inc(i);
-  end;
-  PyModuleLocalCount := PyLocalCount;
-  for i := 0 to PyLocalCount - 1 do
-    PyModuleLocals[i] := PyLocals[i];
-end;
 
 function PyFindBodyEnd(bodyStart: Integer): Integer;
 var i, depth: Integer;
@@ -2313,6 +2232,195 @@ begin
   until (not changed) or (rnd >= PY_INFER_ROUNDS);
 end;
 
+{ Type MODULE-level names by PARSING the module body, the same way
+  PyCollectLocalsAST types a function's locals.
+
+  The token-scanning version this replaces (PyCollectModuleLocals, and
+  PyInferExprType under it) was the last of the eight scanners: a second
+  implementation of expression typing that drifted from the parser which
+  actually builds the call. It could not see a brace literal as a dict, a str
+  method returning a class, or anything whose type came from a real overload.
+
+  Why this could not be done until now: a module statement can call a def
+  declared further down the file, and until PyRegisterDefShells there was no
+  Proc to resolve against, so a trial parse would have failed on ordinary
+  Python. With the signatures registered up front, the module body parses.
+
+  The scan starts at the CURRENT cursor — the real parser is positioned just
+  past the imports when this runs, which is exactly the module body — and
+  skips `def` and `class` spans, since PyParseStatement cannot parse those and
+  their bodies are not module scope anyway.
+
+  Rolls back the AST, the symbols, the frame and BSSSize: a module-level
+  AllocVar allocates a BSS global, so without the BSSSize restore every
+  iteration would leak the whole module's globals again. }
+procedure PyCollectModuleLocalsAST;
+var rnd, i, si, depth, bodyIx: Integer;
+    savedTok, savedAST, savedSC, savedCur, savedFS, savedBSS: Integer;
+    changed, savedExprMode: Boolean;
+    tk, w: TTypeKind;
+    nm: AnsiString;
+begin
+  PyLocalCount := 0;
+  rnd := 0;
+  repeat
+    changed := False;
+    PyTypingChanged := False;
+    savedTok := TokPos;
+    savedAST := ASTNodeCount;
+    savedCur := CurASTNode;
+    savedSC := SymCount;
+    savedFS := FrameSize;
+    savedBSS := BSSSize;
+    for i := 0 to PyLocalCount - 1 do
+      if FindSym(PyLocals[i].Name) < 0 then
+      begin
+        si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
+        if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+          Syms[si].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+      end;
+    PyTypingPass := True;
+    { The real parser turns PyExprMode on only AFTER this pre-pass, but a
+      trial parse needs it: without it `a and b` / `not x` take Pascal's
+      precedence and `print(2 > 1 and 3 > 2)` fails to close its paren. }
+    savedExprMode := PyExprMode;
+    PyExprMode := True;
+    i := savedTok - 1;
+    depth := 0;
+    while i < MainProgramTokCount do
+    begin
+      if Tokens[i].Kind = tkIndent then Inc(depth)
+      else if Tokens[i].Kind = tkDedent then Dec(depth)
+      else if (depth = 0) and
+              ((Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass)) then
+      begin
+        { skip the whole construct: forward to its INDENT, then to the
+          matching DEDENT }
+        bodyIx := i;
+        while (bodyIx < MainProgramTokCount) and
+              (Tokens[bodyIx].Kind <> tkIndent) do Inc(bodyIx);
+        if bodyIx >= MainProgramTokCount then Break;
+        i := PyFindBodyEnd(bodyIx + 1);
+      end
+      else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+              (i + 3 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkColon) then
+      begin
+        { ANNOTATED `name: T = expr`. The annotation is authoritative — it is
+          in Python too — so it is read directly and the RHS is never parsed.
+          That keeps annotation working as the ESCAPE HATCH for anything this
+          pre-pass cannot yet resolve, which is the same role it had under the
+          token scanner. }
+        bodyIx := i + 2;
+        tk := PyAnnTypeAt(bodyIx);
+        if tk <> tyUnknown then
+        begin
+          if PyAnnLastCi >= 0 then
+            PyNoteLocalType(GetTokenStr(i), tk, REC_UCLASS_BASE + PyAnnLastCi)
+          else
+            PyNoteLocalType(GetTokenStr(i), tk, REC_NONE);
+          while (bodyIx < MainProgramTokCount) and
+                not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
+          i := bodyIx;
+          continue;
+        end;
+      end
+      else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+              (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
+      begin
+        { Only a BARE-NAME assignment is trial-parsed: it is the only form
+          that declares a module local, and staying off the others keeps the
+          pre-pass away from statements it cannot yet resolve — a module-level
+          call to a class METHOD, whose Proc is not registered until
+          PyParseClass reaches it. Hoisting class members the way def
+          signatures are now hoisted is the remaining half of
+          feature-n-nilpy-ast-typing-module-scope; until then such an
+          assignment needs the annotated form above. }
+        { A method call on a NAME is skipped, not parsed: class members are not
+          registered until PyParseClass reaches the class, so trial-parsing
+          `x = c.two(1)` here would fail on a method that is perfectly valid a
+          moment later. Skipping costs nothing — the real parse declares the
+          local from the same AST rule — it only forgoes WIDENING for that
+          name, which is what the annotated form is for. A method call on a
+          literal (`"a,b".split(",")`) is not affected: its base is not an
+          identifier. }
+        bodyIx := i + 2;
+        while (bodyIx + 2 < MainProgramTokCount) and
+              not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do
+        begin
+          if (Tokens[bodyIx].Kind = tkIdent) and
+             (Tokens[bodyIx + 1].Kind = tkDot) and
+             (Tokens[bodyIx + 2].Kind = tkIdent) and
+             (bodyIx + 3 < MainProgramTokCount) and
+             (Tokens[bodyIx + 3].Kind = tkLParen) then Break;
+          Inc(bodyIx);
+        end;
+        if (bodyIx + 2 < MainProgramTokCount) and
+           (Tokens[bodyIx].Kind = tkIdent) and (Tokens[bodyIx + 1].Kind = tkDot) then
+        begin
+          while (bodyIx < MainProgramTokCount) and
+                not (Tokens[bodyIx].Kind in [tkNewline, tkDedent]) do Inc(bodyIx);
+          i := bodyIx;
+          continue;
+        end;
+        TokPos := i;
+        Next;
+        PyParseStatement;
+        i := TokPos - 1;      { the statement's terminating token }
+        continue;
+      end;
+      Inc(i);
+    end;
+    PyTypingPass := False;
+    PyExprMode := savedExprMode;
+    if PyTypingChanged then changed := True;
+    for i := savedSC to SymCount - 1 do
+    begin
+      nm := Syms[i].Name;
+      if nm = '' then Continue;
+      tk := Syms[i].TypeKind;
+      si := PyFindConstraint(nm);
+      if si < 0 then
+      begin
+        if PyLocalCount >= PY_MAX_LOCALS then
+          Error('Nil Python: too many inferred module locals');
+        PyLocals[PyLocalCount].Name := nm;
+        PyLocals[PyLocalCount].TypeKind := tk;
+        if Syms[i].RecName >= REC_UCLASS_BASE then
+          PyLocals[PyLocalCount].RecCi := Syms[i].RecName - REC_UCLASS_BASE
+        else
+          PyLocals[PyLocalCount].RecCi := -1;
+        Inc(PyLocalCount);
+        changed := True;
+      end
+      else
+      begin
+        w := PyWiden(PyLocals[si].TypeKind, tk);
+        if w <> PyLocals[si].TypeKind then
+        begin
+          PyLocals[si].TypeKind := w;
+          changed := True;
+        end;
+        if (PyLocals[si].RecCi < 0) and (Syms[i].RecName >= REC_UCLASS_BASE) then
+        begin
+          PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
+          changed := True;
+        end;
+      end;
+    end;
+    SymRollbackTo(savedSC);
+    ASTNodeCount := savedAST;
+    FrameSize := savedFS;
+    BSSSize := savedBSS;
+    CurASTNode := savedCur;
+    TokPos := savedTok - 1;
+    Next;
+    Inc(rnd);
+  until (not changed) or (rnd >= PY_INFER_ROUNDS);
+  PyModuleLocalCount := PyLocalCount;
+  for i := 0 to PyLocalCount - 1 do
+    PyModuleLocals[i] := PyLocals[i];
+end;
+
 { Parse one `def` header into the PyHdr* globals, leaving the cursor just
   past the `:` NEWLINE INDENT that opens the body. The single implementation
   of the header grammar — see the PyHdr* declaration for why that matters. }
@@ -3449,7 +3557,7 @@ begin
     types (len, VariantToStr, pylib methods) resolve during inference. }
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyRegisterDefShells;            { def signatures must exist before it too }
-  PyCollectModuleLocals;
+  PyCollectModuleLocalsAST;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
   mainNode := -1;
