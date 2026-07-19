@@ -34,6 +34,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-str-of-string-and-bool | A | 60 | bug | NilPy `str()` prints a string's POINTER and a bool's 1 | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
@@ -94,7 +95,6 @@ _none_
 | feature-nilpy-bytes-and-slices | N | 55 | feature | NilPy: bytearray + slices (uforth's memory emulation) | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
 | feature-nilpy-corpus-uforth | N | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
-| feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-none-variant | N | 50 | feature | NilPy: `None` as a first-class variant value (VT_EMPTY) | — |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
@@ -220,7 +220,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (853)
+## done (854)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -869,6 +869,7 @@ _none_
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-dict | N | 60 | feature | NilPy: dict v1 — TPyDict | — |
+| feature-nilpy-fstrings | N | 55 | feature | NilPy: f-strings | — |
 | feature-nilpy-len-of-str | N | 50 | feature | NilPy: len() on a str (only TPyList is accepted today) | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
@@ -2524,6 +2525,7 @@ _none_
 - [p 70] [T] regression-optdiff-shard0-6
 - [p 70] [T] regression-optdiff-shard5-6
 - [p 65] [A] feature-a-typeref-handle
+- [p 60] [A] bug-a-nilpy-str-of-string-and-bool
 - [p 60] [U] decide-abi-portable-vs-target-split
 - [p 60] [A] decide-constructor-exception-cleanup-semantics
 - [p 60] [A] feature-a-abi-oracle
@@ -2543,7 +2545,6 @@ _none_
 - [p 55] [N] feature-n-nilpy-ast-typing-module-scope
 - [p 55] [N] feature-nilpy-bytes-and-slices
 - [p 55] [N] feature-nilpy-corpus-uforth
-- [p 55] [N] feature-nilpy-fstrings
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs

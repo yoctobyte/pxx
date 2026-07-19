@@ -32,6 +32,18 @@ It is entirely frontend: no variant reads, no RTTI, no ABI. That makes it one
 of the few uforth-blocking features Track N can land alone, alongside
 [[feature-nilpy-bytes-and-slices]].
 
+## Landed
+
+v1 landed 2026-07-19 in f8f1231e: plain holes + escapes, expanded in the
+source before lexing, holes lowered through pylib's `pystr_of` overloads.
+`test/test_nilpy_fstrings.npy` is in `make test-nilpy`, diffed against
+CPython.
+
+Deliberately NOT in v1, and still open if a corpus needs them: the `!r`
+conversion (18 sites in uforth) and format specs (3 sites). Both error
+cleanly today. `!r` needs a repr that quotes strings but not numbers, so it
+wants the same per-type overload treatment `pystr_of` already has.
+
 ## Gate
 
 `test-nilpy` green with a `.npy` case diffed against CPython + `--tier quick`
