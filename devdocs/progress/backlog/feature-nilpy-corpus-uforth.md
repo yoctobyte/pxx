@@ -65,6 +65,26 @@ slices, f-strings, raise, isinstance, augassign.
 1. N features by need, ranked by what blocks uforth.py's PARSE first
    (dataclass, dict, slice, f-string, ...) — each = own N ticket hung off
    this umbrella; CPython remains the oracle for every increment.
+   **Progress 2026-07-19 (session 2):** landed green, in wall order —
+   lexer literals (hex/oct/bin/_ , triple-quoted, line counting);
+   def/method params past 4 (internal ABI: 6 regs, >6 all-stack);
+   @dataclass v1 (scalar fields, defaults, synthesized ctor; + fixed two
+   latent field bugs: bool-spill width clobber, str-field string[N]
+   semantics); bitwise ops + augassign (Python precedence chain, boolean
+   guard) with a Track A PyExprMode tkShl/tkXor suppression; `/` = true
+   division; from-imports + annotated assignments + module-scope
+   inference fixes; annotation grammar (Optional/Callable/Any/forward
+   refs; Optional[int] None==0 sentinel CAVEAT); stdlib imports
+   consume-and-defer (sys/os/textwrap/select/itertools);
+   **list v1** — pylib TPyList builtin (variant slots, default indexed
+   property, len()), [..] literal desugar, plus Track A: scalar->Variant
+   call boxing, Variant-returning functions (hidden-dest ABI),
+   EmitWriteVariant True/False (x86-64 only — cross variant writers still
+   print ints); field(default_factory=list).
+   **Current wall:** Word.xt_id — [[feature-nilpy-classvar-counter]]
+   (ClassVar + next() + count shim + lambda default_factory).
+   After that (census): dicts (TPyDict), f-strings, tuple unpack, slices,
+   for-in over lists, @property, try/except payloads, nonlocal, del.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
    independently tested against the 134-block corpus extracted standalone.
 3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,
