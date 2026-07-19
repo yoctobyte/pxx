@@ -221,7 +221,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_defaults.npy /tmp/test_nilpy_defaults26
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
 	./$(COMPILER) test/test_nilpy_dict.npy /tmp/test_nilpy_dict26
-	test "$$(/tmp/test_nilpy_dict26)" = "$$(printf '2\n3\n2\nTrue\nFalse\n3\n-1\n2\n200\n1\nFalse\n2\n2\n7\n8\n2\n1\n2')"
+	test "$$(/tmp/test_nilpy_dict26)" = "$$(printf '2\n3\n2\nTrue\nFalse\n3\n-1\n2\n200\n1\nFalse\n2\n2\n7\n8\n2\n1\n2\n0\n1\n3\nFalse\n0\nFalse\n9')"
 	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
 	test "$$(/tmp/test_nilpy_literals26)" = "$$(printf '65536\n15\n10\n1000000\ntri\nple')"
 	./$(COMPILER) test/test_nilpy_operators.npy /tmp/test_nilpy_operators26

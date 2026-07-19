@@ -65,3 +65,23 @@ class Holder:
 
 h = Holder()
 h.fill()
+
+# emptying a dict and refilling it. Deletion SHIFTS the tail down to keep
+# insertion order, so deleting the last remaining entry is where an
+# off-by-one in that shift would show.
+e = {}
+e["a"] = 1
+e["b"] = 2
+del e["a"]
+del e["b"]
+print(len(e))
+e["c"] = 3
+print(len(e))
+print(e["c"])
+print("a" in e)
+
+# an untouched empty dict
+z = {}
+print(len(z))
+print("x" in z)
+print(z.get("x", 9))
