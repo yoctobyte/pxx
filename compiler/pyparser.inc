@@ -136,6 +136,15 @@ begin
             (tk = tyString) or (tk = tyAnsiString);
 end;
 
+var
+  PyInferName: AnsiString;  { name under type inference, for diagnostics }
+
+function PyWidenErr: AnsiString;
+begin
+  Result := 'Nil Python: annotate the type / too dynamic';
+  if PyInferName <> '' then Result := Result + ' (inferring ' + PyInferName + ')';
+end;
+
 function PyWiden(a, b: TTypeKind): TTypeKind;
 begin
   if a = tyUnknown then begin Result := b; Exit; end;
@@ -149,7 +158,7 @@ begin
       Result := tyVariant;
       Exit;
     end;
-    Error('Nil Python: annotate the type / too dynamic');
+    Error(PyWidenErr);
   end;
   if PyNumeric(a) and PyNumeric(b) then
   begin
@@ -179,7 +188,7 @@ begin
     Result := tyVariant;
     Exit;
   end;
-  Error('Nil Python: annotate the type / too dynamic');
+  Error(PyWidenErr);
   Result := tyUnknown;
 end;
 
@@ -506,9 +515,11 @@ begin
        (Tokens[i + 1].Kind = tkAssign) then
     begin
       name := GetTokenStr(i);
+      PyInferName := name;
       j := i + 2;
       while (j < bodyEnd) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
       tk := PyInferExprType(i + 2, j);
+      PyInferName := '';
       if tk = tyUnknown then
         Error('Nil Python: cannot infer local type for ' + name);
       ci := PyFindConstraint(name);
@@ -539,7 +550,9 @@ begin
   i := 0;
   while i < MainProgramTokCount do
   begin
-    if Tokens[i].Kind = tkFunction then
+    if (Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass) then
+      { class bodies are not module scope either: a class-level
+        `name = ...` (or ClassVar line) must not become a module local }
       waitingForFunctionIndent := True
     else if Tokens[i].Kind = tkIndent then
     begin
@@ -555,13 +568,37 @@ begin
       if depth = skipDepth then skipDepth := -1;
       Dec(depth);
     end
-    else if (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
+    else if (depth = 0) and (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 3 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkColon) and
+            (Tokens[i + 3].Kind = tkAssign) and
+            (PyTypeFromTokenIndex(i + 2) <> tyUnknown) then
+    begin
+      { annotated module assignment: NAME : type = expr }
+      name := GetTokenStr(i);
+      tk := PyTypeFromTokenIndex(i + 2);
+      ci := PyFindConstraint(name);
+      if ci < 0 then
+      begin
+        if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
+        PyLocals[PyLocalCount].Name := name;
+        PyLocals[PyLocalCount].TypeKind := tk;
+        Inc(PyLocalCount);
+      end
+      else
+        PyLocals[ci].TypeKind := tk;
+      j := i + 4;
+      while (j < MainProgramTokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
+      i := j - 1;
+    end
+    else if (depth = 0) and (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
             (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
     begin
       name := GetTokenStr(i);
+      PyInferName := name;
       j := i + 2;
       while (j < MainProgramTokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
       tk := PyInferExprType(i + 2, j);
+      PyInferName := '';
       if tk = tyUnknown then
         Error('Nil Python: cannot infer module local type for ' + name);
       ci := PyFindConstraint(name);
@@ -1051,6 +1088,28 @@ begin
     Result := node;
     Exit;
   end;
+  { annotated assignment: NAME : type = expr }
+  if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
+     (Tokens[TokPos].Kind = tkColon) and
+     (Tokens[TokPos + 2].Kind = tkAssign) and
+     (PyTypeFromTokenIndex(TokPos + 1) <> tyUnknown) then
+  begin
+    name := CurTok.SVal;
+    Next;                      { onto ':' }
+    Next;                      { onto the type token }
+    tk := PyParseType;
+    Expect(tkAssign, '=');
+    PyParseBoolExpr;
+    symIdx := FindSym(name);
+    if symIdx < 0 then symIdx := AllocVar(name, tk);
+    lhsNode := PyMakeIdent(symIdx);
+    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := lhsNode;
+    ASTRight[node] := CurASTNode;
+    Result := node;
+    Exit;
+  end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then
   begin
@@ -1227,6 +1286,15 @@ begin
     else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
             (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) then
     begin
+      { ClassVar annotation: a class-level static, not an instance field.
+        Skipped here; a later access through the class name is its own wall. }
+      if (Tokens[i + 2].Kind = tkIdent) and
+         CaseEqual(GetTokenStr(i + 2), 'ClassVar') then
+      begin
+        while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+        Inc(i);
+        continue;
+      end;
       { @dataclass field: name : type [= literal-default] }
       tk := PyTypeFromTokenIndex(i + 2);
       if tk = tyUnknown then
@@ -1547,6 +1615,7 @@ procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
+    impName: AnsiString;
 begin
   needsBuiltin := True;
   for i := 0 to MainProgramTokCount - 1 do
@@ -1612,21 +1681,63 @@ begin
   ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   PySkipNewlines;
+  { A leading module docstring may precede the imports; consume it. }
+  if (CurTok.Kind = tkString) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkNewline) then
+  begin
+    Next;
+    PySkipNewlines;
+  end;
   { Nil Python `import name[, name]` maps each module onto the same unit
     resolver as a Pascal `uses` clause, so a C header in /usr/include
     (e.g. sqlite3) is imported and dynamically linked identically. The
     lexer rewrites `import` to tkUses; leading imports are processed before
-    the program body so their symbols are registered for the main code. }
-  while CurTok.Kind = tkUses do
+    the program body so their symbols are registered for the main code.
+    `from dataclasses|typing import ...` is consumed and ignored (those
+    names are built in); any other from-import is a clean unsupported. }
+  while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
-    Next;
-    while CurTok.Kind = tkIdent do
+    if PyIsIdent('from') then
     begin
-      ParseUsesUnit(CurTok.SVal);
       Next;
-      if not Eat(tkComma) then Break;
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a module name after from');
+      impName := CurTok.SVal;
+      Next;
+      if CurTok.Kind <> tkUses then
+        Error('Nil Python: expected import after from ' + impName);
+      Next;
+      { itertools is consumed-but-unresolved for now: uforth only needs
+        count(); its use sites wall visibly until a shim lands (Track B). }
+      if CaseEqual(impName, 'dataclasses') or CaseEqual(impName, 'typing') or
+         CaseEqual(impName, 'itertools') then
+      begin
+        while CurTok.Kind = tkIdent do
+        begin
+          Next;
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+      end
+      else
+        Error('Nil Python: from-import of module ' + impName + ' is not supported yet');
+      PySkipNewlines;
+    end
+    else
+    begin
+      Next;
+      while CurTok.Kind = tkIdent do
+      begin
+        ParseUsesUnit(CurTok.SVal);
+        Next;
+        if not Eat(tkComma) then Break;
+      end;
+      PySkipNewlines;
     end;
-    PySkipNewlines;
   end;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }

@@ -1,0 +1,9 @@
+LOADSTD: bool = True
+count: int = 41
+scale: float = 1.5
+name: str = "hi"
+count += 1
+print(LOADSTD)
+print(count)
+print(scale)
+print(name)
