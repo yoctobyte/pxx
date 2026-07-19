@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T22:22:58Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fed71966fed10fc42ae0bb4885d94b22243bd2d3",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-17T22:29:31Z",
    "fixed": [],
    "new_red": [],
@@ -5363,6 +5355,14 @@
    "sha": "21f0a4e53312474e94d1a60ebcc471065c8f6ab4",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-07-19T10:30:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "36af35fbb6bbfdba02db26ed0c53466a9a01e75d",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -5737,6 +5737,7 @@
   "test-core#src:test/cfixed_seven_args_b59.c": "pass",
   "test-core#src:test/cflex_array_member_sizeof_b224.c": "pass",
   "test-core#src:test/cfloat_cast_deref_b196.c": "pass",
+  "test-core#src:test/cfloat_cast_narrow_b381.c": "pass",
   "test-core#src:test/cfloat_conv_b176.c": "pass",
   "test-core#src:test/cfloat_global_array_init_b197.c": "pass",
   "test-core#src:test/cfloat_lea_ptr_b195.c": "pass",
@@ -6898,11 +6899,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T10:24:36Z",
-  "sha": "21f0a4e53312474e94d1a60ebcc471065c8f6ab4",
+  "date": "2026-07-19T10:30:04Z",
+  "sha": "36af35fbb6bbfdba02db26ed0c53466a9a01e75d",
   "tier": "native",
   "verdict": "RED",
-  "wall": 279.9
+  "wall": 290.2
  },
  "last_bench": {
   "conf_rows": 550,
