@@ -203,7 +203,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (836)
+## done (839)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -486,7 +486,9 @@ _none_
 | bug-nested-comment-breaks-fpc-brace | A | 50 | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 | bug-nested-dynarray-cross-segfault | A | 50 | bug | Nested dynamic arrays (`array of array of T`) segfault on cross targets | — |
 | bug-nested-proc-sibling-call-unresolved | A | 50 | bug | Nested procedure can't call its sibling (and capturing self-recursion breaks) | — |
+| bug-nilpy-param-spill-width | N | 60 | bug | NilPy: bool/char param spill wrote 4 bytes into a 1-byte slot (SILENT, then SIGSEGV) | — |
 | bug-nilpy-str-param-length-index | A | 55 | bug | NilPy: `str` parameter breaks Length / indexing / codegen | — |
+| bug-nilpy-string-class-field | N | 60 | bug | NilPy: str class field registered as tyString = inline string[N] semantics (garbage reads) | — |
 | bug-not-on-int64-is-boolean | A | 50 | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-object-ref-array-identity-in-method | A | 50 | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-open-array-copy-temp-leak | A | 50 | bug | Open-array copy temp leaked a heap block per call | — |
@@ -837,6 +839,7 @@ _none_
 | feature-nested-routines | A | 50 | feature | feature: nested (local) functions and procedures | — |
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
