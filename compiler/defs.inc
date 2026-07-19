@@ -1085,6 +1085,8 @@ var
   InlineResultDef    : Boolean; { slice 2c: Result definitely (all paths) assigned so far — gates Result-READ inside the body (Clamp-style `if Result < lo then ...`) }
   InlineRetentionSawCall : Boolean; { non-leaf slice: an AN_CALL was accepted somewhere in the body being validated for retention }
   InlineBodyHasCall  : array[0..MAX_PROCS-1] of Boolean; { retained body contains a call — the splice must temp-capture EVERY arg (a direct-substituted pure arg would otherwise be re-read after the inner call's side effects) }
+  FrameIntrinsicUsed : Boolean; { the unit named get_frame / get_pc_addr / get_caller_stackinfo anywhere. Those intrinsics read the LIVE saved-fp chain, so the number of physical frames between a walker and its target is observable — inlining a routine deletes a frame and silently shifts every walk that passes through it (bug: test_stack_frame_intrinsics_b270 at -O3, per-site return addresses collapsed to one). Set at parse, read at the IR inline gate: known for the whole unit by then, so it is order-independent. }
+  ProcFrameSensitive : array[0..MAX_PROCS-1] of Boolean; { this proc itself uses a frame intrinsic — never inline it, its walk is anchored to its own frame }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;

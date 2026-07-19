@@ -8494,6 +8494,8 @@ begin
           Routines, including unit init sections, all have a real prologue. }
         if CurProc < 0 then
           Error(name + ' needs a stack frame, and the program body has none (it is the outermost frame): call it from a routine');
+        FrameIntrinsicUsed := True;
+        if CurProc >= 0 then ProcFrameSensitive[CurProc] := True;
         if CaseEqual(name, 'get_frame') then node := AllocNode(AN_FRAME)
         else node := AllocNode(AN_PCADDR);
         ASTTk[node] := Ord(tyPointer);
@@ -15184,6 +15186,8 @@ begin
           expression. IRLowerAST does the two loads and two stores. }
         if CurProc < 0 then
           Error('get_caller_stackinfo needs a stack frame, and the program body has none (it is the outermost frame): call it from a routine');
+        FrameIntrinsicUsed := True;
+        if CurProc >= 0 then ProcFrameSensitive[CurProc] := True;
         node := AllocNode(AN_CALLERINFO);
         Next; Expect(tkLParen, '(');
         ParseExpr;

@@ -4628,6 +4628,8 @@ begin
   InlineBodyRoot[ProcCount]    := -1;
   InlineParamCnt[ProcCount]    := 0;
   InlineBodyIsStmt[ProcCount]  := False;
+  InlineBodyHasCall[ProcCount] := False;
+  ProcFrameSensitive[ProcCount] := False;
   InlineLocalCnt[ProcCount]    := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin

@@ -5500,9 +5500,17 @@ begin
         (InliningActive < 2, -O3): safe under the IRInlineExpand reentrancy
         contract (locals-first binding, globals only in the clone window);
         depth stays bounded and self-recursion terminates (level 2 lowers as
-        a real call). -O2 keeps depth 0. }
+        a real call). -O2 keeps depth 0.
+        FrameIntrinsicUsed disables the non-leaf cases: once a unit walks the
+        saved-fp chain (get_frame / get_pc_addr / get_caller_stackinfo), the
+        PHYSICAL frame count between a walker and its target is observable, and
+        splicing a body away deletes a frame — so a body that itself uses an
+        intrinsic, or that calls anything (which may reach one), stays a real
+        call. Leaf retained bodies still inline: they add no frame to delete. }
       if (OptLevel >= 2) and (cpi >= 0) and (cpi < MAX_PROCS) and
          (InlineBodyRoot[cpi] >= 0) and
+         (not (FrameIntrinsicUsed and
+               (ProcFrameSensitive[cpi] or InlineBodyHasCall[cpi]))) and
          ((InliningActive = 0) or ((OptLevel >= 3) and (InliningActive < 2))) then
       begin
         outNode := IRInlineExpand(node, cpi);

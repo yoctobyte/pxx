@@ -138,6 +138,7 @@ begin
   WarnedMissedFold := False;
   WarnMissedFold := False;
   DumpCpp := False;
+  FrameIntrinsicUsed := False;
   NoStdInc := False;
   CUseSystemLibs := False;
   CSystemLibCount := 0;
