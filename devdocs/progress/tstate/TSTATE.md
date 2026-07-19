@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `10a4b7bdbee0` | 2026-07-19T17:22:22Z | GREEN (native) | 346.8s | `69f7bda93ac4` GREEN |
+| borg | `e584d7b4c8ef` | 2026-07-19T17:51:51Z | RED (native) | 577.3s | `69f7bda93ac4` GREEN |
 
 ## Open regressions
 - **optdiff#shard4/6** — tools/optdiff.sh (borg): bad `6e0395e5495f`, last good `6e0395e5495f`, 0 commit(s) in range
@@ -11,3 +11,4 @@
 - **optdiff#shard0/6** — tools/optdiff.sh (borg): bad `27b4fd840f7a`, last good `27b4fd840f7a`, 0 commit(s) in range
 - **optdiff#shard0/6** — tools/optdiff.sh (borg): bad `0178c3622bd7`, last good `0178c3622bd7`, 0 commit(s) in range
 - **optdiff#shard0/6** — tools/optdiff.sh (borg): bad `69f7bda93ac4`, last good `69f7bda93ac4`, 0 commit(s) in range
+- **test-core#src:test/test_interface_mainbody_ascast_temp.pas** — test/test_interface_mainbody_ascast_temp.pas (borg): bad `e584d7b4c8ef`, last good `10a4b7bdbee0`, 3 commit(s) in range
