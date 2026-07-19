@@ -90,7 +90,7 @@ _none_
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
-| feature-opt-float-register-temporaries | O | 35 | feature | float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm | — |
+| feature-opt-float-register-temporaries | O | 20 | feature | float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
@@ -2567,7 +2567,6 @@ _none_
 - [p 35] [C] feature-c-esp-conformance-coverage
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-complex-packed-double
-- [p 35] [O] feature-opt-float-register-temporaries
 - [p 35] [A] feature-overflow-checks-cross-and-intrinsics
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
 - [p 30] [A] chore-sqlite-static-capacity-bumps
@@ -2579,6 +2578,7 @@ _none_
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 25] [T] feature-testmgr-bench-fpc-coverage-mandelbrot-raytracer-sieve
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [B] feature-parallel-load-sampler-refine
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [A] compat-pascal-binop-operand-eval-order

@@ -1,7 +1,7 @@
 ---
-summary: "float kernels 4.2x slower than FPC -O2 (mandelbrot-p: 1.33s vs 0.32s, identical checksum) — float binop temporaries spill through the stack; keep them in xmm"
+summary: "float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite"
 type: feature
-prio: 35  # user 2026-07-15: worth a ticket, not high prio
+prio: 20  # user 2026-07-19: general code speed over float — parked lower
 ---
 
 # Track O: float expression temporaries in registers
