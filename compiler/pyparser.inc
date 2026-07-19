@@ -48,6 +48,25 @@ var
     is one variant local, not an Integer one). }
   PyTypingPass: Boolean;
   PyTypingChanged: Boolean;
+  { One parsed `def` header, filled by PyParseDefHeader and read by both its
+    callers — the shell pre-pass and PyParseDef itself. Globals rather than a
+    dozen var parameters because there must be exactly ONE implementation of
+    the header grammar: the pre-pass decides the registered SIGNATURE and
+    PyParseDef decides the FRAME, and any disagreement between them is a
+    silent ABI mismatch rather than a parse error. }
+  PyHdrName: AnsiString;
+  PyHdrNParams: Integer;
+  PyHdrIsProc: Boolean;
+  PyHdrRetType: TTypeKind;
+  PyHdrRetCi: Integer;
+  PyHdrPNames: array[0..15] of AnsiString;
+  PyHdrPTypes: array[0..15] of TTypeKind;
+  PyHdrPCis: array[0..15] of Integer;
+  PyHdrDefHas: array[0..15] of Boolean;
+  PyHdrDefIsStr: array[0..15] of Boolean;
+  PyHdrDefVal: array[0..15] of Int64;
+  PyHdrDefSOff: array[0..15] of Integer;
+  PyHdrDefSLen: array[0..15] of Integer;
   { @dataclass field defaults, appended in declaration order per class ci.
     Looked up positionally by PyClassCreate to fill omitted trailing args. }
   PyDcCi:   array[0..PY_MAX_DC_FIELDS-1] of Integer;
@@ -781,46 +800,9 @@ begin
   Result := -1;
 end;
 
-{ Return type of a top-level `def name(...) -> TYPE` by scanning the program
-  tokens. Used by inference when the callee is a Nil Python function not yet
-  registered (module-local types are collected before defs are parsed).
-  Depth-guarded to top level so class methods (bare-named) are not matched. }
-function PyDefReturnType(const name: AnsiString): TTypeKind;
-var i, j, depth, pdepth: Integer;
-begin
-  Result := tyUnknown;
-  depth := 0;
-  i := 0;
-  while i < MainProgramTokCount do
-  begin
-    if Tokens[i].Kind = tkIndent then Inc(depth)
-    else if Tokens[i].Kind = tkDedent then Dec(depth)
-    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
-            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent) and
-            (GetTokenStr(i + 1) = name) and (i + 2 < MainProgramTokCount) and
-            (Tokens[i + 2].Kind = tkLParen) then
-    begin
-      j := i + 2; pdepth := 0;
-      while j < MainProgramTokCount do
-      begin
-        if Tokens[j].Kind = tkLParen then Inc(pdepth)
-        else if Tokens[j].Kind = tkRParen then
-        begin
-          Dec(pdepth);
-          if pdepth = 0 then Break;
-        end;
-        Inc(j);
-      end;
-      { after ')': expect `-> TYPE` }
-      if (j + 3 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkMinus) and
-         (Tokens[j + 2].Kind = tkGt) then
-        Result := PyTypeFromTokenIndex(j + 3);
-      Exit;
-    end;
-    Inc(i);
-  end;
-end;
-
+{ (PyDefReturnType, the token scan that recovered a top-level def's return
+  type before any Proc existed, was retired by PyRegisterDefShells — the
+  signatures are registered up front now, so FindProc answers it.) }
 { The str-method table — the ONE place a NilPy string method is described.
 
   Both the desugar (PyParseStrMethod) and the type-inference scanner
@@ -938,9 +920,11 @@ begin
           else if lo = 'copy' then tk := tyString
           else
           begin
+            { Every top-level def has a registered Proc by now
+              (PyRegisterDefShells), so FindProc is the whole answer — the old
+              PyDefReturnType token scan that stood in for it is gone. }
             procIdx := FindProc(name);
-            if procIdx >= 0 then tk := Procs[procIdx].RetType
-            else tk := PyDefReturnType(name);
+            if procIdx >= 0 then tk := Procs[procIdx].RetType;
             if tk = tyUnknown then tk := tyVariant;
           end;
           i := i + 1; depth := 0;
@@ -2329,86 +2313,160 @@ begin
   until (not changed) or (rnd >= PY_INFER_ROUNDS);
 end;
 
-procedure PyParseDef;
-var name: AnsiString; pnames: array[0..15] of AnsiString;
-    ptypes: array[0..15] of TTypeKind;
-    pcis: array[0..15] of Integer;
-    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode,
-    annIdx: Integer;
-    pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
-    pdefVal: array[0..15] of Int64;
-    pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
-    retType: TTypeKind; isProc: Boolean; retCi: Integer;
+{ Parse one `def` header into the PyHdr* globals, leaving the cursor just
+  past the `:` NEWLINE INDENT that opens the body. The single implementation
+  of the header grammar — see the PyHdr* declaration for why that matters. }
+procedure PyParseDefHeader;
+var annIdx: Integer;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected function name');
-  name := CurTok.SVal;
+  PyHdrName := CurTok.SVal;
   Next;
   Expect(tkLParen, '(');
-  nparams := 0;
+  PyHdrNParams := 0;
   while CurTok.Kind <> tkRParen do
   begin
-    if nparams >= 16 then Error('Nil Python: too many parameters');
+    if PyHdrNParams >= 16 then Error('Nil Python: too many parameters');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected parameter name');
-    pnames[nparams] := CurTok.SVal;
+    PyHdrPNames[PyHdrNParams] := CurTok.SVal;
     Next;
     Expect(tkColon, ':');
     { same full annotation grammar as a method parameter }
     annIdx := TokPos - 1;
-    ptypes[nparams] := PyAnnTypeAt(annIdx);
-    pcis[nparams] := PyAnnLastCi;
-    if ptypes[nparams] = tyUnknown then
+    PyHdrPTypes[PyHdrNParams] := PyAnnTypeAt(annIdx);
+    PyHdrPCis[PyHdrNParams] := PyAnnLastCi;
+    if PyHdrPTypes[PyHdrNParams] = tyUnknown then
       ErrorAt(Tokens[annIdx].Line,
-              'Nil Python: parameter ' + pnames[nparams]
+              'Nil Python: parameter ' + PyHdrPNames[PyHdrNParams]
               + ' has an unsupported type annotation');
     TokPos := annIdx;
     Next;
-    pdefHas[nparams] := False;
+    PyHdrDefHas[PyHdrNParams] := False;
     if CurTok.Kind = tkAssign then
     begin
       annIdx := TokPos;
-      pdefHas[nparams] := True;
-      pdefVal[nparams] := PyParamDefaultAt(annIdx, pnames[nparams],
-                                           pdefIsStr[nparams],
-                                           pdefSOff[nparams],
-                                           pdefSLen[nparams]);
+      PyHdrDefHas[PyHdrNParams] := True;
+      PyHdrDefVal[PyHdrNParams] :=
+        PyParamDefaultAt(annIdx, PyHdrPNames[PyHdrNParams],
+                         PyHdrDefIsStr[PyHdrNParams],
+                         PyHdrDefSOff[PyHdrNParams],
+                         PyHdrDefSLen[PyHdrNParams]);
       TokPos := annIdx;
       Next;
     end;
-    Inc(nparams);
+    Inc(PyHdrNParams);
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')');
   Expect(tkMinus, '- in ->');
   Expect(tkGt, '> in ->');
   { `-> None` declares a procedure (no Result). }
-  isProc := CurTok.Kind = tkNil;
-  retCi := -1;
-  if isProc then begin retType := tyInteger; Next; end
-  else begin retType := PyParseType; retCi := PyLastTypeCi; end;
+  PyHdrIsProc := CurTok.Kind = tkNil;
+  PyHdrRetCi := -1;
+  if PyHdrIsProc then begin PyHdrRetType := tyInteger; Next; end
+  else begin PyHdrRetType := PyParseType; PyHdrRetCi := PyLastTypeCi; end;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
-  bodyStart := TokPos - 1;
+end;
 
-  procIdx := RegisterProc(name, not isProc, retType, nparams, pnames, ptypes);
-  { A class-returning def must record WHICH class. Without it the call site had
-    a tyClass value with no identity, so `q = make()` then `q.name` resolved
-    the field against nothing and printed the object POINTER — silently. The
-    method path (PyRegisterClassMembers) has always set this; the top-level
-    def path never did. }
-  if (retType = tyClass) and (retCi >= 0) then
-    ProcRetRecId[procIdx] := REC_UCLASS_BASE + retCi;
-  for i := 0 to nparams - 1 do
-    if pdefHas[i] and (i < MAX_PROC_PARAMS) then
+{ Copy the parsed header's defaults and result class onto a registered Proc. }
+procedure PyApplyDefSignature(procIdx: Integer);
+var i: Integer;
+begin
+  { A class-returning def must record WHICH class, or the call site has a
+    tyClass value with no identity and a later field access reads the object
+    POINTER (test_nilpy_class_return). }
+  if (PyHdrRetType = tyClass) and (PyHdrRetCi >= 0) then
+    ProcRetRecId[procIdx] := REC_UCLASS_BASE + PyHdrRetCi;
+  for i := 0 to PyHdrNParams - 1 do
+    if PyHdrDefHas[i] and (i < MAX_PROC_PARAMS) then
     begin
       ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
-      ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefVal[i];
-      ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefIsStr[i];
-      ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefSOff[i];
-      ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefSLen[i];
+      ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefVal[i];
+      ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefIsStr[i];
+      ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSOff[i];
+      ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSLen[i];
     end;
+end;
+
+{ Register every TOP-LEVEL def's SIGNATURE before anything is typed or
+  compiled.
+
+  PyDefReturnType used to answer "what does this def return?" with its own
+  token scan, because module-local inference runs before any def body is
+  parsed and therefore before any Proc exists. That is the same parse-it-twice
+  drift the local-typing pre-pass had, and it only ever recovered the return
+  TYPE — not the result class, not the parameter defaults, not the signature
+  for a forward call.
+
+  Parse each header ONCE here instead, with the real header parser, and
+  register the Proc. From then on inference and codegen both just call
+  FindProc. Bodies are skipped by span, so this emits no code and allocates no
+  symbols. }
+procedure PyRegisterDefShells;
+var savedTok, i, depth, procIdx: Integer;
+begin
+  savedTok := TokPos;
+  i := 0;
+  depth := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
+    begin
+      TokPos := i;
+      Next;                      { CurTok = 'def' }
+      PyParseDefHeader;
+      if FindProc(PyHdrName) < 0 then
+      begin
+        procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
+                                PyHdrNParams, PyHdrPNames, PyHdrPTypes);
+        PyApplyDefSignature(procIdx);
+      end;
+      { Resume at the body's INDENT, not past it. After PyParseDefHeader the
+        cursor sits on the first BODY token, so TokPos-2 is the INDENT and the
+        loop's own Inc(i) must land ON it — resuming at TokPos-2 skipped it,
+        depth never rose, and every method inside a later class then looked
+        top-level (a `self` parameter with no annotation, reported as a stray
+        token 40 lines away). }
+      i := TokPos - 3;
+    end;
+    Inc(i);
+  end;
+  { Re-READ the saved token rather than restoring a copy of CurTok: Next
+    rewrites CurTok.SVal in place
+    (project_curtok_record_copy_shares_sval_landmine). }
+  TokPos := savedTok - 1;
+  Next;
+end;
+
+procedure PyParseDef;
+var name: AnsiString;
+    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
+    retType: TTypeKind; isProc: Boolean;
+begin
+  PyParseDefHeader;
+  name := PyHdrName;
+  nparams := PyHdrNParams;
+  isProc := PyHdrIsProc;
+  retType := PyHdrRetType;
+  bodyStart := TokPos - 1;
+
+  { Reuse the shell PyRegisterDefShells registered for this def. A shell has
+    BodyAddr = -1; anything else means the name is being DEFINED AGAIN, which
+    Python allows, so that gets its own Proc rather than overwriting the first
+    one's body address out from under earlier callers. }
+  procIdx := FindProc(name);
+  if (procIdx < 0) or (Procs[procIdx].BodyAddr >= 0) then
+  begin
+    procIdx := RegisterProc(name, not isProc, retType, nparams,
+                            PyHdrPNames, PyHdrPTypes);
+    PyApplyDefSignature(procIdx);
+  end;
   Procs[procIdx].BodyAddr := CodeLen;
   savedSC := SymCount;
   savedFS := FrameSize;
@@ -2419,20 +2477,21 @@ begin
   begin
     { Any/variant params are const-by-ref (the internal convention passes a
       variant's ADDRESS), so the 8-byte slot holds the pointer }
-    idx := AllocParam(pnames[i], ptypes[i], ptypes[i] = tyVariant, False);
+    idx := AllocParam(PyHdrPNames[i], PyHdrPTypes[i],
+                      PyHdrPTypes[i] = tyVariant, False);
     Procs[procIdx].Params[i].SymIdx := idx;
-    Procs[procIdx].Params[i].IsRef := ptypes[i] = tyVariant;
+    Procs[procIdx].Params[i].IsRef := PyHdrPTypes[i] = tyVariant;
     if i < MAX_PROC_PARAMS then
-      ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := ptypes[i] = tyVariant;
-    if (ptypes[i] = tyClass) and (pcis[i] >= 0) then
-      Syms[idx].RecName := REC_UCLASS_BASE + pcis[i];
+      ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := PyHdrPTypes[i] = tyVariant;
+    if (PyHdrPTypes[i] = tyClass) and (PyHdrPCis[i] >= 0) then
+      Syms[idx].RecName := REC_UCLASS_BASE + PyHdrPCis[i];
   end;
   if not isProc then
   begin
     idx := AllocVar('Result', retType);
     Procs[procIdx].RetSymIdx := idx;
-    if (retType = tyClass) and (retCi >= 0) then
-      Syms[idx].RecName := REC_UCLASS_BASE + retCi;
+    if (retType = tyClass) and (PyHdrRetCi >= 0) then
+      Syms[idx].RecName := REC_UCLASS_BASE + PyHdrRetCi;
     if RetViaHiddenDest(retType) then
     begin
       { variant (Any) results ride the hidden-destination convention }
@@ -3389,6 +3448,7 @@ begin
   { Module-local type collection runs AFTER the units above so proc return
     types (len, VariantToStr, pylib methods) resolve during inference. }
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
+  PyRegisterDefShells;            { def signatures must exist before it too }
   PyCollectModuleLocals;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
