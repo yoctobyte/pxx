@@ -1817,6 +1817,8 @@ test-core: $(COMPILER)
 	/tmp/cmath_hyperbolic_family_b38326; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hypot_correct_round_b384.c /tmp/cmath_hypot_correct_round_b38426
 	/tmp/cmath_hypot_correct_round_b38426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_trig_family_b385.c /tmp/cmath_trig_family_b38526
+	/tmp/cmath_trig_family_b38526; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226

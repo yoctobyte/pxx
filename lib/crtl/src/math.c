@@ -23,12 +23,6 @@
  * binding — the argument never arrives (b377). Name it differently + macro.
  */
 
-/* Pascal math.pas routines whose names differ from the C ones (no collision). */
-extern double ArcTan2(double y, double x);
-extern double ArcSin(double x);
-extern double ArcCos(double x);
-extern double ArcTan(double x);
-
 /* ====================================================================== */
 /* Correctly-rounded exp/log/cbrt/pow via double-double arithmetic        */
 /* (feature-crtl-libm-correctly-rounded-transcendentals).                 */
@@ -408,10 +402,255 @@ double pow(double x, double y) {
   return neg ? -r : r;
 }
 
-double atan2(double y, double x) { return ArcTan2(y, x); }
-double asin(double x)            { return ArcSin(x); }
-double acos(double x)            { return ArcCos(x); }
-double atan(double x)            { return ArcTan(x); }
+/* ---- correctly-rounded trigonometry on the dd kernels ------------------- */
+
+/* Argument reduction x = n*(pi/2) + r, |r| <= pi/4(1+eps), r as a dd.
+   Cody-Waite with pi/2 split into three 24-bit chunks (n*chunk exact for
+   |n| < 2^28) plus a dd tail — r carries ~2^-150 absolute error, enough
+   for full relative accuracy down to the closest double to a multiple of
+   pi/2 (~2^-54 away). VALID FOR |x| < 1e8 ONLY; the caller falls back to
+   the Pascal routines beyond that (huge-argument Payne-Hanek reduction is
+   a known gap, noted in the ticket). Returns the quadrant (n mod 4). */
+static int crtl_trig_reduce(double x, crtl_dd *r) {
+  double nd, s1, s2;
+  long long n;
+  crtl_dd t, p;
+  nd = rint(x * crtl_bits2d(0x3FE45F306DC9C883ull));    /* x * 2/pi */
+  n = (long long)nd;
+  if (n == 0) { r->hi = x; r->lo = 0.0; return 0; }
+  s1 = x  - nd * crtl_bits2d(0x3FF921FB60000000ull);    /* pi/2 chunk A, exact */
+  s2 = s1 - nd * crtl_bits2d(0xBE6777A5C0000000ull);    /* chunk B, exact */
+  t  = crtl_2sum(s2, -(nd * crtl_bits2d(0xBCDEE59DA0000000ull)));  /* chunk C */
+  p  = crtl_2prod(nd, crtl_bits2d(0x3B298A2E03707345ull));         /* dd tail d1 */
+  t  = crtl_dd_add(t, crtl_dd_neg(p));
+  t.lo -= nd * crtl_bits2d(0xB7C6FDB1F7759834ull);                 /* d2 (tiny) */
+  *r = crtl_2sum(t.hi, t.lo);
+  return (int)(n & 3);
+}
+
+/* sin/cos of a reduced dd argument, |r| <= ~0.786, by 13-term dd Taylor. */
+static crtl_dd crtl_sin_kernel(crtl_dd r) {
+  crtl_dd r2, s;
+  int k;
+  r2 = crtl_dd_mul(r, r);
+  s.hi = 1.0; s.lo = 0.0;
+  for (k = 13; k >= 1; k--) {
+    s = crtl_dd_mul(crtl_dd_divd(r2, (double)(2 * k * (2 * k + 1))), s);
+    s = crtl_dd_add(crtl_2sum(1.0, 0.0), crtl_dd_neg(s));   /* 1 - term*s */
+  }
+  return crtl_dd_mul(r, s);
+}
+
+static crtl_dd crtl_cos_kernel(crtl_dd r) {
+  crtl_dd r2, s;
+  int k;
+  r2 = crtl_dd_mul(r, r);
+  s.hi = 1.0; s.lo = 0.0;
+  for (k = 13; k >= 1; k--) {
+    s = crtl_dd_mul(crtl_dd_divd(r2, (double)((2 * k - 1) * 2 * k)), s);
+    s = crtl_dd_add(crtl_2sum(1.0, 0.0), crtl_dd_neg(s));
+  }
+  return s;
+}
+
+/* sin and cos of x via the quadrant identity; valid for |x| < 1e8. */
+static void crtl_sincos_dd(double x, crtl_dd *sn, crtl_dd *cs) {
+  crtl_dd r, a, b;
+  int q = crtl_trig_reduce(x, &r);
+  a = crtl_sin_kernel(r);
+  b = crtl_cos_kernel(r);
+  switch (q) {
+    case 0: *sn = a; *cs = b; break;
+    case 1: *sn = b; *cs = crtl_dd_neg(a); break;
+    case 2: *sn = crtl_dd_neg(a); *cs = crtl_dd_neg(b); break;
+    default: *sn = crtl_dd_neg(b); *cs = a; break;
+  }
+}
+
+/* Pascal fallbacks for the huge-argument range the CW reduction can't do. */
+extern double Sin(double x);
+extern double Cos(double x);
+extern double Tan(double x);
+
+/* NOT named sin/cos/tan: Pascal Sin/Cos/Tan collide (b377 landmine) —
+   C callers come through the math.h function-like macros. */
+double __crtl_sin(double x) {
+  crtl_dd sn, cs;
+  if (x != x || x == 0.0) return x;
+  if (isinf(x)) return (x - x) / (x - x);
+  if (fabs(x) >= 1.0e8) return Sin(x);
+  crtl_sincos_dd(x, &sn, &cs);
+  return sn.hi + sn.lo;
+}
+
+double __crtl_cos(double x) {
+  crtl_dd sn, cs;
+  if (x != x) return x;
+  if (isinf(x)) return (x - x) / (x - x);
+  if (fabs(x) >= 1.0e8) return Cos(x);
+  crtl_sincos_dd(x, &sn, &cs);
+  return cs.hi + cs.lo;
+}
+
+double __crtl_tan(double x) {
+  crtl_dd sn, cs, t;
+  if (x != x || x == 0.0) return x;
+  if (isinf(x)) return (x - x) / (x - x);
+  if (fabs(x) >= 1.0e8) return Tan(x);
+  crtl_sincos_dd(x, &sn, &cs);
+  t = crtl_dd_div(sn, cs);
+  return t.hi + t.lo;
+}
+
+/* pi/2 and pi as dds for the inverse functions. */
+static crtl_dd crtl_pio2(void) {
+  crtl_dd r;
+  r.hi = crtl_bits2d(0x3FF921FB54442D18ull);
+  r.lo = crtl_bits2d(0x3C91A62633145C07ull);
+  return r;
+}
+static crtl_dd crtl_pi(void) {
+  crtl_dd r;
+  r.hi = crtl_bits2d(0x400921FB54442D18ull);
+  r.lo = crtl_bits2d(0x3CA1A62633145C07ull);
+  return r;
+}
+
+/* atan of a non-negative dd argument. t > 1 inverts around pi/2; then
+   half-angle t <- t/(1+sqrt(1+t^2)) until t < 0.0625 (doubling count h),
+   then a 13-term alternating odd series, result scaled by 2^h. */
+static crtl_dd crtl_atan_dd(crtl_dd t) {
+  crtl_dd u, s, one;
+  int h = 0, k, invert = 0;
+  one.hi = 1.0; one.lo = 0.0;
+  if (t.hi > 1.0) {
+    invert = 1;
+    t = crtl_dd_div(one, t);
+  }
+  while (t.hi >= 0.0625 && h < 6) {
+    u = crtl_dd_sqrt(crtl_dd_addd(crtl_dd_mul(t, t), 1.0));
+    t = crtl_dd_div(t, crtl_dd_addd(u, 1.0));
+    h++;
+  }
+  u = crtl_dd_mul(t, t);                     /* <= 2^-8 */
+  s = crtl_dd_divd(one, 27.0);
+  for (k = 12; k >= 0; k--) {
+    s = crtl_dd_mul(u, s);
+    s = crtl_dd_add(crtl_dd_divd(one, (double)(2 * k + 1)), crtl_dd_neg(s));
+  }
+  s = crtl_dd_mul(t, s);
+  while (h > 0) { s = crtl_dd_muld(s, 2.0); h--; }   /* exact doublings */
+  if (invert) s = crtl_dd_add(crtl_pio2(), crtl_dd_neg(s));
+  return s;
+}
+
+double atan(double x) {
+  double ax = fabs(x), r;
+  crtl_dd t, w;
+  if (x != x || x == 0.0) return x;
+  if (isinf(x)) {
+    w = crtl_pio2();
+    r = w.hi + w.lo;
+    return x < 0.0 ? -r : r;
+  }
+  t.hi = ax; t.lo = 0.0;
+  w = crtl_atan_dd(t);
+  r = w.hi + w.lo;
+  return x < 0.0 ? -r : r;
+}
+
+/* exact-quotient dd for atan2/asin/acos: a/b with the residual captured */
+static crtl_dd crtl_div_dd2(double a, double b) {
+  crtl_dd n;
+  n.hi = a; n.lo = 0.0;
+  return crtl_dd_divd(n, b);
+}
+
+double atan2(double y, double x) {
+  double r;
+  crtl_dd t, w;
+  int ysign = signbit(y), xsign = signbit(x);
+  if (x != x || y != y) return x + y;
+  if (y == 0.0) {
+    if (!xsign) return y;                       /* +-0 */
+    w = crtl_pi();
+    r = w.hi + w.lo;
+    return ysign ? -r : r;
+  }
+  if (x == 0.0) {
+    w = crtl_pio2();
+    r = w.hi + w.lo;
+    return ysign ? -r : r;
+  }
+  if (isinf(y)) {
+    if (isinf(x)) {
+      w = xsign ? crtl_dd_muld(crtl_pi(), 0.75) : crtl_dd_muld(crtl_pio2(), 0.5);
+    } else {
+      w = crtl_pio2();
+    }
+    r = w.hi + w.lo;
+    return ysign ? -r : r;
+  }
+  if (isinf(x)) {
+    if (!xsign) return ysign ? crtl_bits2d(0x8000000000000000ull) : 0.0;  /* +-0 */
+    w = crtl_pi();
+    r = w.hi + w.lo;
+    return ysign ? -r : r;
+  }
+  t = crtl_div_dd2(fabs(y), fabs(x));
+  w = crtl_atan_dd(t);
+  if (xsign) w = crtl_dd_add(crtl_pi(), crtl_dd_neg(w));
+  r = w.hi + w.lo;
+  return ysign ? -r : r;
+}
+
+double asin(double x) {
+  double ax = fabs(x), r;
+  crtl_dd p, sq, t, w;
+  if (x != x) return x;
+  if (ax > 1.0) return (x - x) / (x - x);       /* NaN */
+  if (ax == 1.0) {
+    w = crtl_pio2();
+    r = w.hi + w.lo;
+    return x < 0.0 ? -r : r;
+  }
+  if (x == 0.0) return x;
+  if (ax <= 0.5) {
+    p = crtl_dd_addd(crtl_dd_neg(crtl_2prod(ax, ax)), 1.0);   /* 1 - x^2 */
+  } else {
+    p = crtl_dd_mul(crtl_2sum(1.0, -ax), crtl_2sum(1.0, ax)); /* exact factors */
+  }
+  sq = crtl_dd_sqrt(p);
+  t.hi = ax; t.lo = 0.0;
+  w = crtl_atan_dd(crtl_dd_div(t, sq));
+  r = w.hi + w.lo;
+  return x < 0.0 ? -r : r;
+}
+
+double acos(double x) {
+  double ax = fabs(x), r;
+  crtl_dd p, sq, w;
+  if (x != x) return x;
+  if (ax > 1.0) return (x - x) / (x - x);       /* NaN */
+  if (x == 1.0) return 0.0;
+  if (x == -1.0) {
+    w = crtl_pi();
+    return w.hi + w.lo;
+  }
+  if (x == 0.0) {
+    w = crtl_pio2();
+    return w.hi + w.lo;
+  }
+  if (ax <= 0.5) {
+    p = crtl_dd_addd(crtl_dd_neg(crtl_2prod(ax, ax)), 1.0);
+  } else {
+    p = crtl_dd_mul(crtl_2sum(1.0, -ax), crtl_2sum(1.0, ax));
+  }
+  sq = crtl_dd_sqrt(p);
+  w = crtl_atan_dd(crtl_dd_div(sq, crtl_2sum(ax, 0.0)));
+  if (x < 0.0) w = crtl_dd_add(crtl_pi(), crtl_dd_neg(w));
+  return w.hi + w.lo;
+}
 
 double fabs(double x) { return x < 0.0 ? -x : x; }
 
@@ -480,9 +719,9 @@ double ldexpl(double x, int e) { return ldexp(x, e); }
    Relies on the cdecl float-return ABI fix (bug-c-float-single-return-zero). */
 float fabsf(float x)  { return (float)fabs((double)x); }
 float sqrtf(float x)  { return (float)sqrt((double)x); }
-float sinf(float x)   { return (float)sin((double)x); }
-float cosf(float x)   { return (float)cos((double)x); }
-float tanf(float x)   { return (float)tan((double)x); }
+float sinf(float x)   { return (float)__crtl_sin((double)x); }
+float cosf(float x)   { return (float)__crtl_cos((double)x); }
+float tanf(float x)   { return (float)__crtl_tan((double)x); }
 float asinf(float x)  { return (float)asin((double)x); }
 float acosf(float x)  { return (float)acos((double)x); }
 float atanf(float x)  { return (float)atan((double)x); }

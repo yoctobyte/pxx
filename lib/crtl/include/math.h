@@ -56,6 +56,13 @@ extern double __crtl_tanh(double x);
 #define tanh(x) __crtl_tanh(x)
 extern double __crtl_hypot(double x, double y);
 #define hypot(x, y) __crtl_hypot(x, y)
+/* ...and Pascal Sin/Cos/Tan for the forward trig. */
+extern double __crtl_sin(double x);
+extern double __crtl_cos(double x);
+extern double __crtl_tan(double x);
+#define sin(x) __crtl_sin(x)
+#define cos(x) __crtl_cos(x)
+#define tan(x) __crtl_tan(x)
 extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);
