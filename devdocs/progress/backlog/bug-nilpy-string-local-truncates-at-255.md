@@ -36,6 +36,18 @@ So the two are linked: **moving NilPy string locals to managed strings is
 gated on that Track A boxing bug**, not merely on a one-line change to
 PyWiden.
 
+## A string FIELD is already unbounded
+
+Measured 2026-07-20: the same 300-character loop through `self.buf` gives 300,
+both inside the method and after it. The ctor-field registration maps
+`tyString -> tyAnsiString` explicitly ("str fields are managed, not
+string[N]"), so FIELDS are managed and LOCALS are frozen.
+
+That inconsistency is the strongest argument for the fix: the same expression
+means two different things depending on where its result is stored, and only
+one of them is Python. It also means a corpus can work around the limit today
+by keeping long strings in fields.
+
 ## Why it matters
 
 uforth builds strings well past 255 characters — token buffers, assembled
