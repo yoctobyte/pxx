@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (111)
+## backlog (115)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ _none_
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-crtl-libm-glibc-bit-parity | A | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| decide-nilpy-bigint-vs-64bit-cells | A | 40 | decide | decide: NilPy integer semantics — arbitrary precision vs 64-bit (uforth needs one) | — |
 | decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
@@ -70,12 +71,14 @@ _none_
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
+| feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 45 | feature | Networking runtime | — |
 | feature-nilpy-break-continue | A | 40 | feature | NilPy: support break / continue in while (and for) loops — v1 subset lacks them | — |
 | feature-nilpy-collections-and-string-methods | A | 50 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
+| feature-nilpy-corpus-uforth | B | 55 | feature | NilPy corpus: uforth — a real Python Forth system as Track N's forcing target | — |
 | feature-nilpy-idf-import | A | 45 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-parallel-for-in | A | 45 | feature | NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime | decide-nilpy-parallel-capture-semantics |
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
@@ -111,6 +114,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-rtl-math-on-crtl-dd-kernels | B | 10 | feature | RTL math.pas on the crtl dd kernels — correct rounding for Pascal too | — |
 | feature-rtl-optout-for-lcl | A+B | 45 | feature | Opt out of pxx's own RTL/widget layer (for compiling LCL) — without pulling FPC's RTL | — |
+| feature-rtti-field-reflection | A | 45 | feature | RTTI: field get/set by name (extends the VMT-8 method-reflection blob) | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-t-gcc-torture-runner | T | 20 | feature | gcc c-torture: ONE-TIME harvest of the ~50-80 runtime-fail miscompile candidates — NOT a permanent runner (dropped: mostly dialect-gap skip-list busywork) | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 40 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
@@ -2493,6 +2497,7 @@ _none_
 - [p 55] [A] decide-1-0-scope-promise (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [E] feature-demo-portable-userland
+- [p 55] [B] feature-nilpy-corpus-uforth
 - [p 55] [P] feature-pascal-corpus-generics
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [T] feature-pasmith-multi-unit-programs
@@ -2529,6 +2534,7 @@ _none_
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [B] feature-ilja-tui
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
+- [p 45] [B] feature-lib-pyexec
 - [p 45] [B] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
 - [p 45] [A] feature-nilpy-idf-import
@@ -2537,6 +2543,7 @@ _none_
 - [p 45] [B] feature-random-library
 - [p 45] [B] feature-real-dynlib-loader
 - [p 45] [A+B] feature-rtl-optout-for-lcl
+- [p 45] [A] feature-rtti-field-reflection
 - [p 45] [T] feature-t-windows-wine-harness
 - [p 45] [B] feature-tls-system-trust-store
 - [p 45] [A] feature-toolchain-cli-ux
@@ -2549,6 +2556,7 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
+- [p 40] [A] decide-nilpy-bigint-vs-64bit-cells
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom

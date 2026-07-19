@@ -1,0 +1,73 @@
+---
+prio: 55
+type: feature
+---
+
+# NilPy corpus: uforth — a real Python Forth system as Track N's forcing target
+
+- **Track:** N (Nil-Python frontend) umbrella; spawns A/B/U work.
+- **Opened:** 2026-07-19 (user decision). Source: ~/projects/uforth (user's
+  own project, not yet on GitHub — vendor/fetch story TBD when it lands
+  there; until then treat the local checkout as upstream).
+
+## Why this target
+
+uforth = 4344-line single-file Python Forth VM (uforth.py) + layered .UFO
+stdlib + the bundled Forth-2012 conformance suite as a ready-made oracle.
+Self-contained (os/sys/select/textwrap/itertools/dataclasses only), heavy on
+real data structures (heterogeneous Any stacks, dicts of words, byte
+memory, isinstance dispatch) — deliberately chosen to DRIVE NilPy feature
+development (the P-corpus role fpjson played). Goal: uforth runs UNMODIFIED
+under pxx-NilPy, suite output matching CPython's.
+
+## Architecture decisions (settled 2026-07-19 session)
+
+- **exec() becomes a real library** ([[feature-lib-pyexec]]), NOT a
+  precompile hack: uforth's 126+ native words are `"..." PYTHON` blocks in
+  the .UFO files, exec'd per CALL (hot path!). pyexec = parse-once-cached
+  AST + two engines: tree-walker (correctness reference) and, later, an
+  in-process pxx-backend JIT (blocks are native-word definitions — Forth
+  tradition compiles those; env types are concrete at block-compile time so
+  field access burns to fixed offsets). Sane restrictions: explicit env
+  dict only (exactly the exec(src, env) form uforth uses), no import/class
+  in exec'd code.
+- **Host binding via RTTI**: interpreted (and JIT'd) code reaches
+  vm.here/vm.memory/push through class RTTI — method reflection exists
+  (VMT-8); field get/set by name is [[feature-rtti-field-reflection]].
+- **Bignum**: uforth leans on Python arbitrary-precision ints (128-bit
+  (hi<<64)|lo composites, selectively masked) — fork filed as
+  [[decide-nilpy-bigint-vs-64bit-cells]].
+- **Mixed-language libs are policy**: some libs Python, some Pascal, some
+  Pascal-then-ported-to-NilPy once N matures (the port itself then becomes
+  an N corpus test). Track B's language-neutral principle applies.
+
+## Measured feature census (what N must grow)
+
+uforth.py: 12 @dataclass (+field), @property/setters, 39 f-strings, 17
+comprehensions, 9 generator expressions, 123 slice uses, dicts/sets/tuples
+throughout, nonlocal, del, exception payloads (ForthThrow), List[Any]
+variant stacks, isinstance dispatch, select.select stdin polling (KEY —
+needs a PAL primitive), file IO. PYTHON blocks (134, all statically
+parseable): imperative subset only — if/while/for, def, calls, subscripts,
+slices, f-strings, raise, isinstance, augassign.
+
+## Milestone ladder (each lands green independently)
+
+0. Oracle green: fix the CURRENT CPython suite red (core.fr:429 THROW -13
+   'IFFLOORED' — upstream uforth bug/missing word).
+1. N features by need, ranked by what blocks uforth.py's PARSE first
+   (dataclass, dict, slice, f-string, ...) — each = own N ticket hung off
+   this umbrella; CPython remains the oracle for every increment.
+2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
+   independently tested against the 134-block corpus extracted standalone.
+3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,
+   under pxx-NilPy — byte-diff vs CPython run.
+4. (Optimization, later) pyexec JIT engine via the in-tree obj/asmcore
+   backend.
+
+## Non-goals
+
+- No uforth rewrite-to-subset: the design (UFO-resident PYTHON natives) is
+  intentional and stays. N grows to meet it, not vice versa.
+- No full CPython emulation in pyexec — the censused block subset is the
+  contract.
