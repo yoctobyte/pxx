@@ -40,7 +40,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -4639,6 +4639,32 @@ test-zlib: $(COMPILER)
 # few seconds); PERFT_DEEP=5 for the heavy depth-5 sweep (~40s). Skips if the
 # gitignored tree is absent (tools/install_lib_candidates.sh chess). NOT in
 # `make test` (3rd-party).
+# Duktape (embeddable JS engine) curated smoke — GC + IEEE-754 double semantics
+# (feature-c-corpus-duktape). Unity build of crtl + the duktape 2.7.0 amalgamation
+# + test/duktape/duk_smoke.c; stdout byte-compared against duk_smoke.expected
+# (itself verified byte-identical to a gcc-built duk_smoke's output) and exit 42
+# required. Skips if the gitignored tree is absent
+# (tools/install_lib_candidates.sh duktape). NOT in `make test` (3rd-party).
+DUKTAPE_SRC ?= library_candidates/duktape/src
+test-duktape: $(COMPILER)
+	@if [ ! -f "$(DUKTAPE_SRC)/duktape.c" ]; then \
+	  echo "test-duktape: SKIP — no duktape tree at $(DUKTAPE_SRC) (tools/install_lib_candidates.sh duktape)"; \
+	  exit 0; \
+	fi; \
+	echo "compiling duktape smoke ..."; \
+	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -I$(DUKTAPE_SRC) \
+	  test/duktape/duk_smoke.c "$$wd/duk_smoke" > /dev/null || exit 1; \
+	"$$wd/duk_smoke" > "$$wd/got.txt" 2>&1; rc=$$?; \
+	if [ "$$rc" != "42" ]; then \
+	  echo "test-duktape: FAIL — exit $$rc (want 42)"; tail -5 "$$wd/got.txt"; exit 1; \
+	fi; \
+	if diff -u test/duktape/duk_smoke.expected "$$wd/got.txt" > "$$wd/diff.txt"; then \
+	  echo "test-duktape: PASS — curated JS smoke byte-exact"; \
+	else \
+	  echo "test-duktape: FAIL — output mismatch"; head -12 "$$wd/diff.txt"; exit 1; \
+	fi
+
 CHESS_SRC ?= library_candidates/chess/Vice11/src
 PERFT_DEEP ?=
 test-chess-perft: $(COMPILER)

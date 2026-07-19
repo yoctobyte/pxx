@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -61,6 +61,10 @@ VICE_COMMIT="a89f82dcab34b74481d6504312e3d52bbba44320"   # HEAD, 2026-07 snapsho
 
 FPC_URL="https://github.com/fpc/FPCSource"
 FPC_COMMIT="0d122c49534b480be9284c21bd60b53d99904346"   # release_3_2_2 tag
+
+DUKTAPE_VERSION="2.7.0"
+DUKTAPE_URL="https://duktape.org/duktape-${DUKTAPE_VERSION}.tar.xz"
+DUKTAPE_SHA256="90f8d2fa8b5567c6899830ddef2c03f3c27960b11aca222fa17aa7ac613c2890"
 
 SQLITE_VERSION="3.46.0"
 SQLITE_ZIP="sqlite-amalgamation-3460000"
@@ -364,6 +368,36 @@ EOF
   say "quickjs -> $DEST/quickjs"
 }
 
+fetch_duktape() {
+  # Prebuilt amalgamation ships IN the release tarball (src/duktape.c + duktape.h +
+  # duk_config.h) — no python configure step needed, the exact sqlite/tcc shape.
+  if present duktape; then say "duktape present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  command -v curl >/dev/null 2>&1 || die "curl required for duktape"
+  say "fetching duktape-${DUKTAPE_VERSION}"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$DUKTAPE_URL" -o "$tmp/duktape.txz"
+  if command -v sha256sum >/dev/null 2>&1; then
+    got="$(sha256sum "$tmp/duktape.txz" | cut -d' ' -f1)"
+    [ "$got" = "$DUKTAPE_SHA256" ] || die "duktape sha256 mismatch: got $got want $DUKTAPE_SHA256"
+  fi
+  rm -rf "$DEST/duktape"; mkdir -p "$DEST/duktape"
+  tar -xJf "$tmp/duktape.txz" -C "$tmp"
+  cp -a "$tmp/duktape-${DUKTAPE_VERSION}/." "$DEST/duktape/"
+  rm -rf "$tmp"
+  cat > "$DEST/duktape/PROVENANCE.md" <<EOF
+# Duktape Candidate (embeddable ECMAScript engine, plain C)
+Upstream: https://duktape.org/
+Version: duktape-${DUKTAPE_VERSION} (${DUKTAPE_URL})
+SHA256: ${DUKTAPE_SHA256}
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT (see LICENSE.txt in tree).
+Amalgamation at src/duktape.c (+duktape.h, duk_config.h); cmdline in examples/cmdline/.
+Used by \`make test-duktape\` — curated JS smoke, byte-exact stdout
+(feature-c-corpus-duktape; GC + IEEE-754 double semantics corpus rung).
+EOF
+  say "duktape -> $DEST/duktape"
+}
+
 fetch_csmith() {
   # csmith's RUNTIME HEADER (csmith.h + safe_math/platform headers), which every
   # generated program #includes. The generator itself is the `csmith` binary from the
@@ -406,7 +440,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_csmith ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_duktape; fetch_csmith ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -422,6 +456,7 @@ EOF
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
+    duktape)       fetch_duktape ;;
     csmith)        fetch_csmith ;;
     *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith)" ;;
   esac
