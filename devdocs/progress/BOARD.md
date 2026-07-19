@@ -26,12 +26,13 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (115)
+## backlog (116)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
+| bug-pascal-byvalue-variant-param | A | 40 | bug | By-VALUE Variant parameters are miscompiled (silent garbage) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
@@ -204,7 +205,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (840)
+## done (843)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -708,6 +709,8 @@ _none_
 | feature-const-set-literal | A | 50 | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
 | feature-copy-intrinsic | B | 50 | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-core-pyexprmode-shl-xor-suppression | A | 55 | feature | Shared parser: extend PyExprMode suppression to tkShl/tkXor | — |
+| feature-core-variant-arg-boxing | A | 60 | feature | IRLowerCallArg: box scalars passed to Variant parameters | — |
+| feature-core-variant-function-return | A | 60 | feature | Variant-returning functions (hidden-dest ABI) + variant bool printing | — |
 | feature-cross-bootstrap-selfhost | A | 50 | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-bootstrap | A | 50 | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-codegen-gaps | A | 50 | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
@@ -844,6 +847,7 @@ _none_
 | feature-nilpy-decorators-dataclass | N | 55 | feature | NilPy: @dataclass v1 (decorator syntax, annotated scalar fields, defaults) | — |
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
+| feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
@@ -2563,6 +2567,7 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
+- [p 40] [A] bug-pascal-byvalue-variant-param
 - [p 40] [U] decide-nilpy-bigint-vs-64bit-cells
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
