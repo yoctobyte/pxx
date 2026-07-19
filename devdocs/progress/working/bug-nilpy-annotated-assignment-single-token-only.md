@@ -2,6 +2,7 @@
 track: N
 prio: 60
 type: bug
+owner: agent-n
 ---
 
 # NilPy: an annotated assignment only accepted a SINGLE-TOKEN annotation
