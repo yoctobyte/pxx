@@ -1,0 +1,13 @@
+"""module docstring
+spans multiple lines and must not desync line numbers"""
+a = 0x10000
+b = 0o17
+c = 0b1010
+d = 1_000_000
+t = '''tri
+ple'''
+print(a)
+print(b)
+print(c)
+print(d)
+print(t)

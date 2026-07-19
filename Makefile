@@ -210,6 +210,8 @@ test-nilpy: $(COMPILER)
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\na\ncd\nok!')"
+	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
+	test "$$(/tmp/test_nilpy_literals26)" = "$$(printf '65536\n15\n10\n1000000\ntri\nple')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
 	/tmp/test_nilpy_shell026 | grep -q "hello portable userland"
 

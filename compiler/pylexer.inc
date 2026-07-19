@@ -98,11 +98,13 @@ var
   IndentWidth: Integer;
   IsBlankOrComment: Boolean;
   IsLogicalLine: Boolean;
-  c, quoteChar: Char;
+  c, quoteChar, c2: Char;
   s: AnsiString;
   n: Int64;
   floatStart, fpos: Integer;
   k: TTokenKind;
+  numBase, digit, startLine: Integer;
+  hasDigit, isTriple: Boolean;
 begin
   TokCount := 0;
   TokCharLen := 0;
@@ -216,9 +218,43 @@ begin
       begin
         n := 0;
         floatStart := P;
-        while (P <= Length(Source)) and (Source[P] in ['0'..'9']) do
+        { Hex / octal / binary prefixes (0x / 0o / 0b), Python 3 style.
+          Underscore digit separators are permitted and ignored. }
+        if (c = '0') and (P < Length(Source)) and
+           (Source[P+1] in ['x','X','o','O','b','B']) then
         begin
-          n := n * 10 + (Ord(Source[P]) - 48);
+          case Source[P+1] of
+            'x', 'X': numBase := 16;
+            'o', 'O': numBase := 8;
+            else numBase := 2;
+          end;
+          Inc(P, 2);
+          hasDigit := False;
+          while P <= Length(Source) do
+          begin
+            c2 := Source[P];
+            if c2 = '_' then begin Inc(P); continue; end;
+            if c2 in ['0'..'9'] then digit := Ord(c2) - 48
+            else if c2 in ['a'..'f'] then digit := Ord(c2) - 87
+            else if c2 in ['A'..'F'] then digit := Ord(c2) - 55
+            else break;
+            if digit >= numBase then break;
+            n := n * numBase + digit;
+            hasDigit := True;
+            Inc(P);
+          end;
+          if not hasDigit then
+          begin
+            CurTok.Line := SrcLine;
+            Error('invalid numeric literal');
+          end;
+          PyEmitToken(tkInteger, n, SrcLine, '');
+          continue;
+        end;
+        while (P <= Length(Source)) and (Source[P] in ['0'..'9','_']) do
+        begin
+          if Source[P] <> '_' then
+            n := n * 10 + (Ord(Source[P]) - 48);
           Inc(P);
         end;
         { detect float: '.' followed by digit, or e/E exponent }
@@ -237,7 +273,11 @@ begin
             while (P <= Length(Source)) and (Source[P] in ['0'..'9']) do Inc(P);
           end;
           s := ''; fpos := floatStart;
-          while fpos < P do begin AppendChar(s, Source[fpos]); Inc(fpos); end;
+          while fpos < P do
+          begin
+            if Source[fpos] <> '_' then AppendChar(s, Source[fpos]);
+            Inc(fpos);
+          end;
           PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, '');
         end
         else
@@ -247,15 +287,32 @@ begin
         continue;
       end;
 
-      { String Literals }
+      { String Literals — single- and triple-quoted. Newlines inside a body
+        (triple-quoted, or a stray one) must bump SrcLine or every later
+        error/line number drifts. Token carries the START line. }
       if (c = '"') or (c = '''') then
       begin
         quoteChar := c;
-        Inc(P);
+        startLine := SrcLine;
+        isTriple := (P + 2 <= Length(Source)) and
+                    (Source[P+1] = quoteChar) and (Source[P+2] = quoteChar);
+        if isTriple then Inc(P, 3) else Inc(P);
         s := '';
-        while (P <= Length(Source)) and (Source[P] <> quoteChar) do
+        while P <= Length(Source) do
         begin
-          if Source[P] = '\' then
+          if Source[P] = quoteChar then
+          begin
+            if not isTriple then begin Inc(P); break; end;
+            if (P + 2 <= Length(Source)) and
+               (Source[P+1] = quoteChar) and (Source[P+2] = quoteChar) then
+            begin
+              Inc(P, 3);
+              break;
+            end;
+            AppendChar(s, Source[P]);
+            Inc(P);
+          end
+          else if Source[P] = '\' then
           begin
             Inc(P);
             if P <= Length(Source) then
@@ -273,12 +330,12 @@ begin
           end
           else
           begin
+            if Source[P] = #10 then Inc(SrcLine);
             AppendChar(s, Source[P]);
             Inc(P);
           end;
         end;
-        if P <= Length(Source) then Inc(P);
-        PyEmitToken(tkString, 0, SrcLine, s);
+        PyEmitToken(tkString, 0, startLine, s);
         continue;
       end;
 
