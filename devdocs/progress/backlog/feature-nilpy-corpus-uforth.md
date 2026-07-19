@@ -54,14 +54,14 @@ slices, f-strings, raise, isinstance, augassign.
 
 ## Milestone ladder (each lands green independently)
 
-0. Oracle green — IN PROGRESS (2026-07-19, uforth commit 9f9b45a): the
-   core.fr:429 red was uforth's LEXER truncating the token stream at `\`
-   (broke `POSTPONE \ THEN ;`); fixed upstream (standalone-`\`-only token,
-   the immediate word does the >IN skip). core.fr + additional core tests
-   now complete. NEXT KNOWN WALL: utilities.fth `\?` word (second patch in
-   9f9b45a addresses the lexing; full-suite sweep NOT yet verified — run
-   `cd tests && python3 ../uforth.py runtests.fth` and continue
-   wall-by-wall).
+0. Oracle green — **DONE** (2026-07-19, uforth commit 9f9b45a): full suite
+   `cd tests && python3 ../uforth.py runtests.fth` under CPython reports
+   **Total 0 errors** across all 12 word sets (Core, Core ext, Block,
+   Double, Exception, Facility, File-access, Locals, Memory-alloc,
+   Programming-tools, Search-order, String). The 9f9b45a lexer fix
+   (standalone-`\` token) closed both the core.fr:429 red and the
+   utilities.fth `\?` wall. This CPython run is the byte-diff oracle for
+   milestones 1-3.
 1. N features by need, ranked by what blocks uforth.py's PARSE first
    (dataclass, dict, slice, f-string, ...) — each = own N ticket hung off
    this umbrella; CPython remains the oracle for every increment.
