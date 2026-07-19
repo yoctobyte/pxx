@@ -25,10 +25,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (107)
+## backlog (109)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
@@ -36,6 +37,7 @@ _none_
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: first release is 0.1-BETA — a 1.0-grade bar under a modest number | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
+| decide-crtl-libm-glibc-bit-parity | A | 20 | decide | decide: crtl libm — correct rounding (current) vs glibc bug-parity | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-nilpy-parallel-capture-semantics | A | 45 | decide | DECIDE: NilPy parallel for-in capture model — what's private, what's shared, how reductions read | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
@@ -46,7 +48,7 @@ _none_
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 45 | feature | crtl: implement the libc assumptions real-world C leans on | — |
-| feature-crtl-libm-correctly-rounded-transcendentals | B | 40 | feature | crtl libm: correctly-rounded (or <1ulp) transcendentals — cbrt/log/pow/exp | — |
+| feature-crtl-trig-payne-hanek | B | 15 | feature | crtl libm: Payne-Hanek reduction for \|x\| >= 1e8 trig (sin/cos/tan) | — |
 | feature-demo-mandelbrot-asm-autozoom | E | 40 | feature | Demo — real-time auto-zoom Mandelbrot with a per-target ASM iteration kernel | — |
 | feature-demo-mandelbrot-gui-threaded | E | 45 | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | feature-nilpy-break-continue, feature-nilpy-tk-binding |
@@ -195,7 +197,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (833)
+## done (834)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -715,6 +717,7 @@ _none_
 | feature-cross-streaming-lfm | A | 50 | feature | Component streaming + LFM loading on the cross targets | — |
 | feature-cross-target-feature-parity | A | 50 | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-cross-virtual-indirect-hidden-dest | A | 65 | feature | Aggregate / frozen-string result via virtual or indirect call — cross backends | — |
+| feature-crtl-libm-correctly-rounded-transcendentals | B | 40 | feature | crtl libm: correctly-rounded (or <1ulp) transcendentals — cbrt/log/pow/exp | — |
 | feature-crtl-strtok-missing | B | 60 | feature | crtl: `strtok` not implemented (undeclared function) | — |
 | feature-declaration-prescan | A | 50 | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-parameters | A | 50 | feature | feature: default parameter values | — |
@@ -2546,7 +2549,6 @@ _none_
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
-- [p 40] [B] feature-crtl-libm-correctly-rounded-transcendentals
 - [p 40] [E] feature-demo-mandelbrot-asm-autozoom
 - [p 40] [B] feature-dns-backends-selection
 - [p 40] [O] feature-opt-rtti-emit-on-use
@@ -2557,6 +2559,7 @@ _none_
 - [p 35] [A] feature-nested-routine-fixed-array-capture
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [T] feature-pasmith-divergence-signature-granularity
+- [p 30] [C] bug-c-compound-literal-address-of
 - [p 30] [E] feature-demo-parallel-hashing-pow
 - [p 30] [E] feature-demo-parallel-prime-count
 - [p 30] [B] feature-pal-esp-posix-fd-semantics
@@ -2566,10 +2569,12 @@ _none_
 - [p 25] [C] bug-c-float-literal-subnormal-parses-zero
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
+- [p 20] [A] decide-crtl-libm-glibc-bit-parity
 - [p 20] [O] feature-opt-float-register-temporaries
 - [p 20] [B] feature-parallel-load-sampler-refine
 - [p 20] [T] feature-t-gcc-torture-runner
 - [p 15] [A] compat-pascal-binop-operand-eval-order
+- [p 15] [B] feature-crtl-trig-payne-hanek
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 12] [P] task-pascal-conformance-long-tail
 

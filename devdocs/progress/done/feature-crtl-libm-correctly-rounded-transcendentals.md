@@ -63,3 +63,4 @@ the gcc-built oracle.
   test-quickjs smoke now covers the FULL Math surface byte-exact vs the
   gcc oracle (values chosen where glibc agrees with correct rounding);
   tools/libm_diff_sweep.c carries the sweep+judge method.
+- 2026-07-19 — resolved, commit 0c496ef7.
