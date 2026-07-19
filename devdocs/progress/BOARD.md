@@ -25,13 +25,12 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (117)
+## backlog (116)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-compound-literal-address-of | C | 30 | bug | cfront: `*(double*)&(unsigned long long){0x...}` segfaults at runtime | — |
 | bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
-| bug-pascal-byvalue-variant-param | A | 40 | bug | By-VALUE Variant parameters are miscompiled (silent garbage) | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
@@ -205,7 +204,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (846)
+## done (847)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -505,6 +504,7 @@ _none_
 | bug-pascal-ansistring-cast-of-fnptr-call-result | A | 45 | bug | SILENT: AnsiString(<call through a function-pointer returning PChar>) yields a garbage length | — |
 | bug-pascal-builtin-pointer-type-cast | P | 45 | bug | `PInteger(p)^` does not compile, though `var p: PInteger` does | — |
 | bug-pascal-builtin-typename-shadows-source-alias | P | 50 | bug | ParseTypeKind's builtin-name chain runs BEFORE the alias table — every builtin name shadows a source declaration | — |
+| bug-pascal-byvalue-variant-param | A | 40 | bug | By-VALUE Variant parameters are miscompiled (silent garbage) | — |
 | bug-pascal-case-selector-multiple-evaluation | A | 75 | bug | `case` evaluated its selector expression ONCE PER LABEL, not once | — |
 | bug-pascal-class-const-visibility | P | 60 | bug | class CONSTS parse as UNSCOPED GLOBALS: same-named consts in two classes silently clobber (both read the last decl), and a class const clobbers a same-named GLOBAL const — silent wrong values in valid FPC code; visibility (tclass12b) is the minor residual | — |
 | bug-pascal-deref-managed-string-ptr | A | 40 | bug | `^string` — dereferencing a pointer to a managed string segfaults (all targets) | — |
@@ -2571,7 +2571,6 @@ _none_
 - [p 43] [A] decide-int-div-zero-behavior-unification
 - [p 42] [A] feature-pascal-builtin-tobject-class
 - [p 40] [A] feature-nilpy-break-continue (unblocks 1)
-- [p 40] [A] bug-pascal-byvalue-variant-param
 - [p 40] [U] decide-nilpy-bigint-vs-64bit-cells
 - [p 40] [A] decide-rtti-none-semantics
 - [p 40] [A] feature-c-package-namespace-decision
