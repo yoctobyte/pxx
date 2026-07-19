@@ -233,7 +233,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_annotated.npy /tmp/test_nilpy_annotated26
 	test "$$(/tmp/test_nilpy_annotated26)" = "$$(printf 'True\n42\n1.5\nhi')"
 	./$(COMPILER) test/test_nilpy_list.npy /tmp/test_nilpy_list26
-	test "$$(/tmp/test_nilpy_list26)" = "$$(printf '3\n1\n2\n3\n3\n4\n10\n42\n10\n3\n0\nhello\n2.5\nTrue')"
+	test "$$(/tmp/test_nilpy_list26)" = "$$(printf '3\n1\n2\n3\n3\n4\n10\n42\n10\n3\n0\nhello\n2.5\nTrue\n3\n9\n1\n2\n0\n3\na\nccc\n2\n20\n2')"
 	./$(COMPILER) test/test_nilpy_factory.npy /tmp/test_nilpy_factory26
 	test "$$(/tmp/test_nilpy_factory26)" = "$$(printf '0\n0\n2\n0\n6')"
 	./$(COMPILER) test/test_nilpy_classvar_counter.npy /tmp/test_nilpy_classvar_counter26

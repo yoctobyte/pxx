@@ -20,3 +20,39 @@ ys.append(True)
 print(ys[0])
 print(ys[1])
 print(ys[2])
+
+# insert and clear: TPyList has had both since list v1, but nothing exercised
+# them. insert SHIFTS, so index 0 is where an off-by-one in the shift shows.
+zs = [1, 2]
+zs.insert(0, 9)
+print(len(zs))
+print(zs[0])
+print(zs[1])
+print(zs[2])
+zs.clear()
+print(len(zs))
+
+# built up in a loop, then read back
+names = []
+for n in ["a", "bb", "ccc"]:
+    names.append(n)
+print(len(names))
+print(names[0])
+print(names[2])
+
+
+# a list-typed FIELD, filled and read inside the same method
+class Holder:
+    def __init__(self) -> None:
+        self.items = []
+
+    def fill(self) -> None:
+        self.items.append(10)
+        self.items.append(20)
+        print(len(self.items))
+        print(self.items[1])
+
+
+h = Holder()
+h.fill()
+print(len(h.items))
