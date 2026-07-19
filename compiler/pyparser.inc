@@ -41,6 +41,13 @@ var
   PyLocalCount: Integer;
   PyModuleLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyModuleLocalCount: Integer;
+  { PyCollectLocalsAST's trial parse is on. The assignment paths report every
+    RHS type they build so the table can WIDEN: the symbol table alone only
+    remembers a local's FIRST assignment, which is exactly the information
+    Python's implicit declaration does not give you (`x = 1` then `x = "s"`
+    is one variant local, not an Integer one). }
+  PyTypingPass: Boolean;
+  PyTypingChanged: Boolean;
   { @dataclass field defaults, appended in declaration order per class ci.
     Looked up positionally by PyClassCreate to fill omitted trailing args. }
   PyDcCi:   array[0..PY_MAX_DC_FIELDS-1] of Integer;
@@ -281,6 +288,25 @@ begin
   if (a = tyChar) and ((b = tyString) or (b = tyAnsiString)) then
   begin
     Result := b;
+    Exit;
+  end;
+  { The two string kinds are ONE Python type. A literal is born tyString and a
+    concat / pystr_* result is tyAnsiString, so a local built up by `cur = cur
+    + c` sees both; without this the pair fell through to the variant rule and
+    the local was scalar-loaded as a tagged value.
+
+    tyString wins, deliberately. The token scanner typed EVERY string
+    expression tyString by construction, so that is the storage model NilPy
+    locals have always had and the one the RTL paths are exercised against;
+    picking tyAnsiString here instead silently converted every inferred string
+    local to a managed one and produced heap corruption in test_nilpy_str_param
+    (a `-> str` def returning a char, followed by a def with managed locals).
+    Moving NilPy to managed strings is its own ticket, not a side effect of
+    changing where the type comes from. }
+  if ((a = tyString) or (a = tyAnsiString)) and
+     ((b = tyString) or (b = tyAnsiString)) then
+  begin
+    Result := tyString;
     Exit;
   end;
   if PyVariantScalar(a) and PyVariantScalar(b) then
@@ -622,6 +648,38 @@ begin
   Result := -1;
 end;
 
+{ Record one assignment's RHS type against a local, widening. Only the trial
+  parse calls this; the real parse's frame is already laid out. }
+procedure PyNoteLocalType(const name: AnsiString; tk: TTypeKind; rec: Integer);
+var ci: Integer; w: TTypeKind;
+begin
+  if tk = tyUnknown then Exit;
+  ci := PyFindConstraint(name);
+  if ci < 0 then
+  begin
+    if PyLocalCount >= PY_MAX_LOCALS then
+      Error('Nil Python: too many inferred locals');
+    PyLocals[PyLocalCount].Name := name;
+    PyLocals[PyLocalCount].TypeKind := tk;
+    if rec >= REC_UCLASS_BASE then PyLocals[PyLocalCount].RecCi := rec - REC_UCLASS_BASE
+    else PyLocals[PyLocalCount].RecCi := -1;
+    Inc(PyLocalCount);
+    PyTypingChanged := True;
+    Exit;
+  end;
+  w := PyWiden(PyLocals[ci].TypeKind, tk);
+  if w <> PyLocals[ci].TypeKind then
+  begin
+    PyLocals[ci].TypeKind := w;
+    PyTypingChanged := True;
+  end;
+  if (PyLocals[ci].RecCi < 0) and (rec >= REC_UCLASS_BASE) then
+  begin
+    PyLocals[ci].RecCi := rec - REC_UCLASS_BASE;
+    PyTypingChanged := True;
+  end;
+end;
+
 function PyFindModuleConstraint(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -937,41 +995,10 @@ begin
       AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
 end;
 
-procedure PyCollectLocals(bodyStart, bodyEnd: Integer);
-var i, j, ci: Integer; name: AnsiString; tk: TTypeKind;
-begin
-  PyLocalCount := 0;
-  i := bodyStart;
-  while i < bodyEnd do
-  begin
-    if (Tokens[i].Kind = tkIdent) and (i + 1 < bodyEnd) and
-       (Tokens[i + 1].Kind = tkAssign) then
-    begin
-      name := GetTokenStr(i);
-      PyInferName := name;
-      j := i + 2;
-      while (j < bodyEnd) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
-      tk := PyInferExprType(i + 2, j);
-      PyInferName := '';
-      if tk = tyUnknown then
-        Error('Nil Python: cannot infer local type for ' + name);
-      ci := PyFindConstraint(name);
-      if ci < 0 then
-      begin
-        if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred locals');
-        PyLocals[PyLocalCount].Name := name;
-        PyLocals[PyLocalCount].TypeKind := tk;
-        PyLocals[PyLocalCount].RecCi := PyInferLastCi;
-        Inc(PyLocalCount);
-      end
-      else
-        PyLocals[ci].TypeKind := PyWiden(PyLocals[ci].TypeKind, tk);
-      i := j;
-    end
-    else
-      Inc(i);
-  end;
-end;
+{ (PyCollectLocals, the token-scanning local-typing pre-pass, was retired by
+  feature-n-nilpy-ast-based-typing — PyCollectLocalsAST parses the body
+  instead. PyInferExprType survives only for MODULE scope below, which is not
+  a single parseable block; migrating it is the remainder of that ticket.) }
 
 procedure PyCollectModuleLocals;
 var i, j, ci, depth, skipDepth: Integer; name: AnsiString; tk: TTypeKind;
@@ -1856,6 +1883,10 @@ begin
         later `x.name` had no class to resolve against and read the object
         pointer as the field (bug-nilpy-class-typed-field-loses-identity). }
       Syms[symIdx].RecName := ResolveNodeRec(rhsNode);
+    { Trial parse: every assignment widens the local, not just the first one
+      (the symbol only remembers the first). }
+    if PyTypingPass then
+      PyNoteLocalType(name, IntToTypeKind(ASTTk[rhsNode]), ResolveNodeRec(rhsNode));
     lhsNode := PyMakeIdent(symIdx);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
     node := AllocNode(AN_ASSIGN);
@@ -1885,11 +1916,122 @@ begin
   end;
 end;
 
+{ Type a body's implicit locals by PARSING it, not by scanning its tokens.
+
+  Python declares a local by assigning to it, and a local's type can WIDEN
+  across branches (`x = 1` then `x = "s"` -> variant), so the frame cannot be
+  laid out until every assignment has been seen. That constraint is real; the
+  old answer to it was not. PyCollectLocals met it with a token scanner
+  (PyInferExprType and friends) that re-implemented expression typing a second
+  time and drifted from the parser that actually builds the call — a str method
+  returning a class was invisible to it, and `"a,b".split(",")` was invisible
+  because the scan only inspected IDENT tokens.
+
+  So: keep the pre-pass, drop the scanner. Parse the body to AST in a scratch
+  scope and let the ordinary assignment path type each local from ASTTk of the
+  node it just built (pyparser's `symIdx < 0` branch already does exactly
+  that — this only gives it a second look at the body). Then throw the scratch
+  AST and scratch symbols away and keep the widened name->type table. Nothing
+  here can drift from the real parse because it IS the real parse — the same
+  shape rparser.inc:RParseLet and zparser.inc:ZParseVarDecl already use.
+
+  Iterated to a fixed point: round 1 types `x` from its FIRST assignment, so a
+  `y = x + 1` between two assignments to `x` still sees the pre-widening `x`.
+  Re-seeding the scratch scope from the widened table and re-parsing settles
+  it. PyWiden only ever widens, so the loop is monotone; PY_INFER_ROUNDS caps
+  it anyway rather than trusting that forever.
+
+  Safe to run over the same tokens repeatedly: NilPy statement and expression
+  parsing allocates AST nodes and scope-local symbols and emits NO code (the
+  prologue is emitted by the caller, after this returns), and both allocations
+  are rolled back here. }
+const PY_INFER_ROUNDS = 4;
+
+procedure PyCollectLocalsAST(bodyStart: Integer);
+var rnd, i, si, savedTok, savedAST, savedSC, savedCur, savedFS: Integer;
+    changed: Boolean;
+    tk, w: TTypeKind;
+    nm: AnsiString;
+begin
+  PyLocalCount := 0;
+  rnd := 0;
+  repeat
+    changed := False;
+    PyTypingChanged := False;
+    PyTypingPass := True;
+    savedTok := TokPos;
+    savedAST := ASTNodeCount;
+    savedCur := CurASTNode;
+    savedSC := SymCount;
+    savedFS := FrameSize;
+    { seed the scratch scope with what the previous round learned }
+    for i := 0 to PyLocalCount - 1 do
+      if FindSym(PyLocals[i].Name) < 0 then
+      begin
+        si := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
+        if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+          Syms[si].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+      end;
+    TokPos := bodyStart;
+    Next;
+    PyParseBlock;
+    { harvest every symbol the body declared, widening against the table }
+    for i := savedSC to SymCount - 1 do
+    begin
+      nm := Syms[i].Name;
+      if nm = '' then Continue;
+      tk := Syms[i].TypeKind;
+      si := PyFindConstraint(nm);
+      if si < 0 then
+      begin
+        if PyLocalCount >= PY_MAX_LOCALS then
+          Error('Nil Python: too many inferred locals');
+        PyLocals[PyLocalCount].Name := nm;
+        PyLocals[PyLocalCount].TypeKind := tk;
+        if Syms[i].RecName >= REC_UCLASS_BASE then
+          PyLocals[PyLocalCount].RecCi := Syms[i].RecName - REC_UCLASS_BASE
+        else
+          PyLocals[PyLocalCount].RecCi := -1;
+        Inc(PyLocalCount);
+        changed := True;
+      end
+      else
+      begin
+        w := PyWiden(PyLocals[si].TypeKind, tk);
+        if w <> PyLocals[si].TypeKind then
+        begin
+          PyLocals[si].TypeKind := w;
+          changed := True;
+        end;
+        if (PyLocals[si].RecCi < 0) and (Syms[i].RecName >= REC_UCLASS_BASE) then
+        begin
+          PyLocals[si].RecCi := Syms[i].RecName - REC_UCLASS_BASE;
+          changed := True;
+        end;
+      end;
+    end;
+    PyTypingPass := False;
+    if PyTypingChanged then changed := True;
+    SymRollbackTo(savedSC);
+    ASTNodeCount := savedAST;
+    FrameSize := savedFS;
+    CurASTNode := savedCur;
+    { Re-READ the saved token rather than restoring a saved copy of CurTok:
+      Next does SetLength(CurTok.SVal, ...) in place, so a record copy taken
+      before the trial parse shares that buffer and comes back holding whatever
+      token the trial stopped on (a compiler segfault, not a subtle wrong
+      type). Tokens[] is the only trustworthy source. }
+    TokPos := savedTok - 1;
+    Next;
+    Inc(rnd);
+  until (not changed) or (rnd >= PY_INFER_ROUNDS);
+end;
+
 procedure PyParseDef;
 var name: AnsiString; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind;
     pcis: array[0..15] of Integer;
-    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyEnd, bodyNode: Integer;
+    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     retType: TTypeKind; isProc: Boolean; retCi: Integer;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
@@ -1923,7 +2065,6 @@ begin
   Expect(tkNewline, 'newline');
   Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
-  bodyEnd := PyFindBodyEnd(bodyStart);
 
   procIdx := RegisterProc(name, not isProc, retType, nparams, pnames, ptypes);
   Procs[procIdx].BodyAddr := CodeLen;
@@ -1957,9 +2098,14 @@ begin
       ProcAggregateDestSym[procIdx] := idx;
     end;
   end;
-  PyCollectLocals(bodyStart, bodyEnd);
+  PyCollectLocalsAST(bodyStart);
   for i := 0 to PyLocalCount - 1 do
-    if FindSym(PyLocals[i].Name) < 0 then AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
+    if FindSym(PyLocals[i].Name) < 0 then
+    begin
+      idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
+      if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+        Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+    end;
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
@@ -2399,7 +2545,7 @@ end;
 
 procedure PyParseMethod(ci: Integer);
 var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
-    savedSelf, patchPos, bodyNode: Integer; pnames: array[0..15] of AnsiString;
+    savedSelf, patchPos, bodyNode, bodyStart: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     isCtor: Boolean;
 begin
@@ -2425,6 +2571,7 @@ begin
   Expect(tkRParen, ')'); Expect(tkMinus, '- in ->'); Expect(tkGt, '> in ->');
   if isCtor then begin Expect(tkNil, 'None'); end else PyParseType;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
+  bodyStart := TokPos - 1;
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
   for i := 1 to Length(name) do AppendChar(fullName, name[i]);
   procIdx := FindProc(fullName);
@@ -2451,6 +2598,19 @@ begin
       ProcAggregateDestSym[procIdx] := idx;
     end;
   end;
+  { Methods used to have NO local pre-pass at all: a method local took the type
+    of its FIRST assignment and never widened, so `x = 1` then `x = "s"` in a
+    method was an Integer local silently holding a string handle — the same
+    def/method asymmetry that made `-> str` methods a separate bug from `-> str`
+    defs. One pre-pass now serves both. }
+  PyCollectLocalsAST(bodyStart);
+  for i := 0 to PyLocalCount - 1 do
+    if FindSym(PyLocals[i].Name) < 0 then
+    begin
+      idx := AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
+      if (PyLocals[i].TypeKind = tyClass) and (PyLocals[i].RecCi >= 0) then
+        Syms[idx].RecName := REC_UCLASS_BASE + PyLocals[i].RecCi;
+    end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
