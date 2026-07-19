@@ -123,8 +123,15 @@ slices, f-strings, raise, isinstance, augassign.
    [[feature-nilpy-bytes-and-slices]] (bytearray + slices + to_bytes; 99
    slice sites, and vm.memory IS the Forth data space) — but note both
    slices and `int.to_bytes(..., signed=True)` need a shared-parser hook, so
-   that one is not purely ours after all. Then tuple unpack, @property,
-   try/except payloads, nonlocal.
+   that one is not purely ours after all.
+
+   The rest of the census is now characterised and filed rather than left as
+   a list: [[feature-nilpy-exceptions]] (p60 — `raise` / `try` / `except`
+   have NO statement rule at all, and exceptions are uforth's control flow,
+   not its error path), [[feature-nilpy-tuple-unpack]] (p55 — the enabler for
+   `for k, v in d.items()`), and, still unfiled because neither blocks as
+   early: `@property` (only `@dataclass` is accepted as a decorator) and
+   comprehensions.
 2. [[feature-rtti-field-reflection]] + [[feature-lib-pyexec]] (walker) —
    independently tested against the 134-block corpus extracted standalone.
 3. uforth boots STD/CORE.UFO, then prelim tests (57), then full suite,
