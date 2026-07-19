@@ -1,0 +1,71 @@
+# for-in over a list, a set, a dict (keys) and a str, plus break/continue.
+# Oracle: CPython — running this file with python3 must produce byte-identical
+# output to the compiled binary.
+#
+# The loop lowers to a counted while loop with a hidden index. The index is
+# advanced at the TOP of the body and starts at -1, so `continue` still
+# advances it — with the increment at the bottom, `continue` skipped it and
+# the loop hung.
+#
+# NOT covered, and diagnosed rather than miscompiled: iterating a container
+# held in a Variant (`for r in rows` where rows is a list OF lists). The
+# element would have to be unboxed first, which is
+# bug-a-nilpy-variant-element-not-usable-as-scalar (Track A).
+
+xs = [1, 2, 3]
+for x in xs:
+    print(x)
+
+names = ["a", "bb", "ccc"]
+for n in names:
+    print(n)
+
+# a dict iterates its KEYS, like Python
+d = {"k": 1, "j": 2}
+for k in d:
+    print(k)
+
+# a str yields one-character strings
+for ch in "abc":
+    print(ch)
+
+# the counted form still works
+for i in range(2):
+    print(i)
+
+
+class C:
+    def __init__(self) -> None:
+        self.items = ["p", "q"]
+
+    def show(self) -> None:
+        for it in self.items:
+            print(it)
+
+
+c = C()
+c.show()
+
+# break and continue, in both loop kinds
+ws = ["a", "b", "c", "d"]
+for w in ws:
+    if w == "b":
+        continue
+    if w == "d":
+        break
+    print(w)
+
+i = 0
+while i < 6:
+    i = i + 1
+    if i == 2:
+        continue
+    if i == 5:
+        break
+    print(i)
+
+# the loop variable survives the body and the container is evaluated once
+acc = ""
+for ch in "xyz":
+    acc = acc + ch
+print(acc)

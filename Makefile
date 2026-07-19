@@ -208,6 +208,8 @@ test-nilpy: $(COMPILER)
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
+	./$(COMPILER) test/test_nilpy_forin.npy /tmp/test_nilpy_forin26
+	/tmp/test_nilpy_forin26 | diff -u test/test_nilpy_forin.expected -
 	./$(COMPILER) test/test_nilpy_class_return.npy /tmp/test_nilpy_class_return26
 	test "$$(/tmp/test_nilpy_class_return26)" = "$$(printf 'a\nb\nsolo\ninner')"
 	./$(COMPILER) test/test_nilpy_fstrings.npy /tmp/test_nilpy_fstrings26

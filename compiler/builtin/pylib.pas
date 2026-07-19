@@ -148,6 +148,9 @@ function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
 function pystr_at(const s: AnsiString; i: Integer): Char;
+{ Length() as a real Proc. The for-in desugar builds its AST directly and so
+  needs a callable, not the shared parser's intrinsic path. }
+function pystr_len(const s: AnsiString): Integer;
 function pystr_join(const sep: AnsiString; l: TPyList): AnsiString;
 function pystr_split_ws(const s: AnsiString): TPyList;
 function pystr_split_sep(const s: AnsiString; const sep: AnsiString): TPyList;
@@ -200,6 +203,11 @@ end;
 function pystr_ofchar(c: Char): AnsiString;
 begin
   Result := c;
+end;
+
+function pystr_len(const s: AnsiString): Integer;
+begin
+  Result := Length(s);
 end;
 
 { Python's s[i]: 0-BASED, and a NEGATIVE index counts from the end (s[-1] is the

@@ -48,6 +48,7 @@ var
     is one variant local, not an Integer one). }
   PyTypingPass: Boolean;
   PyTypingChanged: Boolean;
+  PyHiddenSeq: Integer;   { serial for hidden for-in loop temps }
   { One parsed `def` header, filled by PyParseDefHeader and read by both its
     callers — the shell pre-pass and PyParseDef itself. Globals rather than a
     dozen var parameters because there must be exactly ONE implementation of
@@ -1784,6 +1785,205 @@ begin
   Result := node;
 end;
 
+{ A distinct name per hidden loop temp, so nested for-in loops do not share
+  an index or a container slot. }
+function PyHiddenName(const stem: AnsiString): AnsiString;
+begin
+  Inc(PyHiddenSeq);
+  Result := '__py_' + stem + '_' + PyIntLiteralText(PyHiddenSeq);
+end;
+
+{ Build `container.<meth>(args...)` as an AN_CALL, given the container's class
+  index. Returns -1 when the method is absent. }
+function PyCallMeth1(ci: Integer; const mname: AnsiString;
+                     selfNode, argNode: Integer): Integer;
+var mmi, mpi, selfArg, valArg: Integer;
+begin
+  Result := -1;
+  mmi := FindUMeth(ci, mname);
+  if mmi < 0 then Exit;
+  mpi := UMthProc_[mmi];
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := selfNode;
+  if argNode >= 0 then
+  begin
+    valArg := AllocNode(AN_ARG);
+    ASTLeft[valArg] := argNode;
+    ASTRight[selfArg] := valArg;
+  end;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  ASTLeft[Result] := selfArg;
+end;
+
+{ `for x in <list|set|dict|str>:` — desugared to a counted while loop:
+
+      __py_c = <container>          (evaluated ONCE)
+      __py_n = len(__py_c)
+      __py_i = 0
+      while __py_i < __py_n:
+          x = __py_c[__py_i]
+          <body>
+          __py_i = __py_i + 1
+
+  The container goes into a hidden local rather than being referenced three
+  times: an IR value node is a SUBTREE, so reusing one RE-EMITS the expression
+  (project_case_selector_reeval_and_fuzzer_narrowness) — here that would
+  re-evaluate the container once per iteration.
+
+  A dict iterates its KEYS, like Python, via keylist. A str yields 1-character
+  strings. Everything else is a list-shaped TPyList.
+
+  The loop variable is a Variant for a container and a str for a string; a
+  body that only passes it along or prints it is correct today. Consuming one
+  AS A SCALAR is bug-a-nilpy-variant-element-not-usable-as-scalar, which is
+  Track A and predates this. }
+function PyParseForIn(const name: AnsiString): Integer;
+var contNode, ci, dictCi, listCi, symIdx, cSym, iSym, nSym: Integer;
+    elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
+    isStr: Boolean; contTk: TTypeKind;
+begin
+  PyParseBoolExpr;
+  contNode := CurASTNode;
+  contTk := IntToTypeKind(ASTTk[contNode]);
+  isStr := (contTk = tyString) or (contTk = tyAnsiString);
+  listCi := FindUClass('TPyList');
+  dictCi := FindUClass('TPyDict');
+  ci := -1;
+  if not isStr then
+  begin
+    ci := ResolveNodeRec(contNode);
+    if ci >= REC_UCLASS_BASE then ci := ci - REC_UCLASS_BASE else ci := -1;
+    if ci < 0 then
+      Error('Nil Python: for-in needs a list, set, dict or str (got something untyped)');
+    if (dictCi >= 0) and (ci = dictCi) then
+    begin
+      { iterate a dict's KEYS, as Python does }
+      contNode := PyCallMeth1(dictCi, 'keylist', contNode, -1);
+      if contNode < 0 then Error('Nil Python: pylib (TPyDict.keylist) not loaded');
+      ci := listCi;
+    end;
+  end;
+
+  Expect(tkColon, ':');
+  Expect(tkNewline, 'newline');
+  Expect(tkIndent, 'indent');
+
+  { hidden locals first, so the loop variable keeps the name the user wrote }
+  if isStr then cSym := AllocVar(PyHiddenName('c'), tyAnsiString)
+  else cSym := AllocVar(PyHiddenName('c'), tyClass);
+  if not isStr then Syms[cSym].RecName := REC_UCLASS_BASE + ci;
+  nSym := AllocVar(PyHiddenName('n'), tyInteger);
+  iSym := AllocVar(PyHiddenName('i'), tyInteger);
+  symIdx := FindSym(name);
+  if symIdx < 0 then
+  begin
+    if isStr then symIdx := AllocVar(name, tyAnsiString)
+    else symIdx := AllocVar(name, tyVariant);
+  end;
+
+  { __py_c := container }
+  seq := -1;
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(cSym);
+  ASTRight[node] := contNode;
+  seq := PySeqAppend(seq, node);
+
+  { __py_n := len(__py_c) }
+  if isStr then
+  begin
+    lenNode := AllocNode(AN_CALL);
+    ASTIVal[lenNode] := FindProc('pystr_len');
+    if ASTIVal[lenNode] < 0 then Error('Nil Python: pylib (pystr_len) not loaded');
+    ASTTk[lenNode] := Ord(tyInteger);
+    node := AllocNode(AN_ARG);
+    ASTLeft[node] := PyMakeIdent(cSym);
+    ASTLeft[lenNode] := node;
+  end
+  else
+  begin
+    lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
+    if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
+  end;
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(nSym);
+  ASTRight[node] := lenNode;
+  seq := PySeqAppend(seq, node);
+
+  { __py_i := -1. The index starts BEFORE the first element and is advanced at
+    the TOP of the body, so `continue` still advances it — with the increment
+    at the bottom, `continue` skipped it and the loop hung. The condition
+    tests the NEXT index for the same reason. }
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(iSym);
+  elemNode := AllocNode(AN_INT_LIT);
+  ASTIVal[elemNode] := -1;
+  ASTTk[elemNode] := Ord(tyInteger);
+  ASTRight[node] := elemNode;
+  seq := PySeqAppend(seq, node);
+
+  { body: __py_i := __py_i + 1 ; x := __py_c[__py_i] ; <user body> }
+  incNode := AllocNode(AN_BINOP);
+  ASTIVal[incNode] := Ord(tkPlus);
+  ASTLeft[incNode] := PyMakeIdent(iSym);
+  elemNode := AllocNode(AN_INT_LIT);
+  ASTIVal[elemNode] := 1;
+  ASTTk[elemNode] := Ord(tyInteger);
+  ASTRight[incNode] := elemNode;
+  ASTTk[incNode] := Ord(tyInteger);
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(iSym);
+  ASTRight[node] := incNode;
+  bodyNode := PySeqAppend(-1, node);
+
+  if isStr then
+  begin
+    elemNode := PyMakeStrIndex(PyMakeIdent(cSym), PyMakeIdent(iSym));
+    { pystr_at yields a Char; the loop variable is a 1-character str }
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := FindProc('pystr_ofchar');
+    if ASTIVal[node] < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
+    ASTTk[node] := Ord(tyAnsiString);
+    cmpNode := AllocNode(AN_ARG);
+    ASTLeft[cmpNode] := elemNode;
+    ASTLeft[node] := cmpNode;
+    elemNode := node;
+  end
+  else
+  begin
+    elemNode := PyCallMeth1(ci, 'get', PyMakeIdent(cSym), PyMakeIdent(iSym));
+    if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
+  end;
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(symIdx);
+  ASTRight[node] := elemNode;
+  bodyNode := PySeqAppend(bodyNode, node);
+
+  node := PyParseBlock;
+  Expect(tkDedent, 'dedent');
+  bodyNode := PySeqAppend(bodyNode, node);
+
+  { while __py_i + 1 < __py_n }
+  incNode := AllocNode(AN_BINOP);
+  ASTIVal[incNode] := Ord(tkPlus);
+  ASTLeft[incNode] := PyMakeIdent(iSym);
+  elemNode := AllocNode(AN_INT_LIT);
+  ASTIVal[elemNode] := 1;
+  ASTTk[elemNode] := Ord(tyInteger);
+  ASTRight[incNode] := elemNode;
+  ASTTk[incNode] := Ord(tyInteger);
+  cmpNode := AllocNode(AN_BINOP);
+  ASTIVal[cmpNode] := Ord(tkLt);
+  ASTLeft[cmpNode] := incNode;
+  ASTRight[cmpNode] := PyMakeIdent(nSym);
+  ASTTk[cmpNode] := Ord(tyBoolean);
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := cmpNode;
+  ASTRight[whileNode] := bodyNode;
+  Result := PySeqAppend(seq, whileNode);
+end;
+
 function PyParseFor: Integer;
 var name: AnsiString; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode: Integer;
@@ -1791,10 +1991,18 @@ begin
   Next;
   if CurTok.Kind <> tkIdent then Error('Nil Python: expected loop variable after for');
   name := CurTok.SVal;
-  symIdx := FindSym(name);
-  if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
   Next;
   Expect(tkIn, 'in');
+  { `for x in range(...)` keeps the counted-loop lowering below; anything else
+    is a container and goes through the desugar. }
+  if not (PyIsIdent('range') and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen)) then
+  begin
+    Result := PyParseForIn(name);
+    Exit;
+  end;
+  symIdx := FindSym(name);
+  if symIdx < 0 then symIdx := AllocVar(name, tyInteger);
   PyExpectIdent('range');
   Expect(tkLParen, '(');
   PyParseBoolExpr;
@@ -1881,6 +2089,21 @@ begin
   if CurTok.Kind = tkWhile then begin Result := PyParseWhile; Exit; end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseFor; Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
+  { `break` / `continue`. The lexer already maps break to tkBreak, but no
+    statement rule ever consumed either, so both died as "expected expression"
+    INSIDE a loop that otherwise worked — including a plain while. }
+  if (CurTok.Kind = tkBreak) or PyIsIdent('break') then
+  begin
+    Next;
+    Result := AllocNode(AN_BREAK);
+    Exit;
+  end;
+  if (CurTok.Kind = tkContinue) or PyIsIdent('continue') then
+  begin
+    Next;
+    Result := AllocNode(AN_CONTINUE);
+    Exit;
+  end;
   { `del d[k]` -> d.remove(k). Only the dict-subscript form is supported; the
     other censused use is `del lst[a:]`, which needs slices and is not this
     ticket. Parsed as a statement rather than through the expression grammar
