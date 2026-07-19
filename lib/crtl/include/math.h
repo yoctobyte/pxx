@@ -47,6 +47,13 @@ extern double __crtl_log2(double x);
 extern double __crtl_log10(double x);
 #define log2(x) __crtl_log2(x)
 #define log10(x) __crtl_log10(x)
+/* ...and Pascal Sinh/Cosh/Tanh for the hyperbolics. */
+extern double __crtl_sinh(double x);
+extern double __crtl_cosh(double x);
+extern double __crtl_tanh(double x);
+#define sinh(x) __crtl_sinh(x)
+#define cosh(x) __crtl_cosh(x)
+#define tanh(x) __crtl_tanh(x)
 extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);

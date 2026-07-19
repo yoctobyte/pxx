@@ -54,6 +54,7 @@ double rint(double x);
 double ldexp(double x, int e);
 int isinf(double x);
 double fmod(double x, double y);   /* binds to the Pascal routine */
+double sqrt(double x);             /* binds to the Pascal routine */
 
 static double crtl_bits2d(unsigned long long b) { return *(double *)&b; }
 
@@ -626,11 +627,180 @@ double log1p(double x) {
   return r.hi + r.lo;
 }
 
-double acosh(double x) { return log(x + sqrt(x * x - 1.0)); }
+/* ---- correctly-rounded hyperbolics on the dd kernels -------------------- */
 
-double asinh(double x) {
-  /* sign-symmetric; the log form loses the sign for negative x */
-  return copysign(log(fabs(x) + sqrt(x * x + 1.0)), x);
+/* Component negate — crtl_dd_muld(v, -1.0) routes through the Dekker split,
+   whose 2^27+1 scaling OVERFLOWS above ~2^996 (asinh/acosh squared args hit
+   that: x ~ 2^499 -> x^2 ~ 2^998 -> NaN). Negation is exact per component. */
+static crtl_dd crtl_dd_neg(crtl_dd a) {
+  crtl_dd r;
+  r.hi = -a.hi; r.lo = -a.lo;
+  return r;
 }
 
-double atanh(double x) { return 0.5 * log((1.0 + x) / (1.0 - x)); }
+/* dd sqrt: hardware/Pascal Sqrt seed (correctly rounded) + one dd Newton
+   correction -> ~2^-105. a must be finite, >= 0, normal-range. */
+static crtl_dd crtl_dd_sqrt(crtl_dd a) {
+  double y0;
+  crtl_dd y, e;
+  if (a.hi == 0.0) return a;
+  y0 = sqrt(a.hi);
+  y.hi = y0; y.lo = 0.0;
+  e = crtl_dd_add(a, crtl_dd_neg(crtl_dd_mul(y, y)));  /* a - y0^2 */
+  y.lo = e.hi / (2.0 * y0);
+  return crtl_fast2sum(y.hi, y.lo);
+}
+
+/* e^ax and e^-ax as dds for 0 <= ax <= 40 (both scalings exact). */
+static void crtl_exp_pair(double ax, crtl_dd *ep, crtl_dd *em) {
+  crtl_dd a, s;
+  int k;
+  a.hi = ax; a.lo = 0.0;
+  s = crtl_exp_core(a, &k);
+  ep->hi = ldexp(s.hi, k);  ep->lo = ldexp(s.lo, k);
+  a.hi = -ax;
+  s = crtl_exp_core(a, &k);
+  em->hi = ldexp(s.hi, k);  em->lo = ldexp(s.lo, k);
+}
+
+/* sinh as a dd for 0 <= ax <= 40 (small args by odd Taylor — the exp
+   difference cancels catastrophically below ~0.35). */
+static crtl_dd crtl_sinh_dd(double ax) {
+  crtl_dd r, r2, s, ep, em;
+  int i;
+  if (ax <= 0.35) {
+    /* x * (1 + x^2/(2*3) * (1 + x^2/(4*5) * (...))) */
+    r.hi = ax; r.lo = 0.0;
+    r2 = crtl_dd_mul(r, r);
+    s.hi = 1.0; s.lo = 0.0;
+    for (i = 11; i >= 1; i--) {
+      s = crtl_dd_mul(crtl_dd_divd(r2, (double)(2 * i * (2 * i + 1))), s);
+      s = crtl_dd_addd(s, 1.0);
+    }
+    return crtl_dd_mul(r, s);
+  }
+  crtl_exp_pair(ax, &ep, &em);
+  s = crtl_dd_add(ep, crtl_dd_muld(em, -1.0));
+  return crtl_dd_muld(s, 0.5);
+}
+
+static crtl_dd crtl_cosh_dd(double ax) {
+  crtl_dd s, ep, em;
+  crtl_exp_pair(ax, &ep, &em);
+  s = crtl_dd_add(ep, em);
+  return crtl_dd_muld(s, 0.5);
+}
+
+/* NOT named sinh/cosh/tanh: those collide case-insensitively with the
+   Pascal routines (the b377 broken-binding landmine) — C callers come
+   through the math.h function-like macros. */
+double __crtl_sinh(double x) {
+  double ax = fabs(x), r;
+  crtl_dd s;
+  int k;
+  if (x != x || x == 0.0 || isinf(x)) return x;
+  if (ax > 40.0) {                       /* e^-ax below dd precision */
+    crtl_dd a;
+    if (ax > 711.0) return x * crtl_bits2d(0x7FE0000000000000ull); /* +-inf */
+    a.hi = ax; a.lo = 0.0;
+    s = crtl_exp_core(a, &k);
+    r = crtl_dd_scale(s, k - 1);         /* e^ax / 2 (handles overflow) */
+  } else {
+    s = crtl_sinh_dd(ax);
+    r = s.hi + s.lo;
+  }
+  return x < 0.0 ? -r : r;
+}
+
+double __crtl_cosh(double x) {
+  double ax = fabs(x), r;
+  crtl_dd s;
+  int k;
+  if (x != x) return x;
+  if (isinf(x)) return fabs(x);
+  if (ax > 40.0) {
+    crtl_dd a;
+    if (ax > 711.0) return crtl_bits2d(0x7FE0000000000000ull) * 2.0; /* +inf */
+    a.hi = ax; a.lo = 0.0;
+    s = crtl_exp_core(a, &k);
+    r = crtl_dd_scale(s, k - 1);
+  } else {
+    s = crtl_cosh_dd(ax);
+    r = s.hi + s.lo;
+  }
+  return r;
+}
+
+double __crtl_tanh(double x) {
+  double ax = fabs(x), r;
+  crtl_dd s;
+  if (x != x || x == 0.0) return x;
+  if (ax > 20.0) return x < 0.0 ? -1.0 : 1.0;   /* 1 - 2e^-2ax, < half-ulp */
+  s = crtl_dd_div(crtl_sinh_dd(ax), crtl_cosh_dd(ax));
+  r = s.hi + s.lo;
+  return x < 0.0 ? -r : r;
+}
+
+double acosh(double x) {
+  crtl_dd p, w;
+  if (x != x) return x;
+  if (x < 1.0) return (x - x) / (x - x);          /* NaN */
+  if (isinf(x)) return x;
+  if (x > crtl_bits2d(0x58F0000000000000ull)) {   /* 2^400: x^2 near the Dekker-split limit */
+    w = crtl_dd_add(crtl_log_dd(x), crtl_ln2());  /* log(2x) */
+    return w.hi + w.lo;
+  }
+  p = crtl_2prod(x, x);                           /* exact x^2 as dd */
+  p = crtl_dd_addd(p, -1.0);                      /* x^2-1, exact through 1 */
+  w = crtl_dd_add(crtl_dd_sqrt(p), crtl_2sum(x, 0.0));
+  w = crtl_log_ddx(w);
+  return w.hi + w.lo;
+}
+
+double asinh(double x) {
+  double ax = fabs(x), r;
+  crtl_dd p, w;
+  if (x != x || x == 0.0 || isinf(x)) return x;
+  if (ax > crtl_bits2d(0x58F0000000000000ull)) {  /* 2^400 */
+    w = crtl_dd_add(crtl_log_dd(ax), crtl_ln2()); /* log(2|x|) */
+    r = w.hi + w.lo;
+    return x < 0.0 ? -r : r;
+  }
+  p = crtl_2prod(ax, ax);
+  p = crtl_dd_addd(p, 1.0);                       /* x^2+1 exact as dd */
+  w = crtl_dd_add(crtl_dd_sqrt(p), crtl_2sum(ax, 0.0));
+  w = crtl_log_ddx(w);
+  r = w.hi + w.lo;
+  return x < 0.0 ? -r : r;
+}
+
+double atanh(double x) {
+  double ax = fabs(x), r;
+  crtl_dd num, den, w, w2, one;
+  if (x != x || x == 0.0) return x;
+  if (ax > 1.0)  return (x - x) / (x - x);        /* NaN */
+  if (ax == 1.0) return x / ((1.0 - ax) * (1.0 + ax));  /* +-inf */
+  if (ax < 9.3e-10) {
+    /* |x| < 2^-30: the (1+x)/(1-x) route computes through q ~ 1, whose
+       ~2^-106 ABSOLUTE dd error becomes half-ulp RELATIVE error at the
+       x-sized result. Direct odd series is relative-exact:
+       x*(1 + x^2/3 + x^4/5), dropped term < 2^-180 relative. */
+    w.hi = ax; w.lo = 0.0;
+    w2 = crtl_dd_mul(w, w);
+    one.hi = 1.0; one.lo = 0.0;
+    num = crtl_dd_divd(one, 5.0);
+    num = crtl_dd_mul(num, w2);
+    num = crtl_dd_add(num, crtl_dd_divd(one, 3.0));
+    num = crtl_dd_mul(num, w2);
+    num = crtl_dd_addd(num, 1.0);
+    num = crtl_dd_mul(num, w);
+    r = num.hi + num.lo;
+    return x < 0.0 ? -r : r;
+  }
+  num = crtl_2sum(1.0, ax);                       /* exact */
+  den = crtl_2sum(1.0, -ax);                      /* exact */
+  w = crtl_log_ddx(crtl_dd_div(num, den));
+  w = crtl_dd_muld(w, 0.5);
+  r = w.hi + w.lo;
+  return x < 0.0 ? -r : r;
+}

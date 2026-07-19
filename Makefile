@@ -1813,6 +1813,8 @@ test-core: $(COMPILER)
 	/tmp/cfloat_cast_narrow_b38126; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c /tmp/cmath_log2_expm1_family_b38226
 	/tmp/cmath_log2_expm1_family_b38226; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_hyperbolic_family_b383.c /tmp/cmath_hyperbolic_family_b38326
+	/tmp/cmath_hyperbolic_family_b38326; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226
