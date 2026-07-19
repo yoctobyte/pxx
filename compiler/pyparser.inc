@@ -417,8 +417,6 @@ begin
 end;
 
 { Bitwise-not / comparison+arithmetic atom. `~` binds like a unary op. }
-function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward;
-
 procedure PyParseBitOperand;
 var node: Integer;
 begin
