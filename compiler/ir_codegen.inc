@@ -2263,6 +2263,20 @@ begin
                   5: begin EmitB($41); EmitB($59); end; { pop r9 }
                 end;
             end;
+          if IRCallDest[node] >= 0 then
+          begin
+            { Aggregate (e.g. quickjs's 16-byte JSValue) result: pxx bodies
+              return aggregates through a hidden caller-destination in r10
+              (RetViaHiddenDest — the callee prologue stashes it, the epilogue
+              fills it). The internal indirect arm below already passes it;
+              without this the cdecl arm left r10 garbage and every C intrinsic
+              returning a struct through a fn-pointer table came back empty.
+              True-SysV rax:rdx struct returns from EXTERN (dlsym) targets stay
+              unmodelled, same caveat as the direct C-call path. Evaluated
+              after the register pops (clobbers rax), before the vararg count. }
+            IREmitNode(IRCallDest[node]);
+            EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
+          end;
           EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
           { Callee: the saved-P slot sits above the pad + stack args. }
           EmitB($4C); EmitB($8B); EmitB($9C); EmitB($24); EmitI32(mStack * 8 + padBytes); { mov r11, [rsp+off] = P }

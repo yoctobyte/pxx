@@ -15,8 +15,9 @@
  * stdout/stderr/stdin are real FILE objects. printf/snprintf %d/%i/%u/%x/%o/%p/
  * %c/%s/%f/%e/%g + flags/width/precision all match gcc stdout. The gating
  * blockers (va_arg-nonint, double-vararg, data-reloc, ternary-string-literal,
- * float-cast/arith) are all closed. %f/%g use a no-libm decimal engine
- * (__crtl_ftoa/__crtl_gtoa); magnitudes beyond ~1.8e18 lose low integer digits.
+ * float-cast/arith) are all closed. %f/%e/%g digits come from an EXACT
+ * no-libm binary->decimal engine (__crtl_dexp_*): correctly rounded at any
+ * precision, honoring the C99 rounding mode (fesetround) at the cut.
  */
 
 #include <stdarg.h>
@@ -117,13 +118,131 @@ static int __crtl_utoa(char *out, unsigned long long v, int base, int upper) {
   return n;
 }
 
+/* ---- EXACT binary->decimal expansion of a finite double -----------------
+   Every finite double is m * 2^e2 with m < 2^53, so its decimal expansion is
+   finite: <= 309 integer digits and <= 1074 fraction digits. Computed with
+   schoolbook decimal doubling/halving on the mantissa — no floating rounding
+   anywhere, so printf digits are exact at ANY precision. This replaced the
+   scaled-multiply extraction, whose product left the double's exact-integer
+   range at >= 16 significant digits and printed sqrt(2)'s 16th digit as ...52
+   instead of ...51 (quickjs js_dtoa round-trip search — every Math.* result
+   showed a 1-ulp tail). Cost: worst case ~1.5M digit ops (subnormals);
+   typical values are a few dozen halvings. */
+#define CRTL_DDI 340
+#define CRTL_DDF 1120
+struct __crtl_dexp {
+  char di[CRTL_DDI]; int ni;   /* integer part, MSB first (ni >= 1) */
+  char df[CRTL_DDF]; int nf;   /* fraction part, first digit after the point */
+};
+static void __crtl_dexp_double(struct __crtl_dexp *x) {
+  int i, c = 0, t;
+  for (i = x->nf - 1; i >= 0; i--) {
+    t = x->df[i] * 2 + c; x->df[i] = (char)(t % 10); c = t / 10;
+  }
+  while (x->nf > 0 && x->df[x->nf - 1] == 0) x->nf--;   /* strip trailing 0s */
+  for (i = x->ni - 1; i >= 0; i--) {
+    t = x->di[i] * 2 + c; x->di[i] = (char)(t % 10); c = t / 10;
+  }
+  if (c && x->ni < CRTL_DDI) {
+    for (i = x->ni; i > 0; i--) x->di[i] = x->di[i - 1];
+    x->di[0] = (char)c; x->ni++;
+  }
+}
+static void __crtl_dexp_halve(struct __crtl_dexp *x) {
+  int i, rem = 0, t;
+  for (i = 0; i < x->ni; i++) {
+    t = rem * 10 + x->di[i]; x->di[i] = (char)(t / 2); rem = t % 2;
+  }
+  while (x->ni > 1 && x->di[0] == 0) {                  /* strip leading 0s */
+    for (i = 1; i < x->ni; i++) x->di[i - 1] = x->di[i];
+    x->ni--;
+  }
+  for (i = 0; i < x->nf; i++) {
+    t = rem * 10 + x->df[i]; x->df[i] = (char)(t / 2); rem = t % 2;
+  }
+  if (rem && x->nf < CRTL_DDF) x->df[x->nf++] = 5;
+}
+static void __crtl_dexp_init(struct __crtl_dexp *x, double a) {
+  unsigned long long b, m; int be, e2, i;
+  char tmp[20]; int nt = 0;
+  b = *(unsigned long long *)&a;
+  be = (int)((b >> 52) & 0x7FF);
+  m  = b & 0xFFFFFFFFFFFFFULL;
+  if (be > 0) { m |= 1ULL << 52; e2 = be - 1075; }
+  else e2 = -1074;                                       /* subnormal */
+  if (m == 0) { x->ni = 1; x->di[0] = 0; x->nf = 0; return; }
+  nt = 0;
+  while (m > 0) { tmp[nt++] = (char)(m % 10ULL); m = m / 10ULL; }
+  x->ni = nt;
+  for (i = 0; i < nt; i++) x->di[i] = tmp[nt - 1 - i];
+  x->nf = 0;
+  while (e2 > 0) { __crtl_dexp_double(x); e2--; }
+  while (e2 < 0) { __crtl_dexp_halve(x); e2++; }
+}
+/* digit at position p, where p = 0 is the last integer digit (units), p > 0
+   counts left of it, p < 0 counts fraction digits right of the point */
+static int __crtl_dexp_at(const struct __crtl_dexp *x, int p) {
+  if (p >= 0) { if (p >= x->ni) return 0; return x->di[x->ni - 1 - p]; }
+  p = -p - 1;
+  if (p >= x->nf) return 0;
+  return x->df[p];
+}
+/* true if any nonzero digit exists strictly below position p */
+static int __crtl_dexp_rest(const struct __crtl_dexp *x, int p) {
+  int i;
+  for (i = p - 1; i >= -x->nf; i--)
+    if (__crtl_dexp_at(x, i) != 0) return 1;
+  return 0;
+}
+/* Rounding decision at the cut, honoring the C99 rounding mode (glibc printf
+   does; quickjs's toFixed probes FE_DOWNWARD/FE_TONEAREST through snprintf to
+   settle ties, so ties-to-even-always broke (1.005).toFixed(2)). `neg` = value
+   sign, `d` = first dropped digit, `rest` = nonzero digits beyond it, `odd` =
+   last kept digit is odd. The expansion is exact, so every test is exact. */
+extern int __pxx_fegetround(void);
+static int __crtl_round_carry(int neg, int d, int rest, int odd) {
+  int mode = __pxx_fegetround();
+  if (mode == 0x400) return neg && (d > 0 || rest);     /* FE_DOWNWARD  */
+  if (mode == 0x800) return (!neg) && (d > 0 || rest);  /* FE_UPWARD    */
+  if (mode == 0xc00) return 0;                          /* FE_TOWARDZERO */
+  if (d > 5) return 1;                                  /* FE_TONEAREST */
+  if (d == 5) { if (rest) return 1; return odd; }       /* tie -> even  */
+  return 0;
+}
+
+/* Extract `want` correctly rounded significant digits into dg[] (MSB first);
+   *pe10 = decimal exponent of the first digit (d.ddd * 10^e form). Rounds to
+   nearest; an exactly-half tail rounds the last kept digit to even (the
+   expansion is exact, so the tie test is exact too). */
+static void __crtl_dexp_sig(const struct __crtl_dexp *x, int want, int neg,
+                            char *dg, int *pe10) {
+  int hi, i, p, d, carry;
+  if (x->ni == 1 && x->di[0] == 0 && x->nf == 0) {
+    for (i = 0; i < want; i++) dg[i] = '0';
+    *pe10 = 0; return;
+  }
+  if (x->ni > 1 || x->di[0] != 0) hi = x->ni - 1;
+  else { hi = 0; while (hi < x->nf && x->df[hi] == 0) hi++; hi = -(hi + 1); }
+  for (i = 0; i < want; i++) dg[i] = (char)('0' + __crtl_dexp_at(x, hi - i));
+  p = hi - want;                                        /* first dropped pos */
+  d = __crtl_dexp_at(x, p);
+  carry = __crtl_round_carry(neg, d, __crtl_dexp_rest(x, p),
+                             (dg[want - 1] - '0') & 1);
+  for (i = want - 1; carry && i >= 0; i--) {
+    if (dg[i] == '9') dg[i] = '0';
+    else { dg[i]++; carry = 0; }
+  }
+  if (carry) { dg[0] = '1'; hi++; }                     /* 999.. -> 1000.. */
+  *pe10 = hi;
+}
+
 /* IEEE double -> decimal in fixed ('f') notation with `prec` fraction digits.
-   Returns the length written. Handles sign, nan, inf. Magnitude beyond ~1.8e18
-   loses the low integer digits (no bignum) — fine for typical printf use. */
+   Returns the length written. Handles sign, nan, inf. Digits come from the
+   exact expansion above (round-to-nearest, ties-to-even at the cut). */
 static int __crtl_ftoa(char *out, double v, int prec) {
-  int n = 0, i, dig, neg = 0;
-  unsigned long ip;
-  double frac, scale;
+  static struct __crtl_dexp X;   /* ~1.5KB — keep off the stack */
+  int n = 0, i, neg = 0, hi, p, d, carry;
+  if (prec > 200) prec = 200;    /* keep the caller's fbuf bound (309+1+prec) */
   if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
   if (v < 0.0) { neg = 1; v = -v; }
   if (v > 1.7976931348623157e308) {
@@ -131,23 +250,42 @@ static int __crtl_ftoa(char *out, double v, int prec) {
     out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
     return n;
   }
-  scale = 1.0;
-  for (i = 0; i < prec; i++) scale = scale * 10.0;
-  v = v + 0.5 / scale;                 /* round half up at the last kept digit */
-  ip = (unsigned long)v;
-  frac = v - (double)ip;
+  __crtl_dexp_init(&X, v);
+  /* round the expansion at fraction position `prec` (position -prec) */
+  p = -prec - 1;                                        /* first dropped pos */
+  d = __crtl_dexp_at(&X, p);
+  carry = __crtl_round_carry(neg, d, __crtl_dexp_rest(&X, p),
+                             __crtl_dexp_at(&X, p + 1) & 1);
+  /* apply the carry by adding 1 at position -prec (decimal add) */
+  if (carry) {
+    if (X.nf < prec) {               /* materialise the implicit zero tail */
+      for (i = X.nf; i < prec && i < CRTL_DDF; i++) X.df[i] = 0;
+      if (prec <= CRTL_DDF) X.nf = prec;
+    }
+    i = prec - 1;                    /* df index of position -prec */
+    while (i >= 0) {
+      if (X.df[i] == 9) { X.df[i] = 0; i--; }
+      else { X.df[i]++; break; }
+    }
+    if (i < 0) {                     /* carried into the integer part */
+      i = X.ni - 1;
+      while (i >= 0) {
+        if (X.di[i] == 9) { X.di[i] = 0; i--; }
+        else { X.di[i]++; break; }
+      }
+      if (i < 0 && X.ni < CRTL_DDI) {
+        for (i = X.ni; i > 0; i--) X.di[i] = X.di[i - 1];
+        X.di[0] = 1; X.ni++;
+      }
+    }
+  }
   if (neg) out[n++] = '-';
-  n += __crtl_utoa(out + n, ip, 10, 0);
+  hi = X.ni;
+  for (i = 0; i < hi; i++) out[n++] = (char)('0' + X.di[i]);
   if (prec > 0) {
     out[n++] = '.';
-    for (i = 0; i < prec; i++) {
-      frac = frac * 10.0;
-      dig = (int)frac;
-      if (dig > 9) dig = 9;
-      if (dig < 0) dig = 0;
-      out[n++] = (char)('0' + dig);
-      frac = frac - (double)dig;
-    }
+    for (i = 0; i < prec; i++)
+      out[n++] = (char)('0' + ((i < X.nf) ? X.df[i] : 0));
   }
   return n;
 }
@@ -173,47 +311,30 @@ static double __crtl_p10(int k) {
    integer mantissa of `prec` digits (one correctly-rounded op for the whole
    normal range), and expand that integer. */
 static int __crtl_gtoa(char *out, double v, int prec, int upper, int force_exp) {
+  static struct __crtl_dexp GX;  /* ~1.5KB — keep off the stack */
   int n = 0, i, e, neg = 0, dotpos;
   double a;
-  char digits[40];
-  int nd, eprec, k;
-  unsigned long long D, lim;
+  char digits[128];
+  int nd;
   if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
   if (prec <= 0) prec = 1;
+  if (prec > 120) prec = 120;
   if (v < 0.0) { neg = 1; a = -v; } else a = v;
   if (a > 1.7976931348623157e308) {
     if (neg) out[n++] = '-';
     out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
     return n;
   }
-  /* extraction precision capped so the mantissa fits unsigned long long
-     (10^18 < 2^63); positions beyond it pad with zeros */
-  eprec = prec; if (eprec > 18) eprec = 18;
-  e = 0;
+  /* exact expansion -> prec correctly rounded significant digits (see the
+     __crtl_dexp engine above; the old scaled-multiply extraction was off by
+     one in the 16th/17th digit — the quickjs Math.* 1-ulp tails) */
   if (a != 0.0) {
-    /* bring a into [1, 1e22) with exact-chunk steps (each one rounded op;
-       only reached outside the double's comfortable middle range) */
-    while (a >= 1e22) { a = a / 1e22; e += 22; }
-    while (a < 1.0)   { a = a * 1e22; e -= 22; }
-    /* k = floor(log10(a)) by comparison against EXACT powers — a unchanged */
-    k = 0;
-    while (k < 21 && a >= __crtl_p10(k + 1)) k++;
-    e += k;
-    /* D = round(a scaled to eprec digits): one exact-power multiply or
-       divide, correctly rounded */
-    if (k + 1 >= eprec) D = (unsigned long long)(a / __crtl_p10(k + 1 - eprec) + 0.5);
-    else                D = (unsigned long long)(a * __crtl_p10(eprec - 1 - k) + 0.5);
-    /* rounding may carry into an extra digit (9.99 -> 10.0) */
-    lim = 1ULL; for (i = 0; i < eprec; i++) lim = lim * 10ULL;
-    if (D >= lim) { D = D / 10ULL; e++; }
-  } else
-    D = 0;
-  /* expand D (eprec digits, MSB first), pad to prec with zeros */
-  for (i = eprec - 1; i >= 0; i--) {
-    digits[i] = (char)('0' + (int)(D % 10ULL));
-    D = D / 10ULL;
+    __crtl_dexp_init(&GX, a);
+    __crtl_dexp_sig(&GX, prec, neg, digits, &e);
+  } else {
+    for (i = 0; i < prec; i++) digits[i] = '0';
+    e = 0;
   }
-  for (i = eprec; i < prec; i++) digits[i] = '0';
   nd = prec;
   if (neg) out[n++] = '-';
   if (force_exp || e < -4 || e >= prec) {
@@ -308,7 +429,7 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
 
     char num[32];
     char one[2];
-    char fbuf[64];
+    char fbuf[560];   /* %f of DBL_MAX = 309 integer digits + '.' + prec (exact engine) */
     const char *s = 0;
     int nl = 0;          /* significant length of s */
     int neg = 0;

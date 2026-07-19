@@ -26,10 +26,11 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (105)
+## backlog (106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-float-literal-subnormal-parses-zero | C | 25 | bug | C float literal in the subnormal range parses to 0.0 | — |
 | chore-makefile-testtmp-parameterize | A | 45 | chore | Makefile: parameterize hardcoded /tmp test paths ($(TESTTMP)) — concurrent gates corrupt each other | — |
 | chore-web-secrets-sops-age | A | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
@@ -2560,6 +2561,7 @@ _none_
 - [p 30] [T] feature-pasmith-qplus-rplus-rungs
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
+- [p 25] [C] bug-c-float-literal-subnormal-parses-zero
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [O] feature-opt-float-register-temporaries
