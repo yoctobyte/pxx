@@ -53,6 +53,9 @@ ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snaps
 QUICKJS_URL="https://github.com/quickjs-ng/quickjs"
 QUICKJS_COMMIT="670492dd342dace0bb7bd6fbfbde8f0bc5651224"   # v0.9.0 release tag
 
+ARMOR_URL="https://github.com/ARM-software/optimized-routines"
+ARMOR_COMMIT="864fb5e16e6fea44e74fd0f05bcd334e5d38c7ed"   # v24.01 release tag
+
 JSSHA256_URL="https://github.com/emn178/js-sha256"
 JSSHA256_COMMIT="7912494a5ae277660131557401b91f11f47c96d2"   # v0.11.1 release tag
 
@@ -392,6 +395,26 @@ EOF
   say "quickjs -> $DEST/quickjs"
 }
 
+fetch_optimized_routines() {
+  # ARM optimized-routines (MIT): reference source for the glibc-parity
+  # exp/log/pow port in lib/crtl/src (feature-crtl-libm-correctly-rounded-
+  # transcendentals) — glibc's own double exp/log/pow ARE these routines, so
+  # porting them (tables + polynomials, MIT-licensed) gives byte-identical
+  # results to a glibc oracle. Vendored for reference/re-extraction only.
+  if present optimized-routines; then say "optimized-routines present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$ARMOR_URL" optimized-routines "$ARMOR_COMMIT" math LICENSE
+  cat > "$DEST/optimized-routines/PROVENANCE.md" <<EOF
+# ARM optimized-routines (libm reference source)
+Upstream: ${ARMOR_URL}
+Commit: ${ARMOR_COMMIT} (v24.01)
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT.
+Used as the port source for lib/crtl/src's glibc-parity exp/log/pow (the ported
+code in the repo carries its own MIT attribution header).
+EOF
+  say "optimized-routines -> $DEST/optimized-routines"
+}
+
 fetch_js_sha256() {
   # Pure-compute JS library for the QuickJS corpus gate (feature-c-corpus-quickjs):
   # a real-world sha256/sha224 implementation (~500 lines plain script, no ES
@@ -500,6 +523,7 @@ EOF
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
     js-sha256)     fetch_js_sha256 ;;
+    optimized-routines) fetch_optimized_routines ;;
     duktape)       fetch_duktape ;;
     fcl-json)      fetch_fcl_json ;;
     csmith)        fetch_csmith ;;

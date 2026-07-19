@@ -1801,6 +1801,14 @@ test-core: $(COMPILER)
 	/tmp/cdesignated_enum_index_unsized_b37526; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cprintf_exact_digits_b376.c /tmp/cprintf_exact_digits_b37626
 	/tmp/cprintf_exact_digits_b37626; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_exp_correct_round_b377.c /tmp/cmath_exp_correct_round_b37726
+	/tmp/cmath_exp_correct_round_b37726; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log_correct_round_b378.c /tmp/cmath_log_correct_round_b37826
+	/tmp/cmath_log_correct_round_b37826; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_cbrt_correct_round_b379.c /tmp/cmath_cbrt_correct_round_b37926
+	/tmp/cmath_cbrt_correct_round_b37926; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_pow_correct_round_b380.c /tmp/cmath_pow_correct_round_b38026
+	/tmp/cmath_pow_correct_round_b38026; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226

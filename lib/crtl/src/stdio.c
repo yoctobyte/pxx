@@ -243,8 +243,13 @@ static int __crtl_ftoa(char *out, double v, int prec) {
   static struct __crtl_dexp X;   /* ~1.5KB — keep off the stack */
   int n = 0, i, neg = 0, hi, p, d, carry;
   if (prec > 200) prec = 200;    /* keep the caller's fbuf bound (309+1+prec) */
-  if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
-  if (v < 0.0) { neg = 1; v = -v; }
+  /* glibc parity: negative-signed NaN prints "-nan"; -0.0 prints "-0" */
+  if (v != v) {
+    if (*(unsigned long long *)&v >> 63) { out[n++] = '-'; }
+    out[n++] = 'n'; out[n++] = 'a'; out[n++] = 'n';
+    return n;
+  }
+  if (v < 0.0 || (v == 0.0 && (*(unsigned long long *)&v >> 63))) { neg = 1; v = -v; }
   if (v > 1.7976931348623157e308) {
     if (neg) out[n++] = '-';
     out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
@@ -316,10 +321,15 @@ static int __crtl_gtoa(char *out, double v, int prec, int upper, int force_exp) 
   double a;
   char digits[128];
   int nd;
-  if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
+  /* glibc parity: negative-signed NaN prints "-nan"; -0.0 prints "-0" */
+  if (v != v) {
+    if (*(unsigned long long *)&v >> 63) { out[n++] = '-'; }
+    out[n++] = 'n'; out[n++] = 'a'; out[n++] = 'n';
+    return n;
+  }
   if (prec <= 0) prec = 1;
   if (prec > 120) prec = 120;
-  if (v < 0.0) { neg = 1; a = -v; } else a = v;
+  if (v < 0.0 || (v == 0.0 && (*(unsigned long long *)&v >> 63))) { neg = 1; a = -v; } else a = v;
   if (a > 1.7976931348623157e308) {
     if (neg) out[n++] = '-';
     out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';

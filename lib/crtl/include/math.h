@@ -28,6 +28,14 @@ extern double sinh(double x);
 extern double cosh(double x);
 extern double tanh(double x);
 extern double exp(double x);
+/* The C name `exp` collides case-insensitively with Pascal Exp when the RTL
+   is linked next to crtl; with TWO visible definitions the call binding
+   silently picks the wrong convention (arguments never arrive). The
+   correctly-rounded implementation therefore lives under __crtl_exp and C
+   callers reach it through this function-like macro — variables named `exp`
+   and struct fields stay untouched. */
+extern double __crtl_exp(double x);
+#define exp(x) __crtl_exp(x)
 extern double exp2(double x);
 extern double log(double x);
 extern double log2(double x);
