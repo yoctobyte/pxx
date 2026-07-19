@@ -42,3 +42,6 @@ which the single-token path never did.
 
 `test-nilpy` green with the container-annotation cases added to the dict
 test + `--tier quick` + self-host byte-identical + `make fpc-check`.
+
+## Log
+- 2026-07-20 — resolved, commit 7f35dff9.
