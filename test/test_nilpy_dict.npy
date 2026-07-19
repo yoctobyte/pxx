@@ -11,7 +11,7 @@
 
 # NilPy has the typing names built in and consumes this import; CPython needs
 # it, and the point of the file is that ONE source runs under both.
-from typing import Dict
+from typing import Dict, List
 
 d = {}
 d["a"] = 1
@@ -85,3 +85,21 @@ z = {}
 print(len(z))
 print("x" in z)
 print(z.get("x", 9))
+
+# A CONTAINER annotation on an assignment, at module scope and inside a def.
+# The annotation used to have to be a single token, so this failed while the
+# identical `self.d: Dict[...]` on a field worked.
+md: Dict[str, int] = {}
+md["q"] = 4
+print(len(md))
+print(md["q"])
+
+
+def local_ann() -> int:
+    xs: List[int] = []
+    ys: Dict[str, int] = {}
+    ys["a"] = 1
+    return len(xs) + len(ys)
+
+
+print(local_ann())

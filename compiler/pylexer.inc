@@ -324,7 +324,19 @@ begin
           PyFsPutCh(c);
           Inc(i);
           while (i <= n) and (Source[i] <> hq) do
-          begin PyFsPutCh(Source[i]); Inc(i); end;
+          begin
+            { an ESCAPED quote does not close the string — without this,
+              f"...{d['a\'b']}..." ended the hole's string early and the rest
+              of the expression was copied as literal text }
+            if Source[i] = '\' then
+            begin
+              PyFsPutCh(Source[i]);
+              Inc(i);
+              if i > n then Break;
+            end;
+            PyFsPutCh(Source[i]);
+            Inc(i);
+          end;
           if i <= n then begin PyFsPutCh(Source[i]); Inc(i); end;
           continue;
         end;

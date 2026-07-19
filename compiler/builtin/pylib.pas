@@ -503,6 +503,9 @@ begin
     dst^.VType := src^.VType;
     dst^.Payload := src^.Payload;
   end;
+  { the old block is unreachable the moment FItems moves — nothing else ever
+    holds it, so it is freed here rather than leaked on every growth }
+  if l.FItems <> nil then FreeMem(l.FItems);
   l.FItems := newItems;
   l.FCap := newCap;
 end;
@@ -698,6 +701,8 @@ begin
     dst^.VType := src^.VType;
     dst^.Payload := src^.Payload;
   end;
+  if d.FKeys <> nil then FreeMem(d.FKeys);
+  if d.FVals <> nil then FreeMem(d.FVals);
   d.FKeys := newKeys;
   d.FVals := newVals;
   d.FCap := newCap;
@@ -977,13 +982,27 @@ begin
 end;
 
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
+var tag: Int64;
 begin
-  if pyvartag(v) = 6 then
+  tag := pyvartag(v);
+  if tag = 6 then
   begin
     Result := pyformat_of(VariantToStr(v), spec);
     Exit;
   end;
-  Result := pyformat_of(PPyVarRec(@v)^.Payload, spec);
+  { Only INTEGER-like tags may go through the integer formatter: VT_INT,
+    VT_INT64, VT_BOOL, VT_CHAR. A VT_DOUBLE's payload is IEEE bits, so
+    formatting it as an integer would print a plausible but meaningless
+    number — the silent-wrong-output case a format spec exists to avoid.
+    Float specs are not implemented; say so rather than guess. }
+  if (tag = 1) or (tag = 2) or (tag = 4) or (tag = 5) then
+  begin
+    Result := pyformat_of(PPyVarRec(@v)^.Payload, spec);
+    Exit;
+  end;
+  WriteLn('Nil Python: f-string format spec "', spec,
+          '" on a value of variant tag ', tag, ' is not supported');
+  Halt(1);
 end;
 
 

@@ -2246,27 +2246,44 @@ begin
     Result := node;
     Exit;
   end;
-  { annotated assignment: NAME : type = expr }
+  { Annotated assignment `NAME : ann = expr`.
+
+    The annotation goes through PyAnnTypeAt, the same grammar a FIELD or a
+    parameter gets. It used to be read by PyTypeFromTokenIndex and the match
+    required the '=' to sit exactly two tokens after the name — so the
+    annotation had to be a SINGLE token, and `d: Dict[str, int] = {}` at
+    module or function scope failed while the identical `self.d: Dict[...]`
+    worked. Same class of bug as the method-parameter one: two readers for one
+    grammar, and the narrow one wins wherever it is still wired up. }
   if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
-     (Tokens[TokPos].Kind = tkColon) and
-     (Tokens[TokPos + 2].Kind = tkAssign) and
-     (PyTypeFromTokenIndex(TokPos + 1) <> tyUnknown) then
+     (Tokens[TokPos].Kind = tkColon) then
   begin
-    name := CurTok.SVal;
-    Next;                      { onto ':' }
-    Next;                      { onto the type token }
-    tk := PyParseType;
-    Expect(tkAssign, '=');
-    PyParseBoolExpr;
-    symIdx := FindSym(name);
-    if symIdx < 0 then symIdx := AllocVar(name, tk);
-    lhsNode := PyMakeIdent(symIdx);
-    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
-    node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := lhsNode;
-    ASTRight[node] := CurASTNode;
-    Result := node;
-    Exit;
+    annIdx := TokPos + 1;
+    tk := PyAnnTypeAt(annIdx);
+    ci := PyAnnLastCi;
+    if (tk <> tyUnknown) and (annIdx < TokCount) and
+       (Tokens[annIdx].Kind = tkAssign) then
+    begin
+      name := CurTok.SVal;
+      TokPos := annIdx;
+      Next;                      { CurTok = '=' }
+      Expect(tkAssign, '=');
+      PyParseBoolExpr;
+      symIdx := FindSym(name);
+      if symIdx < 0 then
+      begin
+        symIdx := AllocVar(name, tk);
+        if (tk = tyClass) and (ci >= 0) then
+          Syms[symIdx].RecName := REC_UCLASS_BASE + ci;
+      end;
+      lhsNode := PyMakeIdent(symIdx);
+      PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := lhsNode;
+      ASTRight[node] := CurASTNode;
+      Result := node;
+      Exit;
+    end;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then
@@ -2408,6 +2425,10 @@ begin
     begin
       nm := Syms[i].Name;
       if nm = '' then Continue;
+      { Hidden for-in temps are re-created by the real parse with fresh
+        serials, so harvesting the trial pass's ones would reserve frame slots
+        that nothing ever reads — one wasted triple per loop per round. }
+      if Copy(nm, 1, 5) = '__py_' then Continue;
       tk := Syms[i].TypeKind;
       si := PyFindConstraint(nm);
       if si < 0 then
