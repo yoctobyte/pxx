@@ -57,6 +57,22 @@ print(f"{s!s}")
 r = {"k": "vv"}
 print(f"{r['k']!r}")
 
+# PASSTHROUGH: the expander rewrites the whole source, so everything that is
+# NOT an f-string has to come through untouched — a comment containing a quote
+# or a brace, a string containing a '#', escaped quotes, a backslash, and an
+# 'f' that is only the start of an identifier.
+# a comment with a quote ' and a brace { and an f" that is not a string
+plain = "text with # not a comment"
+single = 'single {braces} kept'
+esc = "escaped \" quote"
+back = "backslash \\ end"
+prefix = "abc"
+print(plain)
+print(single)
+print(esc)
+print(back)
+print(prefix)
+
 # format specs: base, zero padding, width, alignment
 v = 255
 w = 7

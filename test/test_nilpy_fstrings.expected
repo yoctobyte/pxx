@@ -15,6 +15,11 @@ zed/3
 'hi' 42 True 1.5
 hi
 'vv'
+text with # not a comment
+single {braces} kept
+escaped " quote
+backslash \ end
+abc
 ff FF 255
 00007 00ff
 111 7
