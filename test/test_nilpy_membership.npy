@@ -1,0 +1,9 @@
+IF_TOKENS = {"IF", "X"}
+xs = [1, 2, 3]
+tok = "IF"
+print(tok in IF_TOKENS)
+print("nope" in IF_TOKENS)
+print("nope" not in IF_TOKENS)
+print(2 in xs)
+print(9 in xs)
+print(9 not in xs)

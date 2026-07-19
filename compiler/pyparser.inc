@@ -397,6 +397,65 @@ begin
   CurASTNode := left;
 end;
 
+{ `is` / `is not`: identity comparison. v1 lowers to pointer/scalar equality —
+  correct for the None checks uforth uses (class refs and pointer fields
+  compare against nil; Optional[int] fields compare against the 0 sentinel,
+  consistent with that documented mapping). }
+procedure PyParseIsCmp;
+var left, right, node, i, j: Integer; neg: Boolean;
+begin
+  PyParseBitOr;
+  left := CurASTNode;
+  while PyIsIdent('is') or (CurTok.Kind = tkIn) or
+        ((CurTok.Kind = tkNot) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkIn)) do
+  begin
+    if PyIsIdent('is') then
+    begin
+      Next;
+      neg := False;
+      if CurTok.Kind = tkNot then begin neg := True; Next; end;
+      PyParseBitOr;
+      right := CurASTNode;
+      node := AllocNode(AN_BINOP);
+      if neg then ASTIVal[node] := Ord(tkNeq) else ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := left; ASTRight[node] := right;
+      ASTTk[node] := Ord(tyBoolean);
+      left := node;
+    end
+    else
+    begin
+      { [not] in — membership via pylib pycontains(list, value) }
+      neg := CurTok.Kind = tkNot;
+      if neg then Next;
+      Expect(tkIn, 'in');
+      PyParseBitOr;
+      right := CurASTNode;
+      node := FindProc('pycontains');
+      if node < 0 then Error('Nil Python: pylib (pycontains) not loaded');
+      i := AllocNode(AN_ARG);            { the container, arg 0 }
+      ASTLeft[i] := right;
+      j := AllocNode(AN_ARG);            { the value, arg 1 }
+      ASTLeft[j] := left;
+      ASTRight[i] := j;
+      right := AllocNode(AN_CALL);
+      ASTIVal[right] := node;
+      ASTTk[right] := Ord(tyBoolean);
+      ASTLeft[right] := i;
+      if neg then
+      begin
+        node := AllocNode(AN_NOT);
+        ASTLeft[node] := right;
+        ASTTk[node] := Ord(tyBoolean);
+        left := node;
+      end
+      else
+        left := right;
+    end;
+  end;
+  CurASTNode := left;
+end;
+
 procedure PyParseBoolNot;
 var node: Integer;
 begin
@@ -410,7 +469,7 @@ begin
     CurASTNode := node;
   end
   else
-    PyParseBitOr;   { bitwise chain over the comparison + arithmetic atom }
+    PyParseIsCmp;   { is/is-not over the bitwise chain over ParseExpr }
 end;
 
 procedure PyParseBoolAnd;
@@ -508,9 +567,10 @@ var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name, lo: AnsiString;
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
-  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkLBrack) then
+  if (startIdx < endIdx) and
+     ((Tokens[startIdx].Kind = tkLBrack) or (Tokens[startIdx].Kind = tkBegin)) then
   begin
-    Result := tyClass;   { list literal }
+    Result := tyClass;   { list / set-as-list literal }
     PyInferLastCi := FindUClass('TPyList');
     Exit;
   end;
@@ -977,10 +1037,10 @@ end;
 { List literal [a, b, c] -> TPyList create + chained .append() calls, one
   expression tree (append returns Self). Reached from ParseFactor's PyExprMode
   tkLBrack branch, so nested literals in argument positions work too. }
-procedure PyParseListLiteral;
+procedure PyParseListLiteralT(opener, closer: TTokenKind);
 var ci, recId, node, argNode, sizeNode, callNode, selfArg, valArg, mmi, mpi: Integer;
 begin
-  Expect(tkLBrack, '[');
+  Expect(opener, '[');
   ci := FindUClass('TPyList');
   if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
   recId := REC_UCLASS_BASE + ci;
@@ -997,7 +1057,7 @@ begin
   mmi := FindUMeth(ci, 'append');
   if mmi < 0 then Error('Nil Python: TPyList.append not found');
   mpi := UMthProc_[mmi];
-  while CurTok.Kind <> tkRBrack do
+  while CurTok.Kind <> closer do
   begin
     PyParseBoolExpr;
     valArg := AllocNode(AN_ARG);
@@ -1012,10 +1072,23 @@ begin
     node := callNode;
     if not Eat(tkComma) then break;
   end;
-  Expect(tkRBrack, ']');
+  Expect(closer, ']/}');
   { mark the outermost node so assignment RecName wiring sees a list; a
     chained append is an ordinary AN_CALL whose result class is TPyList }
   CurASTNode := node;
+end;
+
+procedure PyParseListLiteral;
+begin
+  PyParseListLiteralT(tkLBrack, tkRBrack);
+end;
+
+{ `{a, b}` set literal — desugared to a TPyList (the corpus uses sets only
+  for string membership via `in`; TPySet with real set semantics is a later
+  rung). Dict literals will be distinguished by a ':' after the first key. }
+procedure PyParseSetLiteral;
+begin
+  PyParseListLiteralT(tkBegin, tkEnd);
 end;
 
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
@@ -1281,6 +1354,27 @@ begin
   if PyIsIdent('print') or (CurTok.Kind = tkwriteln) then
   begin
     Result := PyParsePrint;
+    Exit;
+  end;
+  if PyIsIdent('super') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    { v1: super().__init__(...) is consumed and DISCARDED (args unevaluated).
+      The Exception base is an empty shell until the try/except rung lands;
+      argument side effects would be lost — none in the censused corpus. }
+    Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
+    Expect(tkDot, '.');
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
+    Next;
+    Expect(tkLParen, '(');
+    ci := 1;
+    while (ci > 0) and (CurTok.Kind <> tkEOF) do
+    begin
+      if CurTok.Kind = tkLParen then Inc(ci)
+      else if CurTok.Kind = tkRParen then Dec(ci);
+      Next;
+    end;
+    Result := -1;
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
@@ -1550,8 +1644,12 @@ begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then Dec(depth)
     else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) then
+            (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
+      { line-start guard: a method header's `-> bool:` return annotation
+        would otherwise re-match as a field named 'bool' }
       { ClassVar annotation: a class-level static — register it as a class
         variable (the same registry Pascal `class var` uses, so
         ClassName.name resolves through FindClassVar). Typed tyClass; the
@@ -1909,10 +2007,29 @@ begin
 end;
 
 procedure PyParseClass(isDC: Boolean);
-var ci, bodyStart, bodyEnd: Integer;
+var ci, bodyStart, bodyEnd, baseCi, k: Integer;
 begin
   Expect(tkClass, 'class');
   ci := FindUClass(CurTok.SVal); Next;
+  if CurTok.Kind = tkLParen then
+  begin
+    { base class: class Name(Base): — Exception is auto-registered as an
+      empty shell (the try/except semantics rung is its own ticket) }
+    Next;
+    if CurTok.Kind <> tkIdent then Error('Nil Python: expected a base class name');
+    baseCi := FindUClass(CurTok.SVal);
+    if (baseCi < 0) and CaseEqual(CurTok.SVal, 'Exception') then
+    begin
+      k := PyStoredName('Exception');
+      AddUClass(k, 9);
+      baseCi := FindUClass('Exception');
+    end;
+    if baseCi < 0 then
+      Error('Nil Python: unknown base class ' + CurTok.SVal);
+    UClsParent[ci] := baseCi;
+    Next;
+    Expect(tkRParen, ')');
+  end;
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
   PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC);
@@ -1920,7 +2037,13 @@ begin
   PySkipNewlines;
   while CurTok.Kind <> tkDedent do
   begin
-    if isDC and (CurTok.Kind = tkIdent) then
+    if CurTok.Kind = tkString then
+    begin
+      { class docstring }
+      Next;
+      PySkipNewlines;
+    end
+    else if isDC and (CurTok.Kind = tkIdent) then
     begin
       { dataclass field line — already registered; skip to end of line }
       while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;

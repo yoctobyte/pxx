@@ -25,6 +25,7 @@ type
     Payload: Int64;
   end;
   PPyVarRec = ^TPyVarRec;
+  PInt64 = ^Int64;
 
   { itertools.count shim: uforth allocates xt ids via
     next(Word._xt_counter). Generators come much later; a bare int counter
@@ -55,6 +56,7 @@ type
 
 function len(l: TPyList): Integer;
 function next(c: TPyCounter): Int64;
+function pycontains(l: TPyList; const v: Variant): Boolean;
 
 implementation
 
@@ -212,6 +214,49 @@ end;
 procedure TPyList.clear;
 begin
   FLen := 0;
+end;
+
+{ Python `in` over a list/set-as-list. Same-tag equality only: ints/bools/
+  chars by payload, floats by bits, strings by CONTENT (payload is the char
+  pointer, length at ptr-8). Cross-tag numeric equality (1 == 1.0) is not
+  modelled — the censused corpus uses string membership. }
+function pycontains(l: TPyList; const v: Variant): Boolean;
+var
+  i, k: Integer;
+  p, q: PPyVarRec;
+  la, lb: Int64;
+  a, b: PChar;
+  same: Boolean;
+begin
+  Result := False;
+  q := PPyVarRec(@v);
+  for i := 0 to l.FLen - 1 do
+  begin
+    p := PPyVarRec(NativeInt(l.FItems) + i * 16);
+    if p^.VType <> q^.VType then continue;
+    if p^.VType = 6 then
+    begin
+      a := PChar(p^.Payload);
+      b := PChar(q^.Payload);
+      if (a = nil) or (b = nil) then
+      begin
+        if a = b then begin Result := True; Exit; end;
+        continue;
+      end;
+      la := PInt64(NativeInt(p^.Payload) - 8)^;
+      lb := PInt64(NativeInt(q^.Payload) - 8)^;
+      if la <> lb then continue;
+      same := True;
+      for k := 0 to Integer(la) - 1 do
+        if a[k] <> b[k] then begin same := False; break; end;
+      if same then begin Result := True; Exit; end;
+    end
+    else if p^.Payload = q^.Payload then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
 end;
 
 end.

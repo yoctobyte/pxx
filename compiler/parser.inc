@@ -714,6 +714,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
+procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 
 { Read/Write/Readln/Writeln are intrinsics resolved by context at the call site,
   not true reserved words — FPC lets a user declaration shadow them. Accept them
@@ -6987,6 +6988,12 @@ begin
         LastExprTk := tySet;
       end;
     end;
+    tkBegin:
+    begin
+      if not PyExprMode then Error('unexpected begin in expression');
+      PyParseSetLiteral;
+      LastExprTk := tyClass;
+    end;
     tkNil:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
@@ -10667,7 +10674,7 @@ begin
     CurASTNode := node;
     Exit;
   end;
-  if CurTok.Kind = tkIn then
+  if (CurTok.Kind = tkIn) and not PyExprMode then
   begin
     Next;
     if CurTok.Kind = tkLBrack then

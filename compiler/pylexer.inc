@@ -411,9 +411,12 @@ begin
             Error('unmatched closing bracket');
           end;
         end;
-        '{': begin PyEmitToken(tkLParen, 0, SrcLine, ''); Inc(parenDepth); end;
+        { set/dict literal braces: distinct kinds (tkBegin/tkEnd reused as
+          shape tokens) so the parser can desugar them; still counted for
+          implicit line continuation }
+        '{': begin PyEmitToken(tkBegin, 0, SrcLine, ''); Inc(parenDepth); end;
         '}': begin
-          PyEmitToken(tkRParen, 0, SrcLine, '');
+          PyEmitToken(tkEnd, 0, SrcLine, '');
           Dec(parenDepth);
           if parenDepth < 0 then
           begin
