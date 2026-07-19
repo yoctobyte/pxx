@@ -1,0 +1,17 @@
+from dataclasses import dataclass, field
+from typing import List, Any
+
+@dataclass
+class Frame:
+    ip: int = 0
+    slots: List[Any] = field(default_factory=list)
+
+f = Frame()
+g = Frame()
+print(f.ip)
+print(len(f.slots))
+f.slots.append(5)
+f.slots.append(6)
+print(len(f.slots))
+print(len(g.slots))
+print(f.slots[1])

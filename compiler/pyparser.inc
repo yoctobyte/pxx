@@ -32,6 +32,7 @@ const
   PYDC_STR   = 3;
   PYDC_BOOL  = 4;
   PYDC_NIL   = 5;  { None default: 0/nil for pointer-like and Optional[int] fields }
+  PYDC_FACTORY_LIST = 6;  { field(default_factory=list): fresh empty TPyList per construction }
 
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
@@ -818,7 +819,7 @@ end;
 
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
-    nArgs, i, k, dcBase, valNode: Integer; tkF: TTypeKind;
+    nArgs, i, k, dcBase, valNode, tkNode: Integer; tkF: TTypeKind;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -890,6 +891,22 @@ begin
             valNode := AllocNode(AN_INT_LIT);
             ASTIVal[valNode] := 0;
             ASTTk[valNode] := Ord(tkF);
+          end;
+          PYDC_FACTORY_LIST:
+          begin
+            { fresh empty TPyList (same GetMem+ctor shape as a [] literal) }
+            k := FindUClass('TPyList');
+            if k < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+            valNode := AllocNode(AN_CALL);
+            ASTIVal[valNode] := -Ord(tkGetMem);
+            ASTTk[valNode] := Ord(tyClass);
+            ASTRight[valNode] := REC_UCLASS_BASE + k;
+            tkNode := AllocNode(AN_INT_LIT);
+            ASTIVal[tkNode] := RecSize(REC_UCLASS_BASE + k);
+            ASTTk[tkNode] := Ord(tyInteger);
+            k := AllocNode(AN_ARG);
+            ASTLeft[k] := tkNode;
+            ASTLeft[valNode] := k;
           end;
           else { PYDC_BOOL }
           begin
@@ -1506,6 +1523,24 @@ begin
           tkTrue:    begin defKind := PYDC_BOOL; defIVal := 1; end;
           tkFalse:   begin defKind := PYDC_BOOL; defIVal := 0; end;
           tkNil:     begin defKind := PYDC_NIL; defIVal := 0; end;
+          tkIdent:
+          begin
+            { field(default_factory=list) -> fresh empty list per construction }
+            if CaseEqual(GetTokenStr(j), 'field') and (j + 4 < bodyEnd) and
+               (Tokens[j + 1].Kind = tkLParen) and
+               (Tokens[j + 2].Kind = tkIdent) and
+               CaseEqual(GetTokenStr(j + 2), 'default_factory') and
+               (Tokens[j + 3].Kind = tkAssign) and
+               (Tokens[j + 4].Kind = tkIdent) and
+               CaseEqual(GetTokenStr(j + 4), 'list') and
+               (j + 5 < bodyEnd) and (Tokens[j + 5].Kind = tkRParen) then
+            begin
+              defKind := PYDC_FACTORY_LIST;
+              j := j + 5;   { onto ')'; the common Inc(j) below steps past it }
+            end
+            else
+              Error('Nil Python: unsupported dataclass field default (see feature-nilpy-classvar-counter for field(default_factory=...) beyond list)');
+          end;
           tkMinus:
           begin
             Inc(j);
