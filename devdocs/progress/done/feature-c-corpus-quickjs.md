@@ -179,3 +179,4 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   (Track B, prio 40). REMAINING for this ticket's full bar ("runs real
   pure-compute JS libraries"): pick one real pure-JS library (md5/sha/json5
   class), run it under the compiled qjs, oracle-diff — then resolve.
+- 2026-07-19 — resolved, commit f1d550f6.
