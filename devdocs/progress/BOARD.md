@@ -8,14 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-callconv-register-args | O | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
-| feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
-| feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
-| feature-opt-pxx-internal-abi-unified-residency | O | 58 | feature | pxx internal calling convention + unified int/float residency allocator | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -29,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (124)
+## backlog (126)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,6 +60,7 @@ _none_
 | feature-demo-parallel-prime-count | E | 30 | feature | Demo — parallel prime count / find | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-dns-backends-selection | B | 40 | feature | DNS backends beyond dns_wire: dns_libc / dns_resolved / dns_esp + selection | — |
+| feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
@@ -79,6 +76,7 @@ _none_
 | feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
+| feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-inline-routines | O | 60 | feature | Inline routine expansion (`inline;`) | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | B | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
@@ -216,7 +214,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (810)
+## done (812)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -695,6 +693,7 @@ _none_
 | feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
 | feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
 | feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
+| feature-callconv-register-args | O | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-class-is-as | A | 50 | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-methods-in-generic-class | A | 50 | feature | `class function` / `class procedure` members inside a generic class | — |
@@ -842,6 +841,7 @@ _none_
 | feature-opt-float-intree-xmm-fusion | O | 40 | feature | Keep float binop-tree intermediates in xmm (no push/pop/GPR-transit) within one expression — most of the 4.2x float gap, small blast radius | — |
 | feature-opt-heap-size-class-allocator | O | 52 | feature | Heap: segregated free lists (size classes) — kill the O(n) free-list walk | — |
 | feature-opt-imm-fold-binop | O | 50 | feature | imm-fold: constant BINOP operand into the instruction immediate (-O1, x86-64) | — |
+| feature-opt-pxx-internal-abi-unified-residency | O | 58 | feature | pxx internal calling convention + unified int/float residency allocator | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
@@ -2526,6 +2526,7 @@ _none_
 - [p 45] [A] feature-cross-frontend-interop-contract
 - [p 45] [B] feature-crtl-implement-libc-assumptions
 - [p 45] [E] feature-demo-mandelbrot-gui-threaded
+- [p 45] [A] feature-dynamic-compiler-tables
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery
 - [p 45] [A] feature-dynarray-insert-delete-managed-elements
@@ -2536,6 +2537,7 @@ _none_
 - [p 45] [A] feature-esp-hardware-flash-validation
 - [p 45] [A] feature-fuzzer-idle-scheduling
 - [p 45] [B] feature-ilja-tui
+- [p 45] [O] feature-inline-nonleaf-and-branch-locals
 - [p 45] [B] feature-move-fillchar-intrinsics
 - [p 45] [B] feature-networking
 - [p 45] [A] feature-nilpy-idf-import

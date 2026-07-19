@@ -168,3 +168,11 @@ if raised) BEFORE code, so every backend + any hand-asm honors it.
   differential identical; byte-scan confirms residency fires (-O3: 231 int
   reads / 69 float reads in mix; -O0: zero). qemu timing meaningless — real-hw
   perf numbers pending. REMAINING: -O2 promotion after full matrix + hw bench.
+
+- 2026-07-19 (sweep) **RESOLVED.** All three slices landed and green: xmm8–13
+  callee-saved ABI (5e03ab93), unified int+float residency x86-64 (b804714b),
+  aarch64 mirror (588d525c) + regression tests (b18ca150). Post-land 1724-program
+  optfuzz sweep clean. Remaining follow-ups (-O2 promotion after full matrix,
+  real-hw aarch64 bench) tracked under the umbrella
+  [[feature-opt-o3-register-pressure]].
+- 2026-07-19 — resolved, commit 588d525c.

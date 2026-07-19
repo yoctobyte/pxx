@@ -5,7 +5,7 @@ prio: 45  # auto
 # Register-based internal calling convention (args in registers, not stack slots)
 
 - **Type:** feature (codegen — ABI-wide) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-03 (pin-time optimization campaign)
 - **Umbrella:** the -O2 tier of [[feature-optimization-levels]]; split out
   because it is ABI-WIDE (every call site + every prologue must flip
@@ -291,3 +291,13 @@ byte-identical, residency+frozen tests identical all tiers. Mixed-args loop
 (complex first arg + 2 deferrable per iteration) -O3 vs -O2 **1.17x**.
 
 Remaining: phase 4 cross-target caller-side (optional per charter).
+
+- 2026-07-19 (sweep) **RESOLVED.** Phase 1 (r14/r15 param residency, -O2,
+  6e369a23), phase 2 measured+rejected (559ac6f3), phase 3 slice 1 (all-simple
+  args direct-load, 258c7b8d) + slice 2 (deferrable mixed args, 2dffbb7c), both
+  -O3. Fuzz-clean (1724-program optfuzz). Remaining phase 4 (cross-target
+  caller-side) is optional per charter — pick up under
+  [[feature-opt-o3-register-pressure]] if a cross target ever gets perf focus.
+
+## Log
+- 2026-07-19 — resolved, commit 2dffbb7c.

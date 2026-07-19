@@ -5,7 +5,7 @@ prio: 45  # auto
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A
-- **Status:** working
+- **Status:** backlog — parked 2026-07-19 sweep; landed slices green, remaining scope below
 - **Owner:** opus-A
 - **Opened:** 2026-06-27
 - **Relation:** forced into view by [[feature-c-desktop-lua-sqlite-path]] M5 —
@@ -210,3 +210,9 @@ an iterative worklist, out of scope here.
 
 **REMAINING:** Code/Data/CPrepChars byte buffers (held-address audit matters), label
 arrays (MAX_IR-sized), smaller MAX_ tables (CTypedef/CPrep*/DBG_VARS).
+
+- 2026-07-19 (sweep) **PARKED to backlog.** No agent on it. Landed + green:
+  IR, AST, Tokens (0f4b5882), Syms (0af554f2), UField (e71df9df) — BSS
+  365→146 MB, 5 hard caps gone. REMAINING: Code/Data/CPrepChars byte buffers
+  (held-address audit critical), MAX_IR-sized label arrays, smaller MAX_
+  tables (CTypedef/CPrep*/DBG_VARS).

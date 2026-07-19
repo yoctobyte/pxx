@@ -5,7 +5,7 @@ prio: 45  # auto
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** working
+- **Status:** backlog — parked 2026-07-19 sweep; landed slices green, remaining scope below
 - **Opened:** 2026-07-04 (follow-up split from [[feature-inline-routines]])
 - **Umbrella:** the `-O2`/`-O3` tier of [[feature-optimization-levels]]; the
   earlier inline slices (v1 pure-expr, 2a if-then-else Result, 2b straight-line
@@ -179,3 +179,10 @@ sites 2b/2c can't reach. Needs (see the design notes in
   (test-opt, quick, bootstrap, benches, O3-built byte-identical). Side-find
   from the UB-drifting reducer already filed:
   [[bug-pascal-undefined-field-on-empty-record-compiles]].
+
+- 2026-07-19 (sweep) **PARKED to backlog.** Shipped this campaign: 2c
+  branch-with-locals (8f144dfe) + nested-ifs-in-arms (17a2f1e5), non-leaf
+  slice 1 (7711208e), depth-1 re-inline reverted (819cb25a, 21 fuzz
+  divergences) then root-caused + re-landed with the IRInlineExpand reentrancy
+  contract (d4c19919); post-land fuzz-clean. REMAINING scope for the next
+  session: while/for loop bodies; deeper non-leaf (depth budget >1).
