@@ -95,6 +95,25 @@ type
     property Items[const k: Variant]: Variant read fetch write store; default;
   end;
 
+  { TPyBytes is Python's bytearray: a flat block of BYTES, not variant slots.
+    That difference is the point — byte memory is uforth's Forth data space,
+    read and written as integers, and putting 16-byte variants under it would
+    cost 16x the space and lose the flat addressing the corpus relies on.
+
+    v1 is the mapping core: allocate, index, len. SLICES (`b[a:c]`, and
+    `b[a:c] = other`) need the shared parser's subscript grammar, which is
+    Track A — see feature-nilpy-bytes-and-slices. }
+  TPyBytes = class
+  public
+    FLen: Integer;
+    FData: Pointer;
+    constructor Create(n: Integer);
+    function count: Integer;
+    function get(i: Integer): Integer;
+    procedure put(i: Integer; v: Integer);
+    property Items[i: Integer]: Integer read get write put; default;
+  end;
+
 { Python's str() for an f-string hole. Overloaded so ARGUMENT TYPE picks the
   spelling, which is the whole point: the shared str() intrinsic lowers every
   argument through StrInt/FloatToStr/VariantToStr and therefore prints a
@@ -122,6 +141,13 @@ function pyrepr_of(const v: Variant): AnsiString; overload;
 function pyformat_of(i: Int64; const spec: AnsiString): AnsiString;
 function pyformat_of(const s: AnsiString; const spec: AnsiString): AnsiString; overload;
 function pyformat_of(const v: Variant; const spec: AnsiString): AnsiString; overload;
+{ `bytearray(n)` and `bytes(b)` are spelled as ordinary FUNCTIONS rather than
+  recognised by the frontend: neither name is a Pascal keyword, so both
+  resolve through the normal call path with no parser hook. (`set()` needed a
+  hook only because `set` IS a keyword.) }
+function bytearray(n: Integer): TPyBytes;
+function bytes(b: TPyBytes): TPyBytes;
+function len(b: TPyBytes): Integer; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -860,6 +886,89 @@ function pydictcontains(d: TPyDict; const k: Variant): Boolean;
 begin
   Result := d.indexof(k) >= 0;
 end;
+
+procedure PyBytesIndexError;
+begin
+  WriteLn('IndexError: bytearray index out of range');
+  Halt(1);
+end;
+
+constructor TPyBytes.Create(n: Integer);
+var k: Integer; p: PByte;
+begin
+  if n < 0 then n := 0;
+  FLen := n;
+  FData := nil;
+  if n = 0 then Exit;
+  GetMem(FData, n);
+  { Python's bytearray(n) is n ZERO bytes, not uninitialised memory }
+  for k := 0 to n - 1 do
+  begin
+    p := PByte(NativeInt(FData) + k);
+    p^ := 0;
+  end;
+end;
+
+function TPyBytes.count: Integer;
+begin
+  Result := FLen;
+end;
+
+{ Python's negative index counts from the end, as for str and list. }
+function PyBytesFix(b: TPyBytes; i: Integer): Integer;
+begin
+  if i < 0 then i := i + b.FLen;
+  if (i < 0) or (i >= b.FLen) then PyBytesIndexError;
+  Result := i;
+end;
+
+function TPyBytes.get(i: Integer): Integer;
+var p: PByte;
+begin
+  i := PyBytesFix(Self, i);
+  p := PByte(NativeInt(FData) + i);
+  Result := p^;
+end;
+
+procedure TPyBytes.put(i: Integer; v: Integer);
+var p: PByte;
+begin
+  i := PyBytesFix(Self, i);
+  p := PByte(NativeInt(FData) + i);
+  { Python stores 0..255 and raises outside that; masking would silently
+    accept 256 as 0, so it is rejected }
+  if (v < 0) or (v > 255) then
+  begin
+    WriteLn('ValueError: byte must be in range(0, 256)');
+    Halt(1);
+  end;
+  p^ := v;
+end;
+
+function bytearray(n: Integer): TPyBytes;
+begin
+  Result := TPyBytes.Create(n);
+end;
+
+function bytes(b: TPyBytes): TPyBytes;
+var k: Integer; src, dst: PByte;
+begin
+  { bytes(x) is an immutable COPY in Python; immutability is not modelled, but
+    the copy is, because uforth uses it to snapshot memory }
+  Result := TPyBytes.Create(b.FLen);
+  for k := 0 to b.FLen - 1 do
+  begin
+    src := PByte(NativeInt(b.FData) + k);
+    dst := PByte(NativeInt(Result.FData) + k);
+    dst^ := src^;
+  end;
+end;
+
+function len(b: TPyBytes): Integer; overload;
+begin
+  Result := b.FLen;
+end;
+
 
 { Integer -> text in the requested base, lower or upper case. Python has no
   sign-and-magnitude form here: a negative value formats its minus sign and
