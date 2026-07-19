@@ -25,7 +25,7 @@ _none_
 | docs-canonical-domain | D | 45 | docs | Canonical domain in the docs | — |
 | feature-port-macos | A | 20 | feature | macOS/arm64 target — BLOCKED: needs Apple hardware+software (Mach-O + mandatory signing + libSystem) | — |
 
-## backlog (107)
+## backlog (106)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,7 +64,6 @@ _none_
 | feature-esp-hardware-flash-validation | A | 45 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 | feature-esp-peripheral-callback-api | B | 53 | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-float-exception-mask-control | A | 60 | feature | Float exception mask control (SetExceptionMask-style, FPC emulation opt-in) | — |
-| feature-fpjson-fpcunit-suite-target | B | 50 | feature | Commit the fpjson/fpcunit suite harness (203/203) as a repo target — today it lives only in volatile /tmp staging | — |
 | feature-ilja-tui | B | 45 | feature | Ilja — TUI (ANSI) face | — |
 | feature-inline-asm-xtensa | A | 60 | feature | Inline asm blocks on xtensa (last leg of the multi-arch rollout) | — |
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
@@ -195,7 +194,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (831)
+## done (832)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -780,6 +779,7 @@ _none_
 | feature-float-str-val | A | 50 | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | 50 | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
 | feature-forin-member-access-source | A | 50 | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
+| feature-fpjson-fpcunit-suite-target | B | 50 | feature | Commit the fpjson/fpcunit suite harness (203/203) as a repo target — today it lives only in volatile /tmp staging | — |
 | feature-fuzzer-idle-scheduling | A | 45 | feature | feature: run the IR fuzzer automatically whenever the project is otherwise idle | — |
 | feature-game-library-candidate-suite | B+C | 60 | feature | Game and engine library candidate suite | — |
 | feature-general-typename-cast | B | 50 | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
@@ -2496,7 +2496,6 @@ _none_
 - [p 53] [B] feature-tls13-from-scratch
 - [p 50] [D] docs-devnotes-ai-assisted-build
 - [p 50] [C] feature-c-corpus-quickjs
-- [p 50] [B] feature-fpjson-fpcunit-suite-target
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
