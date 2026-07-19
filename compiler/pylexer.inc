@@ -104,6 +104,56 @@ end;
   naming the construct: both change what is PRINTED, so emitting str() for
   them would be quietly wrong OUTPUT rather than an honest missing feature. }
 
+{ The expander copies the WHOLE source, so its output has to be built with a
+  growable buffer rather than by repeated concatenation: appending one
+  character at a time is quadratic in file size, and it showed — 30 KB took a
+  second and uforth.py's 150 KB took 107. Capacity doubles; PyFsDone trims. }
+var
+  PyFsOut: AnsiString;
+  PyFsLen: Integer;
+  PyFsCap: Integer;
+
+procedure PyFsReset(hint: Integer);
+begin
+  PyFsCap := hint + 64;
+  SetLength(PyFsOut, PyFsCap);
+  PyFsLen := 0;
+end;
+
+procedure PyFsPut(const t: AnsiString);
+var k, n: Integer;
+begin
+  n := Length(t);
+  if n = 0 then Exit;
+  while PyFsLen + n > PyFsCap do
+  begin
+    PyFsCap := PyFsCap * 2;
+    SetLength(PyFsOut, PyFsCap);
+  end;
+  for k := 1 to n do PyFsOut[PyFsLen + k] := t[k];
+  PyFsLen := PyFsLen + n;
+end;
+
+procedure PyFsPutCh(c: Char);
+begin
+  if PyFsLen + 1 > PyFsCap then
+  begin
+    PyFsCap := PyFsCap * 2;
+    SetLength(PyFsOut, PyFsCap);
+  end;
+  PyFsOut[PyFsLen + 1] := c;
+  PyFsLen := PyFsLen + 1;
+end;
+
+function PyFsDone: AnsiString;
+begin
+  SetLength(PyFsOut, PyFsLen);
+  Result := PyFsOut;
+  PyFsOut := '';
+  PyFsCap := 0;
+  PyFsLen := 0;
+end;
+
 const
   QuoteCh = #39;   { a single quote, spelled by code point to keep this
                      source readable inside a Pascal string }
@@ -113,11 +163,13 @@ begin
   Result := (c = '"') or (c = QuoteCh);
 end;
 
-procedure PyFStrFlush(var outS, lit: AnsiString; var wroteAny: Boolean);
+procedure PyFStrFlush(var lit: AnsiString; var wroteAny: Boolean);
 begin
   if Length(lit) = 0 then Exit;
-  if wroteAny then outS := outS + ' + ';
-  outS := outS + '"' + lit + '"';
+  if wroteAny then PyFsPut(' + ');
+  PyFsPutCh('"');
+  PyFsPut(lit);
+  PyFsPutCh('"');
   lit := '';
   wroteAny := True;
 end;
@@ -127,29 +179,39 @@ end;
   by rewriting rather than by deciding up front because the conversion suffix
   (!r) appears only at the END of the hole, after the expression text has
   already been emitted. }
-function PyFStrSwapLastCall(const outS: AnsiString;
-                            const newCall: AnsiString): AnsiString;
-var i, k: Integer;
+{ Rewrite the innermost still-open pystr_of( in the buffer to newCall. The
+  hole's call was appended by this same pass, so the LAST occurrence is that
+  hole's, and both names are 9 or 10 characters — the tail is shifted rather
+  than the buffer rebuilt. }
+procedure PyFStrSwapLastCall(const newCall: AnsiString);
+var i, k, delta, oldLen: Integer;
 begin
-  Result := outS;
-  for i := Length(outS) - 8 downto 1 do
-    if Copy(outS, i, 9) = 'pystr_of(' then
+  for i := PyFsLen - 8 downto 1 do
+    if (PyFsOut[i] = 'p') and (PyFsOut[i+1] = 'y') and (PyFsOut[i+2] = 's') and
+       (PyFsOut[i+3] = 't') and (PyFsOut[i+4] = 'r') and (PyFsOut[i+5] = '_') and
+       (PyFsOut[i+6] = 'o') and (PyFsOut[i+7] = 'f') and (PyFsOut[i+8] = '(') then
     begin
-      Result := Copy(outS, 1, i - 1) + newCall;
-      for k := i + 9 to Length(outS) do AppendChar(Result, outS[k]);
+      delta := Length(newCall) - 9;
+      oldLen := PyFsLen;
+      if delta > 0 then
+      begin
+        for k := 1 to delta do PyFsPutCh(' ');
+        for k := oldLen downto i + 9 do PyFsOut[k + delta] := PyFsOut[k];
+      end;
+      for k := 1 to Length(newCall) do PyFsOut[i + k - 1] := newCall[k];
       Exit;
     end;
 end;
 
 procedure PyExpandFStrings;
 var
-  outS, lit: AnsiString;
+  lit: AnsiString;
   i, n, depth, ln: Integer;
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
 begin
   n := Length(Source);
-  outS := '';
+  PyFsReset(n);
   i := 1;
   { This pass runs BEFORE the lexer, so nothing else is counting lines yet and
     an Error here would report line 1 for a file of any size. }
@@ -161,7 +223,7 @@ begin
     if c = '#' then
     begin
       while (i <= n) and (Source[i] <> #10) do
-      begin outS := outS + Source[i]; Inc(i); end;
+      begin PyFsPutCh(Source[i]); Inc(i); end;
       continue;
     end;
     { an ORDINARY string literal is copied verbatim, escapes and all, so a
@@ -172,38 +234,38 @@ begin
       sawTriple := (i + 2 <= n) and (Source[i + 1] = q) and (Source[i + 2] = q);
       if sawTriple then
       begin
-        outS := outS + q + q + q;
+        PyFsPutCh(q); PyFsPutCh(q); PyFsPutCh(q);
         Inc(i, 3);
         while i <= n do
         begin
           if (Source[i] = q) and (i + 2 <= n) and (Source[i + 1] = q) and
              (Source[i + 2] = q) then
           begin
-            outS := outS + q + q + q;
+            PyFsPutCh(q); PyFsPutCh(q); PyFsPutCh(q);
             Inc(i, 3);
             break;
           end;
           if Source[i] = #10 then Inc(ln);
-          outS := outS + Source[i];
+          PyFsPutCh(Source[i]);
           Inc(i);
         end;
       end
       else
       begin
-        outS := outS + q;
+        PyFsPutCh(q);
         Inc(i);
         while i <= n do
         begin
           if Source[i] = '\' then
           begin
-            outS := outS + Source[i];
+            PyFsPutCh(Source[i]);
             Inc(i);
-            if i <= n then begin outS := outS + Source[i]; Inc(i); end;
+            if i <= n then begin PyFsPutCh(Source[i]); Inc(i); end;
             continue;
           end;
-          if Source[i] = q then begin outS := outS + q; Inc(i); break; end;
+          if Source[i] = q then begin PyFsPutCh(q); Inc(i); break; end;
           if Source[i] = #10 then break;
-          outS := outS + Source[i];
+          PyFsPutCh(Source[i]);
           Inc(i);
         end;
       end;
@@ -217,7 +279,7 @@ begin
       if (i + 3 <= n) and (Source[i + 2] = q) and (Source[i + 3] = q) then
         ErrorAt(ln, 'Nil Python: a triple-quoted f-string is not supported yet');
       i := i + 2;
-      outS := outS + '(';
+      PyFsPutCh('(');
       lit := '';
       wroteAny := False;
       inHole := False;
@@ -242,9 +304,9 @@ begin
           begin lit := lit + '}'; Inc(i, 2); continue; end;
           if c = '{' then
           begin
-            PyFStrFlush(outS, lit, wroteAny);
-            if wroteAny then outS := outS + ' + ';
-            outS := outS + 'pystr_of(';
+            PyFStrFlush(lit, wroteAny);
+            if wroteAny then PyFsPut(' + ');
+            PyFsPut('pystr_of(');
             wroteAny := True;
             inHole := True;
             depth := 0;
@@ -259,11 +321,11 @@ begin
         if PyFStrIsQuote(c) then
         begin
           hq := c;
-          outS := outS + c;
+          PyFsPutCh(c);
           Inc(i);
           while (i <= n) and (Source[i] <> hq) do
-          begin outS := outS + Source[i]; Inc(i); end;
-          if i <= n then begin outS := outS + Source[i]; Inc(i); end;
+          begin PyFsPutCh(Source[i]); Inc(i); end;
+          if i <= n then begin PyFsPutCh(Source[i]); Inc(i); end;
           continue;
         end;
         if (c = '(') or (c = '[') or (c = '{') then Inc(depth)
@@ -271,7 +333,7 @@ begin
         begin
           if (c = '}') and (depth = 0) then
           begin
-            outS := outS + ')';
+            PyFsPutCh(')');
             inHole := False;
             Inc(i);
             continue;
@@ -287,8 +349,8 @@ begin
             call rather than wrapping it — pyrepr_of carries the same per-type
             overload set as pystr_of. }
           if Source[i + 1] = 'r' then
-            outS := PyFStrSwapLastCall(outS, 'pyrepr_of(');
-          outS := outS + ')';
+            PyFStrSwapLastCall('pyrepr_of(');
+          PyFsPutCh(')');
           inHole := False;
           Inc(i, 3);
           continue;
@@ -303,38 +365,38 @@ begin
             stops the parser and the formatter from disagreeing about what
             "05x" means. pyformat_of rejects anything it does not implement,
             at run time, by name. }
-          outS := PyFStrSwapLastCall(outS, 'pyformat_of(');
-          outS := outS + ', "';
+          PyFStrSwapLastCall('pyformat_of(');
+          PyFsPut(', "');
           Inc(i);
           while (i <= n) and (Source[i] <> '}') do
           begin
             if (Source[i] = #10) or (Source[i] = '"') then
               ErrorAt(ln, 'Nil Python: an f-string format spec must be a plain literal');
-            outS := outS + Source[i];
+            PyFsPutCh(Source[i]);
             Inc(i);
           end;
           if i > n then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
-          outS := outS + '")';
+          PyFsPut('")');
           inHole := False;
           Inc(i);
           continue;
         end;
         if c = #10 then
           ErrorAt(ln, 'Nil Python: a newline inside an f-string hole is not supported');
-        outS := outS + c;
+        PyFsPutCh(c);
         Inc(i);
       end;
       if inHole then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
-      PyFStrFlush(outS, lit, wroteAny);
-      if not wroteAny then outS := outS + '""';
-      outS := outS + ')';
+      PyFStrFlush(lit, wroteAny);
+      if not wroteAny then PyFsPut('""');
+      PyFsPutCh(')');
       continue;
     end;
     if c = #10 then Inc(ln);
-    outS := outS + c;
+    PyFsPutCh(c);
     Inc(i);
   end;
-  Source := outS;
+  Source := PyFsDone;
 end;
 
 procedure PyLexAll(SupportLineNumbers: Boolean);

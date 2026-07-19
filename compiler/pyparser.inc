@@ -2514,17 +2514,11 @@ begin
     begin
       if Tokens[i].Kind = tkIndent then Inc(depth)
       else if Tokens[i].Kind = tkDedent then Dec(depth)
-      else if (depth = 0) and
-              ((Tokens[i].Kind = tkFunction) or (Tokens[i].Kind = tkClass)) then
-      begin
-        { skip the whole construct: forward to its INDENT, then to the
-          matching DEDENT }
-        bodyIx := i;
-        while (bodyIx < MainProgramTokCount) and
-              (Tokens[bodyIx].Kind <> tkIndent) do Inc(bodyIx);
-        if bodyIx >= MainProgramTokCount then Break;
-        i := PyFindBodyEnd(bodyIx + 1);
-      end
+      { No explicit skip for `def` / `class`: their bodies raise depth, and a
+        def or class HEADER is not tkIdent-then-assign, so neither can match
+        the statement tests below. Skipping them with PyFindBodyEnd instead
+        cost an O(n) scan per construct — quadratic on a real file, and
+        uforth.py went from an instant parse error to 107 seconds. }
       else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
               (i + 3 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkColon) then
       begin
