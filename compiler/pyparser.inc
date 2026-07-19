@@ -1256,6 +1256,50 @@ function PyClassCreate: Integer; forward;
    expression: `set` is not a registered proc, so anywhere else it still says
    "undefined variable (set)". Every censused use is an assignment; widen this
    if a corpus ever calls set() in an argument position. *)
+{ A CONSTANT parameter default at token index j (`= None`, `= False`,
+  `= 0`, `= -1`, `= ""`), for both the class pre-pass and PyParseDef. Advances
+  j past the value and returns the ordinal; a string default reports itself
+  through isStr plus the char-pool span, matching the ProcParamDefault* arrays
+  the shared call path already fills omitted trailing args from.
+
+  None is 0 — the same sentinel PyAnnTypeAt gives Optional[X], so `x: Optional[Word] = None`
+  and a nil class reference agree. A NON-constant default (a name, a call, a
+  list) is a clean error rather than a guess: Python evaluates it ONCE at
+  definition time, and quietly picking either "once" or "per call" would be a
+  silent semantic difference. }
+function PyParamDefaultAt(var j: Integer; const pname: AnsiString;
+                          var isStr: Boolean; var sOff, sLen: Integer): Int64;
+begin
+  Result := 0;
+  isStr := False;
+  sOff := 0;
+  sLen := 0;
+  case Tokens[j].Kind of
+    tkNil:     begin Inc(j); Exit; end;
+    tkTrue:    begin Result := 1; Inc(j); Exit; end;
+    tkFalse:   begin Inc(j); Exit; end;
+    tkInteger: begin Result := Tokens[j].IVal; Inc(j); Exit; end;
+    tkString:
+      begin
+        isStr := True;
+        sOff := Tokens[j].SOffset;
+        sLen := Tokens[j].SLen;
+        Inc(j);
+        Exit;
+      end;
+    tkMinus:
+      if Tokens[j + 1].Kind = tkInteger then
+      begin
+        Result := -Tokens[j + 1].IVal;
+        j := j + 2;
+        Exit;
+      end;
+  end;
+  ErrorAt(Tokens[j].Line,
+          'Nil Python: the default for parameter ' + pname
+          + ' must be a constant (None, True, False, an integer or a string)');
+end;
+
 function PyIsEmptySetCall: Boolean;
 begin
   Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'set') and
@@ -1323,7 +1367,7 @@ end;
 
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
-    nArgs, i, k, dcBase, valNode, tkNode: Integer; tkF: TTypeKind;
+    nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
 begin
   name := CurTok.SVal;
   ci := FindUClass(name);
@@ -1354,6 +1398,40 @@ begin
     if not Eat(tkComma) then break;
   end;
   Expect(tkRParen, ')');
+  { A hand-written ctor's declared parameter DEFAULTS. PyClassCreate builds
+    the call itself — GetMem size, then the user args — so it never passes
+    through the shared path that fills omitted trailing args, and `C()` on a
+    ctor with defaults handed the body uninitialised stack (a segfault, not a
+    diagnostic). Param 0 is self, so user arg n is param n+1. }
+  ctorMi := FindUMeth(ci, 'create');
+  if ctorMi >= 0 then
+  begin
+    ctorPi := UMthProc_[ctorMi];
+    while nArgs < Procs[ctorPi].ParamCount - 1 do
+    begin
+      k := nArgs + 1;
+      if (k >= MAX_PROC_PARAMS) or
+         (not ProcParamHasDefault[ctorPi * MAX_PROC_PARAMS + k]) then Break;
+      if ProcParamDefaultIsStr[ctorPi * MAX_PROC_PARAMS + k] then
+      begin
+        valNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[valNode] := ProcParamDefaultSOff[ctorPi * MAX_PROC_PARAMS + k];
+        ASTSLen[valNode] := ProcParamDefaultSLen[ctorPi * MAX_PROC_PARAMS + k];
+        ASTTk[valNode] := Ord(tyString);
+      end
+      else
+      begin
+        valNode := AllocNode(AN_INT_LIT);
+        ASTIVal[valNode] := ProcParamDefaultVal[ctorPi * MAX_PROC_PARAMS + k];
+        ASTTk[valNode] := Ord(Procs[ctorPi].Params[k].TypeKind);
+      end;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := valNode;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      Inc(nArgs);
+    end;
+  end;
   { @dataclass: fill omitted trailing args from field defaults. }
   if (ci < PY_MAX_DC_FIELDS) and PyDcClassIsDc[ci] then
   begin
@@ -2255,7 +2333,11 @@ procedure PyParseDef;
 var name: AnsiString; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind;
     pcis: array[0..15] of Integer;
-    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
+    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode,
+    annIdx: Integer;
+    pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
+    pdefVal: array[0..15] of Int64;
+    pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     retType: TTypeKind; isProc: Boolean; retCi: Integer;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
@@ -2272,8 +2354,28 @@ begin
     pnames[nparams] := CurTok.SVal;
     Next;
     Expect(tkColon, ':');
-    ptypes[nparams] := PyParseType;
-    pcis[nparams] := PyLastTypeCi;
+    { same full annotation grammar as a method parameter }
+    annIdx := TokPos - 1;
+    ptypes[nparams] := PyAnnTypeAt(annIdx);
+    pcis[nparams] := PyAnnLastCi;
+    if ptypes[nparams] = tyUnknown then
+      ErrorAt(Tokens[annIdx].Line,
+              'Nil Python: parameter ' + pnames[nparams]
+              + ' has an unsupported type annotation');
+    TokPos := annIdx;
+    Next;
+    pdefHas[nparams] := False;
+    if CurTok.Kind = tkAssign then
+    begin
+      annIdx := TokPos;
+      pdefHas[nparams] := True;
+      pdefVal[nparams] := PyParamDefaultAt(annIdx, pnames[nparams],
+                                           pdefIsStr[nparams],
+                                           pdefSOff[nparams],
+                                           pdefSLen[nparams]);
+      TokPos := annIdx;
+      Next;
+    end;
     Inc(nparams);
     if not Eat(tkComma) then break;
   end;
@@ -2291,6 +2393,15 @@ begin
   bodyStart := TokPos - 1;
 
   procIdx := RegisterProc(name, not isProc, retType, nparams, pnames, ptypes);
+  for i := 0 to nparams - 1 do
+    if pdefHas[i] and (i < MAX_PROC_PARAMS) then
+    begin
+      ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+      ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefVal[i];
+      ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefIsStr[i];
+      ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefSOff[i];
+      ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefSLen[i];
+    end;
   Procs[procIdx].BodyAddr := CodeLen;
   savedSC := SymCount;
   savedFS := FrameSize;
@@ -2459,6 +2570,9 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz:
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec: Integer; mRet: TTypeKind;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
+    pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
+    pdefVal: array[0..15] of Int64;
+    pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
 begin
   UClsFBase[ci] := UFldCount;
@@ -2619,6 +2733,7 @@ begin
       name := PyMethodName(origName);
       isCtor := name = 'create';
       nparams := 0;
+      for k := 0 to 15 do pdefHas[k] := False;
       j := i + 3;
       while Tokens[j].Kind <> tkRParen do
       begin
@@ -2647,6 +2762,15 @@ begin
             ErrorAt(Tokens[j].Line,
                     'Nil Python: parameter ' + pnames[nparams]
                     + ' has an unsupported type annotation');
+          if Tokens[j].Kind = tkAssign then
+          begin
+            Inc(j);
+            pdefHas[nparams] := True;
+            pdefVal[nparams] := PyParamDefaultAt(j, pnames[nparams],
+                                                 pdefIsStr[nparams],
+                                                 pdefSOff[nparams],
+                                                 pdefSLen[nparams]);
+          end;
         end;
         Inc(nparams);
         if Tokens[j].Kind = tkComma then Inc(j);
@@ -2678,6 +2802,18 @@ begin
       begin
         procIdx := RegisterProc(fullName, not isCtor, mRet, nparams, pnames, ptypes);
         if mRetRec >= REC_UCLASS_BASE then ProcRetRecId[procIdx] := mRetRec;
+        { Trailing constant defaults. The shared call path already fills
+          omitted trailing args from these arrays (symtab.inc), so a NilPy
+          method with defaults needs no call-site work of its own. }
+        for k := 0 to nparams - 1 do
+          if pdefHas[k] and (k < MAX_PROC_PARAMS) then
+          begin
+            ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + k] := True;
+            ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + k] := pdefVal[k];
+            ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + k] := pdefIsStr[k];
+            ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + k] := pdefSOff[k];
+            ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + k] := pdefSLen[k];
+          end;
       end;
       if fieldsOnly then
         { skip method/property registration entirely; fall through to the ctor
@@ -2828,7 +2964,7 @@ end;
 
 procedure PyParseMethod(ci: Integer);
 var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
-    savedSelf, patchPos, bodyNode, bodyStart: Integer; pnames: array[0..15] of AnsiString;
+    savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
     isCtor: Boolean;
 begin
@@ -2845,8 +2981,23 @@ begin
     else
     begin
       Expect(tkColon, ':');
-      ptypes[nparams] := PyParseType;
-      pcis[nparams] := PyLastTypeCi;
+      { PyAnnTypeAt, bridged onto the cursor, so the header accepts exactly
+        what the class pre-pass accepted — List/Dict/set/Optional/Callable.
+        The two must agree: the pre-pass decides the registered signature and
+        this decides the frame, and a disagreement is a silent ABI mismatch. }
+      annIdx := TokPos - 1;
+      ptypes[nparams] := PyAnnTypeAt(annIdx);
+      pcis[nparams] := PyAnnLastCi;
+      TokPos := annIdx;
+      Next;
+      if CurTok.Kind = tkAssign then
+      begin
+        { the default VALUE was recorded by the pre-pass, which is what the
+          call path reads; here it only has to be stepped over }
+        Next;
+        if CurTok.Kind = tkMinus then Next;
+        Next;
+      end;
     end;
     Inc(nparams);
     if not Eat(tkComma) then break;

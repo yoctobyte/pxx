@@ -1,0 +1,63 @@
+# Constant parameter defaults on top-level defs AND methods. Oracle: CPython —
+# running this file with python3 must produce byte-identical output.
+#
+# The four constant forms NilPy accepts are all here: int, bool, str and None.
+# A non-constant default (a name, a call, a list) is a deliberate clean error:
+# Python evaluates it ONCE at definition time, and quietly picking either
+# "once" or "per call" would be a silent semantic difference.
+#
+# NilPy has the typing names built in and consumes this import; CPython needs
+# it, and the point of the file is that ONE source runs under both.
+from typing import Optional
+
+
+def add(a: int, b: int = 5) -> int:
+    return a + b
+
+
+def greet(name: str, excited: bool = False) -> str:
+    if excited:
+        return "hi " + name + "!"
+    return "hi " + name
+
+
+def suffix(word: str, tail: str = "...") -> str:
+    return word + tail
+
+
+def defaulted_none(a: int, w: Optional[int] = None) -> int:
+    # Optional[int] None is the documented 0 sentinel, so this reads as 0.
+    if w is None:
+        return a
+    return a + 1
+
+
+class C:
+    def __init__(self, base: int = 100) -> None:
+        self.base = base
+
+    def two(self, a: int, b: int = 5) -> int:
+        return self.base + a + b
+
+    def flag(self, a: int, f: bool = True) -> int:
+        if f:
+            return a
+        return -a
+
+
+print(add(1, 2))
+print(add(1))
+print(greet("bob"))
+print(greet("bob", True))
+print(suffix("end"))
+print(suffix("end", "!"))
+print(defaulted_none(7))
+
+c = C()
+print(c.two(1, 2))
+print(c.two(1))
+print(c.flag(3))
+print(c.flag(3, False))
+
+d = C(200)
+print(d.two(1))
