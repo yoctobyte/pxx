@@ -142,3 +142,18 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   RetViaHiddenDest handling (alloc result temp, load its address into r10
   before the call). Vendored tree still carries printf instrumentation —
   FORCE=1 refetch before oracle diffing.
+
+- 2026-07-19 (fable-A, wave 4 — ENGINE AT ORACLE PARITY on core surface):
+  JSValue-return wall fixed (IR_CALL_IND cdecl arm passes the r10 hidden
+  dest, 0d7ea60c) — Math.*/map/JSON.stringify/String/regex all return real
+  values now. Follow-on: the 1-ulp Math.* tails were NOT math — crtl printf
+  digit extraction was inexact at >=16 significant digits; replaced with an
+  exact binary->decimal engine (__crtl_dexp_* in stdio.c, rounding-mode-
+  aware via __pxx_fegetround; b376; 4000-double differential vs glibc = one
+  diff, the subnormal-LITERAL parse, filed bug-c-float-literal-subnormal-
+  parses-zero). toFixed's FE_DOWNWARD probe works.
+  **Remaining known diffs vs the gcc oracle:** cbrt/log/pow/exp are 1 ulp
+  off — crtl TRANSCENDENTAL accuracy (libm quality, Track B), not
+  formatting; sqrt/sin/tan already exact. Next milestone: `make
+  test-quickjs` gate + a curated JS smoke vs the gcc-built oracle
+  (duktape shape), accepting or fixing the transcendental ulps first.
