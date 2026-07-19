@@ -53,6 +53,9 @@ ENET_COMMIT="5a9c537fd464b3c6d3c55e1d3bd47588faf71b42"   # master, 2026-07 snaps
 QUICKJS_URL="https://github.com/quickjs-ng/quickjs"
 QUICKJS_COMMIT="670492dd342dace0bb7bd6fbfbde8f0bc5651224"   # v0.9.0 release tag
 
+JSSHA256_URL="https://github.com/emn178/js-sha256"
+JSSHA256_COMMIT="7912494a5ae277660131557401b91f11f47c96d2"   # v0.11.1 release tag
+
 ZENGL_URL="https://github.com/seenkao/New-ZenGL"
 ZENGL_COMMIT="26f402516542286354d7c41e3b435d613b8c7812"   # HEAD, 2026-07 snapshot
 
@@ -389,6 +392,25 @@ EOF
   say "quickjs -> $DEST/quickjs"
 }
 
+fetch_js_sha256() {
+  # Pure-compute JS library for the QuickJS corpus gate (feature-c-corpus-quickjs):
+  # a real-world sha256/sha224 implementation (~500 lines plain script, no ES
+  # modules) run under the pxx-compiled qjs, diffed vs the gcc-built oracle and
+  # NIST known-answer vectors (test/quickjs/sha256_driver.js).
+  if present js-sha256; then say "js-sha256 present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  fetch_commit "$JSSHA256_URL" js-sha256 "$JSSHA256_COMMIT" src/sha256.js LICENSE.txt
+  cat > "$DEST/js-sha256/PROVENANCE.md" <<EOF
+# js-sha256 Candidate (pure-compute JavaScript library)
+Upstream: ${JSSHA256_URL}
+Commit: ${JSSHA256_COMMIT} (v0.11.1)
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: MIT.
+Used by \`make test-quickjs\` — real pure-JS library run under the pxx-compiled
+QuickJS, output byte-exact vs the gcc-built oracle (feature-c-corpus-quickjs).
+EOF
+  say "js-sha256 -> $DEST/js-sha256"
+}
+
 fetch_duktape() {
   # Prebuilt amalgamation ships IN the release tarball (src/duktape.c + duktape.h +
   # duk_config.h) — no python configure step needed, the exact sqlite/tcc shape.
@@ -461,7 +483,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_duktape; fetch_fcl_json; fetch_csmith ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -477,6 +499,7 @@ EOF
     chess|vice)    fetch_vice ;;
     zengl)         fetch_zengl ;;
     quickjs)       fetch_quickjs ;;
+    js-sha256)     fetch_js_sha256 ;;
     duktape)       fetch_duktape ;;
     fcl-json)      fetch_fcl_json ;;
     csmith)        fetch_csmith ;;

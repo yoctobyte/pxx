@@ -158,6 +158,20 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   test-quickjs` gate + a curated JS smoke vs the gcc-built oracle
   (duktape shape), accepting or fixing the transcendental ulps first.
 
+- 2026-07-19 (fable-A, FULL BAR — real library runs, ticket resolved):
+  js-sha256 v0.11.1 (emn178, 526 lines plain-script UMD) vendored via new
+  `tools/install_lib_candidates.sh js-sha256` fetcher (pinned 7912494a,
+  sparse src/sha256.js + LICENSE). test/quickjs/sha256_driver.js = 13
+  known-answer vectors (NIST FIPS 180-4 sha256/sha224, RFC 6234 long
+  messages, million-'a' incremental update, byte-array/Uint8Array/UTF-8
+  input paths, RFC 4231 HMAC-SHA256) — vectors ARE the oracle, gcc-built
+  runner cross-checks byte-exact. `make test-quickjs` now runs both cases
+  (smoke + library KAT). pxx-compiled qjs: ALL PASS first try, output
+  byte-identical to the gcc oracle — no new compiler bugs. testmgr quick
+  GREEN. Bar met: real pure-compute JS library runs under the compiled
+  engine. Remaining transcendental-ulp work tracked in
+  [[feature-crtl-libm-correctly-rounded-transcendentals]].
+
 - 2026-07-19 (fable-A, gate wired): `make test-quickjs` landed (2296b29c) —
   30-case curated smoke byte-exact vs the gcc-built oracle (JSValue returns,
   exact dtoa, closures/classes/GC/JSON/regex/spread). Transcendental ulps

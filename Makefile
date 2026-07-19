@@ -4691,7 +4691,13 @@ test-duktape: $(COMPILER)
 # fn-pointer tables, exact number->string, closures/prototypes/GC/JSON/regex.
 # Skips if the gitignored tree is absent (tools/install_lib_candidates.sh quickjs).
 # NOT in `make test` (3rd-party).
+# Second case: a real pure-compute JS library (js-sha256 v0.11.1, vendored via
+# tools/install_lib_candidates.sh js-sha256) run under the compiled qjs with a
+# known-answer-test driver (test/quickjs/sha256_driver.js — NIST FIPS 180-4 /
+# RFC 4231 vectors); stdout byte-compared against sha256.expected (generated
+# from the gcc-built runner, all-PASS verified against the published vectors).
 QUICKJS_SRC ?= library_candidates/quickjs
+JSSHA256_SRC ?= library_candidates/js-sha256
 test-quickjs: $(COMPILER)
 	@if [ ! -f "$(QUICKJS_SRC)/quickjs.c" ]; then \
 	  echo "test-quickjs: SKIP — no quickjs tree at $(QUICKJS_SRC) (tools/install_lib_candidates.sh quickjs)"; \
@@ -4709,6 +4715,21 @@ test-quickjs: $(COMPILER)
 	  echo "test-quickjs: PASS — curated JS smoke byte-exact"; \
 	else \
 	  echo "test-quickjs: FAIL — output mismatch"; head -12 "$$wd/diff.txt"; exit 1; \
+	fi; \
+	if [ ! -f "$(JSSHA256_SRC)/src/sha256.js" ]; then \
+	  echo "test-quickjs: SKIP library case — no js-sha256 at $(JSSHA256_SRC) (tools/install_lib_candidates.sh js-sha256)"; \
+	  exit 0; \
+	fi; \
+	{ printf 'var window = globalThis;\n'; \
+	  cat "$(JSSHA256_SRC)/src/sha256.js" test/quickjs/sha256_driver.js; } > "$$wd/sha256_cat.js"; \
+	"$$wd/qjs" "$$(cat "$$wd/sha256_cat.js")" > "$$wd/sha_got.txt" 2>&1; rc=$$?; \
+	if [ "$$rc" != "0" ]; then \
+	  echo "test-quickjs: FAIL — sha256 library exit $$rc"; tail -5 "$$wd/sha_got.txt"; exit 1; \
+	fi; \
+	if diff -u test/quickjs/sha256.expected "$$wd/sha_got.txt" > "$$wd/diff2.txt"; then \
+	  echo "test-quickjs: PASS — js-sha256 library KAT byte-exact (13 vectors)"; \
+	else \
+	  echo "test-quickjs: FAIL — js-sha256 output mismatch"; head -12 "$$wd/diff2.txt"; exit 1; \
 	fi
 
 # fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
