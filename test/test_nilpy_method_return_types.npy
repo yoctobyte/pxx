@@ -1,0 +1,33 @@
+# A method must honour its declared `-> TYPE`. PyRegisterClassMembers used to
+# register every method with a hardcoded tyInteger, so only `-> int` worked by
+# luck: `-> bool` printed 1, `-> float` returned 0, `-> str` returned garbage
+# (bug-nilpy-method-returning-str-garbage).
+#
+# `-> str` from a METHOD is still unsupported and now gives a compile-time
+# diagnostic instead of silent garbage; a top-level def returning str works and
+# is covered in test_nilpy_str_methods.npy.
+
+class K:
+    def __init__(self, n: int) -> None:
+        self.n = n
+        self.label = "text"
+    def get_int(self) -> int:
+        return self.n
+    def get_bool(self) -> bool:
+        return self.n > 3
+    def get_neg_bool(self) -> bool:
+        return self.n > 100
+    def get_float(self) -> float:
+        return 2.5
+    def twice(self) -> int:
+        return self.n * 2
+
+k = K(7)
+print(k.get_int())
+print(k.get_bool())
+print(k.get_neg_bool())
+print(k.get_float())
+print(k.twice())
+# a str FIELD still reads fine; only a str-returning METHOD is limited
+print(k.label)
+print(k.label.upper())

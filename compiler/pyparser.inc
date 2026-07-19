@@ -2034,6 +2034,45 @@ begin
     end;
 end;
 
+function PyTypeName(tk: TTypeKind): AnsiString;
+begin
+  if tk = tyAnsiString then PyTypeName := 'str'
+  else if tk = tyVariant then PyTypeName := 'Any'
+  else PyTypeName := 'that type';
+end;
+
+{ A method's declared `-> TYPE`. PyRegisterClassMembers used to register every
+  method with a hardcoded tyInteger return type, so only `-> int` worked by
+  luck: `-> str` returned garbage, `-> float` returned 0, `-> bool` printed 1
+  (bug-nilpy-method-returning-str-garbage). PyDefReturnType covers TOP-LEVEL
+  defs only (it scans at depth 0), which is why methods were missed.
+  Returns tyUnknown for `-> None` and for an unannotated method; the caller
+  keeps tyInteger there, preserving today's behaviour for those. }
+function PyMethodRetType(methodStart: Integer; var retRec: Integer): TTypeKind;
+var j, pdepth: Integer;
+begin
+  Result := tyUnknown;
+  retRec := REC_NONE;
+  j := methodStart + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then Break;
+    end;
+    Inc(j);
+  end;
+  if (j + 3 < TokCount) and (Tokens[j + 1].Kind = tkMinus) and
+     (Tokens[j + 2].Kind = tkGt) then
+  begin
+    Result := PyTypeFromTokenIndex(j + 3);
+    retRec := PyRecFromTokenIndex(j + 3);
+  end;
+end;
+
 { fieldsOnly = the PRE-PASS: register this class's FIELDS and nothing else.
   PyCollectModuleLocals runs before the main loop that parses classes, so
   without a pre-pass every class has zero fields during module-local inference
@@ -2046,7 +2085,8 @@ end;
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
-    origName, name, fullName, rhsName: AnsiString; isCtor: Boolean; fldRec: Integer;
+    origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
+    fldRec, mRetRec: Integer; mRet: TTypeKind;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
 begin
@@ -2229,8 +2269,31 @@ begin
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+      mRet := PyMethodRetType(methodStart, mRetRec);
+      if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
+      { str is managed here as everywhere else in NilPy }
+      if mRet = tyString then mRet := tyAnsiString;
+      if mRet <> tyClass then mRetRec := REC_NONE;
+      { An aggregate/managed return from a METHOD is not wired up: a managed
+        str return segfaults and a hidden-destination return has no caller-side
+        destination. Reject with a diagnostic rather than ship the silent
+        garbage this used to produce (bug-nilpy-method-returning-str-garbage) —
+        before the return type was honoured at all, `-> str` printed an integer.
+        Scalars (int, bool, float) and class returns are unaffected and now DO
+        honour their annotation, which is what fixed `-> bool` printing 1 and
+        `-> float` returning 0. A top-level `def` returning str works; only
+        methods are limited. }
+      if (not fieldsOnly) and (not isCtor) and
+         (RetViaHiddenDest(mRet) or (mRet = tyAnsiString)) then
+        Error('Nil Python: a method returning ' + PyTypeName(mRet)
+          + ' is not supported yet (bug-nilpy-method-returning-str-garbage); '
+          + 'a top-level def returning it works, or return it through a field');
       if fieldsOnly then procIdx := -1
-      else procIdx := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
+      else
+      begin
+        procIdx := RegisterProc(fullName, not isCtor, mRet, nparams, pnames, ptypes);
+        if mRetRec >= REC_UCLASS_BASE then ProcRetRecId[procIdx] := mRetRec;
+      end;
       if fieldsOnly then
         { skip method/property registration entirely; fall through to the ctor
           field scan below, which is the only thing the pre-pass wants }

@@ -224,6 +224,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_membership26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nFalse\nTrue')"
 	./$(COMPILER) test/test_nilpy_any_params.npy /tmp/test_nilpy_any_params26
 	test "$$(/tmp/test_nilpy_any_params26)" = "$$(printf 'got\ngot\n20\n3')"
+	./$(COMPILER) test/test_nilpy_method_return_types.npy /tmp/test_nilpy_method_return_types26
+	test "$$(/tmp/test_nilpy_method_return_types26)" = "$$(printf '7\nTrue\nFalse\n2.5\n14\ntext\nTEXT')"
 	./$(COMPILER) test/test_nilpy_class_field_identity.npy /tmp/test_nilpy_class_field_identity26
 	test "$$(/tmp/test_nilpy_class_field_identity26)" = "$$(printf 'dup\nswap\nDUP\nSWAP\ndup\ndup\nDUP')"
 	./$(COMPILER) test/test_nilpy_str_methods.npy /tmp/test_nilpy_str_methods26

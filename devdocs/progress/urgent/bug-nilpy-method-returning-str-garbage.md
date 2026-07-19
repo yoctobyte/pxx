@@ -43,6 +43,42 @@ method-call path. Note `PyRegisterClassMembers` registers every method with
 return type — and the real return type is presumably patched in later (or not,
 for `str`). That is the first thing to check.
 
+## PARTIALLY FIXED 2026-07-19
+
+Root cause confirmed exactly as the note above guessed:
+`PyRegisterClassMembers` registered EVERY method with
+`RegisterProc(fullName, ..., tyInteger, ...)`. `PyDefReturnType` only covers
+TOP-LEVEL defs (it scans at depth 0), which is why methods were missed and a
+top-level `def f() -> str` works fine.
+
+`PyMethodRetType` now reads the method's `-> TYPE` and registers it (plus
+`ProcRetRecId` for a class return). That FIXES:
+
+| return | before | after |
+| --- | --- | --- |
+| `-> int` | 7 (right by luck) | 7 |
+| `-> bool` | `1` | `True` |
+| `-> float` | `0` | `2.5` |
+| `-> str` | garbage integer | **compile-time diagnostic** |
+
+Still open: a MANAGED (`str`) or hidden-destination return from a **method**.
+Honouring the annotation made `-> str` segfault instead of returning garbage —
+the callee sets its Result up correctly, but the method-call path does not
+carry the result the way the plain-`def` call path does. Rather than ship
+either garbage or a crash, that case is now REJECTED with an actionable
+message. Only ONE annotated method existed in the whole .npy corpus
+(`-> int`), so nothing regressed.
+
+Note `RetViaHiddenDest` does NOT cover `tyAnsiString` — managed strings return
+a heap handle in a register — so the guard tests that case explicitly.
+
+Covered by `test/test_nilpy_method_return_types.npy`, diffed against CPython.
+
+## Remaining work
+
+Wire the method-call path for managed/aggregate returns, then drop the guard.
+uforth needs `-> str` methods heavily, so this stays urgent.
+
 ## Why it is urgent
 
 uforth is full of `-> str` methods (word names, token text, the whole
