@@ -7990,9 +7990,16 @@ begin
       (e.g. pxxcio pulls Pascal math.Sqrt, but `--system-libs=m` wants C sqrt
       to remain an external libm import). Reuse an exact C declaration/definition
       from an earlier pass if present; never bind to a differently-cased Pascal
-      routine here. }
+      routine here. Matching is by EXACT-CASE NAME, not ProcCaseSensitive:
+      a plain C-program compile registers procs under the default
+      case-insensitive mode, so requiring the flag made this loop never
+      match — every pass-2 definition re-registered and pass-2 callers kept
+      the bodyless pass-1 entry ("unresolved forward: crtl_2sum" the moment
+      an auto-pulled crtl file had C-to-C internal calls under
+      --system-libs=c). The exact string compare still excludes
+      differently-cased Pascal twins (Sqrt vs sqrt). }
     for i := 0 to ProcCount - 1 do
-      if ProcCaseSensitive[i] and (Procs[i].Name = name) and
+      if (Procs[i].Name = name) and
          (Procs[i].ParamCount = nparams) then
       begin
         sigMatch := True;
