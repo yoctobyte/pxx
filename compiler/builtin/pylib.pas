@@ -44,6 +44,10 @@ type
     FItems: Pointer;
     constructor Create;
     function append(const v: Variant): TPyList;
+    { set-style insert: append only when the value is not already present.
+      NilPy backs `set` with TPyList (see PyAnnTypeAt), and this is the whole
+      set contract the corpus uses — `s.add(x)` then `x in s`. }
+    function add(const v: Variant): TPyList;
     function get(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
     function count: Integer;
@@ -478,6 +482,12 @@ begin
   dst^.VType := src^.VType;
   dst^.Payload := src^.Payload;
   FLen := FLen + 1;
+  Result := Self;
+end;
+
+function TPyList.add(const v: Variant): TPyList;
+begin
+  if not pycontains(Self, v) then append(v);
   Result := Self;
 end;
 

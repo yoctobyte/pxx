@@ -263,13 +263,37 @@ begin
     PyAnnLastCi := FindUClass('TPyDict');
     Exit;
   end;
-  if (lo = 'tuple') or (lo = 'set') then
+  if lo = 'set' then
+  begin
+    { A set is BACKED BY TPyList — the brace literal already lowers that way,
+      `in` already scans it, and TPyList.add appends only when absent, which
+      is the whole set contract uforth uses (a membership guard). Not a hash
+      set: same reasoning as TPyDict's linear scan. Ordering is insertion
+      order rather than Python's arbitrary order, which is a DIFFERENCE, not
+      a bug to chase — Python's set order is unspecified, so no correct
+      program can depend on it. }
+    Inc(i);
+    if (i < MainProgramTokCount) and (Tokens[i].Kind = tkLBrack) then
+    begin
+      depth := 1; Inc(i);
+      while (i < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then Dec(depth);
+        Inc(i);
+      end;
+    end;
+    Result := tyClass;
+    PyAnnLastCi := FindUClass('TPyList');
+    Exit;
+  end;
+  if lo = 'tuple' then
     { ErrorAt, not Error: this runs in a TOKEN-INDEX pre-pass with no parser
       cursor, so plain Error reports whatever line the cursor happens to sit
       on — for uforth that was line 26, ~180 lines from the actual
       annotation. The token we are looking at knows its own line. }
     ErrorAt(Tokens[i].Line,
-            'Nil Python: tuple/set types are not supported yet (' + lo + ')');
+            'Nil Python: tuple types are not supported yet (' + lo + ')');
   if IsClassType(GetTokenStr(i)) then
   begin
     Result := tyClass;
@@ -1224,6 +1248,41 @@ end;
 function PyClassCreate: Integer; forward;
 
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
+(* `set()` — Python's empty-set constructor. There is no empty-set LITERAL in
+   Python (empty braces are a dict), so this call is the only way to write one,
+   and it is how the uforth VM initialises its required-files guard.
+
+   Recognised at the assignment-RHS intercepts rather than as a general
+   expression: `set` is not a registered proc, so anywhere else it still says
+   "undefined variable (set)". Every censused use is an assignment; widen this
+   if a corpus ever calls set() in an argument position. *)
+function PyIsEmptySetCall: Boolean;
+begin
+  Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'set') and
+            (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+            (Tokens[TokPos + 1].Kind = tkRParen);
+end;
+
+function PyParseEmptySet: Integer;
+var ci, recId, sizeNode, argNode: Integer;
+begin
+  Next; Next; Next;                (* set ( ) *)
+  ci := FindUClass('TPyList');
+  if ci < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := -Ord(tkGetMem);
+  ASTTk[Result] := Ord(tyClass);
+  ASTRight[Result] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[Result] := argNode;
+  CurASTNode := Result;
+end;
+
 function PyIsCountCall: Boolean;
 begin
   Result := (PyCountAlias <> '') and (CurTok.Kind = tkIdent) and
@@ -1940,7 +1999,9 @@ begin
     else
     begin
       Expect(tkAssign, '=');
-      if PyIsCountCall then
+      if PyIsEmptySetCall then
+        rhsNode := PyParseEmptySet
+      else if PyIsCountCall then
         rhsNode := PyParseCountCreate
       else
       begin
@@ -2013,6 +2074,8 @@ begin
     if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       rhsNode := PyClassCreate
+    else if PyIsEmptySetCall then
+      rhsNode := PyParseEmptySet
     else if PyIsCountCall then
       rhsNode := PyParseCountCreate
     else
@@ -2561,17 +2624,31 @@ begin
       begin
         pnames[nparams] := GetTokenStr(j);
         if (nparams = 0) and (pnames[nparams] = 'self') then
-          ptypes[nparams] := tyClass
+        begin
+          ptypes[nparams] := tyClass;
+          Inc(j);
+        end
         else
         begin
           Inc(j);
-          if Tokens[j].Kind <> tkColon then Error('Nil Python: expected parameter type annotation');
+          if Tokens[j].Kind <> tkColon then
+            ErrorAt(Tokens[j].Line,
+                    'Nil Python: parameter ' + pnames[nparams]
+                    + ' needs a type annotation');
           Inc(j);
-          ptypes[nparams] := PyTypeFromTokenIndex(j);
-          if ptypes[nparams] = tyUnknown then Error('Nil Python: expected parameter type annotation');
+          { PyAnnTypeAt, not PyTypeFromTokenIndex: a method parameter takes
+            the SAME annotation grammar as a field or a dataclass member —
+            List/Dict/set/Optional/Callable/Any/forward refs. The narrow
+            single-token reader here meant a method could not accept a
+            container, which is most of uforth's method signatures, and it
+            reported the failure with no line of its own. }
+          ptypes[nparams] := PyAnnTypeAt(j);
+          if ptypes[nparams] = tyUnknown then
+            ErrorAt(Tokens[j].Line,
+                    'Nil Python: parameter ' + pnames[nparams]
+                    + ' has an unsupported type annotation');
         end;
         Inc(nparams);
-        Inc(j);
         if Tokens[j].Kind = tkComma then Inc(j);
       end;
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
