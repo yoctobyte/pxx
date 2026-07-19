@@ -21,16 +21,36 @@ with an indent-depth filter to skip anything nested. A trial parse would have
 to run the whole program's top level — including registering procs and classes
 — and roll all of that back, which is a much bigger blast radius than a body.
 
-## Shape
+## Status: mostly LANDED (226f2507)
 
-Likely the same trial-parse trick applied to the top-level statement loop only,
-skipping `def`/`class` spans the way the scanner already does. Check whether
-`ParsePyProgram` can be restructured so module statements form a block the way
-a body does.
+`PyCollectModuleLocalsAST` trial-parses the module body — enabled by
+`PyRegisterDefShells` (ba546669), which registers top-level def signatures up
+front so a module statement may call a def declared further down.
+`PyCollectModuleLocals` is gone.
 
-Retire `PyInferExprType`, `PyTypeFromTokenIndex`'s inference role and
-`PyStrMethodInfo`'s inference half when this lands — they exist only for this
-caller now.
+**What remains, and why.** Three narrowings keep the pre-pass off ground it
+cannot stand on. Only the second is a real gap:
+
+1. An annotated `name: T = expr` reads the annotation and skips the RHS —
+   intended, and the escape hatch for everything else.
+2. **A bare assignment whose RHS calls a method on a NAME (`x = c.two(1)`) is
+   skipped.** Class MEMBERS are not registered until `PyParseClass` reaches
+   the class, so trial-parsing it would fail on a method that is valid a
+   moment later. Cost: no WIDENING for that name (the real parse still
+   declares it).
+3. Only assignments are parsed; nothing else declares a module local.
+
+**To close (2): hoist class member registration the way def signatures now
+are.** `PyRegisterClassMembers` already has a `fieldsOnly` flag and is
+already run twice (fields pre-pass, then `PyParseClass`). The obstacle is
+that the non-fieldsOnly path also appends to the `PyDc*` dataclass-default
+tables, so a third run would duplicate them — untangle that first, then give
+`PyParseClass` a "members already registered" guard.
+
+`PyInferExprType` survives for ONE caller: the ctor field scan, which has no
+parseable block of its own — fields must exist before any body is parsed. See
+[[project_nilpy_class_pipeline_ordering]]. Closing that is the same
+declaration-phase work as (2).
 
 ## Gate
 
