@@ -24,3 +24,6 @@ pascal26:8: error: IR_UNSUPPORTED: frontend could not lower AST node (kind 78) â
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Fixed 09474309 (AST region-swap missed per-frontend ASTNodeCount reset); watcher recorded FIXED at 81525fb0, full GREEN followed.
+- 2026-07-19 â€” resolved, commit 09474309.

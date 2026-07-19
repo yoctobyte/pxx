@@ -5,7 +5,7 @@ prio: 53  # auto
 # Assembler as a first-class citizen (umbrella)
 
 - **Type:** feature (compiler architecture) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30 (user request: "proper assembler, on all targets")
 - **Relation:** umbrella over [[feature-asmcore-encoder-library]] (Track B,
   layer 1), [[feature-asm-structured-ir-library]] (Track A, layer 2),
@@ -136,3 +136,6 @@ byte-identical on x86-64.
 ## Log
 - 2026-06-30 — Opened (Track B, filing on behalf of Track A scope per repo
   convention — touches `compiler/**`/`elfwriter.inc`, not `lib/**`).
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Umbrella complete: all three heads landed (inline-asm all 6 targets, -S, .asm frontend — pins v109–v112); layer-2 RTL migration REJECTED by user. Children all in done/.
+- 2026-07-19 — resolved, commit e53cea50.

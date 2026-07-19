@@ -44,3 +44,5 @@ identifier.
   is source/object-valid and imports the expected IDF/newlib symbols, but exact
   fd semantics are intentionally left as this follow-up rather than hidden in
   PAL workarounds.
+
+- 2026-07-19 (backlog sweep note) Stale blocker ref: bug-esp-idf-heap-linux-mmap-ecall is resolved (in done/). Ticket itself still fully open (ESP backend stdio-based, PAL_OPEN_EXCL unsupported).

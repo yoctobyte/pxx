@@ -5,7 +5,7 @@ prio: 45  # auto
 # feature: run the IR fuzzer automatically whenever the project is otherwise idle
 
 - **Type:** feature (Track A — tooling/automation)
-- **Status:** backlog
+- **Status:** done
 - **Parent:** [[feature-ir-fuzzer]]
 - **Owner:** —
 - **Opened:** 2026-07-05
@@ -88,3 +88,6 @@ lands in a low-noise staging spot rather than immediately becoming a ticket.
 - 2026-07-05 — filed as a direct follow-up to [[feature-ir-fuzzer]] landing;
   user asked for "how to use fuzzing whenever everything else is idle" as its
   own ticket. Not started — trigger mechanism choice deferred to pickup time.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Delivered via the watcher daemon: run_fuzz_idle in tools/twatch.py (3e84fd43, hardened fb24cd37/6507bd91/49728c23/0d9101df) — time-boxed, preemption-aware, findings-ledger throttled. Mechanism differs from the working/-empty check idea; goal met.
+- 2026-07-19 — resolved, commit 3e84fd43.

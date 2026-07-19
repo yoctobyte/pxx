@@ -51,3 +51,5 @@ corpus rungs.
 Fresh clone + `install_lib_candidates.sh fcl-json` + `make test-fpjson` =
 203/203, no /tmp state involved; a regression in the fpjson/fpcunit chain
 turns the target red.
+
+- 2026-07-19 (backlog sweep note) URGENCY UP: /tmp/fpjson-stage is GONE — step 2 (copy the live stage) is no longer possible; the harness must be rebuilt from upstream + the b318–b327 commit trail. Meanwhile the 203/203 suite has zero regression protection.

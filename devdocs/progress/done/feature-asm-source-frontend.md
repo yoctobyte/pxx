@@ -5,7 +5,7 @@ prio: 60  # auto
 # `.asm` as a first-class source frontend (assemble + link to object/exe/.so)
 
 - **Type:** feature (frontend / linker) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Relation:** part of [[feature-assembler-first-class-citizen]];
   consumes [[feature-asm-structured-ir-library]]; pairs with
@@ -354,3 +354,6 @@ wiring, not new machinery.
   parse .asm; xtensa gives a clear error pointing at
   [[feature-inline-asm-xtensa]]. Remaining scope: -c/--shared beyond
   x86-64, section/extern/db on the engine-backed targets.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** In substance: compiler/asmfront.inc live — ET_EXEC, -c ET_REL, --shared ET_DYN, extern/global, labels, riscv32 leg; test-asm suite gated (2f1804fb, pins v110/v111, f8385e2d). Residue if ever needed: -S round-trip byte-identity acceptance + full multi-target coverage.
+- 2026-07-19 — resolved, commit f8385e2d.

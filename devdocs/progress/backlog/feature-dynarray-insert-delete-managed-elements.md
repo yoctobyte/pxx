@@ -144,3 +144,5 @@ elements, rvalue record/set insert values, non-IDENT targets (obj.field),
 FPC array-splice Insert form. (The riscv32/xtensa SymIsHiddenArgTemp
 prologue nil-init listed as item 5 landed separately in the v155-era
 riscv32 bring-up — both walkers have the loop now.)
+
+- 2026-07-19 (backlog sweep note) Items 1–2 landed and pinned (AnsiString c0105931 v141; managed-record 929f57f6/361b8685 v162). Live remainder per parser.inc:15323–15405 rejections: nested/frozen element types, non-IDENT targets (obj.field, a[i]), FPC array-splice form, riscv32/xtensa prologue nil-init.

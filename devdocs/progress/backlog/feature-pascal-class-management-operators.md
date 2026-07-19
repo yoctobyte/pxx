@@ -6,9 +6,9 @@ prio: 48  # auto — 8 conformance tests
 
 - **Type:** feature (Pascal frontend, operator overloading)
 - **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** working
+- **Status:** backlog
   ([[feature-pascal-corpus-fpc-testsuite]]).
-- **Owner:** opus-p
+- **Owner:** — (header de-staled 2026-07-19 sweep: was left "working/opus-p"; named operators + enumerator dispatch landed (395aa20a + slice 2), management ops still parse-only — not dispatched, tmoperator1-11 skip-listed)
 
 ## Symptom
 `error: expected operator symbol after operator keyword` — pxx parses only

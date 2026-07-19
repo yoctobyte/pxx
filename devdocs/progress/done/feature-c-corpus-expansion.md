@@ -5,7 +5,7 @@ prio: 65  # auto
 # C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness)
 
 - **Type:** feature (C frontend validation) — Track A/C.
-- **Status:** working
+- **Status:** done
 - **Step 1 DONE 2026-07-06:** c-testsuite vendored (install_lib_candidates.sh
   c-testsuite), runner `tools/run_c_conformance.sh` + `make test-c-conformance`.
   **Baseline 172/220 pass on pristine master**; all 48 fails are recorded
@@ -211,3 +211,8 @@ mismatch, `creduce` down to a minimal repro and file it. csmith programs are sel
 (they print a checksum of all globals), so the oracle is just "same checksum", and its
 output is UB-free by construction, so a difference is always a real miscompile in one of
 the two compilers.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Umbrella complete: c-testsuite 220/220, zlib + tcc done, csmith harness live, chess green (608cb971 split the follow-on rungs into their own tickets: duktape, quickjs, gcc-torture).
+
+## Log
+- 2026-07-19 — resolved, commit 608cb971.

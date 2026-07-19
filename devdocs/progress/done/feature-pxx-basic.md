@@ -5,7 +5,7 @@ prio: 60  # auto
 # feature: PXX Basic — own free-form BASIC dialect (real demo target, not an esoteric probe)
 
 - **Type:** feature (Track A — `compiler/blexer.inc`/`bparser.inc`, `lib/` RTL bits as needed)
-- **Status:** backlog — already exists in skeleton form, blocked on a real bug
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-07-05 (user idea: "we're totally free to do as we see fit,
   there are no standards, just intentions — wild demo")
@@ -74,3 +74,6 @@ suite — no BASIC standard to satisfy, by design.
   (untracked) and already has personality (mixed dialect + cross-language
   import), but is blocked by a real GOTO/GOSUB bug filed separately as
   [[bug-basic-goto-gosub-halts-program]].
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Sole blocker (GOTO/GOSUB) fixed 19a18872; test_basic_goto_gosub + comprehensive wired into make test. REPL/flourish ideas were explicitly brainstorm-tier — re-file if ever wanted.
+- 2026-07-19 — resolved, commit 19a18872.

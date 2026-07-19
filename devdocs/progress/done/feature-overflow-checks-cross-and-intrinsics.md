@@ -8,7 +8,7 @@ prio: 35
 
 - **Type:** feature (continuation of [[feature-pascal-overflow-checks-q-plus]],
   whose x86-64 slice landed 17562666). **Track A.**
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-15
 
 ## Remaining scope
@@ -48,3 +48,8 @@ prio: 35
 - test_overflow_checks_qplus runs on all qemu targets against the x86-64
   oracle output.
 - tint642 passes fully once Val lands (whichever order).
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Add/sub + unsigned mul checked on all 5 hosted targets (17562666 et al.), Succ/Pred done, Abs/Sqr + subword oracle-verified nothing-to-do. Deferred residue (niche): SIGNED checked mul on 32-bit pairs; xtensa.
+
+## Log
+- 2026-07-19 — resolved, commit 17562666.

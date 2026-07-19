@@ -5,7 +5,7 @@ prio: 45  # auto
 # Synapse library — proper compile check (Track B)
 
 - **Type:** feature / investigation (library compat target)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** — (**Track B** — libraries/RTL; uses `$(PXX_STABLE)`, never rebuilds
   the compiler)
 - **Opened:** 2026-06-22
@@ -404,3 +404,8 @@ LoadFromStream/SaveToStream/Assign/AddStrings, writable TStream.Size).
   open-array writeback, High(rec.fieldarray)) — fixed in 632af8cb.
 - Remaining: synachar (iconv tables), HMAC/QuotedPrintable etc. unverified,
   SMTP/POP3/FTP runtime untested (need live/loopback servers).
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Done-when met: full HTTP chain compiles under --mimic-fpc; test/lib_synapse.pas smoke gated in make lib-test (b64/md5/sha1/crc32 byte-exact vs FPC + blcksock loopback ping/pong; e222393b…6facf2e1). Follow-up candidates if wanted: synachar iconv tables, SMTP/POP3/FTP runtime breadth.
+
+## Log
+- 2026-07-19 — resolved, commit 6facf2e1.

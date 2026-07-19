@@ -7,7 +7,7 @@ prio: 70
 # pasmith — random well-defined Object Pascal generator, differentially tested against FPC
 
 - **Type:** feature (Track T — tools & testing)
-- **Status:** backlog
+- **Status:** done
 - **Track:** T (owns the tool). Findings file into the owning lane: IR/codegen → A,
   dialect/frontend → P, ansistring/RTL → B. **T never fixes the compiler.**
 - **Owner:** —
@@ -336,3 +336,6 @@ test.
   Rewrote the triage section as ordered *suspicion* rather than verdicts, added the
   selection-effect argument, and noted FPC-vs-itself (`-O0` vs `-O2`) as the oracle
   that needs no judgement at all.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Acceptance met: tools/pasmith.py + pasmith_run.py live (v1 bab094f5; OOP+ansistring 9e0cf382/07f4b35f; clean sweeps 88986014), FPC+cross+O-level oracles, real bugs found+filed. Widening lives in its own tickets (multi-unit, Q+/R+, signature-granularity still open).
+- 2026-07-19 — resolved, commit bab094f5.

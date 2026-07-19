@@ -5,7 +5,7 @@ prio: 45  # auto
 # Meta: multithreading — libc-free Pascal threads (umbrella / epic)
 
 - **Type:** meta (epic / index) — Track A (+ B for the C-shim consumer)
-- **Status:** backlog (standing index)
+- **Status:** done
 - **Opened:** 2026-06-30
 - **Goal (user):** Pascal threads that "just work", no libc. Code safe; heap +
   stack safe **and** optimized; pthread emulated with syscalls.
@@ -88,3 +88,8 @@ guards: __pxxclone requires --threadsafe, cross-target --threadsafe rejected).
 M3 gained Synchronize/Queue/CheckSynchronize + auto-join destructor (v152).
 M4 is UNBLOCKED and ready for Track B/C — entry point written in
 [[feature-syscall-pthread-shim]].
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Epic done-in-substance: M0–M4 all landed (pal-thread-primitives, sync-futex, tthread, MT audit, pthread shim + MT SQLite — sub-tickets in done/; cross atomics 0eb4d9bd/07fee084). Sole remainder = M5 allocator-optimization half, tracked in [[feature-threadsafe-heap-optimize]].
+
+## Log
+- 2026-07-19 — resolved, commit 07fee084.

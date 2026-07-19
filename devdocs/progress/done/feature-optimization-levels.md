@@ -5,7 +5,7 @@ prio: 65  # auto
 # Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
 
 - **Type:** feature — umbrella — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** backlog — **-O2 IS THE DEFAULT as of 2026-07-10 (pinned v194).**
+- **Status:** done
   OptLevel default 0→2; ~1.34x faster / ~11% smaller; self-host -O2 fixedpoint
   byte-identical; `make test` + `make test-opt` green. `-g` now implies `-O0`
   unless an explicit `-O` is given (opt relocates/elides debug lines). The
@@ -473,3 +473,6 @@ unreliable). See [[project_per_body_full_array_clear_waste]].
 Pin note: the label-clear win is byte-identical-transparent, so re-pinning would
 hand B/C/D a 1.30x-faster compiler for free — but pin-flip stays a user-approved
 action; the commits are on master and fold into the next pin.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** -O0..-O3 + pass framework shipped; -O2 default since 224b74e4 (pin v194), per-level self-host fixedpoint. Unbuilt residue: -Os, {$O±} local scope — re-file if ever wanted. Remaining tiers already split to their own tickets.
+- 2026-07-19 — resolved, commit 224b74e4.

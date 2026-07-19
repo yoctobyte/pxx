@@ -5,7 +5,7 @@ prio: 60  # auto
 # Game and engine library candidate suite
 
 - **Type:** feature / investigation (library-suite discovery + compiler test workloads)
-- **Status:** working
+- **Status:** done
 - **Track:** B+C
 - **Owner:** opus-night
 - **Opened:** 2026-06-28
@@ -168,3 +168,6 @@ Apus / Castle. Slice D (graduation) untouched.
 
 Moved back to `backlog/` — it was sitting in `unfinished/` behind a wall that no longer
 exists.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Done-when met: stb/cglm/ENet + ZenGL probed, blockers filed and since fixed (c256c692/c33ebbc1/43edf7db), crtl inet slice graduated into test-core. Residue: unpatched-ZenGL re-probe, Apus/Castle, slice D graduation — re-file if the game push resumes.
+- 2026-07-19 — resolved, commit 43edf7db.

@@ -98,3 +98,5 @@ rule above; secrets and infra private.
 - 2026-07-15 — deploy guard added (user, deploy nearing): never autodeploy from
   either repo — docs pull ok, deploy stays manual/agentic. Server-side local
   agent viable post-deploy.
+
+- 2026-07-19 (backlog sweep note) Done-in-substance (private ~/pxx-website repo live: app, deploy/, secrets/, blog; deploy-guard logged 2026-07-15). Remaining from own steps: CLAUDE.md Track W section so the lane exists for other agents; canonical-domain wiring is a separate ticket.

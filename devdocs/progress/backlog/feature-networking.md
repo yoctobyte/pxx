@@ -184,3 +184,5 @@ DNS deferred to `feature-dns-resolver-library`.
   compat path (Track A blockers `feature-dotted-unit-names` +
   `feature-conditional-declared-directive`), and async/blocking facade
   unification.
+
+- 2026-07-19 (backlog sweep note) Milestone note: lib_synapse smoke in make lib-test compiles real Synapse under --mimic-fpc and runs b64/md5/sha1/crc32 + TCP ping/pong — the Synapse milestone is effectively achieved (see resolved feature-synapse-compile-check). Remaining here: IPv6, async/blocking facade unification; DNS split to its own ticket.

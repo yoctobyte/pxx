@@ -1,13 +1,12 @@
 ---
 prio: 45
-blocked-by: [feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson]
 ---
 
 # Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests)
 
 - **Type:** feature (Pascal frontend validation)
 - **Track:** P — tag: compat
-- **Status:** backlog — **endgame, do LAST**. Opened 2026-07-12.
+- **Status:** backlog — **endgame, do LAST**. Opened 2026-07-12. UNBLOCKED 2026-07-19 (both blockers — fpcunit, fpjson — resolved).
 - **Owner:** —
 - **Parent:** [[feature-pascal-corpus-oop]]
 - **Blocked-by:** feature-pascal-corpus-fpcunit feature-pascal-corpus-fpjson

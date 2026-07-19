@@ -5,7 +5,7 @@ prio: 60  # auto
 # Float exception mask control (SetExceptionMask-style, FPC emulation opt-in)
 
 - **Type:** feature (runtime / math) — Track A
-- **Status:** backlog — **blocked on** [[feature-signal-handlers]]
+- **Status:** backlog — actionable (was blocked on [[feature-signal-handlers]]; that landed and is in done/ — cleared 2026-07-19 sweep)
 - **Opened:** 2026-07-02, from the math-error design discussion with the user.
 
 ## Decision already made (user, 2026-07-02)

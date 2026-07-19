@@ -123,3 +123,5 @@ and `lib_platform`'s expected output dropped its 'dynlib' line accordingly
 not the runtime loader). test_dynlib green in both modes; make lib-test green.
 Remaining: (b) other-target run verification, (d) Synapse SSL end-to-end
 (gated on the jedi.inc lexer bug, see bug-pascal-directive-inside-paren-star-comment).
+
+- 2026-07-19 (backlog sweep note) UNBLOCKED: the jedi.inc directive-in-comment lexer bug blocking item (d) Synapse-SSL end-to-end is resolved (in done/). All done-when bullets met on x86-64; remaining = (b) other-target run verification + (d).

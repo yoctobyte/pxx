@@ -5,7 +5,7 @@ prio: 53  # auto
 # Flagship demo — chess engine (real-world app + cross-target oracle + benchmark)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-17
 - **Relation:** consumes feature-for-in-iteration (move loops) and
   feature-generators-yield (move generation). Doubles as a living regression
@@ -189,3 +189,6 @@ or rejected — lives in its own ticket: **idea-demo-app-candidates**.
   feature-generators-yield. Integer-only core chosen to keep the oracle path
   deterministic (float deferred to optional `--float-eval`). Top-10 alternative
   demos recorded in appendix for future reference.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** examples/chess/chess.pas — real mailbox engine dogfooding generators/yield (5de52412, c0f041cf, 094f78c8), --selftest perft oracle in lib-test, --bench mode. Residue: cross-target perft/cycles-per-node harness never wired — re-file under T/B if wanted.
+- 2026-07-19 — resolved, commit 094f78c8.

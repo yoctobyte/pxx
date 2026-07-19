@@ -117,3 +117,5 @@ taking first — a program that will not compile is a bigger hole than a program
 reject.
 
 Moved back to `backlog/`.
+
+- 2026-07-19 (backlog sweep note) Stale numbers: sweep at HEAD is 323 pass / 0 fail (7b54288c) — the 283/7 and 279/0 figures above are outdated. Remaining scope = the ~200-entry skip-list burn-down (rainy-day per user).

@@ -5,7 +5,7 @@ prio: 30  # auto
 # sqlite arc — interim static capacity bumps
 
 - **Type:** chore (capacity tuning) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Owner:** unassigned
 - **Opened:** 2026-06-27
 - **Relation:** interim/pragmatic counterpart to
@@ -52,3 +52,6 @@ longer byte-identical to the prior pinned binary. Each bump (or a batch) needs:
 
 - 2026-06-27 - Opened. `MAX_TOKENS` → 2M done (gating). User: static-now,
   dynamic-later. Track the remaining bumps here as the sqlite arc advances.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Superseded: close condition fired — Tokens/AST/IR/Syms/UField now dynamic (feature-dynamic-compiler-tables, e.g. 0f4b5882/0af554f2/e71df9df); sqlite green in corpus. Remaining small tables tracked there.
+- 2026-07-19 — resolved, commit 0af554f2.

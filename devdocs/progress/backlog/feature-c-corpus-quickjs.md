@@ -98,3 +98,5 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   `UINT64_C` / stdint.h constant macros (INT64_C/UINT32_C/...) missing from
   crtl's stdint.h — a few `#define UINT64_C(c) c##ULL` lines, needs cpreproc
   token-paste in that position (Track C/B, crtl header).
+
+- 2026-07-19 (backlog sweep note) Stale NEXT-WALL note: UINT64_C/stdint macros landed (25a0499c) and all prereq walls are clear (cquickjs_prereq smoke green). Actual qjs bring-up (make test-quickjs, runner) still not started.

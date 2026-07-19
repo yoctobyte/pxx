@@ -39,3 +39,6 @@ takes it from the repro line.*
 - Verdict: very likely harness race/timeout, not a regression. Leaving OPEN
   for the watcher's idle bisect to confirm; close on the next borg GREEN of
   this job.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** Confirmed harness race (not a compiler regression); watcher marked FIXED at d9cc9184, test passes natively at HEAD. Close condition (next borg GREEN of the job) met.
+- 2026-07-19 — resolved, commit d9cc9184.

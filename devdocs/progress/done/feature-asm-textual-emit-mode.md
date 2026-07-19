@@ -5,7 +5,7 @@ prio: 53  # auto
 # Codegen: emit human-readable assembly text instead of raw bytes
 
 - **Type:** feature (codegen / diagnostics) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-30 (scope corrected same-day — see Log)
 - **Relation:** part of [[feature-assembler-first-class-citizen]]; benefits
   from [[feature-asm-structured-ir-library]] but is more independent than
@@ -167,3 +167,6 @@ and the assembler frontend are faithful to the real encoding.
     explicitly not met, see above; xtensa/arm32/aarch64/riscv32
     echo-from-`EmitAsmXxx` coverage — still open, unstarted, this session's
     goal was specifically the x64 gap.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** -S landed for x86-64 via asmdisasm_x64.inc disassembler (22dbf6ab, pin v112) — different mechanism than the echo plan, same capability. Residue: non-x64 targets + round-trip oracle (pair with asm-source-frontend residue if picked up).
+- 2026-07-19 — resolved, commit 5cb201d0.

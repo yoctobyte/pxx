@@ -134,3 +134,5 @@ multi-wall haul (ole2/Variant for uPSRuntime, InvokeCall.inc assembly). The
 generally-useful spinoffs all landed: array-field record consts, builtin
 TGuid, variable typecasts as var args, cast-deref Dec targets,
 TObject(x).Free, managed→ShortString param conversion, FreeAndNil.
+
+- 2026-07-19 (backlog sweep note) Note: external/pascalscript clone is gone from library_candidates (only synapse remains) — a resume must re-fetch upstream first. uPSUtils-compiles milestone stands (pin v209 c718f279).

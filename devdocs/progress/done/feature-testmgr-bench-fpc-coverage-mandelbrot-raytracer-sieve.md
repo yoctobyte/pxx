@@ -77,3 +77,8 @@ Low priority — the dashboard is honest today (blank = no data). But a reader
 sees three blanks and can't tell "FPC can't build this" from "we forgot to
 measure it". sieve in particular is a *free* extra FPC comparison being left on
 the table over a one-flag mode mismatch.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** sieve fpc_ok with -Mobjfpc (c9d1c31d); portable mandelbrot-p/raytracer-p FPC-comparable variants added (421bdfe7, 750a2723) — exceeds the optional ask.
+
+## Log
+- 2026-07-19 — resolved, commit 750a2723.

@@ -70,3 +70,5 @@ can compile alone. Use **p2c** or **tcc** for the same spirit.
 - [[feature-c-cross-lua-sqlite]] — the proven pattern; open cross bugs it left
   (riscv32 softfloat %f, arm32/i386 lua/sqlite garbage-output codegen bugs,
   typedef-array-param→pointer decay) are the current C-frontend loose ends.
+
+- 2026-07-19 (backlog sweep note) Progress: tcc self-compile byte-identical DONE (116230b1/6d94a43), cJSON green (ccda989f), stb fixed (e33dac36), quickjs parked at its own ticket; busybox declined for ESP (147f5f5e). Remaining candidates: DOOM, micropython, p2c.

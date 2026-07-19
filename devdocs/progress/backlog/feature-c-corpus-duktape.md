@@ -95,3 +95,5 @@ Regressions for the cfront fixes: `test/cpreproc_macro_arg_string_paren_b227.c`,
 (all exit 42, wired into test-core).
 
 [[feature-c-corpus-expansion]] · [[feature-c-corpus-chess]] · [[bug-c-preproc-missing-stdc-version-predefine]] · [[bug-c-preproc-macro-arg-string-literal-paren]] · [[bug-c-duktape-double-formatting]] · [[feature-c-compiler-dynarrays]] · [[feature-c-cmdline-define-flag]]
+
+- 2026-07-19 (backlog sweep note) Substance done (duktape compiles + runs JS, 3db99287; blocking double-formatting bug resolved 6b16cb85/024de68a). Remaining to close: duktape fetcher in tools/install_lib_candidates.sh + a make test-duktape gate — cheap wiring, presumably green now.

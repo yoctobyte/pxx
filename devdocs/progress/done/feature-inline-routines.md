@@ -5,7 +5,7 @@ prio: 60  # auto
 # Inline routine expansion (`inline;`)
 
 - **Type:** feature (codegen — optimization) — **Track O** (Optimization lane; file-ownership Track A)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-18 (design discussion — small-helper performance)
 
@@ -251,3 +251,8 @@ bit-twiddles), where each site drops a full call sequence.
 - Methods / cross-unit.
 
 Status: **phase 0 measured + v1 SHIPPED.** Slices 2-4 backlog.
+
+- 2026-07-19 (backlog sweep) **RESOLVED.** v1 + slices 2a/2b/3 shipped at -O2 (dcc45b0a, 27457285, 5d43f2eb/3bce7621; pin v173 c11a2cf9). Remaining slices carried by feature-inline-nonleaf-and-branch-locals (which has itself landed 2c + non-leaf slice 1 + depth-1 re-inline).
+
+## Log
+- 2026-07-19 — resolved, commit c11a2cf9.

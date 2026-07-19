@@ -9,7 +9,6 @@ prio: 40  # auto
 - **Owner:** unassigned
 - **Found / Opened:** 2026-06-28, while checking sqlite amalgamation progress
   after granular system-library selection.
-- **Blocked-by:** [[task-sqlite-libc-free-runtime-bringup]]
 
 ## Goal
 
@@ -36,3 +35,5 @@ piece is the self-compiled amalgamation runtime: it compiles, but
 - Both binaries execute the same in-memory SQL workload.
 - The expected output is shared and compared exactly.
 - The test is wired into the appropriate C/SQLite gate once stable enough.
+
+- 2026-07-19 (backlog sweep note) Unblocked: [[task-sqlite-libc-free-runtime-bringup]] resolved (6cb47db7/d65d95d8 — self-compiled sqlite :memory: + file VFS green). The parity test itself (same SQL through external libsqlite3.so vs self-compiled amalgamation, outputs byte-compared) still does not exist.
