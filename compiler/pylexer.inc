@@ -122,16 +122,37 @@ begin
   wroteAny := True;
 end;
 
+{ Turn the innermost still-open pystr_of( into pyrepr_of( — the hole's call
+  was appended by this same pass, so the LAST occurrence is that hole's. Done
+  by rewriting rather than by deciding up front because the conversion suffix
+  (!r) appears only at the END of the hole, after the expression text has
+  already been emitted. }
+function PyFStrSwapLastCall(const outS: AnsiString): AnsiString;
+var i, k: Integer;
+begin
+  Result := outS;
+  for i := Length(outS) - 8 downto 1 do
+    if Copy(outS, i, 9) = 'pystr_of(' then
+    begin
+      Result := Copy(outS, 1, i - 1) + 'pyrepr_of(';
+      for k := i + 9 to Length(outS) do AppendChar(Result, outS[k]);
+      Exit;
+    end;
+end;
+
 procedure PyExpandFStrings;
 var
   outS, lit: AnsiString;
-  i, n, depth: Integer;
+  i, n, depth, ln: Integer;
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
 begin
   n := Length(Source);
   outS := '';
   i := 1;
+  { This pass runs BEFORE the lexer, so nothing else is counting lines yet and
+    an Error here would report line 1 for a file of any size. }
+  ln := 1;
   while i <= n do
   begin
     c := Source[i];
@@ -161,6 +182,7 @@ begin
             Inc(i, 3);
             break;
           end;
+          if Source[i] = #10 then Inc(ln);
           outS := outS + Source[i];
           Inc(i);
         end;
@@ -192,7 +214,7 @@ begin
     begin
       q := Source[i + 1];
       if (i + 3 <= n) and (Source[i + 2] = q) and (Source[i + 3] = q) then
-        Error('Nil Python: a triple-quoted f-string is not supported yet');
+        ErrorAt(ln, 'Nil Python: a triple-quoted f-string is not supported yet');
       i := i + 2;
       outS := outS + '(';
       lit := '';
@@ -205,7 +227,7 @@ begin
         if not inHole then
         begin
           if c = q then begin Inc(i); break; end;
-          if c = #10 then Error('Nil Python: an unterminated f-string');
+          if c = #10 then ErrorAt(ln, 'Nil Python: an unterminated f-string');
           if c = '\' then
           begin
             lit := lit + c;
@@ -255,21 +277,37 @@ begin
           end;
           Dec(depth);
         end
+        else if (depth = 0) and (c = '!') and (i + 1 <= n) and
+                ((Source[i + 1] = 'r') or (Source[i + 1] = 's')) and
+                (i + 2 <= n) and (Source[i + 2] = '}') then
+        begin
+          { !r / !s. !s is str(), which is what the hole already emits; !r has
+            to quote a STRING and leave everything else alone, so it swaps the
+            call rather than wrapping it — pyrepr_of carries the same per-type
+            overload set as pystr_of. }
+          if Source[i + 1] = 'r' then
+            outS := PyFStrSwapLastCall(outS);
+          outS := outS + ')';
+          inHole := False;
+          Inc(i, 3);
+          continue;
+        end
         else if (depth = 0) and (c = '!') then
-          Error('Nil Python: an f-string conversion (!r / !s) is not supported yet')
+          ErrorAt(ln, 'Nil Python: only the !r and !s f-string conversions are supported')
         else if (depth = 0) and (c = ':') then
-          Error('Nil Python: an f-string format spec is not supported yet');
+          ErrorAt(ln, 'Nil Python: an f-string format spec is not supported yet');
         if c = #10 then
-          Error('Nil Python: a newline inside an f-string hole is not supported');
+          ErrorAt(ln, 'Nil Python: a newline inside an f-string hole is not supported');
         outS := outS + c;
         Inc(i);
       end;
-      if inHole then Error('Nil Python: an unterminated f-string hole');
+      if inHole then ErrorAt(ln, 'Nil Python: an unterminated f-string hole');
       PyFStrFlush(outS, lit, wroteAny);
       if not wroteAny then outS := outS + '""';
       outS := outS + ')';
       continue;
     end;
+    if c = #10 then Inc(ln);
     outS := outS + c;
     Inc(i);
   end;

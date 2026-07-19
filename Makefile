@@ -209,7 +209,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
 	./$(COMPILER) test/test_nilpy_fstrings.npy /tmp/test_nilpy_fstrings26
-	test "$$(/tmp/test_nilpy_fstrings26)" = "$$(printf 'v=42!\nhi has 42 apples\nno holes here\n\n{literal braces}\n42\na42bhic\nTrue 42 1.5 hi\nFalse\n43 and 84\ncall 6 done\nlen 3\nzed/3\n9')"
+	# .expected file, not an inline printf: the !r cases contain single quotes,
+	# which a printf '...' literal cannot carry without unreadable escaping.
+	# The file is CPython's own output — regenerate with
+	#   python3 test/test_nilpy_fstrings.npy > test/test_nilpy_fstrings.expected
+	/tmp/test_nilpy_fstrings26 | diff -u test/test_nilpy_fstrings.expected -
 	./$(COMPILER) test/test_nilpy_defaults.npy /tmp/test_nilpy_defaults26
 	test "$$(/tmp/test_nilpy_defaults26)" = "$$(printf '3\n6\nhi bob\nhi bob!\nend...\nend!\n7\n103\n106\n3\n-3\n206')"
 	./$(COMPILER) test/test_nilpy_dict.npy /tmp/test_nilpy_dict26

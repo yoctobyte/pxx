@@ -107,6 +107,15 @@ function pystr_of(i: Int64): AnsiString; overload;
 function pystr_of(d: Double): AnsiString; overload;
 function pystr_of(c: Char): AnsiString; overload;
 function pystr_of(const v: Variant): AnsiString; overload;
+{ Python's repr() for an f-string !r hole. Differs from str() for exactly one
+  type — a string gains quotes — which is why it needs the same per-type
+  overload set rather than a single wrapper. }
+function pyrepr_of(const s: AnsiString): AnsiString;
+function pyrepr_of(b: Boolean): AnsiString; overload;
+function pyrepr_of(i: Int64): AnsiString; overload;
+function pyrepr_of(d: Double): AnsiString; overload;
+function pyrepr_of(c: Char): AnsiString; overload;
+function pyrepr_of(const v: Variant): AnsiString; overload;
 function len(l: TPyList): Integer;
 function len(d: TPyDict): Integer; overload;
 function pydictcontains(d: TPyDict; const k: Variant): Boolean;
@@ -862,6 +871,62 @@ end;
 { A container element arrives as a Variant. Booleans still have to come out
   Python-spelled, which VariantToStr does not do, so the tag is checked first
   (VT_BOOL = 4). }
+const
+  QuoteCh = #39;   { a single quote, by code point — Python's repr uses it }
+
+function PyReprQuote(const s: AnsiString): AnsiString;
+var i: Integer; ch: Char;
+begin
+  Result := QuoteCh;
+  for i := 1 to Length(s) do
+  begin
+    ch := s[i];
+    if ch = QuoteCh then Result := Result + '\' + QuoteCh
+    else if ch = '\' then Result := Result + '\\'
+    else if ch = #10 then Result := Result + '\n'
+    else if ch = #9 then Result := Result + '\t'
+    else if ch = #13 then Result := Result + '\r'
+    else Result := Result + ch;
+  end;
+  Result := Result + QuoteCh;
+end;
+
+function pyrepr_of(const s: AnsiString): AnsiString;
+begin
+  Result := PyReprQuote(s);
+end;
+
+function pyrepr_of(b: Boolean): AnsiString; overload;
+begin
+  Result := pystr_of(b);
+end;
+
+function pyrepr_of(i: Int64): AnsiString; overload;
+begin
+  Result := pystr_of(i);
+end;
+
+function pyrepr_of(d: Double): AnsiString; overload;
+begin
+  Result := pystr_of(d);
+end;
+
+function pyrepr_of(c: Char): AnsiString; overload;
+begin
+  Result := PyReprQuote(c);
+end;
+
+function pyrepr_of(const v: Variant): AnsiString; overload;
+begin
+  { only a STRING payload gains quotes; every other tag reprs as it strs }
+  if pyvartag(v) = 6 then
+  begin
+    Result := PyReprQuote(VariantToStr(v));
+    Exit;
+  end;
+  Result := pystr_of(v);
+end;
+
 function pystr_of(const v: Variant): AnsiString; overload;
 begin
   if pyvartag(v) = 4 then
