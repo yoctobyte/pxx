@@ -39,10 +39,17 @@ source before lexing, holes lowered through pylib's `pystr_of` overloads.
 `test/test_nilpy_fstrings.npy` is in `make test-nilpy`, diffed against
 CPython.
 
-Deliberately NOT in v1, and still open if a corpus needs them: the `!r`
-conversion (18 sites in uforth) and format specs (3 sites). Both error
-cleanly today. `!r` needs a repr that quotes strings but not numbers, so it
-wants the same per-type overload treatment `pystr_of` already has.
+Completed the same session: `!r` / `!s` conversions (2fd05bda) and format
+specs (35e15c0f). The whole uforth f-string census is covered — 64 plain
+holes, 18 `!r`, 3 specs.
+
+Spec grammar is `[<|>] [0] [width] [d|x|X|o|b|s]`, interpreted in pylib from
+the spec TEXT rather than compiled in the lexer, so one place decides what
+"05x" means and adding a spec later needs no frontend change. Anything
+outside the grammar halts naming itself.
+
+Still open, if a corpus ever needs them: nested same-quote f-strings (errors
+cleanly), triple-quoted f-strings, and `=` debugging specs.
 
 ## Gate
 
