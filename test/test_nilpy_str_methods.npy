@@ -41,3 +41,51 @@ print("digits 0123 and !@# stay".upper())
 print("emoji stays >>> ok".upper())
 
 print(s)
+
+# --- precedence: a method binds TIGHTER than +. Hooking the non-lvalue route
+# at the additive layer instead of at factor level made this print AB.
+print("a" + "b".upper())
+print("x" + "  y  ".strip() + "z")
+
+# --- tyChar bases. Python has no char type, but the shared lexer types a
+# one-character literal (and s[0]) as tyChar, so these must still be methods.
+print("b".upper())
+print(" ".isspace())
+# s[0].upper() belongs here too, but NilPy string subscripts are still 1-based
+# (bug-nilpy-str-index-off-by-one) — adding it now would freeze the wrong answer.
+
+# --- strip family
+print("[" + "  padded  ".strip() + "]")
+print("[" + "  padded  ".lstrip() + "]")
+print("[" + "  padded  ".rstrip() + "]")
+print("[" + "".strip() + "]")
+print("[" + "   ".strip() + "]")
+print("[" + "\t tabbed \n".strip() + "]")
+
+# --- startswith / endswith, including the empty-affix and too-long cases
+print("FORTH".startswith("FO"))
+print("FORTH".startswith("XX"))
+print("FORTH".endswith("TH"))
+print("FORTH".endswith("XX"))
+print("FORTH".startswith(""))
+print("FORTH".endswith(""))
+print("FORTH".startswith("FORTHER"))
+
+# --- find: 0-BASED, -1 when absent, 0 for an empty needle
+print("FORTH".find("R"))
+print("FORTH".find("FORTH"))
+print("FORTH".find("zz"))
+print("FORTH".find(""))
+print("abcabc".find("bc"))
+print("abc".find("c"))
+
+# --- isspace: "" is False in CPython (no vacuous truth here)
+print("   ".isspace())
+print("".isspace())
+print(" a ".isspace())
+print("\t\n".isspace())
+
+# --- chains mixing the new methods
+print("  Mixed  ".strip().upper())
+print("  Mixed  ".strip().lower())
+print("  a  ".strip().startswith("a"))

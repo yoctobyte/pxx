@@ -65,3 +65,46 @@ Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical.
 `.strip()`/`.rstrip()`/`.lstrip()`, then `.startswith()`/`.endswith()`,
 `.find()`, `.isspace()`, then the list-interop trio (`.join()`, `.split()`,
 `.splitlines()`). Blocker found alongside: [[feature-nilpy-len-of-str]].
+
+## Unit 2 — strip/lstrip/rstrip, startswith/endswith, find, isspace — DONE
+
+The table moved into `PyStrMethodInfo`, now the single source of truth read by
+BOTH the desugar and the inference scanner, so those two can no longer drift
+(they were separate lists after unit 1 — a latent bug).
+
+CPython semantics deliberately encoded, each of which Pascal would get wrong:
+
+- `find` is **0-based** and returns **-1** when absent. Pascal's `Pos` is
+  1-based returning 0, so passing it through would be off by one AND make
+  "not found" read as "found at index 0".
+- `"".isspace()` is **False** — no vacuous truth.
+- `"".startswith("")` / `x.endswith("")` are True.
+
+### Three bugs this unit surfaced
+
+1. **Precedence (mine, silent).** The non-lvalue route was first hooked in
+   `PyParseBitOperand`, i.e. AFTER the additive layer, so
+   `"a" + "b".upper()` parsed as `("a" + "b").upper()` and printed `AB`
+   where CPython prints `aB`. A method binds tighter than `+`: the hook
+   belongs at FACTOR level. Caught only by diffing against the oracle.
+2. **67 exit points (mine).** Moving the hook to the tail of `ParseFactor`
+   silently missed most bases, because that body has 67 `Exit`s —
+   `str(t).upper()`, the actual uforth shape, was one of them. Fixed by
+   renaming the body to `ParseFactorCore` and wrapping it, so the suffix
+   applies however the core returned.
+3. **tyChar bases.** Python has no char type, but the shared lexer types a
+   one-char literal as `tyChar`. Handled by an explicit `pystr_ofchar` call
+   rather than the implicit char->string conversion, which keys on node SHAPE
+   not type (the literal shape converted, the subscript shape did not, giving
+   a silent NUL) — `project_string_conversion_shape_blindspot_pattern`.
+
+### Blocker found, filed urgent
+
+[[bug-nilpy-str-index-off-by-one]] — NilPy string subscripts are 1-BASED, so
+`s[0]` reads a NUL and every index is one character early. Pre-existing, silent,
+and it invalidates any corpus result touching the 123 uforth subscript sites.
+`s[0].upper()` is deliberately NOT in the regression test yet: adding it now
+would freeze the wrong answer.
+
+Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical,
+whole test file diffed against CPython.

@@ -68,8 +68,24 @@ function pyvarobj(const v: Variant): Pointer;
   untouched rather than being mangled. Tracked in feature-nilpy-str-methods. }
 function pystr_upper(const s: AnsiString): AnsiString;
 function pystr_lower(const s: AnsiString): AnsiString;
+function pystr_strip(const s: AnsiString): AnsiString;
+function pystr_lstrip(const s: AnsiString): AnsiString;
+function pystr_rstrip(const s: AnsiString): AnsiString;
+function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
+function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
+function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
+function pystr_isspace(const s: AnsiString): Boolean;
+function pystr_ofchar(c: Char): AnsiString;
 
 implementation
+
+{ Python's whitespace set for the argument-less strip()/isspace():
+  space, tab, newline, carriage return, vertical tab, form feed. }
+function PyIsSpaceCh(c: Char): Boolean;
+begin
+  PyIsSpaceCh := (c = ' ') or (c = Chr(9)) or (c = Chr(10)) or
+                 (c = Chr(11)) or (c = Chr(12)) or (c = Chr(13));
+end;
 
 function pystr_upper(const s: AnsiString): AnsiString;
 var i: Integer;
@@ -97,6 +113,92 @@ begin
       c := Chr(Ord(c) + 32);
     Result := Result + c;
   end;
+end;
+
+{ Char -> 1-length str. Python has no character type, so a tyChar base for a
+  str method (a one-char literal, or s[i]) must become a real string. Done as an
+  EXPLICIT call rather than leaning on the implicit char->string conversion,
+  which keys on node SHAPE not type: the literal shape converted but the
+  subscript shape did not, so s[0].upper() silently produced a NUL byte
+  (project_string_conversion_shape_blindspot_pattern). }
+function pystr_ofchar(c: Char): AnsiString;
+begin
+  Result := c;
+end;
+
+function pystr_lstrip(const s: AnsiString): AnsiString;
+var i, n: Integer;
+begin
+  n := Length(s);
+  i := 1;
+  while (i <= n) and PyIsSpaceCh(s[i]) do Inc(i);
+  Result := Copy(s, i, n - i + 1);
+end;
+
+function pystr_rstrip(const s: AnsiString): AnsiString;
+var n: Integer;
+begin
+  n := Length(s);
+  while (n >= 1) and PyIsSpaceCh(s[n]) do Dec(n);
+  Result := Copy(s, 1, n);
+end;
+
+function pystr_strip(const s: AnsiString): AnsiString;
+begin
+  Result := pystr_lstrip(pystr_rstrip(s));
+end;
+
+function pystr_startswith(const s: AnsiString; const pre: AnsiString): Boolean;
+var i, n: Integer;
+begin
+  n := Length(pre);
+  if n > Length(s) then begin Result := False; Exit; end;
+  for i := 1 to n do
+    if s[i] <> pre[i] then begin Result := False; Exit; end;
+  Result := True;   { "".startswith("") is True in CPython, and falls out here }
+end;
+
+function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
+var i, n, base: Integer;
+begin
+  n := Length(suf);
+  base := Length(s) - n;
+  if base < 0 then begin Result := False; Exit; end;
+  for i := 1 to n do
+    if s[base + i] <> suf[i] then begin Result := False; Exit; end;
+  Result := True;
+end;
+
+{ CPython's str.find: 0-BASED index of the first occurrence, -1 when absent.
+  Deliberately not Pascal's Pos, which is 1-based and returns 0 when absent —
+  returning that unadjusted would be silently off by one everywhere and would
+  make "not found" read as "found at index 0". An empty needle finds at 0. }
+function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
+var i, j, n, m: Integer;
+    hit: Boolean;
+begin
+  n := Length(s);
+  m := Length(sub);
+  if m = 0 then begin Result := 0; Exit; end;
+  for i := 1 to n - m + 1 do
+  begin
+    hit := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin hit := False; Break; end;
+    if hit then begin Result := i - 1; Exit; end;
+  end;
+  Result := -1;
+end;
+
+{ CPython: "".isspace() is FALSE — an empty string has no characters to be
+  whitespace, so the all-quantifier does not vacuously hold here. }
+function pystr_isspace(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(s) = 0 then begin Result := False; Exit; end;
+  for i := 1 to Length(s) do
+    if not PyIsSpaceCh(s[i]) then begin Result := False; Exit; end;
+  Result := True;
 end;
 
 function pyvartag(const v: Variant): Int64;

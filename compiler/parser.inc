@@ -715,6 +715,16 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
+
+{ Types a NilPy str method may be called ON. tyChar is included because Python
+  has NO character type: the shared lexer types a one-character literal like
+  "b" (and `s[0]`) as tyChar, but to Python that is a str of length 1, so
+  `"b".upper()` and `s[0].isspace()` must work. The pylib functions take
+  AnsiString and the ordinary char->string conversion covers the argument. }
+function PyIsStrBaseTk(tk: TTypeKind): Boolean;
+begin
+  PyIsStrBaseTk := (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar);
+end;
 procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc) }
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 
@@ -4431,7 +4441,7 @@ begin
         from the call's return type so the suffix loop keeps chaining
         (`s.strip().upper()`). }
       if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
-         ((tk = tyString) or (tk = tyAnsiString)) then
+         PyIsStrBaseTk(tk) then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
         node := PyParseStrMethod(node, fieldName);
@@ -6962,7 +6972,13 @@ begin
   end;
 end;
 
-procedure ParseFactor;
+procedure ParseFactor; forward;
+
+{ The real factor parser. ParseFactor below wraps it to apply NilPy's str-method
+  suffix uniformly — this body has 67 Exit points, so a suffix loop written at
+  its tail would silently miss most of them (it missed str(t).upper(), the exact
+  uforth shape). }
+procedure ParseFactorCore;
 var name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     mcCtorNm: AnsiString;
@@ -10422,6 +10438,32 @@ begin
     ASTTk[node] := ASTTk[CurASTNode];
     CurASTNode := node; LastExprTk := IntToTypeKind(ASTTk[node]);
     Next;
+  end;
+end;
+
+{ NilPy str-method suffix, applied to EVERY factor however ParseFactorCore
+  returned. The postfix `.member` path inside the core catches ident and field
+  bases (they run through ParseLValueAST); a string LITERAL and a CALL RESULT
+  are not lvalues and arrive here with CurTok still on the '.'. Both routes
+  share pyparser's PyParseStrMethod.
+
+  Factor level is the ONLY correct level: a method binds tighter than `+`.
+  Applying this after the additive layer made `"a" + "b".upper()` parse as
+  `("a" + "b").upper()` and silently print AB where CPython prints aB. }
+procedure ParseFactor;
+var smNameTok: Integer;
+begin
+  ParseFactorCore;
+  while PyExprMode and (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and
+        (Tokens[TokPos + 1].Kind = tkLParen) and
+        PyIsStrBaseTk(IntToTypeKind(ASTTk[CurASTNode])) do
+  begin
+    Next;                       { consume '.'; CurTok = the method name }
+    smNameTok := TokPos - 1;
+    Next;                       { consume the name; CurTok = '(' }
+    CurASTNode := PyParseStrMethod(CurASTNode, GetTokenStr(smNameTok));
+    LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
   end;
 end;
 

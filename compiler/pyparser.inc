@@ -420,7 +420,7 @@ end;
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward;
 
 procedure PyParseBitOperand;
-var node: Integer; smName: AnsiString;
+var node: Integer;
 begin
   if PyIsIdent('isinstance') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
@@ -439,26 +439,7 @@ begin
     CurASTNode := node;
   end
   else
-  begin
     ParseExpr;   { comparison + arithmetic atom }
-    { str methods on a NON-LVALUE base. The shared parser's postfix `.member`
-      path (parser.inc) catches ident/field bases, because those go through
-      ParseLValueAST — but a string LITERAL and a CALL RESULT are not lvalues,
-      so `"x".upper()` and uforth's `str(t).upper()` come back here with CurTok
-      still on the '.'. Same desugar either way, so both routes share
-      PyParseStrMethod. Loops for chains like `str(t).upper().lower()`. }
-    while (CurTok.Kind = tkDot) and (TokPos + 1 < TokCount) and
-          (Tokens[TokPos].Kind = tkIdent) and
-          (Tokens[TokPos + 1].Kind = tkLParen) and
-          ((IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
-           (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString)) do
-    begin
-      Next;                      { consume '.'; CurTok = the method name }
-      smName := GetTokenStr(TokPos - 1);
-      Next;                      { consume the name; CurTok = '(' }
-      CurASTNode := PyParseStrMethod(CurASTNode, smName);
-    end;
-  end;
 end;
 
 procedure PyParseShift;
@@ -691,8 +672,44 @@ begin
   end;
 end;
 
+{ The str-method table — the ONE place a NilPy string method is described.
+
+  Both the desugar (PyParseStrMethod) and the type-inference scanner
+  (PyInferExprType) read it, so they cannot drift: a method added here is
+  immediately known to both, and inference can never disagree with the call it
+  will actually build. Returns False for a name that is not a str method, which
+  is what lets inference leave non-method `.foo` alone.
+
+  Adding a method = one row here + the pylib function. }
+function PyStrMethodInfo(const mname: AnsiString; var pname: AnsiString;
+                         var retTk: TTypeKind; var wantArgs: Integer): Boolean;
+begin
+  retTk := tyAnsiString;    { the str->str default; rows below override }
+  wantArgs := 0;
+  Result := True;
+  if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
+  else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
+  else if CaseEqual(mname, 'strip') then pname := 'pystr_strip'
+  else if CaseEqual(mname, 'lstrip') then pname := 'pystr_lstrip'
+  else if CaseEqual(mname, 'rstrip') then pname := 'pystr_rstrip'
+  else if CaseEqual(mname, 'startswith') then
+    begin pname := 'pystr_startswith'; retTk := tyBoolean; wantArgs := 1; end
+  else if CaseEqual(mname, 'endswith') then
+    begin pname := 'pystr_endswith'; retTk := tyBoolean; wantArgs := 1; end
+  else if CaseEqual(mname, 'find') then
+    begin pname := 'pystr_find'; retTk := tyInteger; wantArgs := 1; end
+  else if CaseEqual(mname, 'isspace') then
+    begin pname := 'pystr_isspace'; retTk := tyBoolean; end
+  else
+  begin
+    pname := '';
+    Result := False;
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name, lo: AnsiString;
+var i, ci, si, procIdx, depth, smArgs: Integer; tk: TTypeKind;
+    name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
@@ -799,10 +816,8 @@ begin
         if ((tk = tyString) or (tk = tyAnsiString)) and (i + 3 < endIdx) and
            (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
            (Tokens[i + 3].Kind = tkLParen) and
-           (CaseEqual(GetTokenStr(i + 2), 'upper') or
-            CaseEqual(GetTokenStr(i + 2), 'lower')) then
+           PyStrMethodInfo(GetTokenStr(i + 2), smPName, tk, smArgs) then
         begin
-          tk := tyAnsiString;
           i := i + 3; depth := 0;
           while i < endIdx do
           begin
@@ -1214,19 +1229,27 @@ end;
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
-    procIdx, callNode, argNode, lastArg, i: Integer;
+    procIdx, callNode, argNode, lastArg, i, wantArgs: Integer;
 begin
-  retTk := tyAnsiString;
-  if CaseEqual(mname, 'upper') then pname := 'pystr_upper'
-  else if CaseEqual(mname, 'lower') then pname := 'pystr_lower'
-  else
-  begin
-    pname := '';
-    Error('Nil Python: unsupported str method .' + mname + '() (have: upper, lower)');
-  end;
+  if not PyStrMethodInfo(mname, pname, retTk, wantArgs) then
+    Error('Nil Python: unsupported str method .' + mname + '() (have: upper, '
+      + 'lower, strip, lstrip, rstrip, startswith, endswith, find, isspace)');
 
   procIdx := FindProc(pname);
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+
+  { A tyChar receiver becomes a real 1-length string first — see pystr_ofchar. }
+  if IntToTypeKind(ASTTk[baseNode]) = tyChar then
+  begin
+    i := FindProc('pystr_ofchar');
+    if i < 0 then Error('Nil Python: pylib (pystr_ofchar) not loaded');
+    callNode := AllocNode(AN_ARG);
+    ASTLeft[callNode] := baseNode;
+    baseNode := AllocNode(AN_CALL);
+    ASTIVal[baseNode] := i;
+    ASTTk[baseNode] := Ord(tyAnsiString);
+    ASTLeft[baseNode] := callNode;
+  end;
 
   { the string itself is argument 0 — the receiver }
   argNode := AllocNode(AN_ARG);
@@ -1247,8 +1270,13 @@ begin
     else Break;
   end;
   Expect(tkRParen, ')');
-  if i <> 0 then
-    Error('Nil Python: str method .' + mname + '() takes no arguments');
+  if i <> wantArgs then
+  begin
+    if wantArgs = 0 then
+      Error('Nil Python: str method .' + mname + '() takes no arguments')
+    else
+      Error('Nil Python: str method .' + mname + '() takes exactly one argument');
+  end;
 
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := procIdx;
