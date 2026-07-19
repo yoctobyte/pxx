@@ -33,6 +33,8 @@ const
   PYDC_BOOL  = 4;
   PYDC_NIL   = 5;  { None default: 0/nil for pointer-like and Optional[int] fields }
   PYDC_FACTORY_LIST = 6;  { field(default_factory=list): fresh empty TPyList per construction }
+  PYDC_FACTORY_EXPR = 7;  { field(default_factory=lambda: <expr>): IVal/SOff carry the
+                            body's token span, re-parsed at every construction site }
 
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
@@ -117,6 +119,7 @@ end;
 var
   PyLastTypeCi: Integer;  { class index when PyParseType returned tyClass }
   PyAnnLastCi: Integer;   { class index when PyAnnTypeAt returned tyClass }
+  PyCountAlias: AnsiString;  { local name bound to itertools.count ('' = none) }
 
 { Token-index annotation parser for the richer grammar dataclass fields use:
     NAME | NAME '[' ann {',' ann} ']' | "ForwardRef" | None
@@ -817,6 +820,40 @@ begin
   Result := s;
 end;
 
+{ `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
+function PyIsCountCall: Boolean;
+begin
+  Result := (PyCountAlias <> '') and (CurTok.Kind = tkIdent) and
+            CaseEqual(CurTok.SVal, PyCountAlias) and
+            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen);
+end;
+
+function PyParseCountCreate: Integer;
+var ci, recId, node, argNode, sizeNode, valArg: Integer;
+begin
+  ci := FindUClass('TPyCounter');
+  if ci < 0 then Error('Nil Python: pylib (TPyCounter) not loaded');
+  recId := REC_UCLASS_BASE + ci;
+  Next;                       { the alias ident }
+  Expect(tkLParen, '(');
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  PyParseBoolExpr;
+  valArg := AllocNode(AN_ARG);
+  ASTLeft[valArg] := CurASTNode;
+  ASTRight[argNode] := valArg;
+  Expect(tkRParen, ')');
+  Result := node;
+end;
+
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     nArgs, i, k, dcBase, valNode, tkNode: Integer; tkF: TTypeKind;
@@ -891,6 +928,18 @@ begin
             valNode := AllocNode(AN_INT_LIT);
             ASTIVal[valNode] := 0;
             ASTTk[valNode] := Ord(tkF);
+          end;
+          PYDC_FACTORY_EXPR:
+          begin
+            { re-parse the captured lambda-body span at this construction
+              site: evaluated per construction, like CPython's factory }
+            k := TokPos - 1;              { restore point (CurTok's index) }
+            TokPos := PyDcIVal[i];
+            Next;
+            PyParseBoolExpr;
+            valNode := CurASTNode;
+            TokPos := k;
+            Next;
           end;
           PYDC_FACTORY_LIST:
           begin
@@ -1257,9 +1306,19 @@ begin
     else
     begin
       Expect(tkAssign, '=');
-      PyParseBoolExpr;
-      rhsNode := CurASTNode;
+      if PyIsCountCall then
+        rhsNode := PyParseCountCreate
+      else
+      begin
+        PyParseBoolExpr;
+        rhsNode := CurASTNode;
+      end;
     end;
+    { `Word._xt_counter = _count(1)`: a class-static (AN_IDENT of the
+      backing global) learns its class from a class-typed rhs. }
+    if (ASTKind[lhsNode] = AN_IDENT) and
+       (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
+      Syms[ASTIVal[lhsNode]].RecName := ASTRight[rhsNode];
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := rhsNode;
@@ -1320,6 +1379,8 @@ begin
     if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       rhsNode := PyClassCreate
+    else if PyIsCountCall then
+      rhsNode := PyParseCountCreate
     else
     begin
       PyParseBoolExpr;
@@ -1491,11 +1552,20 @@ begin
     else if isDC and (depth = 0) and (Tokens[i].Kind = tkIdent) and
             (i + 2 < bodyEnd) and (Tokens[i + 1].Kind = tkColon) then
     begin
-      { ClassVar annotation: a class-level static, not an instance field.
-        Skipped here; a later access through the class name is its own wall. }
+      { ClassVar annotation: a class-level static — register it as a class
+        variable (the same registry Pascal `class var` uses, so
+        ClassName.name resolves through FindClassVar). Typed tyClass; the
+        assignment that populates it fixes RecName (see PyParseStatement). }
       if (Tokens[i + 2].Kind = tkIdent) and
          CaseEqual(GetTokenStr(i + 2), 'ClassVar') then
       begin
+        if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
+        k := AllocVar('', tyClass);
+        ClassVarCi[ClassVarCount]   := ci;
+        ClassVarNOff[ClassVarCount] := Tokens[i].SOffset;
+        ClassVarNLen[ClassVarCount] := Tokens[i].SLen;
+        ClassVarSym[ClassVarCount]  := k;
+        Inc(ClassVarCount);
         while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
         Inc(i);
         continue;
@@ -1538,8 +1608,35 @@ begin
               defKind := PYDC_FACTORY_LIST;
               j := j + 5;   { onto ')'; the common Inc(j) below steps past it }
             end
+            else if CaseEqual(GetTokenStr(j), 'field') and (j + 6 < bodyEnd) and
+               (Tokens[j + 1].Kind = tkLParen) and
+               (Tokens[j + 2].Kind = tkIdent) and
+               CaseEqual(GetTokenStr(j + 2), 'default_factory') and
+               (Tokens[j + 3].Kind = tkAssign) and
+               (Tokens[j + 4].Kind = tkIdent) and
+               CaseEqual(GetTokenStr(j + 4), 'lambda') and
+               (Tokens[j + 5].Kind = tkColon) then
+            begin
+              { zero-arg lambda: capture the body's token span; the matching
+                ')' closes field( — track bracket depth from that paren }
+              defKind := PYDC_FACTORY_EXPR;
+              defIVal := j + 6;         { body start token index }
+              j := j + 6; defSLen := 1; { depth inside field( }
+              while (j < bodyEnd) and (defSLen > 0) do
+              begin
+                if Tokens[j].Kind = tkLParen then Inc(defSLen)
+                else if Tokens[j].Kind = tkRParen then
+                begin
+                  Dec(defSLen);
+                  if defSLen = 0 then break;
+                end;
+                Inc(j);
+              end;
+              defSOff := j;             { body end (the closing paren) }
+              defSLen := 0;
+            end
             else
-              Error('Nil Python: unsupported dataclass field default (see feature-nilpy-classvar-counter for field(default_factory=...) beyond list)');
+              Error('Nil Python: unsupported dataclass field default (field(default_factory=list) and a zero-arg lambda are the supported forms)');
           end;
           tkMinus:
           begin
@@ -1845,7 +1942,7 @@ procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
-    impName: AnsiString;
+    impName: AnsiString; isCount: Boolean;
 begin
   needsBuiltin := True;
   for i := 0 to MainProgramTokCount - 1 do
@@ -1855,6 +1952,7 @@ begin
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
   end;
+  PyCountAlias := '';
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   PyRegisterClassShells;
@@ -1944,11 +2042,18 @@ begin
       begin
         while CurTok.Kind = tkIdent do
         begin
+          isCount := CaseEqual(impName, 'itertools') and
+                     CaseEqual(CurTok.SVal, 'count');
+          if isCount then PyCountAlias := CurTok.SVal;
           Next;
           if PyIsIdent('as') then
           begin
             Next;
-            if CurTok.Kind = tkIdent then Next;
+            if CurTok.Kind = tkIdent then
+            begin
+              if isCount then PyCountAlias := CurTok.SVal;
+              Next;
+            end;
           end;
           if not Eat(tkComma) then Break;
         end;

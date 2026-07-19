@@ -1,0 +1,19 @@
+from dataclasses import dataclass, field
+from typing import ClassVar
+from itertools import count as _count
+
+@dataclass
+class Word:
+    name: str
+    xt_id: int = field(default_factory=lambda: next(Word._xt_counter))
+
+    _xt_counter: ClassVar = None
+
+Word._xt_counter = _count(1)
+
+a = Word("dup")
+b = Word("swap")
+c = Word("drop")
+print(a.name, a.xt_id)
+print(b.name, b.xt_id)
+print(c.name, c.xt_id)

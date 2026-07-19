@@ -26,6 +26,16 @@ type
   end;
   PPyVarRec = ^TPyVarRec;
 
+  { itertools.count shim: uforth allocates xt ids via
+    next(Word._xt_counter). Generators come much later; a bare int counter
+    covers the censused use. }
+  TPyCounter = class
+  public
+    FNext: Int64;
+    constructor Create(start: Int64);
+    function nextval: Int64;
+  end;
+
   TPyList = class
   public
     FLen: Integer;
@@ -44,8 +54,25 @@ type
   end;
 
 function len(l: TPyList): Integer;
+function next(c: TPyCounter): Int64;
 
 implementation
+
+constructor TPyCounter.Create(start: Int64);
+begin
+  FNext := start;
+end;
+
+function TPyCounter.nextval: Int64;
+begin
+  Result := FNext;
+  FNext := FNext + 1;
+end;
+
+function next(c: TPyCounter): Int64;
+begin
+  Result := c.nextval;
+end;
 
 procedure PyIndexError;
 begin

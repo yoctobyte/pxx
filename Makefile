@@ -218,6 +218,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_list26)" = "$$(printf '3\n1\n2\n3\n3\n4\n10\n42\n10\n3\n0\nhello\n2.5\nTrue')"
 	./$(COMPILER) test/test_nilpy_factory.npy /tmp/test_nilpy_factory26
 	test "$$(/tmp/test_nilpy_factory26)" = "$$(printf '0\n0\n2\n0\n6')"
+	./$(COMPILER) test/test_nilpy_classvar_counter.npy /tmp/test_nilpy_classvar_counter26
+	test "$$(/tmp/test_nilpy_classvar_counter26)" = "$$(printf 'dup 1\nswap 2\ndrop 3')"
 	./$(COMPILER) test/test_nilpy_optional.npy /tmp/test_nilpy_optional26
 	test "$$(/tmp/test_nilpy_optional26)" = "$$(printf 'dup\n0\nFalse\n65536')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
