@@ -123,3 +123,22 @@ Track C/A ticket with a minimal repro, same as zlib/tcc.
   shape is correct). Next: bisect which global table feeds the bad name —
   instrument JS_NewAtom callers per-table (vendored tree is scratch,
   printf-instrument freely; FORCE=1 refetch resets).
+
+- 2026-07-19 (fable-A, waves 2+3 — FIRST BAR REACHED: `1+2` -> 3):
+  three more silent-wrong-value compiler bugs, all with regressions:
+  mixed-declared-type bitfield packing (JSString len:31/wide:1 — access
+  window AND unit span were capped by the member's declared-type size, b373;
+  fd65f8ff); C 6.8.4.2 case-label conversion to an unsigned controlling type
+  (js_free_value_rt's switch(uint32 tag) vs JS_TAG_OBJECT=-1, b374); enum-
+  constant array designators in the flat-init pre-scan (func_kind_to_class_id
+  sized to 1/all-zero -> class_id 0 -> every call "not a function", b375;
+  30e7bcc2). Interpreter now correct: fib(20)=6765, 0.1+0.2 exact, 1e21.
+  **NEXT WALL (root-caused, not yet fixed): JSValue (16-byte struct) RETURN
+  through the cdecl indirect-call path.** C intrinsics (Math.sqrt, map, join,
+  JSON.stringify) return empty: pxx's internal aggregate-return convention is
+  hidden-dest-in-r10 (see EmitCall direct path / RetViaHiddenDest), but the
+  IR_CALL_IND cdecl arm (ir_codegen.inc ~2204) never passes a hidden dest —
+  the callee's r10 stash writes garbage. Fix shape: mirror the direct path's
+  RetViaHiddenDest handling (alloc result temp, load its address into r10
+  before the call). Vendored tree still carries printf instrumentation —
+  FORCE=1 refetch before oracle diffing.
