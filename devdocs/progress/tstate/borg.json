@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T17:02:21Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-17T17:08:37Z",
    "fixed": [
     "test-aarch64#src:test/test_asyncecho.pas",
@@ -5358,6 +5350,14 @@
    "sha": "fce8b18dcf0842b7fd8ed326caaaa3a16a44d4e3",
    "tier": "full",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-19T05:48:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "53115cfdeae8797bca56347943aa2be77cf3b099",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5700,6 +5700,7 @@
   "test-core#src:test/ccompound_literal_global_array_b219.c": "pass",
   "test-core#src:test/ccompound_literal_nested_b218.c": "pass",
   "test-core#src:test/ccompound_literal_postfix_b217.c": "pass",
+  "test-core#src:test/ccompound_literal_scalar_b368.c": "pass",
   "test-core#src:test/cconst_cast_b39.c": "pass",
   "test-core#src:test/cconst_divmod_b35.c": "pass",
   "test-core#src:test/cconst_logical_ternary_b164.c": "pass",
@@ -5779,6 +5780,7 @@
   "test-core#src:test/cimplicit_printf_varargs_b195.c": "pass",
   "test-core#src:test/cinc/cinc_main.c": "pass",
   "test-core#src:test/cincdec_value_b27.c": "pass",
+  "test-core#src:test/cindirect_call_stackargs_b369.c": "pass",
   "test-core#src:test/cinit_array_designator_b153.c": "pass",
   "test-core#src:test/cinit_elision_nested_b193.c": "pass",
   "test-core#src:test/cinit_struct_designator_b152.c": "pass",
@@ -5798,6 +5800,7 @@
   "test-core#src:test/cmacro_stringize_b40.c": "pass",
   "test-core#src:test/cmain_argv_b90.c": "pass",
   "test-core#src:test/cmath_domain_nan_b233.c": "pass",
+  "test-core#src:test/cmath_rint_lrint_b372.c": "pass",
   "test-core#src:test/cmath_round_trunc_b140.c": "pass",
   "test-core#src:test/cmath_sign_bits.c": "pass",
   "test-core#src:test/cmath_sqrt_correctly_rounded_b240.c": "pass",
@@ -5825,11 +5828,13 @@
   "test-core#src:test/cpp_if_chain_b17.c": "pass",
   "test-core#src:test/cpragma_pack_b366.c": "pass",
   "test-core#src:test/cpragma_push_pop_macro_b156.c": "pass",
+  "test-core#src:test/cpreproc_body_string_param_b371.c": "pass",
   "test-core#src:test/cpreproc_defined_directive_join_b100.c": "pass",
   "test-core#src:test/cpreproc_hex_octal_if_b237.c": "pass",
   "test-core#src:test/cpreproc_if_arith_b110.c": "pass",
   "test-core#src:test/cpreproc_macro_arg_string_paren_b227.c": "pass",
   "test-core#src:test/cpreproc_macro_comment_continuation_b229.c": "pass",
+  "test-core#src:test/cpreproc_paste_no_arg_expand_b370.c": "pass",
   "test-core#src:test/cpreproc_stdc_version_predefine_b228.c": "pass",
   "test-core#src:test/cprintf_ll_b252.c@1": "pass",
   "test-core#src:test/cprintf_ll_b252.c@2": "pass",
@@ -6869,11 +6874,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T05:26:23Z",
-  "sha": "fce8b18dcf0842b7fd8ed326caaaa3a16a44d4e3",
-  "tier": "full",
+  "date": "2026-07-19T05:48:17Z",
+  "sha": "53115cfdeae8797bca56347943aa2be77cf3b099",
+  "tier": "native",
   "verdict": "GREEN",
-  "wall": 473.8
+  "wall": 317.3
  },
  "last_bench": {
   "conf_rows": 550,
