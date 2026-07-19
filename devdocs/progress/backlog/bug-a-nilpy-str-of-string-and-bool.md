@@ -18,6 +18,13 @@ print(str(1.5))     # CPython: 1.5     pxx: 1.5
 
 Both wrong cases are SILENT — plausible-looking output, no diagnostic.
 
+`str()` on a class instance is the same shape: it prints the pointer as a
+decimal number where CPython prints `<__main__.W object at 0x...>`. That one
+cannot be diffed against CPython (the address varies), so it is not a
+test-gate item — but it belongs to the same lowering, and uforth calls
+`str(t).upper()` on an Any, so whatever this fix chooses for the object case
+decides what that produces.
+
 ## Cause
 
 `str()` is parsed in `parser.inc` (gated on `isNilPy`) into `AN_CALL` with
