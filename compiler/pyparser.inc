@@ -206,7 +206,12 @@ begin
     Exit;
   end;
   if (lo = 'dict') or (lo = 'tuple') or (lo = 'set') then
-    Error('Nil Python: dict/tuple/set types are not supported yet');
+    { ErrorAt, not Error: this runs in a TOKEN-INDEX pre-pass with no parser
+      cursor, so plain Error reports whatever line the cursor happens to sit
+      on — for uforth that was line 26, ~180 lines from the actual
+      annotation. The token we are looking at knows its own line. }
+    ErrorAt(Tokens[i].Line,
+            'Nil Python: dict/tuple/set types are not supported yet (' + lo + ')');
   if IsClassType(GetTokenStr(i)) then
   begin
     Result := tyClass;
@@ -1710,7 +1715,7 @@ begin
 end;
 
 function PyParseStatement: Integer;
-var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode: Integer; tk: TTypeKind;
+var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx: Integer; tk: TTypeKind;
     augTk: TTokenKind;
 begin
   Result := -1;
@@ -1765,6 +1770,17 @@ begin
     begin
       Result := lhsNode;   { expression statement, e.g. obj.method() }
       Exit;
+    end;
+    { `self.x: T = expr` — an annotated FIELD assignment. The annotation was
+      already consumed by the class field pre-pass, which is what decides the
+      field's type; skip it here so the assignment itself parses. Without this
+      the idiomatic annotated ctor body died on Expect(tkAssign). }
+    if CurTok.Kind = tkColon then
+    begin
+      annIdx := TokPos;              { first annotation token }
+      tk := PyAnnTypeAt(annIdx);     { advances annIdx past the annotation }
+      TokPos := annIdx;
+      Next;                          { CurTok = the '=' }
     end;
     augTk := PyAugBinTok(CurTok.Kind);
     if augTk <> tkEOF then
@@ -2231,6 +2247,7 @@ end;
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
                                  fieldsOnly: Boolean);
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
+    fldAnn, rhsAt, k2: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec: Integer; mRet: TTypeKind;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
@@ -2467,19 +2484,63 @@ begin
         Inc(j);
         while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
         begin
+          { Both `self.NAME = expr` and `self.NAME: ann = expr` declare a
+            field. The annotated form used to be invisible here — the match
+            required '=' at j+3 — so a class that annotates its ctor fields
+            (the idiomatic Python form, and the one the uforth VM uses)
+            registered NO fields at all and every later `self.x` mis-resolved
+            against an empty class. }
+          fldAnn := -1;
           if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
-             (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) and
-             (Tokens[j + 3].Kind = tkAssign) then
+             (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) then
           begin
-            tk := PyTypeFromTokenIndex(j + 4);
-            fldRec := PyRecFromTokenIndex(j + 4);
-            if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) then
+            if Tokens[j + 3].Kind = tkAssign then fldAnn := 0
+            else if Tokens[j + 3].Kind = tkColon then fldAnn := j + 4;
+          end;
+          if fldAnn >= 0 then
+          begin
+            if fldAnn > 0 then
             begin
-              rhsName := GetTokenStr(j + 4);
-              tk := PyHeaderParamType(methodStart, j, rhsName);
-              fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+              { annotated: the annotation IS the type, exactly as for a
+                dataclass field — same PyAnnTypeAt grammar (Optional/Any/
+                List/Callable/forward refs). }
+              k2 := fldAnn;
+              tk := PyAnnTypeAt(k2);
+              fldRec := REC_NONE;
+              if (tk = tyClass) and (PyAnnLastCi >= 0) then
+                fldRec := REC_UCLASS_BASE + PyAnnLastCi;
+            end
+            else
+            begin
+              rhsAt := j + 4;
+              tk := PyTypeFromTokenIndex(rhsAt);
+              fldRec := PyRecFromTokenIndex(rhsAt);
+              if (tk = tyUnknown) and (Tokens[rhsAt].Kind = tkIdent) then
+              begin
+                rhsName := GetTokenStr(rhsAt);
+                tk := PyHeaderParamType(methodStart, j, rhsName);
+                fldRec := PyHeaderParamRec(methodStart, j, rhsName);
+              end;
+              if tk = tyUnknown then
+              begin
+                { Anything richer than a literal or a bare parameter — a list
+                  literal (`self.base_stack = [10]`), a call, a construction.
+                  One scanner already knows how to type an expression; reuse
+                  it rather than erroring or growing a second half-scanner
+                  here. }
+                k2 := rhsAt;
+                while (k2 < bodyEnd) and
+                      not (Tokens[k2].Kind in [tkNewline, tkDedent]) do Inc(k2);
+                tk := PyInferExprType(rhsAt, k2);
+                if (tk = tyClass) and (PyInferLastCi >= 0) then
+                  fldRec := REC_UCLASS_BASE + PyInferLastCi;
+              end;
             end;
-            if tk = tyUnknown then Error('Nil Python: cannot infer class field type');
+            if tk = tyUnknown then
+              ErrorAt(Tokens[j].Line,
+                      'Nil Python: cannot infer the type of field self.'
+                      + GetTokenStr(j + 2) + ' - annotate it (self.'
+                      + GetTokenStr(j + 2) + ': int = ...)');
             { see the dataclass branch: str fields are managed, not string[N] }
             if tk = tyString then tk := tyAnsiString;
             if tk <> tyClass then fldRec := REC_NONE;
