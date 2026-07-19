@@ -47,3 +47,32 @@ Python).
 
 Also settle slices (`s[a:b]`) while here — uforth leans on them heavily, and
 they share the convention. Check whether `for c in s` iterates correctly too.
+
+## Fixed 2026-07-19
+
+`s[i]` in PyExprMode now lowers to a pylib `pystr_at(s, i)` call instead of a
+raw Pascal `AN_INDEX`. Doing the fixup in the RUNTIME helper rather than as
+index arithmetic in the parser keeps the negative case correct without
+evaluating the base twice (`s[-1]` needs `Length(s)`).
+
+Semantics now match CPython: 0-based, negative counts from the end, and out of
+range prints `IndexError: string index out of range` and halts — the same shape
+as `TPyList`'s existing behaviour.
+
+### Two files encoded the OLD behaviour and were ported
+
+- `test/test_nilpy_str_param.npy` asserted `"ab"[1] == "a"`. Python says `"b"`.
+  Its scanning loop was 1-based (`i = 1; while i <= n + 1`); now `i = 0;
+  while i <= n`. Expectation updated `2\na\ncd\nok!` -> `2\nb\ncd\nok!`.
+- `examples/shell/shell0.npy` (Track B/E file, ported out of necessity — the
+  semantics change would otherwise leave the demo broken): four index sites in
+  `tok`, `ap_wc`, `ap_upper`, `ap_rev`. `ap_rev` went from
+  `i = Length(args); while i >= 1` to `i = Length(args) - 1; while i >= 0`.
+
+That these two were the ONLY breakage is a useful signal about how little .npy
+code depended on the old convention.
+
+Gate: `test-nilpy` GREEN, `--tier quick` GREEN, self-host byte-identical,
+`test_nilpy_str_methods.npy` (now including subscripts) diffed against CPython.
+
+Follow-up filed: [[bug-nilpy-subscript-on-literal]].

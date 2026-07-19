@@ -76,6 +76,7 @@ function pystr_endswith(const s: AnsiString; const suf: AnsiString): Boolean;
 function pystr_find(const s: AnsiString; const sub: AnsiString): Integer;
 function pystr_isspace(const s: AnsiString): Boolean;
 function pystr_ofchar(c: Char): AnsiString;
+function pystr_at(const s: AnsiString; i: Integer): Char;
 
 implementation
 
@@ -124,6 +125,25 @@ end;
 function pystr_ofchar(c: Char): AnsiString;
 begin
   Result := c;
+end;
+
+{ Python's s[i]: 0-BASED, and a NEGATIVE index counts from the end (s[-1] is the
+  last character). Pascal's own subscript is 1-based with no negative form, so
+  handing the index straight through read one character early and made s[0] a
+  NUL — silently, on all 123 uforth subscript sites
+  (bug-nilpy-str-index-off-by-one). Out of range raises IndexError like CPython,
+  matching TPyList's existing PyListFix behaviour. }
+function pystr_at(const s: AnsiString; i: Integer): Char;
+var n: Integer;
+begin
+  n := Length(s);
+  if i < 0 then i := n + i;
+  if (i < 0) or (i >= n) then
+  begin
+    writeln('IndexError: string index out of range');
+    Halt(1);
+  end;
+  Result := s[i + 1];
 end;
 
 function pystr_lstrip(const s: AnsiString): AnsiString;

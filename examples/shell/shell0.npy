@@ -10,14 +10,15 @@
 def tok(line: str, want: int) -> str:
     # Return the want-th (1-based) whitespace-separated token of line, or "".
     # Char-by-char scan: NilPy has no split() yet (tracked gap).
+    # Indices are 0-BASED (bug-nilpy-str-index-off-by-one ported this file).
     n = Length(line)
-    i = 1
+    i = 0
     idx = 0
     cur = ""
     out = ""
-    while i <= n + 1:
+    while i <= n:
         c = " "
-        if i <= n:
+        if i < n:
             c = line[i]
         if c == " ":
             if cur != "":
@@ -50,10 +51,10 @@ def ap_echo(args: str) -> None:
 def ap_wc(args: str) -> None:
     # words and chars of the argument string
     words = 0
-    i = 1
+    i = 0
     n = Length(args)
     inword = False
-    while i <= n:
+    while i < n:
         if args[i] == " ":
             inword = False
         else:
@@ -66,9 +67,9 @@ def ap_wc(args: str) -> None:
 
 def ap_upper(args: str) -> None:
     out = ""
-    i = 1
+    i = 0
     n = Length(args)
-    while i <= n:
+    while i < n:
         c = args[i]
         o = ord(c)
         if o >= 97:
@@ -80,8 +81,8 @@ def ap_upper(args: str) -> None:
 
 def ap_rev(args: str) -> None:
     out = ""
-    i = Length(args)
-    while i >= 1:
+    i = Length(args) - 1
+    while i >= 0:
         out = out + args[i]
         i = i - 1
     print(out)

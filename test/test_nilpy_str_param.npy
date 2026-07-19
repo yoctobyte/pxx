@@ -1,5 +1,10 @@
 # Regression: bug-nilpy-str-param-length-index — a str-annotated parameter
 # must behave as a full string inside the body.
+#
+# Ported to 0-BASED indexing 2026-07-19 (bug-nilpy-str-index-off-by-one): this
+# file was originally written against Pascal's 1-based subscripts, so it
+# asserted "ab"[1] == "a". Python says "b". The indices below are now Python's,
+# which is what the uforth corpus requires.
 # Face 1: Length(param); Face 2: param[i] indexing; Face 3: scanning loop
 # combining both (was an IR codegen ICE / variant-tag miscompile);
 # plus `-> None` procedure defs and calling them as statements.
@@ -9,18 +14,18 @@ def flen(line: str) -> int:
     return n
 
 def fidx(line: str) -> str:
-    c = line[1]
+    c = line[1]        # Python: the SECOND character
     return c
 
 def tok(line: str, want: int) -> str:
     n = Length(line)
-    i = 1
+    i = 0
     idx = 0
     cur = ""
     out = ""
-    while i <= n + 1:
+    while i <= n:
         c = " "
-        if i <= n:
+        if i < n:
             c = line[i]
         if c == " ":
             if cur != "":

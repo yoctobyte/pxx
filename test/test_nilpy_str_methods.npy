@@ -89,3 +89,12 @@ print("\t\n".isspace())
 print("  Mixed  ".strip().upper())
 print("  Mixed  ".strip().lower())
 print("  a  ".strip().startswith("a"))
+
+# --- 0-based subscripts, now that bug-nilpy-str-index-off-by-one is fixed
+print(s[0])
+print(s[1])
+print(s[-1])
+print(s[0].upper())
+print(s[-1].upper())
+# "abc"[1] — subscripting a LITERAL is a separate gap
+# (bug-nilpy-subscript-on-literal), not covered here.

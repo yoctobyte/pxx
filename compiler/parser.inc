@@ -715,6 +715,7 @@ procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 procedure PyParseListLiteral; forward; { Nil Python [a, b, c] literal (pyparser.inc) }
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python s.upper() etc (pyparser.inc) }
+function PyMakeStrIndex(baseNode, idxNode: Integer): Integer; forward; { Nil Python s[i] (pyparser.inc) }
 
 { Types a NilPy str method may be called ON. tyChar is included because Python
   has NO character type: the shared lexer types a one-character literal like
@@ -4298,7 +4299,14 @@ begin
           recName := ResolveNodeRec(node);
       end
       else if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
-        tk := tyChar
+      begin
+        tk := tyChar;
+        { NilPy: Python subscripts are 0-based and allow negatives, Pascal's are
+          1-based with neither, so route the whole thing through pylib rather
+          than emitting a raw AN_INDEX (bug-nilpy-str-index-off-by-one). }
+        if PyExprMode then
+          indexNode := PyMakeStrIndex(ASTLeft[indexNode], ASTRight[indexNode]);
+      end
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin
         { pointer indexing: p[i] yields the pointed-at element type }

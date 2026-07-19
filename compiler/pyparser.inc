@@ -1226,6 +1226,27 @@ end;
   an unknown name must Error, never fall through to the record-field path,
   which would build a bogus field access on a string (the tarrconstr8 class of
   silent breakage the array guard above this site exists to prevent). }
+{ NilPy `s[i]` -> pylib pystr_at(s, i). Python subscripts are 0-based and allow
+  negative indices; Pascal's are 1-based with neither. Doing the fixup in the
+  RUNTIME helper rather than as index arithmetic here keeps the negative case
+  (which needs Length(s)) correct without evaluating the base twice. }
+function PyMakeStrIndex(baseNode, idxNode: Integer): Integer;
+var procIdx, callNode, a0, a1: Integer;
+begin
+  procIdx := FindProc('pystr_at');
+  if procIdx < 0 then Error('Nil Python: pylib (pystr_at) not loaded');
+  a0 := AllocNode(AN_ARG);
+  ASTLeft[a0] := baseNode;
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := idxNode;
+  ASTRight[a0] := a1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(tyChar);
+  ASTLeft[callNode] := a0;
+  Result := callNode;
+end;
+
 function PyParseStrMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var pname: AnsiString;
     retTk: TTypeKind;
