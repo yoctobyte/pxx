@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
 | feature-track-t-agent | T | 60 | feature | Track T face 2: agentic test manager — reads tstate, crafts tickets, owns the T codebase | feature-track-t-watcher |
 
 ## unfinished (0)
@@ -205,7 +204,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (843)
+## done (844)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -848,6 +847,7 @@ _none_
 | feature-nilpy-def-params | N | 55 | feature | NilPy: raise def/method parameter limit past 4 | — |
 | feature-nilpy-lexer-literals | N | 55 | feature | NilPy lexer: hex/octal/binary int literals, triple-quoted strings, string line counting | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
+| feature-nilpy-operators | N | 55 | feature | NilPy: bitwise operators + augmented assignment | — |
 | feature-object-reference-type | A | 50 | feature | `object` — a rooted object-reference type | — |
 | feature-open-array-constructor-arg | A | 50 | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-opt-div0-stub-on-use | O | 25 | feature | x86-64 div-by-zero abort stub is emitted unconditionally, even for division-free programs | — |
