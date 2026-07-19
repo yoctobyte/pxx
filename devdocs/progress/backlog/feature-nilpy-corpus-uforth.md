@@ -110,6 +110,11 @@ slices, f-strings, raise, isinstance, augassign.
      methods; per the user's 2026-07-19 call this waits for
      [[feature-a-abi-oracle]] rather than a ninth copy of the return rule.
    - [[feature-rtti-field-reflection]] — `t.word.name` on an Any (uforth.py:190).
+   - [[bug-nilpy-string-local-truncates-at-255]] (p65) — a string local is
+     the FROZEN kind, so anything built past 255 characters is silently cut.
+     uforth's token buffers and assembled output lines go well past that.
+     Gated on the same Track A boxing bug: making string locals managed is
+     what corrupted the heap when it was tried.
 
    **Also landed session 3, after the wall picture above was written:**
    f-string conversions and format specs (the whole 67-hole census);
