@@ -1809,6 +1809,8 @@ test-core: $(COMPILER)
 	/tmp/cmath_cbrt_correct_round_b37926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_pow_correct_round_b380.c /tmp/cmath_pow_correct_round_b38026
 	/tmp/cmath_pow_correct_round_b38026; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_cast_narrow_b381.c /tmp/cfloat_cast_narrow_b38126
+	/tmp/cfloat_cast_narrow_b38126; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_field_case_sensitive_b231.c /tmp/cstruct_field_case_sensitive_b23126
 	/tmp/cstruct_field_case_sensitive_b23126; test "$$?" = "42"
 	./$(COMPILER) test/cfloat_nan_compare_b232.c /tmp/cfloat_nan_compare_b23226

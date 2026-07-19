@@ -2044,7 +2044,8 @@ end;
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
-    argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen: Integer;
+    argSeq, castProcSig, castPtrElemProcSig, clRecId, arrCastLen,
+    frTmp, frIdn, frAsn, frSeq: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -2143,6 +2144,27 @@ begin
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
       ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
       Result := node; Exit;
+    end;
+    { A `(float)` cast of a DOUBLE value must actually narrow to single
+      precision (C 6.3.1.5), even when the result is immediately widened
+      back — Math.fround is exactly `(double)(float)d`. The retag path made
+      it a no-op (silent wrong value, b381). Round-trip through an anonymous
+      tySingle temp: the assignment store narrows and the reload widens on
+      EVERY backend, reusing the proven slot-narrowing paths. }
+    if (castDepth = 0) and (castTk = tySingle) and (opTk = tyDouble) then
+    begin
+      frTmp := AllocVar('', tySingle);
+      frIdn := AllocNode(AN_IDENT); ASTIVal[frIdn] := frTmp; ASTTk[frIdn] := Ord(tySingle);
+      frAsn := AllocNode(AN_ASSIGN); ASTLeft[frAsn] := frIdn; ASTRight[frAsn] := operand;
+      ASTTk[frAsn] := Ord(tySingle);
+      frSeq := AllocNode(AN_SEQ); ASTLeft[frSeq] := frAsn; ASTRight[frSeq] := -1;
+      node := AllocNode(AN_COMPOUND_LITERAL);
+      ASTIVal[node] := frTmp; ASTLeft[node] := frSeq; ASTTk[node] := Ord(tySingle);
+      operand := node;
+      node := AllocNode(AN_DEREF);   { COMPOUND_LITERAL yields the ADDRESS }
+      ASTLeft[node] := operand; ASTTk[node] := Ord(tySingle);
+      Result := node;
+      Exit;
     end;
     { narrow integer cast: truncate + re-extend by target signedness
       (C 6.3.1.3) — see CMakeNarrowIntCast. Pointer-width and 64-bit casts
