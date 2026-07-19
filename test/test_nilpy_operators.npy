@@ -39,3 +39,6 @@ a.total += 42
 print(a.total)
 a.total -= 2
 print(a.total)
+print(5 / 2)
+print(4 / 2)
+print(7 // 2)

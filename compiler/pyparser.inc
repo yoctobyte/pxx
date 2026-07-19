@@ -51,16 +51,8 @@ begin
   Result := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, s);
 end;
 
-procedure PyValidateOperators;
-var i: Integer;
-begin
-  for i := 0 to MainProgramTokCount - 1 do
-    if Tokens[i].Kind = tkSlash then
-    begin
-      CurTok.Line := Tokens[i].Line;
-      Error('Nil Python: unsupported operator /; use // for integer division');
-    end;
-end;
+{ `/` is Python true division and maps to the shared tkSlash float-division
+  path (int operands produce a float, matching CPython). `//` is tkDiv. }
 
 procedure PyExpectIdent(const s: AnsiString);
 begin
@@ -1564,7 +1556,6 @@ begin
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
   end;
-  PyValidateOperators;
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   PyRegisterClassShells;

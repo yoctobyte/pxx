@@ -192,8 +192,6 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
-	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
-	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
 	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
 	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
@@ -213,7 +211,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_literals.npy /tmp/test_nilpy_literals26
 	test "$$(/tmp/test_nilpy_literals26)" = "$$(printf '65536\n15\n10\n1000000\ntri\nple')"
 	./$(COMPILER) test/test_nilpy_operators.npy /tmp/test_nilpy_operators26
-	test "$$(/tmp/test_nilpy_operators26)" = "$$(printf '61440\n65535\n3855\n1024\n256\n255\n32\n240\n15\n12\n24\n4\n1\n8\n9\n6\n96\n24\n142\n140')"
+	test "$$(/tmp/test_nilpy_operators26)" = "$$(printf '61440\n65535\n3855\n1024\n256\n255\n32\n240\n15\n12\n24\n4\n1\n8\n9\n6\n96\n24\n142\n140\n2.5\n2.0\n3')"
 	./$(COMPILER) test/test_nilpy_dataclass.npy /tmp/test_nilpy_dataclass26
 	test "$$(/tmp/test_nilpy_dataclass26)" = "$$(printf '3\n4\n25\n10\nfull 1.5 2 False custom\ndefaults 2.5 7 True std\nmix 9.0 7 True std')"
 	./$(COMPILER) examples/shell/shell0.npy /tmp/test_nilpy_shell026
