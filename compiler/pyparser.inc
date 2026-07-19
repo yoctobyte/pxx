@@ -590,6 +590,47 @@ end;
 function PyParseBlock: Integer; forward;
 function PyParseStatement: Integer; forward;
 
+{ Spill incoming integer args into their frame slots, following the internal
+  x86-64 call convention: up to 6 params arrive in rdi rsi rdx rcx r8 r9;
+  a proc with MORE than 6 params receives ALL of them on the caller's stack,
+  pushed left-to-right, so param i sits at [rbp+16+(nparams-1-i)*8]. }
+procedure PyEmitParamSpills(procIdx, nparams: Integer);
+var i, idx: Integer; wide: Boolean;
+begin
+  for i := 0 to nparams - 1 do
+  begin
+    idx := Procs[procIdx].Params[i].SymIdx;
+    wide := TypeSize(Syms[idx].TypeKind) = 8;
+    if nparams > 6 then
+    begin
+      { all-stack convention: load via rax }
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(16 + 8 * (nparams - 1 - i));
+      if wide then EmitB($48);
+      EmitB($89); EmitB($85);
+      EmitI32(Syms[idx].Offset);
+    end
+    else if i <= 3 then
+    begin
+      if wide then EmitB($48);
+      EmitB($89);
+      case i of
+        0: EmitB($BD);
+        1: EmitB($B5);
+        2: EmitB($95);
+        3: EmitB($8D);
+      end;
+      EmitI32(Syms[idx].Offset);
+    end
+    else
+    begin
+      if wide then EmitB($4C) else EmitB($44);
+      EmitB($89);
+      if i = 4 then EmitB($85) else EmitB($8D);
+      EmitI32(Syms[idx].Offset);
+    end;
+  end;
+end;
+
 function PyParsePrint: Integer;
 var node, argNode, lastArg, sepLit: Integer;
 begin
@@ -901,20 +942,7 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
-    EmitB($89);
-    case i of
-      0: EmitB($BD);
-      1: EmitB($B5);
-      2: EmitB($95);
-      3: EmitB($8D);
-      else Error('Nil Python: more than four parameters are not supported in v1');
-    end;
-    EmitI32(Syms[idx].Offset);
-  end;
+  PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
@@ -1100,14 +1128,7 @@ begin
   if not isCtor then begin idx := AllocVar('Result', Procs[procIdx].RetType); Procs[procIdx].RetSymIdx := idx; end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
-    EmitB($89);
-    case i of 0: EmitB($BD); 1: EmitB($B5); 2: EmitB($95); 3: EmitB($8D); end;
-    EmitI32(Syms[idx].Offset);
-  end;
+  PyEmitParamSpills(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);

@@ -202,8 +202,8 @@ test-nilpy: $(COMPILER)
 	grep -q "unexpected token" /tmp/test_nilpy_missing_result_annotation_fail.log
 	! ./$(COMPILER) test/test_nilpy_range_step_fail.npy /tmp/test_nilpy_range_step_fail26 > /tmp/test_nilpy_range_step_fail.log 2>&1
 	grep -q "range step other than 1 is not supported in v1" /tmp/test_nilpy_range_step_fail.log
-	! ./$(COMPILER) test/test_nilpy_five_params_fail.npy /tmp/test_nilpy_five_params_fail26 > /tmp/test_nilpy_five_params_fail.log 2>&1
-	grep -q "more than four parameters are not supported in v1" /tmp/test_nilpy_five_params_fail.log
+	./$(COMPILER) test/test_nilpy_many_params.npy /tmp/test_nilpy_many_params26
+	test "$$(/tmp/test_nilpy_many_params26)" = "$$(printf '55\n65\n36\n204\n80')"
 	! ./$(COMPILER) test/test_nilpy_inconsistent_dedent_fail.npy /tmp/test_nilpy_inconsistent_dedent_fail26 > /tmp/test_nilpy_inconsistent_dedent_fail.log 2>&1
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
