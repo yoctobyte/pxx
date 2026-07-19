@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-17T17:12:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b34929c0e88967dcfac6d683b1425928eddd17a9",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-17T19:11:11Z",
    "fixed": [],
    "new_red": [],
@@ -5355,6 +5347,14 @@
    "sha": "5e284c8495eccb6b1ce4b5d27669c519925fff7a",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-07-19T06:09:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6ba85512ab676b62f7dc940296dfb1e5419f3823",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5708,6 +5708,7 @@
   "test-core#src:test/cdefine_flag_b239.c": "pass",
   "test-core#src:test/cderef_addr_local_store_b84.c": "pass",
   "test-core#src:test/cderef_arrow_field_b76.c": "pass",
+  "test-core#src:test/cdesignated_enum_index_unsized_b375.c": "pass",
   "test-core#src:test/cdiscarded_expr_side_effects_b308.c": "pass",
   "test-core#src:test/cenum_in_struct_b194.c": "pass",
   "test-core#src:test/cenum_typed_decl_b158.c": "pass",
@@ -6873,11 +6874,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-07-19T06:04:13Z",
-  "sha": "5e284c8495eccb6b1ce4b5d27669c519925fff7a",
+  "date": "2026-07-19T06:09:53Z",
+  "sha": "6ba85512ab676b62f7dc940296dfb1e5419f3823",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 316.0
+  "wall": 301.2
  },
  "last_bench": {
   "conf_rows": 550,
