@@ -40,6 +40,13 @@ extern double exp2(double x);
 extern double log(double x);
 extern double log2(double x);
 extern double log10(double x);
+/* Same collision story as exp/Exp above: Pascal Log2/Log10 are linked next
+   to crtl, so the C implementations live under __crtl_ names and calls come
+   through these function-like macros (variables named log2 stay untouched). */
+extern double __crtl_log2(double x);
+extern double __crtl_log10(double x);
+#define log2(x) __crtl_log2(x)
+#define log10(x) __crtl_log10(x)
 extern double pow(double x, double y);
 extern double fmod(double x, double y);
 extern double frexp(double x, int *e);

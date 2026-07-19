@@ -5,7 +5,7 @@
  *
  * KEY (case-insensitive name binding): the C frontend's FindProc is
  * case-insensitive across the C/Pascal namespace, so a C call to `sqrt`/
- * `sin`/`floor`/`ceil`/`fmod`/`sinh`/`cosh`/`tanh`/`hypot`/`log2`/`log10` binds
+ * `sin`/`floor`/`ceil`/`fmod`/`sinh`/`cosh`/`tanh`/`hypot` binds
  * DIRECTLY to the matching Pascal routine (Sqrt/Sin/...) with no wrapper —
  * lua's <math.h> extern is enough. So this file defines ONLY:
  *   - the name-mismatch cases, where the C name differs from the Pascal name
@@ -182,17 +182,15 @@ static double crtl_dd_scale(crtl_dd v, int k) {
   }
 }
 
-/* exp of a double-double argument, correctly rounded to double.
-   Reduction: a = k*ln2 + r, |r| <= ln2/2; e^r by 22-term Taylor in dd
-   (0.347^22/22! ~ 2^-98); result e^r * 2^k via crtl_dd_scale. */
-static double crtl_exp_dd(crtl_dd a) {
+/* Shared exp reduction: a = k*ln2 + r, |r| <= ln2/2; returns e^r as a dd
+   (in [0.7, 1.42]) by 22-term Taylor (0.347^22/22! ~ 2^-98) and k via *kp.
+   Caller must have bounded a.hi to the finite-result range. */
+static crtl_dd crtl_exp_core(crtl_dd a, int *kp) {
   double kd;
-  int k, i;
+  int i;
   crtl_dd r, s, p;
-  if (a.hi > 710.0)  return ldexp(1.0, 1024) * 2.0;      /* +inf */
-  if (a.hi < -746.0) return crtl_bits2d(1ull) * 0.5;     /* +0 (underflow) */
   kd = rint(a.hi * crtl_bits2d(0x3FF71547652B82FEull));  /* 1/ln2 */
-  k = (int)kd;
+  *kp = (int)kd;
   p = crtl_2prod(kd, crtl_ln2().hi);                     /* exact product */
   r = crtl_2sum(a.hi, -p.hi);
   r.lo += (-p.lo - kd * crtl_ln2().lo) + a.lo;
@@ -205,6 +203,16 @@ static double crtl_exp_dd(crtl_dd a) {
     s = crtl_dd_mul(crtl_dd_divd(r, (double)i), s);
     s = crtl_dd_addd(s, 1.0);
   }
+  return s;
+}
+
+/* exp of a double-double argument, correctly rounded to double. */
+static double crtl_exp_dd(crtl_dd a) {
+  int k;
+  crtl_dd s;
+  if (a.hi > 710.0)  return ldexp(1.0, 1024) * 2.0;      /* +inf */
+  if (a.hi < -746.0) return crtl_bits2d(1ull) * 0.5;     /* +0 (underflow) */
+  s = crtl_exp_core(a, &k);
   return crtl_dd_scale(s, k);
 }
 
@@ -224,13 +232,14 @@ double __crtl_exp(double x) {
    Normalize x = 2^e * m with m in [sqrt2/2, sqrt2); log m = 2 atanh z,
    z = (m-1)/(m+1), |z| <= 0.1716; 17 odd terms in dd (~2^-88), plus
    e*ln2 in dd. */
-static crtl_dd crtl_log_dd(double x) {
-  unsigned long long b = *(unsigned long long *)&x;
+static crtl_dd crtl_log_ddx(crtl_dd w) {
+  unsigned long long b;
   int e;
-  double m;
-  crtl_dd z, z2, s, t;
+  double x = w.hi, m;
+  crtl_dd md, z, z2, s, t, num, den;
   int i;
-  /* subnormal: renormalize through 2^54 */
+  b = *(unsigned long long *)&x;
+  /* subnormal: renormalize through 2^54 (a dd input is never subnormal) */
   if ((b >> 52) == 0ull) {
     x = x * crtl_bits2d(0x4350000000000000ull);   /* 2^54 */
     b = *(unsigned long long *)&x;
@@ -244,10 +253,12 @@ static crtl_dd crtl_log_dd(double x) {
     m = m * 0.5;
     e += 1;
   }
-  /* z = (m-1)/(m+1); m-1 is Sterbenz-exact, m+1 exact (m < 2) */
-  z2.hi = m - 1.0; z2.lo = 0.0;
-  t = crtl_2sum(m, 1.0);
-  z = crtl_dd_div(z2, t);
+  md.hi = m;
+  md.lo = ldexp(w.lo, -e);                        /* exact power-of-two shift */
+  /* z = (m-1)/(m+1); m-1 is Sterbenz-exact in the hi part, m+1 exact (m < 2) */
+  num = crtl_dd_addd(md, -1.0);
+  den = crtl_dd_addd(md, 1.0);
+  z = crtl_dd_div(num, den);
   z2 = crtl_dd_mul(z, z);                         /* z^2 <= 0.02944 */
   /* S = sum_{i=0..18} z^(2i)/(2i+1), Horner; one = dd(1) */
   t.hi = 1.0; t.lo = 0.0;
@@ -261,6 +272,12 @@ static crtl_dd crtl_log_dd(double x) {
   return crtl_dd_add(crtl_dd_muld(crtl_ln2(), (double)e), s);
 }
 
+static crtl_dd crtl_log_dd(double x) {
+  crtl_dd w;
+  w.hi = x; w.lo = 0.0;
+  return crtl_log_ddx(w);
+}
+
 double log(double x) {
   crtl_dd r;
   if (x != x) return x;                            /* NaN */
@@ -268,6 +285,35 @@ double log(double x) {
   if (x < 0.0)  return (x - x) / (x - x);          /* NaN */
   if (isinf(x)) return x;                          /* +inf */
   r = crtl_log_dd(x);
+  return r.hi + r.lo;
+}
+
+/* log2/log10: log_dd(x) times the dd constant 1/ln2 resp. 1/ln10 — keeps
+   the exact cases (log2(2^n) = n, log10(10^n) = n) and correct rounding.
+   NOT named log2/log10: those collide case-insensitively with Pascal
+   Log2/Log10 (same silently-broken binding as exp/Exp, b377) — C callers
+   come through the math.h function-like macros. */
+double __crtl_log2(double x) {
+  crtl_dd r, c;
+  if (x != x) return x;
+  if (x == 0.0) return -1.0 / (x * x);
+  if (x < 0.0)  return (x - x) / (x - x);
+  if (isinf(x)) return x;
+  c.hi = crtl_bits2d(0x3FF71547652B82FEull);       /* 1/ln2 */
+  c.lo = crtl_bits2d(0x3C7777D0FFDA0D24ull);
+  r = crtl_dd_mul(crtl_log_dd(x), c);
+  return r.hi + r.lo;
+}
+
+double __crtl_log10(double x) {
+  crtl_dd r, c;
+  if (x != x) return x;
+  if (x == 0.0) return -1.0 / (x * x);
+  if (x < 0.0)  return (x - x) / (x - x);
+  if (isinf(x)) return x;
+  c.hi = crtl_bits2d(0x3FDBCB7B1526E50Eull);       /* 1/ln10 */
+  c.lo = crtl_bits2d(0x3C695355BAAAFAD3ull);
+  r = crtl_dd_mul(crtl_log_dd(x), c);
   return r.hi + r.lo;
 }
 double cbrt(double x) {
@@ -446,7 +492,7 @@ float fmodf(float x, float y)  { return (float)fmod((double)x, (double)y); }
 float powf(float b, float e)   { return (float)pow((double)b, (double)e); }
 float expf(float x)   { return (float)__crtl_exp((double)x); }
 float logf(float x)   { return (float)log((double)x); }
-float log2f(float x)  { return (float)(log((double)x) / 0.6931471805599453); }
+float log2f(float x)  { return (float)__crtl_log2((double)x); }
 float truncf(float x) { return (float)trunc((double)x); }
 float roundf(float x) { return (float)round((double)x); }
 float fminf(float a, float b) { return a < b ? a : b; }
@@ -527,18 +573,57 @@ double remainder(double x, double y) {
   return r;
 }
 
-/* expm1/log1p: series for tiny arguments (where exp(x)-1 cancels), the plain
-   formula elsewhere. Bring-up accuracy, not correctly-rounded. */
+/* expm1/log1p: correctly rounded on the dd kernels (the old small-threshold
+   series lost ~10 digits right AT its 1e-5 cutoff). */
 double expm1(double x) {
-  if (fabs(x) < 1e-5)
-    return x + 0.5 * x * x + (x * x * x) / 6.0;
-  return __crtl_exp(x) - 1.0;
+  crtl_dd a, r, s, v;
+  int k, i;
+  if (x != x) return x;
+  if (x > 710.0)  return __crtl_exp(x);           /* +inf */
+  if (x < -80.0)  return -1.0;                    /* e^x < 2^-115 */
+  if (x >= -0.35 && x <= 0.35) {
+    /* sum_{k>=1} x^k/k! = x * (1 + x/2 * (1 + x/3 * (...))) in dd */
+    r.hi = x; r.lo = 0.0;
+    s.hi = 1.0; s.lo = 0.0;
+    for (i = 22; i >= 2; i--) {
+      s = crtl_dd_mul(crtl_dd_divd(r, (double)i), s);
+      s = crtl_dd_addd(s, 1.0);
+    }
+    s = crtl_dd_mul(r, s);
+    return s.hi + s.lo;
+  }
+  a.hi = x; a.lo = 0.0;
+  s = crtl_exp_core(a, &k);
+  if (k > 1000) return crtl_dd_scale(s, k);       /* -1 is below half-ulp */
+  v.hi = ldexp(s.hi, k);                          /* exact: k in [-116, 1000] */
+  v.lo = ldexp(s.lo, k);
+  v = crtl_dd_addd(v, -1.0);
+  return v.hi + v.lo;
 }
 
 double log1p(double x) {
-  if (fabs(x) < 1e-5)
-    return x - 0.5 * x * x + (x * x * x) / 3.0;
-  return log(1.0 + x);
+  crtl_dd w, r, one;
+  if (x != x) return x;
+  if (x == -1.0) return -1.0 / ((x + 1.0) * (x + 1.0));   /* -inf */
+  if (x < -1.0)  return (x - x) / (x - x);        /* NaN */
+  if (isinf(x))  return x;                        /* +inf */
+  if (x > -6.0e-10 && x < 6.0e-10) {
+    /* log(1+x) = x*(1 - x/2 + x^2/3 - x^3/4 + ...); |x| < 2^-30 so the
+       dropped x^4 term is below 2^-120 relative */
+    w.hi = x; w.lo = 0.0;
+    one.hi = 1.0; one.lo = 0.0;
+    r = crtl_dd_divd(one, 3.0);                   /* 1/3 as a dd */
+    r = crtl_dd_add(r, crtl_dd_muld(w, -0.25));   /* 1/3 - x/4 */
+    r = crtl_dd_mul(r, w);
+    r = crtl_dd_addd(r, -0.5);                    /* -1/2 + x/3 - x^2/4 */
+    r = crtl_dd_mul(r, w);
+    r = crtl_dd_addd(r, 1.0);                     /* 1 - x/2 + ... */
+    r = crtl_dd_mul(r, w);
+    return r.hi + r.lo;
+  }
+  w = crtl_2sum(1.0, x);                          /* exact dd of 1+x */
+  r = crtl_log_ddx(w);
+  return r.hi + r.lo;
 }
 
 double acosh(double x) { return log(x + sqrt(x * x - 1.0)); }
