@@ -35,6 +35,24 @@ in `defs.inc`, "unassigned slot" — it is simply not wired to the language.
 - Truthiness: `if x:` on a variant must treat VT_EMPTY as false.
 - `print(None)` -> `None`, matching CPython.
 
+## Neighbouring gap, found 2026-07-20
+
+Printing a variant that holds an OBJECT (VT_OBJECT) emits NOTHING — an empty
+line, silently. It shows up the moment for-in lands, because the loop variable
+over a list of objects is exactly that:
+
+```python
+for w in vm.order:
+    print(w)          # CPython: <__main__.Word object at 0x...>   pxx: blank
+```
+
+A class-typed value prints its POINTER as an integer instead, which is at
+least visible. Neither matches CPython, and neither can be diffed against it
+(the address varies), so this is not a test-gate item — but a blank line is
+worse than a pointer for anyone debugging, and both should probably become
+something like `<Word object>`. Same writer (`EmitWriteVariant`) as the None
+case above, so it is one change, not two.
+
 ## Why it is filed separately from dict
 
 Dict v1 ([[feature-nilpy-dict]]) deliberately ships `.get(k, default)` (the
