@@ -1,0 +1,37 @@
+# A top-level `def` returning a CLASS keeps the class identity. Oracle:
+# CPython — running this file with python3 must produce byte-identical output.
+#
+# Regression for a silent bug: PyParseDef never recorded ProcRetRecId, so the
+# call site had a tyClass value with no identity and `q = make()` then `q.name`
+# resolved the field against nothing and printed the object POINTER. The
+# method path had always recorded it; only the top-level def path had not.
+from typing import Optional
+
+
+class P:
+    def __init__(self, n: str) -> None:
+        self.name = n
+        self.next: Optional[P] = None
+
+
+def make(n: str) -> P:
+    return P(n)
+
+
+def chain() -> P:
+    a = make("a")
+    b = make("b")
+    a.next = b
+    return a
+
+
+x = chain()
+print(x.name)
+print(x.next.name)
+
+y = make("solo")
+print(y.name)
+
+# the same shape one call deeper, so the identity has to survive a local
+z = make(make("inner").name)
+print(z.name)

@@ -2393,6 +2393,13 @@ begin
   bodyStart := TokPos - 1;
 
   procIdx := RegisterProc(name, not isProc, retType, nparams, pnames, ptypes);
+  { A class-returning def must record WHICH class. Without it the call site had
+    a tyClass value with no identity, so `q = make()` then `q.name` resolved
+    the field against nothing and printed the object POINTER — silently. The
+    method path (PyRegisterClassMembers) has always set this; the top-level
+    def path never did. }
+  if (retType = tyClass) and (retCi >= 0) then
+    ProcRetRecId[procIdx] := REC_UCLASS_BASE + retCi;
   for i := 0 to nparams - 1 do
     if pdefHas[i] and (i < MAX_PROC_PARAMS) then
     begin

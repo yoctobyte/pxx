@@ -208,6 +208,8 @@ test-nilpy: $(COMPILER)
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 	./$(COMPILER) test/test_nilpy_str_param.npy /tmp/test_nilpy_str_param26
 	test "$$(/tmp/test_nilpy_str_param26)" = "$$(printf '2\nb\ncd\nok!')"
+	./$(COMPILER) test/test_nilpy_class_return.npy /tmp/test_nilpy_class_return26
+	test "$$(/tmp/test_nilpy_class_return26)" = "$$(printf 'a\nb\nsolo\ninner')"
 	./$(COMPILER) test/test_nilpy_fstrings.npy /tmp/test_nilpy_fstrings26
 	# .expected file, not an inline printf: the !r cases contain single quotes,
 	# which a printf '...' literal cannot carry without unreadable escaping.
